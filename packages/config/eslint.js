@@ -5,6 +5,8 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import importBoundaries from "./import-boundaries.js";
+
 const JS_FILES = ["**/*.{js,mjs,cjs}"];
 const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
 
@@ -22,6 +24,8 @@ const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
  *   so plain Node scripts lint without a tsconfig.
  * - TypeScript files get typescript-eslint's strict and stylistic type-checked rules, resolved
  *   through the TypeScript project service against the nearest `tsconfig.json`.
+ * - Every JavaScript and TypeScript file is checked by `sebela/import-boundaries`, which enforces
+ *   the dependency table and the API trust boundary of `docs/repository-structure.md`.
  * - A disable directive that no longer suppresses anything is an error.
  *
  * Callers add their own `globalIgnores` or overrides after it.
@@ -57,6 +61,18 @@ export function createConfig({ tsconfigRootDir }) {
           projectService: true,
           tsconfigRootDir,
         },
+      },
+    },
+    {
+      files: [...JS_FILES, ...TS_FILES],
+      plugins: {
+        sebela: {
+          meta: { name: "@sebela/config" },
+          rules: { "import-boundaries": importBoundaries },
+        },
+      },
+      rules: {
+        "sebela/import-boundaries": "error",
       },
     },
   );

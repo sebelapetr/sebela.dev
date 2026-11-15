@@ -375,6 +375,10 @@ describe("import boundaries: bypass-prone paths", () => {
     );
   });
 
+  it("leaves paths into third-party packages installed in the member alone", async () => {
+    await assertAllowed("apps/api/src/app.ts", `import "../node_modules/hono/dist/index.js";\n`);
+  });
+
   it("rejects a relative path that leaves the package for the repository root", async () => {
     await assertRejected("packages/db/src/index.ts", `import "../../../scripts/tool.js";\n`, {
       mentions: ["'../../../scripts/tool.js'", "packages/db"],
