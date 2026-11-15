@@ -61,7 +61,7 @@ Details: `docs/git-workflow.md`.
 | Task | Command |
 |---|---|
 | Create a worktree for a branch | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path) |
-| Remove it and free its slot | `node scripts/harness/worktree.mjs remove <branch>` |
+| Remove it and free its slot | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]` |
 | List worktree slots | `node scripts/harness/worktree.mjs list` |
 | Run a phase unattended (owner only) | `scripts/run-phase.sh <phase-folder> [--base <branch>]` |
 | Harness tests | `node --test scripts/harness/` |

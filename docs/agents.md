@@ -71,10 +71,10 @@ scripts/run-phase.sh <phase-folder>
 
 - **One iteration, one issue.** The script starts Claude Code non-interactively with the orchestrator agent and the instruction to take the next ready issue of the phase through to a merged issue pull request. Every iteration starts with a clean context.
 - **State lives in GitHub**, not in the script: issue labels, open and merged pull requests, the phase branch. The script can be stopped and started again at any time and continues where it left off.
-- **Usage limit.** When a run ends because the usage limit is reached, the script waits ten minutes and tries again, until the limit lifts.
+- **Usage limit.** When a run ends because the usage limit is reached, the script waits ten minutes and tries again, until the limit lifts. A wait counts neither as a failure nor as an iteration, and Ctrl+C ends it at once.
 - **End.** The loop ends when no ready issue of the phase remains; the phase pull request is then open.
 - **Guards against spinning:**
-  - an issue that fails once gets the label `agent-retry`; a second failure gets `agent-failed`, and it is skipped from then on;
+  - an issue that fails once gets the label `agent-retry`; a second failure gets `agent-failed` (and loses `agent-retry`), and it is skipped from then on;
   - HITL issues are always skipped;
   - after several consecutive failed runs the script stops;
   - every run writes a log outside git.

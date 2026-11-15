@@ -21,13 +21,14 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 
 1. Make sure the phase branch `phase/<phase-folder>` exists; create it from the base branch if this is the first issue of the phase. The base branch is `master` unless you were given another.
 2. Pick an issue of the phase labelled `ready-for-agent` whose blockers are closed. Skip issues labelled `hitl` or `agent-failed`.
-3. Run `git fetch origin`, then create the issue branch and its worktree in one step: `node scripts/harness/worktree.mjs create <branch> --base origin/phase/<phase-folder>`. It prints the worktree path and writes the worktree's ports to its `.env.local`.
+3. Name the issue branch exactly `<type>/<issue-number>-<short-slug>` (`docs/git-workflow.md`), where `<type>` is the Conventional Commits type of the change — `feat` for new behaviour, also in the trial. Never `issue/`, `trial/` or a name without a slash. Run `git fetch origin`, then create the issue branch and its worktree in one step: `node scripts/harness/worktree.mjs create <branch> --base origin/phase/<phase-folder>`. It prints the worktree path and writes the worktree's ports to its `.env.local`.
 4. Dispatch the developer agent that matches the area: `backend-developer`, `frontend-developer` or `ai-developer`. Give it the issue text, the worktree path and the PRD path. Do not paraphrase the acceptance criteria — pass them as written.
 5. When the developer reports green checks, dispatch the `reviewer` on the same worktree.
 6. If the reviewer returns objections, send them back to the developer unchanged. Repeat until the reviewer approves.
 7. Open the issue pull request against the phase branch, in the format from `docs/git-workflow.md`, with the roles filled in and screenshots attached for UI work.
 8. Wait for CI (`gh pr checks <number> --watch`). When it is green, merge with `gh pr merge <number> --squash --delete-branch`. If CI fails, send the failure back to the developer.
-9. Run the `docs-keeper` on the merged change, then remove the worktree: `node scripts/harness/worktree.mjs remove <branch>`.
+9. Close the issue with a comment naming the pull request (`gh issue close <n> --comment "Merged into phase/<phase-folder> in #<pr>."`). `Closes #<n>` only works for merges into `master`, so this is always your job.
+10. Run the `docs-keeper` on the merged change, then remove the worktree and its local branch: `node scripts/harness/worktree.mjs remove <branch> --delete-branch`.
 
 ## When the phase is done
 
@@ -44,4 +45,4 @@ If an issue cannot be finished — the reviewer keeps rejecting, CI cannot be ma
 - Creating issues needs the owner's confirmation. Opening pull requests does not.
 - Never edit app or package code yourself.
 - In an unattended run nobody can answer you. When something needs the owner, record it on the issue and continue with the next one.
-- Report to the owner in Czech: what was merged into the phase branch, what was skipped or failed and why, and the link to the phase pull request.
+- In an interactive session, report to the owner in Czech: what was merged into the phase branch, what was skipped or failed and why, and the link to the phase pull request.

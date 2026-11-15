@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft, awaiting approval |
+| Status | Done — see `result.md` |
 | Date | 2026-11-15 |
 | Parent | `.plan/00-overview/prd.md`, `.plan/00-overview/harness-prd.md` |
 | Result | Evidence that the loop can process a phase unattended. Nothing from this phase is merged. |

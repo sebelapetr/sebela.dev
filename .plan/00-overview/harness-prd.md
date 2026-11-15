@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft, awaiting approval |
+| Status | Done — tried in `.plan/00-trial/result.md` |
 | Date | 2026-11-15 |
 | Parent | `.plan/00-overview/prd.md` |
 | Built | By hand, in an interactive session on `phase/00-overview` — the loop cannot build itself |

@@ -247,6 +247,16 @@ test("a symbolic link does not hide where an edit really lands", () => {
   }));
 });
 
+test("both the written and the resolved path are checked", () => {
+  assert.ok(call("Read", { file_path: "/repo/.env" }, { realpath: () => "/repo/README.md" }));
+  assert.ok(call("Edit", { file_path: "/repo/.claude/settings.json" }, { unattended: true, realpath: () => "/tmp/x" }));
+  assert.equal(call("Read", { file_path: "/repo/docs/a.md" }, { realpath: () => "/repo/docs/b.md" }), null);
+});
+
+test("a symbolic link that cannot be resolved is refused", () => {
+  assert.ok(call("Write", { file_path: "/repo/.worktrees/x/dangling" }, { realpath: () => null }));
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {

@@ -66,6 +66,7 @@ Orchestrated by: <agent>
 - UI changes attach the screenshots at 360, 768 and 1280 px in both themes.
 - A change in behaviour or structure includes the documentation update.
 - Merged by the orchestrator with a **squash merge** when the reviewer has approved and CI is green on the pull request. The result is one commit per issue on the phase branch.
+- `Closes #<issue>` only closes issues on merges into `master`, so after the merge the orchestrator closes the issue itself, with a comment naming the pull request, and deletes the local issue branch.
 
 ## Phase pull request
 

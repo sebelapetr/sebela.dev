@@ -72,9 +72,17 @@ function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unatten
   if (fromPattern) return fromPattern;
   const raw = filePathOf(toolInput);
   if (!raw) return null;
-  // Where the file really is, past any symbolic link.
-  const filePath = realpath(path.resolve(cwd ?? mainRoot, raw));
+  // Both the path as written and where it really lands past symbolic links must pass.
+  const lexical = path.resolve(cwd ?? mainRoot, raw);
+  const resolved = realpath(lexical);
+  if (resolved === null) {
+    return deny("A symbolic link that cannot be resolved is not followed (docs/permissions.md).");
+  }
+  const facts = { toolName, mainRoot, restricted, unattended };
+  return checkPath(lexical, facts) ?? (resolved === lexical ? null : checkPath(resolved, facts));
+}
 
+function checkPath(filePath, { toolName, mainRoot, restricted, unattended }) {
   if (isEnvFile(filePath)) {
     return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
   }
@@ -184,7 +192,7 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
 //   unattended            the call comes from the phase loop
 //   lookupPrBase(number)  returns the base branch of a pull request
 //   currentBranch         branch checked out where the command runs
-//   realpath(path)        resolves symbolic links (the hook passes a real one)
+//   realpath(path)        resolves symbolic links; null when a link cannot be resolved
 export function evaluateToolCall({
   toolName,
   toolInput,

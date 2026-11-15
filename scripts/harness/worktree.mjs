@@ -2,7 +2,7 @@
 // Creates and removes worktrees with their own slot (ports) — see docs/repository-structure.md.
 //
 //   node scripts/harness/worktree.mjs create <branch> [--base <ref>]
-//   node scripts/harness/worktree.mjs remove <branch-or-path> [--force]
+//   node scripts/harness/worktree.mjs remove <branch-or-path> [--force] [--delete-branch]
 //   node scripts/harness/worktree.mjs list
 //
 // `create` prints the worktree path as its last line (the WorktreeCreate hook relies on it).
@@ -98,7 +98,7 @@ export function createWorktree({ branch, base = "HEAD", mainRoot = mainRootFrom(
   return { path: worktreePath, slot, name };
 }
 
-export function removeWorktree({ target, force = false, mainRoot = mainRootFrom() }) {
+export function removeWorktree({ target, force = false, deleteBranch = false, mainRoot = mainRootFrom() }) {
   const p = paths(mainRoot);
   const name = path.isAbsolute(target) ? path.basename(target) : worktreeDirName(target);
   const worktreePath = path.join(p.dir, name);
@@ -118,6 +118,14 @@ export function removeWorktree({ target, force = false, mainRoot = mainRootFrom(
     git(["worktree", "remove", ...(force ? ["--force"] : []), worktreePath], { cwd: mainRoot });
   }
   git(["worktree", "prune"], { cwd: mainRoot });
+  // After a squash merge git cannot tell the branch was merged, so deleting it is an explicit choice.
+  if (deleteBranch && !path.isAbsolute(target)) {
+    try {
+      git(["branch", "-D", target], { cwd: mainRoot });
+    } catch {
+      // already gone
+    }
+  }
 
   withLock(p.lock, () => writeState(p.state, freeSlot(readState(p.state), name)));
   return { path: worktreePath, name };
@@ -134,6 +142,7 @@ function parseArgs(argv) {
   for (let i = 0; i < rest.length; i += 1) {
     if (rest[i] === "--base") options.base = rest[++i];
     else if (rest[i] === "--force") options.force = true;
+    else if (rest[i] === "--delete-branch") options.deleteBranch = true;
     else options._.push(rest[i]);
   }
   return { command, options };
@@ -146,12 +155,12 @@ function main() {
     console.error(`worktree ${result.name} on slot ${result.slot}`);
     console.log(result.path);
   } else if (command === "remove" && options._[0]) {
-    const result = removeWorktree({ target: options._[0], force: options.force });
+    const result = removeWorktree({ target: options._[0], force: options.force, deleteBranch: options.deleteBranch });
     console.error(`removed ${result.name}`);
   } else if (command === "list") {
     for (const { slot, name } of listWorktrees()) console.log(`${slot}\t${name}`);
   } else {
-    console.error("usage: worktree.mjs create <branch> [--base <ref>] | remove <branch-or-path> [--force] | list");
+    console.error("usage: worktree.mjs create <branch> [--base <ref>] | remove <branch-or-path> [--force] [--delete-branch] | list");
     process.exit(64);
   }
 }

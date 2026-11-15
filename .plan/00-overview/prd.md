@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft, awaiting approval |
+| Status | Approved |
 | Date | 2026-11-15 |
 | Owner | Petr Šebela |
 | Scope | Overview of the whole project. Each phase gets its own PRD in `.plan/NN-<phase>/prd.md`; those PRDs hold the detail (exact schema, endpoints, pages, tools) and must stay consistent with this document. |

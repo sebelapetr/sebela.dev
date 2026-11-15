@@ -13,7 +13,7 @@ try {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
-            "A pull request was merged. Next: run the docs-keeper agent on the merged change, then remove the issue's worktree with `node scripts/harness/worktree.mjs remove <branch>`.",
+            "A pull request was merged. Next: run the docs-keeper agent on the merged change, close the issue with a comment naming the pull request, then remove the worktree and its branch with `node scripts/harness/worktree.mjs remove <branch> --delete-branch`.",
         },
       }),
     );

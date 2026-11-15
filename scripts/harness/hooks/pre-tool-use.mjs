@@ -16,6 +16,14 @@ function lookupPrBase(number) {
   }).trim();
 }
 
+function isLink(target) {
+  try {
+    return fs.lstatSync(target).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 function currentBranchIn(cwd) {
   try {
     return execFileSync("git", ["-C", cwd, "branch", "--show-current"], {
@@ -27,14 +35,17 @@ function currentBranchIn(cwd) {
   }
 }
 
-// Resolves symbolic links. A file that does not exist yet resolves through its nearest existing parent.
+// Resolves symbolic links. A file that does not exist yet resolves through its nearest existing
+// parent. A dangling link, or any error other than a missing path, returns null so the guard refuses.
 function realpath(target) {
   const rest = [];
   let current = target;
   while (true) {
     try {
       return path.join(fs.realpathSync(current), ...rest);
-    } catch {
+    } catch (error) {
+      if (error.code !== "ENOENT") return null;
+      if (isLink(current)) return null;
       const parent = path.dirname(current);
       if (parent === current) return target;
       rest.unshift(path.basename(current));

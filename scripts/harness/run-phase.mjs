@@ -11,7 +11,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { RUN_REPORT_SCHEMA, classifyRun, decideNext } from "./lib/loop.mjs";
+import { FAILED_LABEL, RETRY_LABEL, RUN_REPORT_SCHEMA, classifyRun, decideNext } from "./lib/loop.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
 function parseArgs(argv) {
@@ -43,8 +43,10 @@ Handle exactly ONE issue, following your agent definition, docs/agents.md and do
 
 1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
 2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. An issue labelled \`agent-retry\` failed once before: read its comments first.
-3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then run the docs-keeper and remove the worktree.
+3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
 4. If no such issue is left, open the phase pull request from phase/${phase} to ${base} (or update it if it exists) and report phase_done.
+
+Write the report summary in English; it goes to the loop's log.
 5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
 
 Nobody can answer questions in this run. Never wait for input; when something needs the owner, record it on the issue.
@@ -99,10 +101,21 @@ function issueLabels(issue) {
 }
 
 function addLabel(issue, label) {
-  execFileSync("gh", ["issue", "edit", String(issue), "--add-label", label], { stdio: "ignore" });
+  // An issue that has failed for good is no longer up for a retry.
+  const remove = label === FAILED_LABEL ? ["--remove-label", RETRY_LABEL] : [];
+  execFileSync("gh", ["issue", "edit", String(issue), "--add-label", label, ...remove], { stdio: "ignore" });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Ctrl+C ends a wait at once instead of after it.
+let wakeUp = () => {};
+const sleep = (ms) =>
+  new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    wakeUp = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+  });
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
@@ -117,6 +130,7 @@ async function main() {
   let interrupted = false;
   process.on("SIGINT", () => {
     interrupted = true;
+    wakeUp();
   });
 
   let consecutiveFailures = 0;
