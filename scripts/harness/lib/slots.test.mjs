@@ -118,7 +118,7 @@ test("folder names come from branch names", () => {
 });
 
 test("the environment file carries the slot and its ports", () => {
-  const content = parseEnv(envFileContent(2, base, { EXTRA: "x" }));
+  const content = { ...parseEnv(envFileContent(2, base, { EXTRA: "x" })) };
   assert.deepEqual(content, {
     WORKTREE_SLOT: "2",
     ...Object.fromEntries(Object.entries(shifted(20)).map(([name, port]) => [name, String(port)])),

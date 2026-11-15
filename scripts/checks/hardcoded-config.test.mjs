@@ -24,13 +24,16 @@ function check(args, cwd) {
   return { status: result.status, output: `${result.stdout}${result.stderr}`, reports };
 }
 
-const located = (reports) => reports.map(({ file, line, rule }) => `${file}:${line} ${rule}`).sort();
+const located = (reports) =>
+  reports.map(({ file, line, rule }) => `${file}:${line} ${rule}`).sort();
 
 function repository(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-config-check-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const git = (...args) =>
-    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], { stdio: "ignore" });
+    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
+      stdio: "ignore",
+    });
   git("init", "-b", "master");
   const put = (target, fixture) => {
     const destination = path.join(root, target);
@@ -39,7 +42,15 @@ function repository(t) {
   };
   const commit = () => {
     git("add", "--all");
-    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture");
+    git(
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "commit",
+      "-m",
+      "fixture",
+    );
   };
   return { root, put, commit };
 }
@@ -88,7 +99,9 @@ describe("hard-coded configuration check: fixture files", () => {
     const result = check([path.join("rejected", "ports.mjs")], FIXTURES);
 
     const listen = result.reports.find((report) => report.line === "6");
-    const source = fs.readFileSync(path.join(FIXTURES, "rejected", "ports.mjs"), "utf8").split("\n")[5];
+    const source = fs
+      .readFileSync(path.join(FIXTURES, "rejected", "ports.mjs"), "utf8")
+      .split("\n")[5];
     assert.ok(listen, result.output);
     assert.match(source.slice(Number(listen.column) - 1), /^\d+\);$/);
   });
@@ -112,10 +125,11 @@ describe("hard-coded configuration check: the repository", () => {
     const result = check([], root);
 
     assert.equal(result.status, 1, result.output);
-    assert.deepEqual(
-      [...new Set(result.reports.map((report) => report.file))].sort(),
-      ["apps/api/src/server.mjs", "apps/api/src/server.test.mjs", "scripts/start.sh"],
-    );
+    assert.deepEqual([...new Set(result.reports.map((report) => report.file))].sort(), [
+      "apps/api/src/server.mjs",
+      "apps/api/src/server.test.mjs",
+      "scripts/start.sh",
+    ]);
   });
 
   it("leaves out only its own negative fixtures, ignored files and non-executable files", (t) => {

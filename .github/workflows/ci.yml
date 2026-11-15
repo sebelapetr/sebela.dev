@@ -25,6 +25,20 @@ jobs:
           node-version-file: .nvmrc
       - run: node --test scripts/harness/
 
+  # Guard rail: no port, local host address or database name hard-coded in executable files. Plain
+  # Node without installed dependencies, so it reports on its own even when the toolchain fails.
+  # `pnpm lint` and `pnpm test` in the quality job run the same check and tests.
+  config-check:
+    name: Hard-coded configuration check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node --test scripts/checks/
+      - run: node scripts/checks/hardcoded-config.mjs
+
   quality:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest

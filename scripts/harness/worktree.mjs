@@ -11,13 +11,31 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import {
   allocateSlot,
+  basePortsFrom,
   emptyState,
   envFileContent,
   freeSlot,
   worktreeDirName,
 } from "./lib/slots.mjs";
+
+// The documented example configuration of the checkout this script belongs to, so the harness and
+// the ports it reads always come from the same revision.
+const EXAMPLE_FILE = path.join(import.meta.dirname, "..", "..", ".env.example");
+
+// Base ports from the process environment, falling back to the documented example for any that are
+// not set. Throws when a port is missing or invalid.
+export function loadBasePorts(env = process.env) {
+  let example = {};
+  try {
+    example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  return basePortsFrom({ ...example, ...env });
+}
 
 function git(args, options = {}) {
   return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
@@ -72,7 +90,9 @@ function withLock(lockDir, fn) {
   }
 }
 
-export function createWorktree({ branch, base = "HEAD", mainRoot = mainRootFrom() }) {
+export function createWorktree({ branch, base = "HEAD", mainRoot = mainRootFrom(), env = process.env }) {
+  // Configuration is validated before anything is created.
+  const basePorts = loadBasePorts(env);
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
   const name = worktreeDirName(branch);
@@ -96,7 +116,7 @@ export function createWorktree({ branch, base = "HEAD", mainRoot = mainRootFrom(
 
   // Exclusive creation preserves local edits and never follows an existing symbolic link.
   try {
-    fs.writeFileSync(path.join(worktreePath, ".env.local"), envFileContent(slot), { flag: "wx" });
+    fs.writeFileSync(path.join(worktreePath, ".env.local"), envFileContent(slot, basePorts), { flag: "wx" });
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
