@@ -54,7 +54,8 @@ The repository is part of the portfolio too: architecture decisions, testing pol
 ```mermaid
 flowchart TB
     visitor["Website visitors"] --> web["web · Next.js"]
-    agents["External AI agents"] --> ai["llm-agent · Python<br/>Public MCP + chat pipeline"]
+    agents["External AI agents"] --> public["mcp-public · Python"]
+    public -->|Read capabilities| ai["ai-service · FastAPI<br/>llm-agent package"]
     owner["Owner's agents"] --> admin["mcp-admin · TypeScript"]
 
     web -->|Public HTTP routes| api["api · Hono<br/>Authentication + validation + OpenAPI"]
@@ -71,7 +72,7 @@ flowchart TB
 
 - **One contract across languages.** OpenAPI drives generated TypeScript and Python clients; Zod provides API validation and shared TypeScript schemas.
 - **Authenticated content writes.** Private API routes verify API keys. Keys stay server-side; the public assistant has no content-write credentials or tools.
-- **A bounded chat exception.** Public chat routes may create and continue the caller's own conversation. The API checks ownership, limits and budget.
+- **A bounded chat exception.** Public chat routes may create, continue and delete the caller's own conversation. The API checks ownership, limits and budget.
 - **Rebuildable retrieval.** The search index is derived from canonical content in PostgreSQL.
 - **Content outside git.** Development uses a fictional demo seed. Real profile content is loaded privately and maintained through the API; media lives in object storage.
 
@@ -85,8 +86,8 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 | Website | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide |
 | API & contracts | Hono, Zod, OpenAPI, generated clients |
 | Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search |
-| AI service | Python, FastAPI, LangGraph |
-| Verification | Vitest, Playwright, promptfoo; Python tooling chosen in phase 7 |
+| AI service | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic |
+| Verification | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review |
 | Observability | Langfuse for AI traces, cost and scoring |
 | Delivery | Docker Compose, GitHub Actions, deployment to a VPS |
 
@@ -105,17 +106,17 @@ The browser reaches the assistant through the website and API. The API owns conv
 
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
-Langfuse traces the pipeline; stored conversations are scored afterwards. Model and embeddings choices are deferred to their implementation phases and evaluated before adoption.
+Langfuse receives redacted traces; stored conversations are scored afterwards and sampled for human review. The package runs three stages: Security Gateway, Main Agent and deterministic Output Guard. Context, retries, concurrency, cancellation and spend are bounded per request. Model and embeddings choices are deferred to their implementation phases and evaluated before adoption.
 
 ### Two servers, two responsibilities
 
 | | Public MCP | Content-management MCP |
 | --- | --- | --- |
-| **App** | `apps/llm-agent` | `apps/mcp-admin` |
+| **App** | `apps/mcp-public` | `apps/mcp-admin` |
 | **Audience** | External AI agents | The owner's agents |
 | **Access** | Public, read-only, rate limited | Secured; caller's API key forwarded to the API |
 | **Purpose** | Read profile, experience, services and learning activity; search public knowledge | Add and update content through private API routes |
-| **Implementation** | Python; shares read tools with the chatbot | TypeScript; reuses contracts and the generated API client |
+| **Implementation** | Python; calls FastAPI read capabilities backed by the shared agent package | TypeScript; reuses contracts and the generated API client |
 
 Connection URLs and client configuration will be added when the servers are implemented.
 

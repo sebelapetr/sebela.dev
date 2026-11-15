@@ -29,4 +29,5 @@ Date: YYYY-MM-DD
 | 0008 | Object storage through an S3 interface, Bunny in the cloud, disk for tests |
 | 0009 | API keys, hashed in the database, instead of JWTs |
 | 0010 | Own retrieval on pgvector, hosted embeddings |
-| 0011 | One Python service for the AI layer; promptfoo and Langfuse |
+| 0011 | One Python service for the AI layer; promptfoo and Langfuse (superseded by 0012) |
+| 0012 | [Separate AI runtime, public MCP and shared Python agent package](0012-ai-runtime-and-shared-agent-package.md) |

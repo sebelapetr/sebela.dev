@@ -103,7 +103,7 @@ Everything in the database is public, so there is no filtering by visibility. If
 - Filters by kind of content.
 - A relevance floor: below it the search returns nothing, so the caller can say it does not know.
 - Returned to the caller: the passage, its score, and the source with the address and anchor.
-- Exposed as a public, read-only, rate-limited API route, so that the assistant — its chat agent and its public MCP server — uses it like any other client.
+- Exposed as a public, read-only, rate-limited API route, consumed by the shared Python read tools through the API client. Chat calls these tools in-process; `mcp-public` reaches them through `ai-service`. FastAPI does not reimplement retrieval, embeddings or index storage.
 
 ### Evals
 

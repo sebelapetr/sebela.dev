@@ -45,10 +45,13 @@ A test written before the markup is not required here.
 MCP tools and AI features are developed evals-first.
 
 - Evals are written before the implementation and state a pass threshold.
-- They are written with promptfoo. They call real models, so they run on demand and for changes to the AI parts (`mcp-admin`, `llm-agent`, `memory`), not on every pull request.
+- They are written with promptfoo. They call real models, so they run on demand and for changes to the AI parts (`mcp-admin`, `ai-service`, `mcp-public`, the `llm-agent` package and `memory`), not on every pull request.
 - Safety suites must pass completely. Other suites have a threshold set from the first baseline; it is never lowered to pass a run.
 - They cover desired and forbidden behaviour: choosing the right tool, factual grounding, saying "I don't know", direct and indirect prompt injection, unsupported claims, source correctness, restraint with destructive tools.
-- Evals live in the `evals/` folder of the app they belong to.
+- Evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Agent-package evals include FastAPI/MCP integration and all three stages.
+- Code graders check deterministic properties; model graders use versioned rubrics calibrated against human labels. Human review covers ambiguous cases, grader disagreements and a sample of automatically passed answers. Record human scores and release decisions.
+- Measure attack success from outcomes and executed tool calls, plus legitimate-question false positives, latency and cost. Passing a finite safety suite is a release gate, not proof of absolute security.
+- Use fictional adversarial fixtures. Real visitor/owner data never enters committed regression datasets.
 
 ## Authentication as a property
 
@@ -58,8 +61,8 @@ There is one test that walks every route of the API and asserts: each write rout
 
 | Kind | Tool | Scope |
 |---|---|---|
-| Unit | Vitest (TypeScript); chosen in phase 7 for Python | Pure logic |
-| Integration | Vitest | API and services against a real Postgres — the database is not mocked |
+| Unit | Vitest (TypeScript); pytest (Python) | Pure logic |
+| Integration | Vitest; pytest for Python HTTP/runtime contracts | API/services use real Postgres; Python uses a test API and fake model providers |
 | End to end and visual | Playwright | The website in a browser, including screenshots |
 | Evals | promptfoo | MCP and AI behaviour, desired and forbidden |
 

@@ -34,7 +34,7 @@ Root instructions and the always-loaded Claude deep-module rule point to the can
 | orchestrator | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository |
 | backend-developer | Implements | `api`, `db`, `services`, `contracts` |
 | frontend-developer | Implements; takes screenshots for visual review | `web`, `ui` |
-| ai-developer | Implements evals-first | `mcp-admin`, `llm-agent` (Python), `memory` |
+| ai-developer | Implements evals-first | `mcp-admin`, `ai-service`, `mcp-public`, `llm-agent` (Python package), `memory` |
 | reviewer | Checks; has no write access to code | Whole repository |
 | docs-keeper | Keeps `docs/`, rules and `AGENTS.md` files in line with the code | Documentation |
 

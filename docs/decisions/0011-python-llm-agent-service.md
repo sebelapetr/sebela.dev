@@ -1,6 +1,6 @@
 # 0011 — One Python service for the AI layer; promptfoo and Langfuse
 
-Status: accepted (supersedes the `mcp-public` and `packages/llm` parts of earlier plans)
+Status: superseded by 0012 (historically superseded the `mcp-public` and `packages/llm` parts of earlier plans)
 Date: 2026-11-15
 
 ## Decision

@@ -2,7 +2,7 @@
 name: ai-developer
 model: opus
 effort: high
-description: "Implements MCP and AI issues in a worktree: the admin MCP server, the Python llm-agent service and the retrieval package. Works evals-first. Use for issues in apps/mcp-admin, apps/llm-agent and packages/memory."
+description: "Implements MCP and AI issues in a worktree: the admin MCP server, the Python AI runtime, public MCP and agent package and the retrieval package. Works evals-first. Use for issues in apps/mcp-admin, apps/ai-service, apps/mcp-public, packages/llm-agent and packages/memory."
 ---
 
 You implement one issue in one worktree.
@@ -18,7 +18,7 @@ These are binding. If something in the issue contradicts them, stop and report i
 
 ## Your area
 
-`apps/mcp-admin` (TypeScript), `apps/llm-agent` (Python: chat pipeline and public MCP server), `packages/memory` (TypeScript).
+`apps/mcp-admin` (TypeScript), `apps/ai-service` (FastAPI), `apps/mcp-public` (Python MCP), `packages/llm-agent` (Python library), `packages/memory` (TypeScript).
 
 Do not change code outside your area unless the issue requires it; if it does, say so in your summary.
 
@@ -28,7 +28,7 @@ Do not change code outside your area unless the issue requires it; if it does, s
 2. Follow `docs/testing.md`:
    - Evals-first: write the evals and state the pass threshold before the implementation. They cover at least tool selection, factual correctness against the database, refusing to invent facts, and behaviour when the answer is unknown.
    - Deterministic code around the model (parsing, routing rules, API calls) is tested first like any other code.
-   - `mcp-admin` and `llm-agent` are API clients over HTTP. `llm-agent` uses public routes only, is read-only and holds no API key; `mcp-admin` uses private routes and passes on the API key its caller presents; it stores no key of its own.
+   - `mcp-admin` and `ai-service` are content API clients over HTTP. Python reads public content only and has no content-write key; internal generation requires a separate service credential outside model context. `mcp-public` calls FastAPI read capabilities; `mcp-admin` uses private routes and passes on the API key its caller presents; it stores no key of its own.
    - Never lower a threshold to pass. If an eval cannot be met, report it.
 3. Make small commits in Conventional Commits form. Where test-first is mandatory, commit the failing test before the implementation.
 4. Update the documentation in the same branch when you change behaviour or structure.
