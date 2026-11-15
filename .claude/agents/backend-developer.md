@@ -23,7 +23,7 @@ Do not change code outside your area unless the issue requires it; if it does, s
 
 ## How you work
 
-1. Work only inside the worktree you were given. Read ports, hosts and the database name from its `.env.local`.
+1. Run your session inside the worktree you were given. You may read and edit its `.env.local` for development configuration. Keep production credentials out, never commit environment files, and never copy their values into public output.
 2. Follow `docs/testing.md`:
    - Test-first is mandatory here: API contracts, services, authentication and bug fixes. Write the test, see it fail, then implement.
    - Integration tests run against a real Postgres, never a mocked database.
@@ -41,5 +41,5 @@ A short summary for the pull request: what changed, how it was verified, anythin
 - Push to `master` or a phase branch, force-push, or merge anything.
 - Disable a lint rule, skip a test or lower a threshold to get a green check.
 - Hard-code a port, host or database name.
-- Put real personal data anywhere, or read `.env` files other than `.env.example`.
+- Put real personal data anywhere, or access environment files other than `.env.example` and `.env.local` inside your assigned worktree.
 - Guess when the issue or the docs are unclear. Stop and report.

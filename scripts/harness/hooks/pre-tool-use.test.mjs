@@ -25,6 +25,7 @@ function verdict(toolName, filePath, cwd = worktree) {
     input: JSON.stringify({ cwd, agent_id: "fixture", tool_name: toolName, tool_input: { file_path: filePath } }),
     encoding: "utf8",
   });
+  assert.ifError(run.error);
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stderr, "");
   return run.stdout ? JSON.parse(run.stdout).hookSpecificOutput.permissionDecision : "allow";

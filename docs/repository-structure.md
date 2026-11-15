@@ -55,6 +55,8 @@ Two folders are tracked only as a one-line `README.md`; everything else in them 
 
 Also not in git: `.env`, `.env.local`.
 
+Agents may read and edit `.env.local` only inside their assigned worktree, with their session running there. It contains development configuration only; production credentials stay outside development worktrees. The guard and the exact limits are described in `docs/permissions.md`.
+
 ## Conventions
 
 - **Package scope:** `@sebela/*`, for example `@sebela/db`.

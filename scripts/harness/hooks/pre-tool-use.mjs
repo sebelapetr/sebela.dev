@@ -35,6 +35,17 @@ function currentBranchIn(cwd) {
   }
 }
 
+function worktreeRootIn(cwd, mainRoot) {
+  try {
+    const [root, common] = execFileSync("git", [
+      "-C", cwd, "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir",
+    ], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().split("\n");
+    return root !== mainRoot && path.dirname(common) === mainRoot ? root : null;
+  } catch {
+    return null;
+  }
+}
+
 // Resolves symbolic links. A file that does not exist yet resolves through its nearest existing
 // parent. A dangling link, or any error other than a missing path, returns null so the guard refuses.
 function realpath(target) {
@@ -58,12 +69,14 @@ try {
   const input = await readHookInput();
   const cwd = input.cwd ?? process.cwd();
   const isBash = input.tool_name === "Bash";
+  const mainRoot = mainRootFrom(process.env.CLAUDE_PROJECT_DIR ?? cwd);
   const verdict = evaluateToolCall({
     toolName: input.tool_name,
     toolInput: input.tool_input,
     // The project directory comes from Claude Code, not from the tool call.
-    mainRoot: mainRootFrom(process.env.CLAUDE_PROJECT_DIR ?? cwd),
+    mainRoot,
     cwd,
+    worktreeRoot: worktreeRootIn(cwd, mainRoot),
     isSubagent: Boolean(input.agent_id),
     unattended: process.env.SEBELA_UNATTENDED === "1",
     lookupPrBase,

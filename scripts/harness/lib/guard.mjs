@@ -20,7 +20,7 @@ export function invokesPrMerge(command) {
 }
 
 const ENV_FILE_NAME = /^\.env(\..+)?$/;
-const ENV_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.env(?!\.example(?![\w.-]))(\.[\w.-]+)?(?=$|[\s'";&|)<>])/;
+const ENV_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.env(?!\.example(?![\w.-]))(\.[\w.-]+)?(?=$|[\s'";&|)<>/*?{}[\]])/;
 const CONTEXT_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.context(\/|(?=$|[\s'";&|)<>]))/;
 
 function isInside(child, parent) {
@@ -41,13 +41,29 @@ function deny(reason) {
   return { reason };
 }
 
+const ENV_REASON = "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md).";
+
+function allowedEnvPath(filePath, worktreeRoot) {
+  return path.basename(filePath) === ".env.example" ||
+    (path.basename(filePath) === ".env.local" && worktreeRoot && isInside(filePath, worktreeRoot));
+}
+
+function checkEnvironmentReference(filePath, { worktreeRoot, realpath }) {
+  const resolved = realpath(filePath);
+  return resolved !== null && allowedEnvPath(filePath, worktreeRoot) && allowedEnvPath(resolved, worktreeRoot)
+    ? null : deny(ENV_REASON);
+}
+
 // Grep's glob and Glob's pattern can reach files that the searched directory does not name.
-function checkSearchPattern({ toolName, toolInput, restricted }) {
+function checkSearchPattern({ toolName, toolInput, restricted, cwd, mainRoot, worktreeRoot, realpath }) {
   const pattern = toolName === "Grep" ? toolInput?.glob : toolName === "Glob" ? toolInput?.pattern : null;
   if (!pattern) return null;
   const segments = String(pattern).split(/[\\/]/);
   if (segments.some((segment) => segment.startsWith(".env") && segment !== ".env.example")) {
-    return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
+    if (/[*?{}[\]]/.test(pattern)) return deny(ENV_REASON);
+    const base = path.resolve(cwd ?? mainRoot, toolInput?.path ?? ".");
+    const verdict = checkEnvironmentReference(path.resolve(base, pattern), { worktreeRoot, realpath });
+    if (verdict) return verdict;
   }
   const contextAt = segments.indexOf(".context");
   if (restricted && contextAt !== -1 && segments.slice(contextAt + 1).join("/") !== "README.md") {
@@ -67,8 +83,8 @@ function isHarnessFile(filePath, mainRoot) {
   return HARNESS_DIRS.some((dir) => isInside(filePath, path.join(mainRoot, dir)));
 }
 
-function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath }) {
-  const fromPattern = checkSearchPattern({ toolName, toolInput, restricted });
+function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath, worktreeRoot }) {
+  const fromPattern = checkSearchPattern({ toolName, toolInput, restricted, cwd, mainRoot, worktreeRoot, realpath });
   if (fromPattern) return fromPattern;
   const raw = filePathOf(toolInput);
   if (!raw) return null;
@@ -78,13 +94,17 @@ function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unatten
   if (resolved === null) {
     return deny("A symbolic link that cannot be resolved is not followed (docs/permissions.md).");
   }
-  const facts = { toolName, mainRoot, restricted, unattended };
+  if (isEnvFile(lexical) || isEnvFile(resolved)) {
+    const verdict = checkEnvironmentReference(lexical, { worktreeRoot, realpath });
+    if (verdict) return verdict;
+  }
+  const facts = { toolName, mainRoot, restricted, unattended, worktreeRoot };
   return checkPath(lexical, facts) ?? (resolved === lexical ? null : checkPath(resolved, facts));
 }
 
-function checkPath(filePath, { toolName, mainRoot, restricted, unattended }) {
-  if (isEnvFile(filePath)) {
-    return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
+function checkPath(filePath, { toolName, mainRoot, restricted, unattended, worktreeRoot }) {
+  if (isEnvFile(filePath) && !allowedEnvPath(filePath, worktreeRoot)) {
+    return deny(ENV_REASON);
   }
 
   const contextDir = path.join(mainRoot, ".context");
@@ -127,6 +147,35 @@ const UNATTENDED_FORBIDDEN = new RegExp(
 
 // The command may run somewhere other than the directory the hook looked at.
 const MOVES = /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
+
+// Only static shell paths get the exception. Expansions and directory changes are ambiguous.
+function checkShellEnvironment(command, facts) {
+  if (!ENV_IN_COMMAND.test(command)) return null;
+  if (MOVES.test(command) || /[$`\\*?{}[\]~]/.test(command)) return deny(ENV_REASON);
+  const words = [];
+  let word = "";
+  let quote = null;
+  for (const char of command) {
+    if (quote) {
+      if (char === quote) quote = null;
+      else word += char;
+    } else if (char === "'" || char === '"') quote = char;
+    else if (/[\s;&|()<>=]/.test(char)) {
+      if (word) words.push(word);
+      word = "";
+    } else word += char;
+  }
+  if (quote) return deny(ENV_REASON);
+  if (word) words.push(word);
+  const references = words.filter(isEnvFile);
+  const mentions = [...command.matchAll(new RegExp(ENV_IN_COMMAND.source, "g"))];
+  if (!references.length || references.length !== mentions.length) return deny(ENV_REASON);
+  for (const reference of references) {
+    const verdict = checkEnvironmentReference(path.resolve(facts.cwd ?? facts.mainRoot, reference), facts);
+    if (verdict) return verdict;
+  }
+  return null;
+}
 
 function checkPush(fullCommand, { currentBranch }) {
   const command = fullCommand.match(PUSH)?.[0]?.replace(/['"]/g, "");
@@ -193,6 +242,7 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
 //   lookupPrBase(number)  returns the base branch of a pull request
 //   currentBranch         branch checked out where the command runs
 //   realpath(path)        resolves symbolic links; null when a link cannot be resolved
+//   worktreeRoot          Git-confirmed root of the worktree containing the session
 export function evaluateToolCall({
   toolName,
   toolInput,
@@ -203,18 +253,25 @@ export function evaluateToolCall({
   lookupPrBase = () => null,
   currentBranch = null,
   realpath = (p) => p,
+  worktreeRoot = null,
 }) {
   const restricted = isSubagent || unattended;
+  // The hook confirms Git ownership; both the session and the real directory must stay inside it.
+  if (!worktreeRoot || worktreeRoot === mainRoot ||
+    !isInside(worktreeRoot, path.join(mainRoot, ".worktrees")) ||
+    worktreeRoot === path.join(mainRoot, ".worktrees") ||
+    !isInside(path.resolve(cwd ?? mainRoot), worktreeRoot) ||
+    realpath(worktreeRoot) !== worktreeRoot ||
+    !isInside(realpath(path.resolve(cwd ?? mainRoot)) ?? mainRoot, worktreeRoot)) worktreeRoot = null;
 
   if (FILE_EDIT_TOOLS.has(toolName) || FILE_READ_TOOLS.has(toolName)) {
-    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath });
+    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath, worktreeRoot });
   }
 
   if (toolName === "Bash") {
     const command = String(toolInput?.command ?? "");
-    if (ENV_IN_COMMAND.test(command)) {
-      return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
-    }
+    const environment = checkShellEnvironment(command, { mainRoot, cwd, worktreeRoot, realpath });
+    if (environment) return environment;
     if (unattended && HARNESS_IN_COMMAND.test(command)) {
       return deny("The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).");
     }

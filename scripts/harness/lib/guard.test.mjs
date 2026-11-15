@@ -127,6 +127,7 @@ test("shell commands cannot use the exception for foreign files or ambiguous pat
     "cat .env.local /repo/.env", "cd /repo && cat .env.local",
     "cat $OTHER/.env.local", "cat ~/.env.local", "cat ../*/.env.local",
     "cat '/other folder/.env.local'", "cat .env.local; cd /repo; cat .env.local",
+    'cat .env.local; python -c "open(\'.env.production\')"', "cat .env*", "cat .env.local*",
   ]) assert.ok(bash(command, own), command);
   assert.ok(bash("cat .env.local", {
     ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? "/repo/.env.local" : p,

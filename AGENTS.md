@@ -35,7 +35,7 @@ The personal professional website of Petr Šebela (sebelapetr.cz): one site for 
 4. **Nothing is hard-coded about the environment.** Ports, hosts and database names come from environment variables. Each worktree has its own values.
 5. **Work in a worktree.** App and package code is never edited in the main checkout.
 6. **Only the owner merges into `master`.** Never push to `master`, never force-push a shared branch. The orchestrator — and no other agent — may squash-merge a reviewed issue pull request into its phase branch.
-7. **Do not read `.env` files** other than `.env.example`.
+7. **Environment files:** agents may read and edit `.env.example` (placeholders only) and `.env.local` inside their assigned worktree. Run the session from that worktree. Other environment files, other worktrees and the main checkout's environment files are off limits. Production credentials never belong in a development worktree. Never commit environment files or copy their values into public output.
 8. **Do not add a top-level folder, app or package** that is not in `docs/repository-structure.md` without the owner's approval.
 9. **Do not weaken a check to make it pass.** No disabled lint rules, skipped tests or lowered thresholds without the owner's approval.
 
