@@ -433,6 +433,44 @@ describe("import boundaries: bypass-prone paths", () => {
   });
 });
 
+describe("import boundaries: aliases", () => {
+  // `apps/web/package.json` maps `#db`, `#contracts` and `#internal/*`; the workspace tsconfig maps
+  // `~db/*` and `~contracts` onto package sources and `~web/*` onto the web app's own sources.
+
+  it("rejects a subpath import that maps to a forbidden package", async () => {
+    await assertRejected("apps/web/src/page.ts", `import "#db";\n`, {
+      mentions: ["'#db'", "apps/web", "@sebela/db"],
+    });
+  });
+
+  it("allows a subpath import that maps to an allowed package entry", async () => {
+    await assertAllowed("apps/web/src/page.ts", `import "#contracts";\n`);
+  });
+
+  it("allows a subpath import that maps inside the package", async () => {
+    await assertAllowed("apps/web/src/page.ts", `import "#internal/format";\n`);
+  });
+
+  it("rejects a TypeScript path alias into a forbidden package", async () => {
+    await lint("packages/db/src/schema.ts", "export const users = 1;\n");
+    await assertRejected("apps/web/src/page.ts", `export { users } from "~db/schema";\n`, {
+      mentions: ["'~db/schema'", "apps/web", "@sebela/db"],
+    });
+  });
+
+  it("rejects a TypeScript path alias that bypasses an allowed package's entry", async () => {
+    await lint("packages/contracts/src/index.ts", "export const version = 1;\n");
+    await assertRejected("apps/web/src/page.ts", `export { version } from "~contracts";\n`, {
+      mentions: ["'~contracts'", "packages/contracts", "@sebela/contracts"],
+    });
+  });
+
+  it("allows a TypeScript path alias inside the importing package", async () => {
+    await lint("apps/web/src/lib/format.ts", "export const format = 1;\n");
+    await assertAllowed("apps/web/src/page.ts", `export { format } from "~web/lib/format";\n`);
+  });
+});
+
 describe("import boundaries: files outside apps and packages", () => {
   it("allows a root file to use a declared package entry", async () => {
     await assertAllowed(
