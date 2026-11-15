@@ -96,6 +96,7 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 | postgres | 5440 (one shared container) | same port, separate database |
 
 - The worktree setup script takes the lowest free slot, creates a database named after the branch, runs migrations and the demo seed, and writes the ports and database name to the worktree's `.env.local`.
+- Running setup again for an existing worktree keeps its slot and preserves its `.env.local`, including local edits. A missing environment file is generated; an existing file or symbolic link is never overwritten.
 - The cleanup script drops the database and frees the slot.
 - In development each worktree also has its own folder in object storage, created and removed by the same scripts.
 - Tests use their own temporary database, so they never touch the data an agent is looking at in the browser.

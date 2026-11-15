@@ -94,7 +94,12 @@ export function createWorktree({ branch, base = "HEAD", mainRoot = mainRootFrom(
     return result.slot;
   });
 
-  fs.writeFileSync(path.join(worktreePath, ".env.local"), envFileContent(slot));
+  // Exclusive creation preserves local edits and never follows an existing symbolic link.
+  try {
+    fs.writeFileSync(path.join(worktreePath, ".env.local"), envFileContent(slot), { flag: "wx" });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
   return { path: worktreePath, slot, name };
 }
 
