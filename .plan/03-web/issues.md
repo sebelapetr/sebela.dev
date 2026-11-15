@@ -1,0 +1,57 @@
+# Phase 3 — Issues
+
+Source: [Website PRD](prd.md). The owner approved the PRD refinements and the twenty-issue breakdown in conversation.
+
+Published on 2026-11-15: **20 issues, 18 AFK and 2 HITL**. All carry `phase:03-web`, their `afk`/`hitl` type and `ready-for-agent`. Dependencies still apply; the loop always skips HITL issues even when they carry `ready-for-agent`.
+
+Prerequisite: phase 2 must be complete and owner-merged into `master` before implementation starts, including [backend handoff #41](https://github.com/sebelapetr/sebela.dev/issues/41). Closing backend issues alone does not establish that owner merge.
+
+## Published breakdown
+
+| Issue | Title | Type | Blocked by | Phase 3 user stories |
+| --- | --- | --- | --- | --- |
+| [#42](https://github.com/sebelapetr/sebela.dev/issues/42) | Render an API-backed homepage in the runnable web workspace | AFK | Phase 2 complete and owner-merged into master; #41 | 1, 2, 7, 8, 16, 23, 25, 26 |
+| [#43](https://github.com/sebelapetr/sebela.dev/issues/43) | Approve the hero direction and shared visual foundations | HITL | [#42](https://github.com/sebelapetr/sebela.dev/issues/42) | 1, 2, 8, 23, 24, 25, 26 |
+| [#44](https://github.com/sebelapetr/sebela.dev/issues/44) | Tell the career through a timeline and approve its visual direction | HITL | [#43](https://github.com/sebelapetr/sebela.dev/issues/43) | 9, 10, 14, 23, 25, 27 |
+| [#45](https://github.com/sebelapetr/sebela.dev/issues/45) | Open selected project evidence and inline case studies at exact deep links | AFK | [#44](https://github.com/sebelapetr/sebela.dev/issues/44) | 4, 14, 23, 25, 27 |
+| [#46](https://github.com/sebelapetr/sebela.dev/issues/46) | Show honest R&D, technology groups and education on Experience | AFK | [#44](https://github.com/sebelapetr/sebela.dev/issues/44) | 6, 12, 13, 15, 23, 25, 27 |
+| [#47](https://github.com/sebelapetr/sebela.dev/issues/47) | Explain three services through evidence and a working contact path | AFK | [#45](https://github.com/sebelapetr/sebela.dev/issues/45), [#46](https://github.com/sebelapetr/sebela.dev/issues/46) | 3, 4, 5, 6, 7, 23, 25, 27 |
+| [#48](https://github.com/sebelapetr/sebela.dev/issues/48) | Read the print-friendly CV and download the manually uploaded PDF | AFK | [#46](https://github.com/sebelapetr/sebela.dev/issues/46) | 10, 11, 12, 15, 23, 25 |
+| [#49](https://github.com/sebelapetr/sebela.dev/issues/49) | Complete the homepage with current focus and compact profile summaries | AFK | [#47](https://github.com/sebelapetr/sebela.dev/issues/47), [#48](https://github.com/sebelapetr/sebela.dev/issues/48) | 1, 3, 6, 7, 10, 12, 13, 23 |
+| [#50](https://github.com/sebelapetr/sebela.dev/issues/50) | Navigate every page with an accessible mobile menu and persistent theme | AFK | [#49](https://github.com/sebelapetr/sebela.dev/issues/49) | 7, 16, 23, 24, 25 |
+| [#51](https://github.com/sebelapetr/sebela.dev/issues/51) | Ask a hero question through the shared streaming mock-chat contract | AFK | [#50](https://github.com/sebelapetr/sebela.dev/issues/50) | 17, 18, 21, 22, 23, 25, 33 |
+| [#52](https://github.com/sebelapetr/sebela.dev/issues/52) | Verify mock answers through safe rich blocks and exact site sources | AFK | [#51](https://github.com/sebelapetr/sebela.dev/issues/51), [#45](https://github.com/sebelapetr/sebela.dev/issues/45), [#46](https://github.com/sebelapetr/sebela.dev/issues/46), [#47](https://github.com/sebelapetr/sebela.dev/issues/47) | 4, 6, 19, 20, 21, 23, 25, 27, 33 |
+| [#53](https://github.com/sebelapetr/sebela.dev/issues/53) | Recover interrupted mock chats without duplicate questions or stale events | AFK | [#52](https://github.com/sebelapetr/sebela.dev/issues/52) | 17, 20, 22, 23, 25, 33 |
+| [#54](https://github.com/sebelapetr/sebela.dev/issues/54) | Publish profile-derived metadata, indexing files and llms.txt | AFK | [#49](https://github.com/sebelapetr/sebela.dev/issues/49), [#50](https://github.com/sebelapetr/sebela.dev/issues/50) | 26, 28, 29, 30, 31 |
+| [#55](https://github.com/sebelapetr/sebela.dev/issues/55) | Serve responsive media and useful Open Graph previews | AFK | [#54](https://github.com/sebelapetr/sebela.dev/issues/54) | 1, 23, 25, 26, 30 |
+| [#56](https://github.com/sebelapetr/sebela.dev/issues/56) | Refresh rendered profile pages through signed API invalidation | AFK | [#54](https://github.com/sebelapetr/sebela.dev/issues/54), [#55](https://github.com/sebelapetr/sebela.dev/issues/55) | 31 |
+| [#57](https://github.com/sebelapetr/sebela.dev/issues/57) | Recover cached content when invalidation delivery fails | AFK | [#56](https://github.com/sebelapetr/sebela.dev/issues/56) | 26, 31 |
+| [#58](https://github.com/sebelapetr/sebela.dev/issues/58) | Keep every page usable with absent content and unavailable dependencies | AFK | [#53](https://github.com/sebelapetr/sebela.dev/issues/53), [#55](https://github.com/sebelapetr/sebela.dev/issues/55), [#57](https://github.com/sebelapetr/sebela.dev/issues/57) | 7, 10, 11, 23, 25, 26, 31 |
+| [#59](https://github.com/sebelapetr/sebela.dev/issues/59) | Run the complete website stack in Docker and isolated worktrees | AFK | [#58](https://github.com/sebelapetr/sebela.dev/issues/58) | 23, 26, 31, 33 |
+| [#60](https://github.com/sebelapetr/sebela.dev/issues/60) | Enable optional privacy-friendly analytics through configuration | AFK | [#59](https://github.com/sebelapetr/sebela.dev/issues/59) | 32 |
+| [#61](https://github.com/sebelapetr/sebela.dev/issues/61) | Verify the website handoff and phase 4/7 extension points | AFK | [#60](https://github.com/sebelapetr/sebela.dev/issues/60) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33 |
+
+## Owner visual approval gates
+
+[#43](https://github.com/sebelapetr/sebela.dev/issues/43) and [#44](https://github.com/sebelapetr/sebela.dev/issues/44) include interactive implementation, screenshots, feedback and explicit owner visual approval. Approval of this issue breakdown does not approve the resulting visuals. Complete them in issue worktrees and merge their reviewed PRs into the phase branch before closing them. The illustrative HTML prototype remains non-authoritative; development and screenshots use fictional content.
+
+## Execution and collision notes
+
+- [#42](https://github.com/sebelapetr/sebela.dev/issues/42) is intentionally the first real functional tracer bullet; [#43](https://github.com/sebelapetr/sebela.dev/issues/43) approves its hero refinement, and [#44](https://github.com/sebelapetr/sebela.dev/issues/44) delivers/approves the career timeline. All remaining page slices depend transitively on both visual gates. [#45](https://github.com/sebelapetr/sebela.dev/issues/45)–[#50](https://github.com/sebelapetr/sebela.dev/issues/50) grow real visitor journeys rather than splitting schema, component library and pages into isolated layers.
+- [#51](https://github.com/sebelapetr/sebela.dev/issues/51)–[#53](https://github.com/sebelapetr/sebela.dev/issues/53) each deliver a working browser chat path through the shared contract and mock adapter. They introduce no live conversation routes, cookie ownership, LLM service or model evals. Contract exports are established with [#51](https://github.com/sebelapetr/sebela.dev/issues/51); later API/Python clients in phase 7 consume them through the OpenAPI workflow.
+- [#56](https://github.com/sebelapetr/sebela.dev/issues/56)–[#57](https://github.com/sebelapetr/sebela.dev/issues/57) span the committed-write API hook, validated notification contract, website cache and rendered output; backend edits are explicitly within their scope. The dedicated notification credential is not a content API key. Dependencies include metadata and preview outputs so invalidation covers all representations.
+- The current loop is sequential. Graph independence does not authorize concurrent edits. [#45](https://github.com/sebelapetr/sebela.dev/issues/45)/[#46](https://github.com/sebelapetr/sebela.dev/issues/46) share Experience composition, anchors, UI exports and fixtures; [#47](https://github.com/sebelapetr/sebela.dev/issues/47)/[#48](https://github.com/sebelapetr/sebela.dev/issues/48) share homepage/Experience links; [#49](https://github.com/sebelapetr/sebela.dev/issues/49)/[#50](https://github.com/sebelapetr/sebela.dev/issues/50)/[#51](https://github.com/sebelapetr/sebela.dev/issues/51) share the homepage/header; [#51](https://github.com/sebelapetr/sebela.dev/issues/51)/[#52](https://github.com/sebelapetr/sebela.dev/issues/52)/[#53](https://github.com/sebelapetr/sebela.dev/issues/53) share chat state and contracts; [#54](https://github.com/sebelapetr/sebela.dev/issues/54)/[#55](https://github.com/sebelapetr/sebela.dev/issues/55)/[#56](https://github.com/sebelapetr/sebela.dev/issues/56) share metadata/cache/image configuration; [#56](https://github.com/sebelapetr/sebela.dev/issues/56)/[#57](https://github.com/sebelapetr/sebela.dev/issues/57)/[#59](https://github.com/sebelapetr/sebela.dev/issues/59) share API/environment/Compose/CI configuration. Coordinate ownership or serialize before any future parallel run. Do not generate competing contract artifacts concurrently.
+- Every slice handles its own empty/error states, security, visual evidence, CI and documentation. [#58](https://github.com/sebelapetr/sebela.dev/issues/58)/[#61](https://github.com/sebelapetr/sebela.dev/issues/61) provide assembled-site verification, not permission to postpone those checks. [#59](https://github.com/sebelapetr/sebela.dev/issues/59) delivers the runnable container/isolation workflow, not a production deployment. [#60](https://github.com/sebelapetr/sebela.dev/issues/60) verifies the chosen analytics integration with a local stub and redacts chat identifiers/text; production account setup stays in phase 8.
+- Owner-specific copy approval and private seed preparation stay with the owner outside unattended work. No issue may read `.context/`, load real data or copy personal facts into tracked fixtures. An unavailable old app/reference is not permission to bypass that boundary.
+
+## Running the phase
+
+After phase 2 is owner-merged and the main checkout is up to date, the owner starts:
+
+```bash
+scripts/run-phase.sh 03-web
+```
+
+The first unattended segment can complete [#42](https://github.com/sebelapetr/sebela.dev/issues/42). It cannot advance through the HITL gates [#43](https://github.com/sebelapetr/sebela.dev/issues/43)/[#44](https://github.com/sebelapetr/sebela.dev/issues/44); it may report that no eligible issues remain. Inspect and complete those gates interactively, then run the same command again to resume eligible AFK issues. A phase-done report alone is not evidence of completion: check all blocked, skipped or failed issues and both owner approvals.
+
+The orchestrator may merge reviewed issue pull requests into `phase/03-web`; only the owner merges the phase pull request into `master`. Runtime implementation, commits and phase-loop execution are separate from this issue-publication task.

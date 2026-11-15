@@ -70,6 +70,8 @@ A controller in the API stays thin: it validates input, calls a service, returns
 
 Next.js is used as a frontend only. Pages render on the server at request time, with caching and invalidation when content changes — not at build time. The build therefore needs no running API, and a content edit needs no deploy.
 
+From phase 3, committed API content writes notify a private website invalidation endpoint, authenticated with a dedicated server-only signing secret independent of content API keys. The website still reads only public API routes and holds no content API key. Validated content references map to affected pages, with safe duplicate delivery and bounded retries. Notification failure never undoes a committed write; time-based revalidation recovers from lost notifications. Freshness and failure criteria are defined in `.plan/03-web/prd.md` under "Cache invalidation guarantees".
+
 ## MCP servers and the LLM agent
 
 | App | Language | Capabilities | Callers |
@@ -94,6 +96,7 @@ Both are API clients and both are deployed as HTTP services. They stay separate 
 - **The assistant produces the answer:** an input guard (a small model), generation by a model with read tools and search, deterministic output checks. It is stateless; the API sends it the conversation so far.
 - The assistant has no API key and no write tool. A successful prompt injection has nothing to extract and nothing to change.
 - Answers carry typed blocks (contact, experience, service, exploration, roadmap, sources) that the website renders with its own components.
+- Phase 3 defines the validated application event/block contract in `packages/contracts` and a browser-local mock adapter. Components depend on that contract rather than transport framing. Phase 7 implements the real API transport/adapter, including idempotent request identifiers and recoverable failures. The mock introduces no live conversation API or server-side storage.
 - Everything is traced; stored conversations are scored afterwards, off the visitor's path.
 
 ## Background work

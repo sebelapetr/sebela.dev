@@ -2,11 +2,13 @@
 
 | | |
 |---|---|
-| Status | Draft, awaiting approval |
+| Status | Approved |
 | Date | 2026-11-15 |
 | Parent | `.plan/00-overview/prd.md` |
 | Depends on | Phase 2 |
 | Result | The public website: all presentation pages, the CV, and a chat that works end to end on mock answers |
+
+Approved implementation issues: [issues.md](issues.md). The owner reviews the hero and timeline through the two HITL issues; approval of this PRD does not replace that visual review.
 
 ## Problem Statement
 
@@ -48,7 +50,7 @@ Everything is rendered from the API, so a content change appears without a deplo
 ### Technical evaluator
 
 14. As a technical evaluator, I want to expand a case study inside an experience, so that I can read the problem, his role and the solution without leaving the page.
-15. As a technical evaluator, I want independent R&D listed with honest statuses, so that I can tell what was built from what was only tried.
+15. As a technical evaluator, I want independent R&D listed with honest statuses, so that I can distinguish implemented work, hands-on experiments and unimplemented designs.
 16. As a technical evaluator, I want a link to the repository from every page, so that I can see how the site is built.
 
 ### Chat
@@ -66,7 +68,7 @@ Everything is rendered from the API, so a content change appears without a deplo
 24. As a visitor, I want light and dark mode following my system, with a switch, so that the site is comfortable to read.
 25. As a visitor using a keyboard or a screen reader, I want to reach and understand everything, so that the site is usable for me.
 26. As a visitor, I want pages to load fast, so that I do not leave before they appear.
-27. As someone who received a link to a specific experience, I want it to open at that item.
+27. As someone who received a link to an experience, project or case study, I want it to open at that item with any enclosing detail expanded, so that I immediately see the evidence I was sent.
 
 ### Search engines and AI agents
 
@@ -157,13 +159,13 @@ Order: **header → career timeline → independent R&D → technologies → edu
   - A client testimonial sits with the experience it belongs to — quote, name, role, organization. There is no testimonials section.
   - Older experiences are one line each and can be expanded.
   - Small client and side work is **its own row** in the timeline, not nested under an employer: "2020–2022 · Selected client & side work · SousedOnline · Currys · MopedAuto · View 3 projects ↓".
-- **Independent R&D:** a few rows, each with name, status, one sentence and the concepts involved. Statuses are shown as they are — built, tested, designed — because the difference between reading about something and having built it is the point. No detail pages.
+- **Independent R&D:** a few rows, each with name, status, one sentence and the concepts involved. Experience and CV may show all three statuses: built (implemented and working), tested (tried hands-on), designed (planned or architected only). The status is visible in text, including in print and chat blocks. Designed work is explicitly labelled as an unimplemented design and is never evidence of delivered work or hands-on experience. Explorations remain separate from the career timeline and client projects. No detail pages.
 - **Technologies:**
   - **Core:** four to six key technologies, visually prominent, with logos. No large cards.
   - **AI engineering focus:** plain text (for example LLMs, MCP, RAG, agents, evals). No logos — several of these are not products, and logos would be inconsistent. The name says it is a current specialisation, not eight years of core expertise.
   - "+ N other technologies & tools ↓" expands a plain-text list.
 - **Education:** low on the page, compact editorial rows, no cards.
-- **Anchors:** every experience has an anchor, so the homepage's Selected work links straight to an item on this page.
+- **Anchors:** experiences, projects and case studies have distinct stable anchors. Selected work links to the exact project or case study it describes, including when it sits inside a collapsed experience. See the deep-link rules below.
 - Mobile: the year moves above the organization, the kind label below it.
 
 Much of the wording for experiences comes from the current sebelapetr.cz, where it was already written with care; it is revised, not rewritten from scratch.
@@ -235,6 +237,16 @@ The chat is the whole page. No sidebar, no dashboard.
 - The mock sits behind the interface the real backend implements in phase 7.
 - The site launches only after all phases, so visitors never see the mock.
 
+### Chat contract and failure states
+
+- Define the shared application contract in `packages/contracts` in phase 3, with runtime schemas and fictional fixtures. The mock implements it; phase 7 supplies the real API transport and adapter. Components depend on the application contract rather than transport framing. Phase 3 adds no live chat routes or conversation tables.
+- A submission carries the conversation identifier, a client-generated request identifier and the question. Stream events identify that request and its assistant message and carry ordered event identifiers. Define a discriminated union for message start, text delta, complete typed block, sources, related links, completion and error. Completion distinguishes answered, insufficient evidence, refused and unavailable; errors have a stable code and indicate whether retry is possible. One terminal completion or error ends an attempt; an earlier disconnect means interruption.
+- Validate payloads for all named block types, source references and related links. Explorations retain their status; sources include the record and exact site path/anchor. Reserve and validate `RoadmapCard` in this phase; real roadmap content and navigation arrive in phase 4. Render text and blocks safely without executable HTML or unsafe link schemes.
+- Validate incoming events, preserve order and ignore duplicate event identifiers. Invalid or unsupported payloads produce a recoverable failure. Render a typed block only after its complete payload validates. Late events from cancelled requests cannot change the current conversation.
+- Show pending, streaming, complete, insufficient-evidence and failed states. On timeout/interruption, preserve the question and partial answer, mark the answer incomplete and offer retry. Retry reuses the logical request and replaces its failed answer attempt without duplicating the question. Do not retry automatically after an ambiguous failure; phase 7 enforces request idempotency at the API boundary.
+- Prevent duplicate pending submissions. New chat cancels the active request and clears visible state. Carry the hero question into `/ask` exactly once, including browser back/forward. Mock state is scoped to the current tab; an unknown conversation address starts empty without automatic submission. Server-side history restoration remains phase 7 work.
+- Deterministic mock scenarios cover every available block, insufficient evidence, refusal, unavailability, failure before the first event, interrupted streaming, duplicate events, invalid payloads and retry. These verify UI behaviour and the contract; model evals remain phase 7 work.
+
 ### Contact block
 
 Not a page. A closing block on the homepage (`#contact`): a one-line prompt for both audiences ("Have a project or a role in mind?"), email, LinkedIn, GitHub, and one button that opens an email. "Contact" in the navigation leads here from every page.
@@ -242,9 +254,25 @@ Not a page. A closing block on the homepage (`#contact`): a one-line prompt for 
 ### Rendering and data
 
 - Pages render on the server at request time and are cached. The build needs no running API.
-- **Cache invalidation:** after a successful write, the API calls a private address of the website that invalidates the affected pages. A content change is visible within seconds without a deploy. The attachment point in the API exists from phase 2.
+- **Cache invalidation:** after a committed content write, the API notifies a private website address that invalidates affected data and pages. Failed writes do not notify. The attachment point exists from phase 2; delivery and recovery guarantees are defined below.
 - The website reads data only through the generated API client and only from public routes. It never holds an API key.
 - Texts that are content (headline, bio, experience descriptions, services) come from the API. Section headings and button labels live in the website.
+
+### Cache invalidation guarantees
+
+- Authenticate notifications using a dedicated server-only signing secret, separate from content API keys. Verify the signature over the exact body and timestamp in constant time; reject timestamps outside a documented short window. Destination and secret are environment configuration and never enter browser code, URLs or logs. A private address alone is insufficient authentication.
+- Notifications contain an event identifier and validated content domain/record references. The website maps these to a documented dependency map; callers cannot supply arbitrary URLs or cache keys. Duplicates and out-of-order delivery safely invalidate and refetch current data rather than replaying content.
+- Invalidate all affected representations: homepage, Experience, Services, CV, profile-derived metadata, sitemap, `llms.txt` and Open Graph output where applicable. Relation changes and deletions cover former dependants. Coarse profile-wide invalidation is acceptable initially if complete; extend the map for roadmap content in phase 4.
+- With healthy API, website and notification delivery, a new page request sees committed content within **10 seconds**, without deployment. Verify rendered output after warming caches, not just callback acknowledgement.
+- Use bounded notification timeouts/retries with a documented attempt budget and observable failure logs without secrets or content bodies. Failure never rolls back or reports failure for an already committed write. No persistent delivery queue is required in this phase.
+- Independently of notifications, cached profile content has a configurable fallback revalidation interval, **60 seconds by default**. After it elapses, the next request refreshes from a healthy API instead of serving the old value indefinitely. Dropped notifications and website restarts therefore cannot leave content stale indefinitely. Test fallback recovery separately from the healthy-delivery 10-second target, using controlled time.
+
+### Missing content and unavailable dependencies
+
+- Absent testimonials, selected work, explorations or current focus are valid states: omit optional sections without invented filler while preserving useful navigation and spacing. Fictional fixtures never substitute the owner's personal examples.
+- Without an attached CV PDF, keep `/cv` available when profile data exists, replace download actions with a CV-page link and omit the PDF update date. An unavailable PDF shows a clear failure and a link to `/cv`; it does not claim a successful download.
+- Missing or unavailable images retain stable layout and an accessible fallback without broken-image icons or fabricated alt text.
+- An uncached page whose API is unavailable shows a useful unavailable state with retry and an appropriate failure status. Distinguish a missing resource from a temporary upstream failure. Do not cache failed reads as successful empty profiles or index the failure as real content. Recovery requires no rebuild.
 
 ### Inline case study
 
@@ -261,6 +289,10 @@ A fixed structure: context → problem → my role → solution → result → t
 | Homepage and Experience | The CV page and the PDF |
 | Footer, every page | The repository; the CV |
 | "Contact" in the navigation, closing buttons | `/#contact` |
+
+- Use a documented anchor convention based on stable record identity, never display order. Experiences, projects, case studies and source targets such as services, explorations and technology groups are addressable. Sources and evidence links use the same anchor builder as their destination.
+- Direct loads, client navigation, hash changes and browser back/forward expand all enclosing details before scrolling to the target. Account for the sticky header and reduced-motion preference; make the target keyboard-reachable. Hydration must not close the revealed detail or undo the scroll.
+- Unknown or removed anchors leave the page usable without opening an unrelated item.
 
 Until phase 4 the AI Roadmap item in the navigation and its links are present but lead to a short placeholder; the Exploring column on the homepage is filled from profile data.
 
@@ -299,10 +331,13 @@ Keyboard operation, sufficient contrast in both themes, alt text from the media 
 
 - **Layout, typography and responsive polish** are accepted on the acceptance criteria of each issue, Playwright checks and screenshots at 360, 768 and 1280 px in light and dark mode, reviewed by the reviewer agent and then by the owner. A test before the markup is not required.
 - **Test-first** applies to the logic in the website: mapping API data to what a page shows (which experiences are written out and which collapsed, what goes into the CV), the chat state (creating a conversation, carrying the first question over, streaming, the "I don't know" state), date and period formatting.
+- **Exploration integrity:** fixtures cover built, tested and designed on Experience, CV and chat blocks, including print output. Designed remains explicitly unimplemented and cannot become evidence of delivered work through presentation mapping.
+- **Deep links:** direct loads and navigation to projects/case studies inside collapsed experiences reveal the exact evidence without another click. Check enclosing expansion, sticky-header visibility, back/forward and missing anchors.
 - **End-to-end tests** cover the paths that matter: hero → Services; hero → Experience → CV download; hero question → `/ask` with the question already answered; "Contact" from an inner page; a deep link to an experience anchor; the theme switch.
 - **Every page** has an automated accessibility check and a check that there is no horizontal scroll at 360 px.
-- **Cache invalidation** is tested end to end: a write through the API changes what the page shows.
-- **The mock chat** is tested through the same interface the real backend will implement.
+- **Cache invalidation:** test authentication and dependency mapping first, then verify against warmed caches that committed writes appear within 10 seconds, including relation changes and deletion. Invalid signatures, stale timestamps and malformed references cannot invalidate anything; duplicates/out-of-order delivery are harmless. A failed callback preserves the successful write, and the 60-second fallback refreshes on the next request with a healthy API even if notifications were dropped.
+- **The mock chat:** test the shared contract and state first: event validation/order/deduplication, incomplete streams, explicit errors, safe blocks/links, retry without duplicate questions, cancellation ignoring late events and exactly-once hero handoff. The real adapter in phase 7 must pass the same contract scenarios.
+- **Missing content and failures:** cover absent optional sections/PDF/images, unavailable files, API timeouts/unavailability, missing resources and recovery without poisoning successful caches. These UI states receive the same responsive, theme and accessibility checks as the happy path.
 - Tests run against the demo seed's shape using small fixtures, not the demo seed itself.
 - **Prior art:** `road-to-matrix` for the component style, SEO and structured data; phase 2 tests for the API side.
 
@@ -318,6 +353,7 @@ Keyboard operation, sufficient contrast in both themes, alt text from the media 
 
 ## Further Notes
 
+- **Personal navigation prototype:** `.plan/03-web/prototype/` is a lightweight, owner-only HTML/CSS aid for exploring page structure and links. It is incomplete and illustrative; it is not an approved visual design, a product requirement, or an implementation reference. Follow this PRD and `docs/design.md` instead. In particular, absence of an element from the prototype does not remove a PRD requirement.
 - **HITL issues in this phase:** the visual direction of the hero and of the Experience timeline is reviewed by the owner before the remaining pages are built on it, so that a wrong direction is caught once and not on every page.
 - **Wording still to be settled with the owner:** the Paldock role title. Paldock content is limited to public product information, roles and technologies; internal use cases and implementation details are excluded.
 - **Content:** much of the wording for experiences comes from the current sebelapetr.cz and is revised, not rewritten. Raw material is in `.context/profile-notes.md`.

@@ -50,7 +50,7 @@ These three are deliberately separate:
 
 - An **experience** is a period in a role. It appears on the timeline and in the CV.
 - A **project** is delivered work shown inside the experience it belongs to — and only when it proves something. A strong one gets a case study.
-- An **exploration** was never released. It is not a project and not part of the CV timeline. Explorations are shown together as one short block that demonstrates initiative.
+- An **exploration** was never released. It is not a delivered project or a career experience. Explorations are shown together as one short block that demonstrates initiative on the Experience page, and concisely in a separate section on the print-friendly CV page, with their actual status preserved. They are not inserted into the career timeline. The downloadable PDF is maintained manually and is not generated from this data.
 
 ### Exploration status
 
@@ -62,7 +62,7 @@ Every exploration carries one of:
 | Tested | Tried out or evaluated hands-on |
 | Designed | Planned or architected only |
 
-The website shows built and tested work. The status exists so that neither a page nor the chatbot ever presents designed work as built.
+The Experience page and print-friendly CV may show all three statuses in their separate R&D sections. Every entry retains a visible text status, including in print and chat blocks. Designed work is explicitly an unimplemented design, never evidence of delivered work or hands-on experience. Neither a page nor the chatbot may present a status more strongly than stored. Explorations never become career experiences or delivered client projects through presentation.
 
 ### Technology tiers
 

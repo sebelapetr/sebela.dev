@@ -20,6 +20,7 @@ Making it real brings three risks that a personal site cannot afford. The assist
 
 - A **chat pipeline** that answers from the public profile, the AI Roadmap and retrieval, shows its sources, returns rich blocks, and says "I don't know — ask Petr" when the evidence is not there.
 - A **public MCP server** offering the same read tools to any AI agent.
+- A public **`/mcp` setup page** that helps visitors connect the remote MCP server to their own AI client, with client-specific, copyable configuration for Claude, Codex, Gemini and OpenCode.
 - The API gains **conversations**: who owns one, how much may be asked, what it may cost, and a record of everything.
 - It is built **evals-first**, for what it must do and — at least as much — for what it must not.
 - Every answer is **traced**, and real conversations are scored afterwards.
@@ -48,25 +49,27 @@ Making it real brings three risks that a personal site cannot afford. The assist
 15. As an AI agent, I want a search tool over his public content.
 16. As an AI agent, I want the server to be read-only and to need no credentials.
 17. As an AI agent in a client that supports it, I want tools to return a rendered card for a contact, an experience or a service.
+18. As a visitor who uses an AI client, I want clear instructions for connecting Petr's public MCP server to Claude, Codex, Gemini or OpenCode, so that I can ask about his public profile from my own agent.
+19. As a visitor, I want to discover the MCP setup page from the main navigation, the Ask page and the homepage chat entry point, so that I can find it whether I arrive to browse, ask or integrate.
 
 ### Owner
 
-18. As the owner, I want the assistant unable to state anything about me that my data does not support.
-19. As the owner, I want prompt injection — typed by a visitor or hidden in indexed text — to achieve nothing.
-20. As the owner, I want a hard monthly ceiling on cost, enforced both at the model provider and in my backend.
-21. As the owner, I want bots and abusive visitors limited before they cost money.
-22. As the owner, I want every conversation stored without a time limit, so that I can analyse what people ask.
-23. As the owner, I want every answer traced step by step — guard, tools called, passages retrieved, cost, latency — so that I can see why it said what it said.
-24. As the owner, I want real conversations scored for grounding and correct sources, and weak ones flagged for me.
-25. As the owner, I want to change the model without rewriting the pipeline.
-26. As the owner, I want questions the assistant could not answer collected, so that I know what to add to my profile.
+20. As the owner, I want the assistant unable to state anything about me that my data does not support.
+21. As the owner, I want prompt injection — typed by a visitor or hidden in indexed text — to achieve nothing.
+22. As the owner, I want a hard monthly ceiling on cost, enforced both at the model provider and in my backend.
+23. As the owner, I want bots and abusive visitors limited before they cost money.
+24. As the owner, I want every conversation stored without a time limit, so that I can analyse what people ask.
+25. As the owner, I want every answer traced step by step — guard, tools called, passages retrieved, cost, latency — so that I can see why it said what it said.
+26. As the owner, I want real conversations scored for grounding and correct sources, and weak ones flagged for me.
+27. As the owner, I want to change the model without rewriting the pipeline.
+28. As the owner, I want questions the assistant could not answer collected, so that I know what to add to my profile.
 
 ### Development
 
-27. As a developer agent, I want the eval suites for forbidden behaviour to exist before the pipeline, so that safety is a requirement and not a patch.
-28. As a reviewer, I want safety suites to pass completely, with no threshold to hide behind.
-29. As a developer agent, I want the read tools defined once and used by both the chat agent and the MCP server.
-30. As a developer agent, I want tests that run without calling a model, so that they are fast, free and repeatable.
+29. As a developer agent, I want the eval suites for forbidden behaviour to exist before the pipeline, so that safety is a requirement and not a patch.
+30. As a reviewer, I want safety suites to pass completely, with no threshold to hide behind.
+31. As a developer agent, I want the read tools defined once and used by both the chat agent and the MCP server.
+32. As a developer agent, I want tests that run without calling a model, so that they are fast, free and repeatable.
 
 ## Implementation Decisions
 
@@ -101,6 +104,8 @@ The read tools are the deep module here: the chat agent and the MCP server are t
 
 ### Conversations (API)
 
+- Implement the shared event/block contract established in phase 3 (`.plan/03-web/prd.md`, "Chat contract and failure states"). Replace the mock adapter while preserving its event semantics, identifiers, validated payloads and incomplete-answer/retry behaviour. Transport framing stays outside presentation components. Generate the Python-facing schema/client from the API contract rather than maintaining handwritten duplicate event definitions.
+- Make client request identifiers idempotent within the owning visitor's conversation: retrying an interrupted submission cannot append duplicate user turns or unintentionally start concurrent generations. Record and expose whether an attempt completed, failed or remains active so an ambiguous disconnect can be recovered safely. Contract and security tests precede implementation.
 - A new schema for conversations and messages, apart from content.
 - **Identity:** a conversation has a random, unguessable identifier that appears in the address. It identifies; it does not authorise.
 - **Ownership:** an anonymous visitor cookie (HttpOnly, Secure, SameSite). Every request is checked against it. Someone else with the link gets a new, empty conversation.
@@ -174,11 +179,14 @@ Rules the generation prompt carries, each backed by evals:
 - Read-only, no credentials, rate limited.
 - Tools are the read tools above. No chat tool: an external agent brings its own model.
 - Listed in the README and in `llms.txt` so that agents can find it.
+- The website also has a public `/mcp` page with a short explanation and setup instructions for Claude, Codex, Gemini and OpenCode. Each client tab shows a copyable configuration snippet and the server URL. This connects each client to the hosted remote server; visitors do not install or run a local copy of the server.
+- Verify each client's current remote MCP setup format and transport support during the phase, and keep the examples aligned with the deployed endpoint. Do not claim a client supports a feature until verified.
 
 ### Website
 
 - The mock is replaced by the real interface: create a conversation, stream an answer, restore one's own conversation from the address.
 - The flow from the hero, the Ask page and the blocks are unchanged — that was the point of building them against the interface in phase 3.
+- Add an MCP entry to the main navigation. Link to `/mcp` from `/ask` and from the homepage hero's chat entry point, so the setup instructions are discoverable alongside the web chatbot.
 - A line under the input says that questions are stored.
 
 ### Evals
@@ -237,6 +245,7 @@ Rules the generation prompt carries, each backed by evals:
   - the graph's control flow with a fake model — guard refusal skips generation; a failing draft becomes the fallback answer;
   - the MCP server — lists the read tools, needs no credentials, offers no write.
 - **End to end**, with a fake model: hero question → conversation → streamed answer with sources and a block on the Ask page; restoring the conversation; a second browser with the same link sees nothing.
+- **Website acceptance:** `/mcp` presents working, copyable setup examples in tabs for Claude, Codex, Gemini and OpenCode; the main navigation, `/ask` and homepage hero chat entry point link to it. Verify snippets against each client's current setup flow.
 - **One end-to-end check with real models** before launch, run by hand.
 - **Prior art:** eval set-up of phases 5 and 6; the mock interface of phase 3.
 

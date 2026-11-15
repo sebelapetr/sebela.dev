@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft, awaiting approval |
+| Status | Approved |
 | Date | 2026-11-15 |
 | Parent | `.plan/00-overview/prd.md` |
 | Depends on | The harness (`.plan/00-overview/harness-prd.md`) and a passed trial (`.plan/00-trial/prd.md`) |
