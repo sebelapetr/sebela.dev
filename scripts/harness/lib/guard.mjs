@@ -56,7 +56,18 @@ function checkSearchPattern({ toolName, toolInput, restricted }) {
   return null;
 }
 
-function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted }) {
+// The harness that governs the loop. Unattended runs change it only inside a worktree, through a
+// pull request; never in the main checkout, and never inside any .git directory.
+const HARNESS_DIRS = [".claude", ".github", path.join("scripts", "harness")];
+const HARNESS_IN_COMMAND = /(^|[\s'"=/<>|;&(])(\.claude\/settings|\.git\/(hooks|config)\b)/;
+
+function isHarnessFile(filePath, mainRoot) {
+  if (filePath.split(path.sep).includes(".git")) return true;
+  if (isInside(filePath, path.join(mainRoot, ".worktrees"))) return false;
+  return HARNESS_DIRS.some((dir) => isInside(filePath, path.join(mainRoot, dir)));
+}
+
+function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended }) {
   const fromPattern = checkSearchPattern({ toolName, toolInput, restricted });
   if (fromPattern) return fromPattern;
   const raw = filePathOf(toolInput);
@@ -74,6 +85,10 @@ function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted }) {
     filePath !== path.join(contextDir, "README.md")
   ) {
     return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");
+  }
+
+  if (FILE_EDIT_TOOLS.has(toolName) && unattended && isHarnessFile(filePath, mainRoot)) {
+    return deny("The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).");
   }
 
   if (FILE_EDIT_TOOLS.has(toolName)) {
@@ -181,13 +196,16 @@ export function evaluateToolCall({
   const restricted = isSubagent || unattended;
 
   if (FILE_EDIT_TOOLS.has(toolName) || FILE_READ_TOOLS.has(toolName)) {
-    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted });
+    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended });
   }
 
   if (toolName === "Bash") {
     const command = String(toolInput?.command ?? "");
     if (ENV_IN_COMMAND.test(command)) {
       return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
+    }
+    if (unattended && HARNESS_IN_COMMAND.test(command)) {
+      return deny("The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).");
     }
     if (unattended && UNATTENDED_FORBIDDEN.test(command)) {
       return deny("The phase loop does not change repository settings, secrets or credentials (docs/permissions.md).");

@@ -217,6 +217,28 @@ test("unattended runs cannot change repository settings, secrets or credentials"
   assert.equal(bash("gh api user"), null);
 });
 
+test("unattended runs cannot edit the harness that governs them in the main checkout", () => {
+  for (const file_path of [
+    "/repo/.claude/settings.json",
+    "/repo/.claude/agents/orchestrator.md",
+    "/repo/scripts/harness/hooks/pre-tool-use.mjs",
+    "/repo/.github/workflows/ci.yml",
+    "/repo/.git/hooks/pre-commit",
+    "/repo/.git/worktrees/feat-1-x/HEAD",
+  ]) {
+    assert.ok(call("Edit", { file_path }, { unattended: true }), file_path);
+  }
+  assert.ok(bash("sed -i s/x/y/ .claude/settings.json", { unattended: true }));
+  assert.ok(bash("echo x > .git/hooks/pre-push", { unattended: true }));
+});
+
+test("unattended runs may change the harness inside a worktree, through a pull request", () => {
+  assert.equal(call("Edit", { file_path: "/repo/.worktrees/ci-1-x/.github/workflows/ci.yml" }, { unattended: true }), null);
+  assert.equal(call("Edit", { file_path: "/repo/docs/agents.md" }, { unattended: true }), null);
+  assert.equal(bash("node scripts/harness/worktree.mjs list", { unattended: true }), null);
+  assert.equal(call("Edit", { file_path: "/repo/.claude/settings.json" }), null);
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {
