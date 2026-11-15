@@ -53,7 +53,7 @@ There is no staging environment. Its job — catching a broken release before vi
 
 ### Verification without staging
 
-- Before anything is published, the pipeline starts the **complete stack** from the freshly built images — database, API, website, `mcp-admin`, `llm-agent` — loads the demo seed, and runs the end-to-end tests against it, with models replaced by fakes.
+- Before anything is published, the pipeline starts the **complete stack** from the freshly built images — database, API, website, `mcp-admin`, `mcp-public`, `ai-service` — loads the demo seed, and runs the end-to-end tests against it, with models replaced by fakes.
 - Only images that passed are published and deployed, and they are the same images, not rebuilt ones.
 
 ### Images
@@ -63,9 +63,9 @@ There is no staging environment. Its job — catching a broken release before vi
 
 ### Production stack
 
-- One Compose stack on the owner's VPS, defined in the repository as production overrides of the base Compose file: reverse proxy, website, API, `mcp-admin`, `llm-agent`, Postgres with pgvector, and a one-off migration service.
+- One Compose stack on the owner's VPS, defined in the repository as production overrides of the base Compose file: reverse proxy, website, API, `mcp-admin`, `mcp-public`, `ai-service`, Postgres with pgvector, and a one-off migration service.
 - **Reverse proxy** with automatic TLS certificates, security headers, compression and rate limits at the edge.
-- **Addresses:** the website on the main domain; the API, the public MCP server and `mcp-admin` each on their own subdomain. Only the reverse proxy is exposed; Postgres and the chat endpoint of `llm-agent` are reachable only inside the stack.
+- **Addresses:** the website on the main domain; the API, the public MCP server and `mcp-admin` each on their own subdomain. Only the reverse proxy is exposed; Postgres and the generation endpoint of `ai-service` are reachable only inside the stack.
 - **Migrations** run as the one-off service and must finish before the new API starts.
 - **Deployment** recreates the services with the new images; an interruption of a few seconds is accepted. Zero-downtime deployment is not a goal of this phase.
 - **Health checks** on every service decide whether a deployment succeeded.

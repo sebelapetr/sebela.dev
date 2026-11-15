@@ -69,7 +69,7 @@ The capability is also dangerous: whatever can write the profile can also wreck 
 ### Deployment and transport
 
 - A separate app, TypeScript, deployed as an HTTP service in the same Compose stack, on its own subdomain behind the reverse proxy with TLS.
-- It reaches data only through the API over HTTP, using the generated client and the shared schemas.
+- It reaches data only through the TypeScript content API over HTTP, using the generated client and shared schemas. It does not call FastAPI or the Python chat pipeline; the external agent supplies its own model. The separate Python `mcp-public` adapter is delivered in phase 7.
 
 ### Security
 

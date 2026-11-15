@@ -233,7 +233,7 @@ The chat is the whole page. No sidebar, no dashboard.
 
 - Prepared answers for the suggested questions, with sources, related links and at least one of each block type, kept as fixtures in the website. They include at least one "I don't know" answer, so that state is designed and tested too.
 - Any other question gets a general reply that the assistant is not connected yet, with links to the main pages.
-- Answers are streamed even in the mock, so the UI is built against real behaviour.
+- Answers are streamed even in the mock, so the UI is built against real behaviour. Phase 7 may send progress before buffering generation through Output Guard, then stream only approved content; the UI must not depend on immediate model-token delivery.
 - The mock sits behind the interface the real backend implements in phase 7.
 - The site launches only after all phases, so visitors never see the mock.
 
