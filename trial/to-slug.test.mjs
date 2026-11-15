@@ -1,24 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { slugify } from "./slugify.mjs";
+import { toSlug } from "./to-slug.mjs";
 
 test("lowercases words and joins them with a dash", () => {
-  assert.equal(slugify("Hello World"), "hello-world");
+  assert.equal(toSlug("Hello World"), "hello-world");
 });
 
 test("removes diacritics", () => {
-  assert.equal(slugify("Šebela Žluťoučký kůň"), "sebela-zlutoucky-kun");
+  assert.equal(toSlug("Šebela Žluťoučký kůň"), "sebela-zlutoucky-kun");
 });
 
 test("collapses every run of other characters into one dash and trims dashes", () => {
-  assert.equal(slugify("  --Hi!!  there--  "), "hi-there");
+  assert.equal(toSlug("  --Hi!!  there--  "), "hi-there");
 });
 
 test("returns an empty string for empty input", () => {
-  assert.equal(slugify(""), "");
+  assert.equal(toSlug(""), "");
 });
 
 test("returns an empty string for whitespace-only input", () => {
-  assert.equal(slugify("   \t\n  "), "");
+  assert.equal(toSlug("   \t\n  "), "");
 });

@@ -1,4 +1,4 @@
-import { slugify } from "./slugify.mjs";
+import { toSlug } from "./to-slug.mjs";
 
 /**
  * Returns the slug of `text` if it is free, otherwise the slug with the
@@ -10,7 +10,7 @@ import { slugify } from "./slugify.mjs";
  */
 export function uniqueSlug(text, taken) {
   const used = taken instanceof Set ? taken : new Set(taken);
-  const base = slugify(text);
+  const base = toSlug(text);
   if (!used.has(base)) {
     return base;
   }

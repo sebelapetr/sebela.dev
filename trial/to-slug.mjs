@@ -6,7 +6,7 @@
  * @param {string} text
  * @returns {string}
  */
-export function slugify(text) {
+export function toSlug(text) {
   return text
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")

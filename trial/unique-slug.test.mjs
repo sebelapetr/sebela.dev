@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { uniqueSlug } from "./unique-slug.mjs";
-import { slugify } from "./slugify.mjs";
+import { toSlug } from "./to-slug.mjs";
 
 test("returns the plain slug when nothing is taken", () => {
   assert.equal(uniqueSlug("Hello World", []), "hello-world");
@@ -27,14 +27,14 @@ test("accepts a Set of taken slugs", () => {
   );
 });
 
-test("derives the slug with slugify", () => {
+test("derives the slug with toSlug", () => {
   const text = "Šebela Žluťoučký kůň";
-  assert.equal(uniqueSlug(text, []), slugify(text));
-  assert.equal(uniqueSlug(text, [slugify(text)]), `${slugify(text)}-2`);
+  assert.equal(uniqueSlug(text, []), toSlug(text));
+  assert.equal(uniqueSlug(text, [toSlug(text)]), `${toSlug(text)}-2`);
 });
 
-test("imports slugify from trial/slugify.mjs rather than reimplementing it", async () => {
+test("imports toSlug from trial/to-slug.mjs rather than reimplementing it", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("./unique-slug.mjs", import.meta.url), "utf8");
-  assert.match(source, /import\s*\{\s*slugify\s*\}\s*from\s*["']\.\/slugify\.mjs["']/);
+  assert.match(source, /import\s*\{\s*toSlug\s*\}\s*from\s*["']\.\/to-slug\.mjs["']/);
 });
