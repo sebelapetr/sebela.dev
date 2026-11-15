@@ -1,0 +1,9 @@
+{
+  "name": "fixture-accepted",
+  "private": true,
+  "description": "Only the scripts are executable; a description may say localhost:3000.",
+  "scripts": {
+    "dev": "next dev --port $WEB_PORT",
+    "start": "node server.mjs"
+  }
+}

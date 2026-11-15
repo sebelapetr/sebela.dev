@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+console.log("serving on http://web.example.invalid:8080");
