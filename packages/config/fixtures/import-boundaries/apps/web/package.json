@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "imports": {
+    "#db": "@sebela/db",
+    "#contracts": "@sebela/contracts",
+    "#internal/*": "./src/internal/*.js"
+  }
+}

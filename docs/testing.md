@@ -62,6 +62,7 @@ There is one test that walks every route of the API and asserts: each write rout
 | Integration | Vitest | API and services against a real Postgres — the database is not mocked |
 | End to end and visual | Playwright | The website in a browser, including screenshots |
 | Evals | promptfoo | MCP and AI behaviour, desired and forbidden |
+| Tooling | Node's built-in test runner (`node --test`) | Plain JavaScript tooling: the harness, and the lint rules of `@sebela/config` against fixture files that must fail and fixture files that must pass |
 
 ## Databases
 
