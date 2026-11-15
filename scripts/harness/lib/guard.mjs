@@ -67,12 +67,13 @@ function isHarnessFile(filePath, mainRoot) {
   return HARNESS_DIRS.some((dir) => isInside(filePath, path.join(mainRoot, dir)));
 }
 
-function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended }) {
+function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath }) {
   const fromPattern = checkSearchPattern({ toolName, toolInput, restricted });
   if (fromPattern) return fromPattern;
   const raw = filePathOf(toolInput);
   if (!raw) return null;
-  const filePath = path.resolve(cwd ?? mainRoot, raw);
+  // Where the file really is, past any symbolic link.
+  const filePath = realpath(path.resolve(cwd ?? mainRoot, raw));
 
   if (isEnvFile(filePath)) {
     return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
@@ -183,6 +184,7 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
 //   unattended            the call comes from the phase loop
 //   lookupPrBase(number)  returns the base branch of a pull request
 //   currentBranch         branch checked out where the command runs
+//   realpath(path)        resolves symbolic links (the hook passes a real one)
 export function evaluateToolCall({
   toolName,
   toolInput,
@@ -192,11 +194,12 @@ export function evaluateToolCall({
   unattended = false,
   lookupPrBase = () => null,
   currentBranch = null,
+  realpath = (p) => p,
 }) {
   const restricted = isSubagent || unattended;
 
   if (FILE_EDIT_TOOLS.has(toolName) || FILE_READ_TOOLS.has(toolName)) {
-    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended });
+    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath });
   }
 
   if (toolName === "Bash") {

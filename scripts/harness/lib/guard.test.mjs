@@ -239,6 +239,14 @@ test("unattended runs may change the harness inside a worktree, through a pull r
   assert.equal(call("Edit", { file_path: "/repo/.claude/settings.json" }), null);
 });
 
+test("a symbolic link does not hide where an edit really lands", () => {
+  const realpath = (p) => p.replace("/repo/.worktrees/x/link", "/repo/.claude");
+  assert.ok(call("Edit", { file_path: "/repo/.worktrees/x/link/settings.json" }, { unattended: true, realpath }));
+  assert.ok(call("Edit", { file_path: "/repo/.worktrees/x/apps/web/page.tsx" }, {
+    realpath: (p) => p.replace("/repo/.worktrees/x/apps", "/repo/apps"),
+  }));
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {

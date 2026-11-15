@@ -2,6 +2,8 @@
 // PreToolUse hook: refuses the actions listed in docs/permissions.md. Rules: ../lib/guard.mjs.
 
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { evaluateToolCall } from "../lib/guard.mjs";
 import { mainRootFrom } from "../worktree.mjs";
 import { readHookInput } from "./read-input.mjs";
@@ -25,6 +27,22 @@ function currentBranchIn(cwd) {
   }
 }
 
+// Resolves symbolic links. A file that does not exist yet resolves through its nearest existing parent.
+function realpath(target) {
+  const rest = [];
+  let current = target;
+  while (true) {
+    try {
+      return path.join(fs.realpathSync(current), ...rest);
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return target;
+      rest.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
 try {
   const input = await readHookInput();
   const cwd = input.cwd ?? process.cwd();
@@ -38,6 +56,7 @@ try {
     isSubagent: Boolean(input.agent_id),
     unattended: process.env.SEBELA_UNATTENDED === "1",
     lookupPrBase,
+    realpath,
     currentBranch: isBash ? currentBranchIn(cwd) : null,
   });
   if (verdict) {
