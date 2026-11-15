@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { inspect } from "node:util";
 
 import { formatDuration } from "./format-duration.mjs";
 
@@ -9,7 +10,7 @@ function assertRejects(value) {
   assert.throws(
     () => formatDuration(value),
     (error) => error instanceof RangeError && error.message === MESSAGE,
-    `expected a RangeError for ${String(value)}`,
+    `expected a RangeError for ${inspect(value)}`,
   );
 }
 
@@ -28,6 +29,7 @@ test("leaves out the minutes on a whole number of hours", () => {
 
 test("formats zero as minutes", () => {
   assert.equal(formatDuration(0), "0 min");
+  assert.equal(formatDuration(-0), "0 min");
 });
 
 test("formats minutes just below and above an hour", () => {
@@ -35,7 +37,8 @@ test("formats minutes just below and above an hour", () => {
   assert.equal(formatDuration(61), "1 h 1 min");
 });
 
-test("formats durations longer than a day in hours", () => {
+test("formats durations of a day or more in hours", () => {
+  assert.equal(formatDuration(1440), "24 h");
   assert.equal(formatDuration(1500), "25 h");
   assert.equal(formatDuration(1501), "25 h 1 min");
 });
@@ -50,6 +53,17 @@ test("rejects a non-integer", () => {
   assertRejects(0.1);
   assertRejects(Infinity);
   assertRejects(-Infinity);
+});
+
+test("formats the largest safe integer exactly", () => {
+  assert.equal(formatDuration(Number.MAX_SAFE_INTEGER), "150119987579016 h 31 min");
+});
+
+test("rejects an integer above Number.MAX_SAFE_INTEGER", () => {
+  assertRejects(Number.MAX_SAFE_INTEGER + 1);
+  assertRejects(2 ** 53 + 1);
+  assertRejects(1e23);
+  assertRejects(Number.MAX_VALUE);
 });
 
 test("rejects NaN", () => {
