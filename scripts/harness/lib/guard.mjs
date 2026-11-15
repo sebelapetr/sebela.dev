@@ -96,6 +96,11 @@ function branchNamedBy(ref, currentBranch) {
   return name === "HEAD" ? currentBranch : name;
 }
 
+// What the phase loop never needs: changing the repository's settings, secrets or credentials.
+const UNATTENDED_FORBIDDEN = new RegExp(
+  `${AT_COMMAND}(gh\\s+(api|repo|secret|auth|label|workflow|ruleset|variable)\\b|git\\s+config\\b)`,
+);
+
 // The command may run somewhere other than the directory the hook looked at.
 const MOVES = /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
 
@@ -183,6 +188,9 @@ export function evaluateToolCall({
     const command = String(toolInput?.command ?? "");
     if (ENV_IN_COMMAND.test(command)) {
       return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
+    }
+    if (unattended && UNATTENDED_FORBIDDEN.test(command)) {
+      return deny("The phase loop does not change repository settings, secrets or credentials (docs/permissions.md).");
     }
     if (restricted && CONTEXT_IN_COMMAND.test(command)) {
       return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");

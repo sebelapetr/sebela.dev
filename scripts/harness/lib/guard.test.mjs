@@ -200,6 +200,23 @@ test("search tools cannot be pointed at .context by pattern when restricted", ()
   assert.ok(call("Grep", { pattern: "x", path: "/repo", glob: ".context/*.md" }, { isSubagent: true }));
 });
 
+test("unattended runs cannot change repository settings, secrets or credentials", () => {
+  for (const command of [
+    "gh api repos/x/y/branches/master/protection -X DELETE",
+    "gh repo edit --visibility private",
+    "gh secret set TOKEN",
+    "gh auth token",
+    "gh label delete trial",
+    "gh workflow disable ci.yml",
+    "git config core.hooksPath /dev/null",
+    "cd x && gh api user",
+  ]) {
+    assert.ok(bash(command, { unattended: true }), command);
+  }
+  assert.equal(bash("gh pr view 4 --json state", { unattended: true }), null);
+  assert.equal(bash("gh api user"), null);
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {
