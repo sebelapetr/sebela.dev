@@ -5,6 +5,7 @@ Initial conventions. They are refined in phase 2, when the first real code exist
 ## TypeScript
 
 - Strict mode everywhere. No `any`; use `unknown` and narrow it.
+- Every `tsconfig.json` extends `@sebela/config/tsconfig.base.json`. Beyond `strict` it enables `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noPropertyAccessFromIndexSignature`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch` and `verbatimModuleSyntax`, and targets Node.js ESM (`module: nodenext`, ES2024). A package may add options for its runtime (for example a bundler for the website) but does not switch a check off.
 - Prefer named exports. A package exposes its public interface from one entry file and nothing else is imported from outside the package.
 - Types that cross a package boundary come from `@sebela/contracts`. Do not redefine them locally.
 - Validate at the edges: everything entering the system (HTTP input, environment variables, tool arguments, seed files) is parsed with a Zod schema. Inside the system, trust the types.
@@ -75,7 +76,9 @@ The conceptual references are [Ousterhout's modular design](https://web.stanford
 ## Formatting and lint
 
 - Prettier formats; ESLint checks. Both run automatically on changed files.
-- A lint rule is never disabled inline to make a check pass without the owner's approval.
+- Prettier uses its defaults (double quotes, semicolons, trailing commas) with a print width of 100. The only Prettier configuration is the root `prettier.config.js`, which re-exports `@sebela/config/prettier`.
+- Every package's `eslint.config.js` is `createConfig({ tsconfigRootDir: import.meta.dirname })` from `@sebela/config/eslint`, followed only by package-specific additions. TypeScript files are linted with `typescript-eslint`'s strict and stylistic type-checked rules; JavaScript files with ESLint's recommended rules. The root configuration lints the harness and root files; each package lints itself.
+- A lint rule is never disabled inline to make a check pass without the owner's approval. A disable directive that no longer suppresses anything is itself a lint error.
 
 ## Python
 
@@ -85,3 +88,5 @@ The conceptual references are [Ousterhout's modular design](https://web.stanford
 
 - Adding a dependency needs a reason stated in the pull request. Prefer what is already in the repository.
 - Shared tool configuration lives in `@sebela/config`.
+- Versions of tools used by more than one package are pinned once in the `catalog` of `pnpm-workspace.yaml` and referenced with `catalog:`. Workspace packages depend on each other with `workspace:*`.
+- The lockfile is committed and CI installs with `--frozen-lockfile`. See [repository structure](repository-structure.md#toolchain-and-workspace) for the supported Node.js and pnpm versions.

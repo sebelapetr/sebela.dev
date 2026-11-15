@@ -17,7 +17,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── llm-agent/           the AI layer, Python: chat pipeline and public MCP server [7]
 │       └── evals/
 ├── packages/
-│   ├── config/              shared ESLint, TypeScript and Prettier configuration [1]
+│   ├── config/              shared ESLint, TypeScript and Prettier configuration, incl. tsconfig.base.json [1]
 │   ├── db/                  Drizzle schema, migrations, repositories [2]
 │   │   └── seed/demo/       fictional person; the only seed in the repository
 │   ├── services/            domain logic [2]
@@ -38,10 +38,14 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── .github/workflows/       CI [1]
 ├── compose.yaml             base stack: postgres, later api, web, mcp [1]
 ├── compose.prod.yaml        production overrides [8]
-├── turbo.json
-├── pnpm-workspace.yaml
-├── package.json
-├── tsconfig.base.json
+├── turbo.json               task pipeline [1]
+├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
+├── pnpm-lock.yaml           committed lockfile [1]
+├── package.json             root commands, Node.js and pnpm versions [1]
+├── .nvmrc                   Node.js major version [1]
+├── eslint.config.js         lints root files: the harness and root configuration [1]
+├── prettier.config.js       re-exports the shared Prettier configuration [1]
+├── .prettierignore          generated files Prettier leaves alone [1]
 ├── .env.example
 ├── AGENTS.md                rules for agents (each app and package also has its own)
 ├── GLOSSARY.md              canonical domain terms
@@ -68,6 +72,36 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 - **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command.
 - **Language:** code, docs, `AGENTS.md`, README and PRDs are in English.
 - **Agent instructions:** the root `AGENTS.md` holds repository-wide rules; every app and package has its own `AGENTS.md` with what is specific to it. There are no `CLAUDE.md` files: Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read it too.
+
+## Toolchain and workspace
+
+| Tool | Version | Declared in |
+| --- | --- | --- |
+| Node.js | 26, the current LTS line | `.nvmrc` (`26`) and `engines.node` in `package.json` (`>=26.0.0 <27.0.0`). `engineStrict` in `pnpm-workspace.yaml` makes installation fail on another version. |
+| pnpm | 12.21.0 | `packageManager` in `package.json`. CI installs exactly this version. |
+| Turborepo, ESLint, TypeScript, Prettier, typescript-eslint | Exact versions | The `catalog` in `pnpm-workspace.yaml`; packages depend on them with `catalog:`. |
+
+- **Prerequisites:** Git, Node.js 26 and pnpm 12.21.0. Install that pnpm version directly (for example `npm install --global pnpm@12.21.0`): pnpm 10 cannot switch itself to the native pnpm 12 executable, so an older global pnpm fails instead of switching.
+- **Installation is locked:** `pnpm install --frozen-lockfile` installs exactly what `pnpm-lock.yaml` records. Change dependencies with `pnpm add` / `pnpm remove` and commit the updated lockfile in the same change.
+- **TypeScript stays on 6.0** while `typescript-eslint`, which needs the TypeScript compiler API, supports only `<6.1.0`. Move both together.
+- **Workspace members:** `apps/*` and `packages/*`. Every member is a `@sebela/*` package with its own `AGENTS.md`. A package defines only the tasks it can meaningfully run.
+
+### Root commands
+
+Run from the repository root. Turborepo runs a task in every package that defines it, after the `build` of the packages it depends on, and caches the result.
+
+| Command | What it runs |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | The locked installation, as in CI |
+| `pnpm lint` | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness and root configuration) |
+| `pnpm typecheck` | `typecheck` of every package |
+| `pnpm test` | `test` of every package, plus the harness tests (`test:harness`) |
+| `pnpm build` | `build` of every package |
+| `pnpm test:harness` | Only the harness tests, through `node --test scripts/harness/` |
+
+The harness (`scripts/harness/`) stays plain Node with no dependencies: its tests run with Node's built-in test runner, and `node --test scripts/harness/` works without `pnpm install`. ESLint checks its files as a development tool; the harness never imports anything from the workspace.
+
+A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
 
 ## Backend module layout
 
