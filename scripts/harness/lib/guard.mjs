@@ -217,7 +217,7 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
   if (!number) {
     return deny("Name the pull request number explicitly so its base branch can be checked.");
   }
-  let base = null;
+  let base;
   try {
     base = lookupPrBase(Number(number));
   } catch {

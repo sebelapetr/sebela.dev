@@ -72,3 +72,12 @@ There is one test that walks every route of the API and asserts: each write rout
 ## CI
 
 Lint, typecheck, tests and build must pass before a pull request can merge. A failing check is fixed, not disabled.
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `master` and `phase/**`:
+
+| Job | Steps |
+| --- | --- |
+| `Harness tests` (required status check) | `node --test scripts/harness/` with plain Node and no installed dependencies |
+| `Lint, typecheck, test, build` | `pnpm install --frozen-lockfile`, then `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` |
+
+Both use the Node.js version from `.nvmrc`; pnpm comes from `packageManager` in `package.json`. The root commands are the same ones contributors run locally (see [repository structure](repository-structure.md#root-commands)).

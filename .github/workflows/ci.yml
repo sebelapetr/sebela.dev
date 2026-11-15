@@ -1,4 +1,5 @@
-# Minimal CI for phase 0: runs the harness tests. Phase 1 replaces it with the full pipeline.
+# Quality gate for issue pull requests and for pushes to phase branches and the main branch.
+# Node.js comes from .nvmrc and pnpm from the packageManager field of package.json.
 name: CI
 
 on:
@@ -12,12 +13,32 @@ permissions:
   contents: read
 
 jobs:
+  # Required status check. Runs with plain Node and no installed dependencies, which keeps the
+  # harness independent of the application toolchain.
   harness:
     name: Harness tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version-file: .nvmrc
       - run: node --test scripts/harness/
+
+  quality:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

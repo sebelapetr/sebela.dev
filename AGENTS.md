@@ -69,11 +69,15 @@ Details: `docs/git-workflow.md`.
 
 | Task | Command |
 |---|---|
+| Install dependencies (Node.js 26, pnpm 12.21.0) | `pnpm install --frozen-lockfile` |
+| Lint, typecheck, test, build | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` |
 | Create a worktree for a branch | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path) |
 | Remove it and free its slot | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]` |
 | List worktree slots | `node scripts/harness/worktree.mjs list` |
 | Run a phase unattended (owner only) | `scripts/run-phase.sh <phase-folder> [--base <branch>]` |
-| Harness tests | `node --test scripts/harness/` |
+| Harness tests (plain Node, no install needed) | `node --test scripts/harness/` |
+
+Supported versions and what each command covers: `docs/repository-structure.md` (Toolchain and workspace). Shared lint, TypeScript and Prettier configuration: `packages/config/AGENTS.md`.
 
 ## Language
 

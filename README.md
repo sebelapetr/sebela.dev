@@ -142,7 +142,13 @@ The phases organise implementation; they are not separate public releases. Speci
 
 ## Working on the project
 
-There is no runnable application in this checkout yet. Installation, environment setup and development commands will be documented as the foundation and application phases land.
+There is no runnable application in this checkout yet. The workspace and its quality checks are in place:
+
+- **Prerequisites:** Git, [Node.js](https://nodejs.org/) 26 (LTS; see `.nvmrc`) and [pnpm](https://pnpm.io/) 12.21.0, for example `npm install --global pnpm@12.21.0`.
+- **Install:** `pnpm install --frozen-lockfile`
+- **Check:** `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` — the same commands CI runs.
+
+Infrastructure, environment setup and application commands will be documented as the remaining foundation and application phases land. Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
 
 Start with [AGENTS.md](AGENTS.md) and the relevant phase specification. Documentation in `docs/` is binding; behaviour and its documentation change together.
 
