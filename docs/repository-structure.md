@@ -44,6 +44,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── tsconfig.base.json
 ├── .env.example
 ├── AGENTS.md                rules for agents (each app and package also has its own)
+├── GLOSSARY.md              canonical domain terms
 ├── README.md
 └── LICENSE
 ```

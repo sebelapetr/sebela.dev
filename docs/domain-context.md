@@ -1,6 +1,6 @@
 # Domain context
 
-The vocabulary of this project. Use these terms in code, issues, PRDs and docs. This document grows with each phase.
+The domain model and product rules for this project. Use [`GLOSSARY.md`](../GLOSSARY.md) for canonical term names and rejected synonyms; this document grows with each phase and records their relationships and detailed meaning.
 
 ## Purpose of the site
 
@@ -16,13 +16,6 @@ A hybrid personal professional site for Petr Šebela. It serves two audiences wi
 Positioning: software engineer focused on AI systems, automation and modern software, available for selected projects and career opportunities.
 
 The site answers, in order: who he is, what he can do, what he has built, what he is doing now, where he is heading, how to work with him.
-
-## Names
-
-- **AI Engineering Roadmap** — the learning part of the site. Short form: **AI Roadmap**. No other name is used ("AI Engineering Path" and "Road to AI" are retired).
-- **Profile** — everything about the person and their work: the `profile` schema.
-- **Demo seed** — the fictional data set shipped in the repository.
-- **Private seed** — the owner's real data, kept outside the repository, used once.
 
 ## Entities of the profile domain
 

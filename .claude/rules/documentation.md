@@ -6,7 +6,8 @@
 |---|---|
 | New files, packages, imports, ports | `docs/repository-structure.md` |
 | Anything crossing the API, access, data flow | `docs/architecture.md` |
-| Naming things, entities, access | `docs/domain-context.md` |
+| Canonical domain names and synonyms | `GLOSSARY.md` |
+| Entity meaning, relationships, access | `docs/domain-context.md` |
 | Writing code or shaping a module/interface | `docs/code-standards.md` (Deep modules), `docs/repository-structure.md` (Backend module layout), `docs/architecture.md` (Module responsibilities and composition) |
 | Writing tests or evals | `docs/testing.md` |
 | Branches, commits, pull requests | `docs/git-workflow.md` |

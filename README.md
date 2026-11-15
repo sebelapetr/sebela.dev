@@ -186,7 +186,7 @@ These are the project's acceptance rules; they do not imply the planned checks a
 | [Overview PRD](.plan/00-overview/prd.md) | Product scope, audiences and phase boundaries |
 | [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md) | Data flow, trust boundary and engineering tradeoffs |
 | [Repository structure](docs/repository-structure.md) | Target layout, allowed imports and worktree isolation |
-| [Domain context](docs/domain-context.md) | Vocabulary, entities and access rules |
+| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md) | Canonical terms, entity relationships and access rules |
 | [Design](docs/design.md) | Visual direction, themes and responsive requirements |
 | [Code standards](docs/code-standards.md) · [Testing](docs/testing.md) | Implementation and verification expectations |
 | [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries |

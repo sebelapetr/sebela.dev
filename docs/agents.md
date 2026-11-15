@@ -23,6 +23,8 @@ A subagent may start without project instructions loaded. Every agent therefore 
 
 The repository carries `codebase-design` and `tdd` under `.claude/skills/`. They adapt Matt Pocock's references to the binding docs: interface design and incremental behaviour tests, with our API trust boundary, real-Postgres integration and existing approval model. Read the relevant `SKILL.md` directly when a harness has no skill invocation tool. No global skill installation or duplicate in a user-level directory is needed.
 
+[`GLOSSARY.md`](../GLOSSARY.md) is the canonical vocabulary source. Read it when a task names or changes domain concepts. Update it when a term or meaning is settled; do not turn it into a specification or duplicate the domain rules in `docs/domain-context.md`.
+
 Root instructions and the always-loaded Claude deep-module rule point to the canonical docs. Skills are reference material, not additional orchestration: they do not launch a codebase survey, spawn agents, install dependencies or reopen an approved issue on their own. Source revisions, adaptations and MIT notices live beside the local references. Update docs and the local references together when a convention changes.
 
 ## Roles
