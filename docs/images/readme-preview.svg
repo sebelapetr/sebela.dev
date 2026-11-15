@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">Website preview placeholder</title>
+  <desc id="description">A monochrome placeholder for a future side-by-side homepage screenshot in light and dark mode. The website is in planning.</desc>
+  <rect width="1600" height="900" fill="#F5F5F5"/>
+  <rect x="1" y="1" width="1598" height="898" stroke="#D4D4D4" stroke-width="2"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="88" y="94" fill="#525252" font-size="17" letter-spacing="4">SEBELA.DEV / WEBSITE PREVIEW</text>
+    <text x="88" y="192" fill="#0A0A0A" font-size="66" font-weight="700" letter-spacing="-2">One profile. Every perspective.</text>
+    <text x="88" y="241" fill="#525252" font-size="24">A place for the website, the work and the engineering behind it.</text>
+    <rect x="88" y="296" width="712" height="432" fill="#FFFFFF" stroke="#D4D4D4" stroke-width="2"/>
+    <rect x="800" y="296" width="712" height="432" fill="#0A0A0A"/>
+    <text x="132" y="350" fill="#525252" font-size="13" letter-spacing="3">LIGHT / HOMEPAGE</text>
+    <text x="844" y="350" fill="#A3A3A3" font-size="13" letter-spacing="3">DARK / HOMEPAGE</text>
+    <path d="M132 377H756" stroke="#E5E5E5" stroke-width="2"/>
+    <path d="M844 377H1468" stroke="#262626" stroke-width="2"/>
+    <text x="132" y="464" fill="#0A0A0A" font-size="38" font-weight="700">Software. Systems.</text>
+    <text x="132" y="511" fill="#0A0A0A" font-size="38" font-weight="700">Applied curiosity.</text>
+    <text x="844" y="464" fill="#EDEDED" font-size="38" font-weight="700">Software. Systems.</text>
+    <text x="844" y="511" fill="#EDEDED" font-size="38" font-weight="700">Applied curiosity.</text>
+    <path d="M132 555H502M132 577H438" stroke="#E5E5E5" stroke-width="10"/>
+    <path d="M844 555H1214M844 577H1150" stroke="#262626" stroke-width="10"/>
+    <text x="132" y="674" fill="#525252" font-size="15" letter-spacing="2">SELECTED WORK</text>
+    <text x="844" y="674" fill="#A3A3A3" font-size="15" letter-spacing="2">SELECTED WORK</text>
+    <text x="88" y="802" fill="#0A0A0A" font-size="19" font-weight="700">PREVIEW PLACEHOLDER</text>
+    <text x="88" y="838" fill="#525252" font-size="19">Replace with a 1600 × 900 homepage capture in light and dark mode.</text>
+    <text x="1512" y="802" fill="#525252" font-size="15" text-anchor="end" letter-spacing="2">PLANNING STAGE</text>
+  </g>
+</svg>
