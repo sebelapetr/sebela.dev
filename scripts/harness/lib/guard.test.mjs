@@ -6,6 +6,8 @@ const mainRoot = "/repo";
 const call = (toolName, toolInput, extra = {}) =>
   evaluateToolCall({ toolName, toolInput, mainRoot, cwd: mainRoot, ...extra });
 const bash = (command, extra) => call("Bash", { command }, extra);
+const ownRoot = "/repo/.worktrees/feat-1-x";
+const own = { cwd: ownRoot, worktreeRoot: ownRoot, isSubagent: true, unattended: true };
 
 // --- editing code in the main checkout -------------------------------------
 
@@ -58,6 +60,77 @@ test("shell commands naming only the example file are allowed", () => {
 test("words that merely contain .env are not refused", () => {
   assert.equal(bash("pnpm test --filter dotenv"), null);
   assert.equal(bash("node scripts/harness/worktree.mjs create feat/1-env-docs"), null);
+});
+
+test("agents may read, create and edit local environment files inside their own worktree", () => {
+  for (const tool of ["Read", "Write", "Edit", "MultiEdit"]) {
+    assert.equal(call(tool, { file_path: ".env.local" }, own), null, tool);
+    assert.equal(call(tool, { file_path: `${ownRoot}/apps/web/.env.local` }, own), null, tool);
+  }
+  assert.equal(call("Read", { file_path: "../../.env.local" }, { ...own, cwd: `${ownRoot}/apps/web` }), null);
+});
+
+test("the local environment exception requires a confirmed worktree containing the session", () => {
+  assert.ok(call("Read", { file_path: `${ownRoot}/.env.local` }, { cwd: ownRoot }));
+  assert.ok(call("Read", { file_path: `${ownRoot}/.env.local` }, { ...own, cwd: mainRoot }));
+  assert.ok(call("Read", { file_path: ".env.local" }, { ...own, worktreeRoot: mainRoot, cwd: mainRoot }));
+});
+
+test("other worktrees, the main checkout and production environment files stay private", () => {
+  for (const file_path of [
+    "/repo/.env.local", "/repo/.worktrees/other/.env.local", `${ownRoot}-other/.env.local`,
+    `${ownRoot}/.env`, `${ownRoot}/.env.production`, `${ownRoot}/.env.local.backup`,
+  ]) {
+    for (const tool of ["Read", "Write", "Edit"]) assert.ok(call(tool, { file_path }, own), file_path);
+  }
+});
+
+test("the local environment exception checks symbolic link destinations too", () => {
+  for (const target of ["/repo/.env.local", "/outside/.env.local", `${ownRoot}/.env.production`, "/outside/plain.txt"]) {
+    const realpath = (p) => p === `${ownRoot}/.env.local` ? target : p;
+    assert.ok(call("Read", { file_path: ".env.local" }, { ...own, realpath }), target);
+  }
+  assert.ok(call("Write", { file_path: ".env.local" }, {
+    ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? null : p,
+  }));
+  assert.equal(call("Read", { file_path: ".env.local" }, {
+    ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? `${ownRoot}/config/.env.local` : p,
+  }), null);
+});
+
+test("a linked session directory cannot turn another worktree into its own", () => {
+  assert.ok(call("Read", { file_path: ".env.local" }, {
+    ...own, realpath: (p) => p.replace(ownRoot, "/repo/.worktrees/other"),
+  }));
+});
+
+test("search tools may name the exact local file in their own worktree", () => {
+  assert.equal(call("Glob", { pattern: ".env.local" }, own), null);
+  assert.equal(call("Grep", { pattern: "WEB_PORT", path: ownRoot, glob: ".env.local" }, own), null);
+  assert.ok(call("Glob", { pattern: "**/.env.local" }, own));
+  assert.ok(call("Glob", { pattern: "../other/.env.local" }, own));
+  assert.ok(call("Grep", { pattern: "x", path: mainRoot, glob: ".env.local" }, own));
+  assert.ok(call("Glob", { pattern: ".env*" }, own));
+});
+
+test("simple shell commands may use local environment files in their own worktree", () => {
+  for (const command of [
+    "cat .env.local", "sed -i 's/WEB_PORT=3010/WEB_PORT=3020/' .env.local",
+    "cp .env.example .env.local", "node --env-file=.env.local app.mjs",
+    `cat '${ownRoot}/apps/web/.env.local'`, `cat '${ownRoot}/folder with spaces/.env.local'`,
+  ]) assert.equal(bash(command, own), null, command);
+});
+
+test("shell commands cannot use the exception for foreign files or ambiguous paths", () => {
+  for (const command of [
+    "cat /repo/.env.local", "cat ../other/.env.local", "cat .env.production",
+    "cat .env.local /repo/.env", "cd /repo && cat .env.local",
+    "cat $OTHER/.env.local", "cat ~/.env.local", "cat ../*/.env.local",
+    "cat '/other folder/.env.local'", "cat .env.local; cd /repo; cat .env.local",
+  ]) assert.ok(bash(command, own), command);
+  assert.ok(bash("cat .env.local", {
+    ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? "/repo/.env.local" : p,
+  }));
 });
 
 // --- the owner's private notes ---------------------------------------------
