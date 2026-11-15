@@ -68,7 +68,7 @@ There is no monorepo yet. Harness logic is written for plain Node with no depend
 
 ### Permissions and hooks
 
-As described in `docs/permissions.md`. In an unattended run nothing can be confirmed, so the allow and deny lists are the whole safety model.
+As described in `docs/permissions.md`. In an unattended run nothing can be confirmed. The loop runs in auto mode: the allow list runs without review, the auto-mode classifier judges everything else, and the deny list and the guard hook refuse what must never happen. (The first trial run used accept-edits mode; it refused every development command not on the allow list, including a developer's `cd`.)
 
 - Hooks delivered now: block edits to app and package code in the main checkout; worktree setup and cleanup; reminder to run the docs-keeper after an issue is merged.
 - Hooks that need the application toolchain (formatting on edit, typecheck and lint when a developer finishes) are delivered in phase 1.

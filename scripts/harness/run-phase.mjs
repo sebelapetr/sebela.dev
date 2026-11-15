@@ -61,8 +61,10 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
     "json",
     "--json-schema",
     JSON.stringify(RUN_REPORT_SCHEMA),
+    // A classifier reviews each call that the allow list does not cover; the deny list and the
+    // guard hook still apply. Nothing can be confirmed, so anything it holds back is refused.
     "--permission-mode",
-    "acceptEdits",
+    "auto",
     "--permission-prompts",
     "none",
     "--name",
@@ -71,7 +73,9 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
   return new Promise((resolve) => {
     const child = spawn("claude", args, {
       cwd: mainRoot,
-      env: { ...process.env, SEBELA_UNATTENDED: "1" },
+      // Subagents must run in the foreground: a print-mode session ends when the orchestrator
+      // stops, and a background developer would be cut off.
+      env: { ...process.env, SEBELA_UNATTENDED: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
