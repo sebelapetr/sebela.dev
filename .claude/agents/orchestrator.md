@@ -1,5 +1,7 @@
 ---
 name: orchestrator
+model: sonnet
+effort: medium
 description: "Runs the development flow for this repository. Takes ready GitHub issues, creates a worktree per issue, dispatches the developer and reviewer agents, opens pull requests, merges reviewed issues into the phase branch and opens the phase pull request for the owner. Use to work through the issues of a phase, interactively or from the phase loop."
 ---
 

@@ -32,6 +32,19 @@ A subagent may start without project instructions loaded. Every agent therefore 
 
 Definitions live in `.claude/agents/`. A dedicated agent for a single app is added only if that part proves to need one.
 
+### Model and effort
+
+Each agent pins its model and effort level in the frontmatter of its `.claude/agents/<name>.md`, so a run does not depend on what the owner last chose in an interactive session.
+
+| Agent | Model | Effort | Why |
+|---|---|---|---|
+| orchestrator | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code |
+| backend-, frontend-, ai-developer | opus | high | Writes the code and the tests, where mistakes cost most |
+| reviewer | opus | high | Must find what the developer missed |
+| docs-keeper | sonnet | low | Compares documents with merged code |
+
+The environment variable `CLAUDE_CODE_EFFORT_LEVEL` overrides the effort fields; the phase loop does not set it.
+
 ## Orchestration
 
 For each issue of a phase:

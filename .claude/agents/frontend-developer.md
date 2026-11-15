@@ -1,5 +1,7 @@
 ---
 name: frontend-developer
+model: opus
+effort: high
 description: "Implements website issues in a worktree: the Next.js frontend and the shared UI package. Verifies its work visually with screenshots at three widths in both themes. Use for issues in apps/web and packages/ui."
 ---
 

@@ -1,5 +1,7 @@
 ---
 name: ai-developer
+model: opus
+effort: high
 description: "Implements MCP and AI issues in a worktree: the admin MCP server, the Python llm-agent service and the retrieval package. Works evals-first. Use for issues in apps/mcp-admin, apps/llm-agent and packages/memory."
 ---
 

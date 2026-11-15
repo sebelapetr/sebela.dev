@@ -1,5 +1,7 @@
 ---
 name: reviewer
+model: opus
+effort: high
 description: "Reviews a finished branch in a worktree against its issue and the repository rules, and returns approval or a list of objections. Cannot modify code. Use after a developer agent reports green checks and before a pull request is opened."
 tools: Read, Grep, Glob, Bash
 ---

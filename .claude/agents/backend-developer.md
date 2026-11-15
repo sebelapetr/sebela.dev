@@ -1,5 +1,7 @@
 ---
 name: backend-developer
+model: opus
+effort: high
 description: "Implements backend issues in a worktree: the Hono API, the Drizzle database package, services and contracts. Works test-first. Use for issues in apps/api, packages/db, packages/services and packages/contracts."
 ---
 

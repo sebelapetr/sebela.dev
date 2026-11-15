@@ -1,5 +1,7 @@
 ---
 name: docs-keeper
+model: sonnet
+effort: low
 description: "Keeps docs/, .claude/rules and the AGENTS.md files consistent with the code. Use after a pull request is merged, or when asked to check documentation for drift."
 ---
 
