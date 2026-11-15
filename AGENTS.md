@@ -76,6 +76,7 @@ Details: `docs/git-workflow.md`.
 | List worktree slots | `node scripts/harness/worktree.mjs list` |
 | Run a phase unattended (owner only) | `scripts/run-phase.sh <phase-folder> [--base <branch>]` |
 | Harness tests (plain Node, no install needed) | `node --test scripts/harness/` |
+| Check for hard-coded ports, hosts and database names (plain Node) | `node scripts/checks/hardcoded-config.mjs` (also part of `pnpm lint`) |
 
 Supported versions and what each command covers: `docs/repository-structure.md` (Toolchain and workspace). Shared lint, TypeScript and Prettier configuration: `packages/config/AGENTS.md`.
 

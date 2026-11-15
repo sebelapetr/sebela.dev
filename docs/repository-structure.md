@@ -27,7 +27,8 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── memory/              indexing and retrieval [6]
 ├── scripts/
 │   ├── run-phase.sh         starts the phase loop [0]
-│   └── harness/             the loop, worktree slots, hooks, GitHub set-up — plain Node, no dependencies [0]
+│   ├── harness/             the loop, worktree slots, hooks, GitHub set-up — plain Node, no dependencies [0]
+│   └── checks/              repository checks: the hard-coded configuration check — plain Node, no dependencies [1]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
@@ -43,10 +44,10 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── pnpm-lock.yaml           committed lockfile [1]
 ├── package.json             root commands, Node.js and pnpm versions [1]
 ├── .nvmrc                   Node.js major version [1]
-├── eslint.config.js         lints root files: the harness and root configuration [1]
+├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
-├── .env.example
+├── .env.example             every environment variable with a comment and an example value; placeholders only [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
 ├── GLOSSARY.md              canonical domain terms
 ├── README.md
@@ -93,13 +94,15 @@ Run from the repository root. Turborepo runs a task in every package that define
 | Command | What it runs |
 | --- | --- |
 | `pnpm install --frozen-lockfile` | The locked installation, as in CI |
-| `pnpm lint` | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness and root configuration) |
+| `pnpm lint` | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`) |
 | `pnpm typecheck` | `typecheck` of every package |
-| `pnpm test` | `test` of every package, plus the harness tests (`test:harness`) |
+| `pnpm test` | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`) |
 | `pnpm build` | `build` of every package |
 | `pnpm test:harness` | Only the harness tests, through `node --test scripts/harness/` |
+| `pnpm check:config` | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached. |
+| `pnpm test:checks` | Only the tests of the repository checks, through `node --test scripts/checks/` |
 
-The harness (`scripts/harness/`) stays plain Node with no dependencies: its tests run with Node's built-in test runner, and `node --test scripts/harness/` works without `pnpm install`. ESLint checks its files as a development tool; the harness never imports anything from the workspace.
+The harness (`scripts/harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test scripts/harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
 
@@ -194,10 +197,53 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 | llm-agent | 3003 | 3003 + N × 10 |
 | postgres | 5440 (one shared container) | same port, separate database |
 
-- The worktree setup script takes the lowest free slot, creates a database named after the branch, runs migrations and the demo seed, and writes the ports and database name to the worktree's `.env.local`.
+- The worktree setup script takes the lowest free slot, creates a database named after the branch, runs migrations and the demo seed, and writes the ports and database name to the worktree's `.env.local`. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment).
 - Running setup again for an existing worktree keeps its slot and preserves its `.env.local`, including local edits. A missing environment file is generated; an existing file or symbolic link is never overwritten.
 - The cleanup script drops the database and frees the slot.
 - In development each worktree also has its own folder in object storage, created and removed by the same scripts.
 - Tests use their own temporary database, so they never touch the data an agent is looking at in the browser.
-- **No port, host or database name is hard-coded** in application code, tests or scripts. Everything reads them from the environment. CI checks this.
+- **No port, host or database name is hard-coded** in application code, tests or scripts. Everything reads them from the environment. [The hard-coded configuration check](#the-hard-coded-configuration-check) enforces this locally and in CI.
 - Postgres uses host port 5440 to stay clear of other local Postgres instances.
+
+### Configuration and environment
+
+- Code reads ports, hosts and database names from the process environment and validates them where it starts. It carries no copy of them, not even as a fallback for an unset variable: a missing setting is an error that names the variable.
+- `.env.example` lists every variable with a comment. Its values are the documented examples — the port scheme of the main checkout above — and placeholders; it never holds credentials or real data. A fixed value that must exist is declared there, or in a declaration such as `compose.yaml`, not in executable code.
+- The main checkout uses the values of `.env.example`. Each worktree gets its own generated `.env.local` with `WORKTREE_SLOT` and the ports of its slot.
+- `node scripts/harness/worktree.mjs create` (and the `WorktreeCreate` hook, which uses it) takes the base ports `WEB_PORT`, `API_PORT`, `MCP_ADMIN_PORT` and `LLM_AGENT_PORT` from the process environment and, for each one that is not set there, from the `.env.example` of the checkout the script belongs to. Each must be a whole number that leaves room for slot 9. A missing or invalid base port stops the script before it creates a worktree, allocates a slot or writes a file.
+- Tests take expected ports from `.env.example` too, so the documented example stays the only place the base ports are written down.
+
+### The hard-coded configuration check
+
+`node scripts/checks/hardcoded-config.mjs` fails when executable code hard-codes a port, a local host address or a database name. It runs in `pnpm lint` (as `check:config`), in the quality job of CI, and on its own in the plain-Node CI job `Hard-coded configuration check`.
+
+**Scope.** Without arguments it checks every file of the repository that Git lists — tracked, or untracked and not ignored — and that is executable:
+
+| Files | Checked as |
+| --- | --- |
+| `*.js`, `*.mjs`, `*.cjs`, `*.jsx`, `*.ts`, `*.tsx`, `*.mts`, `*.cts`; files without an extension whose interpreter line names `node`, `deno`, `bun` or `tsx` | JavaScript and TypeScript |
+| `*.py`; files without an extension whose interpreter line names `python` | Python |
+| `*.sh`, `*.bash`; files without an extension whose interpreter line names `sh`, `bash`, `dash` or `zsh` | Shell |
+| The `scripts` of every `package.json` | Shell commands |
+
+This covers application code, tests and scripts alike, including the harness and the check itself. Given paths, it checks only those files and directories; its tests use this for the fixtures.
+
+**Findings.** Each is reported as `file:line:column rule: message`, pointing at the hard-coded value. Any finding makes the command exit with 1; a check that cannot run (for example outside a Git repository) exits with 2.
+
+| Rule | What it finds |
+| --- | --- |
+| `port` | A port-named variable or key (`API_PORT`, `PGPORT`, `port`, `api_port`, `apiPort`) assigned a number of two to five digits; an explicit port in a URL (`scheme://host:<number>`); `.listen(<number>)`; `--port <number>` and `-p <number>`. Port `0`, "any free port", is allowed. |
+| `local-host` | `localhost`, `127.x.x.x`, `0.0.0.0` and a quoted or bracketed `::1`. |
+| `database-name` | A database-named variable or key (`DATABASE_NAME`, `POSTGRES_DB`, `PGDATABASE`, `database`, `dbName`) assigned a string literal; the database of a connection URL (`postgres://…/<name>`); `CREATE`, `DROP` or `ALTER DATABASE <name>`; in shell commands also `createdb` and `dropdb <name>` and `psql`, `pg_dump` or `pg_restore` with `-d <name>` or `--dbname`. |
+| `environment-default` | A port, host, database, URL or DSN variable read from the environment with a literal fallback: `process.env.API_PORT ?? …`, `env["API_URL"] \|\| …`, `os.getenv("API_HOST", …)`, `${WEB_PORT:-…}`. The value belongs in `.env.example`; the code fails when the variable is not set. |
+
+A value built from the environment passes: `Number(process.env.API_PORT)`, `` `http://${host}:${port}` ``, `os.environ["DATABASE_URL"]`, `createdb "$DATABASE_NAME"`, `next dev --port $WEB_PORT`.
+
+**What is not executable configuration.** These narrow rules are the only exceptions; there is no inline suppression and no excluded runtime or harness directory.
+
+1. Documentation and declarations are not read: Markdown, HTML, YAML (Compose files, workflows), JSON other than the `scripts` of a `package.json`, `.env.example` and Dockerfiles.
+2. A full-line comment is documentation: a line starting with `//` or inside a `/* … */` block that starts a line in JavaScript and TypeScript, a line starting with `#` in Python and shell. A comment after code on the same line is checked.
+3. The deliberate negative fixtures of the check, exactly the folder `scripts/checks/fixtures/hardcoded-config/`, are left out of the repository scan. Its tests check them explicitly: `rejected/` must fail at the listed locations, `accepted/` must pass.
+4. Files that Git ignores (`node_modules/`, `.worktrees/`, build output, environment files) are not part of the repository.
+
+**Limits.** The check recognises the common spellings above, not every way to write a value: a comparison (`port === …`), a value assembled from parts or a positional argument passes unnoticed. Review still looks for hard-coded environment values. A new spelling the check should catch starts with a failing fixture in `scripts/checks/fixtures/hardcoded-config/rejected/` and a case in `scripts/checks/hardcoded-config.test.mjs`.

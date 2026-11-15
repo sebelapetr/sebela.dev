@@ -62,7 +62,11 @@ There is one test that walks every route of the API and asserts: each write rout
 | Integration | Vitest | API and services against a real Postgres — the database is not mocked |
 | End to end and visual | Playwright | The website in a browser, including screenshots |
 | Evals | promptfoo | MCP and AI behaviour, desired and forbidden |
-| Tooling | Node's built-in test runner (`node --test`) | Plain JavaScript tooling: the harness, and the lint rules of `@sebela/config` against fixture files that must fail and fixture files that must pass |
+| Tooling | Node's built-in test runner (`node --test`) | Plain JavaScript tooling: the harness; the lint rules of `@sebela/config` and the hard-coded configuration check (`scripts/checks/`), each against fixture files that must fail and fixture files that must pass |
+
+## Configuration in tests
+
+Tests follow the same rule as the code: no hard-coded port, local host address or database name (see [the hard-coded configuration check](repository-structure.md#the-hard-coded-configuration-check)). A test takes an expected port from `.env.example` or from the configuration it passes in, and leaves a fixed value to fixture files whose purpose is to hold it.
 
 ## Databases
 
@@ -79,6 +83,7 @@ Lint, typecheck, tests and build must pass before a pull request can merge. A fa
 | Job | Steps |
 | --- | --- |
 | `Harness tests` (required status check) | `node --test scripts/harness/` with plain Node and no installed dependencies |
-| `Lint, typecheck, test, build` | `pnpm install --frozen-lockfile`, then `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` |
+| `Hard-coded configuration check` | `node --test scripts/checks/`, then `node scripts/checks/hardcoded-config.mjs`, with plain Node and no installed dependencies |
+| `Lint, typecheck, test, build` | `pnpm install --frozen-lockfile`, then `pnpm lint` (including the hard-coded configuration check), `pnpm typecheck`, `pnpm test`, `pnpm build` |
 
-Both use the Node.js version from `.nvmrc`; pnpm comes from `packageManager` in `package.json`. The root commands are the same ones contributors run locally (see [repository structure](repository-structure.md#root-commands)).
+All three use the Node.js version from `.nvmrc`; pnpm comes from `packageManager` in `package.json`. The root commands are the same ones contributors run locally (see [repository structure](repository-structure.md#root-commands)).
