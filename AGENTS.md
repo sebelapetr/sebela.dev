@@ -17,7 +17,8 @@ The personal professional website of Petr Šebela (sebelapetr.cz): one site for 
 |---|---|
 | Where things live, allowed imports, ports | `docs/repository-structure.md` |
 | Layers, trust boundary, data flow | `docs/architecture.md` |
-| Vocabulary, entities, access | `docs/domain-context.md` |
+| Canonical terms | `GLOSSARY.md` |
+| Entity relationships, access and product rules | `docs/domain-context.md` |
 | Code conventions | `docs/code-standards.md` |
 | What to test and how | `docs/testing.md` |
 | Branches, commits, pull requests | `docs/git-workflow.md` |
@@ -38,6 +39,14 @@ The personal professional website of Petr Šebela (sebelapetr.cz): one site for 
 7. **Environment files:** agents may read and edit `.env.example` (placeholders only) and `.env.local` inside their assigned worktree. Run the session from that worktree. Other environment files, other worktrees and the main checkout's environment files are off limits. Production credentials never belong in a development worktree. Never commit environment files or copy their values into public output.
 8. **Do not add a top-level folder, app or package** that is not in `docs/repository-structure.md` without the owner's approval.
 9. **Do not weaken a check to make it pass.** No disabled lint rules, skipped tests or lowered thresholds without the owner's approval.
+
+## Deep modules
+
+Expose a small, documented interface that hides a complete responsibility. Put handwritten backend modules in `src/modules/<name>/` with an explicit `index.ts`; other modules use that entry and other packages use declared exports. Keep dependencies acyclic and preserve the API trust boundary. Hide SQL, storage drivers and internal workflows behind their owning interfaces. Follow [code standards](docs/code-standards.md#deep-modules), [module placement/import rules](docs/repository-structure.md#backend-module-layout) and [architecture](docs/architecture.md#module-responsibilities-and-composition); maintain the module map in each relevant app/package `AGENTS.md`.
+
+Project-local references: read [codebase-design](.claude/skills/codebase-design/SKILL.md) when shaping an interface and [tdd](.claude/skills/tdd/SKILL.md) for test-first implementation. They supplement the binding docs and do not reopen approved issue scope. These skills live only in this repository; no global installation is required.
+
+Use [`GLOSSARY.md`](GLOSSARY.md) for canonical domain language. Read it when naming or changing domain concepts; update it only when a term or meaning is actually settled, and keep detailed behaviour in the owning domain document or specification.
 
 ## Testing
 

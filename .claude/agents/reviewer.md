@@ -19,7 +19,7 @@ These are binding. If something in the issue contradicts them, stop and report i
 ## What you check
 
 1. **Acceptance criteria** — each one, against the actual behaviour, not against the developer's summary. Run the tests and, for UI, open the page.
-2. **Boundaries** — no forbidden imports; only `apps/api` reaches the database.
+2. **Boundaries and deep modules** — no forbidden package/private-module imports or cycles; only `apps/api` reaches the database. Check complete public operations, documented guarantees/errors, hidden SQL/driver details and an accurate module map, using the canonical deep-module standard. A folder or lint pass alone does not prove information hiding.
 3. **Access** — every write is a private, authenticated route; the API key never reaches client-side code.
 4. **Order of work** — where test-first is mandatory, the test commit precedes the implementation commit in the branch history.
 5. **UI** — screenshots exist at 360, 768 and 1280 px in light and dark mode, and you have looked at them: no horizontal scroll, nothing clipped, consistent with `docs/design.md`.

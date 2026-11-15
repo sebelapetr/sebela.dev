@@ -136,7 +136,7 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 | 4 | `04-ai-roadmap` | AI Roadmap | `ai_roadmap` schema, API, pages, import of the existing data |
 | 5 | `05-mcp-admin` | MCP for content management | Secured MCP server that writes content through the API, plus agent skills that use it |
 | 6 | `06-rag-memory` | Retrieval | The project's own retrieval over public data: pgvector, hybrid search, measured with evals |
-| 7 | `07-llm-agent` | LLM agent: chatbot and public MCP | One Python service for the AI layer — the chat pipeline and the public read-only MCP server — and the real chatbot replacing the mock |
+| 7 | `07-llm-agent` | LLM agent: chatbot and public MCP | One Python service for the AI layer — the chat pipeline and the public read-only MCP server — plus the real chatbot and a `/mcp` page with setup instructions for connecting external AI clients |
 | 8 | `08-delivery` | Continuous delivery and launch | A version tag builds, verifies and deploys to the VPS; production Compose, reverse proxy, TLS, backups; loading the real data and switching the domain |
 
 ### Phase boundaries
@@ -157,7 +157,7 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 
 **6 — Retrieval.** The project's own retrieval implementation — no Cognee, no separate vector database. Public content is split into chunks, embedded through a hosted embeddings API and stored with pgvector in the same Postgres; search combines vector similarity with full-text search. Developed evals-first: a set of questions with known sources decides between the variants, and the measurements are published. Indexing follows writes directly; no worker unless that stops being enough.
 
-**7 — LLM agent.** One Python service for the whole AI layer: the chat pipeline (input guard, generation with read tools and search, output checks) and the public read-only MCP server, sharing one set of tools. The API gains conversations: visitor cookie, ownership, limits, bot detection, budget, storage. The website's mock is replaced. Evals for desired and forbidden behaviour; monitoring of real conversations.
+**7 — LLM agent.** One Python service for the whole AI layer: the chat pipeline (input guard, generation with read tools and search, output checks) and the public read-only MCP server, sharing one set of tools. The API gains conversations: visitor cookie, ownership, limits, bot detection, budget, storage. The website's mock is replaced, with a public `/mcp` setup page offering copyable connection instructions for Claude, Codex, Gemini and OpenCode, linked from the main navigation, `/ask` and the homepage chat entry point. Evals for desired and forbidden behaviour; monitoring of real conversations.
 
 **8 — Continuous delivery and launch.** Done last. A version tag builds the images, verifies the complete stack in the pipeline, deploys to the owner's server and rolls back on failure. Production only — no staging; the full-stack check and the rollback take its place. Production Compose stack behind a reverse proxy with TLS, backups with a rehearsed restore, monitoring. Then the launch: the owner's real data and the final roadmap import are loaded, and sebelapetr.cz is switched to the new site.
 

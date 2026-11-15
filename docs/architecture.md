@@ -42,6 +42,16 @@ The cost is a network hop and a second service to run. It is accepted.
 
 A controller in the API stays thin: it validates input, calls a service, returns the result. Authentication is middleware on the private route group, not logic inside handlers.
 
+## Module responsibilities and composition
+
+A domain may have an HTTP module in the API, an operation in services and a persistence module in db. Those are different responsibilities, not three public versions of the same implementation. HTTP adapts the request/response and applies security; services coordinate the domain use case; db performs cohesive persistence operations and owns SQL/transaction mechanics. Contracts describe transport data independently of services and db. Storage hides provider SDKs/key layout; media coordinates upload checks, metadata, attachment and cleanup.
+
+Create resources at the backend startup/composition entry and the corresponding maintenance CLI path. Keep package dependencies unchanged: API composition calls permitted services entries, and services use db through persistence entries. Do not import db directly into API startup as a shortcut, or pass raw database/SDK handles out to HTTP/client code. Pass validated configuration and the required capabilities once; runtime modules do not repeatedly read environment variables or construct hidden clients. Close owned resources at shutdown.
+
+For a multi-record mutation, the caller requests a complete operation. Services ask db to perform the necessary atomic persistence change; callers never manage SQL transaction primitives. File storage and database commits are not one transaction: media explicitly owns validation, ordering and compensation/cleanup on failure. Public interfaces document these guarantees and expected errors.
+
+Module dependencies are acyclic and cross only explicit entries. [Repository structure](repository-structure.md#backend-module-layout) defines imports/placement; [code standards](code-standards.md#deep-modules) explains interface design and review. Required HTTP/security adapters remain even if they are small; deep modules do not remove the API trust boundary.
+
 ## Data
 
 - **PostgreSQL is the single canonical source.** Nothing in the repository mirrors live content.
@@ -70,6 +80,8 @@ A controller in the API stays thin: it validates input, calls a service, returns
 
 Next.js is used as a frontend only. Pages render on the server at request time, with caching and invalidation when content changes — not at build time. The build therefore needs no running API, and a content edit needs no deploy.
 
+From phase 3, committed API content writes notify a private website invalidation endpoint, authenticated with a dedicated server-only signing secret independent of content API keys. The website still reads only public API routes and holds no content API key. Validated content references map to affected pages, with safe duplicate delivery and bounded retries. Notification failure never undoes a committed write; time-based revalidation recovers from lost notifications. Freshness and failure criteria are defined in `.plan/03-web/prd.md` under "Cache invalidation guarantees".
+
 ## MCP servers and the LLM agent
 
 | App | Language | Capabilities | Callers |
@@ -94,6 +106,7 @@ Both are API clients and both are deployed as HTTP services. They stay separate 
 - **The assistant produces the answer:** an input guard (a small model), generation by a model with read tools and search, deterministic output checks. It is stateless; the API sends it the conversation so far.
 - The assistant has no API key and no write tool. A successful prompt injection has nothing to extract and nothing to change.
 - Answers carry typed blocks (contact, experience, service, exploration, roadmap, sources) that the website renders with its own components.
+- Phase 3 defines the validated application event/block contract in `packages/contracts` and a browser-local mock adapter. Components depend on that contract rather than transport framing. Phase 7 implements the real API transport/adapter, including idempotent request identifiers and recoverable failures. The mock introduces no live conversation API or server-side storage.
 - Everything is traced; stored conversations are scored afterwards, off the visitor's path.
 
 ## Background work

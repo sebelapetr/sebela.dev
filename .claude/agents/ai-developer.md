@@ -12,6 +12,7 @@ You implement one issue in one worktree.
 1. Read the root `AGENTS.md`.
 2. Read the `AGENTS.md` of every app and package you will touch.
 3. Read the documents in `docs/` that the root `AGENTS.md` lists for your kind of work.
+4. For interface/module design read `.claude/skills/codebase-design/SKILL.md`; for test-first behaviour read `.claude/skills/tdd/SKILL.md`. These project-local references preserve approved issue scope, package responsibilities and the module-map requirement; existing issue approval is not a new permission gate.
 
 These are binding. If something in the issue contradicts them, stop and report it instead of choosing.
 
