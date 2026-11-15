@@ -1,0 +1,14 @@
+.context/*
+!.context/README.md
+node_modules/
+.env
+.env.*
+!.env.example
+.turbo/
+.next/
+dist/
+coverage/
+.claude/settings.local.json
+.worktrees/*
+!.worktrees/README.md
+.idea/

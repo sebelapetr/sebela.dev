@@ -1,0 +1,158 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { evaluateToolCall, invokesPrMerge } from "./guard.mjs";
+
+const mainRoot = "/repo";
+const call = (toolName, toolInput, extra = {}) =>
+  evaluateToolCall({ toolName, toolInput, mainRoot, cwd: mainRoot, ...extra });
+const bash = (command, extra) => call("Bash", { command }, extra);
+
+// --- editing code in the main checkout -------------------------------------
+
+test("editing app code in the main checkout is refused", () => {
+  assert.ok(call("Edit", { file_path: "/repo/apps/api/src/index.ts" }));
+  assert.ok(call("Write", { file_path: "/repo/packages/db/schema.ts" }));
+});
+
+test("editing app code inside a worktree is allowed", () => {
+  assert.equal(call("Edit", { file_path: "/repo/.worktrees/feat-1-x/apps/api/src/index.ts" }), null);
+});
+
+test("editing docs, plans and agent configuration in the main checkout is allowed", () => {
+  assert.equal(call("Edit", { file_path: "/repo/docs/testing.md" }), null);
+  assert.equal(call("Write", { file_path: "/repo/.plan/03-web/prd.md" }), null);
+  assert.equal(call("Edit", { file_path: "/repo/.claude/agents/reviewer.md" }), null);
+});
+
+test("relative paths are resolved against the session directory", () => {
+  assert.ok(call("Edit", { file_path: "apps/web/page.tsx" }));
+});
+
+test("reading code in the main checkout is allowed", () => {
+  assert.equal(call("Read", { file_path: "/repo/apps/api/src/index.ts" }), null);
+});
+
+// --- environment files -----------------------------------------------------
+
+test("environment files cannot be read or edited", () => {
+  assert.ok(call("Read", { file_path: "/repo/.env" }));
+  assert.ok(call("Read", { file_path: "/repo/.worktrees/x/.env.local" }));
+  assert.ok(call("Edit", { file_path: "/repo/.env.production" }));
+});
+
+test("the example environment file can be read", () => {
+  assert.equal(call("Read", { file_path: "/repo/.env.example" }), null);
+});
+
+test("shell commands naming an environment file are refused", () => {
+  assert.ok(bash("cat .env"));
+  assert.ok(bash("grep KEY ./.env.local"));
+  assert.ok(bash("source /repo/.env && echo ok"));
+});
+
+test("shell commands naming only the example file are allowed", () => {
+  assert.equal(bash("cat .env.example"), null);
+  assert.equal(bash("cp .env.example /tmp/example"), null);
+});
+
+test("words that merely contain .env are not refused", () => {
+  assert.equal(bash("pnpm test --filter dotenv"), null);
+  assert.equal(bash("node scripts/harness/worktree.mjs create feat/1-env-docs"), null);
+});
+
+// --- the owner's private notes ---------------------------------------------
+
+test("subagents cannot read .context", () => {
+  assert.ok(call("Read", { file_path: "/repo/.context/profile-notes.md" }, { isSubagent: true }));
+  assert.ok(bash("cat .context/profile-notes.md", { isSubagent: true }));
+});
+
+test("unattended runs cannot read .context", () => {
+  assert.ok(call("Grep", { path: "/repo/.context" }, { unattended: true }));
+});
+
+test("the .context readme stays readable", () => {
+  assert.equal(call("Read", { file_path: "/repo/.context/README.md" }, { isSubagent: true }), null);
+});
+
+test("the owner's interactive session may read .context", () => {
+  assert.equal(call("Read", { file_path: "/repo/.context/profile-notes.md" }), null);
+});
+
+// --- pushing ---------------------------------------------------------------
+
+test("pushing to master is refused", () => {
+  assert.ok(bash("git push origin master"));
+  assert.ok(bash("git push origin HEAD:master"));
+  assert.ok(bash("git push origin main"));
+});
+
+test("force-pushing is refused", () => {
+  assert.ok(bash("git push --force origin feat/1-x"));
+  assert.ok(bash("git push -f origin feat/1-x"));
+  assert.ok(bash("git push --force-with-lease origin feat/1-x"));
+  assert.ok(bash("git push origin +feat/1-x"));
+});
+
+test("pushing an issue or phase branch is allowed", () => {
+  assert.equal(bash("git push -u origin feat/12-profile-api"), null);
+  assert.equal(bash("git push origin phase/02-api-db"), null);
+});
+
+// --- merging ---------------------------------------------------------------
+
+const lookup = (bases) => (number) => bases[number] ?? null;
+
+test("the orchestrator may squash-merge into a phase branch", () => {
+  const result = bash("gh pr merge 41 --squash --delete-branch", {
+    lookupPrBase: lookup({ 41: "phase/02-api-db" }),
+  });
+  assert.equal(result, null);
+});
+
+test("merging into master is refused", () => {
+  assert.ok(bash("gh pr merge 42 --merge", { lookupPrBase: lookup({ 42: "master" }) }));
+});
+
+test("merging without --squash into a phase branch is refused", () => {
+  assert.ok(bash("gh pr merge 41 --merge", { lookupPrBase: lookup({ 41: "phase/02-api-db" }) }));
+});
+
+test("merging without a pull request number is refused", () => {
+  assert.ok(bash("gh pr merge --squash", { lookupPrBase: lookup({}) }));
+});
+
+test("merging when the base cannot be confirmed is refused", () => {
+  assert.ok(bash("gh pr merge 43 --squash", { lookupPrBase: () => { throw new Error("offline"); } }));
+});
+
+test("subagents never merge", () => {
+  assert.ok(
+    bash("gh pr merge 41 --squash", { isSubagent: true, lookupPrBase: lookup({ 41: "phase/02-api-db" }) }),
+  );
+});
+
+test("a merge or push chained after another command is still checked", () => {
+  assert.ok(bash("git fetch && git push origin master"));
+  assert.ok(bash("cd x; gh pr merge 42 --merge", { lookupPrBase: lookup({ 42: "master" }) }));
+});
+
+test("text that only mentions a merge or a push is not treated as one", () => {
+  assert.equal(bash("echo 'then run gh pr merge <number> --squash'"), null);
+  assert.equal(bash("python3 - <<'EOF'\ndoc = '(`gh pr merge <number>`) and `git push origin master`'\nEOF"), null);
+});
+
+test("a real merge is recognised for the post-merge reminder, a mention is not", () => {
+  assert.equal(invokesPrMerge("gh pr merge 41 --squash --delete-branch"), true);
+  assert.equal(invokesPrMerge("gh pr checks 41 --watch && gh pr merge 41 --squash"), true);
+  assert.equal(invokesPrMerge("python3 - <<'EOF'\nx = 'merge with `gh pr merge <number>`'\nEOF"), false);
+  assert.equal(invokesPrMerge(undefined), false);
+});
+
+// --- everything else -------------------------------------------------------
+
+test("ordinary commands pass", () => {
+  assert.equal(bash("pnpm test"), null);
+  assert.equal(bash("git status"), null);
+  assert.equal(call("WebFetch", { url: "https://example.com" }), null);
+});
