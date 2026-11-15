@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { parseEnv } from "node:util";
 import {
   MAX_SLOTS,
+  PORT_VARIABLES,
   allocateSlot,
+  basePortsFrom,
   emptyState,
   envFileContent,
   freeSlot,
@@ -11,28 +16,49 @@ import {
   worktreeDirName,
 } from "./slots.mjs";
 
+// The base ports are configuration: they come from the documented example, never from the code.
+const EXAMPLE_FILE = path.join(import.meta.dirname, "..", "..", "..", ".env.example");
+const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
+const base = basePortsFrom(example);
+const shifted = (by) =>
+  Object.fromEntries(Object.entries(base).map(([name, port]) => [name, port + by]));
+
+test("the documented example configures the base port of every service", () => {
+  assert.deepEqual(PORT_VARIABLES, ["WEB_PORT", "API_PORT", "MCP_ADMIN_PORT", "LLM_AGENT_PORT"]);
+  for (const name of PORT_VARIABLES) assert.equal(base[name], Number(example[name]));
+});
+
 test("slot 0 is the main checkout with the base ports", () => {
-  assert.deepEqual(portsForSlot(0), {
-    WEB_PORT: 3000,
-    API_PORT: 3001,
-    MCP_ADMIN_PORT: 3002,
-    LLM_AGENT_PORT: 3003,
-  });
+  assert.deepEqual(portsForSlot(0, base), base);
 });
 
 test("slot N shifts every port by N x 10", () => {
-  assert.deepEqual(portsForSlot(3), {
-    WEB_PORT: 3030,
-    API_PORT: 3031,
-    MCP_ADMIN_PORT: 3032,
-    LLM_AGENT_PORT: 3033,
-  });
+  assert.deepEqual(portsForSlot(3, base), shifted(30));
+});
+
+test("every service needs a base port", () => {
+  for (const name of PORT_VARIABLES) {
+    const incomplete = { ...example };
+    delete incomplete[name];
+    assert.throws(() => basePortsFrom(incomplete), new RegExp(`${name} is not set`));
+  }
+});
+
+test("a base port must be a whole port number", () => {
+  for (const value of ["", "abc", "30.5", "-1", "0", " 1"]) {
+    assert.throws(() => basePortsFrom({ ...example, API_PORT: value }), /API_PORT must be/);
+  }
+});
+
+test("a base port leaves room for the ports of every slot", () => {
+  const highest = String(2 ** 16 - 1);
+  assert.throws(() => basePortsFrom({ ...example, LLM_AGENT_PORT: highest }), /LLM_AGENT_PORT/);
 });
 
 test("ports are refused for a slot out of range", () => {
-  assert.throws(() => portsForSlot(-1), RangeError);
-  assert.throws(() => portsForSlot(MAX_SLOTS + 1), RangeError);
-  assert.throws(() => portsForSlot(1.5), RangeError);
+  assert.throws(() => portsForSlot(-1, base), RangeError);
+  assert.throws(() => portsForSlot(MAX_SLOTS + 1, base), RangeError);
+  assert.throws(() => portsForSlot(1.5, base), RangeError);
 });
 
 test("the first worktree gets slot 1", () => {
@@ -92,9 +118,10 @@ test("folder names come from branch names", () => {
 });
 
 test("the environment file carries the slot and its ports", () => {
-  const content = envFileContent(2, { EXTRA: "x" });
-  assert.match(content, /^WORKTREE_SLOT=2$/m);
-  assert.match(content, /^WEB_PORT=3020$/m);
-  assert.match(content, /^LLM_AGENT_PORT=3023$/m);
-  assert.match(content, /^EXTRA=x$/m);
+  const content = parseEnv(envFileContent(2, base, { EXTRA: "x" }));
+  assert.deepEqual(content, {
+    WORKTREE_SLOT: "2",
+    ...Object.fromEntries(Object.entries(shifted(20)).map(([name, port]) => [name, String(port)])),
+    EXTRA: "x",
+  });
 });
