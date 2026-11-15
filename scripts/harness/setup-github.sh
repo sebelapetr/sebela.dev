@@ -21,7 +21,7 @@ repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 gh api --method PUT "repos/$repo/branches/master/protection" --input - >/dev/null <<JSON
 {
   "required_status_checks": { "strict": false, "contexts": ["Harness tests"] },
-  "enforce_admins": false,
+  "enforce_admins": true,
   "required_pull_request_reviews": { "required_approving_review_count": 0 },
   "restrictions": null,
   "allow_force_pushes": false,
@@ -29,4 +29,4 @@ gh api --method PUT "repos/$repo/branches/master/protection" --input - >/dev/nul
   "required_linear_history": false
 }
 JSON
-echo "master protected: pull request with green CI required, no force-push, no deletion"
+echo "master protected: pull request with green CI required for everyone (admins too), no force-push, no deletion"

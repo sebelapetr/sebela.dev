@@ -3,7 +3,7 @@
   "permissions": {
     "allow": [
       "Bash(node scripts/harness/*)",
-      "Bash(node --test *)",
+      "Bash(node --test scripts/harness/)",
       "Bash(scripts/run-phase.sh *)",
       "Bash(pnpm *)",
       "Bash(docker compose *)",
@@ -37,7 +37,6 @@
       "Bash(ls *)",
       "Bash(cat *)",
       "Bash(grep *)",
-      "Bash(find *)",
       "Bash(wc *)",
       "Bash(head *)",
       "Bash(tail *)"

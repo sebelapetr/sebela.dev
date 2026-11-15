@@ -39,7 +39,24 @@ function deny(reason) {
   return { reason };
 }
 
+// Grep's glob and Glob's pattern can reach files that the searched directory does not name.
+function checkSearchPattern({ toolName, toolInput, restricted }) {
+  const pattern = toolName === "Grep" ? toolInput?.glob : toolName === "Glob" ? toolInput?.pattern : null;
+  if (!pattern) return null;
+  const segments = String(pattern).split(/[\\/]/);
+  if (segments.some((segment) => segment.startsWith(".env") && segment !== ".env.example")) {
+    return deny("Environment files are off limits; only .env.example may be read (docs/permissions.md).");
+  }
+  const contextAt = segments.indexOf(".context");
+  if (restricted && contextAt !== -1 && segments.slice(contextAt + 1).join("/") !== "README.md") {
+    return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");
+  }
+  return null;
+}
+
 function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted }) {
+  const fromPattern = checkSearchPattern({ toolName, toolInput, restricted });
+  if (fromPattern) return fromPattern;
   const raw = filePathOf(toolInput);
   if (!raw) return null;
   const filePath = path.resolve(cwd ?? mainRoot, raw);
@@ -71,17 +88,28 @@ function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted }) {
   return null;
 }
 
-function checkPush(fullCommand) {
+// "+refs/heads/master", "HEAD:master", "master" all name master. HEAD is the checked-out branch.
+function branchNamedBy(ref, currentBranch) {
+  const name = ref.replace(/^\+/, "").replace(/^refs\/heads\//, "");
+  return name === "HEAD" ? currentBranch : name;
+}
+
+function checkPush(fullCommand, { currentBranch }) {
   const command = fullCommand.match(PUSH)?.[0];
   if (!command) return null;
-  if (/\s(--force(-with-lease)?|-f)(\s|=|$)/.test(command) || /\s\+[\w/.-]+/.test(command)) {
+  if (/\s(--force(-with-lease)?|-f)(\s|=|$)/.test(command) || /[\s:]\+[\w/.-]+/.test(command)) {
     return deny("Force-pushing is not allowed (docs/git-workflow.md).");
   }
-  const targets = command.trim().split(/\s+/).flatMap((part) => part.split(":"));
-  if (targets.some((part) => PROTECTED_BRANCHES.has(part))) {
-    return deny("Nobody but the owner changes master; push your issue or phase branch instead.");
+  const masterRefused = deny("Nobody but the owner changes master; push your issue or phase branch instead.");
+  // After "git push": options, then the remote, then refspecs.
+  const positional = command.trim().split(/\s+/).slice(2).filter((part) => !part.startsWith("-"));
+  const refspecs = positional.slice(1);
+  if (refspecs.length === 0) {
+    // A bare push goes to the upstream of the checked-out branch.
+    return PROTECTED_BRANCHES.has(currentBranch) ? masterRefused : null;
   }
-  return null;
+  const destinations = refspecs.flatMap((spec) => spec.split(":")).map((ref) => branchNamedBy(ref, currentBranch));
+  return destinations.some((name) => PROTECTED_BRANCHES.has(name)) ? masterRefused : null;
 }
 
 function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
@@ -89,6 +117,9 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
   if (!command) return null;
   if (isSubagent) {
     return deny("Only the orchestrator merges, and only into a phase branch.");
+  }
+  if (/\s(--repo|-R)(\s|=)/.test(command) || /https?:\/\//.test(command)) {
+    return deny("Merge pull requests of this repository only, by number.");
   }
   const number = command.match(/\bgh\s+pr\s+merge\s+(?:[^\s-]\S*\s+)*?(\d+)\b/)?.[1];
   if (!number) {
@@ -117,6 +148,7 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
 //   isSubagent            the call comes from a subagent
 //   unattended            the call comes from the phase loop
 //   lookupPrBase(number)  returns the base branch of a pull request
+//   currentBranch         branch checked out where the command runs
 export function evaluateToolCall({
   toolName,
   toolInput,
@@ -125,6 +157,7 @@ export function evaluateToolCall({
   isSubagent = false,
   unattended = false,
   lookupPrBase = () => null,
+  currentBranch = null,
 }) {
   const restricted = isSubagent || unattended;
 
@@ -140,7 +173,7 @@ export function evaluateToolCall({
     if (restricted && CONTEXT_IN_COMMAND.test(command)) {
       return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");
     }
-    return checkPush(command) ?? checkMerge(command, { isSubagent, lookupPrBase });
+    return checkPush(command, { currentBranch }) ?? checkMerge(command, { isSubagent, lookupPrBase });
   }
 
   return null;

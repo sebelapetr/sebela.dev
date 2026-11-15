@@ -51,8 +51,8 @@ Free hands inside a worktree, hard limits at the boundaries. An agent should fin
 | Layer | Where | Covers |
 |---|---|---|
 | Permission rules | `.claude/settings.json` | What runs without asking, what asks, what is refused |
-| Guard hook | `scripts/harness/hooks/pre-tool-use.mjs`, rules in `scripts/harness/lib/guard.mjs` | Code edits in the main checkout; environment files; `.context/` for subagents and the loop; pushes to `master` and force-pushes; merges — only by the orchestrator, only with `--squash`, only into a branch other than `master` |
-| Branch protection | GitHub, set by `scripts/harness/setup-github.sh` | `master` takes changes only through a pull request with green CI |
+| Guard hook | `scripts/harness/hooks/pre-tool-use.mjs`, rules in `scripts/harness/lib/guard.mjs` | Code edits in the main checkout; environment files; `.context/` for subagents and the loop; pushes to `master` and force-pushes; merges — only by the orchestrator, only of this repository, only with `--squash`, only into a branch other than `master`. Search patterns of Grep and Glob are checked like paths. In the phase loop a guard that fails refuses the call |
+| Branch protection | GitHub, set by `scripts/harness/setup-github.sh` | `master` takes changes only through a pull request with green CI, for the owner too (admins are not exempt), with no force-push or deletion |
 
 Rules on shell commands match the command as written, so they are a safety net, not a sandbox: an agent determined to get round them could. Branch protection on GitHub is the layer that cannot be talked round.
 

@@ -149,6 +149,38 @@ test("a real merge is recognised for the post-merge reminder, a mention is not",
   assert.equal(invokesPrMerge(undefined), false);
 });
 
+// --- review findings: refspec spellings, bare pushes, other repositories, search tools ---
+
+test("pushing to master under another refspec spelling is refused", () => {
+  assert.ok(bash("git push origin HEAD:refs/heads/master"));
+  assert.ok(bash("git push origin feat/1-x:+master"));
+  assert.ok(bash("git push origin refs/heads/main"));
+});
+
+test("a bare push is refused while master is checked out", () => {
+  assert.ok(bash("git push", { currentBranch: "master" }));
+  assert.ok(bash("git push origin", { currentBranch: "master" }));
+  assert.equal(bash("git push", { currentBranch: "feat/1-x" }), null);
+});
+
+test("merging a pull request of another repository is refused", () => {
+  const lookupPrBase = lookup({ 41: "phase/02-api-db" });
+  assert.ok(bash("gh pr merge 41 --squash --repo someone/else", { lookupPrBase }));
+  assert.ok(bash("gh pr merge 41 --squash -R someone/else", { lookupPrBase }));
+  assert.ok(bash("gh pr merge https://github.com/someone/else/pull/41 --squash", { lookupPrBase }));
+});
+
+test("search tools cannot be pointed at environment files by pattern", () => {
+  assert.ok(call("Grep", { pattern: "KEY", path: "/repo", glob: ".env*" }));
+  assert.ok(call("Glob", { pattern: "**/.env.local" }));
+  assert.equal(call("Glob", { pattern: "**/.env.example" }), null);
+});
+
+test("search tools cannot be pointed at .context by pattern when restricted", () => {
+  assert.ok(call("Glob", { pattern: ".context/**" }, { unattended: true }));
+  assert.ok(call("Grep", { pattern: "x", path: "/repo", glob: ".context/*.md" }, { isSubagent: true }));
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {
