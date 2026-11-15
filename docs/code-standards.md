@@ -17,6 +17,44 @@ Initial conventions. They are refined in phase 2, when the first real code exist
 - Authentication is applied as middleware on the private route group in the API, not inside individual handlers.
 - No environment access scattered through the code: each app reads and validates its environment once, at startup, and passes configuration down.
 
+## Deep modules
+
+### Why
+
+A caller should learn one operation and its guarantees, rather than the internal sequence that makes it work. Information hiding keeps validation decisions, persistence details and failure handling with the code that owns them. Changing a storage driver or an internal query should not require edits in every caller.
+
+This also gives a coding agent a useful reading path: app/package module map → public entry and documented contract → behaviour tests → implementation when needed. It limits the context needed to use a module; it is not a claim of measured improvements in model accuracy. Folder depth and implementation line counts do not measure module depth.
+
+### How
+
+- Start with the caller's complete operation, its inputs/result and the decisions it hides. Export cohesive operations such as updating an experience and its technology relations, validating/attaching media, or verifying a key. Do not make callers reconstruct the workflow from low-level steps.
+- Document inputs, results, errors, side effects, atomicity, ordering and required configuration at the entry. Public types alone do not describe the complete contract. Keep external types/domain results stable while internals change.
+- Use the explicit entries and placement rules in [repository structure](repository-structure.md#backend-module-layout). Select exports deliberately; a barrel that re-exports every internal file is not encapsulation. Private files stay private even if TypeScript can resolve them.
+- Compose validated configuration and resources once, then pass required capabilities to modules. Keep dependency direction acyclic. [Architecture](architecture.md#module-responsibilities-and-composition) assigns HTTP/security, domain orchestration and SQL to distinct owners.
+- Keep SQL, Drizzle query builders/tables, transaction/connection handles, storage SDK objects and driver-specific errors inside their owning implementation. Db exposes atomic persistence operations; services request those operations without handling SQL primitives.
+- Use replaceable drivers for actual variation, such as local/Bunny storage. Retain required HTTP, security and package adapters even with one implementation. Do not add speculative factories, generic repositories or a forwarding class per table. When deleting a proposed wrapper only deletes forwarding code, simplify it; when deleting it forces callers to recreate a workflow, it probably hides useful work.
+- Verify observable results through the public operation and keep those tests through refactors. Nontrivial internal pure helpers may have focused tests without being exported solely for testing. Real persistence tests use real Postgres; follow [testing](testing.md#test-surfaces-and-the-redgreenrefactor-cycle).
+- Add or change the module map alongside the implementation: module path, public entry, responsibility/hidden decisions, allowed dependencies and relevant test commands. Start with real functionality, not empty modules for later phases.
+
+### Example: update an experience
+
+The HTTP adapter authenticates and validates once, then calls a profile operation through its public entry:
+
+```typescript
+const result = await profile.updateExperience({
+  id: experienceId,
+  changes: { title: "Platform engineer", technologyIds },
+});
+```
+
+The interface promises either a consistent updated experience/relations or a documented failure with no partial write. Services own domain checks; db owns the atomic persistence operation. The caller never obtains a transaction, updates the experience table, deletes join rows, inserts technology links and decides how to roll back. That sequence belongs behind db's interface; exposing it would make every caller understand the implementation. This example describes a future operation, not an existing runtime export.
+
+### Enforcement and review
+
+These instructions apply now. Package import checks are introduced in phase 1; [issue #22](https://github.com/sebelapetr/sebela.dev/issues/22) extends them to private module imports and cycles in phase 2. Those executable module checks are not implemented by this documentation change. Until they exist, review imports manually; afterwards review still checks information hiding and interface quality, which import syntax cannot prove.
+
+The conceptual references are [Ousterhout's modular design](https://web.stanford.edu/~ouster/cgi-bin/cs190-winter18/lecture.php?topic=modularDesign) and [Matt Pocock's codebase-design](https://www.aihero.dev/skills-codebase-design). The directory convention, trust boundary and test policy are this repository's choices. Project-local skills record their upstream revision and adaptations; project terms such as API, service, repository and component retain their established meaning.
+
 ## Naming
 
 - Files and folders: `kebab-case`. Types and components: `PascalCase`. Functions and variables: `camelCase`.

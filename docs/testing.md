@@ -17,6 +17,18 @@ The test is written first and must fail without the implementation. The reviewer
 - Services and domain logic
 - Bug fixes — first a test that reproduces the bug
 
+## Test surfaces and the red–green–refactor cycle
+
+An approved issue/PRD identifies the behaviour and the public operation to test. Record the relevant surface (HTTP request, service operation, persistence operation, pure transformation or rendered visitor journey), what it observes and the important failure cases. Existing approval covers those tests; an unattended agent does not ask the owner to approve the same surface again. Ask only if a material scope/domain decision is genuinely unresolved.
+
+Work in small observable slices: write one behavioural test, run it and confirm failure for the missing behaviour, commit the red test, implement enough to pass, then rerun relevant checks. Refactor after green without changing behaviour, and keep the tests. An import error or broken fixture is not the intended red evidence. Expected values come from the requirement or independently worked examples, not the implementation formula repeated in the assertion.
+
+Tests enter the module through the operation they exercise and assert results/errors/state visible through that contract. Do not mock the internal call graph or assert helper call counts/order. Nontrivial internal pure functions may have focused tests without becoming public exports solely for tests. Do not add tests that only restate configuration, generated files or trivial forwarding code. Required security/HTTP/validation/persistence behaviour still needs tests even if a handler delegates it.
+
+Persistence integration tests use real Postgres and separate temporary databases. Controlled clocks/randomness and external provider fakes are appropriate at real external interfaces; they do not replace actual database integration. Test failure/rollback outcomes through the relevant persistence/service/HTTP contract; low-level integrity checks are valid in tests whose subject is persistence integrity. Local-storage tests may use disposable real files; normal CI never needs Bunny credentials.
+
+Use the project-local [tdd reference](../.claude/skills/tdd/SKILL.md); [codebase-design](../.claude/skills/codebase-design/SKILL.md) helps if the interface itself is unclear. Follow the UI and MCP/AI verification policies below; these references do not extend test-first requirements to typography or replace model evals with mocks.
+
 ## Where visual evidence is the standard
 
 Layout, typography and responsive polish are accepted on:

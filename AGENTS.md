@@ -39,6 +39,12 @@ The personal professional website of Petr Šebela (sebelapetr.cz): one site for 
 8. **Do not add a top-level folder, app or package** that is not in `docs/repository-structure.md` without the owner's approval.
 9. **Do not weaken a check to make it pass.** No disabled lint rules, skipped tests or lowered thresholds without the owner's approval.
 
+## Deep modules
+
+Expose a small, documented interface that hides a complete responsibility. Put handwritten backend modules in `src/modules/<name>/` with an explicit `index.ts`; other modules use that entry and other packages use declared exports. Keep dependencies acyclic and preserve the API trust boundary. Hide SQL, storage drivers and internal workflows behind their owning interfaces. Follow [code standards](docs/code-standards.md#deep-modules), [module placement/import rules](docs/repository-structure.md#backend-module-layout) and [architecture](docs/architecture.md#module-responsibilities-and-composition); maintain the module map in each relevant app/package `AGENTS.md`.
+
+Project-local references: read [codebase-design](.claude/skills/codebase-design/SKILL.md) when shaping an interface and [tdd](.claude/skills/tdd/SKILL.md) for test-first implementation. They supplement the binding docs and do not reopen approved issue scope. These skills live only in this repository; no global installation is required.
+
 ## Testing
 
 - **Test-first is mandatory** for security, API contracts, services and domain logic, and bug fixes. The test is written first and must fail without the implementation.

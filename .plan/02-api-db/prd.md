@@ -146,7 +146,7 @@ Each app/package above has an `AGENTS.md` at its root. Committed SQL migrations 
 
 Module entry locations are fixed by this convention; the internal filenames illustrate the agreed responsibilities and may evolve without changing those entries. Each module may contain implementation files and colocated tests. A source module does not necessarily correspond to a PostgreSQL schema or a table. Subdivide `profile` when cohesive operations justify it; do not create a module or a controller/service/repository class for every table by default. The same domain can have an HTTP adapter, domain logic and persistence in different packages; their responsibilities remain distinct.
 
-This layout and its enforcement are delivered by the standalone issue below. The folder convention is this project's choice; module depth comes from the information hidden behind its interface.
+The layout, rationale and agent guidance are established in [PR #62](https://github.com/sebelapetr/sebela.dev/pull/62), including project-local codebase-design and TDD references. The standalone issue below verifies the inherited standard and adds executable enforcement after phase 1. The folder convention is this project's choice; module depth comes from the information hidden behind its interface.
 
 ### The `profile` schema
 
@@ -262,7 +262,7 @@ Every table has an identifier, timestamps and, where order matters, a position. 
 - **The generated client** is checked for staleness in CI.
 - **Prior art:** the Booky monorepo for Hono with OpenAPI, Drizzle, a test database and CI.
 
-## Planned standalone issue — Establish the deep-module standard and enforce its imports
+## Standalone issue — Establish the deep-module standard and enforce its imports
 
 ### Parent and scheduling
 
@@ -274,9 +274,9 @@ Every table has an identifier, timestamps and, where order matters, a position. 
 
 ### What to build
 
-Turn the existing deep-module principle into a usable repository standard before backend code is introduced. Keep the approved packages and trust boundary. Establish the source layout above, document module responsibilities and enforce imports mechanically. Deliver the convention and fixture-based enforcement together; later issues create real modules as their functionality is implemented.
+The owner brought forward the documentation and agent-guidance portion into [PR #62](https://github.com/sebelapetr/sebela.dev/pull/62). Preserve and verify that inherited standard rather than recreating it. Issue #22 remains open and blocking for fixture-based import/cycle enforcement using phase 1 tooling; later issues create real modules as their functionality is implemented. No executable enforcement is claimed by the documentation PR.
 
-Use `docs/code-standards.md` as the canonical explanation, `docs/repository-structure.md` for placement and import rules, and `docs/architecture.md` for responsibilities and composition. Root `AGENTS.md` and `.claude/rules/deep-modules.md` carry short instructions linking to those documents. Extend `.claude/rules/documentation.md` so an agent changing a module knows which documents to read. Backend package instructions added in later issues include their actual module map and public entries. Keep project terms such as API, services, repositories and trust boundary; external vocabulary does not rename established concepts.
+Use `docs/code-standards.md` as the canonical explanation, `docs/repository-structure.md` for placement and import rules, and `docs/architecture.md` for responsibilities and composition. Root `AGENTS.md` and `.claude/rules/deep-modules.md` carry short instructions linking to those documents. Keep `.claude/rules/documentation.md` and the project-local `codebase-design`/`tdd` references aligned so an agent changing a module knows which documents to read. Backend package instructions added in later issues include their actual module map and public entries. Keep project terms such as API, services, repositories and trust boundary; external vocabulary does not rename established concepts.
 
 ### Standard to document
 
@@ -293,13 +293,13 @@ The primary rationale is information hiding and limiting the knowledge callers m
 
 ### Wording for root AGENTS.md
 
-Add a short architecture instruction linked to the canonical documents:
+Preserve the short architecture instruction introduced in PR #62, linked to the canonical documents:
 
 > Design deep modules: expose a small, documented interface that hides a complete responsibility. Put handwritten backend modules in `src/modules/<name>/` with an explicit `index.ts`; other modules use that entry, and other packages use declared package exports. Keep dependencies acyclic and preserve the API trust boundary. Keep driver details, SQL and internal workflows behind their owning interfaces. Follow `docs/code-standards.md`, `docs/repository-structure.md` and `docs/architecture.md`; maintain the module map in the relevant app/package `AGENTS.md`.
 
 ### Wording for .claude/rules/deep-modules.md
 
-Create a short, always-loaded rule that points to the canonical documents rather than duplicating their full content:
+Maintain the short, always-loaded rule introduced in PR #62; it points to canonical documents rather than duplicating their full content:
 
 > Before designing or changing a module, read the Structure section of `docs/code-standards.md`, the module layout/import rules in `docs/repository-structure.md` and the relevant app/package `AGENTS.md`.
 >
@@ -307,8 +307,8 @@ Create a short, always-loaded rule that points to the canonical documents rather
 
 ### Acceptance criteria
 
-- [ ] Root `AGENTS.md`, the three canonical documents, `.claude/rules/documentation.md` and the new `.claude/rules/deep-modules.md` agree on the convention, retain valid links and preserve the existing package dependency table.
-- [ ] Canonical docs contain the phase 2 layout, composition/CLI placement, explicit entry rules, private implementation examples and a short example contrasting a cohesive operation with caller-managed implementation steps.
+- [ ] Verify the guidance inherited from PR #62: root `AGENTS.md`, the canonical documents, `.claude/rules/documentation.md`, `.claude/rules/deep-modules.md` and the project-local reference skills agree, retain valid links and preserve the existing package dependency table. Do not recreate guidance already present.
+- [ ] Preserve the canonical phase 2 layout, composition/CLI placement, explicit entry rules, private implementation examples and the cohesive-operation example introduced in PR #62; update them only if the enforcement implementation reveals a concrete gap.
 - [ ] Extend the existing lint/import-boundary mechanism, with failing fixtures first, to reject cross-module private imports, cross-package source imports and circular module dependencies. Cover supported static imports, type imports, re-exports and literal dynamic imports, including relative and configured alias paths; keep a narrow documented provision for framework tooling that runs within its own package.
 - [ ] Positive fixtures demonstrate private imports inside one module, another module using its public entry, composition code using entries and allowed package-root imports. Negative fixtures demonstrate bypasses and cycles. Fixtures do not create placeholder apps/packages or load real credentials.
 - [ ] The normal lint command and CI execute these checks. The issue states any dependency added and its reason; it does not weaken the phase 1 checks. Tool limitations are documented, and the reviewer verifies behavioural information hiding separately from syntactic import enforcement.

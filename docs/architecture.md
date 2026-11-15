@@ -42,6 +42,16 @@ The cost is a network hop and a second service to run. It is accepted.
 
 A controller in the API stays thin: it validates input, calls a service, returns the result. Authentication is middleware on the private route group, not logic inside handlers.
 
+## Module responsibilities and composition
+
+A domain may have an HTTP module in the API, an operation in services and a persistence module in db. Those are different responsibilities, not three public versions of the same implementation. HTTP adapts the request/response and applies security; services coordinate the domain use case; db performs cohesive persistence operations and owns SQL/transaction mechanics. Contracts describe transport data independently of services and db. Storage hides provider SDKs/key layout; media coordinates upload checks, metadata, attachment and cleanup.
+
+Create resources at the backend startup/composition entry and the corresponding maintenance CLI path. Keep package dependencies unchanged: API composition calls permitted services entries, and services use db through persistence entries. Do not import db directly into API startup as a shortcut, or pass raw database/SDK handles out to HTTP/client code. Pass validated configuration and the required capabilities once; runtime modules do not repeatedly read environment variables or construct hidden clients. Close owned resources at shutdown.
+
+For a multi-record mutation, the caller requests a complete operation. Services ask db to perform the necessary atomic persistence change; callers never manage SQL transaction primitives. File storage and database commits are not one transaction: media explicitly owns validation, ordering and compensation/cleanup on failure. Public interfaces document these guarantees and expected errors.
+
+Module dependencies are acyclic and cross only explicit entries. [Repository structure](repository-structure.md#backend-module-layout) defines imports/placement; [code standards](code-standards.md#deep-modules) explains interface design and review. Required HTTP/security adapters remain even if they are small; deep modules do not remove the API trust boundary.
+
 ## Data
 
 - **PostgreSQL is the single canonical source.** Nothing in the repository mirrors live content.

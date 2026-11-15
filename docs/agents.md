@@ -19,6 +19,12 @@ There are no `CLAUDE.md` files. Claude Code reads `AGENTS.md` directly when no `
 
 A subagent may start without project instructions loaded. Every agent therefore begins by reading the root `AGENTS.md` and the `AGENTS.md` of each part it will touch.
 
+## Project-local design and testing references
+
+The repository carries `codebase-design` and `tdd` under `.claude/skills/`. They adapt Matt Pocock's references to the binding docs: interface design and incremental behaviour tests, with our API trust boundary, real-Postgres integration and existing approval model. Read the relevant `SKILL.md` directly when a harness has no skill invocation tool. No global skill installation or duplicate in a user-level directory is needed.
+
+Root instructions and the always-loaded Claude deep-module rule point to the canonical docs. Skills are reference material, not additional orchestration: they do not launch a codebase survey, spawn agents, install dependencies or reopen an approved issue on their own. Source revisions, adaptations and MIT notices live beside the local references. Update docs and the local references together when a convention changes.
+
 ## Roles
 
 | Agent | Does | Works in |
