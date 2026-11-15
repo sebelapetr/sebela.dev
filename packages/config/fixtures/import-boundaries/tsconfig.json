@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "jsx": "preserve",
+    "types": []
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]
+}
