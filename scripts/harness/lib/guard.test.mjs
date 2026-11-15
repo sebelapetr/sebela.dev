@@ -163,6 +163,25 @@ test("a bare push is refused while master is checked out", () => {
   assert.equal(bash("git push", { currentBranch: "feat/1-x" }), null);
 });
 
+test("pushes that name every branch, or a quoted master, are refused", () => {
+  assert.ok(bash("git push --all origin", { currentBranch: "feat/1-x" }));
+  assert.ok(bash("git push --mirror origin", { currentBranch: "feat/1-x" }));
+  assert.ok(bash("git push origin 'master'", { currentBranch: "feat/1-x" }));
+});
+
+test("a bare or HEAD push is refused when the branch it pushes cannot be known", () => {
+  assert.ok(bash("git push"));
+  assert.ok(bash("cd ../other && git push", { currentBranch: "feat/1-x" }));
+  assert.ok(bash("git -C ../other push origin HEAD", { currentBranch: "feat/1-x" }));
+  assert.equal(bash("cd x && git push origin feat/1-x", { currentBranch: "feat/1-x" }), null);
+});
+
+test("a merge that redirects gh to another repository through the environment is refused", () => {
+  const lookupPrBase = lookup({ 41: "phase/02-api-db" });
+  assert.ok(bash("GH_REPO=someone/else gh pr merge 41 --squash", { lookupPrBase }));
+  assert.ok(bash("export GH_HOST=evil.example; gh pr merge 41 --squash", { lookupPrBase }));
+});
+
 test("merging a pull request of another repository is refused", () => {
   const lookupPrBase = lookup({ 41: "phase/02-api-db" });
   assert.ok(bash("gh pr merge 41 --squash --repo someone/else", { lookupPrBase }));

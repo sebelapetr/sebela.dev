@@ -9,8 +9,10 @@ const PROTECTED_BRANCHES = new Set(["master", "main"]);
 
 // A command counts only where it is actually invoked: at the start, or after ; & | ( or a newline.
 // Text that merely mentions it (an argument, a heredoc) does not count.
-const AT_COMMAND = String.raw`(?:^|[;&|(\n]\s*)`;
-const PUSH = new RegExp(`${AT_COMMAND}git\\s+push\\b[^;&|\\n]*`);
+// Leading variable assignments (FOO=bar cmd) and `env` still leave the command in command position.
+const AT_COMMAND = String.raw`(?:^|[;&|(\n]\s*)(?:env\s+)?(?:\w+=\S*\s+)*`;
+const GIT_OPTIONS = String.raw`(?:\s+(?:-C\s+\S+|-c\s+\S+|--git-dir=\S+|--work-tree=\S+))*`;
+const PUSH = new RegExp(`${AT_COMMAND}git${GIT_OPTIONS}\\s+push\\b[^;&|\\n]*`);
 const MERGE = new RegExp(`${AT_COMMAND}gh\\s+pr\\s+merge\\b[^;&|\\n]*`);
 
 export function invokesPrMerge(command) {
@@ -94,21 +96,33 @@ function branchNamedBy(ref, currentBranch) {
   return name === "HEAD" ? currentBranch : name;
 }
 
+// The command may run somewhere other than the directory the hook looked at.
+const MOVES = /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
+
 function checkPush(fullCommand, { currentBranch }) {
-  const command = fullCommand.match(PUSH)?.[0];
+  const command = fullCommand.match(PUSH)?.[0]?.replace(/['"]/g, "");
   if (!command) return null;
+  if (/\s--(all|mirror|branches)\b/.test(command)) {
+    return deny("Push one named branch, not all of them (docs/git-workflow.md).");
+  }
   if (/\s(--force(-with-lease)?|-f)(\s|=|$)/.test(command) || /[\s:]\+[\w/.-]+/.test(command)) {
     return deny("Force-pushing is not allowed (docs/git-workflow.md).");
   }
   const masterRefused = deny("Nobody but the owner changes master; push your issue or phase branch instead.");
   // After "git push": options, then the remote, then refspecs.
-  const positional = command.trim().split(/\s+/).slice(2).filter((part) => !part.startsWith("-"));
+  const afterPush = command.slice(command.search(/\spush\b/) + 5);
+  const positional = afterPush.trim().split(/\s+/).filter((part) => part && !part.startsWith("-"));
   const refspecs = positional.slice(1);
+  const branchKnown = Boolean(currentBranch) && !MOVES.test(fullCommand);
+  const unknownBranch = deny("Name the branch to push explicitly (git push origin <branch>).");
   if (refspecs.length === 0) {
     // A bare push goes to the upstream of the checked-out branch.
+    if (!branchKnown) return unknownBranch;
     return PROTECTED_BRANCHES.has(currentBranch) ? masterRefused : null;
   }
-  const destinations = refspecs.flatMap((spec) => spec.split(":")).map((ref) => branchNamedBy(ref, currentBranch));
+  const refs = refspecs.flatMap((spec) => spec.split(":"));
+  if (!branchKnown && refs.some((ref) => ref.replace(/^\+/, "") === "HEAD")) return unknownBranch;
+  const destinations = refs.map((ref) => branchNamedBy(ref, currentBranch));
   return destinations.some((name) => PROTECTED_BRANCHES.has(name)) ? masterRefused : null;
 }
 
@@ -118,7 +132,7 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
   if (isSubagent) {
     return deny("Only the orchestrator merges, and only into a phase branch.");
   }
-  if (/\s(--repo|-R)(\s|=)/.test(command) || /https?:\/\//.test(command)) {
+  if (/\s(--repo|-R)(\s|=)/.test(command) || /https?:\/\//.test(command) || /\bGH_(REPO|HOST)=/.test(fullCommand)) {
     return deny("Merge pull requests of this repository only, by number.");
   }
   const number = command.match(/\bgh\s+pr\s+merge\s+(?:[^\s-]\S*\s+)*?(\d+)\b/)?.[1];
