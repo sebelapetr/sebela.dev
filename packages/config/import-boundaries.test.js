@@ -4,10 +4,10 @@
 // lints a file of a fictional workspace with `createConfig` and checks what ESLint reports.
 //
 // The committed fixture workspace in `fixtures/import-boundaries/` holds no real packages: only the
-// files the rule reads (the workspace marker and two `package.json` files declaring exports), a
-// tsconfig for the type-aware rules, and an allowed and a forbidden source file. The tests copy it
-// to a disposable directory and write each case there as a real file, because the TypeScript
-// project service lints only files that exist.
+// files the rule reads (the workspace marker and `package.json` files declaring exports and
+// imports), a tsconfig with `paths` aliases, and an allowed and a forbidden source file. The tests
+// copy it to a disposable directory and write each case there as a real file, because the
+// TypeScript project service lints only files that exist.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";

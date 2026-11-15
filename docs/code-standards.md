@@ -78,6 +78,7 @@ The conceptual references are [Ousterhout's modular design](https://web.stanford
 - Prettier formats; ESLint checks. Both run automatically on changed files.
 - Prettier uses its defaults (double quotes, semicolons, trailing commas) with a print width of 100. The only Prettier configuration is the root `prettier.config.js`, which re-exports `@sebela/config/prettier`.
 - Every package's `eslint.config.js` is `createConfig({ tsconfigRootDir: import.meta.dirname })` from `@sebela/config/eslint`, followed only by package-specific additions. TypeScript files are linted with `typescript-eslint`'s strict and stylistic type-checked rules; JavaScript files with ESLint's recommended rules. The root configuration lints the harness and root files; each package lints itself.
+- `createConfig` also enables `sebela/import-boundaries` on every JavaScript and TypeScript file, so each package inherits the [dependency rules](repository-structure.md#dependency-rules) through its normal `lint` task.
 - A lint rule is never disabled inline to make a check pass without the owner's approval. A disable directive that no longer suppresses anything is itself a lint error.
 
 ## Python

@@ -162,11 +162,25 @@ The API is the trust boundary: writes and authentication are enforced there and 
 | `apps/web`, `apps/mcp-admin` | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP |
 | `apps/llm-agent` (Python) | Nothing from the TypeScript packages; a client generated from the OpenAPI document — and it reaches data only through the API's public routes |
 | `apps/api` | `services`, `contracts`, `config` |
-| `packages/services` | `db`, `contracts`, `memory` |
+| `packages/services` | `db`, `contracts`, `memory`, `config` |
 | `packages/db` | nothing from this repository except `config` |
 | `packages/contracts` | nothing from this repository except `config` |
+| `packages/config` | nothing from this repository |
 
 `packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and `llm-agent` has no database access at all. A lint rule enforces this; do not disable it.
+
+### The `sebela/import-boundaries` lint rule
+
+`createConfig` from `@sebela/config/eslint` enables the rule as an error on every JavaScript and TypeScript file, so every package that lints itself with the shared configuration is checked by its normal `lint` task, and `pnpm lint` fails on a forbidden import. The rule lives in `packages/config/import-boundaries.js`; its behaviour tests and fixture workspace are described in `packages/config/AGENTS.md`.
+
+- **Who imports.** The workspace root is the nearest folder above the file that contains `pnpm-workspace.yaml`. A file under `apps/<name>/` or `packages/<name>/` belongs to that member; other files (the harness, root configuration) are root files. A member's package name is `@sebela/<folder name>`.
+- **The table.** A member imports another member only by package name and only if its row above allows it; importing itself is always allowed. Nothing imports an app. A member without a row (for example `api-client`, `ui` or `memory` before their phases) may import no workspace package: its row is added here and in the rule when the package is created. Root files are not in the table, but follow the entry-point and path rules.
+- **Entry points.** An `@sebela/*` specifier must name a declared entry point: a subpath in the target's `exports`, or only the package root when the target has no `exports` or does not exist yet. Subpath patterns and `null` exclusions are honoured, so `@sebela/<name>/src/...` cannot bypass a package's public entry.
+- **Paths.** A relative, absolute or `file:` path may not leave its member, reach into another member or go through `node_modules/@sebela/*`. A root file may not reach into a member by path.
+- **Aliases.** A `#` subpath import is checked where the `imports` map of the importer's `package.json` sends it. In TypeScript files, any other bare specifier that the TypeScript program resolves to a workspace file (for example a `paths` alias) is checked as the path it resolves to. JavaScript files are linted without type information, so their aliases are not resolved.
+- **Forms.** Static imports and re-exports (type-only ones too), dynamic `import()`, `require()`, TypeScript `import x = require()` and `typeof import()`. Specifiers that are not string literals cannot be checked. Third-party packages and Node.js built-ins are outside the rule.
+
+The diagnostic names the specifier, the importing member and what it may import instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A change to the table above changes the `DEPENDENCIES` map in the rule and its tests in the same pull request.
 
 ## Ports and worktree isolation
 
