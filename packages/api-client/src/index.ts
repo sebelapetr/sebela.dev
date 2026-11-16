@@ -1,5 +1,6 @@
-import type { Client } from "openapi-fetch";
+import createClient, { type Client, type Middleware } from "openapi-fetch";
 
+import document from "./generated/openapi.json" with { type: "json" };
 import type { components, paths } from "./generated/schema.js";
 
 type Schemas = components["schemas"];
@@ -25,6 +26,47 @@ export interface ApiClientOptions {
   readonly fetch?: (request: Request) => Promise<Response>;
 }
 
+/** What the client reads from the committed document: each operation's security requirement. */
+interface DocumentedSecurity {
+  readonly paths: Readonly<
+    Record<string, Readonly<Record<string, { readonly security?: readonly object[] } | undefined>>>
+  >;
+}
+
+const documented: DocumentedSecurity = document;
+
+/** Whether the contract requires credentials for the operation at `schemaPath` and `method`. */
+function requiresKey(schemaPath: string, method: string): boolean {
+  const security = documented.paths[schemaPath]?.[method.toLowerCase()]?.security;
+  return security !== undefined && security.length > 0;
+}
+
+/**
+ * A client of the API for one base address and, server-side, one API key.
+ *
+ * Every call returns `{ data, error, response }`: `data` is the documented success body, `error`
+ * the common `ErrorResponse` of a documented failure, and `response` carries the status and
+ * headers such as `Retry-After`. Calls do not throw for HTTP failures; a network failure rejects.
+ * The key is attached as `Authorization: Bearer` only to operations whose OpenAPI security
+ * requires it, so public reads never carry it. Each client keeps its own key; there is no
+ * global state.
+ */
 export function createApiClient(options: ApiClientOptions): ApiClient {
-  throw new Error(`Not implemented: ${options.baseUrl}`);
+  const client = createClient<paths>({
+    baseUrl: options.baseUrl,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+  const { apiKey } = options;
+  if (apiKey !== undefined) {
+    const bearer: Middleware = {
+      onRequest({ request, schemaPath }) {
+        if (requiresKey(schemaPath, request.method)) {
+          request.headers.set("Authorization", `Bearer ${apiKey}`);
+        }
+        return request;
+      },
+    };
+    client.use(bearer);
+  }
+  return client;
 }
