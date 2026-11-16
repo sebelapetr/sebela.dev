@@ -161,6 +161,23 @@ test("the verdict line is green, yellow or red", () => {
   assert.ok(problem.startsWith("\u001b[31m") && problem.includes("stuck"));
 });
 
+test("the line says what is happening, then what was found", () => {
+  const plain = (text) =>
+    text
+      .split("\u001b")
+      .join("")
+      .replace(/\[\d+m/g, "");
+  const line = "backend-developer on #24 · 16 min";
+  assert.equal(
+    plain(formatVerdict({ status: "ok", findings: [], line })),
+    `[steward] ok · ${line}`,
+  );
+  assert.equal(
+    plain(formatVerdict({ status: "warn", findings: ["slow"], line })),
+    `[steward] warn · ${line}: slow`,
+  );
+});
+
 test("the model's report schema requires a status and findings", () => {
   assert.deepEqual(STEWARD_REPORT_SCHEMA.required, ["status", "findings"]);
 });

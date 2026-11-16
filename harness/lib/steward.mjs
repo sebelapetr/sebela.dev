@@ -159,9 +159,10 @@ export function needsModel({
 
 const COLOURS = { ok: "\x1b[32m", warn: "\x1b[33m", problem: "\x1b[31m" };
 
-// One console line: green, yellow or red.
-export function formatVerdict({ status, findings }) {
+// One console line: green, yellow or red; what is happening (`line`), then what was found.
+export function formatVerdict({ status, findings, line }) {
   const colour = COLOURS[status] ?? COLOURS.warn;
+  const what = line ? ` · ${line}` : "";
   const detail = findings.length ? `: ${findings.join("; ")}` : "";
-  return `${colour}[steward] ${status}${detail}\x1b[0m`;
+  return `${colour}[steward] ${status}${what}${detail}\x1b[0m`;
 }

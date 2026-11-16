@@ -20,10 +20,12 @@ import {
   decideNext,
 } from "./lib/loop.mjs";
 import { newProblem, notify } from "./lib/notify.mjs";
+import { currentWork, workChange } from "./lib/progress.mjs";
 import { formatCost, iterationStats } from "./lib/phase-report.mjs";
 import { writePhaseReport } from "./phase-report.mjs";
 import { checkReadiness } from "./preflight.mjs";
-import { checkOnce, failedIssues } from "./steward.mjs";
+import { readLines, transcriptDir } from "./run-tools.mjs";
+import { checkOnce, failedIssues, phaseProgressNow } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
 function parseArgs(argv) {
@@ -203,6 +205,21 @@ function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardStat
   return () => clearInterval(timer);
 }
 
+// Every half minute, reads the orchestrator's transcript and prints a line when it picks an issue
+// or hands it to another agent.
+function startWatcher({ mainRoot, sessionId, iteration }) {
+  const file = path.join(transcriptDir(mainRoot), `${sessionId}.jsonl`);
+  let previous = { issue: null, branch: null, agent: null };
+  const timer = setInterval(() => {
+    const work = currentWork(readLines(file) ?? []);
+    const change = workChange(previous, work);
+    if (change) log(`iteration ${iteration}: ${change}`);
+    previous = work;
+  }, 30_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.phase) {
@@ -238,8 +255,11 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    log(`iteration ${iteration}: starting the orchestrator for ${options.phase}`);
+    const progress = phaseProgressNow(options.phase);
+    const done = progress ? ` (${progress.closed}/${progress.total} issues closed)` : "";
+    log(`iteration ${iteration}: starting the orchestrator for ${options.phase}${done}`);
     const sessionId = randomUUID();
+    const stopWatcher = startWatcher({ mainRoot, sessionId, iteration });
     const stopSteward = startSteward({
       mainRoot,
       phase: options.phase,
@@ -256,6 +276,7 @@ async function main() {
       sessionId,
     });
     stopSteward();
+    stopWatcher();
     const run = classifyRun(raw);
 
     const labels =

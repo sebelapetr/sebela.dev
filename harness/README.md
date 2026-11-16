@@ -12,7 +12,7 @@ The agent harness of this repository: what lets coding agents work through a pha
 | `worktree.mjs`                  | Creates and removes a worktree per branch with its own slot, ports and database in the shared Postgres; continues an interrupted issue's branch                                         |
 | `hooks/`                        | Claude Code hooks: the guard that refuses forbidden actions, formatting of edited files, worktree set-up, instructions for compaction and the post-merge reminder                       |
 | `git-hooks/`                    | Git hooks (formatting, commit messages) installed by `pnpm install`                                                                                                                     |
-| `lib/`                          | The pure rules behind them — slots, the loop's decision table, the guard, the steward, readiness, the phase report, Windows notifications — with their tests                            |
+| `lib/`                          | The pure rules behind them — slots, the loop's decision table, the guard, the steward, readiness, progress, the phase report, Windows notifications — with their tests                  |
 | `mcp.json`                      | The only MCP servers an unattended run loads                                                                                                                                            |
 | `setup-github.sh`               | Labels and protection of `master`; run once by the owner                                                                                                                                |
 

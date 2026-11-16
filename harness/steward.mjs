@@ -14,6 +14,7 @@ import {
   needsModel,
   summarizeTranscript,
 } from "./lib/steward.mjs";
+import { currentWork, describeWork, phaseProgress } from "./lib/progress.mjs";
 import { askAgent, quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { listWorktrees } from "./worktree.mjs";
 
@@ -69,6 +70,23 @@ function failingPullRequests(phase) {
       (pr.statusCheckRollup ?? []).some((check) => FAILED.has(check.conclusion ?? check.state)),
     )
     .map((pr) => pr.number);
+}
+
+// Closed of all the phase's issues, or null when GitHub cannot be asked.
+export function phaseProgressNow(phase) {
+  const out = quiet("gh", [
+    "issue",
+    "list",
+    "--label",
+    `phase:${phase}`,
+    "--state",
+    "all",
+    "--limit",
+    "200",
+    "--json",
+    "state",
+  ]);
+  return out === null ? null : phaseProgress(JSON.parse(out));
 }
 
 export function failedIssues(phase) {
@@ -202,13 +220,27 @@ export async function checkOnce({
     postgres: postgresHealth(mainRoot),
     leftoverWorktrees: leftover,
     newFailedIssues: failedIssues(phase).filter((n) => !failedAtStart.includes(n)),
+    work: currentWork(main ?? []),
+    progress: phaseProgressNow(phase),
   };
+  const line = describeWork({
+    work: facts.work,
+    minutes: facts.iterationMinutes,
+    calls: facts.agent.calls,
+    context: facts.agent.context,
+    progress: facts.progress,
+  });
   const findings = assess(facts);
   const rulesStatus = findings.reduce(
     (worst, f) => (SEVERITY[f.level] > SEVERITY[worst] ? f.level : worst),
     "ok",
   );
-  let verdict = { status: rulesStatus, findings: findings.map((f) => f.message), by: "rules" };
+  let verdict = {
+    status: rulesStatus,
+    findings: findings.map((f) => f.message),
+    by: "rules",
+    line,
+  };
 
   const minutesSinceModel = state.lastModelAt
     ? Math.round((now - state.lastModelAt) / 60_000)
@@ -229,6 +261,7 @@ export async function checkOnce({
         status,
         findings: report.findings.length ? report.findings : verdict.findings,
         by: "model",
+        line,
       };
     } else {
       verdict.findings = [...verdict.findings, "the steward model gave no answer"];
