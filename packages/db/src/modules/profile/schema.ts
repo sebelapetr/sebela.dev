@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  index,
   integer,
   jsonb,
   pgSchema,
@@ -14,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { PersonLinkRecord } from "./index.js";
+import type { ProjectLinkRecord } from "./types.js";
 
 export const profileSchema = pgSchema("profile");
 
@@ -160,5 +162,62 @@ export const experienceTechnologies = profileSchema.table(
   (table) => [
     primaryKey({ columns: [table.experienceId, table.technologyId] }),
     unique("experience_technologies_position_unique").on(table.experienceId, table.position),
+  ],
+);
+
+/**
+ * Projects delivered within an experience. The experience key is required and has no cascade, so
+ * every project has exactly one owner and an experience is never deleted while it owns a project.
+ * A missing end marks an ongoing project, and the database refuses an end before the start.
+ */
+export const projects = profileSchema.table(
+  "projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    experienceId: uuid("experience_id")
+      .notNull()
+      .references(() => experiences.id),
+    name: text("name").notNull(),
+    summary: text("summary").notNull(),
+    problem: text("problem").notNull(),
+    workDone: text("work_done").notNull(),
+    result: text("result").notNull(),
+    startedOn: date("started_on", { mode: "string" }).notNull(),
+    endedOn: date("ended_on", { mode: "string" }),
+    links: jsonb("links").$type<ProjectLinkRecord[]>().notNull().default([]),
+    selectedForHomepage: boolean("selected_for_homepage").notNull().default(false),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("projects_experience_id_index").on(table.experienceId),
+    check("projects_position_not_negative", sql`${table.position} >= 0`),
+    check(
+      "projects_period_is_ordered",
+      sql`${table.endedOn} IS NULL OR ${table.endedOn} >= ${table.startedOn}`,
+    ),
+  ],
+);
+
+/**
+ * The ordered technology links of a project: pure link rows. They disappear with their project; a
+ * linked technology cannot be deleted. Each technology is linked once.
+ */
+export const projectTechnologies = profileSchema.table(
+  "project_technologies",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    technologyId: uuid("technology_id")
+      .notNull()
+      .references(() => technologies.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.technologyId] }),
+    unique("project_technologies_position_unique").on(table.projectId, table.position),
   ],
 );
