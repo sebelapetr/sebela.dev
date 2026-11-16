@@ -36,7 +36,7 @@ export interface paths {
         put?: never;
         /**
          * Create the person
-         * @description There is at most one person; a second create is a conflict.
+         * @description There is at most one person; a second create is a conflict. `photoId` attaches uploaded image media and `cvPdfId` an uploaded, manually prepared PDF; the wrong kind or unknown media is refused.
          */
         post: operations["createPerson"];
         /** Delete the person */
@@ -163,7 +163,7 @@ export interface paths {
         put?: never;
         /**
          * Create an organization
-         * @description The slug is unique and stable; a taken slug is a conflict. A logo cannot be attached yet.
+         * @description The slug is unique and stable; a taken slug is a conflict. `logoId` attaches uploaded image media; a PDF or unknown media is refused.
          */
         post: operations["createOrganization"];
         delete?: never;
@@ -261,7 +261,7 @@ export interface paths {
         put?: never;
         /**
          * Create a project
-         * @description Stores the project in its experience together with its technology links, or nothing. The experience and the technologies are slugs of existing records; the slug is unique and stable across all experiences, a taken slug is a conflict.
+         * @description Stores the project in its experience together with its technology links, or nothing. The experience and the technologies are slugs of existing records; the slug is unique and stable across all experiences, a taken slug is a conflict. `coverId` attaches uploaded image media; a PDF or unknown media is refused.
          */
         post: operations["createProject"];
         delete?: never;
@@ -569,6 +569,75 @@ export interface paths {
         patch: operations["updateCurrentFocus"];
         trace?: never;
     };
+    "/v1/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the media
+         * @description Ordered by creation, newest first, then by identifier.
+         */
+        get: operations["listMedia"];
+        put?: never;
+        /**
+         * Upload an image or a PDF
+         * @description Accepts one PNG, JPEG or WebP image or PDF as `multipart/form-data`, within the configured size and image-dimension limits. The content proves the type; a declared type or extension that contradicts it is refused. The API generates the storage key; the file name never chooses it. Uploads have their own, stricter rate limit.
+         */
+        post: operations["uploadMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read media */
+        get: operations["getMedia"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete media
+         * @description Deletes the record and its file. Media attached to the person, an organization or a project is not deleted; clear the reference first.
+         */
+        delete: operations["deleteMedia"];
+        options?: never;
+        head?: never;
+        /**
+         * Update the alt text of media
+         * @description Changes or clears (`null`) the alt text; the file itself cannot be replaced.
+         */
+        patch: operations["updateMedia"];
+        trace?: never;
+    };
+    "/v1/media/files/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a media file
+         * @description Serves a recorded file under its storage key with the type its content proved, `nosniff` and a sandboxing content security policy. Only files the API stores itself are served here.
+         */
+        get: operations["getMediaFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -630,6 +699,16 @@ export interface components {
              * @default null
              */
             careerStartedOn?: string | null;
+            /**
+             * @description The identifier of the person's photo, an uploaded image.
+             * @default null
+             */
+            photoId?: string | null;
+            /**
+             * @description The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated.
+             * @default null
+             */
+            cvPdfId?: string | null;
         };
         /** @description A link of the person, in its intended order. */
         PersonLink: {
@@ -650,6 +729,10 @@ export interface components {
             availability?: string | null;
             /** @description The date the career started. */
             careerStartedOn?: string | null;
+            /** @description The identifier of the person's photo, an uploaded image. */
+            photoId?: string | null;
+            /** @description The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated. */
+            cvPdfId?: string | null;
         };
         TechnologyCreate: {
             /** @description The stable, unique address of the record, for example `paldock`. */
@@ -709,6 +792,11 @@ export interface components {
              * @default null
              */
             description?: string | null;
+            /**
+             * @description The identifier of the organization's logo, an uploaded image.
+             * @default null
+             */
+            logoId?: string | null;
         };
         OrganizationUpdate: {
             name?: string;
@@ -716,6 +804,8 @@ export interface components {
             website?: string | null;
             /** @description Markdown. */
             description?: string | null;
+            /** @description The identifier of the organization's logo, an uploaded image. */
+            logoId?: string | null;
         };
         ExperienceCreate: {
             /** @description The stable, unique address of the record, for example `paldock`. */
@@ -812,6 +902,11 @@ export interface components {
             selectedForHomepage?: boolean;
             /** @description Ascending order within the owning experience; ties are ordered by slug. */
             position: number;
+            /**
+             * @description The identifier of the project's cover, an uploaded image.
+             * @default null
+             */
+            coverId?: string | null;
             /** @description The slug of the existing experience the project belongs to. On an update it moves the project to that experience. */
             experience: string;
             /**
@@ -849,6 +944,8 @@ export interface components {
             selectedForHomepage?: boolean;
             /** @description Ascending order within the owning experience; ties are ordered by slug. */
             position?: number;
+            /** @description The identifier of the project's cover, an uploaded image. */
+            coverId?: string | null;
             /** @description The slug of the existing experience the project belongs to. On an update it moves the project to that experience. */
             experience?: string;
             /** @description Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged. */
@@ -1108,6 +1205,19 @@ export interface components {
             /** @description Slugs of existing topics, each once, in their intended order. On an update the list replaces every link (an empty list removes them); an omitted list leaves them unchanged. */
             topics?: string[];
         };
+        MediaUpload: {
+            /**
+             * Format: binary
+             * @description A PNG, JPEG or WebP image or a PDF. Its declared type and extension must match its content.
+             */
+            file: string;
+            /** @description Text that describes an image for people who cannot see it. */
+            altText?: string;
+        };
+        MediaUpdate: {
+            /** @description Text that describes an image for people who cannot see it. */
+            altText?: string | null;
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -1141,6 +1251,10 @@ export interface components {
             availability: string | null;
             /** @description The date the career started. */
             careerStartedOn: string | null;
+            /** @description The identifier of the person's photo, an uploaded image. */
+            photoId: string | null;
+            /** @description The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated. */
+            cvPdfId: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1196,6 +1310,8 @@ export interface components {
             website: string | null;
             /** @description Markdown. */
             description: string | null;
+            /** @description The identifier of the organization's logo, an uploaded image. */
+            logoId: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1268,6 +1384,8 @@ export interface components {
             selectedForHomepage: boolean;
             /** @description Ascending order within the owning experience; ties are ordered by slug. */
             position: number;
+            /** @description The identifier of the project's cover, an uploaded image. */
+            coverId: string | null;
             /** @description The linked technologies, in their intended order. */
             technologies: components["schemas"]["Technology"][];
             /** @description The long-form case study of the project, or `null` while it has none. It is written at `/v1/projects/{slug}/case-study`, never in a project body. */
@@ -1469,6 +1587,36 @@ export interface components {
             name: string;
             /** @description The slug of the experience it belongs to. */
             experience: string;
+        };
+        /** @description Ordered by creation, newest first, then by identifier. */
+        MediaList: components["schemas"]["Media"][];
+        Media: {
+            /**
+             * Format: uuid
+             * @description The identifier of the media.
+             */
+            id: string;
+            /** @description The storage key, generated by the API. Never a deployment-specific address. */
+            key: string;
+            /** @enum {string} */
+            mediaType: "image/png" | "image/jpeg" | "image/webp" | "application/pdf";
+            /** @description The size of the file in bytes. */
+            byteSize: number;
+            /** @description The image width in pixels; `null` for a PDF. */
+            width: number | null;
+            /** @description The image height in pixels; `null` for a PDF. */
+            height: number | null;
+            /** @description Text that describes an image for people who cannot see it. */
+            altText: string | null;
+            /**
+             * Format: uri
+             * @description The public address of the file, computed from the configured public base.
+             */
+            url: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
     };
     responses: never;
@@ -5862,6 +6010,437 @@ export interface operations {
             };
             /** @description `unsupported_media_type`: the body is not `application/json`. */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every media record. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    uploadMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["MediaUpload"];
+            };
+        };
+        responses: {
+            /** @description The stored media. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description `validation_failed` (an invalid form, a malformed file or an image over the size limit, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the file or the form exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `multipart/form-data`, or the file is not an accepted type or contradicts its declared type or extension. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The identifier of the media. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The media record. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The identifier of the media. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The media was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The identifier of the media. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated media. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMediaFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The storage key of the media. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
+                    "application/pdf": string;
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
