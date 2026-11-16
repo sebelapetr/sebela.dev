@@ -25,6 +25,7 @@
     "zod-openapi": "6.0.2"
   },
   "devDependencies": {
+    "@sebela/api-client": "workspace:*",
     "@sebela/config": "workspace:*",
     "@types/node": "catalog:",
     "eslint": "catalog:",
