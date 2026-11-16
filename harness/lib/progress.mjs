@@ -6,9 +6,12 @@ const CREATE = /worktree\.mjs create (\S+)/;
 const BRANCH_ISSUE = /^[a-z]+\/(\d+)-/;
 const ISSUE = /(?:issue|#)\s*#?(\d+)/i;
 
-// The orchestrator's transcript (JSONL lines) → { issue, branch, agent }, null where not known yet.
-export function currentWork(lines) {
-  const work = { issue: null, branch: null, agent: null };
+// The orchestrator's tool calls, in order, with each call that puts an agent to work resolved to
+// that agent: a dispatch names it (`subagent_type`); a SendMessage that continues a finished
+// agent — objections back to the developer, fixes back to the reviewer — names it by the id
+// Claude Code recorded when that agent finished.
+export function* toolCalls(lines) {
+  const agents = new Map();
   for (const line of lines) {
     let entry;
     try {
@@ -16,21 +19,34 @@ export function currentWork(lines) {
     } catch {
       continue;
     }
+    const { agentId, agentType } = entry?.toolUseResult ?? {};
+    if (agentId && agentType) agents.set(agentId, agentType);
     const content = entry?.message?.content;
     if (entry?.type !== "assistant" || !Array.isArray(content)) continue;
     for (const part of content) {
       if (part?.type !== "tool_use") continue;
-      const created = CREATE.exec(String(part.input?.command ?? ""));
-      if (created) {
-        work.branch = created[1];
-        const issue = BRANCH_ISSUE.exec(created[1]);
-        if (issue) work.issue = Number(issue[1]);
-      }
-      if (part.input?.subagent_type) {
-        work.agent = part.input.subagent_type;
-        const named = ISSUE.exec(`${part.input.description ?? ""} ${part.input.prompt ?? ""}`);
-        if (named && work.issue === null) work.issue = Number(named[1]);
-      }
+      const input = part.input ?? {};
+      const agent =
+        input.subagent_type ?? (part.name === "SendMessage" ? agents.get(input.to) : undefined);
+      yield { input, agent: agent ?? null };
+    }
+  }
+}
+
+// The orchestrator's transcript (JSONL lines) → { issue, branch, agent }, null where not known yet.
+export function currentWork(lines) {
+  const work = { issue: null, branch: null, agent: null };
+  for (const { input, agent } of toolCalls(lines)) {
+    const created = CREATE.exec(String(input.command ?? ""));
+    if (created) {
+      work.branch = created[1];
+      const issue = BRANCH_ISSUE.exec(created[1]);
+      if (issue) work.issue = Number(issue[1]);
+    }
+    if (agent) {
+      work.agent = agent;
+      const named = ISSUE.exec(`${input.description ?? ""} ${input.prompt ?? ""}`);
+      if (named && work.issue === null) work.issue = Number(named[1]);
     }
   }
   return work;

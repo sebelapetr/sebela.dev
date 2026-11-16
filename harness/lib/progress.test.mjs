@@ -80,3 +80,29 @@ test("the loop prints a line only when the issue or the agent changes", () => {
   assert.equal(workChange(dev, dev), null);
   assert.equal(workChange(dev, review), "#24 feat/24-x → reviewer");
 });
+
+// How Claude Code records a finished subagent, and how the orchestrator continues it.
+const finished = (agentId, agentType) =>
+  JSON.stringify({ type: "user", toolUseResult: { agentId, agentType, status: "completed" } });
+const message = (to) => call("SendMessage", { to, message: "Reviewer objections (unchanged) …" });
+
+test("objections sent back to the same developer count as the developer working again", () => {
+  const lines = [
+    create,
+    dispatch("backend-developer", "Implement issue 24"),
+    finished("dev1", "backend-developer"),
+    dispatch("reviewer", "Review issue 24"),
+    finished("rev1", "reviewer"),
+    message("dev1"),
+  ];
+  assert.equal(currentWork(lines).agent, "backend-developer");
+  assert.equal(
+    currentWork([...lines, finished("dev1", "backend-developer"), message("rev1")]).agent,
+    "reviewer",
+  );
+});
+
+test("a message to an agent the transcript does not know changes nothing", () => {
+  const lines = [create, dispatch("reviewer", "Review issue 24"), message("unknown")];
+  assert.equal(currentWork(lines).agent, "reviewer");
+});

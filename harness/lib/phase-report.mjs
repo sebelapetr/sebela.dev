@@ -2,6 +2,8 @@
 // loop leaves in .worktrees/logs/<phase>/. Pure — the caller reads the files
 // (harness/phase-report.mjs). Intent: docs/agents.md, "The phase report".
 
+import { toolCalls } from "./progress.mjs";
+
 function parseResult(stdout) {
   const text = String(stdout ?? "").trim();
   for (const candidate of [text, text.split("\n").filter(Boolean).at(-1)]) {
@@ -41,22 +43,12 @@ export function formatCost({ costUsd, minutes }) {
     : `${dollars(costUsd)}, ${minutes} min`;
 }
 
-// How often the orchestrator dispatched each agent, from its transcript (JSONL lines).
+// How often the orchestrator put each agent to work, from its transcript (JSONL lines): a
+// dispatch and every continuation of the same agent count, so review rounds are counted right.
 export function countDispatches(lines) {
   const counts = {};
-  for (const line of lines) {
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const content = entry?.message?.content;
-    if (entry?.type !== "assistant" || !Array.isArray(content)) continue;
-    for (const part of content) {
-      const type = part?.type === "tool_use" ? part.input?.subagent_type : undefined;
-      if (type) counts[type] = (counts[type] ?? 0) + 1;
-    }
+  for (const { agent } of toolCalls(lines)) {
+    if (agent) counts[agent] = (counts[agent] ?? 0) + 1;
   }
   return counts;
 }
