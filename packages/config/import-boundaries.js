@@ -57,10 +57,11 @@ const DEPENDENCIES = new Map([
   ["apps/web", ["api-client", "contracts", "ui", "config"]],
   ["apps/mcp-admin", ["api-client", "contracts", "config"]],
   ["apps/llm-agent", []],
-  ["apps/api", ["services", "contracts", "config"]],
+  ["apps/api", ["services", "contracts", "api-client", "config"]],
   ["packages/services", ["db", "contracts", "memory", "config"]],
   ["packages/db", ["config"]],
   ["packages/contracts", ["config"]],
+  ["packages/api-client", ["config"]],
   ["packages/config", []],
 ]);
 
