@@ -46,6 +46,13 @@ These three are deliberately separate:
 - A **project** is delivered work shown inside the experience it belongs to — and only when it proves something. A strong one gets a case study.
 - An **exploration** was never released. It is not a delivered project or a career experience. Explorations are shown together as one short block that demonstrates initiative on the Experience page, and concisely in a separate section on the print-friendly CV page, with their actual status preserved. They are not inserted into the career timeline. The downloadable PDF is maintained manually and is not generated from this data.
 
+### CV data, CV page, Experience page and CV PDF
+
+- **CV data** is what the public `GET /v1/cv` returns: the person, the experiences selected for the CV, the technology tiers and groups, education, the explorations with their actual status in a section of their own, and the current CV PDF's metadata. It is assembled from the stored profile on every read, so a profile change shows in the next response; nothing is copied into another table.
+- The **CV page** is the future print-friendly page of the website (phase 3) that renders the CV data. It may show fewer exploration statuses than the data carries, according to its PRD.
+- The **Experience page** is another consumer of the same profile: the full timeline with projects and the exploration block. It reads the profile through its own routes, not through the CV data.
+- The **CV PDF** is prepared by hand and uploaded as media; the person names the current one. Neither the API nor the pages generate or update it.
+
 ### Exploration status
 
 Every exploration carries one of:
