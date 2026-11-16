@@ -35,7 +35,12 @@ interface DocumentedSecurity {
 
 const documented: DocumentedSecurity = document;
 
-/** Whether the contract requires credentials for the operation at `schemaPath` and `method`. */
+/**
+ * Whether the contract requires credentials for the operation at `schemaPath` and `method`.
+ * The API declares security per operation and none at the document level (`apps/api/src/openapi.ts`),
+ * so a document-level `security` is not consulted; if the API ever adds one, extend this lookup
+ * and the consumer contract tests together.
+ */
 function requiresKey(schemaPath: string, method: string): boolean {
   const security = documented.paths[schemaPath]?.[method.toLowerCase()]?.security;
   return security !== undefined && security.length > 0;
