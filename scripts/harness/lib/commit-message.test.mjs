@@ -103,3 +103,33 @@ test("reports validity alongside the errors", () => {
   assert.equal(checkCommitMessage("feat: add endpoints").valid, true);
   assert.equal(checkCommitMessage("Add endpoints").valid, false);
 });
+
+test("can refuse autosquash markers, which only an issue branch's squash merge removes", () => {
+  for (const message of [
+    "fixup! feat(api): add experience endpoints",
+    "squash! feat(api): add experience endpoints",
+    "amend! feat(api): add experience endpoints",
+  ]) {
+    const { valid, errors } = checkCommitMessage(message, { autosquash: false });
+    assert.equal(valid, false, message);
+    assert.match(errors[0], /squash/, message);
+  }
+  assert.deepEqual(
+    checkCommitMessage("Merge pull request #7 from owner/phase/01-foundation", {
+      autosquash: false,
+    }).errors,
+    [],
+  );
+});
+
+test("can refuse merge headers, for a title that becomes a squash commit", () => {
+  const { valid, errors } = checkCommitMessage("Merge branch 'phase/01-foundation'", {
+    merge: false,
+  });
+  assert.equal(valid, false);
+  assert.match(errors[0], /<type>\(<scope>\): <summary>/);
+  assert.deepEqual(
+    checkCommitMessage('Revert "feat(api): add experience endpoints"', { merge: false }).errors,
+    [],
+  );
+});
