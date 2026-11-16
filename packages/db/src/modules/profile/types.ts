@@ -46,6 +46,8 @@ export interface TopicRecord extends TopicFields {
 export type CreateTopicResult =
   { ok: true; topic: TopicRecord } | { ok: false; reason: "conflict" };
 
+export type DeleteTopicResult = { ok: true } | { ok: false; reason: "not_found" | "referenced" };
+
 /** Persistence operations of the ordered technology and topic catalogs. */
 export interface CatalogPersistence {
   /** Every technology: primary before secondary, `core` before `ai_engineering_focus`, then position and slug. */
@@ -61,7 +63,7 @@ export interface CatalogPersistence {
   ): Promise<UpdateTechnologyResult>;
   /**
    * Deletes the technology; `not_found` when there is none, `referenced` (and nothing deleted)
-   * while an experience or another record still links to it.
+   * while an experience, a project, an exploration or another record still links to it.
    */
   deleteTechnology(slug: string): Promise<DeleteTechnologyResult>;
   /** Every topic, ordered by position and slug. */
@@ -72,8 +74,11 @@ export interface CatalogPersistence {
   createTopic(fields: TopicFields & { slug: string }): Promise<CreateTopicResult>;
   /** Changes only the given fields; `null` when there is no such topic. */
   updateTopic(slug: string, changes: Partial<TopicFields>): Promise<TopicRecord | null>;
-  /** `true` when the topic was deleted, `false` when there was none. */
-  deleteTopic(slug: string): Promise<boolean>;
+  /**
+   * Deletes the topic; `not_found` when there is none, `referenced` (and nothing deleted) while
+   * an exploration or another record still links to it.
+   */
+  deleteTopic(slug: string): Promise<DeleteTopicResult>;
 }
 
 /** Writable fields of an organization. The slug is fixed when it is created. */

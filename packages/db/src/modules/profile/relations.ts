@@ -1,8 +1,8 @@
-// Write helpers shared by records with ordered technology links; private to the profile module.
+// Write helpers shared by records with ordered catalog links; private to the profile module.
 import { asc, desc, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
-import { experiences, technologies } from "./schema.js";
+import { experiences, technologies, topics } from "./schema.js";
 
 /** A connection or an open transaction; both run the same queries. */
 export type Executor = Pick<NodePgDatabase, "select" | "insert" | "update" | "delete">;
@@ -53,6 +53,34 @@ export async function technologyIds(tx: Executor, slugs: string[]): Promise<stri
       reason: "unknown_technologies",
       slugs: unknown,
     });
+  }
+  return slugs.map((slug) => ids.get(slug) ?? "");
+}
+
+/** The topic refusals every record with topic links shares. */
+type TopicFailure =
+  | { ok: false; reason: "unknown_topics"; slugs: string[] }
+  | { ok: false; reason: "repeated_topics" };
+
+/**
+ * The ids of the topics with the given slugs, in their order, locked against a concurrent delete
+ * until the transaction ends. Refuses repeated and unknown slugs.
+ */
+export async function topicIds(tx: Executor, slugs: string[]): Promise<string[]> {
+  if (new Set(slugs).size !== slugs.length) {
+    throw new WriteRefused<TopicFailure>({ ok: false, reason: "repeated_topics" });
+  }
+  if (slugs.length === 0) return [];
+
+  const rows = await tx
+    .select({ id: topics.id, slug: topics.slug })
+    .from(topics)
+    .where(inArray(topics.slug, slugs))
+    .for("key share");
+  const ids = new Map(rows.map((row) => [row.slug, row.id]));
+  const unknown = slugs.filter((slug) => !ids.has(slug));
+  if (unknown.length > 0) {
+    throw new WriteRefused<TopicFailure>({ ok: false, reason: "unknown_topics", slugs: unknown });
   }
   return slugs.map((slug) => ids.get(slug) ?? "");
 }

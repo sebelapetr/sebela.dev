@@ -43,6 +43,13 @@
       "when": 1794843555891,
       "tag": "0005_case-studies",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794846623161,
+      "tag": "0006_explorations",
+      "breakpoints": true
     }
   ]
 }

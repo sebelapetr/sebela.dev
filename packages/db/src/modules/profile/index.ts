@@ -35,6 +35,7 @@ export type {
   DeleteOrganizationResult,
   DeleteProjectResult,
   DeleteTechnologyResult,
+  DeleteTopicResult,
   ExperienceFields,
   ExperienceKind,
   ExperiencePersistence,
