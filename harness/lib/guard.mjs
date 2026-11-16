@@ -285,29 +285,15 @@ function changesGitConfig(command) {
   });
 }
 
-// A literal message of git commit, tag or merge (no expansion in it) is text, not a command, and
-// may mention config. Nothing is left out when something could run that text as a command: eval,
-// a shell, xargs, source.
-const RUNS_TEXT = /(^|[\s;&|(])(eval|sh|bash|zsh|dash|xargs|source|\.)\s/;
-const COMMIT_MESSAGE =
-  /(\bgit\s+(?:commit|tag|merge)\b[^;&|\n]*?\s(?:-m|--message)(?:=|\s+))("[^"$`\\]*"|'[^'$`]*')/;
-function withoutCommitMessages(command) {
-  if (RUNS_TEXT.test(command)) return command;
-  let text = command;
-  for (let previous = ""; previous !== text;) {
-    previous = text;
-    text = text.replace(COMMIT_MESSAGE, "$1msg");
-  }
-  return text;
-}
-
 // For a command the parser cannot read: every git invocation must start plainly — nothing in
 // front of git, only safe or place options, and a subcommand other than config — before the
 // first word the shell could expand. Expansions after the subcommand cannot set configuration.
 const GIT_AT_COMMAND =
   /(^|[;&|(\n]\s*)(?:(?:do|then|else|elif|!)\s+)?([^\s;&|=]+=[^\s;&|]*\s+|env\s+)*([^\s;&|]*\/)?git(\s+|$)([^;&|\n]*)/g;
 function unreadableGitChange(command) {
-  const plain = withoutCommitMessages(command).replace(/['"\\]/g, "");
+  // Quotes are dropped, not honoured: git and a configuration word count wherever they appear,
+  // a commit message included (write such a message to a file and use git commit -F).
+  const plain = command.replace(/['"\\]/g, "");
   for (const match of plain.matchAll(GIT_AT_COMMAND)) {
     if (match[2]) return true;
     const words = match[5].split(/\s+/).filter(Boolean);

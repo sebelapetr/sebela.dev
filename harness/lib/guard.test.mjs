@@ -581,7 +581,6 @@ test("Git configuration cannot be changed by quoting, wrappers, editors or other
     "B=origin/phase/01-x; git show $B:package.json | grep -n node",
     "for c in a b; do git show --stat $c | head; done",
     'env -i PATH="$PATH" HOME="$HOME" docker compose config',
-    'git add a && git commit -q -m "feat(config): share the lint config" && (cd packages/config && node --test)',
   ]) {
     assert.equal(bash(command, loop), null, command);
   }
@@ -600,6 +599,15 @@ test("abbreviated git options that write a file are refused on harness reads", (
     assert.ok(bash(command, loop), command);
   }
   assert.equal(bash("git log --oneline -- .claude/settings.json", loop), null);
+});
+
+test("a commit message mentioning config in a command the guard cannot read points to -F", () => {
+  const refusal = bash(
+    'git add a && git commit -q -m "feat(config): share the lint config" && (cd packages/config && node --test)',
+    loop,
+  );
+  assert.match(refusal.reason, /git commit -F/);
+  assert.equal(bash('git commit -q -m "feat(config): share the lint config"', loop), null);
 });
 
 test("a refusal says how to do the same safely", () => {
