@@ -51,7 +51,7 @@ describe("OrganizationCreateSchema", () => {
     ["a website that is not a URL", { ...northwind, website: "northwind" }],
     ["a website that is not http(s)", { ...northwind, website: "ftp://northwind.example.com" }],
     ["a website with a script scheme", { ...northwind, website: "javascript:alert(1)" }],
-    ["a website without a domain host", { ...northwind, website: "https://localhost/" }],
+    ["a website without a domain host", { ...northwind, website: "https://northwind/" }],
     [
       "a website that is too long",
       { ...northwind, website: `https://northwind.example.com/${"x".repeat(2048)}` },
