@@ -8,6 +8,7 @@ import { createExplorationPersistence } from "./explorations.js";
 import { createOrganizationPersistence } from "./organizations.js";
 import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
+import { createServicePersistence } from "./services.js";
 import type {
   CaseStudyPersistence,
   CatalogPersistence,
@@ -15,6 +16,7 @@ import type {
   ExplorationPersistence,
   OrganizationPersistence,
   ProjectPersistence,
+  ServicePersistence,
 } from "./types.js";
 
 export type {
@@ -25,6 +27,7 @@ export type {
   CreateCaseStudyResult,
   CreateOrganizationResult,
   CreateProjectResult,
+  CreateServiceResult,
   CreateTechnologyResult,
   CreateExperienceResult,
   CreateExplorationResult,
@@ -34,6 +37,7 @@ export type {
   DeleteExplorationResult,
   DeleteOrganizationResult,
   DeleteProjectResult,
+  DeleteServiceResult,
   DeleteTechnologyResult,
   DeleteTopicResult,
   ExperienceFields,
@@ -57,6 +61,12 @@ export type {
   ProjectRecord,
   ProjectRelations,
   ProjectWriteFailure,
+  ServiceEvidence,
+  ServiceEvidenceRecord,
+  ServiceFields,
+  ServicePersistence,
+  ServiceRecord,
+  ServiceWriteFailure,
   TechnologyFields,
   TechnologyGroup,
   TechnologyRecord,
@@ -67,6 +77,7 @@ export type {
   UpdateExperienceResult,
   UpdateExplorationResult,
   UpdateProjectResult,
+  UpdateServiceResult,
   UpdateTechnologyResult,
 } from "./types.js";
 
@@ -106,7 +117,8 @@ export interface ProfilePersistence
     ExperiencePersistence,
     ExplorationPersistence,
     ProjectPersistence,
-    CaseStudyPersistence {
+    CaseStudyPersistence,
+    ServicePersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -144,6 +156,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createExplorationPersistence(db),
     ...createProjectPersistence(db),
     ...createCaseStudyPersistence(db),
+    ...createServicePersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;

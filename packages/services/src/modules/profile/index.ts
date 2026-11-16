@@ -9,6 +9,7 @@ import { createExperienceService } from "./experiences.js";
 import { createExplorationService } from "./explorations.js";
 import { createOrganizationService } from "./organizations.js";
 import { createProjectService } from "./projects.js";
+import { createServiceService } from "./services.js";
 import type {
   CaseStudyService,
   CatalogService,
@@ -16,6 +17,7 @@ import type {
   ExplorationService,
   OrganizationService,
   ProjectService,
+  ServiceService,
 } from "./types.js";
 
 export type {
@@ -25,6 +27,7 @@ export type {
   ExplorationService,
   OrganizationService,
   ProjectService,
+  ServiceService,
 } from "./types.js";
 
 /**
@@ -39,8 +42,8 @@ export type {
  *
  * It also includes the catalog operations of `CatalogService`, the organization operations of
  * `OrganizationService`, the experience operations of `ExperienceService`, the project
- * operations of `ProjectService`, the case-study operations of `CaseStudyService` and the
- * exploration operations of `ExplorationService`.
+ * operations of `ProjectService`, the case-study operations of `CaseStudyService`, the
+ * exploration operations of `ExplorationService` and the service operations of `ServiceService`.
  */
 export interface ProfileService
   extends
@@ -49,7 +52,8 @@ export interface ProfileService
     ExperienceService,
     ProjectService,
     CaseStudyService,
-    ExplorationService {
+    ExplorationService,
+    ServiceService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -75,6 +79,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createProjectService(persistence),
     ...createCaseStudyService(persistence),
     ...createExplorationService(persistence),
+    ...createServiceService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();

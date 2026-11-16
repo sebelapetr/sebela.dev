@@ -17,4 +17,5 @@ export type {
   OrganizationService,
   ProfileService,
   ProjectService,
+  ServiceService,
 } from "./modules/profile/index.js";

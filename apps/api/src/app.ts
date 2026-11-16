@@ -143,6 +143,11 @@ const describingProfile: ProfileService = {
   createExploration: documentationOnly,
   updateExploration: documentationOnly,
   deleteExploration: documentationOnly,
+  listServices: documentationOnly,
+  getService: documentationOnly,
+  createService: documentationOnly,
+  updateService: documentationOnly,
+  deleteService: documentationOnly,
 };
 
 /**

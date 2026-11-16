@@ -313,8 +313,8 @@ export interface ProjectPersistence {
   ): Promise<UpdateProjectResult>;
   /**
    * Deletes the project and its technology links, never its experience or technologies;
-   * `not_found` when there is none, `referenced` (and nothing deleted) while another record still
-   * refers to it.
+   * `not_found` when there is none, `referenced` (and nothing deleted) while a case study or a
+   * service naming it as evidence still refers to it.
    */
   deleteProject(slug: string): Promise<DeleteProjectResult>;
 }
@@ -430,7 +430,8 @@ export type UpdateExplorationResult =
   | { ok: false; reason: "not_found" }
   | ExplorationWriteFailure;
 
-export type DeleteExplorationResult = { ok: true } | { ok: false; reason: "not_found" };
+export type DeleteExplorationResult =
+  { ok: true } | { ok: false; reason: "not_found" | "referenced" };
 
 /**
  * Persistence operations of the explorations, addressed by slug. Each write of an exploration and
@@ -456,7 +457,98 @@ export interface ExplorationPersistence {
   ): Promise<UpdateExplorationResult>;
   /**
    * Deletes the exploration and its links, never the technologies or topics; `not_found` when
-   * there is none.
+   * there is none, `referenced` (and nothing deleted) while a service names it as evidence.
    */
   deleteExploration(slug: string): Promise<DeleteExplorationResult>;
+}
+
+/** Writable scalar fields of a service. The slug is fixed when it is created. */
+export interface ServiceFields {
+  name: string;
+  /** Markdown. */
+  summary: string;
+  /** Who the service is for. Markdown. */
+  audience: string;
+  /** What the client gets. Markdown. */
+  deliverable: string;
+  /** Ascending order of the services; ties are ordered by slug. */
+  position: number;
+}
+
+/**
+ * One piece of evidence as written: an existing project or exploration by slug, or a link to a
+ * path within the site. The path is validated by the caller.
+ */
+export type ServiceEvidence =
+  | { kind: "project"; project: string }
+  | { kind: "exploration"; exploration: string }
+  | { kind: "link"; label: string; path: string };
+
+/** One piece of evidence as read: the project or exploration resolved, or the site link. */
+export type ServiceEvidenceRecord =
+  | {
+      kind: "project";
+      project: { slug: string; name: string; summary: string; experience: string };
+    }
+  | {
+      kind: "exploration";
+      exploration: { slug: string; name: string; summary: string; status: ExplorationStatus };
+    }
+  | { kind: "link"; label: string; path: string };
+
+/** A service with its evidence resolved in its stored order. */
+export interface ServiceRecord extends ServiceFields {
+  id: string;
+  slug: string;
+  evidence: ServiceEvidenceRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update of a service wrote nothing, besides `conflict` and `not_found`:
+ *
+ * - `unknown_projects` / `unknown_explorations`: some slugs exist nowhere; `slugs` lists them.
+ * - `repeated_projects` / `repeated_explorations`: a slug is given more than once.
+ */
+export type ServiceWriteFailure =
+  | { ok: false; reason: "unknown_projects"; slugs: string[] }
+  | { ok: false; reason: "repeated_projects" }
+  | { ok: false; reason: "unknown_explorations"; slugs: string[] }
+  | { ok: false; reason: "repeated_explorations" };
+
+export type CreateServiceResult =
+  { ok: true; service: ServiceRecord } | { ok: false; reason: "conflict" } | ServiceWriteFailure;
+
+export type UpdateServiceResult =
+  { ok: true; service: ServiceRecord } | { ok: false; reason: "not_found" } | ServiceWriteFailure;
+
+export type DeleteServiceResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/**
+ * Persistence operations of the services, addressed by slug. Each write of a service and its
+ * evidence is one transaction: it is stored completely or not at all.
+ */
+export interface ServicePersistence {
+  /** Every service, ordered by position, then slug. */
+  listServices(): Promise<ServiceRecord[]>;
+  /** The service with the slug, or `null`. */
+  findService(slug: string): Promise<ServiceRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `ServiceWriteFailure`. */
+  createService(
+    fields: ServiceFields & { slug: string; evidence: ServiceEvidence[] },
+  ): Promise<CreateServiceResult>;
+  /**
+   * Changes only the given fields. A given `evidence` list replaces all evidence; an omitted one
+   * keeps it. `not_found` when there is no such service; see `ServiceWriteFailure`.
+   */
+  updateService(
+    slug: string,
+    changes: Partial<ServiceFields & { evidence: ServiceEvidence[] }>,
+  ): Promise<UpdateServiceResult>;
+  /**
+   * Deletes the service and its evidence, never the projects or explorations it names;
+   * `not_found` when there is none.
+   */
+  deleteService(slug: string): Promise<DeleteServiceResult>;
 }

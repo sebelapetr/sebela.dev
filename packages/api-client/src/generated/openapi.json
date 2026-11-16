@@ -2876,7 +2876,7 @@
       "delete": {
         "operationId": "deleteProject",
         "summary": "Delete a project",
-        "description": "Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.",
+        "description": "Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one a service names as evidence, is a conflict until those are removed.",
         "security": [
           {
             "bearerAuth": []
@@ -3844,7 +3844,7 @@
       "delete": {
         "operationId": "deleteExploration",
         "summary": "Delete an exploration",
-        "description": "Removes the exploration and its technology and topic links; the technologies and topics stay.",
+        "description": "Removes the exploration and its technology and topic links; the technologies and topics stay. An exploration a service names as evidence is a conflict until it is removed from that service.",
         "security": [
           {
             "bearerAuth": []
@@ -3868,6 +3868,511 @@
         "responses": {
           "204": {
             "description": "The exploration was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services": {
+      "get": {
+        "operationId": "listServices",
+        "summary": "List the services",
+        "description": "By position, then slug. Each service carries its evidence in its defined order, each piece typed by `kind`: a project or an exploration resolved to what a page needs, or a link within the site.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Every service, in order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createService",
+        "summary": "Create a service",
+        "description": "Stores the service and its evidence together or not at all. Projects and explorations are named by the slugs of existing records, each at most once; links are paths within the site. The slug is unique and stable, a taken slug is a conflict.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created service.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/{slug}": {
+      "get": {
+        "operationId": "getService",
+        "summary": "Read a service",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The service with its evidence in order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateService",
+        "summary": "Update a service",
+        "description": "Changes only the fields sent, together or not at all; the slug cannot change. A sent `evidence` list replaces all evidence in its order, an empty list removes it; an omitted one keeps it. A refused update leaves the service and its evidence as they were.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteService",
+        "summary": "Delete a service",
+        "description": "Removes the service and its evidence; the projects and explorations it names stay.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The service was deleted."
           },
           "400": {
             "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
@@ -5145,6 +5650,201 @@
         },
         "additionalProperties": false
       },
+      "ServiceCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "audience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Who the service is for. Markdown."
+          },
+          "deliverable": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "What the client gets. Markdown."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "evidence": {
+            "default": [],
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceEvidenceInput"
+            },
+            "description": "The evidence in its intended order; each project and exploration at most once. On an update the list replaces all evidence; an omitted list leaves it unchanged."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "summary",
+          "audience",
+          "deliverable",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceEvidenceInput": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ServiceProjectEvidenceInput"
+          },
+          {
+            "$ref": "#/components/schemas/ServiceExplorationEvidenceInput"
+          },
+          {
+            "$ref": "#/components/schemas/ServiceLinkEvidence"
+          }
+        ],
+        "description": "Evidence for a service, chosen by `kind`: an existing project, an existing exploration or a link to another part of the site.",
+        "type": "object",
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "project": "#/components/schemas/ServiceProjectEvidenceInput",
+            "exploration": "#/components/schemas/ServiceExplorationEvidenceInput",
+            "link": "#/components/schemas/ServiceLinkEvidence"
+          }
+        }
+      },
+      "ServiceProjectEvidenceInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "project"
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of an existing project."
+          }
+        },
+        "required": [
+          "kind",
+          "project"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceExplorationEvidenceInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "exploration"
+          },
+          "exploration": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of an existing exploration."
+          }
+        },
+        "required": [
+          "kind",
+          "exploration"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceLinkEvidence": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "link"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The text of the link, for example `AI Roadmap`."
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 500,
+            "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+            "description": "A path within the site, for example `/roadmap` or `/contact?topic=automation`. It starts with a single `/`; schemes, hosts, whitespace and backslashes are rejected."
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "path"
+        ],
+        "additionalProperties": false,
+        "description": "A link to another part of the site."
+      },
+      "ServiceUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "audience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Who the service is for. Markdown."
+          },
+          "deliverable": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "What the client gets. Markdown."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "evidence": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceEvidenceInput"
+            },
+            "description": "The evidence in its intended order; each project and exploration at most once. On an update the list replaces all evidence; an omitted list leaves it unchanged."
+          }
+        },
+        "additionalProperties": false
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -5993,6 +6693,213 @@
           "topics",
           "createdAt",
           "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Service"
+        },
+        "description": "Ordered by position, then slug."
+      },
+      "Service": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "audience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Who the service is for. Markdown."
+          },
+          "deliverable": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "What the client gets. Markdown."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceEvidence"
+            },
+            "description": "The evidence for the service, in its intended order."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "summary",
+          "audience",
+          "deliverable",
+          "position",
+          "evidence",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceEvidence": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ServiceProjectEvidence"
+          },
+          {
+            "$ref": "#/components/schemas/ServiceExplorationEvidence"
+          },
+          {
+            "$ref": "#/components/schemas/ServiceLinkEvidence"
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "project": "#/components/schemas/ServiceProjectEvidence",
+            "exploration": "#/components/schemas/ServiceExplorationEvidence",
+            "link": "#/components/schemas/ServiceLinkEvidence"
+          }
+        }
+      },
+      "ServiceProjectEvidence": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "project"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ServiceEvidenceProject"
+          }
+        },
+        "required": [
+          "kind",
+          "project"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceEvidenceProject": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Markdown."
+          },
+          "experience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of the experience it belongs to."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "summary",
+          "experience"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceExplorationEvidence": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "exploration"
+          },
+          "exploration": {
+            "$ref": "#/components/schemas/ServiceEvidenceExploration"
+          }
+        },
+        "required": [
+          "kind",
+          "exploration"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceEvidenceExploration": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Markdown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "built",
+              "tested",
+              "designed"
+            ],
+            "description": "How far the exploration got, exactly as stored; never shown stronger."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "summary",
+          "status"
         ],
         "additionalProperties": false
       }

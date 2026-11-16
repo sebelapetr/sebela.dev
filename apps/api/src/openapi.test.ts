@@ -311,6 +311,54 @@ describe("the OpenAPI document and the reference", () => {
     expect(exploration).not.toHaveProperty("project");
   });
 
+  it("documents the services and their typed evidence from the contract schemas", () => {
+    expect(operation("GET", "/v1/services").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ServiceList" } },
+    });
+    expect(operation("GET", "/v1/services/:slug").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Service" } },
+    });
+    expect(operation("POST", "/v1/services").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ServiceCreate" } },
+    });
+    expect(operation("PATCH", "/v1/services/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ServiceUpdate" } },
+    });
+    expect(operation("POST", "/v1/services").responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(operation("POST", "/v1/services").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    expect(Object.keys(operation("PATCH", "/v1/services/:slug").responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/services/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "401", "404"]),
+    );
+    for (const [method, path] of [
+      ["POST", "/v1/services"],
+      ["PATCH", "/v1/services/:slug"],
+      ["DELETE", "/v1/services/:slug"],
+    ] as const) {
+      expect(operation(method, path).security).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(operation("GET", "/v1/services").security).toEqual([]);
+    expect(operation("GET", "/v1/services/:slug").parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+    // A project or an exploration a service names is not deleted: the delete may be a conflict.
+    for (const path of ["/v1/projects/:slug", "/v1/explorations/:slug"]) {
+      expect(Object.keys(operation("DELETE", path).responses)).toEqual(
+        expect.arrayContaining(["204", "404", "409"]),
+      );
+    }
+    // The evidence is a union discriminated by its kind, never an untyped payload.
+    for (const id of ["ServiceEvidence", "ServiceEvidenceInput"]) {
+      expect(document.components.schemas[id]).toMatchObject({
+        discriminator: { propertyName: "kind" },
+      });
+    }
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

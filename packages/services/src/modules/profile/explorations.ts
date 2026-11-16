@@ -80,7 +80,12 @@ export function createExplorationService(persistence: ProfilePersistence): Explo
     },
     async deleteExploration(slug) {
       const result = await persistence.deleteExploration(slug);
-      if (!result.ok) throw missing(slug);
+      if (result.ok) return;
+      if (result.reason === "not_found") throw missing(slug);
+      throw new DomainError(
+        "conflict",
+        `The exploration "${slug}" is still named as evidence by a service; remove it from that service first.`,
+      );
     },
   };
 }
