@@ -2,13 +2,20 @@
 // ("Commits"): `<type>(<scope>): <summary>` with one of the documented types, an optional
 // lower-case scope and `!` for a breaking change, a summary in lower case without a trailing
 // period, and a blank line before any body.
+//
+// The headers Git writes itself pass by default, as the commit-msg hook needs. CI narrows that
+// (scripts/checks/commit-messages.mjs): `autosquash: false` refuses `fixup!`, `squash!` and
+// `amend!` where no squash merge will remove them, and `merge: false` refuses `Merge …` for a
+// pull request title that becomes the squash commit's header.
 
 export const COMMIT_TYPES = ["feat", "fix", "docs", "refactor", "test", "chore", "ci"];
 
 const FORM = "<type>(<scope>): <summary>";
 const HEADER = /^(?<type>[a-z]+)(?:\((?<scope>[a-z0-9][a-z0-9-]*)\))?!?: (?<summary>\S.*)$/;
 // Messages Git writes itself for merges, reverts and autosquash commits.
-const GENERATED = /^(Merge |Revert "|fixup! |squash! |amend! )/;
+const MERGE = /^Merge /;
+const REVERT = /^Revert "/;
+const AUTOSQUASH = /^(fixup|squash|amend)! /;
 const SCISSORS = /^# -+ >8 -+$/m;
 
 // What Git keeps of the message with the default cleanup: no comment lines, nothing below the
@@ -25,11 +32,21 @@ function cleanMessage(text) {
 }
 
 // Returns { valid, errors }; each error is one sentence a developer can act on.
-export function checkCommitMessage(text) {
+export function checkCommitMessage(text, { autosquash = true, merge = true } = {}) {
   const message = cleanMessage(String(text ?? ""));
   if (!message) return { valid: false, errors: ["The commit message is empty."] };
   const [header, second] = message.split("\n");
-  if (GENERATED.test(header)) return { valid: true, errors: [] };
+  if (REVERT.test(header) || (merge && MERGE.test(header))) return { valid: true, errors: [] };
+  if (AUTOSQUASH.test(header)) {
+    if (autosquash) return { valid: true, errors: [] };
+    return {
+      valid: false,
+      errors: [
+        `"${header}" is an autosquash commit; only an issue branch is squash-merged, so fold it ` +
+          "into the commit it amends (git rebase --autosquash) before it reaches this branch.",
+      ],
+    };
+  }
 
   const errors = [];
   const match = header.match(HEADER);

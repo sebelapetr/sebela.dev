@@ -87,7 +87,8 @@ describe("commit-message check: issue pull requests, squash-merged into the phas
     repo.commit("feat(checks): check the commit range");
     repo.commit("fixup! feat(checks): check the commit range");
     repo.git("switch", "--quiet", "phase/01-foundation");
-    repo.commit("fix(harness): keep the slot (#64)");
+    // The event carries the phase branch's tip at the time of the event.
+    const base = repo.commit("fix(harness): keep the slot (#64)");
     repo.git("switch", "--quiet", "feat/20-affected-task-ci");
     repo.git("merge", "--quiet", "--no-edit", "phase/01-foundation");
     const head = repo.git("rev-parse", "HEAD");
@@ -97,7 +98,7 @@ describe("commit-message check: issue pull requests, squash-merged into the phas
       repo.root,
       "pull_request",
       pullRequest({
-        base: repo.base,
+        base,
         head,
         headRef: "feat/20-affected-task-ci",
         title: "ci: gate pull requests with the affected-task pipeline",
