@@ -1,0 +1,40 @@
+{
+  "name": "@sebela/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PostgreSQL schema, migrations and persistence operations. The only package with SQL.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsc --project tsconfig.build.json && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/migrate.js",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@sebela/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
