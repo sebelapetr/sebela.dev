@@ -10,4 +10,8 @@ export type {
   ApiKeyServiceOptions,
   KeyVerification,
 } from "./modules/api-keys/index.js";
-export type { CatalogService, ProfileService } from "./modules/profile/index.js";
+export type {
+  CatalogService,
+  OrganizationService,
+  ProfileService,
+} from "./modules/profile/index.js";

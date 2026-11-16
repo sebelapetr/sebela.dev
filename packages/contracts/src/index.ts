@@ -1,6 +1,10 @@
 export { ErrorResponseSchema, errorCodes } from "./errors.js";
 export type { ErrorCode, ErrorResponse } from "./errors.js";
 export {
+  OrganizationCreateSchema,
+  OrganizationListSchema,
+  OrganizationSchema,
+  OrganizationUpdateSchema,
   PersonCreateSchema,
   PersonLinkSchema,
   PersonSchema,
@@ -18,6 +22,9 @@ export {
   technologyTiers,
 } from "./modules/profile/index.js";
 export type {
+  Organization,
+  OrganizationCreate,
+  OrganizationUpdate,
   Person,
   PersonCreate,
   PersonLink,

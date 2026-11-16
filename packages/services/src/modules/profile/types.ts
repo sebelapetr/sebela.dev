@@ -1,5 +1,9 @@
-// The catalog service interface, private to the profile module and re-exported by its index.
+// The catalog and organization service interfaces, private to the profile module and re-exported
+// by its index.
 import type {
+  Organization,
+  OrganizationCreate,
+  OrganizationUpdate,
   Technology,
   TechnologyCreate,
   TechnologyUpdate,
@@ -33,4 +37,24 @@ export interface CatalogService {
   createTopic(input: TopicCreate): Promise<Topic>;
   updateTopic(slug: string, changes: TopicUpdate): Promise<Topic>;
   deleteTopic(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the organizations, addressed by slug. Results are in the contract shape; expected
+ * failures are `DomainError`s:
+ *
+ * - `listOrganizations`: every organization, ordered by name ignoring case, then by slug.
+ * - `getOrganization`: the organization, or `not_found`.
+ * - `createOrganization`: `conflict` when the slug is taken, also when creates race.
+ * - `updateOrganization`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`; `not_found` for an unknown slug.
+ * - `deleteOrganization`: removes the organization; `not_found` for an unknown slug; `conflict`
+ *   (and nothing deleted) while another record, such as an experience, still refers to it.
+ */
+export interface OrganizationService {
+  listOrganizations(): Promise<Organization[]>;
+  getOrganization(slug: string): Promise<Organization>;
+  createOrganization(input: OrganizationCreate): Promise<Organization>;
+  updateOrganization(slug: string, changes: OrganizationUpdate): Promise<Organization>;
+  deleteOrganization(slug: string): Promise<void>;
 }

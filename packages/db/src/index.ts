@@ -10,9 +10,14 @@ export type {
 } from "./modules/api-keys/index.js";
 export type {
   CatalogPersistence,
+  CreateOrganizationResult,
   CreatePersonResult,
   CreateTechnologyResult,
   CreateTopicResult,
+  DeleteOrganizationResult,
+  OrganizationFields,
+  OrganizationPersistence,
+  OrganizationRecord,
   PersonFields,
   PersonLinkRecord,
   PersonRecord,

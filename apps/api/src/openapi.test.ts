@@ -141,6 +141,34 @@ describe("the OpenAPI document and the reference", () => {
     );
   });
 
+  it("documents the organizations from their contract schemas", () => {
+    expect(operation("GET", "/v1/organizations").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/OrganizationList" } },
+    });
+    expect(operation("GET", "/v1/organizations/:slug").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Organization" } },
+    });
+    expect(operation("POST", "/v1/organizations").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/OrganizationCreate" } },
+    });
+    expect(operation("PATCH", "/v1/organizations/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/OrganizationUpdate" } },
+    });
+    expect(operation("POST", "/v1/organizations").responses["201"]?.headers).toHaveProperty(
+      "Location",
+    );
+    expect(Object.keys(operation("POST", "/v1/organizations").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "409"]),
+    );
+    // A referenced organization is not deleted: the delete answers with a conflict.
+    expect(Object.keys(operation("DELETE", "/v1/organizations/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "404", "409"]),
+    );
+    expect(operation("GET", "/v1/organizations/:slug").parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

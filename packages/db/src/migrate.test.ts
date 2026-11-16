@@ -38,6 +38,7 @@ describe("migrateDatabase", () => {
     );
     expect(tables.map((row) => row["name"])).toEqual([
       "auth.api_keys",
+      "profile.organizations",
       "profile.persons",
       "profile.technologies",
       "profile.topics",

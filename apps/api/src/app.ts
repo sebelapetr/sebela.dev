@@ -119,6 +119,11 @@ const describingProfile: ProfileService = {
   createTopic: documentationOnly,
   updateTopic: documentationOnly,
   deleteTopic: documentationOnly,
+  listOrganizations: documentationOnly,
+  getOrganization: documentationOnly,
+  createOrganization: documentationOnly,
+  updateOrganization: documentationOnly,
+  deleteOrganization: documentationOnly,
 };
 
 /**

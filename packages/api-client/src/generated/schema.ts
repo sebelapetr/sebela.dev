@@ -142,6 +142,55 @@ export interface paths {
         patch: operations["updateTopic"];
         trace?: never;
     };
+    "/v1/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the organizations
+         * @description Ordered by name, ignoring case, then by slug.
+         */
+        get: operations["listOrganizations"];
+        put?: never;
+        /**
+         * Create an organization
+         * @description The slug is unique and stable; a taken slug is a conflict. A logo cannot be attached yet.
+         */
+        post: operations["createOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an organization */
+        get: operations["getOrganization"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an organization
+         * @description An organization that other records, such as experiences, still refer to is not deleted; remove those references first.
+         */
+        delete: operations["deleteOrganization"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an organization
+         * @description Changes only the fields sent; `null` clears an optional field; the slug cannot change.
+         */
+        patch: operations["updateOrganization"];
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -268,6 +317,28 @@ export interface components {
             /** @description Ascending order in the list; ties are ordered by slug. */
             position?: number;
         };
+        OrganizationCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /**
+             * @description The organization's own website.
+             * @default null
+             */
+            website?: string | null;
+            /**
+             * @description Markdown.
+             * @default null
+             */
+            description?: string | null;
+        };
+        OrganizationUpdate: {
+            name?: string;
+            /** @description The organization's own website. */
+            website?: string | null;
+            /** @description Markdown. */
+            description?: string | null;
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -339,6 +410,23 @@ export interface components {
             name: string;
             /** @description Ascending order in the list; ties are ordered by slug. */
             position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Ordered by name, ignoring case, then by slug. */
+        OrganizationList: components["schemas"]["Organization"][];
+        Organization: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description The organization's own website. */
+            website: string | null;
+            /** @description Markdown. */
+            description: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1374,6 +1462,382 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Topic"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every organization, in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationCreate"];
+            };
+        };
+        responses: {
+            /** @description The created organization. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated organization. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
                 };
             };
             /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */

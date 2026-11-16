@@ -87,3 +87,17 @@ export const topics = profileSchema.table(
   },
   (table) => [check("topics_position_not_negative", sql`${table.position} >= 0`)],
 );
+
+/**
+ * Organizations that experiences and other records refer to. Referencing tables use plain foreign
+ * keys, so the database refuses to delete an organization that is still referenced.
+ */
+export const organizations = profileSchema.table("organizations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  website: text("website"),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

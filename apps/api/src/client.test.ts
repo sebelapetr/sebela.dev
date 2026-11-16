@@ -195,4 +195,44 @@ describe("the generated API client", () => {
     });
     expect(updated.data?.position).toBe(2);
   });
+
+  it("manages organizations: create, duplicate, public list, update and delete", async () => {
+    const { client, authorizations } = consumer(key);
+    const organization = { slug: "fictional-org", name: "Fictional Org" };
+
+    const created = await client.POST("/v1/organizations", { body: organization });
+    expect(created.response.status).toBe(201);
+    expect(created.data).toMatchObject({ ...organization, website: null, description: null });
+    const duplicate = await client.POST("/v1/organizations", { body: organization });
+    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.error?.error.code).toBe("conflict");
+
+    const listed = await client.GET("/v1/organizations");
+    expect(listed.data).toEqual([expect.objectContaining({ slug: "fictional-org" })]);
+
+    const updated = await client.PATCH("/v1/organizations/{slug}", {
+      params: { path: { slug: "fictional-org" } },
+      body: { website: "https://fictional-org.example.com/" },
+    });
+    expect(updated.data?.website).toBe("https://fictional-org.example.com/");
+
+    const deleted = await client.DELETE("/v1/organizations/{slug}", {
+      params: { path: { slug: "fictional-org" } },
+    });
+    expect(deleted.response.status).toBe(204);
+    const missing = await client.GET("/v1/organizations/{slug}", {
+      params: { path: { slug: "fictional-org" } },
+    });
+    expect(missing.response.status).toBe(404);
+    expect(missing.error?.error.code).toBe("not_found");
+
+    expect(authorizations).toEqual([
+      `Bearer ${key}`,
+      `Bearer ${key}`,
+      null,
+      `Bearer ${key}`,
+      `Bearer ${key}`,
+      null,
+    ]);
+  });
 });

@@ -4,9 +4,10 @@ import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db"
 import { DomainError } from "../../errors.js";
 import { createCatalogService } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
-import type { CatalogService } from "./types.js";
+import { createOrganizationService } from "./organizations.js";
+import type { CatalogService, OrganizationService } from "./types.js";
 
-export type { CatalogService } from "./types.js";
+export type { CatalogService, OrganizationService } from "./types.js";
 
 /**
  * Operations on the person, the one profile record. Results are in the contract shape of
@@ -18,9 +19,10 @@ export type { CatalogService } from "./types.js";
  *   `updatedAt`; `not_found` while there is no person.
  * - `deletePerson`: removes the person; `not_found` while there is none.
  *
- * It also includes the catalog operations of `CatalogService`.
+ * It also includes the catalog operations of `CatalogService` and the organization operations of
+ * `OrganizationService`.
  */
-export interface ProfileService extends CatalogService {
+export interface ProfileService extends CatalogService, OrganizationService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -41,6 +43,7 @@ function toPerson(record: PersonRecord): Person {
 export function createProfileService(persistence: ProfilePersistence): ProfileService {
   return {
     ...createCatalogService(persistence),
+    ...createOrganizationService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();

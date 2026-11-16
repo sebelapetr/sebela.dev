@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-const text = (max: number) => z.string().trim().min(1).max(max);
+import { HttpUrlSchema, text } from "./fields.js";
 
 export const PersonLinkSchema = z
   .strictObject({
     label: text(100),
-    url: z.url({ protocol: /^https?$/, hostname: z.regexes.domain }).max(2048),
+    url: HttpUrlSchema,
   })
   .meta({ id: "PersonLink", description: "A link of the person, in its intended order." });
 
@@ -86,3 +86,10 @@ export type {
   TopicCreate,
   TopicUpdate,
 } from "./catalogs.js";
+export {
+  OrganizationCreateSchema,
+  OrganizationListSchema,
+  OrganizationSchema,
+  OrganizationUpdateSchema,
+} from "./organizations.js";
+export type { Organization, OrganizationCreate, OrganizationUpdate } from "./organizations.js";
