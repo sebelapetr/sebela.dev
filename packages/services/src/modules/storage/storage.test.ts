@@ -39,10 +39,10 @@ describe("readStorageConfig", () => {
 
   it("resolves a relative root against the given working folder", () => {
     const config = readStorageConfig(
-      { ...environment, STORAGE_LOCAL_ROOT: "../../.storage" },
+      { ...environment, STORAGE_LOCAL_ROOT: "../../.tmp/storage" },
       "/srv/checkout/apps/api",
     );
-    expect(config.root).toBe("/srv/checkout/.storage");
+    expect(config.root).toBe("/srv/checkout/.tmp/storage");
   });
 
   it("treats an empty or missing worktree as none", () => {
