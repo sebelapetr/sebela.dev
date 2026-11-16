@@ -50,6 +50,7 @@ Development environment files stay ignored by Git. Production credentials are ke
 | When a developer agent hands off or stops      | Lint and typecheck run for the parts it changed, in its worktree; failures go back to the agent | `hooks/developer-handoff.mjs` (PreToolUse on SubagentHandback, SubagentStop) |
 | When a worktree is created or removed          | The setup or cleanup script runs                                                                | `hooks/worktree-create.mjs`, `hooks/worktree-remove.mjs`                     |
 | After an issue is merged into the phase branch | The orchestrator is reminded to run the docs-keeper                                             | `hooks/post-tool-use.mjs` (PostToolUse on Bash)                              |
+| Before a context is compacted                  | The summary is told what an issue's work must keep                                              | `hooks/pre-compact.mjs` (PreCompact)                                         |
 | Before a commit, in every checkout             | Staged files are formatted and linted; the commit message is checked                            | Git hooks in `git-hooks/`, see [git workflow](git-workflow.md#local-hooks)   |
 
 ### Formatting after an edit

@@ -2,13 +2,14 @@
 // The phase loop: runs the orchestrator unattended, one issue per iteration, until the phase is done.
 // Design: .plan/00-overview/harness-prd.md. Decisions: ./lib/loop.mjs.
 //
-//   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10]
+//   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10] [--steward-minutes 15]
 //                                       [--max-failures 3] [--max-iterations 50]
 //
 // It holds no state of its own: what is done is read from GitHub by the orchestrator each time,
 // so the loop can be stopped (Ctrl+C) and started again at any point.
 
 import { execFileSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -18,16 +19,25 @@ import {
   classifyRun,
   decideNext,
 } from "./lib/loop.mjs";
+import { checkOnce, failedIssues } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
 function parseArgs(argv) {
-  const options = { base: "master", waitMinutes: 10, maxFailures: 3, maxIterations: 50, _: [] };
+  const options = {
+    base: "master",
+    waitMinutes: 10,
+    maxFailures: 3,
+    maxIterations: 50,
+    stewardMinutes: 15,
+    _: [],
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--base") options.base = argv[++i];
     else if (arg === "--wait-minutes") options.waitMinutes = Number(argv[++i]);
     else if (arg === "--max-failures") options.maxFailures = Number(argv[++i]);
     else if (arg === "--max-iterations") options.maxIterations = Number(argv[++i]);
+    else if (arg === "--steward-minutes") options.stewardMinutes = Number(argv[++i]);
     else options._.push(arg);
   }
   options.phase = options._[0];
@@ -59,7 +69,7 @@ Nobody can answer questions in this run. Never wait for input; when something ne
 Finish with the structured report.`;
 }
 
-function runOrchestrator({ mainRoot, phase, base, iteration }) {
+function runOrchestrator({ mainRoot, phase, base, iteration, sessionId }) {
   const args = [
     "-p",
     prompt({ phase, base }),
@@ -86,6 +96,9 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
     path.join(mainRoot, "harness", "mcp.json"),
     "--name",
     `loop ${phase} #${iteration}`,
+    // A known session id lets the steward find this run's transcript.
+    "--session-id",
+    sessionId,
   ];
   return new Promise((resolve) => {
     const child = spawn("claude", args, {
@@ -143,6 +156,34 @@ const sleep = (ms) =>
     };
   });
 
+// Checks the running iteration every few minutes and prints one line; never blocks the loop.
+function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardState }) {
+  if (!(options.stewardMinutes > 0)) return () => {};
+  const iterationStartedAt = Date.now();
+  let running = false;
+  const timer = setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      await checkOnce({
+        mainRoot,
+        phase,
+        sessionId,
+        iterationStartedAt,
+        failedAtStart: stewardState.failedAtStart,
+        state: stewardState,
+        logDir,
+      });
+    } catch (error) {
+      log(`steward check failed: ${error.message}`);
+    } finally {
+      running = false;
+    }
+  }, options.stewardMinutes * 60_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.phase) {
@@ -161,15 +202,28 @@ async function main() {
     wakeUp();
   });
 
+  // The steward compares with what had already failed when the loop started.
+  const stewardState = { failedAtStart: failedIssues(options.phase) };
   let consecutiveFailures = 0;
   for (let iteration = 1; iteration <= options.maxIterations && !interrupted; iteration += 1) {
     log(`iteration ${iteration}: starting the orchestrator for ${options.phase}`);
+    const sessionId = randomUUID();
+    const stopSteward = startSteward({
+      mainRoot,
+      phase: options.phase,
+      sessionId,
+      logDir,
+      options,
+      stewardState,
+    });
     const raw = await runOrchestrator({
       mainRoot,
       phase: options.phase,
       base: options.base,
       iteration,
+      sessionId,
     });
+    stopSteward();
     const run = classifyRun(raw);
 
     const labels =

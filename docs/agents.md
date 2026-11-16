@@ -49,6 +49,7 @@ Root instructions and the always-loaded Claude deep-module rule point to the can
 | ai-developer       | Implements evals-first                                                                                                          | `mcp-admin`, `ai-service`, `mcp-public`, `llm-agent` (Python package), `memory` |
 | reviewer           | Checks; has no write access to code                                                                                             | Whole repository                                                                |
 | docs-keeper        | Keeps `docs/`, rules and `AGENTS.md` files in line with the code                                                                | Documentation                                                                   |
+| steward            | Watches an unattended run and reports whether it is healthy; has no tools                                                       | Facts the loop gives it                                                         |
 
 Definitions live in `.claude/agents/`. A dedicated agent for a single app is added only if that part proves to need one.
 
@@ -102,13 +103,26 @@ harness/run-phase.sh <phase-folder>
   - every run writes a log outside git.
 - **Sequential.** One issue at a time. Parallel runs are a later improvement.
 - **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed or phase done). The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
-- **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`. Logs are in `.worktrees/logs/<phase>/`.
+- **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off). Logs are in `.worktrees/logs/<phase>/`.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
 - **MCP servers:** the loop loads only `harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
 - **Settings:** the loop loads only the repository's settings (`--setting-sources project,local`). The owner's `~/.claude` — plugins, global rules, personal agents and skills — does not reach an unattended run, so it behaves the same on any machine.
 - **Agent memory:** developers and the reviewer have `memory: local`. Their memory lives in the main checkout under `.claude/agent-memory-local/<agent>/` (ignored by git), shared by all worktrees and runs, and is the one place in the main checkout's `.claude/` an unattended run may write. It holds verified, practical findings; `docs/` and `AGENTS.md` win over it. The orchestrator, as the main session, uses Claude Code's auto memory for the repository; subagents do not see that.
 - **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide.
 - **Foreground subagents:** the loop sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, so the orchestrator waits for each developer and reviewer instead of ending its run while they still work.
+
+### The steward
+
+While an iteration runs, the loop starts `harness/steward.mjs` every 15 minutes. It **only reports**: one line in the loop's console — green `ok`, yellow warning, red problem — and an entry in `.worktrees/logs/<phase>/steward.jsonl`. It never stops, fixes or merges anything.
+
+1. **Rules, no model** (`harness/lib/steward.mjs`): from the orchestrator's and the current subagent's transcripts (found by the session id the loop gives each run), the phase's open pull requests, Postgres and the worktree slots it gathers how long the iteration has run, how long nothing has happened, refusals of the same command repeated within 15 minutes, the agent's calls and context, failing CI, new `agent-failed` issues and worktrees of merged pull requests still present at two checks in a row. Fixed limits turn them into warnings or problems: an iteration over 45 minutes is a warning and over 90 a problem; 15 minutes without activity a warning and 30 a problem; Postgres not healthy a problem.
+2. **A small model when needed:** when a rule finds something, and once an hour anyway, the `steward` agent (Haiku, medium effort, no tools) gets the facts, the findings and the latest transcript entries and judges what rules cannot — whether the agent repeats a failing approach, works outside its task or waits for nothing. It can explain or add to the rules' findings but never makes them less severe.
+
+Automatic intervention is a later step, once the reports have shown they are reliable.
+
+### Compaction
+
+Before any compaction, automatic or `/compact`, the `PreCompact` hook (`harness/hooks/pre-compact.mjs`) tells the summary what an issue's work must keep: issue, branch and worktree, the acceptance criteria verbatim, the test-first state, unresolved errors, the reviewer's objections verbatim, decisions and what remains. Developers compact at 150 000 tokens, so this keeps a long issue on track after the summary.
 
 The reviewer agent is the only check between issues inside a phase, so a mistake in one issue can carry into the next before the owner sees it. CI on the phase branch and the owner's review of the whole phase are the safety net.
 
