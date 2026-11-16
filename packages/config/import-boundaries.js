@@ -249,9 +249,8 @@ const importBoundaries = {
      * @param {string} target
      */
     function checkModuleTarget(node, specifier, target) {
-      if (importer === undefined) return true;
       const module = moduleOf(target, root);
-      const sameMember = module?.member.dir === importer.dir;
+      const sameMember = importer !== undefined && module?.member.dir === importer.dir;
       if (
         module !== undefined &&
         !isModuleEntry(target, module) &&
@@ -267,8 +266,12 @@ const importBoundaries = {
       }
 
       const member = memberContaining(target, root);
-      if (member?.dir !== importer.dir || member.installed === true) return true;
-      if (isToolingConfig(target, root) && !importerIsTooling) {
+      const inImporter =
+        importer !== undefined && member?.dir === importer.dir && member.installed !== true;
+      // A tooling configuration may be imported only by another tooling configuration of its own
+      // member; reached any other way, even through a declared export, it would forward its
+      // access to the member's private module files.
+      if (isToolingConfig(target, root) && !(importerIsTooling && inImporter)) {
         const config = path.relative(root, target).split(path.sep).join("/");
         context.report({
           node,
@@ -278,6 +281,7 @@ const importBoundaries = {
         return false;
       }
 
+      if (!inImporter) return true;
       graph ??= createModuleGraph({ root, member: importer, importer: file, ...resolution });
       const cycle = graph.cycleThrough(target);
       if (cycle !== undefined) {
