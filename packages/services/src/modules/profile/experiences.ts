@@ -22,6 +22,7 @@ function toExperience(record: ExperienceRecord): Experience {
     organization: toOrganization(record.organization),
     technologies: record.technologies.map(toTechnology),
     projects: record.projects.map(toProject),
+    testimonials: [],
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

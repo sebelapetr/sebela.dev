@@ -19,4 +19,5 @@ export type {
   ProfileService,
   ProjectService,
   ServiceService,
+  TestimonialService,
 } from "./modules/profile/index.js";
