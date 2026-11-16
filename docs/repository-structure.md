@@ -81,7 +81,7 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 - **Dockerfiles** live in the app they build. Compose files live in the repository root.
 - **Tests** sit next to the code they test. End-to-end tests live in `apps/web/e2e/`; evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Python uses package-local `tests/unit/` and `tests/integration/`.
 - **Two languages:** `apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python with their own dependency toolchain and participate in monorepo tasks/CI. Other apps/packages use TypeScript.
-- **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command.
+- **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command: `pnpm --filter @sebela/api seed [folder]` (the demo without a folder). Format, identity and rerun rules: [`packages/db/seed/README.md`](../packages/db/seed/README.md).
 - **Language:** code, docs, `AGENTS.md`, README and PRDs are in English.
 - **Agent instructions:** the root `AGENTS.md` holds repository-wide rules; every app and package has its own `AGENTS.md` with what is specific to it. There are no `CLAUDE.md` files: Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read it too.
 
