@@ -2,12 +2,14 @@ import type { Person, PersonCreate, PersonUpdate } from "@sebela/contracts";
 import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
+import { createCaseStudyService } from "./case-studies.js";
 import { createCatalogService } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
 import { createExperienceService } from "./experiences.js";
 import { createOrganizationService } from "./organizations.js";
 import { createProjectService } from "./projects.js";
 import type {
+  CaseStudyService,
   CatalogService,
   ExperienceService,
   OrganizationService,
@@ -15,6 +17,7 @@ import type {
 } from "./types.js";
 
 export type {
+  CaseStudyService,
   CatalogService,
   ExperienceService,
   OrganizationService,
@@ -32,11 +35,11 @@ export type {
  * - `deletePerson`: removes the person; `not_found` while there is none.
  *
  * It also includes the catalog operations of `CatalogService`, the organization operations of
- * `OrganizationService`, the experience operations of `ExperienceService` and the project
- * operations of `ProjectService`.
+ * `OrganizationService`, the experience operations of `ExperienceService`, the project
+ * operations of `ProjectService` and the case-study operations of `CaseStudyService`.
  */
 export interface ProfileService
-  extends CatalogService, OrganizationService, ExperienceService, ProjectService {
+  extends CatalogService, OrganizationService, ExperienceService, ProjectService, CaseStudyService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -60,6 +63,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createOrganizationService(persistence),
     ...createExperienceService(persistence),
     ...createProjectService(persistence),
+    ...createCaseStudyService(),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();
