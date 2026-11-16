@@ -483,6 +483,30 @@ describe("media service", () => {
     });
   });
 
+  describe("records of another prefix", () => {
+    it("lists and reads them without an address and serves no file for them", async () => {
+      const uploaded = await media.uploadMedia(png());
+      const elsewhere = serviceWith(
+        openStorage({
+          driver: "local",
+          root: folder,
+          environment: "test",
+          worktree: "feature-b",
+          publicBaseUrl: "https://media.example.test/files",
+        }).storage,
+      );
+
+      const foreign = { ...uploaded, url: null };
+      await expect(elsewhere.listMedia()).resolves.toEqual([foreign]);
+      await expect(elsewhere.getMedia(uploaded.id)).resolves.toEqual(foreign);
+      await expect(elsewhere.updateMedia(uploaded.id, { altText: null })).resolves.toMatchObject({
+        altText: null,
+        url: null,
+      });
+      await expect(elsewhere.readMediaFile(uploaded.key)).resolves.toBeNull();
+    });
+  });
+
   describe("serve", () => {
     it("serves nothing for an unknown key or a recorded file that is missing", async () => {
       await expect(media.readMediaFile("test/feature-a/missing.png")).resolves.toBeNull();

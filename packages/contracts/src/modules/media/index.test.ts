@@ -45,6 +45,10 @@ describe("MediaSchema", () => {
     expect(MediaListSchema.parse([image, pdf])).toEqual([image, pdf]);
   });
 
+  it("has no address for a key the configured storage cannot address", () => {
+    expect(MediaSchema.parse({ ...image, url: null })).toEqual({ ...image, url: null });
+  });
+
   it.each([
     ["an unsupported type", { ...image, mediaType: "image/svg+xml" }],
     ["an empty file", { ...image, byteSize: 0 }],

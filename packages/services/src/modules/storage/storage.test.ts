@@ -166,7 +166,7 @@ describe("local storage", () => {
 
     await expect(files?.read(key)).resolves.toBeNull();
     await expect(storage.delete(key)).rejects.toThrow(/key/i);
-    expect(() => storage.publicAddress(key)).toThrow(/key/i);
+    expect(storage.publicAddress(key)).toBeNull();
     await expect(readFile(join(outside, "decoy.png"), "utf8")).resolves.toBe("decoy");
   });
 
