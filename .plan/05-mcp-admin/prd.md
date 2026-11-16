@@ -1,12 +1,12 @@
 # Phase 5 — MCP for content management
 
-| | |
-|---|---|
-| Status | Draft, awaiting approval |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Depends on | Phases 2 and 4 |
-| Result | The owner manages all content by talking to an agent: a secured MCP server over the API's private routes, the skills that use it, and evals that prove it behaves |
+|            |                                                                                                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | Draft, awaiting approval                                                                                                                                          |
+| Date       | 2026-11-15                                                                                                                                                        |
+| Parent     | `.plan/00-overview/prd.md`                                                                                                                                        |
+| Depends on | Phases 2 and 4                                                                                                                                                    |
+| Result     | The owner manages all content by talking to an agent: a secured MCP server over the API's private routes, the skills that use it, and evals that prove it behaves |
 
 ## Problem Statement
 
@@ -94,26 +94,26 @@ Two layers, about a dozen tools in total. More would make selection worse and co
 
 **Task tools** — one tool per intent; each may perform several steps:
 
-| Tool | Does |
-|---|---|
-| Log a study session | Finds or creates the day's diary entry, finds the resource (or event), stores the time record and the notes |
-| Find a resource | Searches resources by name or link and returns candidates |
-| Add a resource | Adds a resource to a module |
-| Set a resource's status | Started, completed, paused, skipped |
-| Add an event | Creates the event |
-| Add or update a book | Creates a book or changes its state and summary |
-| Upload a file | Uploads an image or a PDF and returns the media record |
+| Tool                    | Does                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Log a study session     | Finds or creates the day's diary entry, finds the resource (or event), stores the time record and the notes |
+| Find a resource         | Searches resources by name or link and returns candidates                                                   |
+| Add a resource          | Adds a resource to a module                                                                                 |
+| Set a resource's status | Started, completed, paused, skipped                                                                         |
+| Add an event            | Creates the event                                                                                           |
+| Add or update a book    | Creates a book or changes its state and summary                                                             |
+| Upload a file           | Uploads an image or a PDF and returns the media record                                                      |
 
 **General tools** — over a fixed list of entities from both domains:
 
-| Tool | Does |
-|---|---|
-| Describe an entity | Returns its fields and their rules |
-| List | Returns the records of an entity |
-| Get | Returns one record |
-| Save | Creates or updates one record, with its relations |
-| Delete | Deletes one record. Marked destructive |
-| Recent changes | Reads the record of writes |
+| Tool               | Does                                              |
+| ------------------ | ------------------------------------------------- |
+| Describe an entity | Returns its fields and their rules                |
+| List               | Returns the records of an entity                  |
+| Get                | Returns one record                                |
+| Save               | Creates or updates one record, with its relations |
+| Delete             | Deletes one record. Marked destructive            |
+| Recent changes     | Reads the record of writes                        |
 
 - Tool descriptions state when to use the tool and when to use another one instead.
 - Errors from the API are returned in a form the agent can act on: the field, the reason.
@@ -123,12 +123,12 @@ Two layers, about a dozen tools in total. More would make selection worse and co
 
 Kept in the repository, written for any agent connected to the server:
 
-| Skill | Job |
-|---|---|
-| `diary-entry` | Log a study session from partial input; replaces the owner's current skill, which writes to the old database |
-| `add-event` | Record an attended event and the time spent |
-| `update-profile` | Change part of the profile: look first, show the change, then save |
-| `update-cv` | After a change that affects the CV, check the CV page and remind the owner to upload a new PDF |
+| Skill            | Job                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `diary-entry`    | Log a study session from partial input; replaces the owner's current skill, which writes to the old database |
+| `add-event`      | Record an attended event and the time spent                                                                  |
+| `update-profile` | Change part of the profile: look first, show the change, then save                                           |
+| `update-cv`      | After a change that affects the CV, check the CV page and remind the owner to upload a new PDF               |
 
 A skill describes the conversation — what to ask when information is missing, what to confirm — and leaves the mechanics to the tools.
 

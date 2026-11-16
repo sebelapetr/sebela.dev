@@ -8,16 +8,28 @@ There is a small number of agents, one per role. What differs between parts of t
 
 ## Instruction files
 
-| File | Holds |
-|---|---|
-| `AGENTS.md` (root) | Repository-wide rules |
+| File                         | Holds                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md` (root)           | Repository-wide rules                                                                                      |
 | `<app or package>/AGENTS.md` | Only what is specific to that part: how to add an endpoint, how to write a migration, how to run its tests |
-| `.claude/rules/*.md` | Short reminders that point to a document in `docs/`; some are scoped to paths |
-| `docs/` | The full, binding description |
+| `.claude/rules/*.md`         | Short reminders that point to a document in `docs/`; some are scoped to paths                              |
+| `docs/`                      | The full, binding description                                                                              |
 
 There are no `CLAUDE.md` files. Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read `AGENTS.md` too.
 
 A subagent may start without project instructions loaded. Every agent therefore begins by reading the root `AGENTS.md` and the `AGENTS.md` of each part it will touch.
+
+### Path-scoped rules
+
+A rule with `paths` in its frontmatter loads when an agent reads, writes or edits a matching file; the others load in every session. Each scoped rule names the binding documents of its area and repeats only the few points most often missed. A rule is added when its area exists — no empty app or package is created to hold one — and is extended when an app or package arrives in a later phase.
+
+| Rule                      | Loads for                                                                                                     | Points to                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `shared-configuration.md` | `packages/config/`, every `eslint.config.js`, `prettier.config.js`, `.prettierignore`, every `tsconfig*.json` | `packages/config/AGENTS.md`, code standards, dependency rules                      |
+| `repository-checks.md`    | `scripts/checks/`                                                                                             | The hard-coded configuration check, the CI commit-message check, testing (tooling) |
+| `harness.md`              | `scripts/harness/`, `scripts/run-phase.sh`, `.claude/settings.json`, `.claude/agents/`                        | Permissions, agents, git workflow (local hooks), worktree isolation                |
+| `toolchain-and-ci.md`     | Every `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `.nvmrc`, `.github/workflows/`   | Toolchain and workspace, root commands, CI                                         |
+| `local-infrastructure.md` | `compose.yaml`, `.env.example`                                                                                | Ports and worktree isolation, the shared Postgres, configuration and environment   |
 
 ## Project-local design and testing references
 
@@ -29,14 +41,14 @@ Root instructions and the always-loaded Claude deep-module rule point to the can
 
 ## Roles
 
-| Agent | Does | Works in |
-|---|---|---|
-| orchestrator | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository |
-| backend-developer | Implements | `api`, `db`, `services`, `contracts` |
-| frontend-developer | Implements; takes screenshots for visual review | `web`, `ui` |
-| ai-developer | Implements evals-first | `mcp-admin`, `ai-service`, `mcp-public`, `llm-agent` (Python package), `memory` |
-| reviewer | Checks; has no write access to code | Whole repository |
-| docs-keeper | Keeps `docs/`, rules and `AGENTS.md` files in line with the code | Documentation |
+| Agent              | Does                                                                                                                            | Works in                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| orchestrator       | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository                                                                |
+| backend-developer  | Implements                                                                                                                      | `api`, `db`, `services`, `contracts`                                            |
+| frontend-developer | Implements; takes screenshots for visual review                                                                                 | `web`, `ui`                                                                     |
+| ai-developer       | Implements evals-first                                                                                                          | `mcp-admin`, `ai-service`, `mcp-public`, `llm-agent` (Python package), `memory` |
+| reviewer           | Checks; has no write access to code                                                                                             | Whole repository                                                                |
+| docs-keeper        | Keeps `docs/`, rules and `AGENTS.md` files in line with the code                                                                | Documentation                                                                   |
 
 Definitions live in `.claude/agents/`. A dedicated agent for a single app is added only if that part proves to need one.
 
@@ -44,12 +56,12 @@ Definitions live in `.claude/agents/`. A dedicated agent for a single app is add
 
 Each agent pins its model and effort level in the frontmatter of its `.claude/agents/<name>.md`, so a run does not depend on what the owner last chose in an interactive session.
 
-| Agent | Model | Effort | Why |
-|---|---|---|---|
-| orchestrator | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code |
-| backend-, frontend-, ai-developer | opus | medium | Writes the code and the tests; the model is kept, the effort lowered because a developer's own reasoning is what fills its context (phase 1 measurement: 100–220k output tokens and up to 195k context per issue). Auto-compaction at 150 000 tokens caps unusually long runs |
-| reviewer | opus | high | Must find what the developer missed |
-| docs-keeper | sonnet | low | Compares documents with merged code |
+| Agent                             | Model  | Effort | Why                                                                                                                                                                                                                                                                           |
+| --------------------------------- | ------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| orchestrator                      | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code                                                                                                                                                                                                               |
+| backend-, frontend-, ai-developer | opus   | medium | Writes the code and the tests; the model is kept, the effort lowered because a developer's own reasoning is what fills its context (phase 1 measurement: 100–220k output tokens and up to 195k context per issue). Auto-compaction at 150 000 tokens caps unusually long runs |
+| reviewer                          | opus   | high   | Must find what the developer missed                                                                                                                                                                                                                                           |
+| docs-keeper                       | sonnet | low    | Compares documents with merged code                                                                                                                                                                                                                                           |
 
 The environment variables `CLAUDE_CODE_EFFORT_LEVEL` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` override these fields; the phase loop sets neither. The reviewer stays at high effort, so that lower developer effort is checked by a thorough review.
 
@@ -62,7 +74,7 @@ For each issue of a phase:
 1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed.
 2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database and ports.
 3. It dispatches the developer agent that matches the area of the issue.
-4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary.
+4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
 5. The orchestrator dispatches the reviewer.
 6. The reviewer approves or returns objections; objections go back to the developer.
 7. The orchestrator opens the issue pull request against the phase branch.

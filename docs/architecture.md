@@ -24,16 +24,16 @@ The cost is extra HTTP hops and independently managed runtime processes. This is
 
 ## Layers
 
-| Layer | Responsibility | Knows about |
-|---|---|---|
-| Clients (`web`, `mcp-admin`) | Presentation and administration protocol | The content API contract |
-| `mcp-public` | Public read-only MCP transport | The AI read-capability contract |
-| `ai-service` | FastAPI AI routes, lifecycle and execution admission | `llm-agent` package and public content API |
-| `llm-agent` package | Three-stage pipelines, read tools, models, guardrails and evals | Generated content API models/client; no TypeScript imports or database |
-| `api` | HTTP, authentication, validation, OpenAPI | `services`, `contracts` |
-| `services` | Domain logic, composition (for example assembling the CV) | `db`, `contracts`, `memory` |
-| `db` | Schema, migrations, repositories, seed | PostgreSQL |
-| `contracts` | Zod schemas and types shared by the API and its clients | Nothing else in the repository |
+| Layer                        | Responsibility                                                  | Knows about                                                            |
+| ---------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Clients (`web`, `mcp-admin`) | Presentation and administration protocol                        | The content API contract                                               |
+| `mcp-public`                 | Public read-only MCP transport                                  | The AI read-capability contract                                        |
+| `ai-service`                 | FastAPI AI routes, lifecycle and execution admission            | `llm-agent` package and public content API                             |
+| `llm-agent` package          | Three-stage pipelines, read tools, models, guardrails and evals | Generated content API models/client; no TypeScript imports or database |
+| `api`                        | HTTP, authentication, validation, OpenAPI                       | `services`, `contracts`                                                |
+| `services`                   | Domain logic, composition (for example assembling the CV)       | `db`, `contracts`, `memory`                                            |
+| `db`                         | Schema, migrations, repositories, seed                          | PostgreSQL                                                             |
+| `contracts`                  | Zod schemas and types shared by the API and its clients         | Nothing else in the repository                                         |
 
 A controller in the API stays thin: it validates input, calls a service, returns the result. Authentication is middleware on the private route group, not logic inside handlers.
 
@@ -79,12 +79,12 @@ From phase 3, committed API content writes notify a private website invalidation
 
 ## MCP servers and the AI runtime
 
-| App/package | Language | Responsibility |
-|---|---|---|
-| `apps/mcp-admin` | TypeScript | Authenticated management tools -> private content API; forwards caller key |
-| `apps/mcp-public` | Python | Public read tools -> FastAPI capability routes; external agents bring their model |
-| `apps/ai-service` | Python / FastAPI | Separate AI HTTP routes, chat generation, read capabilities and runtime lifecycle |
-| `packages/llm-agent` | Python | Library: pipelines, shared read-tool implementations, providers, guardrails and evals |
+| App/package          | Language         | Responsibility                                                                        |
+| -------------------- | ---------------- | ------------------------------------------------------------------------------------- |
+| `apps/mcp-admin`     | TypeScript       | Authenticated management tools -> private content API; forwards caller key            |
+| `apps/mcp-public`    | Python           | Public read tools -> FastAPI capability routes; external agents bring their model     |
+| `apps/ai-service`    | Python / FastAPI | Separate AI HTTP routes, chat generation, read capabilities and runtime lifecycle     |
+| `packages/llm-agent` | Python           | Library: pipelines, shared read-tool implementations, providers, guardrails and evals |
 
 Apps are separate deployables; the package is installed in Python app images and has no server lifecycle. Read capability implementations are shared through the package: chat invokes them internally and MCP calls them through FastAPI. The public MCP server exposes no chat tool. `mcp-admin` calls the content API directly and does not depend on the AI runtime.
 

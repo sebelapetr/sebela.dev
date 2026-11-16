@@ -1,11 +1,11 @@
 # sebelapetr.cz — Overview PRD
 
-| | |
-|---|---|
-| Status | Approved |
-| Date | 2026-11-15 |
-| Owner | Petr Šebela |
-| Scope | Overview of the whole project. Each phase gets its own PRD in `.plan/NN-<phase>/prd.md`; those PRDs hold the detail (exact schema, endpoints, pages, tools) and must stay consistent with this document. |
+|        |                                                                                                                                                                                                          |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status | Approved                                                                                                                                                                                                 |
+| Date   | 2026-11-15                                                                                                                                                                                               |
+| Owner  | Petr Šebela                                                                                                                                                                                              |
+| Scope  | Overview of the whole project. Each phase gets its own PRD in `.plan/NN-<phase>/prd.md`; those PRDs hold the detail (exact schema, endpoints, pages, tools) and must stay consistent with this document. |
 
 ## Problem Statement
 
@@ -22,7 +22,7 @@ Separately, his learning roadmap lives in another application (Road to AI, `road
 
 A new sebelapetr.cz: a hybrid personal professional site built on one structured data model.
 
-- One identity, two paths. Positioning: *software engineer focused on AI systems, automation and modern software — available for selected projects and career opportunities.*
+- One identity, two paths. Positioning: _software engineer focused on AI systems, automation and modern software — available for selected projects and career opportunities._
 - The site answers, in this order: who he is, what he can do, what he has built, what he is doing now, where he is heading, how to work with him.
 - Every fact is stored once in PostgreSQL and reused by the website, the CV, the AI Roadmap, the chatbot and the MCP servers.
 - The learning roadmap moves into the site as the **AI Engineering Roadmap** — "AI Roadmap" for short. These two are the only names used; "AI Engineering Path" and "Road to AI" are retired.
@@ -33,12 +33,12 @@ The site launches publicly once all phases are done and replaces the current seb
 
 ## Audiences
 
-| Audience | What they need within 30 seconds | Primary path |
-|---|---|---|
-| Client | Whether Petr can solve their problem and what exactly he offers | Homepage → Services → Contact |
-| Recruiter / hiring manager | Seniority, stack, recent work, CV | Homepage → Experience → CV |
-| Technical evaluator | Depth: how he builds, tests and reasons | Experience and its case studies → repository |
-| AI agent | Structured, trustworthy facts about Petr | Public MCP server, `llms.txt` |
+| Audience                   | What they need within 30 seconds                                | Primary path                                 |
+| -------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
+| Client                     | Whether Petr can solve their problem and what exactly he offers | Homepage → Services → Contact                |
+| Recruiter / hiring manager | Seniority, stack, recent work, CV                               | Homepage → Experience → CV                   |
+| Technical evaluator        | Depth: how he builds, tests and reasons                         | Experience and its case studies → repository |
+| AI agent                   | Structured, trustworthy facts about Petr                        | Public MCP server, `llms.txt`                |
 
 ## User Stories
 
@@ -126,18 +126,18 @@ Folder names below are the `.plan/` folders. Each phase has its own PRD — all 
 
 Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1 to 8, each processed by the loop and merged by the owner.
 
-| # | Folder | Phase | Result |
-|---|---|---|---|
-| 0 | `00-overview` | Overview and harness | This document, the docs and agent rules, and the harness that lets later phases run unattended (`harness-prd.md`). Done by hand |
-| 0 | `00-trial` | Trial | A dry run of the harness on practice issues. Ends with a pull request that is closed, not merged |
-| 1 | `01-foundation` | Foundation | Turborepo, shared configuration, guard-rail checks, Docker Compose skeleton, full CI. The first phase processed by the loop. No application code |
-| 2 | `02-api-db` | API and database | `apps/api`, `packages/db`, `packages/services`, `packages/contracts`, `profile` schema, seed |
-| 3 | `03-web` | Website | `apps/web` with all presentation pages, CV, and a chat UI running on mock data |
-| 4 | `04-ai-roadmap` | AI Roadmap | `ai_roadmap` schema, API, pages, import of the existing data |
-| 5 | `05-mcp-admin` | MCP for content management | Secured MCP server that writes content through the API, plus agent skills that use it |
-| 6 | `06-rag-memory` | Retrieval | The project's own retrieval over public data: pgvector, hybrid search, measured with evals |
-| 7 | `07-llm-agent` | LLM agent: chatbot and public MCP | A FastAPI AI runtime, separate Python public MCP and shared agent package, plus the real chatbot and a `/mcp` page with setup instructions for connecting external AI clients |
-| 8 | `08-delivery` | Continuous delivery and launch | A version tag builds, verifies and deploys to the VPS; production Compose, reverse proxy, TLS, backups; loading the real data and switching the domain |
+| #   | Folder          | Phase                             | Result                                                                                                                                                                        |
+| --- | --------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | `00-overview`   | Overview and harness              | This document, the docs and agent rules, and the harness that lets later phases run unattended (`harness-prd.md`). Done by hand                                               |
+| 0   | `00-trial`      | Trial                             | A dry run of the harness on practice issues. Ends with a pull request that is closed, not merged                                                                              |
+| 1   | `01-foundation` | Foundation                        | Turborepo, shared configuration, guard-rail checks, Docker Compose skeleton, full CI. The first phase processed by the loop. No application code                              |
+| 2   | `02-api-db`     | API and database                  | `apps/api`, `packages/db`, `packages/services`, `packages/contracts`, `profile` schema, seed                                                                                  |
+| 3   | `03-web`        | Website                           | `apps/web` with all presentation pages, CV, and a chat UI running on mock data                                                                                                |
+| 4   | `04-ai-roadmap` | AI Roadmap                        | `ai_roadmap` schema, API, pages, import of the existing data                                                                                                                  |
+| 5   | `05-mcp-admin`  | MCP for content management        | Secured MCP server that writes content through the API, plus agent skills that use it                                                                                         |
+| 6   | `06-rag-memory` | Retrieval                         | The project's own retrieval over public data: pgvector, hybrid search, measured with evals                                                                                    |
+| 7   | `07-llm-agent`  | LLM agent: chatbot and public MCP | A FastAPI AI runtime, separate Python public MCP and shared agent package, plus the real chatbot and a `/mcp` page with setup instructions for connecting external AI clients |
+| 8   | `08-delivery`   | Continuous delivery and launch    | A version tag builds, verifies and deploys to the VPS; production Compose, reverse proxy, TLS, backups; loading the real data and switching the domain                        |
 
 ### Phase boundaries
 

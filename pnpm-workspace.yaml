@@ -1,0 +1,17 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Refuse to install on a Node.js version outside the declared engines range.
+engineStrict: true
+
+# One version of each shared tool for the whole workspace. Packages refer to it with `catalog:`.
+catalog:
+  "@eslint/js": 10.0.1
+  "@types/node": 26.6.6
+  eslint: 10.15.0
+  globals: 17.14.0
+  prettier: 3.10.1
+  turbo: 2.11.11
+  typescript: 6.0.3
+  typescript-eslint: 8.72.2

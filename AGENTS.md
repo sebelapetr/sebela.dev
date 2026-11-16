@@ -13,20 +13,20 @@ The personal professional website of Petr Šebela (sebelapetr.cz): one site for 
 
 `docs/` describes how this repository works. Follow it. If the code and a document disagree, fix one of them in the same pull request — never leave them apart.
 
-| Topic | Document |
-|---|---|
-| Where things live, allowed imports, ports | `docs/repository-structure.md` |
-| Layers, trust boundary, data flow | `docs/architecture.md` |
-| Canonical terms | `GLOSSARY.md` |
-| Entity relationships, access and product rules | `docs/domain-context.md` |
-| Code conventions | `docs/code-standards.md` |
-| What to test and how | `docs/testing.md` |
-| Branches, commits, pull requests | `docs/git-workflow.md` |
-| Agent roles and orchestration | `docs/agents.md` |
-| What agents may and may not do | `docs/permissions.md` |
-| Visual language | `docs/design.md` |
-| Releases | `docs/release-workflow.md` |
-| Why things are the way they are | `docs/decisions/` |
+| Topic                                          | Document                       |
+| ---------------------------------------------- | ------------------------------ |
+| Where things live, allowed imports, ports      | `docs/repository-structure.md` |
+| Layers, trust boundary, data flow              | `docs/architecture.md`         |
+| Canonical terms                                | `GLOSSARY.md`                  |
+| Entity relationships, access and product rules | `docs/domain-context.md`       |
+| Code conventions                               | `docs/code-standards.md`       |
+| What to test and how                           | `docs/testing.md`              |
+| Branches, commits, pull requests               | `docs/git-workflow.md`         |
+| Agent roles and orchestration                  | `docs/agents.md`               |
+| What agents may and may not do                 | `docs/permissions.md`          |
+| Visual language                                | `docs/design.md`               |
+| Releases                                       | `docs/release-workflow.md`     |
+| Why things are the way they are                | `docs/decisions/`              |
 
 ## Hard rules
 
@@ -67,13 +67,26 @@ Details: `docs/git-workflow.md`.
 
 ## Commands
 
-| Task | Command |
-|---|---|
-| Create a worktree for a branch | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path) |
-| Remove it and free its slot | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]` |
-| List worktree slots | `node scripts/harness/worktree.mjs list` |
-| Run a phase unattended (owner only) | `scripts/run-phase.sh <phase-folder> [--base <branch>]` |
-| Harness tests | `node --test scripts/harness/` |
+| Task                                                                                   | Command                                                                                                        |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Install dependencies (Node.js 26, pnpm 12.21.0); also enables the Git hooks            | `pnpm install --frozen-lockfile`                                                                               |
+| Enable the Git hooks in a checkout installed before                                    | `pnpm run prepare`                                                                                             |
+| Lint, typecheck, test, build                                                           | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`                                                       |
+| Start the shared Postgres (owner, main checkout, `.env` created from `.env.example`)   | `docker compose up --detach --wait`                                                                            |
+| Create a worktree for a branch, with its own database                                  | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path; needs the running Postgres) |
+| Remove it, drop its database and free its slot                                         | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]`                                          |
+| List worktree slots                                                                    | `node scripts/harness/worktree.mjs list`                                                                       |
+| Run a phase unattended (owner only)                                                    | `scripts/run-phase.sh <phase-folder> [--base <branch>]`                                                        |
+| Harness tests (plain Node, no install needed)                                          | `node --test scripts/harness/`                                                                                 |
+| Worktree databases end to end against a disposable Postgres (needs Docker; also in CI) | `node scripts/harness/worktree-databases.e2e.mjs`                                                              |
+| Check for hard-coded ports, hosts and database names (plain Node)                      | `node scripts/checks/hardcoded-config.mjs` (also part of `pnpm lint`)                                          |
+| What CI runs: root checks, then the package tasks the change affects                   | `pnpm ci:root`, then `pnpm ci:affected` (compares with `TURBO_SCM_BASE`; see `docs/testing.md`, CI)            |
+
+Supported versions and what each command covers: `docs/repository-structure.md` (Toolchain and workspace). Shared lint, TypeScript and Prettier configuration: `packages/config/AGENTS.md`.
+
+## Hooks and handoff
+
+Your edits are formatted as you make them. Commits format and lint the staged files and check the message against Conventional Commits. A developer agent's handoff is refused while lint or typecheck of what it changed fail; fix the failures, do not bypass them (no `--no-verify`). Details: `docs/permissions.md` (Hooks) and `docs/git-workflow.md` (Local hooks).
 
 ## Language
 

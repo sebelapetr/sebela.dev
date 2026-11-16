@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "jsx": "preserve",
+    "types": [],
+    "paths": {
+      "~db/*": ["./packages/db/src/*"],
+      "~contracts": ["./packages/contracts/src/index.ts"],
+      "~web/*": ["./apps/web/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]
+}

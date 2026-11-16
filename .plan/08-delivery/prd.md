@@ -1,12 +1,12 @@
 # Phase 8 — Continuous delivery and launch
 
-| | |
-|---|---|
-| Status | Draft, awaiting approval |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Depends on | All previous phases |
-| Result | Tagging a release deploys it to the owner's server; the real data is loaded; sebelapetr.cz serves the new site |
+|            |                                                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| Status     | Draft, awaiting approval                                                                                       |
+| Date       | 2026-11-15                                                                                                     |
+| Parent     | `.plan/00-overview/prd.md`                                                                                     |
+| Depends on | All previous phases                                                                                            |
+| Result     | Tagging a release deploys it to the owner's server; the real data is loaded; sebelapetr.cz serves the new site |
 
 ## Problem Statement
 

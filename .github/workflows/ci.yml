@@ -1,4 +1,7 @@
-# Minimal CI for phase 0: runs the harness tests. Phase 1 replaces it with the full pipeline.
+# Quality gate for issue pull requests and for pushes to phase branches and the main branch.
+# Node.js comes from .nvmrc and pnpm from the packageManager field of package.json. Every job runs on
+# every event; none is skipped by a path filter, so no required status is ever left waiting.
+# What each job checks: docs/testing.md ("CI").
 name: CI
 
 on:
@@ -12,12 +15,69 @@ permissions:
   contents: read
 
 jobs:
+  # Required status check. Runs with plain Node and no installed dependencies, which keeps the
+  # harness independent of the application toolchain.
   harness:
     name: Harness tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version-file: .nvmrc
       - run: node --test scripts/harness/
+
+  # Guard rail: no port, local host address or database name hard-coded in executable files. Plain
+  # Node without installed dependencies, so it reports on its own even when the toolchain fails.
+  # The quality job runs the same check and tests through Turborepo.
+  config-check:
+    name: Hard-coded configuration check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node --test scripts/checks/
+      - run: node scripts/checks/hardcoded-config.mjs
+
+  # The root checks on every run, then lint (including the import-boundaries rule), typecheck, test
+  # and build of the packages the change affects. The comparison base is the pull request's base or
+  # the commit before the push; full history makes it resolvable. When Turborepo cannot resolve it
+  # (a new branch, a rewritten history) it treats every package as affected.
+  quality:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      TURBO_SCM_HEAD: HEAD
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Affected packages and why
+        run: pnpm exec turbo query affected --packages
+      - name: Root checks (root lint, hard-coded configuration, harness and check tests)
+        run: pnpm ci:root
+      - name: Affected package tasks (lint, typecheck, test, build)
+        run: pnpm ci:affected
+
+  # Real-Postgres lifecycle of the worktree databases: a disposable Compose project from
+  # compose.yaml on a free port. Plain Node and Docker, no installed dependencies.
+  worktree-databases:
+    name: Worktree database lifecycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/harness/worktree-databases.e2e.mjs

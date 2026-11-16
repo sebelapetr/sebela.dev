@@ -1,0 +1,29 @@
+{
+  "name": "@sebela/root",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=26.0.0 <27.0.0"
+  },
+  "scripts": {
+    "prepare": "node scripts/harness/git-hooks/install.mjs",
+    "lint": "turbo run lint lint:root check:config",
+    "lint:root": "eslint .",
+    "check:config": "node scripts/checks/hardcoded-config.mjs",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test test:harness test:checks",
+    "test:harness": "node --test scripts/harness/",
+    "test:checks": "node --test scripts/checks/",
+    "build": "turbo run build",
+    "ci:root": "turbo run lint:root check:config test:harness test:checks --continue",
+    "ci:affected": "turbo run lint typecheck test build --affected --continue"
+  },
+  "devDependencies": {
+    "@sebela/config": "workspace:*",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}

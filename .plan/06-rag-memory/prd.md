@@ -1,12 +1,12 @@
 # Phase 6 — Retrieval
 
-| | |
-|---|---|
-| Status | Draft, awaiting approval |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Depends on | Phases 2 and 4 |
-| Result | The project's own retrieval over public content: an index kept in step with the database, a search that returns passages with their sources, and published measurements of how well it works |
+|            |                                                                                                                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | Draft, awaiting approval                                                                                                                                                                     |
+| Date       | 2026-11-15                                                                                                                                                                                   |
+| Parent     | `.plan/00-overview/prd.md`                                                                                                                                                                   |
+| Depends on | Phases 2 and 4                                                                                                                                                                               |
+| Result     | The project's own retrieval over public content: an index kept in step with the database, a search that returns passages with their sources, and published measurements of how well it works |
 
 ## Problem Statement
 
@@ -54,13 +54,13 @@ A retrieval layer written in this repository, with no separate vector database a
 
 ### Modules
 
-| Module | Interface | Hides |
-|---|---|---|
-| Document builder | Given a record, produce its documents | Which fields of which entity become searchable text, and the source link for each |
-| Chunker | Given a document, produce chunks | How text is split |
-| Embedder | Given texts, produce vectors | The provider, batching, retries |
-| Index | Add, replace and remove the chunks of a record; rebuild everything | Storage, content hashes, what is skipped |
-| Search | Given a question and optional filters, return ranked passages with sources | Vector search, full-text search, how the two rankings are combined, reranking |
+| Module           | Interface                                                                  | Hides                                                                             |
+| ---------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Document builder | Given a record, produce its documents                                      | Which fields of which entity become searchable text, and the source link for each |
+| Chunker          | Given a document, produce chunks                                           | How text is split                                                                 |
+| Embedder         | Given texts, produce vectors                                               | The provider, batching, retries                                                   |
+| Index            | Add, replace and remove the chunks of a record; rebuild everything         | Storage, content hashes, what is skipped                                          |
+| Search           | Given a question and optional filters, return ranked passages with sources | Vector search, full-text search, how the two rankings are combined, reranking     |
 
 The whole layer is one package with three operations visible outside it: index a record, remove a record, search. The API is its only caller.
 

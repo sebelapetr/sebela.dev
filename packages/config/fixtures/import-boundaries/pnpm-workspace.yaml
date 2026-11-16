@@ -1,0 +1,5 @@
+# Marks this folder as the root of a miniature, fictional workspace for the import-boundaries
+# tests. It is not part of the real workspace: no folder here is installed or built.
+packages:
+  - apps/*
+  - packages/*

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Creates and removes worktrees with their own slot (ports) — see docs/repository-structure.md.
+// Creates and removes worktrees with their own slot (ports) and their own database in the shared
+// Postgres — see docs/repository-structure.md ("Ports and worktree isolation").
 //
 //   node scripts/harness/worktree.mjs create <branch> [--base <ref>]
 //   node scripts/harness/worktree.mjs remove <branch-or-path> [--force] [--delete-branch]
@@ -11,13 +12,45 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
+import { composeDatabases } from "./lib/databases.mjs";
 import {
   allocateSlot,
+  basePortsFrom,
+  databaseName,
   emptyState,
   envFileContent,
   freeSlot,
+  existingIssueBranch,
   worktreeDirName,
 } from "./lib/slots.mjs";
+
+// The checkout this script belongs to: its documented example configuration and its compose.yaml,
+// so the harness, the ports it reads and the database service it uses come from the same revision.
+const CHECKOUT_ROOT = path.join(import.meta.dirname, "..", "..");
+const EXAMPLE_FILE = path.join(CHECKOUT_ROOT, ".env.example");
+
+// Settings from the process environment, falling back to the documented example for any that are
+// not set.
+export function loadSettings(env = process.env) {
+  let example = {};
+  try {
+    example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  return { ...example, ...env };
+}
+
+// Base ports from the settings. Throws when a port is missing or invalid.
+export function loadBasePorts(env = process.env) {
+  return basePortsFrom(loadSettings(env));
+}
+
+// The databases of the shared Postgres, reached through this checkout's compose.yaml.
+function defaultDatabases(env) {
+  return composeDatabases({ root: CHECKOUT_ROOT, env: loadSettings(env) });
+}
 
 function git(args, options = {}) {
   return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
@@ -72,43 +105,118 @@ function withLock(lockDir, fn) {
   }
 }
 
-export function createWorktree({ branch, base = "HEAD", mainRoot = mainRootFrom() }) {
+// Creates the worktree of `branch` (or reuses it), gives it a slot and its own database, and only
+// then writes its environment file. When the database cannot be ensured, whatever this call added
+// is undone (a new worktree and branch, a new slot) and the error is thrown; an existing worktree
+// keeps its slot and its environment file.
+function branchExistsIn(mainRoot, branch) {
+  return (
+    gitSucceeds(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], mainRoot) ||
+    gitSucceeds(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], mainRoot)
+  );
+}
+
+// Local branches as `<name>`, remote ones as `origin/<name>`.
+function allBranches(mainRoot) {
+  return git(["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin"], { cwd: mainRoot })
+    .split("\n")
+    .filter(Boolean)
+    .map((ref) => ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, ""));
+}
+
+export function createWorktree({
+  branch: requested,
+  base = "HEAD",
+  mainRoot = mainRootFrom(),
+  env = process.env,
+  databases = defaultDatabases(env),
+}) {
+  // Configuration is validated before anything is created.
+  const basePorts = loadBasePorts(env);
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
+  const resumed = branchExistsIn(mainRoot, requested) ? null : existingIssueBranch(requested, allBranches(mainRoot));
+  const branch = resumed ?? requested;
   const name = worktreeDirName(branch);
+  const database = databaseName(name);
   const worktreePath = path.join(p.dir, name);
 
+  let added = null;
   if (!fs.existsSync(worktreePath)) {
     if (gitSucceeds(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], mainRoot)) {
       git(["worktree", "add", worktreePath, branch], { cwd: mainRoot });
+      added = { branch: false };
     } else if (gitSucceeds(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], mainRoot)) {
       git(["worktree", "add", "--track", "-b", branch, worktreePath, `origin/${branch}`], { cwd: mainRoot });
+      added = { branch: true };
     } else {
       git(["worktree", "add", "--no-track", "-b", branch, worktreePath, base], { cwd: mainRoot });
+      added = { branch: true };
     }
   }
 
-  const slot = withLock(p.lock, () => {
-    const result = allocateSlot(readState(p.state), name);
-    writeState(p.state, result.state);
-    return result.slot;
-  });
+  let slot;
+  try {
+    // The database is ensured under the lock, so a slot is only kept by a worktree with a database.
+    slot = withLock(p.lock, () => {
+      const before = readState(p.state);
+      const result = allocateSlot(before, name);
+      const newSlot = result.state !== before;
+      if (newSlot) writeState(p.state, result.state);
+      try {
+        databases.ensure(database, name);
+      } catch (error) {
+        if (newSlot) writeState(p.state, freeSlot(readState(p.state), name));
+        throw error;
+      }
+      return result.slot;
+    });
+  } catch (error) {
+    if (added) undoAdd({ mainRoot, worktreePath, branch, deleteBranch: added.branch, error });
+    throw error;
+  }
 
   // Exclusive creation preserves local edits and never follows an existing symbolic link.
   try {
-    fs.writeFileSync(path.join(worktreePath, ".env.local"), envFileContent(slot), { flag: "wx" });
+    fs.writeFileSync(
+      path.join(worktreePath, ".env.local"),
+      envFileContent(slot, basePorts, { DATABASE_NAME: database }),
+      { flag: "wx" },
+    );
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  return { path: worktreePath, slot, name };
+  return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
 }
 
-export function removeWorktree({ target, force = false, deleteBranch = false, mainRoot = mainRootFrom() }) {
+// Removes a worktree this call has just added; it holds no work yet. A failure here is added to the
+// error that caused it, which is thrown afterwards.
+function undoAdd({ mainRoot, worktreePath, branch, deleteBranch, error }) {
+  try {
+    git(["worktree", "remove", "--force", worktreePath], { cwd: mainRoot });
+    if (deleteBranch) git(["branch", "-D", branch], { cwd: mainRoot });
+  } catch (undoError) {
+    error.message += `; removing the new worktree ${worktreePath} also failed: ${undoError.stderr?.toString().trim() || undoError.message}`;
+  }
+}
+
+// Drops the worktree's database first, then removes the worktree and frees its slot. Uncommitted
+// work or a database that cannot be dropped stops the removal before anything is changed.
+export function removeWorktree({
+  target,
+  force = false,
+  deleteBranch = false,
+  mainRoot = mainRootFrom(),
+  env = process.env,
+  databases = defaultDatabases(env),
+}) {
   const p = paths(mainRoot);
   const name = path.isAbsolute(target) ? path.basename(target) : worktreeDirName(target);
+  const database = databaseName(name);
   const worktreePath = path.join(p.dir, name);
+  const exists = fs.existsSync(worktreePath);
 
-  if (fs.existsSync(worktreePath)) {
+  if (exists) {
     // The environment file is ours; anything else left behind is the agent's work and stops
     // the removal unless --force is given.
     const leftovers = git(["status", "--porcelain", "--untracked-files=all"], { cwd: worktreePath })
@@ -119,6 +227,12 @@ export function removeWorktree({ target, force = false, deleteBranch = false, ma
         `${name} has uncommitted work (${leftovers.length} file(s)); commit it or pass --force:\n${leftovers.join("\n")}`,
       );
     }
+  }
+
+  // Also when the folder is already gone, so a database left behind by an earlier attempt goes too.
+  databases.drop(database, name);
+
+  if (exists) {
     fs.rmSync(path.join(worktreePath, ".env.local"), { force: true });
     git(["worktree", "remove", ...(force ? ["--force"] : []), worktreePath], { cwd: mainRoot });
   }
@@ -133,7 +247,7 @@ export function removeWorktree({ target, force = false, deleteBranch = false, ma
   }
 
   withLock(p.lock, () => writeState(p.state, freeSlot(readState(p.state), name)));
-  return { path: worktreePath, name };
+  return { path: worktreePath, name, database };
 }
 
 export function listWorktrees({ mainRoot = mainRootFrom() } = {}) {
@@ -157,11 +271,12 @@ function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
   if (command === "create" && options._[0]) {
     const result = createWorktree({ branch: options._[0], base: options.base });
-    console.error(`worktree ${result.name} on slot ${result.slot}`);
+    if (result.resumed) console.error(`issue already has branch ${result.resumed}; continuing it`);
+    console.error(`worktree ${result.name} on slot ${result.slot} with database ${result.database}`);
     console.log(result.path);
   } else if (command === "remove" && options._[0]) {
     const result = removeWorktree({ target: options._[0], force: options.force, deleteBranch: options.deleteBranch });
-    console.error(`removed ${result.name}`);
+    console.error(`removed ${result.name} and its database ${result.database}`);
   } else if (command === "list") {
     for (const { slot, name } of listWorktrees()) console.log(`${slot}\t${name}`);
   } else {
