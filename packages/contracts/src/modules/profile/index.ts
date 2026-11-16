@@ -61,3 +61,15 @@ export type PersonLink = z.infer<typeof PersonLinkSchema>;
 export type Person = z.infer<typeof PersonSchema>;
 export type PersonCreate = z.output<typeof PersonCreateSchema>;
 export type PersonUpdate = z.output<typeof PersonUpdateSchema>;
+
+export {
+  SlugParamsSchema,
+  TechnologyCreateSchema,
+  TechnologyListSchema,
+  TechnologySchema,
+  TechnologyUpdateSchema,
+  TopicCreateSchema,
+  TopicListSchema,
+  TopicSchema,
+  TopicUpdateSchema,
+} from "./catalogs.js";
