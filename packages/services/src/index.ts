@@ -24,6 +24,7 @@ export type {
   CaseStudyService,
   CatalogService,
   CurrentFocusService,
+  CvService,
   EducationService,
   ExperienceService,
   OrganizationService,

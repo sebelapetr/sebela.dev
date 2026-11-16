@@ -118,6 +118,7 @@ const describingProfile: ProfileService = {
   createPerson: documentationOnly,
   updatePerson: documentationOnly,
   deletePerson: documentationOnly,
+  getCv: documentationOnly,
   listTechnologies: documentationOnly,
   getTechnology: documentationOnly,
   createTechnology: documentationOnly,
