@@ -175,11 +175,15 @@ describe("readStorageConfig", () => {
   });
 });
 
-/** An in-memory, path-style S3 endpoint: the protocol the Bunny driver speaks, without a network. */
+/**
+ * An in-memory, path-style S3 endpoint: the protocol the Bunny driver speaks, without a network.
+ * Deleting a missing object answers 404 `NoSuchKey`: Bunny documents that code, and does not
+ * document that a single DeleteObject of a missing key succeeds.
+ */
 function fakeS3(config: BunnyS3StorageConfig) {
   const objects = new Map<string, { body: Uint8Array; headers: Record<string, string> }>();
   const exchanges: S3Exchange[] = [];
-  const state = { failWith: null as number | null };
+  const state = { failWith: null as number | null, failCode: "AccessDenied" };
   const error = (status: number, code: string) => ({
     status,
     headers: { "content-type": "application/xml" },
@@ -194,7 +198,7 @@ function fakeS3(config: BunnyS3StorageConfig) {
     if (!signed.startsWith(`AWS4-HMAC-SHA256 Credential=${config.zone}/`)) {
       return Promise.resolve(error(403, "InvalidAccessKeyId"));
     }
-    if (state.failWith !== null) return Promise.resolve(error(state.failWith, "AccessDenied"));
+    if (state.failWith !== null) return Promise.resolve(error(state.failWith, state.failCode));
     const [, bucket, ...path] = url.pathname.split("/");
     if (bucket !== config.zone) return Promise.resolve(error(404, "NoSuchBucket"));
     const key = path.map(decodeURIComponent).join("/");
@@ -203,7 +207,7 @@ function fakeS3(config: BunnyS3StorageConfig) {
       return Promise.resolve({ status: 200, headers: { etag: '"fictional"' } });
     }
     if (exchange.method === "DELETE") {
-      objects.delete(key);
+      if (!objects.delete(key)) return Promise.resolve(error(404, "NoSuchKey"));
       return Promise.resolve({ status: 204 });
     }
     return Promise.resolve(error(501, "NotImplemented"));
@@ -553,6 +557,22 @@ describe("bunny-s3 storage", () => {
     fake.state.failWith = 403;
 
     await expect(storage.delete(key)).rejects.toThrow(/delete.*403/i);
+  });
+
+  it("counts a key the zone reports missing (404 NoSuchKey) as removed", async () => {
+    const key = await storage.store({ bytes: Buffer.from("x"), extension: "png" });
+    fake.objects.delete(key);
+
+    await expect(storage.delete(key)).resolves.toBeUndefined();
+    expect(sent()).toHaveLength(2);
+  });
+
+  it("does not count any other 404 as removed", async () => {
+    const key = await storage.store({ bytes: Buffer.from("x"), extension: "png" });
+    fake.state.failWith = 404;
+    fake.state.failCode = "NoSuchBucket";
+
+    await expect(storage.delete(key)).rejects.toThrow(/delete.*404.*NoSuchBucket/i);
   });
 
   it("gives public addresses on the CDN base, never on the storage endpoint", async () => {
