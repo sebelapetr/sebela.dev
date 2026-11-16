@@ -24,6 +24,7 @@ export interface ApiKeyPersistence {
   insertKey(key: { name: string; publicId: string; secretHash: string }): Promise<ApiKeyMetadata>;
   /** Every key, revoked ones included, oldest first. */
   listKeys(): Promise<ApiKeyMetadata[]>;
+  /** The credential of the key with this public id, revoked or not; `null` when there is none. */
   findCredential(publicId: string): Promise<ApiKeyCredential | null>;
   markUsed(id: string, at: Date): Promise<void>;
   /** Revokes a key; a revoked key keeps its first revocation time. `null` when there is no key. */

@@ -33,9 +33,13 @@ export type CreatePersonResult =
 
 /** Persistence operations of the profile domain. */
 export interface ProfilePersistence {
+  /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
+  /** Creates the person; `conflict` when one already exists, also for a racing create. */
   createPerson(fields: PersonFields): Promise<CreatePersonResult>;
+  /** Changes only the given fields; `null` when there is no person. */
   updatePerson(changes: Partial<PersonFields>): Promise<PersonRecord | null>;
+  /** `true` when a person was deleted, `false` when there was none. */
   deletePerson(): Promise<boolean>;
 }
 

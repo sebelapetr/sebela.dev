@@ -18,7 +18,9 @@ export interface ApiConfig {
   readonly bodyLimitBytes: number;
   /**
    * Addresses of reverse proxies whose `X-Forwarded-For` is believed. Empty: the client address is
-   * the connection's, and forwarded headers are ignored.
+   * the connection's, and forwarded headers are ignored. Addresses match exactly as the socket
+   * reports them: a proxy reached over IPv4 on a dual-stack listener appears as `::ffff:<ipv4>` and
+   * must be listed in that form.
    */
   readonly trustedProxies: readonly string[];
   readonly rateLimits: {

@@ -11,13 +11,12 @@ import type { ApiEnv } from "./middleware/context.js";
 import { ApiError, handleErrors } from "./middleware/errors.js";
 import { jsonBody } from "./middleware/json-body.js";
 import { createRateLimits } from "./middleware/limits.js";
-import { noSniff, redact, requestLog } from "./middleware/logging.js";
+import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { createOpenApiDocument } from "./openapi.js";
 import type { RouteDefinition, RouteDocumentation } from "./routing.js";
 
-/** One line of the request or error log, already redacted. */
-export type Logger = (line: string) => void;
+export type { Logger };
 
 /** What a successful write reports to the attachment point for interested parties. */
 export interface WriteEvent {

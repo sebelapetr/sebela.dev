@@ -4,7 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { ErrorCode, ErrorResponse } from "@sebela/contracts";
 import { DomainError } from "@sebela/services";
 
-import type { Logger } from "../app.js";
+import type { Logger } from "./logging.js";
 import { redact } from "./logging.js";
 
 type ErrorField = NonNullable<ErrorResponse["error"]["fields"]>[number];

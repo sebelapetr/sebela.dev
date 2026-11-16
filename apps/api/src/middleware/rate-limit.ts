@@ -13,7 +13,6 @@ export interface RateLimitStore {
 }
 
 interface Window {
-  readonly startedAt: number;
   readonly endsAt: number;
   count: number;
 }
@@ -31,12 +30,11 @@ export function createRateLimitStore(options: {
 
   function makeRoom(now: number) {
     for (const [key, window] of windows) if (window.endsAt <= now) windows.delete(key);
-    while (windows.size >= options.maxTracked) {
-      let oldest: [string, Window] | undefined;
-      for (const entry of windows)
-        if (!oldest || entry[1].startedAt < oldest[1].startedAt) oldest = entry;
-      if (!oldest) return;
-      windows.delete(oldest[0]);
+    // A window is inserted when it starts and removed when it ends, so the map's insertion order is
+    // the order of start times: the first entry is the oldest.
+    for (const key of windows.keys()) {
+      if (windows.size < options.maxTracked) return;
+      windows.delete(key);
     }
   }
 
@@ -50,7 +48,7 @@ export function createRateLimitStore(options: {
       }
       if (!window) {
         if (windows.size >= options.maxTracked) makeRoom(now);
-        window = { startedAt: now, endsAt: now + policy.windowMs, count: 0 };
+        window = { endsAt: now + policy.windowMs, count: 0 };
         windows.set(key, window);
       }
       if (window.count >= policy.max) {

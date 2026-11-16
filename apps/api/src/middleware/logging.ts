@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 
-import type { Logger } from "../app.js";
+/** One line of the request or error log, already redacted. */
+export type Logger = (line: string) => void;
 
 const KEY = /sebela_[0-9a-f]{16}_[A-Za-z0-9_-]*/g;
 const BEARER = /Bearer\s+\S+/gi;
