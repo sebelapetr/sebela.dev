@@ -5,9 +5,7 @@
 // transcript and judges what a script cannot. It only reports. Rules: lib/steward.mjs; intent:
 // docs/agents.md, "The steward".
 
-import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import {
   STEWARD_REPORT_SCHEMA,
@@ -16,26 +14,11 @@ import {
   needsModel,
   summarizeTranscript,
 } from "./lib/steward.mjs";
+import { askAgent, quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { listWorktrees } from "./worktree.mjs";
 
-const MODEL_TIMEOUT_MS = 180_000;
 const EXCERPT_ENTRIES = 40;
 const EXCERPT_CHARS = 12_000;
-
-// Claude Code keeps a session's transcript under its project folder, named after the working
-// directory with every character other than a letter or digit turned into "-".
-function transcriptDir(mainRoot) {
-  const config = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), ".claude");
-  return path.join(config, "projects", mainRoot.replace(/[^a-zA-Z0-9]/g, "-"));
-}
-
-function readLines(file) {
-  try {
-    return fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
-  } catch {
-    return null;
-  }
-}
 
 function newestFile(dir) {
   try {
@@ -49,20 +32,7 @@ function newestFile(dir) {
   }
 }
 
-function quiet(command, args, options = {}) {
-  try {
-    return execFileSync(command, args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 30_000,
-      ...options,
-    });
-  } catch {
-    return null;
-  }
-}
-
-function postgresHealth(mainRoot) {
+export function postgresHealth(mainRoot) {
   const out = quiet("docker", ["compose", "ps", "--format", "json", "postgres"], { cwd: mainRoot });
   if (out === null) return "unknown";
   const service = out
@@ -180,42 +150,13 @@ function askModel({ mainRoot, phase, facts, findings, transcript }) {
     `Findings of the harness's rules:\n${findings.map((f) => `- ${f.level}: ${f.message}`).join("\n") || "- none"}`,
     `Latest entries of the current agent's transcript:\n${transcript || "(none)"}`,
   ].join("\n\n");
-  const args = [
-    "-p",
+  return askAgent({
+    mainRoot,
+    agent: "steward",
     prompt,
-    "--agent",
-    "steward",
-    "--tools",
-    "",
-    "--output-format",
-    "json",
-    "--json-schema",
-    JSON.stringify(STEWARD_REPORT_SCHEMA),
-    "--setting-sources",
-    "project,local",
-    "--strict-mcp-config",
-    "--name",
-    `steward ${phase}`,
-  ];
-  return new Promise((resolve) => {
-    const child = spawn("claude", args, {
-      cwd: mainRoot,
-      env: { ...process.env, SEBELA_UNATTENDED: "1", ENABLE_CLAUDEAI_MCP_SERVERS: "false" },
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    let stdout = "";
-    child.stdout.on("data", (chunk) => (stdout += chunk));
-    const timer = setTimeout(() => child.kill("SIGTERM"), MODEL_TIMEOUT_MS);
-    child.on("close", () => {
-      clearTimeout(timer);
-      try {
-        const report = JSON.parse(stdout).structured_output;
-        resolve(report?.status ? report : null);
-      } catch {
-        resolve(null);
-      }
-    });
-  });
+    schema: STEWARD_REPORT_SCHEMA,
+    name: `steward ${phase}`,
+  }).then((report) => (report?.status ? report : null));
 }
 
 const SEVERITY = { ok: 0, warn: 1, problem: 2 };
