@@ -295,6 +295,55 @@ export interface paths {
         patch: operations["updateProject"];
         trace?: never;
     };
+    "/v1/testimonials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the testimonials
+         * @description Quotes from clients and colleagues, grouped by experience in the experience order, then by position and slug. Each names the experience it belongs to.
+         */
+        get: operations["listTestimonials"];
+        put?: never;
+        /**
+         * Create a testimonial
+         * @description The testimonial belongs to the existing experience named by `experience`; an unknown experience is refused with that field. The slug is unique and stable; a taken slug is a conflict.
+         */
+        post: operations["createTestimonial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/testimonials/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a testimonial */
+        get: operations["getTestimonial"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a testimonial
+         * @description Removes the testimonial; its experience stays.
+         */
+        delete: operations["deleteTestimonial"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a testimonial
+         * @description Changes only the fields sent; the slug cannot change. A sent `experience` moves the testimonial to that existing experience; an unknown one is refused and changes nothing.
+         */
+        patch: operations["updateTestimonial"];
+        trace?: never;
+    };
     "/v1/projects/{slug}/case-study": {
         parameters: {
             query?: never;
@@ -756,6 +805,32 @@ export interface components {
             /** @description Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged. */
             technologies?: string[];
         };
+        TestimonialCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of the existing experience the testimonial belongs to. On an update it moves the testimonial to that experience. */
+            experience: string;
+            /** @description What the author said, plain text without quotation marks. */
+            quote: string;
+            /** @description The name of the client or colleague who said it. */
+            authorName: string;
+            /** @description The author's role, for example `Head of Operations`; the organization comes from the experience. */
+            authorRole: string;
+            /** @description Ascending order within the experience; ties are ordered by slug. */
+            position: number;
+        };
+        TestimonialUpdate: {
+            /** @description The slug of the existing experience the testimonial belongs to. On an update it moves the testimonial to that experience. */
+            experience?: string;
+            /** @description What the author said, plain text without quotation marks. */
+            quote?: string;
+            /** @description The name of the client or colleague who said it. */
+            authorName?: string;
+            /** @description The author's role, for example `Head of Operations`; the organization comes from the experience. */
+            authorRole?: string;
+            /** @description Ascending order within the experience; ties are ordered by slug. */
+            position?: number;
+        };
         CaseStudyCreate: {
             /** @description The person's own role in the project, as plain text, for example `Lead engineer`. */
             role: string;
@@ -1069,6 +1144,8 @@ export interface components {
             technologies: components["schemas"]["Technology"][];
             /** @description The projects delivered within the experience, by position, then slug; each says whether it is selected for the homepage. */
             projects: components["schemas"]["Project"][];
+            /** @description The quotes of clients and colleagues about the experience, by position, then slug; the organization above is their context. */
+            testimonials: components["schemas"]["Testimonial"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1126,8 +1203,30 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        Testimonial: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of the experience the testimonial belongs to; every testimonial has exactly one. */
+            experience: string;
+            /** @description What the author said, plain text without quotation marks. */
+            quote: string;
+            /** @description The name of the client or colleague who said it. */
+            authorName: string;
+            /** @description The author's role, for example `Head of Operations`; the organization comes from the experience. */
+            authorRole: string;
+            /** @description Ascending order within the experience; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         /** @description Grouped by owning experience in the experience order, then by position, then by slug. */
         ProjectList: components["schemas"]["Project"][];
+        /** @description Grouped by experience in the experience order, then by position, then by slug. */
+        TestimonialList: components["schemas"]["Testimonial"][];
         /** @description Ordered by position, then slug. */
         ExplorationList: components["schemas"]["Exploration"][];
         Exploration: {
@@ -3428,6 +3527,373 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listTestimonials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every testimonial, in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestimonialList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createTestimonial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestimonialCreate"];
+            };
+        };
+        responses: {
+            /** @description The created testimonial. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Testimonial"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getTestimonial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The testimonial. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Testimonial"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteTestimonial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The testimonial was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateTestimonial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestimonialUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated testimonial. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Testimonial"];
                 };
             };
             /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */

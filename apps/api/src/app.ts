@@ -153,6 +153,11 @@ const describingProfile: ProfileService = {
   createEducation: documentationOnly,
   updateEducation: documentationOnly,
   deleteEducation: documentationOnly,
+  listTestimonials: documentationOnly,
+  getTestimonial: documentationOnly,
+  createTestimonial: documentationOnly,
+  updateTestimonial: documentationOnly,
+  deleteTestimonial: documentationOnly,
 };
 
 /**
