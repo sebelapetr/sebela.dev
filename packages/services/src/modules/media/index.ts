@@ -132,11 +132,11 @@ export function readMediaConfig(env: Environment, cwd: string = process.cwd()): 
 
 /**
  * Checks a file exactly as `uploadMedia` would, without storing or recording anything, so a caller
- * can refuse a whole batch before its first upload. Throws the refusal `uploadMedia` would throw.
+ * can refuse a whole batch before its first upload. Returns the type the content proves; throws the
+ * refusal `uploadMedia` would throw.
  */
 export function checkMediaUpload(input: MediaUploadInput, limits: MediaLimits): MediaType {
-  inspectUpload(input, limits);
-  return "image/png";
+  return inspectUpload(input, limits).mediaType;
 }
 
 const digestOf = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
