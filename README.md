@@ -176,7 +176,7 @@ Installation needs no configuration. It installs exactly what `pnpm-lock.yaml` r
 cp .env.example .env
 ```
 
-Then replace the placeholder `POSTGRES_PASSWORD` in `.env` with a local password of your own. `.env.example` documents every setting; its other values are the main checkout's ports, the Postgres address and port and the user and database names. Compose reads `.env` next to `compose.yaml`; a variable set in your shell takes precedence. Environment files are ignored by Git — never commit them.
+Then replace the placeholder `POSTGRES_PASSWORD` in `.env` with a local password of your own, and set `DATABASE_USER` and `DATABASE_PASSWORD` to the role the main checkout's code connects as. `.env.example` documents every setting; its other values are the main checkout's ports, the Postgres address and port and the user and database names. Compose reads `.env` next to `compose.yaml`; a variable set in your shell takes precedence. Environment files are ignored by Git — never commit them.
 
 ### 3. Start the infrastructure
 
@@ -207,8 +207,8 @@ node harness/worktree.mjs list                                       # slots in 
 cd .worktrees/feat-12-profile-api && pnpm install --frozen-lockfile
 ```
 
-- **Isolation.** The worktree takes the lowest free slot (1 to 9) and gets its own database in the shared Postgres, named after its folder (`wt_feat_12_profile_api_<hash>`). Its ports are the main checkout's ports plus ten times the slot, so its ports and its database are its own; the Postgres container is shared.
-- **Generated configuration.** `create` writes the worktree's `.env.local` itself: `WORKTREE_SLOT`, the ports of its slot and `DATABASE_NAME`. The base ports come from your process environment and otherwise from `.env.example`. Running `create` again reuses the slot and the database and never overwrites an existing `.env.local`; delete the file and run `create` again to regenerate it.
+- **Isolation.** The worktree takes the lowest free slot (1 to 9) and gets its own database in the shared Postgres, named after its folder (`wt_feat_12_profile_api_<hash>`), and its own database role of the same name. The role owns that database, may create temporary databases for tests and cannot connect to another worktree's database. Its ports are the main checkout's ports plus ten times the slot, so its ports, its database and its credentials are its own; the Postgres container is shared.
+- **Generated configuration.** `create` writes the worktree's `.env.local` itself: `WORKTREE_SLOT`, the ports of its slot, `DATABASE_NAME`, and `DATABASE_USER` and `DATABASE_PASSWORD` with a random password it never prints. The base ports come from your process environment and otherwise from `.env.example`. Running `create` again reuses the slot, the database and the password and never overwrites an existing `.env.local`; delete the file and run `create` again to regenerate it, with a new password for the role. The Postgres superuser password stays in the main checkout's `.env`.
 - **Reading configuration.** Code reads ports, hosts and database names from the process environment and fails when one is missing. Load `.env.local` into the process (for example `node --env-file=.env.local …`) instead of copying values out of it. Coding agents never open or print real environment files; they may edit only the `.env.local` of the worktree they work in ([permissions](docs/permissions.md)).
 
 Remove the worktree when its branch is done:
@@ -217,7 +217,7 @@ Remove the worktree when its branch is done:
 node harness/worktree.mjs remove feat/12-profile-api --delete-branch
 ```
 
-Removal drops the worktree's database first, then removes the worktree and frees its slot. It refuses uncommitted work unless you pass `--force`, needs the running Postgres, and only ever drops a database it created for that worktree. Slots, ports and databases in detail: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
+Removal first drops the worktree's database, every temporary database its role still owns and the role, then removes the worktree and frees its slot. It refuses uncommitted work unless you pass `--force`, needs the running Postgres, and only ever drops a database or role it created for that worktree. Slots, ports and databases in detail: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
 
 Application commands will be documented as the application phases land. Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
 

@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import { randomPassword } from "./lib/credentials.mjs";
 import { composeDatabases } from "./lib/databases.mjs";
 import {
   allocateSlot,
@@ -29,6 +30,7 @@ import {
 // so the harness, the ports it reads and the database service it uses come from the same revision.
 const CHECKOUT_ROOT = path.join(import.meta.dirname, "..");
 const EXAMPLE_FILE = path.join(CHECKOUT_ROOT, ".env.example");
+const ENV_FILE = ".env.local";
 
 // Settings from the process environment, falling back to the documented example for any that are
 // not set.
@@ -109,10 +111,6 @@ function withLock(lockDir, fn) {
   }
 }
 
-// Creates the worktree of `branch` (or reuses it), gives it a slot and its own database, and only
-// then writes its environment file. When the database cannot be ensured, whatever this call added
-// is undone (a new worktree and branch, a new slot) and the error is thrown; an existing worktree
-// keeps its slot and its environment file.
 function branchExistsIn(mainRoot, branch) {
   return (
     gitSucceeds(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], mainRoot) ||
@@ -130,6 +128,13 @@ function allBranches(mainRoot) {
     .map((ref) => ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, ""));
 }
 
+// Creates the worktree of `branch` (or reuses it), gives it a slot, its own database and its own
+// role, and only then writes its environment file with the role's credentials. An existing
+// environment file (or a symbolic link in its place) is never touched and the role keeps its
+// password; a missing one is generated with a new password. When the database or role cannot be
+// ensured, whatever this call added is undone (a new worktree and branch, a new slot) and the
+// error is thrown; an existing worktree keeps its slot and its environment file. The password is
+// written only to the environment file, never returned.
 export function createWorktree({
   branch: requested,
   base = "HEAD",
@@ -167,7 +172,9 @@ export function createWorktree({
     }
   }
 
+  const envPath = path.join(worktreePath, ENV_FILE);
   let slot;
+  let credentials = null;
   try {
     // The database is ensured under the lock, so a slot is only kept by a worktree with a database.
     slot = withLock(p.lock, () => {
@@ -176,7 +183,10 @@ export function createWorktree({
       const newSlot = result.state !== before;
       if (newSlot) writeState(p.state, result.state);
       try {
-        databases.ensure(database, name);
+        const password = fileExists(envPath) ? undefined : randomPassword();
+        const { user } = databases.ensure(database, name, { password });
+        if (password !== undefined)
+          credentials = { DATABASE_USER: user, DATABASE_PASSWORD: password };
       } catch (error) {
         if (newSlot) writeState(p.state, freeSlot(readState(p.state), name));
         throw error;
@@ -188,17 +198,31 @@ export function createWorktree({
     throw error;
   }
 
-  // Exclusive creation preserves local edits and never follows an existing symbolic link.
-  try {
-    fs.writeFileSync(
-      path.join(worktreePath, ".env.local"),
-      envFileContent(slot, basePorts, { DATABASE_NAME: database }),
-      { flag: "wx" },
-    );
-  } catch (error) {
-    if (error.code !== "EEXIST") throw error;
+  // Exclusive creation preserves local edits and never follows an existing symbolic link. Only its
+  // owner may read the file, as it holds the password.
+  if (credentials) {
+    try {
+      fs.writeFileSync(
+        envPath,
+        envFileContent(slot, basePorts, { DATABASE_NAME: database, ...credentials }),
+        { flag: "wx", mode: 0o600 },
+      );
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
   }
   return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
+}
+
+// Also true for a symbolic link, whether or not it leads anywhere.
+function fileExists(file) {
+  try {
+    fs.lstatSync(file);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 // Removes a worktree this call has just added; it holds no work yet. A failure here is added to the
@@ -212,8 +236,9 @@ function undoAdd({ mainRoot, worktreePath, branch, deleteBranch, error }) {
   }
 }
 
-// Drops the worktree's database first, then removes the worktree and frees its slot. Uncommitted
-// work or a database that cannot be dropped stops the removal before anything is changed.
+// Drops the worktree's databases and its role first, then removes the worktree and frees its slot.
+// Uncommitted work or a database or role that cannot be dropped stops the removal before anything
+// else is changed.
 export function removeWorktree({
   target,
   force = false,
@@ -233,7 +258,7 @@ export function removeWorktree({
     // the removal unless --force is given.
     const leftovers = git(["status", "--porcelain", "--untracked-files=all"], { cwd: worktreePath })
       .split("\n")
-      .filter((line) => line && !line.endsWith(".env.local"));
+      .filter((line) => line && !line.endsWith(ENV_FILE));
     if (leftovers.length && !force) {
       throw new Error(
         `${name} has uncommitted work (${leftovers.length} file(s)); commit it or pass --force:\n${leftovers.join("\n")}`,
@@ -241,11 +266,12 @@ export function removeWorktree({
     }
   }
 
-  // Also when the folder is already gone, so a database left behind by an earlier attempt goes too.
+  // Also when the folder is already gone, so a database or role left behind by an earlier attempt
+  // goes too.
   databases.drop(database, name);
 
   if (exists) {
-    fs.rmSync(path.join(worktreePath, ".env.local"), { force: true });
+    fs.rmSync(path.join(worktreePath, ENV_FILE), { force: true });
     git(["worktree", "remove", ...(force ? ["--force"] : []), worktreePath], { cwd: mainRoot });
   }
   git(["worktree", "prune"], { cwd: mainRoot });
@@ -294,7 +320,7 @@ function main() {
       force: options.force,
       deleteBranch: options.deleteBranch,
     });
-    console.error(`removed ${result.name} and its database ${result.database}`);
+    console.error(`removed ${result.name}, its databases and its role ${result.database}`);
   } else if (command === "list") {
     for (const { slot, name } of listWorktrees()) console.log(`${slot}\t${name}`);
   } else {

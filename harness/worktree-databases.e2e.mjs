@@ -21,6 +21,9 @@ import { createWorktree, listWorktrees, loadSettings, removeWorktree } from "./w
 
 const CHECKOUT_ROOT = path.join(import.meta.dirname, "..");
 const ENV_FILE = ".env.local";
+// A temporary database a test run leaves behind, deliberately not of the worktree form: cleanup
+// drops whatever the worktree's role owns, whatever its name.
+const LEFTOVER = `leftover_${process.pid}`;
 
 // The settings of this run: the documented ones, a project of its own and any free host port.
 const base = loadSettings(process.env);
@@ -200,7 +203,7 @@ try {
           env.POSTGRES_DB,
           `SELECT concat_ws(',', rolcanlogin, rolcreatedb, rolsuper, rolcreaterole) FROM pg_roles WHERE rolname = '${settings.DATABASE_USER}';`,
         ),
-        "true,true,false,false",
+        "t,t,f,f",
       );
       assert.equal(
         sql(
@@ -257,7 +260,7 @@ try {
     sqlIn(first, `DROP DATABASE "${first.database}_tmp_dropped";`);
     assert.equal(databaseExists(`${first.database}_tmp_dropped`), false);
     // Left behind on purpose: cleanup removes temporary databases the role still owns.
-    sqlIn(first, 'CREATE DATABASE "first_leftover_test";');
+    sqlIn(first, `CREATE DATABASE "${LEFTOVER}";`);
   });
 
   await step("creating a worktree again reuses its database and keeps its credentials", () => {
@@ -332,7 +335,7 @@ try {
     remove("feat/1-first");
     assert.equal(fs.existsSync(first.path), false);
     assert.equal(databaseExists(first.database), false);
-    assert.equal(databaseExists("first_leftover_test"), false);
+    assert.equal(databaseExists(LEFTOVER), false);
     assert.deepEqual(worktreeRoles(), [second.database]);
     assert.equal(sqlIn(second, "SELECT string_agg(body, ',') FROM note;"), second.name);
     assert.deepEqual(listWorktrees({ mainRoot }), [{ slot: second.slot, name: second.name }]);
