@@ -3,8 +3,26 @@
 # isolation"). Every setting comes from the environment — the process environment or a `.env`
 # file next to this one — and is documented in `.env.example`; a missing one stops Compose.
 #
+# `docker compose up` starts Postgres only. The profile `api` adds the containerised API stack of
+# the main checkout (apps/api/AGENTS.md, "Container stack"): the one-off migration service and the
+# API, both from the image of apps/api/Dockerfile. Worktrees run the API on the host instead.
+#
 # The fixed project name makes every checkout address the same stack and volume.
 name: sebela
+
+# The database settings of the containers. Inside the Compose network the API reaches Postgres by
+# its service name on the container port; these two values are part of this declaration, not
+# settings. The database, role and password are the checkout's own (DATABASE_*).
+x-database-environment: &database-environment
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  DATABASE_NAME: ${DATABASE_NAME:?set DATABASE_NAME (documented in .env.example)}
+  DATABASE_USER: ${DATABASE_USER:?set DATABASE_USER (documented in .env.example)}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD (documented in .env.example)}
+
+x-api-build: &api-build
+  context: .
+  dockerfile: apps/api/Dockerfile
 
 services:
   postgres:
@@ -38,5 +56,74 @@ services:
       start_interval: 1s
     restart: unless-stopped
 
+  # Applies the committed migrations once and exits. It starts when Postgres is healthy; the API
+  # starts only when it has exited successfully, so a failed migration keeps the API down. The API
+  # itself never migrates, and nothing here loads a seed.
+  migrate:
+    profiles: [api]
+    build: *api-build
+    command: [node, /app/packages/db/dist/cli/migrate.js]
+    environment: *database-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # The API server. The seed and the first API key are explicit one-off commands in this service's
+  # container (`pnpm stack:seed`, `pnpm stack:api-keys create <name>`), never part of a start.
+  api:
+    profiles: [api]
+    build: *api-build
+    environment:
+      <<: *database-environment
+      # The container listens on every interface; the host publishes it on API_HOST only.
+      API_HOST: 0.0.0.0
+      API_PORT: ${API_PORT:?set API_PORT (documented in .env.example)}
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:?set API_BODY_LIMIT_BYTES (documented in .env.example)}
+      API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES?set API_TRUSTED_PROXIES, empty for none (documented in .env.example)}
+      API_RATE_LIMIT_HEALTH: ${API_RATE_LIMIT_HEALTH:?set API_RATE_LIMIT_HEALTH (documented in .env.example)}
+      API_RATE_LIMIT_PUBLIC: ${API_RATE_LIMIT_PUBLIC:?set API_RATE_LIMIT_PUBLIC (documented in .env.example)}
+      API_RATE_LIMIT_PRIVATE: ${API_RATE_LIMIT_PRIVATE:?set API_RATE_LIMIT_PRIVATE (documented in .env.example)}
+      API_RATE_LIMIT_KEY: ${API_RATE_LIMIT_KEY:?set API_RATE_LIMIT_KEY (documented in .env.example)}
+      API_RATE_LIMIT_MAX_TRACKED: ${API_RATE_LIMIT_MAX_TRACKED:?set API_RATE_LIMIT_MAX_TRACKED (documented in .env.example)}
+      API_RATE_LIMIT_UPLOAD: ${API_RATE_LIMIT_UPLOAD:?set API_RATE_LIMIT_UPLOAD (documented in .env.example)}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:?set STORAGE_DRIVER (documented in .env.example)}
+      # Local files live on the media volume below, not in the checkout, so they survive a restart
+      # or a rebuilt container. The key namespaces (environment, worktree) apply below this folder.
+      STORAGE_LOCAL_ROOT: /var/lib/sebela/media
+      STORAGE_ENVIRONMENT: ${STORAGE_ENVIRONMENT:?set STORAGE_ENVIRONMENT (documented in .env.example)}
+      STORAGE_WORKTREE: ${STORAGE_WORKTREE?set STORAGE_WORKTREE, empty in the main checkout (documented in .env.example)}
+      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:?set STORAGE_PUBLIC_BASE_URL (documented in .env.example)}
+      STORAGE_BUNNY_ENDPOINT: ${STORAGE_BUNNY_ENDPOINT?set STORAGE_BUNNY_ENDPOINT, empty for local (documented in .env.example)}
+      STORAGE_BUNNY_REGION: ${STORAGE_BUNNY_REGION?set STORAGE_BUNNY_REGION, empty for local (documented in .env.example)}
+      STORAGE_BUNNY_ZONE: ${STORAGE_BUNNY_ZONE?set STORAGE_BUNNY_ZONE, empty for local (documented in .env.example)}
+      STORAGE_BUNNY_PASSWORD: ${STORAGE_BUNNY_PASSWORD?set STORAGE_BUNNY_PASSWORD, empty for local (documented in .env.example)}
+      MEDIA_MAX_BYTES: ${MEDIA_MAX_BYTES:?set MEDIA_MAX_BYTES (documented in .env.example)}
+      MEDIA_MAX_IMAGE_DIMENSION: ${MEDIA_MAX_IMAGE_DIMENSION:?set MEDIA_MAX_IMAGE_DIMENSION (documented in .env.example)}
+    ports:
+      - "${API_HOST:?set API_HOST (documented in .env.example)}:${API_PORT:?set API_PORT (documented in .env.example)}:${API_PORT}"
+    volumes:
+      - api-media:/var/lib/sebela/media
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Healthy once the API answers its health route (which does not touch the database).
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --eval
+        - >-
+          fetch("http://127.0.0.1:" + process.env.API_PORT + "/health")
+          .then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  # Local uploaded media of the container stack. Removed only by `down --volumes`.
+  api-media:
