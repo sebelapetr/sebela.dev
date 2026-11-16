@@ -129,6 +129,11 @@ const describingProfile: ProfileService = {
   createExperience: documentationOnly,
   updateExperience: documentationOnly,
   deleteExperience: documentationOnly,
+  listProjects: documentationOnly,
+  getProject: documentationOnly,
+  createProject: documentationOnly,
+  updateProject: documentationOnly,
+  deleteProject: documentationOnly,
 };
 
 /**

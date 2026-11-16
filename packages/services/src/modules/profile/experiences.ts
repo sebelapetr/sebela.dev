@@ -11,6 +11,7 @@ import { DomainError } from "../../errors.js";
 import { toTechnology } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
 import { toOrganization } from "./organizations.js";
+import { toProject } from "./projects.js";
 import type { ExperienceService } from "./types.js";
 
 const missing = (slug: string) => new DomainError("not_found", `There is no experience "${slug}".`);
@@ -20,7 +21,7 @@ function toExperience(record: ExperienceRecord): Experience {
     ...record,
     organization: toOrganization(record.organization),
     technologies: record.technologies.map(toTechnology),
-    projects: [],
+    projects: record.projects.map(toProject),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -52,7 +53,7 @@ function refused(
 }
 
 /**
- * The experiences with their organization and technologies resolved. Persistence writes an
+ * The experiences with their organization, technologies and projects resolved. Persistence writes an
  * experience and its technology links in one transaction and judges relation targets, the period
  * and slug uniqueness on stored rows, so a refused write leaves nothing behind.
  */
@@ -89,7 +90,8 @@ export function createExperienceService(persistence: ProfilePersistence): Experi
       if (result.reason === "not_found") throw missing(slug);
       throw new DomainError(
         "conflict",
-        `The experience "${slug}" is still referenced by other records; remove those references first.`,
+        `The experience "${slug}" still owns projects or is referenced by other records; move or ` +
+          "delete those first.",
       );
     },
   };
