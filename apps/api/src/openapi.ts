@@ -35,14 +35,7 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
     : {};
   return {
     [String(response.status)]: { description: response.description, ...success, ...location },
-    "400": error(
-      route.body
-        ? "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path " +
-            "parameter or a domain rule) or `credentials_in_url`."
-        : route.params
-          ? "`validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`."
-          : "`credentials_in_url`: a credential was sent in the query string.",
-    ),
+    "400": error(badRequest(route)),
     ...(route.access === "private"
       ? {
           "401": error("`unauthorized`: the API key is missing, malformed, unknown or revoked.", {
@@ -74,6 +67,21 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
     }),
     "500": error("`internal_error`: an unexpected failure, without details."),
   };
+}
+
+/** What a 400 of the route can mean: only the checks the route actually runs. */
+function badRequest(route: RouteDocumentation): string {
+  const invalid = [
+    ...(route.params ? ["a malformed path parameter"] : []),
+    ...(route.body ? ["an invalid body or a broken domain rule"] : []),
+  ];
+  return [
+    ...(route.body ? ["`malformed_json`"] : []),
+    ...(invalid.length > 0
+      ? [`\`validation_failed\` (${invalid.join(" or ")}, with \`fields\`)`]
+      : []),
+    "`credentials_in_url` (a credential was sent in the query string)",
+  ].join(", ");
 }
 
 function operation(route: RouteDocumentation): ZodOpenApiOperationObject {

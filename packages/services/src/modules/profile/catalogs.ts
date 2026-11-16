@@ -9,7 +9,7 @@ import type {
 
 import { DomainError } from "../../errors.js";
 import { definedChanges } from "./changes.js";
-import type { CatalogService } from "./index.js";
+import type { CatalogService } from "./types.js";
 
 const missing = (kind: string, slug: string) =>
   new DomainError("not_found", `There is no ${kind} "${slug}".`);
@@ -22,6 +22,12 @@ const inconsistent = () =>
     "validation_failed",
     "A primary technology needs a group and a secondary technology has none; send the group " +
       "that matches the tier.",
+    [
+      {
+        path: "group",
+        message: "Must be set for a primary technology and null for a secondary one.",
+      },
+    ],
   );
 
 function toTechnology(record: TechnologyRecord): Technology {

@@ -1,7 +1,7 @@
 export { readDatabaseConfig } from "@sebela/db";
 export type { DatabaseConfig } from "@sebela/db";
 export { DomainError } from "./errors.js";
-export type { DomainErrorCode } from "./errors.js";
+export type { DomainErrorCode, DomainErrorField } from "./errors.js";
 export { openServices } from "./services.js";
 export type { Services } from "./services.js";
 export type {

@@ -24,7 +24,7 @@
             }
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -81,7 +81,7 @@
             }
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -169,7 +169,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`.",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -287,7 +287,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`.",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -387,7 +387,7 @@
             "description": "The person was deleted."
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -473,7 +473,7 @@
             }
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -551,7 +551,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`.",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -671,7 +671,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`.",
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -766,7 +766,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`.",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -881,7 +881,7 @@
             "description": "The technology was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`.",
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -967,7 +967,7 @@
             }
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1045,7 +1045,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`.",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1165,7 +1165,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`.",
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1260,7 +1260,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`.",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1375,7 +1375,7 @@
             "description": "The topic was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`.",
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1453,7 +1453,7 @@
             "description": "The OpenAPI 3.1 document."
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1506,7 +1506,7 @@
             }
           },
           "400": {
-            "description": "`credentials_in_url`: a credential was sent in the query string.",
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {

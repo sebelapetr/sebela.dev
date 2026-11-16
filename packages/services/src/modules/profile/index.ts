@@ -1,46 +1,12 @@
-import type {
-  Person,
-  PersonCreate,
-  PersonUpdate,
-  Technology,
-  TechnologyCreate,
-  TechnologyUpdate,
-  Topic,
-  TopicCreate,
-  TopicUpdate,
-} from "@sebela/contracts";
+import type { Person, PersonCreate, PersonUpdate } from "@sebela/contracts";
 import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
 import { createCatalogService } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
+import type { CatalogService } from "./types.js";
 
-/**
- * Operations on the ordered technology and topic catalogs, addressed by slug. Results are in the
- * contract shape; expected failures are `DomainError`s:
- *
- * - `listTechnologies`/`listTopics`: every record in catalog order, possibly none.
- * - `get…`: the record, or `not_found`.
- * - `create…`: `conflict` when the slug is taken, also when creates race; a technology whose group
- *   disagrees with its tier is `validation_failed`.
- * - `update…`: changes only the given fields, keeps `id`, `slug` and `createdAt` and advances
- *   `updatedAt`; `not_found` for an unknown slug; a technology change that leaves group and tier
- *   disagreeing (for example only `tier: "secondary"` on a `core` technology) is
- *   `validation_failed`.
- * - `delete…`: removes the record; `not_found` for an unknown slug.
- */
-export interface CatalogService {
-  listTechnologies(): Promise<Technology[]>;
-  getTechnology(slug: string): Promise<Technology>;
-  createTechnology(input: TechnologyCreate): Promise<Technology>;
-  updateTechnology(slug: string, changes: TechnologyUpdate): Promise<Technology>;
-  deleteTechnology(slug: string): Promise<void>;
-  listTopics(): Promise<Topic[]>;
-  getTopic(slug: string): Promise<Topic>;
-  createTopic(input: TopicCreate): Promise<Topic>;
-  updateTopic(slug: string, changes: TopicUpdate): Promise<Topic>;
-  deleteTopic(slug: string): Promise<void>;
-}
+export type { CatalogService } from "./types.js";
 
 /**
  * Operations on the person, the one profile record. Results are in the contract shape of

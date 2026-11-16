@@ -371,7 +371,7 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -420,7 +420,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -484,7 +484,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -569,7 +569,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -642,7 +642,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -729,7 +729,7 @@ export interface operations {
                     "application/json": components["schemas"]["TechnologyList"];
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -784,7 +784,7 @@ export interface operations {
                     "application/json": components["schemas"]["Technology"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -874,7 +874,7 @@ export interface operations {
                     "application/json": components["schemas"]["Technology"];
                 };
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`. */
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -933,7 +933,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`. */
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1009,7 +1009,7 @@ export interface operations {
                     "application/json": components["schemas"]["Technology"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1096,7 +1096,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopicList"];
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1151,7 +1151,7 @@ export interface operations {
                     "application/json": components["schemas"]["Topic"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1241,7 +1241,7 @@ export interface operations {
                     "application/json": components["schemas"]["Topic"];
                 };
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`. */
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1300,7 +1300,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`. */
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1376,7 +1376,7 @@ export interface operations {
                     "application/json": components["schemas"]["Topic"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`, also for a malformed path parameter or a domain rule) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1461,7 +1461,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1510,7 +1510,7 @@ export interface operations {
                     "text/html": unknown;
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;

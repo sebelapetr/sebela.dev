@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
-import type { CatalogPersistence } from "./index.js";
+import type { CatalogPersistence } from "./types.js";
 import { technologies, topics } from "./schema.js";
 
 const technologyColumns = {
