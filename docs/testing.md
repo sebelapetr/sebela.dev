@@ -56,13 +56,13 @@ There is one test that walks every route of the API and asserts: each write rout
 
 ## Kinds of tests
 
-| Kind | Tool | Scope |
-|---|---|---|
-| Unit | Vitest (TypeScript); chosen in phase 7 for Python | Pure logic |
-| Integration | Vitest | API and services against a real Postgres — the database is not mocked |
-| End to end and visual | Playwright | The website in a browser, including screenshots |
-| Evals | promptfoo | MCP and AI behaviour, desired and forbidden |
-| Tooling | Node's built-in test runner (`node --test`) | Plain JavaScript tooling: the harness; the lint rules of `@sebela/config` and the hard-coded configuration check (`scripts/checks/`), each against fixture files that must fail and fixture files that must pass |
+| Kind                  | Tool                                              | Scope                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit                  | Vitest (TypeScript); chosen in phase 7 for Python | Pure logic                                                                                                                                                                                                                                                                                                                                                                                    |
+| Integration           | Vitest                                            | API and services against a real Postgres — the database is not mocked                                                                                                                                                                                                                                                                                                                         |
+| End to end and visual | Playwright                                        | The website in a browser, including screenshots                                                                                                                                                                                                                                                                                                                                               |
+| Evals                 | promptfoo                                         | MCP and AI behaviour, desired and forbidden                                                                                                                                                                                                                                                                                                                                                   |
+| Tooling               | Node's built-in test runner (`node --test`)       | Plain JavaScript tooling: the harness, including its Git and Claude Code hooks, which run against disposable Git repositories with fake Prettier, ESLint and Turborepo executables at their command-line interface; the lint rules of `@sebela/config` and the hard-coded configuration check (`scripts/checks/`), each against fixture files that must fail and fixture files that must pass |
 
 ## Configuration in tests
 
@@ -74,16 +74,28 @@ Tests follow the same rule as the code: no hard-coded port, local host address o
 - Tests use a separate temporary database, so they never touch the data an agent is looking at in the browser.
 - Tests use small fictional fixtures, never the demo seed, so that editing demo content cannot break a test.
 
+## Local checks
+
+Checks run at three points before CI, each lighter than the next:
+
+| When                            | What runs                                                                                                        | Where it is described                                  |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| An agent edits or writes a file | Prettier on that file                                                                                            | [Permissions](permissions.md#formatting-after-an-edit) |
+| A commit is made                | Prettier and ESLint on the staged files; the commit message against Conventional Commits. No typecheck, no tests | [Git workflow](git-workflow.md#local-hooks)            |
+| A developer agent hands off     | Lint and typecheck of the changed packages, their dependents and the root, in its worktree. No tests             | [Permissions](permissions.md#handoff-checks)           |
+
+The developer still runs the tests and the build for what it changed before it finishes; CI runs everything.
+
 ## CI
 
 Lint, typecheck, tests and build must pass before a pull request can merge. A failing check is fixed, not disabled.
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to `master` and `phase/**`:
 
-| Job | Steps |
-| --- | --- |
-| `Harness tests` (required status check) | `node --test scripts/harness/` with plain Node and no installed dependencies |
-| `Hard-coded configuration check` | `node --test scripts/checks/`, then `node scripts/checks/hardcoded-config.mjs`, with plain Node and no installed dependencies |
-| `Lint, typecheck, test, build` | `pnpm install --frozen-lockfile`, then `pnpm lint` (including the hard-coded configuration check), `pnpm typecheck`, `pnpm test`, `pnpm build` |
+| Job                                     | Steps                                                                                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Harness tests` (required status check) | `node --test scripts/harness/` with plain Node and no installed dependencies                                                                   |
+| `Hard-coded configuration check`        | `node --test scripts/checks/`, then `node scripts/checks/hardcoded-config.mjs`, with plain Node and no installed dependencies                  |
+| `Lint, typecheck, test, build`          | `pnpm install --frozen-lockfile`, then `pnpm lint` (including the hard-coded configuration check), `pnpm typecheck`, `pnpm test`, `pnpm build` |
 
 All three use the Node.js version from `.nvmrc`; pnpm comes from `packageManager` in `package.json`. The root commands are the same ones contributors run locally (see [repository structure](repository-structure.md#root-commands)).

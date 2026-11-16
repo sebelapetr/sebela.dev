@@ -1,0 +1,3 @@
+#!/bin/sh
+# Git commit-msg hook: checks the message against Conventional Commits (docs/git-workflow.md).
+exec node "$(dirname -- "$0")/commit-msg.mjs" "$@"

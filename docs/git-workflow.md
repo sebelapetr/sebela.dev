@@ -15,11 +15,11 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 ## Branches
 
-| Branch | Purpose | Who merges into it |
-|---|---|---|
-| `master` | The only long-lived branch | The owner only |
-| `phase/<phase-folder>` | Integration branch of a phase, for example `phase/02-api-db` | The orchestrator, after review and green CI |
-| `<type>/<issue-number>-<short-slug>` | One issue, for example `feat/12-profile-experience-api` | — |
+| Branch                               | Purpose                                                      | Who merges into it                          |
+| ------------------------------------ | ------------------------------------------------------------ | ------------------------------------------- |
+| `master`                             | The only long-lived branch                                   | The owner only                              |
+| `phase/<phase-folder>`               | Integration branch of a phase, for example `phase/02-api-db` | The orchestrator, after review and green CI |
+| `<type>/<issue-number>-<short-slug>` | One issue, for example `feat/12-profile-experience-api`      | —                                           |
 
 - `<type>` is a Conventional Commits type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 - An issue branch is cut from the phase branch and its pull request targets the phase branch.
@@ -40,7 +40,23 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 
 - [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <summary>`. The scope is the app or package, for example `feat(api): add experience endpoints`.
 - Summary in the imperative, lower case, no trailing period.
+- The types are `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `!` before the colon marks a breaking change (`feat(api)!: drop the legacy profile route`). The scope is optional and in lower case. A body follows one blank line.
 - Commits on an issue branch may be small and frequent; they are squashed when the issue is merged. Where test-first is mandatory, the test commit comes before the implementation commit so the reviewer can see the order.
+
+### Local hooks
+
+`pnpm install` enables the repository's Git hooks: the root `prepare` script (`scripts/harness/git-hooks/install.mjs`) sets `core.hooksPath` to `scripts/harness/git-hooks`. The path is relative, so Git resolves it in the worktree a commit is made in: every worktree runs the hooks it checked out, with its own installed tools, and one setting serves all worktrees of the repository. pnpm runs `prepare` only when it installs something; in a checkout that was installed before, run `pnpm run prepare`.
+
+| Hook         | What it does                                                                                                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pre-commit` | Formats the staged files with Prettier and lints the staged JavaScript and TypeScript files with ESLint, both with the shared configuration of the checkout. Any failure stops the commit and prints the tool output. |
+| `commit-msg` | Checks the message against the rules above and stops the commit with what to change. Messages Git writes itself (`Merge …`, `Revert "…"`, `fixup!`, `squash!`, `amend!`) pass.                                        |
+
+- **What is checked is what is committed.** A file whose working copy equals its staged content is formatted in place and staged again. A partially staged file is formatted from its staged content directly into the index; its working copy, with the unstaged edits, stays exactly as it was. Lint reads the staged content too. Other unstaged and untracked files are never touched.
+- **Paths are data.** File names go to Git separated by NUL bytes and to the tools after `--` or as an option value, never through a shell or as a pattern, so spaces, brackets, a leading dash or non-ASCII characters are safe.
+- **Fast by design.** The hooks do not run the typecheck or the tests; the [handoff checks](permissions.md#handoff-checks) and CI do. Without installed tools in the checkout the commit stops and names `pnpm install --frozen-lockfile`.
+- **No takeover.** If `core.hooksPath` already points elsewhere, the installer keeps it and says so. The phase loop does not change repository settings, so under `SEBELA_UNATTENDED=1` the installer only reports; the owner's one `pnpm install` in the main checkout enables the hooks for every worktree.
+- A failing hook is fixed, not bypassed: do not commit with `--no-verify`.
 
 ## Issue pull requests
 

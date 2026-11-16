@@ -73,6 +73,16 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/pre-tool-use.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "SubagentHandback",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/developer-handoff.mjs\"",
+            "timeout": 960
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -82,6 +92,28 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/post-tool-use.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/format-edited-file.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "backend-developer|frontend-developer|ai-developer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/developer-handoff.mjs\"",
+            "timeout": 960
           }
         ]
       }
