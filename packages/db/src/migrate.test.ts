@@ -47,6 +47,7 @@ describe("migrateDatabase", () => {
       "profile.exploration_technologies",
       "profile.exploration_topics",
       "profile.explorations",
+      "profile.media",
       "profile.organizations",
       "profile.persons",
       "profile.project_technologies",

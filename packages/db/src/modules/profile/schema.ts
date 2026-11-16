@@ -20,6 +20,42 @@ import type { ProjectLinkRecord } from "./types.js";
 
 export const profileSchema = pgSchema("profile");
 
+/** The accepted media types: PNG, JPEG and WebP images and PDF documents. */
+export const mediaType = profileSchema.enum("media_type", [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/pdf",
+]);
+
+/**
+ * Metadata of uploaded files; the files live in storage under `key`, never under a
+ * deployment-specific address. Images have positive dimensions and a PDF has none; the database
+ * refuses anything else (the check spells out `IS NOT NULL`, because a check that is `NULL` passes). Referencing rows use foreign keys without a cascade, so referenced media
+ * is never deleted.
+ */
+export const media = profileSchema.table(
+  "media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: text("key").notNull().unique(),
+    mediaType: mediaType("media_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    altText: text("alt_text"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("media_byte_size_positive", sql`${table.byteSize} > 0`),
+    check(
+      "media_dimensions_match_type",
+      sql`(${table.mediaType} = 'application/pdf' AND ${table.width} IS NULL AND ${table.height} IS NULL) OR (${table.mediaType} <> 'application/pdf' AND ${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.width} > 0 AND ${table.height} > 0)`,
+    ),
+  ],
+);
+
 /**
  * The one person the site is about. `singleton` is always `true` and unique, so the database itself
  * refuses a second row, also when two creates race.
@@ -38,6 +74,8 @@ export const persons = profileSchema.table(
     links: jsonb("links").$type<PersonLinkRecord[]>().notNull().default([]),
     availability: text("availability"),
     careerStartedOn: date("career_started_on", { mode: "string" }),
+    photoId: uuid("photo_id").references(() => media.id),
+    cvPdfId: uuid("cv_pdf_id").references(() => media.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -103,6 +141,7 @@ export const organizations = profileSchema.table("organizations", {
   name: text("name").notNull(),
   website: text("website"),
   description: text("description"),
+  logoId: uuid("logo_id").references(() => media.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -189,6 +228,7 @@ export const projects = profileSchema.table(
     links: jsonb("links").$type<ProjectLinkRecord[]>().notNull().default([]),
     selectedForHomepage: boolean("selected_for_homepage").notNull().default(false),
     position: integer("position").notNull(),
+    coverId: uuid("cover_id").references(() => media.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

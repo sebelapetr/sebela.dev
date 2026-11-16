@@ -7,7 +7,12 @@ import { createCurrentFocusPersistence } from "./current-focus.js";
 import { createEducationPersistence } from "./education.js";
 import { createExperiencePersistence } from "./experiences.js";
 import { createExplorationPersistence } from "./explorations.js";
-import { createMediaPersistence } from "./media.js";
+import {
+  checkMediaReferences,
+  createMediaPersistence,
+  type MediaReference,
+  refusingMedia,
+} from "./media.js";
 import { createOrganizationPersistence } from "./organizations.js";
 import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
@@ -201,11 +206,17 @@ const columns = {
   links: persons.links,
   availability: persons.availability,
   careerStartedOn: persons.careerStartedOn,
-  photoId: sql<string | null>`null`,
-  cvPdfId: sql<string | null>`null`,
+  photoId: persons.photoId,
+  cvPdfId: persons.cvPdfId,
   createdAt: persons.createdAt,
   updatedAt: persons.updatedAt,
 };
+
+/** The photo must be an image and the CV PDF a PDF. */
+const personMedia = (fields: Partial<PersonMedia>): MediaReference[] => [
+  { field: "photoId", id: fields.photoId, kind: "image" },
+  { field: "cvPdfId", id: fields.cvPdfId, kind: "pdf" },
+];
 
 /**
  * The singleton person in `profile.persons`. There is at most one row: the unique `singleton`
@@ -228,21 +239,35 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
     },
-    async createPerson(fields) {
-      const [row] = await db
-        .insert(persons)
-        .values(fields)
-        .onConflictDoNothing({ target: persons.singleton })
-        .returning(columns);
-      return row ? { ok: true, person: row } : { ok: false, reason: "conflict" };
+    createPerson(fields) {
+      return refusingMedia(() =>
+        db.transaction(async (tx) => {
+          await checkMediaReferences(tx, personMedia(fields));
+          const [row] = await tx
+            .insert(persons)
+            .values(fields)
+            .onConflictDoNothing({ target: persons.singleton })
+            .returning(columns);
+          return row
+            ? ({ ok: true, person: row } as const)
+            : ({ ok: false, reason: "conflict" } as const);
+        }),
+      );
     },
-    async updatePerson(changes) {
-      // `clock_timestamp()`, not `now()`: it advances also within one transaction.
-      const [row] = await db
-        .update(persons)
-        .set({ ...changes, updatedAt: sql`clock_timestamp()` })
-        .returning(columns);
-      return row ? { ok: true, person: row } : { ok: false, reason: "not_found" };
+    updatePerson(changes) {
+      return refusingMedia(() =>
+        db.transaction(async (tx) => {
+          await checkMediaReferences(tx, personMedia(changes));
+          // `clock_timestamp()`, not `now()`: it advances also within one transaction.
+          const [row] = await tx
+            .update(persons)
+            .set({ ...changes, updatedAt: sql`clock_timestamp()` })
+            .returning(columns);
+          return row
+            ? ({ ok: true, person: row } as const)
+            : ({ ok: false, reason: "not_found" } as const);
+        }),
+      );
     },
     async deletePerson() {
       const rows = await db.delete(persons).returning({ id: persons.id });

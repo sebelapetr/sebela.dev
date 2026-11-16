@@ -1,13 +1,15 @@
-import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { loadCaseStudies } from "./case-studies.js";
 import { technologyColumns } from "./catalogs.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
+import { checkMediaReferences, type MediaReference } from "./media.js";
 import { experienceOrder, type Executor, now, technologyIds, WriteRefused } from "./relations.js";
 import { experiences, projectTechnologies, projects, technologies } from "./schema.js";
 import type {
   ProjectFields,
+  ProjectMedia,
   ProjectPersistence,
   ProjectRecord,
   ProjectRelations,
@@ -29,7 +31,7 @@ const projectColumns = {
   links: projects.links,
   selectedForHomepage: projects.selectedForHomepage,
   position: projects.position,
-  coverId: sql<string | null>`null`,
+  coverId: projects.coverId,
   createdAt: projects.createdAt,
   updatedAt: projects.updatedAt,
 };
@@ -100,6 +102,11 @@ async function linkTechnologies(tx: Executor, projectId: string, slugs: string[]
     .values(ids.map((technologyId, position) => ({ projectId, technologyId, position })));
 }
 
+/** The cover must be an image. */
+const cover = (fields: Partial<ProjectMedia>): MediaReference[] => [
+  { field: "coverId", id: fields.coverId, kind: "image" },
+];
+
 /** Runs a write; a refusal or a broken period rolls it back and becomes its failure. */
 async function refusable<T>(write: () => Promise<T>): Promise<T | ProjectWriteFailure> {
   try {
@@ -113,8 +120,10 @@ async function refusable<T>(write: () => Promise<T>): Promise<T | ProjectWriteFa
 }
 
 /** Scalar changes without the relations, which are written separately. */
-function scalarChanges(changes: Partial<ProjectFields & ProjectRelations>): Partial<ProjectFields> {
-  const fields: Partial<ProjectFields & ProjectRelations> = { ...changes };
+function scalarChanges(
+  changes: Partial<ProjectFields & ProjectMedia & ProjectRelations>,
+): Partial<ProjectFields & ProjectMedia> {
+  const fields: Partial<ProjectFields & ProjectMedia & ProjectRelations> = { ...changes };
   delete fields.experience;
   delete fields.technologies;
   return fields;
@@ -140,6 +149,7 @@ export function createProjectPersistence(db: NodePgDatabase): ProjectPersistence
     createProject({ experience, technologies: slugs, ...fields }) {
       return refusable(() =>
         db.transaction(async (tx) => {
+          await checkMediaReferences(tx, cover(fields));
           const [row] = await tx
             .insert(projects)
             .values({ ...fields, experienceId: await experienceId(tx, experience) })
@@ -160,6 +170,7 @@ export function createProjectPersistence(db: NodePgDatabase): ProjectPersistence
             .where(eq(projects.slug, slug))
             .for("update");
           if (!current) return { ok: false, reason: "not_found" } as const;
+          await checkMediaReferences(tx, cover(changes));
 
           const owner =
             changes.experience === undefined
