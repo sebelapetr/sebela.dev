@@ -28,7 +28,7 @@ export async function createTemporaryDatabase(
   await administer(base, (client) => client.query(`CREATE DATABASE "${name}"`));
   const config = { ...base, name };
   const drop = () =>
-    administer(base, (client) => client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`));
+    administer(base, (client) => client.query(`DROP DATABASE "${name}" WITH (FORCE)`));
   if (options.migrated !== false) {
     try {
       await migrateDatabase(config);
