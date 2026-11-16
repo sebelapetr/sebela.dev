@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { CaseStudySchema, ExperienceSchema, ProjectSchema } from "@sebela/contracts";
@@ -21,8 +24,14 @@ const narrative = {
 
 const ADDRESS = "/v1/projects/routing-engine/case-study";
 
-/** Room for a body of the longest allowed narrative; the shared test limit is smaller. */
-const config = testConfig({ bodyLimitBytes: 128 * 1024 });
+/**
+ * The documented request-body limit (`.env.example`), so the longest allowed narrative is proven
+ * to fit what a deployment accepts; the shared test limit is smaller.
+ */
+const documented = parseEnv(
+  readFileSync(new URL("../../../.env.example", import.meta.url), "utf8"),
+);
+const config = testConfig({ bodyLimitBytes: Number(documented["API_BODY_LIMIT_BYTES"]) });
 
 interface FieldError {
   path: string;
@@ -109,6 +118,14 @@ describe("the case-study API", () => {
 
   it("accepts a body of the longest allowed length", async () => {
     const response = await create({ ...narrative, body: "x".repeat(50_000) });
+
+    expect(response.status).toBe(201);
+  });
+
+  it("accepts the longest narrative written in multi-byte characters", async () => {
+    // "€" is three bytes in UTF-8, the most a single UTF-16 character takes, so this is the largest
+    // narrative the contract allows that JSON does not escape.
+    const response = await create({ role: "€".repeat(500), body: "€".repeat(50_000) });
 
     expect(response.status).toBe(201);
   });
