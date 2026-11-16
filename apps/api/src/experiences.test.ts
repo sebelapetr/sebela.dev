@@ -49,12 +49,14 @@ describe("the experience API", () => {
     auth = bearer((await backend.services.apiKeys.createKey("experience routes")).key);
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "northwind",
       name: "Northwind Example",
       website: null,
       description: null,
     });
     await profile.createOrganization({
+      logoId: null,
       slug: "acme",
       name: "Acme",
       website: null,

@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { samplePng } from "@sebela/services/testing";
+
 import type { RouteSummary } from "../app.js";
 import {
   anyText,
@@ -9,6 +11,7 @@ import {
   openTestBackend,
   person,
   type TestBackend,
+  upload,
 } from "../test-support.js";
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -26,6 +29,10 @@ const attempts: { name: string; init: RequestInit }[] = [
     init: { headers: { "content-type": "text/plain" }, body: "x" },
   },
   { name: "no body", init: {} },
+  {
+    name: "a valid upload",
+    init: upload({ bytes: samplePng({ width: 4, height: 3 }), name: "portrait.png" }),
+  },
 ];
 
 // Keys that must all be refused the same way.
@@ -111,6 +118,8 @@ describe("authentication of the private routes", () => {
     await expect(backend.services.profile.listEducation()).resolves.toEqual([]);
     await expect(backend.services.profile.listTestimonials()).resolves.toEqual([]);
     await expect(backend.services.profile.listCurrentFocus()).resolves.toEqual([]);
+    await expect(backend.services.media.listMedia()).resolves.toEqual([]);
+    expect(await backend.storedFiles()).toEqual([]);
   });
 
   it("permits a valid key, and refuses it on the next request after revocation", async () => {

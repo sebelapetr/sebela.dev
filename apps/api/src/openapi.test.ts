@@ -42,7 +42,8 @@ describe("the OpenAPI document and the reference", () => {
   });
 
   const operation = (method: string, path: string): Operation => {
-    const found = document.paths[path.replace(/:([A-Za-z]+)/g, "{$1}")]?.[method.toLowerCase()];
+    const found =
+      document.paths[path.replace(/:([A-Za-z]+)(\{[^}]*\})?/g, "{$1}")]?.[method.toLowerCase()];
     if (!found) throw new Error(`${method} ${path} is not documented`);
     return found;
   };
@@ -498,6 +499,43 @@ describe("the OpenAPI document and the reference", () => {
     for (const nullable of ["project", "link"]) {
       expect(JSON.stringify(focus?.properties?.[nullable])).toContain('"null"');
     }
+  });
+
+  it("documents the media routes, the multipart upload and the binary files", () => {
+    expect(operation("GET", "/v1/media").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/MediaList" } },
+    });
+    expect(operation("GET", "/v1/media/:id").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Media" } },
+    });
+    expect(operation("POST", "/v1/media").requestBody?.content).toEqual({
+      "multipart/form-data": { schema: { $ref: "#/components/schemas/MediaUpload" } },
+    });
+    expect(operation("POST", "/v1/media").security).toEqual([{ bearerAuth: [] }]);
+    expect(operation("POST", "/v1/media").responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(operation("POST", "/v1/media").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "413", "415", "429"]),
+    );
+    expect(operation("PATCH", "/v1/media/:id").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/MediaUpdate" } },
+    });
+    // Attached media is not deleted: the delete answers with a conflict.
+    expect(Object.keys(operation("DELETE", "/v1/media/:id").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "404", "409"]),
+    );
+    const file = operation("GET", "/v1/media/files/:key{.+}");
+    expect(file.security).toEqual([]);
+    expect(file.parameters).toEqual([
+      expect.objectContaining({ name: "key", in: "path", required: true }),
+    ]);
+    const binary = { schema: { type: "string", format: "binary" } };
+    expect(file.responses["200"]?.content).toEqual({
+      "image/png": binary,
+      "image/jpeg": binary,
+      "image/webp": binary,
+      "application/pdf": binary,
+    });
+    expect(Object.keys(file.responses)).toEqual(expect.arrayContaining(["200", "404", "429"]));
   });
 
   it("documents the health route", () => {

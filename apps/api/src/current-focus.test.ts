@@ -44,6 +44,7 @@ describe("the current-focus API", () => {
     auth = bearer((await backend.services.apiKeys.createKey("current-focus routes")).key);
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "northwind",
       name: "Northwind",
       website: null,
@@ -74,8 +75,18 @@ describe("the current-focus API", () => {
       position: 0,
       technologies: [],
     };
-    await profile.createProject({ ...project, slug: "route-planner", name: "Route planner" });
-    await profile.createProject({ ...project, slug: "fleet-board", name: "Fleet board" });
+    await profile.createProject({
+      coverId: null,
+      ...project,
+      slug: "route-planner",
+      name: "Route planner",
+    });
+    await profile.createProject({
+      coverId: null,
+      ...project,
+      slug: "fleet-board",
+      name: "Fleet board",
+    });
     for (const [position, slug] of ["agents", "rag", "evals"].entries()) {
       await profile.createTopic({ slug, name: slug.toUpperCase(), position });
     }

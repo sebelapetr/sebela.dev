@@ -59,7 +59,13 @@ describe("the project API", () => {
     auth = bearer((await backend.services.apiKeys.createKey("project routes")).key);
     const { profile } = backend.services;
     for (const slug of ["northwind", "acme"]) {
-      await profile.createOrganization({ slug, name: slug, website: null, description: null });
+      await profile.createOrganization({
+        logoId: null,
+        slug,
+        name: slug,
+        website: null,
+        description: null,
+      });
     }
     for (const [position, slug] of ["typescript", "postgres", "rust"].entries()) {
       await profile.createTechnology({
@@ -126,11 +132,12 @@ describe("the project API", () => {
     const { technologies, ...fields } = routing;
     expect(body).toMatchObject(fields);
     expect(body.technologies.map((technology) => technology.slug)).toEqual(technologies);
-    // No cover or visibility flag: those are not part of a project yet. The case study is written
-    // through its own address, so a new project has none.
+    // No visibility flag: that is not part of a project yet. The case study is written through its
+    // own address, so a new project has none; a cover is attached by its media identifier.
     expect(body.caseStudy).toBeNull();
+    expect(body.coverId).toBeNull();
     expect(Object.keys(body).sort()).toEqual(
-      [...Object.keys(routing), "id", "caseStudy", "createdAt", "updatedAt"].sort(),
+      [...Object.keys(routing), "id", "coverId", "caseStudy", "createdAt", "updatedAt"].sort(),
     );
 
     const read = await request("/v1/projects/routing-engine");

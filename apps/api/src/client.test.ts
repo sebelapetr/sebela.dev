@@ -591,6 +591,7 @@ describe("the generated API client", () => {
     const at = (slug: string) => ({ params: { path: { slug } } });
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "fictional-harbor",
       name: "Harbor",
       website: null,
@@ -609,6 +610,7 @@ describe("the generated API client", () => {
       technologies: [],
     });
     await profile.createProject({
+      coverId: null,
       slug: "fictional-dock-planner",
       experience: "fictional-harbor-engineer",
       name: "Dock planner",
@@ -795,6 +797,7 @@ describe("the generated API client", () => {
     const at = (slug: string) => ({ params: { path: { slug } } });
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "quarry-works",
       name: "Quarry Works",
       website: null,
@@ -877,6 +880,7 @@ describe("the generated API client", () => {
     const at = (slug: string) => ({ params: { path: { slug } } });
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "lumen-labs",
       name: "Lumen Labs",
       website: null,
@@ -895,6 +899,7 @@ describe("the generated API client", () => {
       technologies: [],
     });
     await profile.createProject({
+      coverId: null,
       slug: "lumen-console",
       experience: "lumen-builder",
       name: "Lumen console",
