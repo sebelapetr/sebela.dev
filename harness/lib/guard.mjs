@@ -156,7 +156,8 @@ function simpleCommands(command) {
 // variable assignments) or a global option other than the few that only say where or how to
 // print (`-c`, `--config-env`, `--exec-path`, `--attr-source`, …). Null when the words do not
 // invoke git.
-const GIT_PLACE_OPTIONS = new Set(["-C", "--git-dir", "--work-tree"]);
+// Only -C: --git-dir and --work-tree could point git at another repository and its configuration.
+const GIT_PLACE_OPTIONS = new Set(["-C"]);
 const GIT_SAFE_OPTIONS = new Set([
   "--no-pager",
   "-P",

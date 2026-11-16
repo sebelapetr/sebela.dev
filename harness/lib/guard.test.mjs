@@ -595,6 +595,8 @@ test("abbreviated git options that write a file are refused on harness reads", (
     "git diff --ext -- .claude/settings.json",
     "./git diff -- .claude/settings.json",
     "tools/git log -- .claude/settings.json",
+    "git --git-dir=/tmp/x/.git log -- .claude/settings.json",
+    "git --work-tree /tmp diff -- .claude/settings.json",
   ]) {
     assert.ok(bash(command, loop), command);
   }
