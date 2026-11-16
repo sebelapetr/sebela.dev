@@ -283,7 +283,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a project
-         * @description Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.
+         * @description Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one a service names as evidence, is a conflict until those are removed.
          */
         delete: operations["deleteProject"];
         options?: never;
@@ -364,7 +364,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an exploration
-         * @description Removes the exploration and its technology and topic links; the technologies and topics stay.
+         * @description Removes the exploration and its technology and topic links; the technologies and topics stay. An exploration a service names as evidence is a conflict until it is removed from that service.
          */
         delete: operations["deleteExploration"];
         options?: never;
@@ -374,6 +374,55 @@ export interface paths {
          * @description Changes only the fields sent, together or not at all; the slug cannot change. A sent `concepts`, `technologies` or `topics` list replaces the whole list in its order; an omitted one keeps it. The period is checked against the stored start or end.
          */
         patch: operations["updateExploration"];
+        trace?: never;
+    };
+    "/v1/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the services
+         * @description By position, then slug. Each service carries its evidence in its defined order, each piece typed by `kind`: a project or an exploration resolved to what a page needs, or a link within the site.
+         */
+        get: operations["listServices"];
+        put?: never;
+        /**
+         * Create a service
+         * @description Stores the service and its evidence together or not at all. Projects and explorations are named by the slugs of existing records, each at most once; links are paths within the site. The slug is unique and stable, a taken slug is a conflict.
+         */
+        post: operations["createService"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a service */
+        get: operations["getService"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a service
+         * @description Removes the service and its evidence; the projects and explorations it names stay.
+         */
+        delete: operations["deleteService"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a service
+         * @description Changes only the fields sent, together or not at all; the slug cannot change. A sent `evidence` list replaces all evidence in its order, an empty list removes it; an omitted one keeps it. A refused update leaves the service and its evidence as they were.
+         */
+        patch: operations["updateService"];
         trace?: never;
     };
     "/openapi.json": {
@@ -737,6 +786,69 @@ export interface components {
             /** @description Slugs of existing topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged. */
             topics?: string[];
         };
+        ServiceCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /** @description Who the service is for. Markdown. */
+            audience: string;
+            /** @description What the client gets. Markdown. */
+            deliverable: string;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position: number;
+            /**
+             * @description The evidence in its intended order; each project and exploration at most once. On an update the list replaces all evidence; an omitted list leaves it unchanged.
+             * @default []
+             */
+            evidence?: components["schemas"]["ServiceEvidenceInput"][];
+        };
+        /** @description Evidence for a service, chosen by `kind`: an existing project, an existing exploration or a link to another part of the site. */
+        ServiceEvidenceInput: components["schemas"]["ServiceProjectEvidenceInput"] | components["schemas"]["ServiceExplorationEvidenceInput"] | components["schemas"]["ServiceLinkEvidence"];
+        ServiceProjectEvidenceInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "project";
+            /** @description The slug of an existing project. */
+            project: string;
+        };
+        ServiceExplorationEvidenceInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "exploration";
+            /** @description The slug of an existing exploration. */
+            exploration: string;
+        };
+        /** @description A link to another part of the site. */
+        ServiceLinkEvidence: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "link";
+            /** @description The text of the link, for example `AI Roadmap`. */
+            label: string;
+            /** @description A path within the site, for example `/roadmap` or `/contact?topic=automation`. It starts with a single `/`; schemes, hosts, whitespace and backslashes are rejected. */
+            path: string;
+        };
+        ServiceUpdate: {
+            name?: string;
+            /** @description Markdown. */
+            summary?: string;
+            /** @description Who the service is for. Markdown. */
+            audience?: string;
+            /** @description What the client gets. Markdown. */
+            deliverable?: string;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position?: number;
+            /** @description The evidence in its intended order; each project and exploration at most once. On an update the list replaces all evidence; an omitted list leaves it unchanged. */
+            evidence?: components["schemas"]["ServiceEvidenceInput"][];
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -954,6 +1066,67 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @description Ordered by position, then slug. */
+        ServiceList: components["schemas"]["Service"][];
+        Service: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /** @description Who the service is for. Markdown. */
+            audience: string;
+            /** @description What the client gets. Markdown. */
+            deliverable: string;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position: number;
+            /** @description The evidence for the service, in its intended order. */
+            evidence: components["schemas"]["ServiceEvidence"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ServiceEvidence: components["schemas"]["ServiceProjectEvidence"] | components["schemas"]["ServiceExplorationEvidence"] | components["schemas"]["ServiceLinkEvidence"];
+        ServiceProjectEvidence: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "project";
+            project: components["schemas"]["ServiceEvidenceProject"];
+        };
+        ServiceEvidenceProject: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /** @description The slug of the experience it belongs to. */
+            experience: string;
+        };
+        ServiceExplorationEvidence: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "exploration";
+            exploration: components["schemas"]["ServiceEvidenceExploration"];
+        };
+        ServiceEvidenceExploration: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /**
+             * @description How far the exploration got, exactly as stored; never shown stronger.
+             * @enum {string}
+             */
+            status: "built" | "tested" | "designed";
         };
     };
     responses: never;
@@ -3783,6 +3956,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description `rate_limited`: a rate-limit budget is exhausted. */
             429: {
                 headers: {
@@ -3828,6 +4010,373 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Exploration"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listServices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every service, in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createService: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceCreate"];
+            };
+        };
+        responses: {
+            /** @description The created service. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Service"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getService: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The service with its evidence in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Service"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteService: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The service was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateService: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated service. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Service"];
                 };
             };
             /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */

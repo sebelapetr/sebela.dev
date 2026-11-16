@@ -96,7 +96,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Delete a project",
       description:
-        "Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.",
+        "Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one a service names as evidence, is a conflict until those are removed.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The project was deleted." },
       errors: ["not_found", "conflict"],

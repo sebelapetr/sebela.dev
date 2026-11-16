@@ -17,7 +17,8 @@ const ITEM = "/v1/explorations/:slug";
  * status exactly as stored and the technologies and topics resolved, authenticated create, update
  * and delete. An exploration belongs to no experience or project. An unknown or repeated
  * technology or topic, an unknown status or an end before the start is a `validation_failed`
- * naming the field; a taken slug is a `conflict`.
+ * naming the field; a taken slug is a `conflict`, and so is deleting one a service names as
+ * evidence.
  */
 export function explorationRoutes(profile: ProfileService): RouteDefinition[] {
   return [
@@ -95,10 +96,10 @@ export function explorationRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Delete an exploration",
       description:
-        "Removes the exploration and its technology and topic links; the technologies and topics stay.",
+        "Removes the exploration and its technology and topic links; the technologies and topics stay. An exploration a service names as evidence is a conflict until it is removed from that service.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The exploration was deleted." },
-      errors: ["not_found"],
+      errors: ["not_found", "conflict"],
       handle: async ({ params }) => {
         await profile.deleteExploration(params.slug);
         return undefined;
