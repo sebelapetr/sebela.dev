@@ -71,11 +71,13 @@ Details: `docs/git-workflow.md`.
 |---|---|
 | Install dependencies (Node.js 26, pnpm 12.21.0) | `pnpm install --frozen-lockfile` |
 | Lint, typecheck, test, build | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` |
-| Create a worktree for a branch | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path) |
-| Remove it and free its slot | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]` |
+| Start the shared Postgres (owner, main checkout, `.env` created from `.env.example`) | `docker compose up --detach --wait` |
+| Create a worktree for a branch, with its own database | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path; needs the running Postgres) |
+| Remove it, drop its database and free its slot | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]` |
 | List worktree slots | `node scripts/harness/worktree.mjs list` |
 | Run a phase unattended (owner only) | `scripts/run-phase.sh <phase-folder> [--base <branch>]` |
 | Harness tests (plain Node, no install needed) | `node --test scripts/harness/` |
+| Worktree databases end to end against a disposable Postgres (needs Docker) | `node scripts/harness/worktree-databases.e2e.mjs` |
 | Check for hard-coded ports, hosts and database names (plain Node) | `node scripts/checks/hardcoded-config.mjs` (also part of `pnpm lint`) |
 
 Supported versions and what each command covers: `docs/repository-structure.md` (Toolchain and workspace). Shared lint, TypeScript and Prettier configuration: `packages/config/AGENTS.md`.

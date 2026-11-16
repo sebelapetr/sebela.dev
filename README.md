@@ -142,13 +142,14 @@ The phases organise implementation; they are not separate public releases. Speci
 
 ## Working on the project
 
-There is no runnable application in this checkout yet. The workspace and its quality checks are in place:
+There is no runnable application in this checkout yet. The workspace, its quality checks and the local database are in place:
 
-- **Prerequisites:** Git, [Node.js](https://nodejs.org/) 26 (LTS; see `.nvmrc`) and [pnpm](https://pnpm.io/) 12.21.0, for example `npm install --global pnpm@12.21.0`.
+- **Prerequisites:** Git, [Node.js](https://nodejs.org/) 26 (LTS; see `.nvmrc`), [pnpm](https://pnpm.io/) 12.21.0, for example `npm install --global pnpm@12.21.0`, and Docker with Compose.
 - **Install:** `pnpm install --frozen-lockfile`
+- **Infrastructure:** copy `.env.example` to `.env`, set a local `POSTGRES_PASSWORD`, then `docker compose up --detach --wait` starts PostgreSQL with pgvector. Every worktree gets its own database in it.
 - **Check:** `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` — the same commands CI runs.
 
-Infrastructure, environment setup and application commands will be documented as the remaining foundation and application phases land. Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
+Application commands will be documented as the application phases land. Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace); the database and worktree isolation: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
 
 Start with [AGENTS.md](AGENTS.md) and the relevant phase specification. Documentation in `docs/` is binding; behaviour and its documentation change together.
 

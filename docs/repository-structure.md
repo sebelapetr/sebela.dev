@@ -27,7 +27,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── memory/              indexing and retrieval [6]
 ├── scripts/
 │   ├── run-phase.sh         starts the phase loop [0]
-│   ├── harness/             the loop, worktree slots, hooks, GitHub set-up — plain Node, no dependencies [0]
+│   ├── harness/             the loop, worktree slots and databases, hooks, GitHub set-up — plain Node, no dependencies [0]
 │   └── checks/              repository checks: the hard-coded configuration check — plain Node, no dependencies [1]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
@@ -197,20 +197,39 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 | llm-agent | 3003 | 3003 + N × 10 |
 | postgres | 5440 (one shared container) | same port, separate database |
 
-- The worktree setup script takes the lowest free slot, creates a database named after the branch, runs migrations and the demo seed, and writes the ports and database name to the worktree's `.env.local`. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment).
-- Running setup again for an existing worktree keeps its slot and preserves its `.env.local`, including local edits. A missing environment file is generated; an existing file or symbolic link is never overwritten.
-- The cleanup script drops the database and frees the slot.
-- In development each worktree also has its own folder in object storage, created and removed by the same scripts.
+- The worktree setup script (`node scripts/harness/worktree.mjs create`, also run by the `WorktreeCreate` hook) takes the lowest free slot, creates the worktree's own database in the shared Postgres, or reuses it, and then writes the ports and the database name to the worktree's `.env.local`. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment). Migrations and the demo seed are added to setup in phase 2, when they exist.
+- Running setup again for an existing worktree keeps its slot and its database and preserves its `.env.local`, including local edits. A missing environment file is generated; an existing file or symbolic link is never overwritten, so a worktree whose `.env.local` predates its database gets `DATABASE_NAME` only after that file is deleted and setup runs again.
+- The cleanup script (`node scripts/harness/worktree.mjs remove`, also run by the `WorktreeRemove` hook) drops the worktree's database, removes the worktree and frees the slot.
+- From phase 2, in development each worktree also has its own folder in object storage, created and removed by the same scripts.
 - Tests use their own temporary database, so they never touch the data an agent is looking at in the browser.
 - **No port, host or database name is hard-coded** in application code, tests or scripts. Everything reads them from the environment. [The hard-coded configuration check](#the-hard-coded-configuration-check) enforces this locally and in CI.
 - Postgres uses host port 5440 to stay clear of other local Postgres instances.
 
+### The shared Postgres
+
+`compose.yaml` in the repository root defines one service, `postgres`: PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
+
+```bash
+cp .env.example .env               # once; set your own POSTGRES_PASSWORD before the first start
+docker compose up --detach --wait  # returns when the service is healthy
+```
+
+Compose takes every setting from the process environment or from the `.env` file next to `compose.yaml`; a missing one stops it with a message naming the variable. The published address and port are `POSTGRES_HOST` and `POSTGRES_PORT`. `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` (the main checkout's database) take effect when the volume is first initialised. `docker compose down` stops the service and keeps the data; `docker compose down --volumes` deletes it.
+
+### Worktree databases
+
+- **Name.** `databaseName` in `scripts/harness/lib/slots.mjs` derives the name from the worktree's folder name, so a branch and its folder give the same database: `wt_`, the folder name in lower case with every run of other characters turned into `_`, shortened so the whole name fits Postgres's 63-byte limit, then `_` and ten hexadecimal characters of a SHA-256 hash of the folder name. `feat/12-profile-api` becomes `wt_feat_12_profile_api_<hash>`. The hash keeps folders apart that would otherwise normalise alike (`a.b`, `a-b`, `A-B`) and long names that share a beginning. The prefix keeps worktree databases apart from the main checkout's.
+- **Ownership.** The setup script records the owning worktree in the database's comment. Setup reuses a database only when it already belongs to the same worktree, and cleanup drops only such a database. A database with a worktree's name that the scripts did not create for it is refused, never used or dropped. The scripts create or drop nothing but names of the derived form.
+- **How the scripts reach Postgres.** The harness stays plain Node without a database driver: `scripts/harness/lib/databases.mjs` runs `psql` inside the running service through `docker compose exec`, as the service's superuser connected to `POSTGRES_DB`. Compose runs with the process environment, falling back to `.env.example` for settings that are not set. Without a running service, setup and cleanup fail and say how to start it.
+- **Failures.** Setup ensures the database before it writes the environment file, and holds the slot lock meanwhile. When the database cannot be created or reused, a worktree, branch or slot this run added is removed again and the script fails; an existing worktree keeps its slot and its `.env.local`. So a `.env.local` names a database only once it exists. Cleanup refuses uncommitted work as before (unless `--force`) and drops the database before it removes anything else: when the drop fails, the worktree, its environment file and its slot stay as they were and the removal can be repeated. Repeating a completed removal changes nothing. The database is dropped with `WITH (FORCE)`, which ends connections a development server of that worktree still holds.
+- **End-to-end run.** `node scripts/harness/worktree-databases.e2e.mjs` checks the whole lifecycle against real Postgres: healthy startup, two independently usable worktree databases, reuse, refusal of a foreign database, failure without a running service, removal of one without losing the other, and cleanup. It needs Docker, starts its own disposable Compose project from `compose.yaml` on a free host port, works with worktrees of a temporary repository and removes all of it at the end. It runs on demand, not in `pnpm test`.
+
 ### Configuration and environment
 
 - Code reads ports, hosts and database names from the process environment and validates them where it starts. It carries no copy of them, not even as a fallback for an unset variable: a missing setting is an error that names the variable.
-- `.env.example` lists every variable with a comment. Its values are the documented examples — the port scheme of the main checkout above — and placeholders; it never holds credentials or real data. A fixed value that must exist is declared there, or in a declaration such as `compose.yaml`, not in executable code.
-- The main checkout uses the values of `.env.example`. Each worktree gets its own generated `.env.local` with `WORKTREE_SLOT` and the ports of its slot.
-- `node scripts/harness/worktree.mjs create` (and the `WorktreeCreate` hook, which uses it) takes the base ports `WEB_PORT`, `API_PORT`, `MCP_ADMIN_PORT` and `LLM_AGENT_PORT` from the process environment and, for each one that is not set there, from the `.env.example` of the checkout the script belongs to. Each must be a whole number that leaves room for slot 9. A missing or invalid base port stops the script before it creates a worktree, allocates a slot or writes a file.
+- `.env.example` lists every variable with a comment. Its values are the documented examples — the port scheme of the main checkout above, the Postgres address and port, user and database names — and placeholders such as the Postgres password; it never holds credentials or real data. A fixed value that must exist is declared there, or in a declaration such as `compose.yaml`, not in executable code. Installation needs no settings.
+- The main checkout uses the values of `.env.example`; its `.env`, created from that file with the owner's own password, is where Compose reads them. Each worktree gets its own generated `.env.local` with `WORKTREE_SLOT`, the ports of its slot and `DATABASE_NAME`, its own database. The Postgres address, port and user are shared by every worktree.
+- `node scripts/harness/worktree.mjs create` (and the `WorktreeCreate` hook, which uses it) takes the base ports `WEB_PORT`, `API_PORT`, `MCP_ADMIN_PORT` and `LLM_AGENT_PORT` from the process environment and, for each one that is not set there, from the `.env.example` of the checkout the script belongs to. Each must be a whole number that leaves room for slot 9. A missing or invalid base port stops the script before it creates a worktree, allocates a slot or writes a file. The Compose settings it needs to reach the database service come from the same two places.
 - Tests take expected ports from `.env.example` too, so the documented example stays the only place the base ports are written down.
 
 ### The hard-coded configuration check
