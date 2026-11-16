@@ -86,3 +86,9 @@ export type {
   TopicCreate,
   TopicUpdate,
 } from "./catalogs.js";
+export {
+  OrganizationCreateSchema,
+  OrganizationListSchema,
+  OrganizationSchema,
+  OrganizationUpdateSchema,
+} from "./organizations.js";
