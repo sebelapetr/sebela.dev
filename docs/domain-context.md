@@ -6,12 +6,12 @@ The domain model and product rules for this project. Use [`GLOSSARY.md`](../GLOS
 
 A hybrid personal professional site for Petr Šebela. It serves two audiences with one identity:
 
-| Audience | Needs | Path |
-|---|---|---|
-| Client | What can be ordered and whether it fits their problem | Homepage → Services → Contact |
-| Recruiter / hiring manager | Seniority, stack, recent work, CV | Homepage → Experience → CV |
-| Technical evaluator | Depth and how the work is done | Projects, case studies, this repository |
-| AI agent | Structured, trustworthy facts | Public MCP server |
+| Audience                   | Needs                                                 | Path                                    |
+| -------------------------- | ----------------------------------------------------- | --------------------------------------- |
+| Client                     | What can be ordered and whether it fits their problem | Homepage → Services → Contact           |
+| Recruiter / hiring manager | Seniority, stack, recent work, CV                     | Homepage → Experience → CV              |
+| Technical evaluator        | Depth and how the work is done                        | Projects, case studies, this repository |
+| AI agent                   | Structured, trustworthy facts                         | Public MCP server                       |
 
 Positioning: software engineer focused on AI systems, automation and modern software, available for selected projects and career opportunities.
 
@@ -21,21 +21,21 @@ The site answers, in order: who he is, what he can do, what he has built, what h
 
 Draft; the exact schema is defined in the phase 2 PRD.
 
-| Entity | Meaning |
-|---|---|
-| Person | The site owner: name, headline, short bio, location, contacts, availability, photo. One record |
-| Organization | A company or client |
-| Experience | A role at an organization over a period; its kind is main job, side project or own business |
-| Project | Something delivered within an experience, described as problem → what was done → result; may be selected for the homepage |
-| Case study | The long-form text for a project, including the person's role in it |
-| Exploration | Independent R&D outside the timeline: unreleased side work and experiments |
-| Service | Something a client can order: who it is for, what they get, and the evidence — projects, explorations, links |
-| Technology | A tool or language; see tiers below |
-| Topic | A shared subject (for example RAG, MCP, agents) that links the profile to the AI Roadmap |
-| Education | Schools, courses, certifications, milestones |
-| Testimonial | A quote from a client or colleague, shown with the experience it belongs to |
-| Current focus | What is being built right now |
-| Media | An uploaded file — an image or a PDF such as the CV: storage key, type, dimensions, alt text |
+| Entity        | Meaning                                                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Person        | The site owner: name, headline, short bio, location, contacts, availability, photo. One record                                      |
+| Organization  | A company or client: name, website, description. Experiences refer to it, so an organization cannot be deleted while one still does |
+| Experience    | A role at an organization over a period; its kind is main job, side project or own business                                         |
+| Project       | Something delivered within an experience, described as problem → what was done → result; may be selected for the homepage           |
+| Case study    | The long-form text for a project, including the person's role in it                                                                 |
+| Exploration   | Independent R&D outside the timeline: unreleased side work and experiments                                                          |
+| Service       | Something a client can order: who it is for, what they get, and the evidence — projects, explorations, links                        |
+| Technology    | A tool or language; see tiers below                                                                                                 |
+| Topic         | A shared subject (for example RAG, MCP, agents) that links the profile to the AI Roadmap                                            |
+| Education     | Schools, courses, certifications, milestones                                                                                        |
+| Testimonial   | A quote from a client or colleague, shown with the experience it belongs to                                                         |
+| Current focus | What is being built right now                                                                                                       |
+| Media         | An uploaded file — an image or a PDF such as the CV: storage key, type, dimensions, alt text                                        |
 
 ### Experience, project, exploration
 
@@ -49,20 +49,20 @@ These three are deliberately separate:
 
 Every exploration carries one of:
 
-| Status | Meaning |
-|---|---|
-| Built | Implemented and working |
-| Tested | Tried out or evaluated hands-on |
-| Designed | Planned or architected only |
+| Status   | Meaning                         |
+| -------- | ------------------------------- |
+| Built    | Implemented and working         |
+| Tested   | Tried out or evaluated hands-on |
+| Designed | Planned or architected only     |
 
 The Experience page and print-friendly CV may show all three statuses in their separate R&D sections. Every entry retains a visible text status, including in print and chat blocks. Designed work is explicitly an unimplemented design, never evidence of delivered work or hands-on experience. Neither a page nor the chatbot may present a status more strongly than stored. Explorations never become career experiences or delivered client projects through presentation.
 
 ### Technology tiers
 
-| Tier | Presentation |
-|---|---|
-| Primary | Shown prominently, in two groups: **core** (four to six key technologies, with logos) and **AI engineering focus** (plain text — several are concepts, not products) |
-| Secondary | Listed as plain text only, in a collapsed "other technologies and tools" list |
+| Tier      | Presentation                                                                                                                                                         |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary   | Shown prominently, in two groups: **core** (four to six key technologies, with logos) and **AI engineering focus** (plain text — several are concepts, not products) |
+| Secondary | Listed as plain text only, in a collapsed "other technologies and tools" list                                                                                        |
 
 The point is that a task tracker never looks as important as the database or the main language.
 
