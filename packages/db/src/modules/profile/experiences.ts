@@ -80,7 +80,7 @@ async function loadExperiences(
   for (const { experienceId, technology } of links) {
     linked.set(experienceId, [...(linked.get(experienceId) ?? []), technology]);
   }
-  return rows.map((row) => ({ ...row, technologies: linked.get(row.id) ?? [] }));
+  return rows.map((row) => ({ ...row, technologies: linked.get(row.id) ?? [], projects: [] }));
 }
 
 async function loadExperience(db: Executor, id: string): Promise<ExperienceRecord> {
