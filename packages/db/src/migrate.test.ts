@@ -48,6 +48,8 @@ describe("migrateDatabase", () => {
       "profile.persons",
       "profile.project_technologies",
       "profile.projects",
+      "profile.service_evidence",
+      "profile.services",
       "profile.technologies",
       "profile.topics",
     ]);
