@@ -2,7 +2,7 @@
 
 |            |                                                                                                                                                          |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Draft, awaiting approval                                                                                                                                 |
+| Status     | Approved in conversation                                                                                                                                 |
 | Date       | 2026-11-16                                                                                                                                               |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                                               |
 | Depends on | Phases 2 and 3                                                                                                                                           |
@@ -220,6 +220,7 @@ The owner's existing `diary-entry` skill writes straight into the old applicatio
 
 ## Further Notes
 
+- The owner approved the [seven-issue breakdown](issues.md): one HITL overview implementation/visual gate and six AFK slices. Implementation waits for the prerequisite owner merges; the breakdown does not approve the resulting UI.
 - **HITL:** the side-by-side comparison with the old application is reviewed by the owner for the roadmap overview before the remaining pages are carried over.
 - The old application has uncommitted changes in its working tree and its latest dump is from 2026-10-05. Before the mapper is written, a fresh dump is taken, and the working tree — not the last commit — is the reference for how pages look.
 - The current data: 10 areas, 53 modules, 137 resources.
