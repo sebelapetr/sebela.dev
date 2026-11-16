@@ -79,6 +79,10 @@ describe("MediaUploadSchema", () => {
     expect(MediaUploadSchema.safeParse({ file: "binary" }).success).toBe(true);
     expect(MediaUploadSchema.safeParse({ altText: "A desk." }).success).toBe(false);
   });
+
+  it("refuses fields it does not document, such as a caller-chosen key", () => {
+    expect(MediaUploadSchema.safeParse({ file: "binary", key: "../x" }).success).toBe(false);
+  });
 });
 
 describe("MediaIdParamsSchema", () => {

@@ -21,7 +21,10 @@ interface Document {
   openapi: string;
   paths: Record<string, Record<string, Operation>>;
   components: {
-    schemas: Record<string, { properties?: Record<string, unknown>; required?: string[] }>;
+    schemas: Record<
+      string,
+      { properties?: Record<string, unknown>; required?: string[]; additionalProperties?: unknown }
+    >;
     securitySchemes: Record<string, unknown>;
   };
 }
@@ -511,6 +514,7 @@ describe("the OpenAPI document and the reference", () => {
     expect(operation("POST", "/v1/media").requestBody?.content).toEqual({
       "multipart/form-data": { schema: { $ref: "#/components/schemas/MediaUpload" } },
     });
+    expect(document.components.schemas["MediaUpload"]?.additionalProperties).toBe(false);
     expect(operation("POST", "/v1/media").security).toEqual([{ bearerAuth: [] }]);
     expect(operation("POST", "/v1/media").responses["201"]?.headers).toHaveProperty("Location");
     expect(Object.keys(operation("POST", "/v1/media").responses)).toEqual(

@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { MediaListSchema, MediaSchema, type Media } from "@sebela/contracts";
+import { MediaListSchema, MediaSchema, type ErrorResponse, type Media } from "@sebela/contracts";
 import { samplePdf, samplePng, sampleJpeg, sampleWebp } from "@sebela/services/testing";
 
 import type { WriteEvent } from "./app.js";
@@ -254,6 +254,18 @@ describe("the media API", () => {
 
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ error: { code: "validation_failed" } });
+      await expectNothingStored();
+    });
+
+    it("refuses undocumented form fields, such as a caller-chosen key, storing nothing", async () => {
+      for (const fields of [{ key: "../x" }, { mediaType: "application/pdf" }]) {
+        const response = await request("/v1/media", "POST", upload(png, fields, auth));
+
+        expect(response.status).toBe(400);
+        const body = (await response.json()) as ErrorResponse;
+        expect(body.error.code).toBe("validation_failed");
+        expect(JSON.stringify(body.error.fields)).toContain(Object.keys(fields)[0]);
+      }
       await expectNothingStored();
     });
 
