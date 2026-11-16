@@ -2,7 +2,7 @@ import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { technologyColumns, topicColumns } from "./catalogs.js";
-import { breaksCheck } from "./database-errors.js";
+import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import { type Executor, now, technologyIds, topicIds, WriteRefused } from "./relations.js";
 import {
   explorations,
@@ -136,7 +136,8 @@ function scalarChanges(
  * transaction, so an exploration and its links are stored completely or not at all. Slugs are
  * unique in the database, the status is an enum and the period rule a check constraint, an update
  * locks its exploration so concurrent replacements of the links serialize, and the links cascade
- * only with their exploration. An exploration refers to no experience and no project.
+ * only with their exploration. An exploration refers to no experience and no project; a service
+ * that names it as evidence keeps it from being deleted.
  */
 export function createExplorationPersistence(db: NodePgDatabase): ExplorationPersistence {
   return {
@@ -187,11 +188,16 @@ export function createExplorationPersistence(db: NodePgDatabase): ExplorationPer
       );
     },
     async deleteExploration(slug) {
-      const rows = await db
-        .delete(explorations)
-        .where(eq(explorations.slug, slug))
-        .returning({ id: explorations.id });
-      return rows.length > 0 ? { ok: true } : { ok: false, reason: "not_found" };
+      try {
+        const rows = await db
+          .delete(explorations)
+          .where(eq(explorations.slug, slug))
+          .returning({ id: explorations.id });
+        return rows.length > 0 ? { ok: true } : { ok: false, reason: "not_found" };
+      } catch (error) {
+        if (isStillReferenced(error)) return { ok: false, reason: "referenced" };
+        throw error;
+      }
     },
   };
 }

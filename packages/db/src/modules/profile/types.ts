@@ -313,8 +313,8 @@ export interface ProjectPersistence {
   ): Promise<UpdateProjectResult>;
   /**
    * Deletes the project and its technology links, never its experience or technologies;
-   * `not_found` when there is none, `referenced` (and nothing deleted) while another record still
-   * refers to it.
+   * `not_found` when there is none, `referenced` (and nothing deleted) while a case study or a
+   * service naming it as evidence still refers to it.
    */
   deleteProject(slug: string): Promise<DeleteProjectResult>;
 }
@@ -430,7 +430,8 @@ export type UpdateExplorationResult =
   | { ok: false; reason: "not_found" }
   | ExplorationWriteFailure;
 
-export type DeleteExplorationResult = { ok: true } | { ok: false; reason: "not_found" };
+export type DeleteExplorationResult =
+  { ok: true } | { ok: false; reason: "not_found" | "referenced" };
 
 /**
  * Persistence operations of the explorations, addressed by slug. Each write of an exploration and
@@ -456,7 +457,7 @@ export interface ExplorationPersistence {
   ): Promise<UpdateExplorationResult>;
   /**
    * Deletes the exploration and its links, never the technologies or topics; `not_found` when
-   * there is none.
+   * there is none, `referenced` (and nothing deleted) while a service names it as evidence.
    */
   deleteExploration(slug: string): Promise<DeleteExplorationResult>;
 }

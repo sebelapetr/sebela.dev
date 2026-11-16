@@ -10,6 +10,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -314,5 +315,72 @@ export const explorationTopics = profileSchema.table(
   (table) => [
     primaryKey({ columns: [table.explorationId, table.topicId] }),
     unique("exploration_topics_position_unique").on(table.explorationId, table.position),
+  ],
+);
+
+/** A service: something a client can order. Slugs are unique; the order is by position. */
+export const services = profileSchema.table(
+  "services",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    summary: text("summary").notNull(),
+    audience: text("audience").notNull(),
+    deliverable: text("deliverable").notNull(),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("services_position_not_negative", sql`${table.position} >= 0`)],
+);
+
+/** What a piece of service evidence points at. */
+export const serviceEvidenceKind = profileSchema.enum("service_evidence_kind", [
+  "project",
+  "exploration",
+  "link",
+]);
+
+/**
+ * The ordered evidence of a service. Each row is one kind and sets exactly that kind's columns: a
+ * project, an exploration, or a link label and site path. The rows disappear with their service;
+ * a project or exploration that a row names cannot be deleted. Each project and exploration
+ * appears at most once per service.
+ */
+export const serviceEvidence = profileSchema.table(
+  "service_evidence",
+  {
+    serviceId: uuid("service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    kind: serviceEvidenceKind("kind").notNull(),
+    projectId: uuid("project_id").references(() => projects.id),
+    explorationId: uuid("exploration_id").references(() => explorations.id),
+    linkLabel: text("link_label"),
+    linkPath: text("link_path"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.serviceId, table.position] }),
+    index("service_evidence_project_id_index").on(table.projectId),
+    index("service_evidence_exploration_id_index").on(table.explorationId),
+    uniqueIndex("service_evidence_project_unique")
+      .on(table.serviceId, table.projectId)
+      .where(sql`${table.projectId} IS NOT NULL`),
+    uniqueIndex("service_evidence_exploration_unique")
+      .on(table.serviceId, table.explorationId)
+      .where(sql`${table.explorationId} IS NOT NULL`),
+    check(
+      "service_evidence_matches_kind",
+      sql`CASE ${table.kind}
+        WHEN 'project' THEN ${table.projectId} IS NOT NULL AND ${table.explorationId} IS NULL
+          AND ${table.linkLabel} IS NULL AND ${table.linkPath} IS NULL
+        WHEN 'exploration' THEN ${table.explorationId} IS NOT NULL AND ${table.projectId} IS NULL
+          AND ${table.linkLabel} IS NULL AND ${table.linkPath} IS NULL
+        ELSE ${table.linkLabel} IS NOT NULL AND ${table.linkPath} IS NOT NULL
+          AND ${table.projectId} IS NULL AND ${table.explorationId} IS NULL
+      END`,
+    ),
   ],
 );

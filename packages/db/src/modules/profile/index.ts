@@ -156,7 +156,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createExplorationPersistence(db),
     ...createProjectPersistence(db),
     ...createCaseStudyPersistence(db),
-    ...createServicePersistence(),
+    ...createServicePersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
