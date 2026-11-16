@@ -20,6 +20,10 @@ import { databaseName } from "./lib/slots.mjs";
 import { createWorktree, listWorktrees, loadSettings, removeWorktree } from "./worktree.mjs";
 
 const CHECKOUT_ROOT = path.join(import.meta.dirname, "..");
+const ENV_FILE = ".env.local";
+// A temporary database a test run leaves behind, deliberately not of the worktree form: cleanup
+// drops whatever the worktree's role owns, whatever its name.
+const LEFTOVER = `leftover_${process.pid}`;
 
 // The settings of this run: the documented ones, a project of its own and any free host port.
 const base = loadSettings(process.env);
@@ -70,6 +74,30 @@ function sql(database, statement) {
   ).trim();
 }
 
+// Runs SQL in a database as a worktree's role, the way the worktree's own code connects: over the
+// network with its password, not through the trusted local socket. The password reaches psql on
+// standard input, never as an argument.
+function sqlAs({ DATABASE_USER: user, DATABASE_PASSWORD: password }, database, statement) {
+  return execFileSync(
+    "docker",
+    [
+      "compose",
+      "--project-directory",
+      CHECKOUT_ROOT,
+      "exec",
+      "-T",
+      "postgres",
+      "sh",
+      "-c",
+      'IFS= read -r PGPASSWORD; export PGPASSWORD; exec psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$(hostname -i | cut -d " " -f 1)" -U "$1" -d "$2"',
+      "sh",
+      user,
+      database,
+    ],
+    { env, input: `${password}\n${statement}`, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+  ).trim();
+}
+
 const databaseExists = (name) =>
   sql(env.POSTGRES_DB, `SELECT count(*) FROM pg_database WHERE datname = '${name}';`) === "1";
 
@@ -78,6 +106,11 @@ const worktreeDatabases = () =>
     env.POSTGRES_DB,
     "SELECT datname FROM pg_database WHERE datname LIKE 'wt\\_%' ORDER BY datname;",
   )
+    .split("\n")
+    .filter(Boolean);
+
+const worktreeRoles = () =>
+  sql(env.POSTGRES_DB, "SELECT rolname FROM pg_roles WHERE rolname LIKE 'wt\\_%' ORDER BY rolname;")
     .split("\n")
     .filter(Boolean);
 
@@ -112,8 +145,12 @@ function temporaryRepository() {
 }
 
 // The database a worktree's code would use, read the way an app loads its environment file.
-const configuredDatabase = (worktree) =>
-  parseEnv(fs.readFileSync(path.join(worktree.path, ".env.local"), "utf8")).DATABASE_NAME;
+const envFile = (worktree) => path.join(worktree.path, ENV_FILE);
+const settingsOf = (worktree) => parseEnv(fs.readFileSync(envFile(worktree), "utf8"));
+const configuredDatabase = (worktree) => settingsOf(worktree).DATABASE_NAME;
+// Runs SQL in the worktree's own database with the credentials of its environment file.
+const sqlIn = (worktree, statement) =>
+  sqlAs(settingsOf(worktree), configuredDatabase(worktree), statement);
 
 async function step(description, fn) {
   try {
@@ -156,24 +193,116 @@ try {
     assert.deepEqual(worktreeDatabases(), [first.database, second.database].sort());
   });
 
-  await step("both databases are usable independently", () => {
+  await step("each worktree has its own role with the documented attributes", () => {
     for (const worktree of [first, second]) {
-      const database = configuredDatabase(worktree);
-      sql(database, `CREATE TABLE note (body text); INSERT INTO note VALUES ('${worktree.name}');`);
+      const settings = settingsOf(worktree);
+      assert.equal(settings.DATABASE_USER, worktree.database);
+      assert.match(settings.DATABASE_PASSWORD, /^[A-Za-z0-9_-]{43,}$/);
+      assert.equal(
+        sql(
+          env.POSTGRES_DB,
+          `SELECT concat_ws(',', rolcanlogin, rolcreatedb, rolsuper, rolcreaterole) FROM pg_roles WHERE rolname = '${settings.DATABASE_USER}';`,
+        ),
+        "t,t,f,f",
+      );
+      assert.equal(
+        sql(
+          env.POSTGRES_DB,
+          `SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '${worktree.database}';`,
+        ),
+        settings.DATABASE_USER,
+      );
+      assert.equal(
+        sql(
+          env.POSTGRES_DB,
+          `SELECT count(*) FROM pg_database d, aclexplode(coalesce(d.datacl, acldefault('d', d.datdba))) a WHERE d.datname = '${worktree.database}' AND a.grantee = 0 AND a.privilege_type = 'CONNECT';`,
+        ),
+        "0",
+      );
     }
-    assert.equal(
-      sql(configuredDatabase(first), "SELECT string_agg(body, ',') FROM note;"),
-      first.name,
+    assert.notEqual(settingsOf(first).DATABASE_PASSWORD, settingsOf(second).DATABASE_PASSWORD);
+    assert.deepEqual(worktreeRoles(), [first.database, second.database].sort());
+  });
+
+  await step("each worktree connects with its own credentials to its own database", () => {
+    for (const worktree of [first, second]) {
+      sqlIn(
+        worktree,
+        `CREATE TABLE note (body text); INSERT INTO note VALUES ('${worktree.name}');`,
+      );
+    }
+    assert.equal(sqlIn(first, "SELECT string_agg(body, ',') FROM note;"), first.name);
+    assert.equal(sqlIn(second, "SELECT string_agg(body, ',') FROM note;"), second.name);
+  });
+
+  await step("a worktree cannot connect to the other's database", () => {
+    assert.throws(
+      () => sqlAs(settingsOf(first), second.database, "SELECT 1;"),
+      /permission denied for database/,
     );
-    assert.equal(
-      sql(configuredDatabase(second), "SELECT string_agg(body, ',') FROM note;"),
-      second.name,
+    assert.throws(
+      () => sqlAs(settingsOf(second), first.database, "SELECT 1;"),
+      /permission denied for database/,
     );
   });
 
-  await step("creating a worktree again reuses its database and keeps its data", () => {
+  await step("a wrong password is refused", () => {
+    const wrong = { ...settingsOf(first), DATABASE_PASSWORD: settingsOf(second).DATABASE_PASSWORD };
+    assert.throws(
+      () => sqlAs(wrong, first.database, "SELECT 1;"),
+      /password authentication failed/,
+    );
+  });
+
+  await step("a worktree can create and drop a temporary database", () => {
+    sqlIn(first, `CREATE DATABASE "${first.database}_tmp_dropped";`);
+    assert.ok(databaseExists(`${first.database}_tmp_dropped`));
+    sqlIn(first, `DROP DATABASE "${first.database}_tmp_dropped";`);
+    assert.equal(databaseExists(`${first.database}_tmp_dropped`), false);
+    // Left behind on purpose: cleanup removes temporary databases the role still owns.
+    sqlIn(first, `CREATE DATABASE "${LEFTOVER}";`);
+  });
+
+  await step("creating a worktree again reuses its database and keeps its credentials", () => {
+    const settings = fs.readFileSync(envFile(first), "utf8");
     assert.deepEqual(create("feat/1-first"), first);
-    assert.equal(sql(first.database, "SELECT string_agg(body, ',') FROM note;"), first.name);
+    assert.equal(fs.readFileSync(envFile(first), "utf8"), settings);
+    assert.equal(sqlIn(first, "SELECT string_agg(body, ',') FROM note;"), first.name);
+  });
+
+  await step("regenerating a missing environment file restores working credentials", () => {
+    const previous = settingsOf(first);
+    fs.rmSync(envFile(first));
+    create("feat/1-first");
+    assert.notEqual(settingsOf(first).DATABASE_PASSWORD, previous.DATABASE_PASSWORD);
+    assert.equal(sqlIn(first, "SELECT string_agg(body, ',') FROM note;"), first.name);
+    assert.throws(() => sqlAs(previous, first.database, "SELECT 1;"), /password authentication/);
+  });
+
+  await step("the command line never prints the password", () => {
+    const cli = (...args) =>
+      execFileSync(process.execPath, [path.join(import.meta.dirname, "worktree.mjs"), ...args], {
+        cwd: mainRoot,
+        env,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    const created = cli("create", "feat/5-command-line");
+    const worktree = { path: created.trim().split("\n").at(-1) };
+    const { DATABASE_PASSWORD } = settingsOf(worktree);
+    assert.equal(created.includes(DATABASE_PASSWORD), false);
+    assert.equal(cli("remove", "feat/5-command-line").includes(DATABASE_PASSWORD), false);
+  });
+
+  await step("a role the scripts did not create for the worktree is refused and kept", () => {
+    const foreign = databaseName("feat/6-foreign-role");
+    sql(env.POSTGRES_DB, `CREATE ROLE "${foreign}" LOGIN;`);
+    assert.throws(() => create("feat/6-foreign-role"), /refusing/);
+    assert.equal(fs.existsSync(path.join(mainRoot, ".worktrees", "feat-6-foreign-role")), false);
+    assert.equal(databaseExists(foreign), false);
+    assert.throws(() => remove("feat/6-foreign-role"), /refusing/);
+    assert.ok(worktreeRoles().includes(foreign));
+    sql(env.POSTGRES_DB, `DROP ROLE "${foreign}";`);
   });
 
   await step("a database the scripts did not create for the worktree is refused and kept", () => {
@@ -185,6 +314,23 @@ try {
     assert.ok(databaseExists(foreign));
     sql(env.POSTGRES_DB, `DROP DATABASE "${foreign}";`);
   });
+
+  await step(
+    "a database another worktree's role planted for a worktree is refused and kept",
+    () => {
+      // A worktree role may create databases and comment on those it owns, so the comment alone
+      // proves nothing: the owner of the database decides.
+      const planted = databaseName("feat/7-planted");
+      sqlIn(first, `CREATE DATABASE "${planted}";`);
+      sqlIn(first, `COMMENT ON DATABASE "${planted}" IS 'sebela worktree:feat-7-planted';`);
+      assert.throws(() => create("feat/7-planted"), /refusing/);
+      assert.equal(fs.existsSync(path.join(mainRoot, ".worktrees", "feat-7-planted")), false);
+      assert.equal(worktreeRoles().includes(planted), false);
+      assert.throws(() => remove("feat/7-planted"), /refusing/);
+      assert.ok(databaseExists(planted));
+      sql(env.POSTGRES_DB, `DROP DATABASE "${planted}";`);
+    },
+  );
 
   await step("without a running service no worktree is created and no slot is held", () => {
     compose("stop", "postgres");
@@ -202,19 +348,26 @@ try {
     }
   });
 
-  await step("removing one worktree drops its database and keeps the other's data", () => {
+  await step("removing one worktree drops its databases and role, and keeps the other's", () => {
     remove("feat/1-first");
     assert.equal(fs.existsSync(first.path), false);
     assert.equal(databaseExists(first.database), false);
-    assert.equal(sql(second.database, "SELECT string_agg(body, ',') FROM note;"), second.name);
+    assert.equal(databaseExists(LEFTOVER), false);
+    assert.deepEqual(worktreeRoles(), [second.database]);
+    assert.equal(sqlIn(second, "SELECT string_agg(body, ',') FROM note;"), second.name);
     assert.deepEqual(listWorktrees({ mainRoot }), [{ slot: second.slot, name: second.name }]);
   });
 
-  await step("removing the other leaves no worktree database and no slot", () => {
+  await step("removing the other leaves no worktree role, database or slot", () => {
     remove(second.path);
     assert.deepEqual(worktreeDatabases(), []);
+    assert.deepEqual(worktreeRoles(), []);
     assert.deepEqual(listWorktrees({ mainRoot }), []);
     assert.ok(databaseExists(env.POSTGRES_DB));
+  });
+
+  await step("no password reached the server log", () => {
+    assert.doesNotMatch(compose("logs", "postgres"), /PASSWORD\s+'(?!SCRAM-SHA-256\$)/i);
   });
 } catch (error) {
   failed = true;
