@@ -33,3 +33,4 @@ Date: YYYY-MM-DD
 | 0012 | [Separate AI runtime, public MCP and shared Python agent package](0012-ai-runtime-and-shared-agent-package.md) |
 | 0013 | [The harness lives in a top-level `harness/` folder](0013-harness-at-the-top-level.md)                         |
 | 0014 | [The API client is generated with openapi-typescript and openapi-fetch](0014-generated-api-client.md)          |
+| 0015 | [A caller-scoped unit of work for loading a seed](0015-caller-scoped-unit-of-work-for-the-seed.md)             |
