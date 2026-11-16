@@ -359,3 +359,99 @@ export interface CaseStudyPersistence {
   /** Deletes only the case study, never its project; `not_found` when there is none. */
   deleteCaseStudy(project: string): Promise<DeleteCaseStudyResult>;
 }
+
+/** How far an exploration got, from the strongest claim to the weakest. */
+export type ExplorationStatus = "built" | "tested" | "designed";
+
+/** Writable scalar fields of an exploration. The slug is fixed when it is created. */
+export interface ExplorationFields {
+  name: string;
+  /** Markdown. */
+  summary: string;
+  /** Stored and returned exactly as written. */
+  status: ExplorationStatus;
+  /** Plain-text concepts in their intended order. */
+  concepts: string[];
+  /** Calendar date, `YYYY-MM-DD`. */
+  startedOn: string;
+  /** Calendar date, `YYYY-MM-DD`, not before the start; `null` marks an ongoing exploration. */
+  endedOn: string | null;
+  /** Ascending order of the explorations; ties are ordered by slug. */
+  position: number;
+}
+
+/** Relations of an exploration as written: slugs of existing catalog records. */
+export interface ExplorationRelations {
+  /** Slugs of the technologies, each once, in their intended order. */
+  technologies: string[];
+  /** Slugs of the topics, each once, in their intended order. */
+  topics: string[];
+}
+
+/**
+ * An exploration with its technologies and topics resolved in link order. It refers to no
+ * experience and no project.
+ */
+export interface ExplorationRecord extends ExplorationFields {
+  id: string;
+  slug: string;
+  technologies: TechnologyRecord[];
+  topics: TopicRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update of an exploration wrote nothing, besides `conflict` and `not_found`:
+ *
+ * - `unknown_technologies` / `unknown_topics`: some slugs exist nowhere; `slugs` lists them.
+ * - `repeated_technologies` / `repeated_topics`: a slug is given more than once.
+ * - `invalid_period`: the end would be before the start.
+ */
+export type ExplorationWriteFailure =
+  | { ok: false; reason: "unknown_technologies"; slugs: string[] }
+  | { ok: false; reason: "repeated_technologies" }
+  | { ok: false; reason: "unknown_topics"; slugs: string[] }
+  | { ok: false; reason: "repeated_topics" }
+  | { ok: false; reason: "invalid_period" };
+
+export type CreateExplorationResult =
+  | { ok: true; exploration: ExplorationRecord }
+  | { ok: false; reason: "conflict" }
+  | ExplorationWriteFailure;
+
+export type UpdateExplorationResult =
+  | { ok: true; exploration: ExplorationRecord }
+  | { ok: false; reason: "not_found" }
+  | ExplorationWriteFailure;
+
+export type DeleteExplorationResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/**
+ * Persistence operations of the explorations, addressed by slug. Each write of an exploration and
+ * its technology and topic links is one transaction: it is stored completely or not at all.
+ */
+export interface ExplorationPersistence {
+  /** Every exploration, ordered by position, then slug. */
+  listExplorations(): Promise<ExplorationRecord[]>;
+  /** The exploration with the slug, or `null`. */
+  findExploration(slug: string): Promise<ExplorationRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `ExplorationWriteFailure`. */
+  createExploration(
+    fields: ExplorationFields & ExplorationRelations & { slug: string },
+  ): Promise<CreateExplorationResult>;
+  /**
+   * Changes only the given fields. Given `technologies` or `topics` replace every link of that
+   * kind; omitted ones keep them. `not_found` when there is no such exploration; see
+   * `ExplorationWriteFailure`.
+   */
+  updateExploration(
+    slug: string,
+    changes: Partial<ExplorationFields & ExplorationRelations>,
+  ): Promise<UpdateExplorationResult>;
+  /**
+   * Deletes the exploration and its links, never the technologies or topics; `not_found` when
+   * there is none.
+   */
+  deleteExploration(slug: string): Promise<DeleteExplorationResult>;
+}
