@@ -1,12 +1,12 @@
 # Phase 2 — API and database
 
-| | |
-|---|---|
-| Status | Approved |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Depends on | Phase 1 |
-| Result | The profile domain, complete on the backend: database, services, storage, an HTTP API with an OpenAPI contract, a generated typed client and a demo seed. No UI. |
+|            |                                                                                                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | Approved                                                                                                                                                         |
+| Date       | 2026-11-15                                                                                                                                                       |
+| Parent     | `.plan/00-overview/prd.md`                                                                                                                                       |
+| Depends on | Phase 1                                                                                                                                                          |
+| Result     | The profile domain, complete on the backend: database, services, storage, an HTTP API with an OpenAPI contract, a generated typed client and a demo seed. No UI. |
 
 ## Problem Statement
 
@@ -74,17 +74,17 @@ After this phase the website can be built against a running, documented API.
 
 ### Modules
 
-| Module | Lives in | Interface |
-|---|---|---|
-| Schema and migrations | `db` | The `profile` tables and their relations |
-| Repositories | `db` | Read and write operations per entity; the only place with SQL |
-| Profile services | `services` | Operations on entities; assembling the CV |
-| Storage | `services` | Store a file, delete it, give its public address; two drivers behind one interface |
-| Authentication | `api` and `services` | Middleware on the private route group; commands to create, list and revoke API keys |
-| HTTP API | `api` | Routes per entity, one error shape, the OpenAPI document |
-| Contracts | `contracts` | Zod schemas and types for every request and response |
-| Generated client | `api-client` | A typed client produced from the OpenAPI document |
-| Seed | `db` and `services` | One command that loads a seed folder from any path |
+| Module                | Lives in             | Interface                                                                           |
+| --------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| Schema and migrations | `db`                 | The `profile` tables and their relations                                            |
+| Repositories          | `db`                 | Read and write operations per entity; the only place with SQL                       |
+| Profile services      | `services`           | Operations on entities; assembling the CV                                           |
+| Storage               | `services`           | Store a file, delete it, give its public address; two drivers behind one interface  |
+| Authentication        | `api` and `services` | Middleware on the private route group; commands to create, list and revoke API keys |
+| HTTP API              | `api`                | Routes per entity, one error shape, the OpenAPI document                            |
+| Contracts             | `contracts`          | Zod schemas and types for every request and response                                |
+| Generated client      | `api-client`         | A typed client produced from the OpenAPI document                                   |
+| Seed                  | `db` and `services`  | One command that loads a seed folder from any path                                  |
 
 Storage is the deepest of these: three operations hide the driver, the key layout, the per-environment prefix and the public address.
 
@@ -152,21 +152,21 @@ The layout, rationale and agent guidance are established in [PR #62](https://git
 
 Every table has an identifier, timestamps and, where order matters, a position. Records that are addressed from outside have a unique slug. Longer texts are markdown.
 
-| Entity | Holds | Relations |
-|---|---|---|
-| Person | Name, headline, short bio, long bio, location, email, links, availability wording, date the career started | Photo (media); current CV file (media). One record |
-| Organization | Name, website, description | Logo (media) |
-| Experience | Title, kind (main job, side project, own business), start and end (open end means current), summary, responsibilities, whether it appears in the CV | Organization; technologies; projects |
-| Project | Name, summary, problem, what was done, result, period, links, whether it is selected for the homepage | The experience it belongs to; cover (media); technologies |
-| Case study | Long-form body, the person's role | One per project |
-| Exploration | Name, summary, status (built, tested, designed), list of concepts, period | Technologies; topics |
-| Service | Name, summary, who it is for, what the client gets | Evidence: projects, explorations, and links to other parts of the site |
-| Technology | Name, tier (primary, secondary), group for primary ones (core, AI engineering focus), optional logo key | — |
-| Topic | Name | Links to the AI Roadmap in phase 4 |
-| Education | Kind (school, course, certification, milestone), title, institution, period, description | — |
-| Testimonial | Quote, author, author's role | The experience it belongs to |
-| Current focus | Title, description, link | Project (optional); topics |
-| Media | Storage key, type, size, dimensions (images), alt text | Referenced by person, organization, project. Images and PDF documents |
+| Entity        | Holds                                                                                                                                               | Relations                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Person        | Name, headline, short bio, long bio, location, email, links, availability wording, date the career started                                          | Photo (media); current CV file (media). One record                     |
+| Organization  | Name, website, description                                                                                                                          | Logo (media)                                                           |
+| Experience    | Title, kind (main job, side project, own business), start and end (open end means current), summary, responsibilities, whether it appears in the CV | Organization; technologies; projects                                   |
+| Project       | Name, summary, problem, what was done, result, period, links, whether it is selected for the homepage                                               | The experience it belongs to; cover (media); technologies              |
+| Case study    | Long-form body, the person's role                                                                                                                   | One per project                                                        |
+| Exploration   | Name, summary, status (built, tested, designed), list of concepts, period                                                                           | Technologies; topics                                                   |
+| Service       | Name, summary, who it is for, what the client gets                                                                                                  | Evidence: projects, explorations, and links to other parts of the site |
+| Technology    | Name, tier (primary, secondary), group for primary ones (core, AI engineering focus), optional logo key                                             | —                                                                      |
+| Topic         | Name                                                                                                                                                | Links to the AI Roadmap in phase 4                                     |
+| Education     | Kind (school, course, certification, milestone), title, institution, period, description                                                            | —                                                                      |
+| Testimonial   | Quote, author, author's role                                                                                                                        | The experience it belongs to                                           |
+| Current focus | Title, description, link                                                                                                                            | Project (optional); topics                                             |
+| Media         | Storage key, type, size, dimensions (images), alt text                                                                                              | Referenced by person, organization, project. Images and PDF documents  |
 
 - The logo of a technology is a key into a fixed set of static assets shipped with the website, not an uploaded file.
 - There is no visibility field anywhere. Everything stored is public content.
@@ -239,6 +239,7 @@ Every table has an identifier, timestamps and, where order matters, a position. 
 ### Environments and tooling
 
 - Migrations run as a dedicated step, never from the API on start-up.
+- **Database credentials per worktree.** Phase 1 creates each worktree's database through `psql` inside the Postgres service, so the harness never needs a password; the API and its tests connect from their own process and do. The worktree setup script therefore also creates a database role per worktree, named like its database, with a random password: `LOGIN`, `CREATEDB` (tests create their own temporary databases), no superuser, no role creation. The role owns the worktree's database, and `CONNECT` on it is revoked from `PUBLIC`, so one worktree cannot open another's database. Setup writes `DATABASE_USER` and `DATABASE_PASSWORD` next to `DATABASE_NAME` into the worktree's `.env.local` and never prints them; cleanup drops the worktree's databases, including temporary ones its role created, and then the role. The main checkout sets its own `DATABASE_USER` and `DATABASE_PASSWORD` in `.env`; `.env.example` documents them as placeholders. Code connects with `POSTGRES_HOST`, `POSTGRES_PORT`, `DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD` from the environment. The superuser password in the main checkout's `.env` never reaches a worktree.
 - The worktree setup script now also runs migrations, loads the demo seed and prepares the storage prefix; cleanup removes them.
 - The API gets a Dockerfile and a Compose service, together with a one-off migration service that completes before the API starts.
 - Each of `api`, `db`, `services` and `contracts` gets its own `AGENTS.md`: how to add an entity end to end, how to write a migration, how to run its tests.
