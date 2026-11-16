@@ -130,6 +130,13 @@ export type {
 } from "./explorations.js";
 export type { CaseStudy, CaseStudyCreate, CaseStudyUpdate } from "./case-studies.js";
 export {
+  EducationCreateSchema,
+  EducationListSchema,
+  EducationSchema,
+  EducationUpdateSchema,
+  educationKinds,
+} from "./education.js";
+export {
   ServiceCreateSchema,
   ServiceEvidenceInputSchema,
   ServiceEvidenceSchema,
