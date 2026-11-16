@@ -115,3 +115,4 @@ export {
 } from "./projects.js";
 export type { Project, ProjectCreate, ProjectLink, ProjectUpdate } from "./projects.js";
 export { CaseStudyCreateSchema, CaseStudySchema, CaseStudyUpdateSchema } from "./case-studies.js";
+export type { CaseStudy, CaseStudyCreate, CaseStudyUpdate } from "./case-studies.js";

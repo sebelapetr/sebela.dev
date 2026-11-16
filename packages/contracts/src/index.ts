@@ -1,6 +1,9 @@
 export { ErrorResponseSchema, errorCodes } from "./errors.js";
 export type { ErrorCode, ErrorResponse } from "./errors.js";
 export {
+  CaseStudyCreateSchema,
+  CaseStudySchema,
+  CaseStudyUpdateSchema,
   ExperienceCreateSchema,
   ExperienceListSchema,
   ExperienceSchema,
@@ -32,6 +35,9 @@ export {
   technologyTiers,
 } from "./modules/profile/index.js";
 export type {
+  CaseStudy,
+  CaseStudyCreate,
+  CaseStudyUpdate,
   Experience,
   ExperienceCreate,
   ExperienceKind,
