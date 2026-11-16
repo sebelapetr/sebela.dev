@@ -8455,7 +8455,8 @@
         },
         "required": [
           "file"
-        ]
+        ],
+        "additionalProperties": false
       },
       "MediaUpdate": {
         "type": "object",

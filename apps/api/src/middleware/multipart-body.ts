@@ -15,7 +15,7 @@ const invalid = (path: string, message: string) =>
 /**
  * Accepts only a `multipart/form-data` body within `maxFileBytes` plus `FORM_OVERHEAD_BYTES`
  * (declared or streamed). It must hold exactly one file part named `fileField`; the other fields are
- * validated with `schema` without it. The file stays in memory; nothing is written to disk. The
+ * validated with `schema` without it, so a strict schema refuses any field it does not name. The file stays in memory; nothing is written to disk. The
  * fields and the file, as an `UploadedFile` under `file`, are handed on as the `body` variable.
  */
 export function multipartBody(

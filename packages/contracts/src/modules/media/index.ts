@@ -58,11 +58,11 @@ export const MediaUpdateSchema = z
   .meta({ id: "MediaUpdate" });
 
 /**
- * The `multipart/form-data` body of an upload: one file and an optional alt text. The filename and
- * the declared type of the part never choose where or as what the file is stored.
+ * The `multipart/form-data` body of an upload: one file and an optional alt text, nothing else. The
+ * filename and the declared type of the part never choose where or as what the file is stored.
  */
 export const MediaUploadSchema = z
-  .object({
+  .strictObject({
     file: z.string().meta({
       format: "binary",
       description:
