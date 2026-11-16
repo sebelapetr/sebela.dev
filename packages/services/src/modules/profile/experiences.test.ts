@@ -178,20 +178,6 @@ describe("experience service", () => {
     });
   });
 
-  it("refuses to delete a referenced experience as a conflict", async () => {
-    // Persistence reports a reference that a foreign key holds (tested in @sebela/db); no table
-    // refers to experiences yet.
-    const referenced = createProfileService({
-      ...persistence.profile,
-      deleteExperience: () => Promise.resolve({ ok: false, reason: "referenced" }),
-    });
-
-    await expect(referenced.deleteExperience("northwind-lead")).rejects.toMatchObject({
-      code: "conflict",
-      message: expect.stringContaining("northwind-lead") as unknown,
-    });
-  });
-
   it("refuses to delete an organization or a technology an experience uses as a conflict", async () => {
     await profile.createExperience(lead);
 

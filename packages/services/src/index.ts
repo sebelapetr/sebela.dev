@@ -15,4 +15,5 @@ export type {
   ExperienceService,
   OrganizationService,
   ProfileService,
+  ProjectService,
 } from "./modules/profile/index.js";

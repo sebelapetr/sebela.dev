@@ -6,9 +6,20 @@ import { createCatalogService } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
 import { createExperienceService } from "./experiences.js";
 import { createOrganizationService } from "./organizations.js";
-import type { CatalogService, ExperienceService, OrganizationService } from "./types.js";
+import { createProjectService } from "./projects.js";
+import type {
+  CatalogService,
+  ExperienceService,
+  OrganizationService,
+  ProjectService,
+} from "./types.js";
 
-export type { CatalogService, ExperienceService, OrganizationService } from "./types.js";
+export type {
+  CatalogService,
+  ExperienceService,
+  OrganizationService,
+  ProjectService,
+} from "./types.js";
 
 /**
  * Operations on the person, the one profile record. Results are in the contract shape of
@@ -21,9 +32,11 @@ export type { CatalogService, ExperienceService, OrganizationService } from "./t
  * - `deletePerson`: removes the person; `not_found` while there is none.
  *
  * It also includes the catalog operations of `CatalogService`, the organization operations of
- * `OrganizationService` and the experience operations of `ExperienceService`.
+ * `OrganizationService`, the experience operations of `ExperienceService` and the project
+ * operations of `ProjectService`.
  */
-export interface ProfileService extends CatalogService, OrganizationService, ExperienceService {
+export interface ProfileService
+  extends CatalogService, OrganizationService, ExperienceService, ProjectService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -46,6 +59,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createCatalogService(persistence),
     ...createOrganizationService(persistence),
     ...createExperienceService(persistence),
+    ...createProjectService(),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();

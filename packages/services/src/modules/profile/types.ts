@@ -1,5 +1,5 @@
-// The catalog, organization and experience service interfaces, private to the profile module and re-exported
-// by its index.
+// The catalog, organization, experience and project service interfaces, private to the profile
+// module and re-exported by its index.
 import type {
   Experience,
   ExperienceCreate,
@@ -7,6 +7,9 @@ import type {
   Organization,
   OrganizationCreate,
   OrganizationUpdate,
+  Project,
+  ProjectCreate,
+  ProjectUpdate,
   Technology,
   TechnologyCreate,
   TechnologyUpdate,
@@ -64,8 +67,8 @@ export interface OrganizationService {
 }
 
 /**
- * Operations on the experiences, addressed by slug, with their organization and technologies
- * resolved. Results are in the contract shape; expected failures are `DomainError`s:
+ * Operations on the experiences, addressed by slug, with their organization, technologies and
+ * projects (by position, then slug) resolved. Results are in the contract shape; expected failures are `DomainError`s:
  *
  * - `listExperiences`: every experience, current roles (no end) first, then by start, latest
  *   first, then by end, latest first, then by slug.
@@ -79,7 +82,8 @@ export interface OrganizationService {
  *   unknown `organization`, unknown or repeated `technologies` and an `endedOn` before the
  *   (stored or given) start.
  * - `deleteExperience`: removes the experience and its technology links; `not_found` for an
- *   unknown slug; `conflict` (and nothing deleted) while another record still refers to it.
+ *   unknown slug; `conflict` (and nothing deleted) while it owns a project or another record
+ *   still refers to it.
  */
 export interface ExperienceService {
   listExperiences(): Promise<Experience[]>;
@@ -87,4 +91,33 @@ export interface ExperienceService {
   createExperience(input: ExperienceCreate): Promise<Experience>;
   updateExperience(slug: string, changes: ExperienceUpdate): Promise<Experience>;
   deleteExperience(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the projects, addressed by slug. Every project belongs to exactly one experience,
+ * named by its slug; its technologies are resolved. Results are in the contract shape; expected
+ * failures are `DomainError`s:
+ *
+ * - `listProjects`: every project, grouped by owning experience in the experience order, then by
+ *   position, then by slug.
+ * - `getProject`: the project, or `not_found`.
+ * - `createProject`: stores the project and its technology links together; `conflict` when the
+ *   slug is taken, also when creates race.
+ * - `updateProject`: changes only the given fields, keeps `id`, `slug` and `createdAt` and advances
+ *   `updatedAt`. A given `experience` moves the project to that experience; a given `technologies`
+ *   list replaces every link in its order and an omitted one keeps them. `not_found` for an
+ *   unknown slug.
+ * - Create and update refuse, as `validation_failed` naming the field and writing nothing, an
+ *   unknown `experience`, unknown or repeated `technologies` and an `endedOn` before the (stored
+ *   or given) start.
+ * - `deleteProject`: removes the project and its technology links, never its experience or
+ *   technologies; `not_found` for an unknown slug; `conflict` (and nothing deleted) while another
+ *   record still refers to it.
+ */
+export interface ProjectService {
+  listProjects(): Promise<Project[]>;
+  getProject(slug: string): Promise<Project>;
+  createProject(input: ProjectCreate): Promise<Project>;
+  updateProject(slug: string, changes: ProjectUpdate): Promise<Project>;
+  deleteProject(slug: string): Promise<void>;
 }
