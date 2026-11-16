@@ -5,6 +5,7 @@ import { PersonSchema } from "@sebela/contracts";
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
 interface Operation {
+  parameters?: { name: string; in: string; required?: boolean; schema: Record<string, unknown> }[];
   security?: Record<string, string[]>[];
   requestBody?: { content: Record<string, { schema: { $ref?: string } }> };
   responses: Record<
@@ -96,6 +97,47 @@ describe("the OpenAPI document and the reference", () => {
     );
     expect(Object.keys(operation("DELETE", "/v1/person").responses)).toEqual(
       expect.arrayContaining(["204", "404"]),
+    );
+  });
+
+  it("documents the catalogs from their contract schemas, with the slug path parameter", () => {
+    expect(operation("GET", "/v1/technologies").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TechnologyList" } },
+    });
+    expect(operation("GET", "/v1/topics").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TopicList" } },
+    });
+    expect(operation("POST", "/v1/technologies").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TechnologyCreate" } },
+    });
+    expect(operation("PATCH", "/v1/topics/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TopicUpdate" } },
+    });
+    expect(operation("POST", "/v1/topics").responses["201"]?.headers).toHaveProperty("Location");
+    for (const [method, path] of [
+      ["GET", "/v1/technologies/:slug"],
+      ["PATCH", "/v1/technologies/:slug"],
+      ["DELETE", "/v1/technologies/:slug"],
+      ["GET", "/v1/topics/:slug"],
+      ["PATCH", "/v1/topics/:slug"],
+      ["DELETE", "/v1/topics/:slug"],
+    ] as const) {
+      const documented = operation(method, path);
+      expect(documented.parameters).toEqual([
+        expect.objectContaining({
+          name: "slug",
+          in: "path",
+          required: true,
+          schema: expect.objectContaining({
+            type: "string",
+            pattern: expect.any(String) as unknown,
+          }) as unknown,
+        }),
+      ]);
+      expect(Object.keys(documented.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+    }
+    expect(Object.keys(operation("POST", "/v1/technologies").responses)).toEqual(
+      expect.arrayContaining(["201", "409"]),
     );
   });
 

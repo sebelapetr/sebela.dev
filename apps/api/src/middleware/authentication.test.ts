@@ -101,6 +101,8 @@ describe("authentication of the private routes", () => {
     }
     // Nothing was written by any of the refused requests.
     await expect(backend.services.profile.getPerson()).rejects.toMatchObject({ code: "not_found" });
+    await expect(backend.services.profile.listTechnologies()).resolves.toEqual([]);
+    await expect(backend.services.profile.listTopics()).resolves.toEqual([]);
   });
 
   it("permits a valid key, and refuses it on the next request after revocation", async () => {

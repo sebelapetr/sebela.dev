@@ -130,4 +130,69 @@ describe("the generated API client", () => {
     expect(deleted.error).toBeUndefined();
     expect((await client.GET("/v1/person")).response.status).toBe(404);
   });
+
+  it("manages the catalogs: public reads, keyed writes, path parameters and errors", async () => {
+    const { client, authorizations } = consumer(key);
+
+    const empty = await client.GET("/v1/technologies");
+    expect(empty.data).toEqual([]);
+
+    const created = await client.POST("/v1/technologies", {
+      body: { slug: "fictional-tool", name: "Fictional Tool", tier: "secondary", position: 0 },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe("/v1/technologies/fictional-tool");
+    expect(created.data).toMatchObject({ group: null, logoKey: null });
+
+    const read = await client.GET("/v1/technologies/{slug}", {
+      params: { path: { slug: "fictional-tool" } },
+    });
+    expect(read.data?.name).toBe("Fictional Tool");
+
+    const inconsistent = await client.PATCH("/v1/technologies/{slug}", {
+      params: { path: { slug: "fictional-tool" } },
+      body: { tier: "primary" },
+    });
+    expect(inconsistent.response.status).toBe(400);
+    expect(inconsistent.error?.error.code).toBe("validation_failed");
+
+    const deleted = await client.DELETE("/v1/technologies/{slug}", {
+      params: { path: { slug: "fictional-tool" } },
+    });
+    expect(deleted.response.status).toBe(204);
+
+    const missing = await client.DELETE("/v1/technologies/{slug}", {
+      params: { path: { slug: "fictional-tool" } },
+    });
+    expect(missing.response.status).toBe(404);
+    expect(missing.error?.error.code).toBe("not_found");
+
+    expect(authorizations).toEqual([
+      null,
+      `Bearer ${key}`,
+      null,
+      `Bearer ${key}`,
+      `Bearer ${key}`,
+      `Bearer ${key}`,
+    ]);
+  });
+
+  it("creates, lists and refuses duplicate topics", async () => {
+    const { client } = consumer(key);
+    const topic = { slug: "fictional-topic", name: "Fictional Topic", position: 0 };
+
+    expect((await client.POST("/v1/topics", { body: topic })).response.status).toBe(201);
+    const duplicate = await client.POST("/v1/topics", { body: topic });
+    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.error?.error.code).toBe("conflict");
+
+    const listed = await client.GET("/v1/topics");
+    expect(listed.data).toEqual([expect.objectContaining({ slug: "fictional-topic" })]);
+
+    const updated = await client.PATCH("/v1/topics/{slug}", {
+      params: { path: { slug: "fictional-topic" } },
+      body: { position: 2 },
+    });
+    expect(updated.data?.position).toBe(2);
+  });
 });
