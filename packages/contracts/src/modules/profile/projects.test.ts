@@ -28,6 +28,7 @@ const routing = {
   selectedForHomepage: true,
   position: 1,
   technologies: ["typescript", "postgres"],
+  coverId: "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b",
 };
 
 const technology = {
@@ -71,6 +72,7 @@ describe("ProjectCreateSchema", () => {
       links: [],
       selectedForHomepage: false,
       technologies: [],
+      coverId: null,
     });
   });
 
@@ -125,7 +127,8 @@ describe("ProjectCreateSchema", () => {
       "too many technologies",
       { ...routing, technologies: [...Array(51).keys()].map((n) => `t${String(n)}`) },
     ],
-    ["a cover before media exists", { ...routing, cover: "routing-cover" }],
+    ["a cover that is a file name", { ...routing, coverId: "routing-cover.png" }],
+    ["an embedded cover", { ...routing, cover: { id: routing.coverId } }],
     ["an embedded case study, which has its own route", { ...routing, caseStudy: { body: "x" } }],
     ["a visibility flag", { ...routing, visible: true }],
     ["a draft flag", { ...routing, draft: false }],
@@ -168,6 +171,13 @@ describe("ProjectUpdateSchema", () => {
     expect(ProjectUpdateSchema.parse({ technologies: [] })).toEqual({ technologies: [] });
   });
 
+  it("attaches and clears the cover by media identifier", () => {
+    expect(ProjectUpdateSchema.parse({ coverId: routing.coverId })).toEqual({
+      coverId: routing.coverId,
+    });
+    expect(ProjectUpdateSchema.parse({ coverId: null })).toEqual({ coverId: null });
+  });
+
   it("accepts deselecting the project and reopening its end", () => {
     expect(ProjectUpdateSchema.parse({ selectedForHomepage: false, endedOn: null })).toEqual({
       selectedForHomepage: false,
@@ -184,7 +194,8 @@ describe("ProjectUpdateSchema", () => {
     ["clearing the technologies", { technologies: null }],
     ["an end before the start", { startedOn: "2024-01-02", endedOn: "2024-01-01" }],
     ["a repeated technology", { technologies: ["postgres", "postgres"] }],
-    ["a cover before media exists", { cover: null }],
+    ["a cover that is a path", { coverId: "../cover.png" }],
+    ["an embedded cover", { cover: null }],
   ])("rejects %s", (_, input) => {
     expect(ProjectUpdateSchema.safeParse(input).success).toBe(false);
   });
@@ -220,6 +231,7 @@ describe("ProjectSchema and ProjectListSchema", () => {
         name: "Northwind Example",
         website: null,
         description: null,
+        logoId: null,
       },
       technologies: [],
       projects: [project, { ...project, slug: "fleet", selectedForHomepage: false }],
