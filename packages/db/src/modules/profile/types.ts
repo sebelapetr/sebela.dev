@@ -144,12 +144,16 @@ export interface ExperienceRelations {
   technologies: string[];
 }
 
-/** An experience with its organization and technologies (in link order) resolved. */
+/**
+ * An experience with its organization, technologies (in link order) and projects (by position,
+ * then slug) resolved.
+ */
 export interface ExperienceRecord extends ExperienceFields {
   id: string;
   slug: string;
   organization: OrganizationRecord;
   technologies: TechnologyRecord[];
+  projects: ProjectRecord[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -204,7 +208,106 @@ export interface ExperiencePersistence {
   ): Promise<UpdateExperienceResult>;
   /**
    * Deletes the experience and its technology links; `not_found` when there is none,
-   * `referenced` (and nothing deleted) while another record still refers to it.
+   * `referenced` (and nothing deleted) while a project or another record still refers to it.
    */
   deleteExperience(slug: string): Promise<DeleteExperienceResult>;
+}
+
+export interface ProjectLinkRecord {
+  label: string;
+  /** An absolute `http`/`https` address. */
+  url: string;
+}
+
+/** Writable scalar fields of a project. The slug is fixed when it is created. */
+export interface ProjectFields {
+  name: string;
+  /** Markdown. */
+  summary: string;
+  /** Markdown. */
+  problem: string;
+  /** Markdown. */
+  workDone: string;
+  /** Markdown. */
+  result: string;
+  /** Calendar date, `YYYY-MM-DD`. */
+  startedOn: string;
+  /** Calendar date, `YYYY-MM-DD`, not before the start; `null` marks an ongoing project. */
+  endedOn: string | null;
+  links: ProjectLinkRecord[];
+  selectedForHomepage: boolean;
+  /** Ascending order within the owning experience; ties are ordered by slug. */
+  position: number;
+}
+
+/** Relations of a project as written: slugs of existing records. */
+export interface ProjectRelations {
+  /** The slug of the experience that owns the project. */
+  experience: string;
+  /** Slugs of the technologies, each once, in their intended order. */
+  technologies: string[];
+}
+
+/** A project with its owning experience (by slug) and its technologies (in link order). */
+export interface ProjectRecord extends ProjectFields {
+  id: string;
+  slug: string;
+  /** The slug of the owning experience. */
+  experience: string;
+  technologies: TechnologyRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update of a project wrote nothing, besides `conflict` and `not_found`:
+ *
+ * - `unknown_experience`: no experience has the given slug.
+ * - `unknown_technologies`: some technology slugs exist nowhere; `slugs` lists them.
+ * - `repeated_technologies`: a technology slug is given more than once.
+ * - `invalid_period`: the end would be before the start.
+ */
+export type ProjectWriteFailure =
+  | { ok: false; reason: "unknown_experience" }
+  | { ok: false; reason: "unknown_technologies"; slugs: string[] }
+  | { ok: false; reason: "repeated_technologies" }
+  | { ok: false; reason: "invalid_period" };
+
+export type CreateProjectResult =
+  { ok: true; project: ProjectRecord } | { ok: false; reason: "conflict" } | ProjectWriteFailure;
+
+export type UpdateProjectResult =
+  { ok: true; project: ProjectRecord } | { ok: false; reason: "not_found" } | ProjectWriteFailure;
+
+export type DeleteProjectResult = { ok: true } | { ok: false; reason: "not_found" | "referenced" };
+
+/**
+ * Persistence operations of the projects, addressed by slug. Every project belongs to exactly one
+ * experience. Each write of a project and its technology links is one transaction: it is stored
+ * completely or not at all.
+ */
+export interface ProjectPersistence {
+  /** Every project, grouped by experience in the experience order, then by position and slug. */
+  listProjects(): Promise<ProjectRecord[]>;
+  /** The project with the slug, or `null`. */
+  findProject(slug: string): Promise<ProjectRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `ProjectWriteFailure`. */
+  createProject(
+    fields: ProjectFields & ProjectRelations & { slug: string },
+  ): Promise<CreateProjectResult>;
+  /**
+   * Changes only the given fields. A given `experience` moves the project to that experience;
+   * given `technologies` replace every link and omitted ones keep them. `not_found` when there is
+   * no such project; see `ProjectWriteFailure`.
+   */
+  updateProject(
+    slug: string,
+    changes: Partial<ProjectFields & ProjectRelations>,
+  ): Promise<UpdateProjectResult>;
+  /**
+   * Deletes the project and its technology links, never its experience or technologies;
+   * `not_found` when there is none, `referenced` (and nothing deleted) while another record still
+   * refers to it.
+   */
+  deleteProject(slug: string): Promise<DeleteProjectResult>;
 }

@@ -105,8 +105,9 @@ describe("the experience API", () => {
     expect(body.organization).toMatchObject({ slug: organization, name: "Northwind Example" });
     expect(body.technologies.map((technology) => technology.slug)).toEqual(technologies);
     expect(Object.keys(body).sort()).toEqual(
-      [...Object.keys(lead), "id", "createdAt", "updatedAt"].sort(),
+      [...Object.keys(lead), "id", "projects", "createdAt", "updatedAt"].sort(),
     );
+    expect(body.projects).toEqual([]);
 
     const read = await request("/v1/experiences/northwind-lead");
     expect(read.status).toBe(200);

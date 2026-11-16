@@ -1,43 +1,22 @@
 import { z } from "zod";
 
 import { TechnologySchema } from "./catalogs.js";
-import { SlugSchema, text, timestamps } from "./fields.js";
+import {
+  DateSchema,
+  endFollowsStart,
+  SlugSchema,
+  technologiesAreUnique,
+  text,
+  timestamps,
+} from "./fields.js";
 import { OrganizationSchema } from "./organizations.js";
+import { ProjectSchema } from "./projects.js";
 
 export const experienceKinds = ["main_job", "side_project", "own_business"] as const;
 
 const KindSchema = z
   .enum(experienceKinds)
   .meta({ description: "A `main_job`, a `side_project` or an `own_business`." });
-
-const DateSchema = z.iso.date();
-
-const PERIOD_RULE = "The end cannot be before the start.";
-const UNIQUE_TECHNOLOGIES = "List each technology once.";
-
-/** The end is not before the start. Checked when both are in the same body. */
-function endFollowsStart(
-  value: { startedOn?: string | undefined; endedOn?: string | null | undefined },
-  context: z.core.$RefinementCtx,
-) {
-  const { startedOn, endedOn } = value;
-  if (startedOn === undefined || endedOn === undefined || endedOn === null) return;
-  // ISO dates of the same format compare chronologically as strings.
-  if (endedOn < startedOn) {
-    context.addIssue({ code: "custom", path: ["endedOn"], message: PERIOD_RULE });
-  }
-}
-
-/** Every technology slug of a write appears once. */
-function technologiesAreUnique(
-  value: { technologies?: string[] | undefined },
-  context: z.core.$RefinementCtx,
-) {
-  const { technologies } = value;
-  if (technologies !== undefined && new Set(technologies).size !== technologies.length) {
-    context.addIssue({ code: "custom", path: ["technologies"], message: UNIQUE_TECHNOLOGIES });
-  }
-}
 
 /** Scalar fields of an experience, the same when written and when read. */
 const scalarFields = {
@@ -68,7 +47,10 @@ const relationFields = {
     }),
 };
 
-/** An experience: a role at an organization over a period, with its technologies resolved. */
+/**
+ * An experience: a role at an organization over a period, with its technologies and its projects
+ * resolved.
+ */
 export const ExperienceSchema = z
   .object({
     id: z.uuid(),
@@ -78,6 +60,11 @@ export const ExperienceSchema = z
     technologies: z
       .array(TechnologySchema)
       .meta({ description: "The linked technologies, in their intended order." }),
+    projects: z.array(ProjectSchema).meta({
+      description:
+        "The projects delivered within the experience, by position, then slug; each says " +
+        "whether it is selected for the homepage.",
+    }),
     ...timestamps,
   })
   .meta({ id: "Experience" });

@@ -1,21 +1,27 @@
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { technologyColumns } from "./catalogs.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import { organizationColumns } from "./organizations.js";
-import { experienceTechnologies, experiences, organizations, technologies } from "./schema.js";
+import { loadProjects } from "./projects.js";
+import { experienceOrder, type Executor, now, technologyIds, WriteRefused } from "./relations.js";
+import {
+  experienceTechnologies,
+  experiences,
+  organizations,
+  projects,
+  technologies,
+} from "./schema.js";
 import type {
   ExperienceFields,
   ExperiencePersistence,
   ExperienceRecord,
   ExperienceRelations,
   ExperienceWriteFailure,
+  ProjectRecord,
   TechnologyRecord,
 } from "./types.js";
-
-/** A connection or an open transaction; both run the same queries. */
-type Executor = Pick<NodePgDatabase, "select" | "insert" | "update" | "delete">;
 
 const experienceColumns = {
   id: experiences.id,
@@ -32,27 +38,12 @@ const experienceColumns = {
   organization: organizationColumns,
 };
 
-/** Current roles (no end) first, then the latest start, the latest end and the slug. */
-const listOrder = [
-  asc(sql`${experiences.endedOn} IS NOT NULL`),
-  desc(experiences.startedOn),
-  desc(experiences.endedOn),
-  asc(experiences.slug),
-];
-
-/** `clock_timestamp()`, not `now()`: it advances also within one transaction. */
-const now = sql`clock_timestamp()`;
-
 const PERIOD_CHECK = "experiences_period_is_ordered";
 
-/** Thrown inside a transaction to roll it back and return the failure instead. */
-class WriteRefused extends Error {
-  constructor(readonly failure: ExperienceWriteFailure) {
-    super(failure.reason);
-  }
-}
-
-/** The experiences with their organization and their technologies in link order. */
+/**
+ * The experiences with their organization, their technologies in link order and their projects by
+ * position, then slug.
+ */
 async function loadExperiences(
   db: Executor,
   where: ReturnType<typeof eq> | undefined,
@@ -62,7 +53,7 @@ async function loadExperiences(
     .from(experiences)
     .innerJoin(organizations, eq(experiences.organizationId, organizations.id))
     .where(where)
-    .orderBy(...listOrder);
+    .orderBy(...experienceOrder);
   if (rows.length === 0) return [];
 
   const links = await db
@@ -80,7 +71,17 @@ async function loadExperiences(
   for (const { experienceId, technology } of links) {
     linked.set(experienceId, [...(linked.get(experienceId) ?? []), technology]);
   }
-  return rows.map((row) => ({ ...row, technologies: linked.get(row.id) ?? [] }));
+
+  const owned = new Map<string, ProjectRecord[]>();
+  const ids = rows.map((row) => row.id);
+  for (const project of await loadProjects(db, inArray(projects.experienceId, ids))) {
+    owned.set(project.experience, [...(owned.get(project.experience) ?? []), project]);
+  }
+  return rows.map((row) => ({
+    ...row,
+    technologies: linked.get(row.id) ?? [],
+    projects: owned.get(row.slug) ?? [],
+  }));
 }
 
 async function loadExperience(db: Executor, id: string): Promise<ExperienceRecord> {
@@ -99,40 +100,22 @@ async function organizationId(tx: Executor, slug: string): Promise<string> {
     .from(organizations)
     .where(eq(organizations.slug, slug))
     .for("key share");
-  if (!row) throw new WriteRefused({ ok: false, reason: "unknown_organization" });
+  if (!row) {
+    throw new WriteRefused<ExperienceWriteFailure>({ ok: false, reason: "unknown_organization" });
+  }
   return row.id;
 }
 
-/**
- * Replaces the technology links of the experience with the given slugs in their order. The
- * technologies are locked against a concurrent delete; repeated or unknown slugs are refused.
- */
+/** Replaces the technology links of the experience with the given slugs in their order. */
 async function linkTechnologies(tx: Executor, experienceId: string, slugs: string[]) {
-  if (new Set(slugs).size !== slugs.length) {
-    throw new WriteRefused({ ok: false, reason: "repeated_technologies" });
-  }
+  const ids = await technologyIds(tx, slugs);
   await tx
     .delete(experienceTechnologies)
     .where(eq(experienceTechnologies.experienceId, experienceId));
-  if (slugs.length === 0) return;
-
-  const rows = await tx
-    .select({ id: technologies.id, slug: technologies.slug })
-    .from(technologies)
-    .where(inArray(technologies.slug, slugs))
-    .for("key share");
-  const ids = new Map(rows.map((row) => [row.slug, row.id]));
-  const unknown = slugs.filter((slug) => !ids.has(slug));
-  if (unknown.length > 0) {
-    throw new WriteRefused({ ok: false, reason: "unknown_technologies", slugs: unknown });
-  }
-  await tx.insert(experienceTechnologies).values(
-    slugs.map((slug, position) => ({
-      experienceId,
-      technologyId: ids.get(slug) ?? "",
-      position,
-    })),
-  );
+  if (ids.length === 0) return;
+  await tx
+    .insert(experienceTechnologies)
+    .values(ids.map((technologyId, position) => ({ experienceId, technologyId, position })));
 }
 
 /** Runs a write; a refusal or a broken period rolls it back and becomes its failure. */
@@ -140,7 +123,8 @@ async function refusable<T>(write: () => Promise<T>): Promise<T | ExperienceWrit
   try {
     return await write();
   } catch (error) {
-    if (error instanceof WriteRefused) return error.failure;
+    // Every refusal thrown by the experience writes is an `ExperienceWriteFailure`.
+    if (error instanceof WriteRefused) return error.failure as ExperienceWriteFailure;
     if (breaksCheck(error, PERIOD_CHECK)) return { ok: false, reason: "invalid_period" };
     throw error;
   }
@@ -160,7 +144,8 @@ function scalarChanges(
  * The experiences and their ordered technology links. Every write runs in one transaction, so an
  * experience and its links are stored completely or not at all. Slugs are unique in the database,
  * the period rule is a check constraint, an update locks its experience so concurrent
- * replacements of the links serialize, and the links cascade only with their experience.
+ * replacements of the links serialize, and the links cascade only with their experience. Projects
+ * refer to their experience without a cascade, so an experience that owns one is not deleted.
  */
 export function createExperiencePersistence(db: NodePgDatabase): ExperiencePersistence {
   return {

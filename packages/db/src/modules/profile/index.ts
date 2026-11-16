@@ -4,21 +4,25 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { createCatalogPersistence } from "./catalogs.js";
 import { createExperiencePersistence } from "./experiences.js";
 import { createOrganizationPersistence } from "./organizations.js";
+import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
 import type {
   CatalogPersistence,
   ExperiencePersistence,
   OrganizationPersistence,
+  ProjectPersistence,
 } from "./types.js";
 
 export type {
   CatalogPersistence,
   CreateOrganizationResult,
+  CreateProjectResult,
   CreateTechnologyResult,
   CreateExperienceResult,
   CreateTopicResult,
   DeleteExperienceResult,
   DeleteOrganizationResult,
+  DeleteProjectResult,
   DeleteTechnologyResult,
   ExperienceFields,
   ExperienceKind,
@@ -29,6 +33,12 @@ export type {
   OrganizationFields,
   OrganizationPersistence,
   OrganizationRecord,
+  ProjectFields,
+  ProjectLinkRecord,
+  ProjectPersistence,
+  ProjectRecord,
+  ProjectRelations,
+  ProjectWriteFailure,
   TechnologyFields,
   TechnologyGroup,
   TechnologyRecord,
@@ -36,6 +46,7 @@ export type {
   TopicFields,
   TopicRecord,
   UpdateExperienceResult,
+  UpdateProjectResult,
   UpdateTechnologyResult,
 } from "./types.js";
 
@@ -69,7 +80,7 @@ export type CreatePersonResult =
 
 /** Persistence operations of the profile domain. */
 export interface ProfilePersistence
-  extends CatalogPersistence, OrganizationPersistence, ExperiencePersistence {
+  extends CatalogPersistence, OrganizationPersistence, ExperiencePersistence, ProjectPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -104,6 +115,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createCatalogPersistence(db),
     ...createOrganizationPersistence(db),
     ...createExperiencePersistence(db),
+    ...createProjectPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;

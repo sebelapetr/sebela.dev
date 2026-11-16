@@ -4,12 +4,13 @@ import type { RouteDefinition } from "../../routing.js";
 import { experienceRoutes } from "./experiences.js";
 import { organizationRoutes } from "./organizations.js";
 import { personRoutes } from "./person.js";
+import { projectRoutes } from "./projects.js";
 import { technologyRoutes } from "./technologies.js";
 import { topicRoutes } from "./topics.js";
 
 /**
  * The HTTP routes of the profile: the person, the ordered technology and topic catalogs, the
- * organizations and the experiences that relate them.
+ * organizations, the experiences that relate them and the projects each experience owns.
  * Path slugs and bodies are validated by the app before a handler runs.
  */
 export function profileRoutes(profile: ProfileService): RouteDefinition[] {
@@ -19,5 +20,6 @@ export function profileRoutes(profile: ProfileService): RouteDefinition[] {
     ...topicRoutes(profile),
     ...organizationRoutes(profile),
     ...experienceRoutes(profile),
+    ...projectRoutes(profile),
   ];
 }

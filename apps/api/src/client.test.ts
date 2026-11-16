@@ -307,4 +307,107 @@ describe("the generated API client", () => {
       null,
     ]);
   });
+
+  it("manages projects: read-after-write, ordered in their experience, moved, protected and deleted", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await client.POST("/v1/organizations", {
+      body: { slug: "fictional-client", name: "Client" },
+    });
+    await client.POST("/v1/technologies", {
+      body: { slug: "fictional-queue", name: "Queue", tier: "secondary", position: 20 },
+    });
+    const role = {
+      title: "Engineer",
+      kind: "main_job" as const,
+      organization: "fictional-client",
+      summary: "A fictional role.",
+      inCv: true,
+    };
+    await client.POST("/v1/experiences", {
+      body: { ...role, slug: "fictional-role", startedOn: "2020-01-01", endedOn: "2021-12-31" },
+    });
+    await client.POST("/v1/experiences", {
+      body: { ...role, slug: "fictional-next", startedOn: "2022-01-01" },
+    });
+    const selected = {
+      slug: "fictional-selected",
+      experience: "fictional-role",
+      name: "Selected project",
+      summary: "A fictional project.",
+      problem: "A fictional problem.",
+      workDone: "Fictional work.",
+      result: "A fictional result.",
+      startedOn: "2020-02-01",
+      endedOn: "2020-11-30",
+      links: [{ label: "Repository", url: "https://example.com/selected" }],
+      selectedForHomepage: true,
+      position: 1,
+      technologies: ["fictional-queue"],
+    };
+
+    const unselected = await client.POST("/v1/projects", {
+      body: { ...selected, slug: "fictional-unselected", selectedForHomepage: false, position: 2 },
+    });
+    const created = await client.POST("/v1/projects", { body: selected });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe("/v1/projects/fictional-selected");
+    expect(created.data?.technologies.map(({ slug }) => slug)).toEqual(["fictional-queue"]);
+    const read = await client.GET("/v1/projects/{slug}", at("fictional-selected"));
+    expect(read.data).toEqual(created.data);
+
+    const owner = await client.GET("/v1/experiences/{slug}", at("fictional-role"));
+    expect(owner.data?.projects).toEqual([created.data, unselected.data]);
+    expect(owner.data?.projects.map((project) => project.selectedForHomepage)).toEqual([
+      true,
+      false,
+    ]);
+
+    const duplicate = await client.POST("/v1/projects", { body: selected });
+    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const orphan = await client.POST("/v1/projects", {
+      body: { ...selected, slug: "fictional-orphan", experience: "fictional-missing" },
+    });
+    expect(orphan.response.status).toBe(400);
+    expect(orphan.error?.error.fields).toEqual([
+      { path: "experience", message: expect.stringContaining("fictional-missing") as unknown },
+    ]);
+
+    const moved = await client.PATCH("/v1/projects/{slug}", {
+      ...at("fictional-unselected"),
+      body: { experience: "fictional-next" },
+    });
+    expect(moved.data?.experience).toBe("fictional-next");
+    const listed = await client.GET("/v1/projects");
+    expect(listed.data?.map(({ slug }) => slug)).toEqual([
+      "fictional-unselected",
+      "fictional-selected",
+    ]);
+    const owning = await client.DELETE("/v1/experiences/{slug}", at("fictional-role"));
+    expect(owning.response.status).toBe(409);
+    expect(owning.error?.error.code).toBe("conflict");
+
+    for (const slug of ["fictional-selected", "fictional-unselected"]) {
+      expect((await client.DELETE("/v1/projects/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/projects/{slug}", at("fictional-selected"));
+    expect(missing.response.status).toBe(404);
+    expect(missing.error?.error.code).toBe("not_found");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(6).fill(bearer),
+      null,
+      null,
+      bearer,
+      bearer,
+      bearer,
+      null,
+      bearer,
+      bearer,
+      bearer,
+      null,
+    ]);
+  });
 });
