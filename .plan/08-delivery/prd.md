@@ -17,7 +17,7 @@ Everything is built and nothing is live. The site runs on developers' machines w
 - A release pipeline: a version tag builds the images, verifies them as a whole, and deploys them to the server.
 - A production Compose stack behind a reverse proxy with TLS.
 - Backups that are proven to restore.
-- The launch itself: the owner's real data loaded, the old roadmap data imported one last time, the domain switched, the old addresses redirected.
+- The launch itself: the owner's real data loaded, the old roadmap data imported once, the domain switched, the old addresses redirected.
 
 There is no staging environment. Its job — catching a broken release before visitors do — is done by a full-stack check in the pipeline and by a rollback.
 
@@ -101,7 +101,7 @@ Done once, by the owner with an agent, following a checklist kept in the reposit
 1. Provision the server and the DNS records for the subdomains.
 2. Deploy the first release with an empty database.
 3. Load the owner's private profile seed; upload the photo, logos and the CV file.
-4. Take a fresh dump of the old Road to AI database, run the mapper, load the result. This is the final import; from now on the old application is read-only.
+4. Take a fresh dump of the old Road to AI database, run the external mapper and load the roadmap once. Verify entity counts, relationships and elapsed-time totals as specified in phase 4, accounting for Prague date grouping and midnight splits; resolve discrepancies before proceeding. No incremental synchronization is required. From this cutover the old application is read-only.
 5. Rebuild the retrieval index.
 6. Create the API key for `mcp-admin` and connect the owner's agent.
 7. Check every page with real data at the three widths and in both themes; run the chat by hand with real models, including a few adversarial questions.
