@@ -3,12 +3,19 @@
 // the contract's types. A route change regenerates the client and extends these cases.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createApiClient, type ApiClient, type ErrorResponse } from "@sebela/api-client";
+import {
+  createApiClient,
+  type ApiClient,
+  type ErrorResponse,
+  type MediaUpload,
+} from "@sebela/api-client";
+import { samplePdf, samplePng } from "@sebela/services/testing";
 
 import type { AppDependencies } from "./app.js";
 import {
   anyText,
   connection,
+  MEDIA_PUBLIC_BASE,
   openTestBackend,
   person,
   testConfig,
@@ -975,6 +982,87 @@ describe("the generated API client", () => {
       null,
       ...Array<string>(3).fill(bearer),
       null,
+    ]);
+  });
+  it("uploads, describes, attaches and deletes media through multipart and JSON operations", async () => {
+    const { client, authorizations } = consumer(key);
+    /** A multipart upload: the form carries the file; the typed body names it. */
+    const upload = (bytes: Uint8Array, name: string, type: string, altText?: string) => {
+      const body: MediaUpload = { file: name, ...(altText === undefined ? {} : { altText }) };
+      return {
+        body,
+        bodySerializer: () => {
+          const form = new FormData();
+          form.set("file", new Blob([new Uint8Array(bytes)], { type }), name);
+          if (altText !== undefined) form.set("altText", altText);
+          return form;
+        },
+      };
+    };
+    const at = (id: string) => ({ params: { path: { id } } });
+
+    const photo = await client.POST(
+      "/v1/media",
+      upload(
+        samplePng({ width: 4, height: 3 }),
+        "portrait.png",
+        "image/png",
+        "A fictional portrait",
+      ),
+    );
+    expect(photo.response.status).toBe(201);
+    expect(photo.data).toMatchObject({
+      mediaType: "image/png",
+      width: 4,
+      height: 3,
+      altText: "A fictional portrait",
+    });
+    const photoId = photo.data?.id ?? "";
+    expect(photo.data?.url).toBe(`${MEDIA_PUBLIC_BASE}/${photo.data?.key ?? ""}`);
+    const cv = await client.POST("/v1/media", upload(samplePdf(), "cv.pdf", "application/pdf"));
+    expect(cv.data).toMatchObject({ mediaType: "application/pdf", width: null, height: null });
+    const misleading = await client.POST("/v1/media", upload(samplePdf(), "cv.png", "image/png"));
+    expect(misleading.response.status).toBe(415);
+    expect(misleading.error?.error.code).toBe("unsupported_media_type");
+
+    const listed = await client.GET("/v1/media");
+    expect(listed.data?.map(({ id }) => id)).toEqual([cv.data?.id, photoId]);
+    const described = await client.PATCH("/v1/media/{id}", {
+      ...at(photoId),
+      body: { altText: "A fictional portrait, smiling" },
+    });
+    expect(described.data?.altText).toBe("A fictional portrait, smiling");
+    expect((await client.GET("/v1/media/{id}", at(photoId))).data).toEqual(described.data);
+
+    const created = await client.POST("/v1/person", {
+      body: { ...person, photoId, cvPdfId: cv.data?.id ?? "" },
+    });
+    expect(created.data).toMatchObject({ photoId, cvPdfId: cv.data?.id });
+    const swapped = await client.PATCH("/v1/person", { body: { photoId: cv.data?.id ?? "" } });
+    expect(swapped.error?.error.fields?.map(({ path }) => path)).toEqual(["photoId"]);
+    const attached = await client.DELETE("/v1/media/{id}", at(photoId));
+    expect(attached.response.status).toBe(409);
+    expect(attached.error?.error.code).toBe("conflict");
+
+    const cleared = await client.PATCH("/v1/person", { body: { photoId: null } });
+    expect(cleared.data?.photoId).toBeNull();
+    expect((await client.DELETE("/v1/media/{id}", at(photoId))).response.status).toBe(204);
+    const missing = await client.GET("/v1/media/{id}", at(photoId));
+    expect(missing.error?.error.code).toBe("not_found");
+    expect((await client.DELETE("/v1/person")).response.status).toBe(204);
+    expect((await client.DELETE("/v1/media/{id}", at(cv.data?.id ?? ""))).response.status).toBe(
+      204,
+    );
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(3).fill(bearer),
+      null,
+      bearer,
+      null,
+      ...Array<string>(5).fill(bearer),
+      null,
+      ...Array<string>(2).fill(bearer),
     ]);
   });
 });
