@@ -169,7 +169,7 @@ describe("ExperienceUpdateSchema", () => {
 });
 
 describe("ExperienceSchema and ExperienceListSchema", () => {
-  it("describe stored experiences with their organization and technologies resolved", () => {
+  it("describe stored experiences with their organization, technologies and projects resolved", () => {
     const experience = {
       ...stored,
       ...lead,
@@ -191,6 +191,7 @@ describe("ExperienceSchema and ExperienceListSchema", () => {
           position: 1,
         },
       ],
+      projects: [],
     };
     expect(ExperienceSchema.parse(experience)).toEqual(experience);
     expect(ExperienceListSchema.parse([experience])).toEqual([experience]);
