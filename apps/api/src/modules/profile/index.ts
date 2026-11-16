@@ -16,7 +16,7 @@ export function profileRoutes(profile: ProfileService): RouteDefinition[] {
       method: "GET",
       path: PATH,
       access: "public",
-      summary: "Read the person",
+      summary: "Read the person (drift demo)",
       response: { status: 200, description: "The person.", schema: PersonSchema },
       errors: ["not_found"],
       handle: () => profile.getPerson(),

@@ -31,7 +31,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read the person */
+        /** Read the person (drift demo) */
         get: operations["getPerson"];
         put?: never;
         /**

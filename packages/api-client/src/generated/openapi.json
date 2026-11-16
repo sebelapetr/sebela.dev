@@ -67,7 +67,7 @@
     "/v1/person": {
       "get": {
         "operationId": "getPerson",
-        "summary": "Read the person",
+        "summary": "Read the person (drift demo)",
         "security": [],
         "responses": {
           "200": {
