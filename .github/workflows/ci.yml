@@ -76,6 +76,11 @@ jobs:
         run: pnpm ci:root
       - name: Affected package tasks (lint, typecheck, test, build)
         run: pnpm ci:affected
+      # On every run, not only when the API is affected: regenerates the OpenAPI document and the
+      # client from the API source (no database or secrets) and fails on any difference from the
+      # committed files.
+      - name: Generated API client matches the API
+        run: pnpm check:api-client
 
   # Real-Postgres lifecycle of the worktree databases: a disposable Compose project from
   # compose.yaml on a free port. Plain Node and Docker, no installed dependencies.

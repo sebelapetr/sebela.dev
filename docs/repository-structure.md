@@ -102,23 +102,29 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 
 Run from the repository root. Turborepo runs a task in every package that defines it, after the `build` of the packages it depends on, and caches the result.
 
-| Command                          | What it runs                                                                                                                                                                                                                     |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | The locked installation, as in CI; its `prepare` script enables the [Git hooks](git-workflow.md#local-hooks)                                                                                                                     |
-| `pnpm lint`                      | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`) |
-| `pnpm typecheck`                 | `typecheck` of every package                                                                                                                                                                                                     |
-| `pnpm test`                      | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`)                                                                                                          |
-| `pnpm build`                     | `build` of every package                                                                                                                                                                                                         |
-| `pnpm test:harness`              | Only the harness tests, through `node --test harness/`                                                                                                                                                                           |
-| `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                     |
-| `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                   |
-| `pnpm ci:root`                   | The root tasks as CI runs them on every change: `lint:root`, `check:config`, `test:harness` and `test:checks`                                                                                                                    |
-| `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`         |
-| `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                          |
+| Command                          | What it runs                                                                                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | The locked installation, as in CI; its `prepare` script enables the [Git hooks](git-workflow.md#local-hooks)                                                                                                                                                        |
+| `pnpm lint`                      | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`)                                    |
+| `pnpm typecheck`                 | `typecheck` of every package                                                                                                                                                                                                                                        |
+| `pnpm test`                      | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`)                                                                                                                                             |
+| `pnpm build`                     | `build` of every package                                                                                                                                                                                                                                            |
+| `pnpm test:harness`              | Only the harness tests, through `node --test harness/`                                                                                                                                                                                                              |
+| `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                                                        |
+| `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                                                      |
+| `pnpm ci:root`                   | The root tasks as CI runs them on every change: `lint:root`, `check:config`, `test:harness` and `test:checks`                                                                                                                                                       |
+| `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`                                            |
+| `pnpm generate:api-client`       | Exports the API's OpenAPI document from its source (`openapi:export` of `@sebela/api`, no database, configuration or secrets) into `packages/api-client/src/generated/openapi.json` and regenerates the client types beside it; see `packages/api-client/AGENTS.md` |
+| `pnpm check:api-client`          | The [generated-code drift check](#the-generated-api-client-drift-check): runs `generate:api-client` and fails when the committed `packages/api-client/src/generated/` differs from the result. CI runs it on every change                                           |
+| `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                                                             |
 
 The harness (`harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
+
+### The generated API client drift check
+
+`scripts/checks/generated-drift.mjs <folder>... -- <command>` runs a generator and fails when the listed folders then differ from what is committed: a changed, added (untracked) or removed file, reported with `git status` and a diff summary, and a hint naming the command to regenerate with. A failing generator fails the check. Plain Node with no dependencies, like the other repository checks; its tests (`generated-drift.test.mjs`) use a disposable Git repository and a fake generator. `pnpm check:api-client` applies it to the API client, and the quality job of CI runs that on every change, not only when the API is affected. The decision and the alternatives: [0014](decisions/0014-generated-api-client.md).
 
 ### Affected packages
 
@@ -164,8 +170,8 @@ packages/contracts/src/
   modules/profile/index.ts
   modules/media/index.ts
 packages/api-client/src/
-  index.ts
-  generated/                        # generated code, not handwritten modules
+  index.ts                          # createApiClient and the contract's DTO types
+  generated/                        # committed generated code: openapi.json and schema.ts
 ```
 
 SQL migrations stay in `packages/db/migrations/`, fictional seed data in `packages/db/seed/demo/`, and tests beside the behaviour they exercise. App startup/configuration, middleware and CLI adapters stay outside domain modules. The source entry convention is fixed; internal filenames evolve as real functionality arrives. No folders above need to be scaffolded before their phase.
@@ -189,17 +195,18 @@ Each backend app/package `AGENTS.md` must map actual module paths to public entr
 
 The API is the trust boundary: content writes and content authentication are enforced there. FastAPI separately authenticates internal generation and limits AI execution. The import rules exist to keep it that way.
 
-| Package or app                | May import                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP    |
-| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client |
-| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app       |
-| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers      |
-| `apps/api`                    | `services`, `contracts`, `config`                                                                            |
-| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                        |
-| `packages/db`                 | nothing from this repository except `config`                                                                 |
-| `packages/contracts`          | nothing from this repository except `config`                                                                 |
-| `packages/config`             | nothing from this repository                                                                                 |
+| Package or app                | May import                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP            |
+| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client         |
+| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app               |
+| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers              |
+| `apps/api`                    | `services`, `contracts`, `config`; `api-client` only in test files (`*.test.<ext>`), for its consumer contract tests |
+| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                                |
+| `packages/db`                 | nothing from this repository except `config`                                                                         |
+| `packages/contracts`          | nothing from this repository except `config`                                                                         |
+| `packages/api-client`         | nothing from this repository except `config`; generated from the API's OpenAPI document, never its source            |
+| `packages/config`             | nothing from this repository                                                                                         |
 
 `packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and both Python apps and `packages/llm-agent` have no database access at all. A lint rule enforces this; do not disable it.
 
@@ -208,7 +215,7 @@ The API is the trust boundary: content writes and content authentication are enf
 `createConfig` from `@sebela/config/eslint` enables the rule as an error on every JavaScript and TypeScript file, so every package that lints itself with the shared configuration is checked by its normal `lint` task, and `pnpm lint` and CI fail on a forbidden import. The rule lives in `packages/config/import-boundaries.js` with private helpers beside it; its behaviour tests and fixture workspaces are described in `packages/config/AGENTS.md`. It needs no dependency beyond ESLint and TypeScript, which the shared configuration already uses.
 
 - **Who imports.** The workspace root is the nearest folder above the file that contains `pnpm-workspace.yaml`. A file under `apps/<name>/` or `packages/<name>/` belongs to that member; other files (the harness, root configuration) are root files. A member's package name is `@sebela/<folder name>`.
-- **The table.** A member imports another member only by package name and only if its row above allows it; importing itself is always allowed. Nothing imports an app. A member without a row (for example `api-client`, `ui` or `memory` before their phases) may import no workspace package: its row is added here and in the rule when the package is created. Root files are not in the table, but follow the entry-point, path and private-module-file rules.
+- **The table.** A member imports another member only by package name and only if its row above allows it; importing itself is always allowed. Nothing imports an app. A member without a row (for example `ui` or `memory` before their phases) may import no workspace package: its row is added here and in the rule when the package is created. Root files are not in the table, but follow the entry-point, path and private-module-file rules.
 - **Entry points.** An `@sebela/*` specifier must name a declared entry point: a subpath in the target's `exports`, or only the package root when the target has no `exports` or does not exist yet. Subpath patterns and `null` exclusions are honoured, so `@sebela/<name>/src/...` cannot bypass a package's public entry.
 - **Paths.** A relative, absolute or `file:` path may not leave its member, reach into another member or go through `node_modules/@sebela/*`. A root file may not reach into a member by path.
 - **Aliases.** A `#` subpath import is checked where the `imports` map of the importer's `package.json` sends it. In TypeScript files, any other bare specifier that the TypeScript program resolves to a workspace file (for example a `paths` alias) is checked as the path it resolves to. JavaScript files are linted without type information, so their aliases are not resolved.
@@ -218,7 +225,7 @@ The API is the trust boundary: content writes and content authentication are enf
 
 **Limits.** The rule checks import syntax, not design. Information hiding, a cohesive interface, documented guarantees, and selected exports instead of a barrel of every internal file are left to the reviewer (see [code standards](code-standards.md#enforcement-and-review)). JavaScript files have no type information, so their `paths` aliases are resolved neither for their own imports nor in the cycle search. Specifiers computed at run time are invisible.
 
-Each diagnostic names the specifier and what is allowed instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A change to the table above changes the `DEPENDENCIES` map in the rule and its tests in the same pull request.
+Each diagnostic names the specifier and what is allowed instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A package allowed only in test files is listed in the rule's `TEST_DEPENDENCIES` map; elsewhere in the member it is rejected with a message saying so. A change to the table above changes the `DEPENDENCIES` and `TEST_DEPENDENCIES` maps in the rule and its tests in the same pull request.
 
 ## Ports and worktree isolation
 

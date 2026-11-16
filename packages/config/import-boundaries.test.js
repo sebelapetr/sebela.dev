@@ -62,7 +62,12 @@ describe("import boundaries: the dependency table", () => {
     [
       "apps/api/src/app.ts",
       ["@sebela/services", "@sebela/contracts"],
-      ["@sebela/db", "@sebela/memory", "@sebela/api-client", "@sebela/ui"],
+      ["@sebela/db", "@sebela/memory", "@sebela/ui", "@sebela/api-client"],
+    ],
+    [
+      "packages/api-client/src/index.ts",
+      [],
+      ["@sebela/contracts", "@sebela/services", "@sebela/db", "@sebela/ui"],
     ],
     [
       "packages/services/src/index.ts",
@@ -96,6 +101,28 @@ describe("import boundaries: the dependency table", () => {
     }
   }
 
+  it("allows apps/api to import @sebela/api-client in its tests only", async () => {
+    for (const test of ["apps/api/src/client.test.ts", "apps/api/src/modules/profile/x.test.mjs"]) {
+      await assertAllowed(test, `import { createApiClient } from "@sebela/api-client";\n`);
+    }
+    for (const production of ["apps/api/src/server.ts", "apps/api/src/test-support.ts"]) {
+      await assertRejected(production, `import "@sebela/api-client";\n`, {
+        mentions: [
+          "'@sebela/api-client'",
+          "apps/api",
+          "only in its tests",
+          "docs/repository-structure.md",
+        ],
+      });
+    }
+  });
+
+  it("allows test-only packages in no other member's tests", async () => {
+    await assertRejected("packages/services/src/x.test.ts", `import "@sebela/api-client";\n`, {
+      mentions: ["'@sebela/api-client'", "packages/services"],
+    });
+  });
+
   it("names what the importer may import instead", async () => {
     await assertRejected("apps/web/src/page.ts", `import "@sebela/db";\n`, {
       mentions: ["@sebela/api-client", "@sebela/contracts", "@sebela/ui", "@sebela/config"],
@@ -110,6 +137,7 @@ describe("import boundaries: the dependency table", () => {
       "packages/services/eslint.config.js",
       "packages/db/eslint.config.js",
       "packages/contracts/eslint.config.js",
+      "packages/api-client/eslint.config.js",
     ]) {
       await assertAllowed(importer, `export { createConfig } from "@sebela/config/eslint";\n`);
     }
