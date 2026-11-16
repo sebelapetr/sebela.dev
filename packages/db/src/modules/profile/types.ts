@@ -255,6 +255,8 @@ export interface ProjectRecord extends ProjectFields {
   /** The slug of the owning experience. */
   experience: string;
   technologies: TechnologyRecord[];
+  /** The case study of the project, or `null` while it has none. */
+  caseStudy: CaseStudyRecord | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -310,4 +312,50 @@ export interface ProjectPersistence {
    * refers to it.
    */
   deleteProject(slug: string): Promise<DeleteProjectResult>;
+}
+
+/** Writable fields of a case study. Its project is fixed when it is created. */
+export interface CaseStudyFields {
+  /** The person's own role in the project, plain text. */
+  role: string;
+  /** Markdown, stored as written. */
+  body: string;
+}
+
+/** The case study of a project, which names its project by slug. */
+export interface CaseStudyRecord extends CaseStudyFields {
+  id: string;
+  /** The slug of the project the case study explains. */
+  project: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CreateCaseStudyResult =
+  { ok: true; caseStudy: CaseStudyRecord } | { ok: false; reason: "unknown_project" | "conflict" };
+
+export type UpdateCaseStudyResult =
+  { ok: true; caseStudy: CaseStudyRecord } | { ok: false; reason: "not_found" };
+
+export type DeleteCaseStudyResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/**
+ * Persistence operations of the case studies, addressed by the slug of their project. A project
+ * has at most one case study; a project with one cannot be deleted.
+ */
+export interface CaseStudyPersistence {
+  /** The case study of the project, or `null` when the project has none or does not exist. */
+  findCaseStudy(project: string): Promise<CaseStudyRecord | null>;
+  /**
+   * Creates the case study of the project; `unknown_project` when no project has the slug,
+   * `conflict` when it already has one, also for a racing create.
+   */
+  createCaseStudy(project: string, fields: CaseStudyFields): Promise<CreateCaseStudyResult>;
+  /** Changes only the given fields; `not_found` when the project or its case study is missing. */
+  updateCaseStudy(
+    project: string,
+    changes: Partial<CaseStudyFields>,
+  ): Promise<UpdateCaseStudyResult>;
+  /** Deletes only the case study, never its project; `not_found` when there is none. */
+  deleteCaseStudy(project: string): Promise<DeleteCaseStudyResult>;
 }

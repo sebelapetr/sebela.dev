@@ -62,7 +62,7 @@ export async function loadProjects(db: Executor, where: SQL | undefined): Promis
   for (const { projectId, technology } of links) {
     linked.set(projectId, [...(linked.get(projectId) ?? []), technology]);
   }
-  return rows.map((row) => ({ ...row, technologies: linked.get(row.id) ?? [] }));
+  return rows.map((row) => ({ ...row, technologies: linked.get(row.id) ?? [], caseStudy: null }));
 }
 
 async function loadProject(db: Executor, id: string): Promise<ProjectRecord> {
