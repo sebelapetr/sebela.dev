@@ -193,6 +193,21 @@ describe("module boundaries: source access across packages", () => {
     );
   });
 
+  it("rejects a root file reaching a private module file through a declared export", async () => {
+    write(
+      "packages/ledger/package.json",
+      JSON.stringify({
+        private: true,
+        type: "module",
+        exports: { ".": "./src/index.ts", "./entries": "./src/modules/entries/store.ts" },
+      }),
+    );
+    write("packages/ledger/src/modules/entries/store.ts", "export const store = 1;\n");
+    await assertRejected("tools/ledger-report.ts", `import "@sebela/ledger/entries";\n`, {
+      mentions: ["'@sebela/ledger/entries'", "packages/ledger/src/modules/entries", /private/u],
+    });
+  });
+
   it("rejects a declared package export that leads to a private module file", async () => {
     write(
       "packages/memory/package.json",
@@ -243,6 +258,25 @@ describe("module boundaries: tooling inside its own package", () => {
         mentions: ["'../drizzle.config.js'", "packages/db/drizzle.config", /tooling/u],
       },
     );
+  });
+
+  it("rejects another package importing a tooling configuration through a declared export", async () => {
+    write(
+      "packages/services/package.json",
+      JSON.stringify({
+        private: true,
+        type: "module",
+        exports: { ".": "./src/index.ts", "./tool": "./vitest.config.ts" },
+        imports: { "#modules/*": "./src/modules/*" },
+      }),
+    );
+    write(
+      "packages/services/vitest.config.ts",
+      `import "./src/modules/storage/drivers/local.js";\n`,
+    );
+    await assertRejected("apps/api/src/uses-tool.ts", `import "@sebela/services/tool";\n`, {
+      mentions: ["'@sebela/services/tool'", "packages/services/vitest.config", /tooling/u],
+    });
   });
 
   it("does not let tooling of another package read a private module file", async () => {
