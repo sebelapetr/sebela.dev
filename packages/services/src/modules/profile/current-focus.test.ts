@@ -48,6 +48,7 @@ describe("current-focus service", () => {
       name: "Northwind",
       website: null,
       description: null,
+      logoId: null,
     });
     await profile.createExperience({
       slug: "northwind-lead",
@@ -73,6 +74,7 @@ describe("current-focus service", () => {
       selectedForHomepage: false,
       position: 0,
       technologies: [],
+      coverId: null,
     };
     await profile.createProject({ ...project, slug: "route-planner", name: "Route planner" });
     await profile.createProject({ ...project, slug: "fleet-board", name: "Fleet board" });

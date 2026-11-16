@@ -108,9 +108,9 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
       return toPerson(result.person);
     },
     async updatePerson(changes) {
-      const record = await persistence.updatePerson(definedChanges<PersonFields>(changes));
-      if (!record) throw missing();
-      return toPerson(record);
+      const result = await persistence.updatePerson(definedChanges<PersonFields>(changes));
+      if (!result.ok) throw missing();
+      return toPerson(result.person);
     },
     async deletePerson() {
       if (!(await persistence.deletePerson())) throw missing();

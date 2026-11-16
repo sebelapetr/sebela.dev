@@ -27,6 +27,7 @@ const routing: ProjectCreate = {
   selectedForHomepage: true,
   position: 1,
   technologies: ["typescript", "postgres"],
+  coverId: null,
 };
 
 const fleet: ProjectCreate = {
@@ -38,6 +39,7 @@ const fleet: ProjectCreate = {
   selectedForHomepage: false,
   position: 2,
   technologies: [],
+  coverId: null,
 };
 
 describe("project service", () => {
@@ -50,7 +52,13 @@ describe("project service", () => {
     persistence = createPersistence(database.config);
     profile = createProfileService(persistence.profile);
     for (const slug of ["northwind", "acme"]) {
-      await profile.createOrganization({ slug, name: slug, website: null, description: null });
+      await profile.createOrganization({
+        slug,
+        name: slug,
+        website: null,
+        description: null,
+        logoId: null,
+      });
     }
     for (const [position, slug] of ["typescript", "postgres", "rust"].entries()) {
       await profile.createTechnology({

@@ -31,6 +31,7 @@ describe("case-study service", () => {
     selectedForHomepage: true,
     position,
     technologies: [],
+    coverId: null,
   });
 
   beforeAll(async () => {
@@ -42,6 +43,7 @@ describe("case-study service", () => {
       name: "Northwind",
       website: null,
       description: null,
+      logoId: null,
     });
     await profile.createExperience({
       slug: "northwind-lead",

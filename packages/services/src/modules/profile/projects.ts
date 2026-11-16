@@ -49,6 +49,8 @@ function refused(
       return invalid("technologies", "List each technology once.");
     case "invalid_period":
       return invalid("endedOn", "The end cannot be before the start.");
+    default:
+      return new DomainError("conflict", "Not implemented yet.");
   }
 }
 

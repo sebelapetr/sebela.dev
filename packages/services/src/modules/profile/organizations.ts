@@ -39,12 +39,12 @@ export function createOrganizationService(persistence: ProfilePersistence): Orga
       return toOrganization(result.organization);
     },
     async updateOrganization(slug, changes) {
-      const record = await persistence.updateOrganization(
+      const result = await persistence.updateOrganization(
         slug,
         definedChanges<OrganizationFields>(changes),
       );
-      if (!record) throw missing(slug);
-      return toOrganization(record);
+      if (!result.ok) throw missing(slug);
+      return toOrganization(result.organization);
     },
     async deleteOrganization(slug) {
       const result = await persistence.deleteOrganization(slug);

@@ -46,7 +46,13 @@ describe("experience service", () => {
     persistence = createPersistence(database.config);
     profile = createProfileService(persistence.profile);
     for (const slug of ["northwind", "acme"]) {
-      await profile.createOrganization({ slug, name: slug, website: null, description: null });
+      await profile.createOrganization({
+        slug,
+        name: slug,
+        website: null,
+        description: null,
+        logoId: null,
+      });
     }
     for (const [position, slug] of ["typescript", "postgres", "rust"].entries()) {
       await profile.createTechnology({

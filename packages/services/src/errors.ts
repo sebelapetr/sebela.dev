@@ -5,8 +5,12 @@
  * - `not_found`: the addressed record does not exist.
  * - `conflict`: the operation contradicts existing content, for example a second person.
  * - `validation_failed`: an argument breaks a domain rule the caller could not check itself.
+ * - `payload_too_large`: an uploaded file is larger than the configured limit.
+ * - `unsupported_media_type`: an uploaded file is not an accepted type, or its declared type or
+ *   extension contradicts its content.
  */
-export type DomainErrorCode = "not_found" | "conflict" | "validation_failed";
+export type DomainErrorCode =
+  "not_found" | "conflict" | "validation_failed" | "payload_too_large" | "unsupported_media_type";
 
 /** An offending input field of a `validation_failed` refusal, named by its dotted path. */
 export interface DomainErrorField {
