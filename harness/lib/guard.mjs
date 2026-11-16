@@ -103,13 +103,14 @@ const HARNESS_REASON =
   "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md). To read a harness file, use the Read or Grep tool, or a plain cat, grep, head or sed -n.";
 
 // Splits a shell command into its simple commands (separated by ; & | or newlines) as lists of
-// words without quotes. Null when it cannot tell what runs: command substitution, redirection
-// into a file, a heredoc or an unbalanced quote. Discarding output (2>&1, >/dev/null) is fine.
+// words without quotes. It fails closed: null for anything the shell could read differently from
+// this parser — a backslash outside single quotes, any expansion ($, braces, globs, ~ is harmless
+// and kept), a subshell, a comment, redirection into a file, a heredoc or an unbalanced quote.
+// Discarding output (2>&1, >/dev/null) is fine.
 function simpleCommands(command) {
-  if (/`|\$\(/.test(command)) return null;
   const cleaned = command
     .replace(/(^|\s)\d?>&\d(?=\s|$)/g, " ")
-    .replace(/\d?>\s*\/dev\/null/g, " ");
+    .replace(/(^|\s)\d?>\s*\/dev\/null(?=\s|$)/g, " ");
   const commands = [];
   let words = [];
   let word = null;
@@ -118,14 +119,21 @@ function simpleCommands(command) {
     if (word !== null) words.push(word);
     word = null;
   };
-  for (const char of cleaned) {
-    if (quote) {
-      if (char === quote) quote = null;
+  const chars = [...cleaned];
+  for (let i = 0; i < chars.length; i += 1) {
+    const char = chars[i];
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      else word += char;
+    } else if (quote === '"') {
+      if (char === '"') quote = null;
+      else if (char === "$" || char === "`") return null;
+      else if (char === "\\" && /[$`"\\\n]/.test(chars[i + 1] ?? "")) return null;
       else word += char;
     } else if (char === "'" || char === '"') {
       quote = char;
       word ??= "";
-    } else if (char === "<" || char === ">") {
+    } else if (/[\\$`<>(){}*?[\]#]/.test(char)) {
       return null;
     } else if (/[;&|\n]/.test(char)) {
       endWord();
@@ -143,19 +151,66 @@ function simpleCommands(command) {
   return commands;
 }
 
+// What a git invocation runs: the subcommand after the global options, and whether it sets
+// configuration for itself (`-c`, `--config-env`). Null when the words do not invoke git.
+const GIT_OPTIONS_WITH_VALUE = new Set([
+  "-C",
+  "-c",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+  "--exec-path",
+  "--super-prefix",
+  "--config-env",
+]);
+function gitInvocation(words) {
+  let i = 0;
+  if (words[i] === "env") i += 1;
+  while (i < words.length && /^\w+=/.test(words[i])) i += 1;
+  if (path.basename(words[i] ?? "") !== "git") return null;
+  i += 1;
+  const first = i;
+  let oneOff = false;
+  while (i < words.length && words[i].startsWith("-")) {
+    const option = words[i];
+    if (/^-c/.test(option) || option.startsWith("--config-env")) oneOff = true;
+    i += GIT_OPTIONS_WITH_VALUE.has(option) ? 2 : 1;
+  }
+  return {
+    sub: words[i],
+    args: words.slice(i + 1),
+    globals: words.slice(first, i),
+    plain: words[0] === "git",
+    oneOff,
+  };
+}
+
 // Programs that only read and print, with the arguments that keep them so.
 const READ_ONLY_GIT = new Set(["diff", "show", "log", "status", "ls-files", "grep", "blame"]);
-function readsOnly([program, ...args]) {
+// Options of those that write a file or run a program: --output, -O (open in a pager), external
+// diff and text conversion drivers.
+const GIT_WRITING_OPTION = /^(-[^-]*O|--output|--open-files|--ext-diff|--textconv)/;
+function readsOnly(words) {
+  const [program, ...args] = words;
   if (["cd", "cat", "head", "tail", "grep", "wc", "ls", "diff", "echo"].includes(program)) {
     return true;
   }
-  if (program === "sed") return args[0] === "-n" && /^\d+(,\d+)?p$/.test(args[1] ?? "");
-  if (program === "git") {
-    // `git -C <dir>` only says where; what follows decides.
-    while (args[0] === "-C" && args.length > 2) args.splice(0, 2);
+  // GNU sed takes options after the files too, so no other argument may be an option.
+  if (program === "sed") {
     return (
-      READ_ONLY_GIT.has(args[0]) && !args.some((arg) => /^(-O|--output|--open-files)/.test(arg))
+      args[0] === "-n" &&
+      /^\d+(,\d+)?p$/.test(args[1] ?? "") &&
+      args.slice(2).every((arg) => !arg.startsWith("-"))
     );
+  }
+  const git = gitInvocation(words);
+  if (
+    git?.plain &&
+    !git.oneOff &&
+    // Only `-C <dir>` before the subcommand: it says where, not what.
+    git.globals.every((word, index) => index % 2 === 1 || word === "-C")
+  ) {
+    return READ_ONLY_GIT.has(git.sub) && !git.args.some((arg) => GIT_WRITING_OPTION.test(arg));
   }
   return false;
 }
@@ -180,21 +235,53 @@ const GIT_CONFIG_READ_FLAGS = new Set([
   "--name-only",
   "--includes",
 ]);
-const GIT_CONFIG = new RegExp(`${AT_COMMAND}git\\s+config\\b`);
+function readsGitConfig(args) {
+  const values = args.filter((arg) => !arg.startsWith("-"));
+  return (
+    args.every((arg) => !arg.startsWith("-") || GIT_CONFIG_READ_FLAGS.has(arg)) &&
+    values.length <= 1
+  );
+}
+
+// Configuration through the environment reaches every git command, hooks included.
+const GIT_CONFIG_ENVIRONMENT =
+  /\bGIT_CONFIG(_COUNT|_KEY_|_VALUE_|_PARAMETERS|_GLOBAL|_SYSTEM|_NOSYSTEM)?\b/;
+// Programs that run another command given to them.
+const WRAPPERS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "eval",
+  "exec",
+  "command",
+  "xargs",
+  "nohup",
+  "timeout",
+  "nice",
+  "time",
+  "sudo",
+  "watch",
+  "find",
+]);
+const CONFIG_WORDS = /(^|\s)(config\b|-c(\s|\S)|--config-env)/;
+
+// Whether a command changes Git configuration, for good or for one command. Anything it cannot
+// read safely that mentions git together with configuration counts as a change.
 function changesGitConfig(command) {
-  if (!GIT_CONFIG.test(command)) return false;
+  if (GIT_CONFIG_ENVIRONMENT.test(command)) return true;
+  if (!/\bgit\b/.test(command)) return false;
   const commands = simpleCommands(command);
-  if (commands === null) return true;
-  return commands
-    .filter(([program, sub]) => program === "git" && sub === "config")
-    .some((words) => {
-      const args = words.slice(2);
-      const values = args.filter((arg) => !arg.startsWith("-"));
-      return (
-        !args.every((arg) => !arg.startsWith("-") || GIT_CONFIG_READ_FLAGS.has(arg)) ||
-        values.length > 1
-      );
-    });
+  if (commands === null) return CONFIG_WORDS.test(command);
+  return commands.some((words) => {
+    const git = gitInvocation(words);
+    if (git) return git.oneOff || (git.sub === "config" && !readsGitConfig(git.args));
+    return (
+      WRAPPERS.has(path.basename(words[0])) &&
+      /\bgit\b/.test(words.join(" ")) &&
+      CONFIG_WORDS.test(words.join(" "))
+    );
+  });
 }
 
 // Leaving .context out of a search (`--exclude-dir=.context`, `-path ./.context -prune`,
@@ -308,10 +395,6 @@ function branchNamedBy(ref, currentBranch) {
 // What the phase loop never needs: changing the repository's settings, secrets or credentials.
 const UNATTENDED_FORBIDDEN = new RegExp(
   `${AT_COMMAND}gh\\s+(api|repo|secret|auth|label|workflow|ruleset|variable)\\b`,
-);
-// `git -c` sets configuration for one command, hooks included.
-const ONE_OFF_GIT_CONFIG = new RegExp(
-  `${AT_COMMAND}git(?:\\s+(?:-C\\s+\\S+|--git-dir=\\S+|--work-tree=\\S+))*\\s+(-c\\s|--config-env)`,
 );
 const SETTINGS_REASON =
   "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md). To read a release of another repository, use `gh release view --repo <owner>/<repo>`; to read a Git setting, `git config --get <key>`.";
@@ -478,12 +561,7 @@ export function evaluateToolCall({
     ) {
       return deny(HARNESS_REASON);
     }
-    if (
-      unattended &&
-      (UNATTENDED_FORBIDDEN.test(command) ||
-        ONE_OFF_GIT_CONFIG.test(command) ||
-        changesGitConfig(command))
-    ) {
+    if (unattended && (UNATTENDED_FORBIDDEN.test(command) || changesGitConfig(command))) {
       return deny(SETTINGS_REASON);
     }
     if (restricted && mentionsContext(command)) {

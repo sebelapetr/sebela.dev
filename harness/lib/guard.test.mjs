@@ -499,6 +499,46 @@ test("anything that could write the harness settings through the shell is still 
   }
 });
 
+test("what the shell would read differently from the guard is refused", () => {
+  for (const command of [
+    "cat \\' > .claude/settings.json \\'",
+    'cat .claude/settings.json \\" > .claude/settings.json \\"',
+    "git diff $X -- .claude/settings.json",
+    'git diff "$X" -- .claude/settings.json',
+    "git diff {--output=.claude/settings.json,} HEAD",
+    "git diff --outpu* .claude/settings.json",
+    "git grep -nO vi x -- .claude/settings.json",
+    "git diff --ext-diff -- .claude/settings.json",
+    "cat .claude/settings.json # > nothing",
+    "sed -n 1,80p .claude/settings.json -i",
+    "sed -n 1p .claude/settings.json --in-place",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
+test("Git configuration cannot be changed around the parser", () => {
+  for (const command of [
+    "git -C . config core.hooksPath /dev/null",
+    "git --no-pager config core.hooksPath x",
+    "env git config core.hooksPath x",
+    "A=1 git config core.hooksPath x",
+    "/usr/bin/git config core.hooksPath x",
+    'sh -c "git config core.hooksPath x"',
+    "(git config core.hooksPath x)",
+    "git config $(echo core.hooksPath x)",
+    "git --no-pager -c core.hooksPath=/dev/null commit -m x",
+    "git -C . -c core.hooksPath=x commit -m x",
+    "git --config-env=core.hooksPath=X commit -m x",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x",
+    "export GIT_CONFIG_PARAMETERS=x && git commit -m x",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+  assert.equal(bash("git -C /repo/.worktrees/feat-1-x config --get core.hooksPath", loop), null);
+  assert.equal(bash('git commit -m "use git config for hooks"', loop), null);
+});
+
 test("a refusal says how to do the same safely", () => {
   assert.match(bash("sed -i s/x/y/ .claude/settings.json", loop).reason, /Read or Grep tool/);
   assert.match(bash("python3 fix.py .env", loop).reason, /Edit or Write tool/);
