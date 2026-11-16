@@ -148,3 +148,31 @@ test("refusals are merged, the most frequent first, ten at most, each on one lin
   assert.equal(items.length, 10);
   assert.match(items[0], /^- 5× cmd 3 second line$/);
 });
+
+test("a continued agent counts as another round of it", () => {
+  const line = (obj) => JSON.stringify(obj);
+  const counts = countDispatches([
+    line({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", name: "Agent", input: { subagent_type: "reviewer" } }],
+      },
+    }),
+    line({ type: "user", toolUseResult: { agentId: "rev1", agentType: "reviewer" } }),
+    line({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", name: "SendMessage", input: { to: "rev1", message: "fixed" } },
+        ],
+      },
+    }),
+    line({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", name: "SendMessage", input: { to: "nobody", message: "x" } }],
+      },
+    }),
+  ]);
+  assert.deepEqual(counts, { reviewer: 2 });
+});
