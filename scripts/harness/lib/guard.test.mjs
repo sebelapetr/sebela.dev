@@ -115,7 +115,7 @@ test("search tools may name the exact local file in their own worktree", () => {
 
 test("simple shell commands may use local environment files in their own worktree", () => {
   for (const command of [
-    "cat .env.local", "sed -i 's/WEB_PORT=3010/WEB_PORT=3020/' .env.local",
+    "cat .env.local", "sed -i 's/CUSTOM_SETTING=off/CUSTOM_SETTING=on/' .env.local",
     "cp .env.example .env.local", "node --env-file=.env.local app.mjs",
     `cat '${ownRoot}/apps/web/.env.local'`, `cat '${ownRoot}/folder with spaces/.env.local'`,
   ]) assert.equal(bash(command, own), null, command);
