@@ -9997,9 +9997,16 @@
             "description": "Text that describes an image for people who cannot see it."
           },
           "url": {
-            "type": "string",
-            "format": "uri",
-            "description": "The public address of the file, computed from the configured public base."
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The public address of the file, computed from the configured public base; null when the configured storage cannot address the key, for example a file stored under another environment or worktree."
           },
           "createdAt": {
             "type": "string",

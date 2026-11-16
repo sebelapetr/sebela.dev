@@ -27,8 +27,12 @@ export interface Storage {
   store(file: { bytes: Uint8Array; extension: StoredExtension }): Promise<string>;
   /** Removes the file; a file that is already gone counts as removed. */
   delete(key: string): Promise<void>;
-  /** The public address of the key, computed from the configured base; nothing is stored. */
-  publicAddress(key: string): string;
+  /**
+   * The public address of the key, computed from the configured base; nothing is stored.
+   * `null` when this storage cannot address the key, for example a key written under
+   * another environment or worktree prefix.
+   */
+  publicAddress(key: string): string | null;
 }
 
 /** Reads the files a driver keeps on local disk, so the API can serve them. */
@@ -105,10 +109,7 @@ export function openStorage(config: StorageConfig): OpenedStorage {
       store: (file) => local.store(file),
       delete: (key) => local.delete(key),
       publicAddress(key) {
-        if (fileNameOf(prefix, key) === null) {
-          throw new Error("The key is not a key of this storage.");
-        }
-        return `${config.publicBaseUrl}/${key}`;
+        return fileNameOf(prefix, key) === null ? null : `${config.publicBaseUrl}/${key}`;
       },
     },
     files: { read: (key) => local.read(key) },

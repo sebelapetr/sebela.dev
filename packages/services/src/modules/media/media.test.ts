@@ -486,15 +486,17 @@ describe("media service", () => {
   describe("records of another prefix", () => {
     it("lists and reads them without an address and serves no file for them", async () => {
       const uploaded = await media.uploadMedia(png());
-      const elsewhere = serviceWith(
-        openStorage({
+      const elsewhere = createMediaService(persistence.profile, {
+        storage: openStorage({
           driver: "local",
           root: folder,
           environment: "test",
           worktree: "feature-b",
           publicBaseUrl: "https://media.example.test/files",
-        }).storage,
-      );
+        }),
+        limits,
+        onCleanupFailure: (failure) => failures.push(failure),
+      });
 
       const foreign = { ...uploaded, url: null };
       await expect(elsewhere.listMedia()).resolves.toEqual([foreign]);

@@ -1608,11 +1608,8 @@ export interface components {
             height: number | null;
             /** @description Text that describes an image for people who cannot see it. */
             altText: string | null;
-            /**
-             * Format: uri
-             * @description The public address of the file, computed from the configured public base.
-             */
-            url: string;
+            /** @description The public address of the file, computed from the configured public base; null when the configured storage cannot address the key, for example a file stored under another environment or worktree. */
+            url: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

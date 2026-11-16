@@ -37,9 +37,13 @@ export const MediaSchema = z
     width: dimension("The image width in pixels"),
     height: dimension("The image height in pixels"),
     altText: AltTextSchema,
-    url: z.url({ protocol: /^https?$/ }).meta({
-      description: "The public address of the file, computed from the configured public base.",
-    }),
+    url: z
+      .url({ protocol: /^https?$/ })
+      .nullable()
+      .meta({
+        description:
+          "The public address of the file, computed from the configured public base; null when the configured storage cannot address the key, for example a file stored under another environment or worktree.",
+      }),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })
