@@ -64,6 +64,9 @@ describe("hard-coded configuration check: fixture files", () => {
       located(result.reports),
       [
         "rejected/bin/serve:2 port",
+        "rejected/comments.mjs:2 port",
+        "rejected/comments.mjs:5 port",
+        "rejected/comments.mjs:6 local-host",
         "rejected/database.mjs:2 database-name",
         "rejected/database.mjs:3 database-name",
         "rejected/database.mjs:4 database-name",
@@ -85,12 +88,20 @@ describe("hard-coded configuration check: fixture files", () => {
         "rejected/service.py:4 port",
         "rejected/service.py:5 database-name",
         "rejected/service.py:6 environment-default",
+        "rejected/service.py:7 port",
+        "rejected/service.py:8 environment-default",
+        "rejected/service.py:9 environment-default",
         "rejected/start.sh:4 port",
         "rejected/start.sh:5 port",
         "rejected/start.sh:6 database-name",
         "rejected/start.sh:7 database-name",
         "rejected/start.sh:8 database-name",
         "rejected/start.sh:9 environment-default",
+        "rejected/typed.ts:2 port",
+        "rejected/typed.ts:3 port",
+        "rejected/typed.ts:6 database-name",
+        "rejected/typed.ts:8 port",
+        "rejected/typed.ts:9 port",
       ].sort(),
     );
   });
@@ -111,6 +122,8 @@ describe("hard-coded configuration check: fixture files", () => {
 
     assert.equal(result.status, 0, result.output);
     assert.deepEqual(result.reports, []);
+    // Six executable files; the documentation and the declaration are not checked at all.
+    assert.match(result.output, /in 6 file\(s\)/);
   });
 });
 

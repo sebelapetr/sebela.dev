@@ -14,3 +14,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   }
   return { apiUrl, webPort, databaseName };
 }
+
+export function listen(port: number = Number(process.env["WEB_PORT"])): number {
+  return port;
+}
+export const probePort: number = 0;

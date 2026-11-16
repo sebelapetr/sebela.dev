@@ -19,3 +19,4 @@ export const mode = process.env.NODE_ENV ?? "development";
 export function report(transport) {
   return transport.export({ port });
 }
+/* Documentation before code: port 3000 on localhost. */ export const documented = port;
