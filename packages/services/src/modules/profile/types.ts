@@ -113,9 +113,11 @@ export interface ExperienceService {
  * - Create and update refuse, as `validation_failed` naming the field and writing nothing, an
  *   unknown `experience`, unknown or repeated `technologies` and an `endedOn` before the (stored
  *   or given) start.
+ * - Every project carries its case study, or `null` without one; it is written only through
+ *   `CaseStudyService`.
  * - `deleteProject`: removes the project and its technology links, never its experience or
- *   technologies; `not_found` for an unknown slug; `conflict` (and nothing deleted) while another
- *   record still refers to it.
+ *   technologies; `not_found` for an unknown slug; `conflict` (and nothing deleted) while it has a
+ *   case study or another record still refers to it.
  */
 export interface ProjectService {
   listProjects(): Promise<Project[]>;

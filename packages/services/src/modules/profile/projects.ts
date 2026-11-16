@@ -8,18 +8,20 @@ import type {
 } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
+import { toCaseStudy } from "./case-studies.js";
 import { toTechnology } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
 import type { ProjectService } from "./types.js";
 
 const missing = (slug: string) => new DomainError("not_found", `There is no project "${slug}".`);
 
-/** A stored project in the contract shape; the experience stays its slug. */
+/** A stored project in the contract shape with its case study; the experience stays its slug. */
 export function toProject(record: ProjectRecord): Project {
   return {
     ...record,
     links: record.links.map(({ label, url }) => ({ label, url })),
     technologies: record.technologies.map(toTechnology),
+    caseStudy: record.caseStudy ? toCaseStudy(record.caseStudy) : null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -89,7 +91,7 @@ export function createProjectService(persistence: ProfilePersistence): ProjectSe
       if (result.reason === "not_found") throw missing(slug);
       throw new DomainError(
         "conflict",
-        `The project "${slug}" is still referenced by other records; remove those references first.`,
+        `The project "${slug}" still has a case study or another record referring to it; remove those first.`,
       );
     },
   };
