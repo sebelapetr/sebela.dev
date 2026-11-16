@@ -22,6 +22,8 @@ const TIMEOUT_MS = 20_000;
 const DATABASE_IDENTIFIER = /^wt_[a-z0-9_]{1,60}$/;
 const OWNER_NAME = /^[A-Za-z0-9._-]+$/;
 const ROLE_ATTRIBUTES = "LOGIN CREATEDB NOSUPERUSER NOCREATEROLE";
+// The holder of a database whose owner makes its comment untrustworthy; never a worktree name.
+const FOREIGN = Symbol("foreign owner");
 
 // `root` is the checkout whose compose.yaml defines the service; `env` is the environment Compose
 // runs with (it resolves the project name and the settings compose.yaml requires).
@@ -67,13 +69,30 @@ export function composeDatabases({ root, env }) {
     const comment = row.slice("found:".length);
     return comment.startsWith(OWNER_MARKER) ? comment.slice(OWNER_MARKER.length) : "";
   };
-  const databaseHolder = (name) => holderOf("pg_database", "pg_database", "datname", name);
   const roleHolder = (name) => holderOf("pg_authid", "pg_roles", "rolname", name);
-
-  const refuse = (kind, name, owner, holder) =>
-    new Error(
-      `${kind} ${name} exists but ${holder ? `belongs to worktree ${holder}` : "was not created for a worktree"}; refusing to use or drop it for ${owner}`,
+  // Worktree roles may create databases and comment on their own, so a database's comment counts
+  // only while the database is owned by the worktree's role or by the superuser the scripts
+  // connect as (a database created before worktrees had roles). Otherwise it is "foreign".
+  const databaseHolder = (name) => {
+    const holder = holderOf("pg_database", "pg_database", "datname", name);
+    if (holder === null) return null;
+    const trusted = psql(
+      `SELECT pg_get_userbyid(datdba) IN (current_user, '${name}') FROM pg_database WHERE datname = '${name}';`,
     );
+    return trusted === "t" ? holder : FOREIGN;
+  };
+
+  const refuse = (kind, name, owner, holder) => {
+    const reason =
+      holder === FOREIGN
+        ? "is owned by a role other than its worktree's"
+        : holder
+          ? `belongs to worktree ${holder}`
+          : "was not created for a worktree";
+    return new Error(
+      `${kind} ${name} exists but ${reason}; refusing to use or drop it for ${owner}`,
+    );
+  };
 
   // The databases the role owns besides `name`: those drop may remove (`protectedOnes` false), or
   // those it must keep (true) — the main checkout's database and any recorded for another worktree.

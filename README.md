@@ -176,7 +176,7 @@ Installation needs no configuration. It installs exactly what `pnpm-lock.yaml` r
 cp .env.example .env
 ```
 
-Then replace the placeholder `POSTGRES_PASSWORD` in `.env` with a local password of your own, and set `DATABASE_USER` and `DATABASE_PASSWORD` to the role the main checkout's code connects as. `.env.example` documents every setting; its other values are the main checkout's ports, the Postgres address and port and the user and database names. Compose reads `.env` next to `compose.yaml`; a variable set in your shell takes precedence. Environment files are ignored by Git — never commit them.
+Then replace the placeholder `POSTGRES_PASSWORD` in `.env` with a local password of your own, and set `DATABASE_USER` and `DATABASE_PASSWORD` to the role the main checkout's code connects as: no script creates one for it, so it uses `POSTGRES_USER` and that password. `.env.example` documents every setting; its other values are the main checkout's ports, the Postgres address and port and the user and database names. Compose reads `.env` next to `compose.yaml`; a variable set in your shell takes precedence. Environment files are ignored by Git — never commit them.
 
 ### 3. Start the infrastructure
 

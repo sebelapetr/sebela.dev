@@ -209,6 +209,11 @@ export function createWorktree({
       );
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
+      // Written by someone else meanwhile: kept, but its credentials no longer work.
+      throw new Error(
+        `${envPath} appeared while the worktree was set up and was kept, but role ${credentials.DATABASE_USER} now has a new password it does not hold; delete it and run create again`,
+        { cause: error },
+      );
     }
   }
   return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
