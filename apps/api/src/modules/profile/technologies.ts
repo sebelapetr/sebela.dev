@@ -83,7 +83,7 @@ export function technologyRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Delete a technology",
       description:
-        "A technology that other records, such as experiences, still link is not deleted; remove those links first.",
+        "A technology that other records, such as experiences and projects, still link is not deleted; remove those links first.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The technology was deleted." },
       errors: ["not_found", "conflict"],

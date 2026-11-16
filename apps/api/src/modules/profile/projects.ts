@@ -12,12 +12,6 @@ import { defineRoute, type RouteDefinition } from "../../routing.js";
 const LIST = "/v1/projects";
 const ITEM = "/v1/projects/:slug";
 
-/** Red stub: the routes are documented, their handlers are not written yet. */
-const notYet = (profile: ProfileService): Promise<never> =>
-  Promise.reject(
-    new Error(`Not implemented yet (${String(Object.keys(profile).length)} operations).`),
-  );
-
 /**
  * The HTTP routes of the projects, addressed by stable slug: public list and read with the
  * technologies resolved and the owning experience named by slug, authenticated create, update and
@@ -41,7 +35,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
         schema: ProjectListSchema,
       },
       errors: [],
-      handle: () => notYet(profile),
+      handle: () => profile.listProjects(),
     }),
     defineRoute({
       operationId: "getProject",
@@ -56,7 +50,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
         schema: ProjectSchema,
       },
       errors: ["not_found"],
-      handle: () => notYet(profile),
+      handle: ({ params }) => profile.getProject(params.slug),
     }),
     defineRoute({
       operationId: "createProject",
@@ -74,7 +68,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
         location: ITEM,
       },
       errors: ["conflict"],
-      handle: () => notYet(profile),
+      handle: ({ body }) => profile.createProject(body),
     }),
     defineRoute({
       operationId: "updateProject",
@@ -92,7 +86,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
         schema: ProjectSchema,
       },
       errors: ["not_found"],
-      handle: () => notYet(profile),
+      handle: ({ params, body }) => profile.updateProject(params.slug, body),
     }),
     defineRoute({
       operationId: "deleteProject",
@@ -105,7 +99,10 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
       params: SlugParamsSchema,
       response: { status: 204, description: "The project was deleted." },
       errors: ["not_found", "conflict"],
-      handle: () => notYet(profile),
+      handle: async ({ params }) => {
+        await profile.deleteProject(params.slug);
+        return undefined;
+      },
     }),
   ];
 }

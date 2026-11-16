@@ -14,10 +14,10 @@ const ITEM = "/v1/experiences/:slug";
 
 /**
  * The HTTP routes of the experiences, addressed by stable slug: public list and read with the
- * organization and technologies resolved, authenticated create, update and delete. An unknown
- * organization or technology, a repeated technology or an end before the start is a
- * `validation_failed` naming the field; a taken slug and a still-referenced experience are a
- * `conflict`.
+ * organization and technologies resolved and the owned projects in their order, authenticated
+ * create, update and delete. An unknown organization or technology, a repeated technology or an
+ * end before the start is a `validation_failed` naming the field; a taken slug and an experience
+ * that still owns projects are a `conflict`.
  */
 export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
   return [
@@ -28,7 +28,7 @@ export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
       access: "public",
       summary: "List the experiences",
       description:
-        "Current roles (no end) first, then by start, latest first, then by end, latest first, then by slug. Each experience carries its organization and its technologies in their order.",
+        "Current roles (no end) first, then by start, latest first, then by end, latest first, then by slug. Each experience carries its organization, its technologies and its projects, each in their order.",
       response: {
         status: 200,
         description: "Every experience, in order.",
@@ -46,7 +46,7 @@ export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
       params: SlugParamsSchema,
       response: {
         status: 200,
-        description: "The experience with its organization and technologies.",
+        description: "The experience with its organization, technologies and projects.",
         schema: ExperienceSchema,
       },
       errors: ["not_found"],
@@ -95,7 +95,7 @@ export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Delete an experience",
       description:
-        "Removes the experience and its technology links; the organization and the technologies stay. An experience that other records still refer to is not deleted.",
+        "Removes the experience and its technology links; the organization and the technologies stay. An experience that still owns projects, or that other records refer to, is not deleted.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The experience was deleted." },
       errors: ["not_found", "conflict"],

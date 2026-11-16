@@ -87,7 +87,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a technology
-         * @description A technology that other records, such as experiences, still link is not deleted; remove those links first.
+         * @description A technology that other records, such as experiences and projects, still link is not deleted; remove those links first.
          */
         delete: operations["deleteTechnology"];
         options?: never;
@@ -203,7 +203,7 @@ export interface paths {
         };
         /**
          * List the experiences
-         * @description Current roles (no end) first, then by start, latest first, then by end, latest first, then by slug. Each experience carries its organization and its technologies in their order.
+         * @description Current roles (no end) first, then by start, latest first, then by end, latest first, then by slug. Each experience carries its organization, its technologies and its projects, each in their order.
          */
         get: operations["listExperiences"];
         put?: never;
@@ -231,7 +231,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an experience
-         * @description Removes the experience and its technology links; the organization and the technologies stay. An experience that other records still refer to is not deleted.
+         * @description Removes the experience and its technology links; the organization and the technologies stay. An experience that still owns projects, or that other records refer to, is not deleted.
          */
         delete: operations["deleteExperience"];
         options?: never;
@@ -2384,7 +2384,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The experience with its organization and technologies. */
+            /** @description The experience with its organization, technologies and projects. */
             200: {
                 headers: {
                     [name: string]: unknown;
