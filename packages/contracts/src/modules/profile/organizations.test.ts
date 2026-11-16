@@ -22,7 +22,7 @@ const northwind = {
 
 describe("OrganizationCreateSchema", () => {
   it("accepts an organization with a website and a description", () => {
-    expect(OrganizationCreateSchema.parse(northwind)).toEqual(northwind);
+    expect(OrganizationCreateSchema.parse(northwind)).toEqual({ ...northwind, logoId: null });
   });
 
   it("fills an unset website and description with null", () => {

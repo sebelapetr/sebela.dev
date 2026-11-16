@@ -1,6 +1,21 @@
 export { ErrorResponseSchema, errorCodes } from "./errors.js";
 export type { ErrorCode, ErrorResponse } from "./errors.js";
 export {
+  MediaIdParamsSchema,
+  MediaListSchema,
+  MediaSchema,
+  MediaUpdateSchema,
+  MediaUploadSchema,
+  mediaTypes,
+} from "./modules/media/index.js";
+export type {
+  Media,
+  MediaIdParams,
+  MediaType,
+  MediaUpdate,
+  MediaUpload,
+} from "./modules/media/index.js";
+export {
   CaseStudyCreateSchema,
   CaseStudySchema,
   CaseStudyUpdateSchema,
