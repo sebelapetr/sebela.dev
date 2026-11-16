@@ -221,3 +221,20 @@ export const projectTechnologies = profileSchema.table(
     unique("project_technologies_position_unique").on(table.projectId, table.position),
   ],
 );
+
+/**
+ * The long-form case study of a project. The unique `project_id` keeps at most one per project,
+ * also against racing creates; the foreign key has no cascade, so a project with a case study
+ * cannot be deleted until the case study is removed.
+ */
+export const caseStudies = profileSchema.table("case_studies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .unique()
+    .references(() => projects.id),
+  role: text("role").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
