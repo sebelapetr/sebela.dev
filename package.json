@@ -24,7 +24,7 @@
     "stack:seed": "docker compose --profile api run --rm api node dist/cli/seed.js",
     "stack:api-keys": "docker compose --profile api run --rm api node dist/cli/api-keys.js",
     "stack:logs": "docker compose --profile api logs",
-    "stack:down": "docker compose --profile api down",
+    "stack:down": "docker compose --profile api rm --stop --force api migrate",
     "test:api-stack": "node scripts/checks/api-stack.e2e.mjs"
   },
   "devDependencies": {
