@@ -108,7 +108,9 @@ export type {
 } from "./experiences.js";
 export {
   ProjectCreateSchema,
+  ProjectLinkSchema,
   ProjectListSchema,
   ProjectSchema,
   ProjectUpdateSchema,
 } from "./projects.js";
+export type { Project, ProjectCreate, ProjectLink, ProjectUpdate } from "./projects.js";

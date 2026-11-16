@@ -5,7 +5,7 @@ import { key, SlugSchema, timestamps } from "./fields.js";
 const NameSchema = z.string().trim().min(1).max(100);
 
 /** Orders a record in its list, ascending; records with the same position are ordered by slug. */
-const PositionSchema = z
+export const PositionSchema = z
   .int()
   .min(0)
   .max(1_000_000)
