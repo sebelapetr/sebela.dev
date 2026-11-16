@@ -69,3 +69,47 @@ export interface CatalogPersistence {
   /** `true` when the topic was deleted, `false` when there was none. */
   deleteTopic(slug: string): Promise<boolean>;
 }
+
+/** Writable fields of an organization. The slug is fixed when it is created. */
+export interface OrganizationFields {
+  name: string;
+  /** An absolute `http`/`https` address, or `null`. */
+  website: string | null;
+  /** Markdown, or `null`. */
+  description: string | null;
+}
+
+export interface OrganizationRecord extends OrganizationFields {
+  id: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CreateOrganizationResult =
+  { ok: true; organization: OrganizationRecord } | { ok: false; reason: "conflict" };
+
+export type DeleteOrganizationResult =
+  { ok: true } | { ok: false; reason: "not_found" | "referenced" };
+
+/** Persistence operations of the organizations, addressed by slug. */
+export interface OrganizationPersistence {
+  /** Every organization, ordered by name ignoring case, then by slug. */
+  listOrganizations(): Promise<OrganizationRecord[]>;
+  /** The organization with the slug, or `null`. */
+  findOrganization(slug: string): Promise<OrganizationRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create. */
+  createOrganization(
+    fields: OrganizationFields & { slug: string },
+  ): Promise<CreateOrganizationResult>;
+  /** Changes only the given fields; `null` when there is no such organization. */
+  updateOrganization(
+    slug: string,
+    changes: Partial<OrganizationFields>,
+  ): Promise<OrganizationRecord | null>;
+  /**
+   * Deletes the organization; `not_found` when there is none, `referenced` (and nothing deleted)
+   * while another record still refers to it through a foreign key.
+   */
+  deleteOrganization(slug: string): Promise<DeleteOrganizationResult>;
+}

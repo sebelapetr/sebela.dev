@@ -2,13 +2,19 @@ import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { createCatalogPersistence } from "./catalogs.js";
+import { createOrganizationPersistence } from "./organizations.js";
 import { persons } from "./schema.js";
-import type { CatalogPersistence } from "./types.js";
+import type { CatalogPersistence, OrganizationPersistence } from "./types.js";
 
 export type {
   CatalogPersistence,
+  CreateOrganizationResult,
   CreateTechnologyResult,
   CreateTopicResult,
+  DeleteOrganizationResult,
+  OrganizationFields,
+  OrganizationPersistence,
+  OrganizationRecord,
   TechnologyFields,
   TechnologyGroup,
   TechnologyRecord,
@@ -47,7 +53,7 @@ export type CreatePersonResult =
   { ok: true; person: PersonRecord } | { ok: false; reason: "conflict" };
 
 /** Persistence operations of the profile domain. */
-export interface ProfilePersistence extends CatalogPersistence {
+export interface ProfilePersistence extends CatalogPersistence, OrganizationPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -80,6 +86,7 @@ const columns = {
 export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence {
   return {
     ...createCatalogPersistence(db),
+    ...createOrganizationPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
