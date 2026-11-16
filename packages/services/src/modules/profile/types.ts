@@ -1,9 +1,13 @@
-// The catalog, organization, experience, project, case-study, exploration, service, education and
-// testimonial interfaces, private to the profile module and re-exported by its index.
+// The catalog, organization, experience, project, case-study, exploration, service, education,
+// testimonial and current-focus interfaces, private to the profile module and re-exported by its
+// index.
 import type {
   CaseStudy,
   CaseStudyCreate,
   CaseStudyUpdate,
+  CurrentFocus,
+  CurrentFocusCreate,
+  CurrentFocusUpdate,
   Education,
   EducationCreate,
   EducationUpdate,
@@ -263,4 +267,30 @@ export interface TestimonialService {
   createTestimonial(input: TestimonialCreate): Promise<Testimonial>;
   updateTestimonial(slug: string, changes: TestimonialUpdate): Promise<Testimonial>;
   deleteTestimonial(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the current focus, addressed by slug: what is being built or learned right now,
+ * each entry optionally about one project and linked to ordered topics. Results are in the
+ * contract shape with the project and topics resolved; expected failures are `DomainError`s:
+ *
+ * - `listCurrentFocus`: every entry, ordered by position, then slug.
+ * - `getCurrentFocus`: the entry, or `not_found`.
+ * - `createCurrentFocus`: stores the entry with its project and topic links; `conflict` when the
+ *   slug is taken, also when creates race.
+ * - `updateCurrentFocus`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `project` replaces the project and `null` removes it; a given
+ *   `topics` list replaces every topic link; omitted fields keep their value. `not_found` for an
+ *   unknown slug.
+ * - Create and update refuse, as `validation_failed` writing nothing, an unknown `project` and
+ *   unknown or repeated `topics`, each naming its field.
+ * - `deleteCurrentFocus`: removes the entry and its topic links, never the project or topics;
+ *   `not_found` for an unknown slug. Nothing refers to an entry, so a delete never conflicts.
+ */
+export interface CurrentFocusService {
+  listCurrentFocus(): Promise<CurrentFocus[]>;
+  getCurrentFocus(slug: string): Promise<CurrentFocus>;
+  createCurrentFocus(input: CurrentFocusCreate): Promise<CurrentFocus>;
+  updateCurrentFocus(slug: string, changes: CurrentFocusUpdate): Promise<CurrentFocus>;
+  deleteCurrentFocus(slug: string): Promise<void>;
 }
