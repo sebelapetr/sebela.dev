@@ -305,17 +305,22 @@ describe("the media API", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("image/png");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      expect(response.headers.get("content-security-policy")).toContain("sandbox");
+      expect(response.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+      expect(response.headers.get("content-disposition")).toBe("inline");
       expect(Buffer.from(await response.arrayBuffer())).toEqual(png.bytes);
     });
 
-    it("serves a PDF as a PDF", async () => {
+    it("serves a PDF inline, unsniffable, without the sandbox that stops browser viewers", async () => {
       const media = await uploaded(pdf);
+      const name = media.key.split("/").at(-1) ?? "";
 
       const response = await request(`/v1/media/files/${media.key}`);
 
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("application/pdf");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("content-security-policy")).toBe("default-src 'none'");
+      expect(response.headers.get("content-disposition")).toBe(`inline; filename="${name}"`);
       expect(Buffer.from(await response.arrayBuffer())).toEqual(pdf.bytes);
     });
 
