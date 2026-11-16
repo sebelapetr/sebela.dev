@@ -1,8 +1,11 @@
-// Slot bookkeeping for parallel worktrees. Pure functions only: no file system, no git.
-// Slot 0 is the main checkout; worktrees take slots 1..MAX_SLOTS.
+// Slot bookkeeping for parallel worktrees. Pure functions only: no file system, no git, no
+// database. Slot 0 is the main checkout; worktrees take slots 1..MAX_SLOTS.
 // Scheme: docs/repository-structure.md ("Ports and worktree isolation"). The base ports are the
 // main checkout's configuration, not code: callers read them from the environment (.env.example
-// documents them) and validate them with basePortsFrom.
+// documents them) and validate them with basePortsFrom. Each worktree also owns one database,
+// named by databaseName.
+
+import { createHash } from "node:crypto";
 
 export const MAX_SLOTS = 9;
 export const PORT_STEP = 10;
@@ -78,6 +81,32 @@ export function worktreeDirName(branch) {
     .replace(/^[-.]+|[-.]+$/g, "");
   if (!name) throw new Error(`cannot derive a folder name from branch "${branch}"`);
   return name;
+}
+
+// Postgres identifiers are at most 63 bytes. A worktree database name is `wt_<slug>_<hash>`: the
+// prefix keeps it apart from the main checkout's database, the slug keeps it readable, and the
+// hash of the worktree folder name keeps folders that normalise alike (`a.b`, `a-b`, `A-B`) and
+// long names that share a beginning apart. It depends only on the folder name, so a branch and
+// its folder give the same database.
+const IDENTIFIER_LIMIT = 63;
+const DATABASE_PREFIX = "wt_";
+const HASH_LENGTH = 10;
+
+export function databaseName(branch) {
+  let folder;
+  try {
+    folder = worktreeDirName(branch);
+  } catch {
+    throw new Error(`cannot derive a database name from branch "${branch}"`);
+  }
+  const hash = createHash("sha256").update(folder).digest("hex").slice(0, HASH_LENGTH);
+  const room = IDENTIFIER_LIMIT - DATABASE_PREFIX.length - hash.length - 1;
+  const slug = folder
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .slice(0, room)
+    .replace(/^_+|_+$/g, "");
+  return `${DATABASE_PREFIX}${slug ? `${slug}_` : ""}${hash}`;
 }
 
 export function envFileContent(slot, basePorts, extra = {}) {

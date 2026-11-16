@@ -8,6 +8,7 @@ import {
   PORT_VARIABLES,
   allocateSlot,
   basePortsFrom,
+  databaseName,
   emptyState,
   envFileContent,
   freeSlot,
@@ -115,6 +116,57 @@ test("folder names come from branch names", () => {
   assert.equal(worktreeDirName("docs/00-overview-planning"), "docs-00-overview-planning");
   assert.equal(worktreeDirName("  fix//weird name!!  "), "fix-weird-name");
   assert.throws(() => worktreeDirName("///"), /cannot derive/);
+});
+
+// A database name a worktree can own: a lowercase, unquoted Postgres identifier within the
+// 63-byte limit, recognisably marked as a worktree database.
+const WORKTREE_DATABASE = /^wt_[a-z0-9_]+$/;
+const POSTGRES_IDENTIFIER_LIMIT = 63;
+
+function assertWorktreeDatabase(name) {
+  assert.match(name, WORKTREE_DATABASE);
+  assert.ok(Buffer.byteLength(name) <= POSTGRES_IDENTIFIER_LIMIT, `${name} is too long`);
+}
+
+test("a database name is a readable identifier derived from the branch", () => {
+  const name = databaseName("feat/12-profile-experience-api");
+  assertWorktreeDatabase(name);
+  assert.ok(name.startsWith("wt_feat_12_profile_experience_api_"), name);
+  assert.equal(databaseName("feat/12-profile-experience-api"), name);
+});
+
+test("a branch and its worktree folder name give the same database", () => {
+  for (const branch of ["feat/12-profile-api", "  Fix//Weird Name!! ", "docs/v1.2-notes"]) {
+    assert.equal(databaseName(worktreeDirName(branch)), databaseName(branch), branch);
+  }
+});
+
+test("worktrees whose names normalise alike still get different databases", () => {
+  const branches = ["feat/a.b", "feat/a-b", "feat/a_b", "feat/A-B", "Feat/a-b"];
+  const names = branches.map((branch) => databaseName(branch));
+  for (const name of names) assertWorktreeDatabase(name);
+  assert.equal(new Set(names).size, branches.length, names.join(", "));
+});
+
+test("a long branch name is shortened to the identifier limit and stays distinct", () => {
+  const common = `feat/${"very-long-branch-name-".repeat(10)}`;
+  const first = databaseName(`${common}one`);
+  const second = databaseName(`${common}two`);
+  assertWorktreeDatabase(first);
+  assertWorktreeDatabase(second);
+  assert.ok(first.startsWith("wt_feat_very_long_branch_name_very_long_"), first);
+  assert.notEqual(first, second);
+});
+
+test("unusual branch names give valid database names", () => {
+  for (const branch of ["12-starts-with-digit", "fix/čeština-ŘÍZENÍ", "feat/emoji-🚀-x", "a", "_x_", "x.y.z"]) {
+    assertWorktreeDatabase(databaseName(branch));
+  }
+});
+
+test("a database name needs a branch with usable characters", () => {
+  assert.throws(() => databaseName("///"), /cannot derive/);
+  assert.throws(() => databaseName(""), /cannot derive/);
 });
 
 test("the environment file carries the slot and its ports", () => {

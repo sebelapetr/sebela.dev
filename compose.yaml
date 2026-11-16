@@ -1,0 +1,39 @@
+# Local infrastructure: one Postgres with pgvector, shared by the main checkout and every worktree.
+# Each worktree works in its own database in it (docs/repository-structure.md, "Ports and worktree
+# isolation"). Every setting comes from the environment — the process environment or a `.env`
+# file next to this one — and is documented in `.env.example`; a missing one stops Compose.
+#
+# The fixed project name makes every checkout address the same stack and volume.
+name: sebela
+
+services:
+  postgres:
+    # pgvector is part of the image from the start, so retrieval (phase 6) needs no other image.
+    image: pgvector/pgvector:0.8.7-pg18-trixie
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER (documented in .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (documented in .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB (documented in .env.example)}
+    ports:
+      - "${POSTGRES_HOST:?set POSTGRES_HOST (documented in .env.example)}:${POSTGRES_PORT:?set POSTGRES_PORT (documented in .env.example)}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    # Healthy once the server accepts queries over TCP — not only the temporary server of the first
+    # initialisation — and the pgvector extension is available to create.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          psql --host 127.0.0.1 --username "$${POSTGRES_USER}" --dbname "$${POSTGRES_DB}"
+          --no-psqlrc --tuples-only --no-align
+          --command "SELECT count(*) FROM pg_available_extensions WHERE name = 'vector'"
+          | grep --quiet --line-regexp 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 1s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
