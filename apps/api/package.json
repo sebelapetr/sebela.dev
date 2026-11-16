@@ -1,0 +1,31 @@
+{
+  "name": "@sebela/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Hono HTTP API, the only gateway to the data.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.8",
+    "@scalar/hono-api-reference": "0.12.20",
+    "@sebela/contracts": "workspace:*",
+    "@sebela/services": "workspace:*",
+    "hono": "4.13.18",
+    "zod": "catalog:",
+    "zod-openapi": "6.0.2"
+  },
+  "devDependencies": {
+    "@sebela/config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "4.23.15",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
