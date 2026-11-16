@@ -6,12 +6,14 @@ import { createCaseStudyService } from "./case-studies.js";
 import { createCatalogService } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
 import { createExperienceService } from "./experiences.js";
+import { createExplorationService } from "./explorations.js";
 import { createOrganizationService } from "./organizations.js";
 import { createProjectService } from "./projects.js";
 import type {
   CaseStudyService,
   CatalogService,
   ExperienceService,
+  ExplorationService,
   OrganizationService,
   ProjectService,
 } from "./types.js";
@@ -20,6 +22,7 @@ export type {
   CaseStudyService,
   CatalogService,
   ExperienceService,
+  ExplorationService,
   OrganizationService,
   ProjectService,
 } from "./types.js";
@@ -36,10 +39,17 @@ export type {
  *
  * It also includes the catalog operations of `CatalogService`, the organization operations of
  * `OrganizationService`, the experience operations of `ExperienceService`, the project
- * operations of `ProjectService` and the case-study operations of `CaseStudyService`.
+ * operations of `ProjectService`, the case-study operations of `CaseStudyService` and the
+ * exploration operations of `ExplorationService`.
  */
 export interface ProfileService
-  extends CatalogService, OrganizationService, ExperienceService, ProjectService, CaseStudyService {
+  extends
+    CatalogService,
+    OrganizationService,
+    ExperienceService,
+    ProjectService,
+    CaseStudyService,
+    ExplorationService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -64,6 +74,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createExperienceService(persistence),
     ...createProjectService(persistence),
     ...createCaseStudyService(persistence),
+    ...createExplorationService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();
