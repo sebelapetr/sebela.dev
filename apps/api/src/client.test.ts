@@ -585,4 +585,138 @@ describe("the generated API client", () => {
       null,
     ]);
   });
+
+  it("manages services: typed evidence in order, replaced, invalid refused, targets protected and deleted", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    const { profile } = backend.services;
+    await profile.createOrganization({
+      slug: "fictional-harbor",
+      name: "Harbor",
+      website: null,
+      description: null,
+    });
+    await profile.createExperience({
+      slug: "fictional-harbor-engineer",
+      organization: "fictional-harbor",
+      title: "Engineer",
+      kind: "main_job",
+      summary: "A fictional role.",
+      responsibilities: [],
+      startedOn: "2020-01-01",
+      endedOn: null,
+      inCv: true,
+      technologies: [],
+    });
+    await profile.createProject({
+      slug: "fictional-dock-planner",
+      experience: "fictional-harbor-engineer",
+      name: "Dock planner",
+      summary: "A fictional project.",
+      problem: "A fictional problem.",
+      workDone: "Fictional work.",
+      result: "A fictional result.",
+      startedOn: "2020-02-01",
+      endedOn: null,
+      links: [],
+      selectedForHomepage: false,
+      position: 30,
+      technologies: [],
+    });
+    await profile.createExploration({
+      slug: "fictional-sketch",
+      name: "Sketch",
+      summary: "A fictional exploration.",
+      status: "tested",
+      concepts: [],
+      startedOn: "2025-01-01",
+      endedOn: null,
+      position: 30,
+      technologies: [],
+      topics: [],
+    });
+    const offer = {
+      slug: "fictional-offer",
+      name: "Offer",
+      summary: "A fictional service.",
+      audience: "Fictional teams.",
+      deliverable: "A fictional deliverable.",
+      position: 1,
+      evidence: [
+        { kind: "exploration" as const, exploration: "fictional-sketch" },
+        { kind: "link" as const, label: "Contact", path: "/contact" },
+        { kind: "project" as const, project: "fictional-dock-planner" },
+      ],
+    };
+
+    const created = await client.POST("/v1/services", { body: offer });
+    expect(created.response.status).toBe(201);
+    expect(created.data?.evidence).toEqual([
+      {
+        kind: "exploration",
+        exploration: {
+          slug: "fictional-sketch",
+          name: "Sketch",
+          summary: "A fictional exploration.",
+          status: "tested",
+        },
+      },
+      { kind: "link", label: "Contact", path: "/contact" },
+      {
+        kind: "project",
+        project: {
+          slug: "fictional-dock-planner",
+          name: "Dock planner",
+          summary: "A fictional project.",
+          experience: "fictional-harbor-engineer",
+        },
+      },
+    ]);
+    const duplicate = await client.POST("/v1/services", { body: offer });
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/services", {
+      body: { ...offer, slug: "fictional-unknown", evidence: [{ kind: "project", project: "x" }] },
+    });
+    expect(unknown.response.status).toBe(400);
+    expect(unknown.error?.error.fields).toEqual([
+      { path: "evidence", message: expect.stringContaining("x") as unknown },
+    ]);
+    await client.POST("/v1/services", {
+      body: { ...offer, slug: "fictional-first", position: 0, evidence: [] },
+    });
+
+    const listed = await client.GET("/v1/services");
+    expect(listed.data?.map(({ slug, evidence }) => [slug, evidence.length])).toEqual([
+      ["fictional-first", 0],
+      ["fictional-offer", 3],
+    ]);
+
+    const replaced = await client.PATCH("/v1/services/{slug}", {
+      ...at("fictional-offer"),
+      body: { evidence: [{ kind: "link", label: "Roadmap", path: "/roadmap" }] },
+    });
+    expect(replaced.data?.evidence).toEqual([{ kind: "link", label: "Roadmap", path: "/roadmap" }]);
+    const unsafe = await client.PATCH("/v1/services/{slug}", {
+      ...at("fictional-offer"),
+      body: { evidence: [{ kind: "link", label: "x", path: "javascript:alert(1)" }] },
+    });
+    expect(unsafe.response.status).toBe(400);
+    const named = await client.DELETE("/v1/explorations/{slug}", at("fictional-sketch"));
+    expect(named.response.status).toBe(409);
+    expect(named.error?.error.code).toBe("conflict");
+
+    for (const slug of ["fictional-offer", "fictional-first"]) {
+      expect((await client.DELETE("/v1/services/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/services/{slug}", at("fictional-offer"));
+    expect(missing.error?.error.code).toBe("not_found");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(4).fill(bearer),
+      null,
+      ...Array<string>(5).fill(bearer),
+      null,
+    ]);
+  });
 });
