@@ -28,7 +28,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── scripts/
 │   ├── run-phase.sh         starts the phase loop [0]
 │   ├── harness/             the loop, worktree slots and databases, Claude Code and Git hooks, GitHub set-up — plain Node, no dependencies [0, hooks 1]
-│   └── checks/              repository checks: the hard-coded configuration check — plain Node, no dependencies [1]
+│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check — plain Node, no dependencies [1]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
@@ -101,11 +101,24 @@ Run from the repository root. Turborepo runs a task in every package that define
 | `pnpm test:harness`              | Only the harness tests, through `node --test scripts/harness/`                                                                                                                                                                   |
 | `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                     |
 | `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                   |
+| `pnpm ci:root`                   | The root tasks as CI runs them on every change: `lint:root`, `check:config`, `test:harness` and `test:checks`                                                                                                                    |
+| `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`         |
 | `pnpm run prepare`               | Only the Git hooks installer, through `node scripts/harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                  |
 
-The harness (`scripts/harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test scripts/harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`scripts/harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
+The harness (`scripts/harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test scripts/harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `scripts/harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`scripts/harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
+
+### Affected packages
+
+`turbo run … --affected` selects the packages changed between a comparison base (`TURBO_SCM_BASE`) and `HEAD`, together with every package that depends on them. Turborepo widens that selection itself:
+
+- A change to `turbo.json`, the root `package.json` or a file of `globalDependencies` in `turbo.json` (`.nvmrc`, `pnpm-workspace.yaml`) selects every package.
+- A change to the lockfile selects the packages whose external dependencies changed.
+- The root depends on `@sebela/config`, so a change to the shared configuration selects every package, its consumers included.
+- A base Turborepo cannot resolve in the checkout — a new branch, a rewritten history, a shallow clone — selects every package.
+
+Root files that belong to no package (the harness, the repository checks, docs) select no package; the root tasks cover them, and CI runs those on every change (`pnpm ci:root`). `pnpm exec turbo query affected --packages` lists the selection with the reason for each package.
 
 ## Backend module layout
 
@@ -224,7 +237,7 @@ Compose takes every setting from the process environment or from the `.env` file
 - **How the scripts reach Postgres.** The harness stays plain Node without a database driver: `scripts/harness/lib/databases.mjs` runs `psql` inside the running service through `docker compose exec`, as the service's superuser connected to `POSTGRES_DB`. Compose runs with the process environment, falling back to `.env.example` for settings that are not set. Without a running service, setup and cleanup fail and say how to start it.
 - **Failures.** Setup ensures the database before it writes the environment file, and holds the slot lock meanwhile. When the database cannot be created or reused, a worktree, branch or slot this run added is removed again and the script fails; an existing worktree keeps its slot and its `.env.local`. So a `.env.local` names a database only once it exists. Cleanup refuses uncommitted work as before (unless `--force`) and drops the database before it removes anything else: when the drop fails, the worktree, its environment file and its slot stay as they were and the removal can be repeated. Repeating a completed removal changes nothing. The database is dropped with `WITH (FORCE)`, which ends connections a development server of that worktree still holds.
 - **Manual cleanup.** Removal needs the running service, because dropping the database comes first; start it, then repeat `remove`. A database the scripts refuse, one whose comment names no or another worktree, is never dropped by them: the owner checks it and drops it by hand with `psql`.
-- **End-to-end run.** `node scripts/harness/worktree-databases.e2e.mjs` checks the whole lifecycle against real Postgres: healthy startup, two independently usable worktree databases, reuse, refusal of a foreign database, failure without a running service, removal of one without losing the other, and cleanup. It needs Docker, starts its own disposable Compose project from `compose.yaml` on a free host port, works with worktrees of a temporary repository and removes all of it at the end. It runs on demand, not in `pnpm test`.
+- **End-to-end run.** `node scripts/harness/worktree-databases.e2e.mjs` checks the whole lifecycle against real Postgres: healthy startup, two independently usable worktree databases, reuse, refusal of a foreign database, failure without a running service, removal of one without losing the other, and cleanup. It needs Docker, starts its own disposable Compose project from `compose.yaml` on a free host port, works with worktrees of a temporary repository and removes all of it at the end. It is not part of `pnpm test`: run it on demand, and CI runs it on every pull request and push in the job `Worktree database lifecycle`. Each run uses its own Compose project name and a free port, so it can be repeated, also next to the shared stack.
 
 ### Configuration and environment
 

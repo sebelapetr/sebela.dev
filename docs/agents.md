@@ -23,13 +23,13 @@ A subagent may start without project instructions loaded. Every agent therefore 
 
 A rule with `paths` in its frontmatter loads when an agent reads, writes or edits a matching file; the others load in every session. Each scoped rule names the binding documents of its area and repeats only the few points most often missed. A rule is added when its area exists — no empty app or package is created to hold one — and is extended when an app or package arrives in a later phase.
 
-| Rule                      | Loads for                                                                                                     | Points to                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `shared-configuration.md` | `packages/config/`, every `eslint.config.js`, `prettier.config.js`, `.prettierignore`, every `tsconfig*.json` | `packages/config/AGENTS.md`, code standards, dependency rules                    |
-| `repository-checks.md`    | `scripts/checks/`                                                                                             | The hard-coded configuration check, testing (tooling)                            |
-| `harness.md`              | `scripts/harness/`, `scripts/run-phase.sh`, `.claude/settings.json`, `.claude/agents/`                        | Permissions, agents, git workflow (local hooks), worktree isolation              |
-| `toolchain-and-ci.md`     | Every `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `.nvmrc`, `.github/workflows/`   | Toolchain and workspace, root commands, CI                                       |
-| `local-infrastructure.md` | `compose.yaml`, `.env.example`                                                                                | Ports and worktree isolation, the shared Postgres, configuration and environment |
+| Rule                      | Loads for                                                                                                     | Points to                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `shared-configuration.md` | `packages/config/`, every `eslint.config.js`, `prettier.config.js`, `.prettierignore`, every `tsconfig*.json` | `packages/config/AGENTS.md`, code standards, dependency rules                      |
+| `repository-checks.md`    | `scripts/checks/`                                                                                             | The hard-coded configuration check, the CI commit-message check, testing (tooling) |
+| `harness.md`              | `scripts/harness/`, `scripts/run-phase.sh`, `.claude/settings.json`, `.claude/agents/`                        | Permissions, agents, git workflow (local hooks), worktree isolation                |
+| `toolchain-and-ci.md`     | Every `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `.nvmrc`, `.github/workflows/`   | Toolchain and workspace, root commands, CI                                         |
+| `local-infrastructure.md` | `compose.yaml`, `.env.example`                                                                                | Ports and worktree isolation, the shared Postgres, configuration and environment   |
 
 ## Project-local design and testing references
 

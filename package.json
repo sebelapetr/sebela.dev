@@ -15,7 +15,9 @@
     "test": "turbo run test test:harness test:checks",
     "test:harness": "node --test scripts/harness/",
     "test:checks": "node --test scripts/checks/",
-    "build": "turbo run build"
+    "build": "turbo run build",
+    "ci:root": "turbo run lint:root check:config test:harness test:checks --continue",
+    "ci:affected": "turbo run lint typecheck test build --affected --continue"
   },
   "devDependencies": {
     "@sebela/config": "workspace:*",

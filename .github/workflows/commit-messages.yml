@@ -1,0 +1,29 @@
+# Conventional Commits in CI: the commits a pull request or a push brings, and the title of an issue
+# pull request, which becomes its squash commit. Its own workflow, so that editing a pull request's
+# title re-runs only this check. Rules: docs/git-workflow.md ("What CI validates").
+name: Commit messages
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches:
+      - master
+      - "phase/**"
+
+permissions:
+  contents: read
+
+jobs:
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/checks/commit-messages.mjs
