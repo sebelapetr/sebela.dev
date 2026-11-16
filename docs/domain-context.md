@@ -42,6 +42,7 @@ Draft; the exact schema is defined in the phase 2 PRD.
 These three are deliberately separate:
 
 - An **experience** is a period in a role. It appears on the timeline and in the CV.
+  Experiences have no manual position. They are ordered current roles first (no end date), then by latest start, latest end and slug.
 - A **project** is delivered work shown inside the experience it belongs to — and only when it proves something. A strong one gets a case study.
 - An **exploration** was never released. It is not a delivered project or a career experience. Explorations are shown together as one short block that demonstrates initiative on the Experience page, and concisely in a separate section on the print-friendly CV page, with their actual status preserved. They are not inserted into the career timeline. The downloadable PDF is maintained manually and is not generated from this data.
 
