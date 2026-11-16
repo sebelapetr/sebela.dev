@@ -81,6 +81,7 @@ Handle exactly ONE issue, following your agent definition, docs/agents.md and do
 
 Write the report summary in English; it goes to the loop's log.
 5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
+6. If the usage limit stops the work on the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted. The loop waits and continues the same issue.
 
 Nobody can answer questions in this run. Never wait for input; when something needs the owner, record it on the issue.
 Finish with the structured report.`;

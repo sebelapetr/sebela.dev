@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FAILED_LABEL, RETRY_LABEL, classifyRun, decideNext } from "./loop.mjs";
+import { FAILED_LABEL, RETRY_LABEL, RUN_REPORT_SCHEMA, classifyRun, decideNext } from "./loop.mjs";
 
 const success = (report) =>
   JSON.stringify({
@@ -97,6 +97,22 @@ test("a usage limit waits and does not count as a failure", () => {
     label: null,
     consecutiveFailures: 1,
   });
+});
+
+test("an issue interrupted by the usage limit waits, without a label or a failure", () => {
+  assert.deepEqual(
+    decideNext({
+      run: report("interrupted", 29),
+      consecutiveFailures: 1,
+      issueLabels: ["agent-retry"],
+    }),
+    { next: "wait", label: null, consecutiveFailures: 1 },
+  );
+});
+
+test("the orchestrator may report an interruption by the usage limit", () => {
+  assert.ok(RUN_REPORT_SCHEMA.properties.outcome.enum.includes("interrupted"));
+  assert.match(RUN_REPORT_SCHEMA.properties.outcome.description, /interrupted: .*usage limit/);
 });
 
 test("no ready issue left ends the loop", () => {

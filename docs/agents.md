@@ -109,7 +109,7 @@ harness/run-phase.sh <phase-folder>
   - after several consecutive failed runs the script stops;
   - every run writes a log outside git.
 - **Sequential.** One issue at a time. Parallel runs are a later improvement.
-- **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed or phase done). The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
+- **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed, interrupted or phase done). Interrupted means the usage limit stopped the work on an issue: the loop waits as for any limit and continues the same issue, without a label or a failure counted. The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
 - **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off), `--no-notify`. Logs are in `.worktrees/logs/<phase>/`.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
 - **MCP servers:** the loop loads only `harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
@@ -157,3 +157,5 @@ Documentation is updated in the same pull request as the change. The docs-keeper
 The owner reviews every phase and is the only one who merges into `master`. Inside a phase, the orchestrator merges reviewed issue pull requests into the phase branch.
 
 Issues are either AFK (an agent can finish them alone) or HITL (they need a decision or a design review from the owner). The loop skips HITL issues.
+
+Agents cannot create issues. What an issue leaves for later goes into a comment on that issue, one line each starting with `Follow-up:`, and the orchestrator lists all of them in the phase pull request, where the owner decides which become issues.

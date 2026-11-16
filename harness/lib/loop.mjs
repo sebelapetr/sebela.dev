@@ -9,9 +9,9 @@ export const RUN_REPORT_SCHEMA = Object.freeze({
   properties: {
     outcome: {
       type: "string",
-      enum: ["merged", "failed", "phase_done"],
+      enum: ["merged", "failed", "interrupted", "phase_done"],
       description:
-        "merged: one issue was merged into the phase branch. failed: the issue could not be finished. phase_done: no ready issue was left and the phase pull request is open.",
+        "merged: one issue was merged into the phase branch. failed: the issue could not be finished. interrupted: work on the issue stopped because the usage limit was reached, not because of the issue; its worktree and branch are kept. phase_done: no ready issue was left and the phase pull request is open.",
     },
     issue: {
       type: ["integer", "null"],
@@ -96,7 +96,8 @@ export function decideNext({
   issueLabels = [],
   maxConsecutiveFailures = 3,
 }) {
-  if (run.kind === "limit") {
+  // A usage limit is not the issue's fault, also when it stops a run halfway through an issue.
+  if (run.kind === "limit" || (run.kind === "report" && run.outcome === "interrupted")) {
     return { next: "wait", label: null, consecutiveFailures };
   }
 
