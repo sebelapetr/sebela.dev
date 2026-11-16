@@ -93,3 +93,17 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: node harness/worktree-databases.e2e.mjs
+
+  # The containerised API stack of compose.yaml (profile `api`): builds the API image, then checks
+  # migration ordering, health, the OpenAPI document and reference, a seeded public read, a write
+  # with a key from the CLI and a local media download, in a disposable Compose project with its own
+  # volumes, removed at the end. Plain Node and Docker, no installed dependencies.
+  api-stack:
+    name: API stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/checks/api-stack.e2e.mjs
