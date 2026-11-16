@@ -15,6 +15,19 @@ const filePattern = new RegExp(
 /** The folders every key of one storage starts with: the environment, then the worktree. */
 export type KeyPrefix = readonly string[];
 
+/** The prefix of a configured storage: its environment, then its worktree when it has one. */
+export function prefixOf(layout: {
+  readonly environment: string;
+  readonly worktree: string | null;
+}): KeyPrefix {
+  return layout.worktree === null ? [layout.environment] : [layout.environment, layout.worktree];
+}
+
+/** The public address of a key of this prefix below the base, or `null` for any other key. */
+export function addressOf(prefix: KeyPrefix, base: string, key: string): string | null {
+  return fileNameOf(prefix, key) === null ? null : `${base}/${key}`;
+}
+
 export function isStoredExtension(value: string): value is StoredExtension {
   return (storedExtensions as readonly string[]).includes(value);
 }
