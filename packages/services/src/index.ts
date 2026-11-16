@@ -12,6 +12,7 @@ export type {
 } from "./modules/api-keys/index.js";
 export type {
   CatalogService,
+  ExperienceService,
   OrganizationService,
   ProfileService,
 } from "./modules/profile/index.js";

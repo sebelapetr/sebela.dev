@@ -170,8 +170,11 @@ describe("catalog persistence", () => {
     it("deletes a technology once", async () => {
       await profile.createTechnology(typescript);
 
-      await expect(profile.deleteTechnology("typescript")).resolves.toBe(true);
-      await expect(profile.deleteTechnology("typescript")).resolves.toBe(false);
+      await expect(profile.deleteTechnology("typescript")).resolves.toEqual({ ok: true });
+      await expect(profile.deleteTechnology("typescript")).resolves.toEqual({
+        ok: false,
+        reason: "not_found",
+      });
       await expect(profile.findTechnology("typescript")).resolves.toBeNull();
     });
   });

@@ -1,10 +1,12 @@
 import { asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
-import type { CatalogPersistence } from "./types.js";
+import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import { technologies, topics } from "./schema.js";
+import type { CatalogPersistence } from "./types.js";
 
-const technologyColumns = {
+/** The returned columns of a technology, also when another record resolves it. */
+export const technologyColumns = {
   id: technologies.id,
   slug: technologies.slug,
   name: technologies.name,
@@ -27,19 +29,6 @@ const topicColumns = {
 
 /** `clock_timestamp()`, not `now()`: it advances also within one transaction. */
 const now = sql`clock_timestamp()`;
-
-/** Whether the error is the database refusing a technology whose group disagrees with its tier. */
-function isInconsistentGroup(error: unknown): boolean {
-  const cause = error instanceof Error ? error.cause : undefined;
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "code" in cause &&
-    "constraint" in cause &&
-    cause.code === "23514" &&
-    cause.constraint === "technologies_group_matches_tier"
-  );
-}
 
 /**
  * The ordered technology and topic catalogs. Slugs are unique in the database, so concurrent
@@ -76,7 +65,8 @@ export function createCatalogPersistence(db: NodePgDatabase): CatalogPersistence
           .returning(technologyColumns);
         return row ? { ok: true, technology: row } : { ok: false, reason: "conflict" };
       } catch (error) {
-        if (isInconsistentGroup(error)) return { ok: false, reason: "inconsistent" };
+        if (breaksCheck(error, "technologies_group_matches_tier"))
+          return { ok: false, reason: "inconsistent" };
         throw error;
       }
     },
@@ -89,16 +79,22 @@ export function createCatalogPersistence(db: NodePgDatabase): CatalogPersistence
           .returning(technologyColumns);
         return row ? { ok: true, technology: row } : { ok: false, reason: "not_found" };
       } catch (error) {
-        if (isInconsistentGroup(error)) return { ok: false, reason: "inconsistent" };
+        if (breaksCheck(error, "technologies_group_matches_tier"))
+          return { ok: false, reason: "inconsistent" };
         throw error;
       }
     },
     async deleteTechnology(slug) {
-      const rows = await db
-        .delete(technologies)
-        .where(eq(technologies.slug, slug))
-        .returning({ id: technologies.id });
-      return rows.length > 0;
+      try {
+        const rows = await db
+          .delete(technologies)
+          .where(eq(technologies.slug, slug))
+          .returning({ id: technologies.id });
+        return rows.length > 0 ? { ok: true } : { ok: false, reason: "not_found" };
+      } catch (error) {
+        if (isStillReferenced(error)) return { ok: false, reason: "referenced" };
+        throw error;
+      }
     },
     listTopics() {
       return db.select(topicColumns).from(topics).orderBy(asc(topics.position), asc(topics.slug));

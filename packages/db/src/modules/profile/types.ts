@@ -27,6 +27,9 @@ export type CreateTechnologyResult =
 export type UpdateTechnologyResult =
   { ok: true; technology: TechnologyRecord } | { ok: false; reason: "not_found" | "inconsistent" };
 
+export type DeleteTechnologyResult =
+  { ok: true } | { ok: false; reason: "not_found" | "referenced" };
+
 /** Writable fields of a topic. The slug is fixed when it is created. */
 export interface TopicFields {
   name: string;
@@ -56,8 +59,11 @@ export interface CatalogPersistence {
     slug: string,
     changes: Partial<TechnologyFields>,
   ): Promise<UpdateTechnologyResult>;
-  /** `true` when the technology was deleted, `false` when there was none. */
-  deleteTechnology(slug: string): Promise<boolean>;
+  /**
+   * Deletes the technology; `not_found` when there is none, `referenced` (and nothing deleted)
+   * while an experience or another record still links to it.
+   */
+  deleteTechnology(slug: string): Promise<DeleteTechnologyResult>;
   /** Every topic, ordered by position and slug. */
   listTopics(): Promise<TopicRecord[]>;
   /** The topic with the slug, or `null`. */
@@ -112,4 +118,93 @@ export interface OrganizationPersistence {
    * while another record still refers to it through a foreign key.
    */
   deleteOrganization(slug: string): Promise<DeleteOrganizationResult>;
+}
+
+export type ExperienceKind = "main_job" | "side_project" | "own_business";
+
+/** Writable scalar fields of an experience. The slug is fixed when it is created. */
+export interface ExperienceFields {
+  title: string;
+  kind: ExperienceKind;
+  /** Calendar date, `YYYY-MM-DD`. */
+  startedOn: string;
+  /** Calendar date, `YYYY-MM-DD`, not before the start; `null` marks a current role. */
+  endedOn: string | null;
+  /** Markdown. */
+  summary: string;
+  responsibilities: string[];
+  inCv: boolean;
+}
+
+/** Relations of an experience as written: slugs of existing records. */
+export interface ExperienceRelations {
+  /** The slug of the organization. */
+  organization: string;
+  /** Slugs of the technologies, each once, in their intended order. */
+  technologies: string[];
+}
+
+/** An experience with its organization and technologies (in link order) resolved. */
+export interface ExperienceRecord extends ExperienceFields {
+  id: string;
+  slug: string;
+  organization: OrganizationRecord;
+  technologies: TechnologyRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update wrote nothing, besides `conflict` and `not_found`:
+ *
+ * - `unknown_organization`: no organization has the given slug.
+ * - `unknown_technologies`: some technology slugs exist nowhere; `slugs` lists them.
+ * - `repeated_technologies`: a technology slug is given more than once.
+ * - `invalid_period`: the end would be before the start.
+ */
+export type ExperienceWriteFailure =
+  | { ok: false; reason: "unknown_organization" }
+  | { ok: false; reason: "unknown_technologies"; slugs: string[] }
+  | { ok: false; reason: "repeated_technologies" }
+  | { ok: false; reason: "invalid_period" };
+
+export type CreateExperienceResult =
+  | { ok: true; experience: ExperienceRecord }
+  | { ok: false; reason: "conflict" }
+  | ExperienceWriteFailure;
+
+export type UpdateExperienceResult =
+  | { ok: true; experience: ExperienceRecord }
+  | { ok: false; reason: "not_found" }
+  | ExperienceWriteFailure;
+
+export type DeleteExperienceResult =
+  { ok: true } | { ok: false; reason: "not_found" | "referenced" };
+
+/**
+ * Persistence operations of the experiences, addressed by slug. Each write of an experience and
+ * its technology links is one transaction: it is stored completely or not at all.
+ */
+export interface ExperiencePersistence {
+  /** Every experience: current roles first, then latest start, latest end and slug. */
+  listExperiences(): Promise<ExperienceRecord[]>;
+  /** The experience with the slug, or `null`. */
+  findExperience(slug: string): Promise<ExperienceRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `ExperienceWriteFailure`. */
+  createExperience(
+    fields: ExperienceFields & ExperienceRelations & { slug: string },
+  ): Promise<CreateExperienceResult>;
+  /**
+   * Changes only the given fields. Given `technologies` replace every link; omitted ones keep
+   * them. `not_found` when there is no such experience; see `ExperienceWriteFailure`.
+   */
+  updateExperience(
+    slug: string,
+    changes: Partial<ExperienceFields & ExperienceRelations>,
+  ): Promise<UpdateExperienceResult>;
+  /**
+   * Deletes the experience and its technology links; `not_found` when there is none,
+   * `referenced` (and nothing deleted) while another record still refers to it.
+   */
+  deleteExperience(slug: string): Promise<DeleteExperienceResult>;
 }

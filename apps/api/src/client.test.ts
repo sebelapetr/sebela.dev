@@ -235,4 +235,76 @@ describe("the generated API client", () => {
       null,
     ]);
   });
+
+  it("manages experiences: relations, current roles first, replaced links, conflicts and delete", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await client.POST("/v1/organizations", {
+      body: { slug: "fictional-employer", name: "Employer" },
+    });
+    for (const [position, slug] of ["fictional-lang", "fictional-db"].entries()) {
+      await client.POST("/v1/technologies", {
+        body: { slug, name: slug, tier: "secondary", position: position + 10 },
+      });
+    }
+    const past = {
+      slug: "fictional-past",
+      title: "Engineer",
+      kind: "main_job" as const,
+      organization: "fictional-employer",
+      startedOn: "2019-01-01",
+      endedOn: "2022-12-31",
+      summary: "A fictional role.",
+      inCv: true,
+      technologies: ["fictional-lang", "fictional-db"],
+    };
+
+    const created = await client.POST("/v1/experiences", { body: past });
+    expect(created.response.status).toBe(201);
+    expect(created.data?.organization.slug).toBe("fictional-employer");
+    expect(created.data?.technologies.map(({ slug }) => slug)).toEqual(past.technologies);
+    const duplicate = await client.POST("/v1/experiences", { body: past });
+    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/experiences", {
+      body: { ...past, slug: "fictional-unknown", technologies: ["fictional-missing"] },
+    });
+    expect(unknown.response.status).toBe(400);
+    expect(unknown.error?.error.fields).toEqual([
+      { path: "technologies", message: expect.stringContaining("fictional-missing") as unknown },
+    ]);
+    await client.POST("/v1/experiences", {
+      body: { ...past, slug: "fictional-current", startedOn: "2023-01-01", endedOn: null },
+    });
+
+    const listed = await client.GET("/v1/experiences");
+    expect(listed.data?.map(({ slug }) => slug)).toEqual(["fictional-current", "fictional-past"]);
+
+    const replaced = await client.PATCH("/v1/experiences/{slug}", {
+      ...at("fictional-past"),
+      body: { technologies: ["fictional-db"] },
+    });
+    expect(replaced.data?.technologies.map(({ slug }) => slug)).toEqual(["fictional-db"]);
+    const linked = await client.DELETE("/v1/technologies/{slug}", at("fictional-db"));
+    expect(linked.response.status).toBe(409);
+    expect(linked.error?.error.code).toBe("conflict");
+
+    for (const slug of ["fictional-past", "fictional-current"]) {
+      expect((await client.DELETE("/v1/experiences/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/experiences/{slug}", at("fictional-past"));
+    expect(missing.response.status).toBe(404);
+    expect(missing.error?.error.code).toBe("not_found");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(7).fill(bearer),
+      null,
+      bearer,
+      bearer,
+      bearer,
+      bearer,
+      null,
+    ]);
+  });
 });

@@ -1,10 +1,12 @@
 import { asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import { isStillReferenced } from "./database-errors.js";
 import { organizations } from "./schema.js";
 import type { OrganizationPersistence } from "./types.js";
 
-const columns = {
+/** The returned columns of an organization, also when another record resolves it. */
+export const organizationColumns = {
   id: organizations.id,
   slug: organizations.slug,
   name: organizations.name,
@@ -17,12 +19,6 @@ const columns = {
 /** `clock_timestamp()`, not `now()`: it advances also within one transaction. */
 const now = sql`clock_timestamp()`;
 
-/** Whether the error is the database refusing a delete because a foreign key still refers to it. */
-function isStillReferenced(error: unknown): boolean {
-  const cause = error instanceof Error ? error.cause : undefined;
-  return typeof cause === "object" && cause !== null && "code" in cause && cause.code === "23503";
-}
-
 /**
  * The organizations. Slugs are unique in the database, so concurrent creates of one slug leave
  * exactly one row; referencing tables hold foreign keys, so a referenced row is never deleted.
@@ -31,13 +27,13 @@ export function createOrganizationPersistence(db: NodePgDatabase): OrganizationP
   return {
     listOrganizations() {
       return db
-        .select(columns)
+        .select(organizationColumns)
         .from(organizations)
         .orderBy(asc(sql`lower(${organizations.name})`), asc(organizations.slug));
     },
     async findOrganization(slug) {
       const [row] = await db
-        .select(columns)
+        .select(organizationColumns)
         .from(organizations)
         .where(eq(organizations.slug, slug));
       return row ?? null;
@@ -47,7 +43,7 @@ export function createOrganizationPersistence(db: NodePgDatabase): OrganizationP
         .insert(organizations)
         .values(fields)
         .onConflictDoNothing({ target: organizations.slug })
-        .returning(columns);
+        .returning(organizationColumns);
       return row ? { ok: true, organization: row } : { ok: false, reason: "conflict" };
     },
     async updateOrganization(slug, changes) {
@@ -55,7 +51,7 @@ export function createOrganizationPersistence(db: NodePgDatabase): OrganizationP
         .update(organizations)
         .set({ ...changes, updatedAt: now })
         .where(eq(organizations.slug, slug))
-        .returning(columns);
+        .returning(organizationColumns);
       return row ?? null;
     },
     async deleteOrganization(slug) {

@@ -14,7 +14,8 @@ const ITEM = "/v1/technologies/:slug";
 
 /**
  * The HTTP routes of the technology catalog, addressed by stable slug: public list and read,
- * authenticated create, update and delete. Domain errors become `not_found` and `conflict`.
+ * authenticated create, update and delete. Domain errors become `not_found` and `conflict`; a
+ * delete of a technology that other records still link is a `conflict`.
  */
 export function technologyRoutes(profile: ProfileService): RouteDefinition[] {
   return [
@@ -81,9 +82,11 @@ export function technologyRoutes(profile: ProfileService): RouteDefinition[] {
       path: ITEM,
       access: "private",
       summary: "Delete a technology",
+      description:
+        "A technology that other records, such as experiences, still link is not deleted; remove those links first.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The technology was deleted." },
-      errors: ["not_found"],
+      errors: ["not_found", "conflict"],
       handle: async ({ params }) => {
         await profile.deleteTechnology(params.slug);
         return undefined;

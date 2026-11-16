@@ -2,16 +2,30 @@ import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { createCatalogPersistence } from "./catalogs.js";
+import { createExperiencePersistence } from "./experiences.js";
 import { createOrganizationPersistence } from "./organizations.js";
 import { persons } from "./schema.js";
-import type { CatalogPersistence, OrganizationPersistence } from "./types.js";
+import type {
+  CatalogPersistence,
+  ExperiencePersistence,
+  OrganizationPersistence,
+} from "./types.js";
 
 export type {
   CatalogPersistence,
   CreateOrganizationResult,
   CreateTechnologyResult,
+  CreateExperienceResult,
   CreateTopicResult,
+  DeleteExperienceResult,
   DeleteOrganizationResult,
+  DeleteTechnologyResult,
+  ExperienceFields,
+  ExperienceKind,
+  ExperiencePersistence,
+  ExperienceRecord,
+  ExperienceRelations,
+  ExperienceWriteFailure,
   OrganizationFields,
   OrganizationPersistence,
   OrganizationRecord,
@@ -21,6 +35,7 @@ export type {
   TechnologyTier,
   TopicFields,
   TopicRecord,
+  UpdateExperienceResult,
   UpdateTechnologyResult,
 } from "./types.js";
 
@@ -53,7 +68,8 @@ export type CreatePersonResult =
   { ok: true; person: PersonRecord } | { ok: false; reason: "conflict" };
 
 /** Persistence operations of the profile domain. */
-export interface ProfilePersistence extends CatalogPersistence, OrganizationPersistence {
+export interface ProfilePersistence
+  extends CatalogPersistence, OrganizationPersistence, ExperiencePersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -87,6 +103,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
   return {
     ...createCatalogPersistence(db),
     ...createOrganizationPersistence(db),
+    ...createExperiencePersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;

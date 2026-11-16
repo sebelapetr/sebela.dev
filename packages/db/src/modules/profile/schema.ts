@@ -6,8 +6,10 @@ import {
   integer,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -101,3 +103,62 @@ export const organizations = profileSchema.table("organizations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** The kinds of an experience. */
+export const experienceKind = profileSchema.enum("experience_kind", [
+  "main_job",
+  "side_project",
+  "own_business",
+]);
+
+/**
+ * Experiences: roles at an organization over a period. The organization key has no cascade, so an
+ * organization is never deleted while an experience refers to it; a missing end marks a current
+ * role, and the database refuses an end before the start.
+ */
+export const experiences = profileSchema.table(
+  "experiences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    kind: experienceKind("kind").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    startedOn: date("started_on", { mode: "string" }).notNull(),
+    endedOn: date("ended_on", { mode: "string" }),
+    summary: text("summary").notNull(),
+    responsibilities: jsonb("responsibilities").$type<string[]>().notNull().default([]),
+    inCv: boolean("in_cv").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "experiences_period_is_ordered",
+      sql`${table.endedOn} IS NULL OR ${table.endedOn} >= ${table.startedOn}`,
+    ),
+  ],
+);
+
+/**
+ * The ordered technology links of an experience: pure link rows. They disappear with their
+ * experience; a linked technology cannot be deleted. Each technology is linked once.
+ */
+export const experienceTechnologies = profileSchema.table(
+  "experience_technologies",
+  {
+    experienceId: uuid("experience_id")
+      .notNull()
+      .references(() => experiences.id, { onDelete: "cascade" }),
+    technologyId: uuid("technology_id")
+      .notNull()
+      .references(() => technologies.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.experienceId, table.technologyId] }),
+    unique("experience_technologies_position_unique").on(table.experienceId, table.position),
+  ],
+);
