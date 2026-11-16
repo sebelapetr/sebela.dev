@@ -39,7 +39,8 @@ export function toTechnology(record: TechnologyRecord): Technology {
   };
 }
 
-function toTopic(record: TopicRecord): Topic {
+/** The topic in the contract shape; also used where another record resolves it. */
+export function toTopic(record: TopicRecord): Topic {
   return {
     ...record,
     createdAt: record.createdAt.toISOString(),
@@ -102,7 +103,13 @@ export function createCatalogService(persistence: ProfilePersistence): CatalogSe
       return toTopic(record);
     },
     async deleteTopic(slug) {
-      if (!(await persistence.deleteTopic(slug))) throw missing("topic", slug);
+      const result = await persistence.deleteTopic(slug);
+      if (result.ok) return;
+      if (result.reason === "not_found") throw missing("topic", slug);
+      throw new DomainError(
+        "conflict",
+        `The topic "${slug}" is still linked from other records; remove those links first.`,
+      );
     },
   };
 }

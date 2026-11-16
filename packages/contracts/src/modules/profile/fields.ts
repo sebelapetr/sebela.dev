@@ -51,3 +51,16 @@ export function technologiesAreUnique(
     context.addIssue({ code: "custom", path: ["technologies"], message: UNIQUE_TECHNOLOGIES });
   }
 }
+
+const UNIQUE_TOPICS = "List each topic once.";
+
+/** Every topic slug of a write appears once. */
+export function topicsAreUnique(
+  value: { topics?: string[] | undefined },
+  context: z.core.$RefinementCtx,
+) {
+  const { topics } = value;
+  if (topics !== undefined && new Set(topics).size !== topics.length) {
+    context.addIssue({ code: "custom", path: ["topics"], message: UNIQUE_TOPICS });
+  }
+}

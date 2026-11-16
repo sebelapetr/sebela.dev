@@ -138,6 +138,11 @@ const describingProfile: ProfileService = {
   createCaseStudy: documentationOnly,
   updateCaseStudy: documentationOnly,
   deleteCaseStudy: documentationOnly,
+  listExplorations: documentationOnly,
+  getExploration: documentationOnly,
+  createExploration: documentationOnly,
+  updateExploration: documentationOnly,
+  deleteExploration: documentationOnly,
 };
 
 /**

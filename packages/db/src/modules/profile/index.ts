@@ -4,6 +4,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { createCaseStudyPersistence } from "./case-studies.js";
 import { createCatalogPersistence } from "./catalogs.js";
 import { createExperiencePersistence } from "./experiences.js";
+import { createExplorationPersistence } from "./explorations.js";
 import { createOrganizationPersistence } from "./organizations.js";
 import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
@@ -11,6 +12,7 @@ import type {
   CaseStudyPersistence,
   CatalogPersistence,
   ExperiencePersistence,
+  ExplorationPersistence,
   OrganizationPersistence,
   ProjectPersistence,
 } from "./types.js";
@@ -25,18 +27,27 @@ export type {
   CreateProjectResult,
   CreateTechnologyResult,
   CreateExperienceResult,
+  CreateExplorationResult,
   CreateTopicResult,
   DeleteCaseStudyResult,
   DeleteExperienceResult,
+  DeleteExplorationResult,
   DeleteOrganizationResult,
   DeleteProjectResult,
   DeleteTechnologyResult,
+  DeleteTopicResult,
   ExperienceFields,
   ExperienceKind,
   ExperiencePersistence,
   ExperienceRecord,
   ExperienceRelations,
   ExperienceWriteFailure,
+  ExplorationFields,
+  ExplorationPersistence,
+  ExplorationRecord,
+  ExplorationRelations,
+  ExplorationStatus,
+  ExplorationWriteFailure,
   OrganizationFields,
   OrganizationPersistence,
   OrganizationRecord,
@@ -54,6 +65,7 @@ export type {
   TopicRecord,
   UpdateCaseStudyResult,
   UpdateExperienceResult,
+  UpdateExplorationResult,
   UpdateProjectResult,
   UpdateTechnologyResult,
 } from "./types.js";
@@ -92,6 +104,7 @@ export interface ProfilePersistence
     CatalogPersistence,
     OrganizationPersistence,
     ExperiencePersistence,
+    ExplorationPersistence,
     ProjectPersistence,
     CaseStudyPersistence {
   /** The person, or `null` when none exists. */
@@ -128,6 +141,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createCatalogPersistence(db),
     ...createOrganizationPersistence(db),
     ...createExperiencePersistence(db),
+    ...createExplorationPersistence(db),
     ...createProjectPersistence(db),
     ...createCaseStudyPersistence(db),
     async findPerson() {

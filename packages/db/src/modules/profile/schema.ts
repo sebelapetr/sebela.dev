@@ -238,3 +238,81 @@ export const caseStudies = profileSchema.table("case_studies", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** How far an exploration got; the database stores nothing else. */
+export const explorationStatus = profileSchema.enum("exploration_status", [
+  "built",
+  "tested",
+  "designed",
+]);
+
+/**
+ * Explorations: independent work outside the career timeline, with an honest status. They refer
+ * to no experience and no project. A missing end marks an ongoing exploration, and the database
+ * refuses an end before the start.
+ */
+export const explorations = profileSchema.table(
+  "explorations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    summary: text("summary").notNull(),
+    status: explorationStatus("status").notNull(),
+    concepts: jsonb("concepts").$type<string[]>().notNull().default([]),
+    startedOn: date("started_on", { mode: "string" }).notNull(),
+    endedOn: date("ended_on", { mode: "string" }),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("explorations_position_not_negative", sql`${table.position} >= 0`),
+    check(
+      "explorations_period_is_ordered",
+      sql`${table.endedOn} IS NULL OR ${table.endedOn} >= ${table.startedOn}`,
+    ),
+  ],
+);
+
+/**
+ * The ordered technology links of an exploration: pure link rows. They disappear with their
+ * exploration; a linked technology cannot be deleted. Each technology is linked once.
+ */
+export const explorationTechnologies = profileSchema.table(
+  "exploration_technologies",
+  {
+    explorationId: uuid("exploration_id")
+      .notNull()
+      .references(() => explorations.id, { onDelete: "cascade" }),
+    technologyId: uuid("technology_id")
+      .notNull()
+      .references(() => technologies.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.explorationId, table.technologyId] }),
+    unique("exploration_technologies_position_unique").on(table.explorationId, table.position),
+  ],
+);
+
+/**
+ * The ordered topic links of an exploration: pure link rows. They disappear with their
+ * exploration; a linked topic cannot be deleted. Each topic is linked once.
+ */
+export const explorationTopics = profileSchema.table(
+  "exploration_topics",
+  {
+    explorationId: uuid("exploration_id")
+      .notNull()
+      .references(() => explorations.id, { onDelete: "cascade" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.explorationId, table.topicId] }),
+    unique("exploration_topics_position_unique").on(table.explorationId, table.position),
+  ],
+);

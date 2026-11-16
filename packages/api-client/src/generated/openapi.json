@@ -856,7 +856,7 @@
       "delete": {
         "operationId": "deleteTechnology",
         "summary": "Delete a technology",
-        "description": "A technology that other records, such as experiences and projects, still link is not deleted; remove those links first.",
+        "description": "A technology that other records, such as experiences, projects and explorations, still link is not deleted; remove those links first.",
         "security": [
           {
             "bearerAuth": []
@@ -1361,6 +1361,7 @@
       "delete": {
         "operationId": "deleteTopic",
         "summary": "Delete a topic",
+        "description": "A topic that an exploration still links is not deleted; remove those links first.",
         "security": [
           {
             "bearerAuth": []
@@ -1415,6 +1416,16 @@
           },
           "404": {
             "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3432,6 +3443,501 @@
         }
       }
     },
+    "/v1/explorations": {
+      "get": {
+        "operationId": "listExplorations",
+        "summary": "List the explorations",
+        "description": "By position, then slug. Each exploration carries its status exactly as stored (`built`, `tested` or `designed`), its concepts in order and its technologies and topics in link order.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Every exploration, in order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplorationList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createExploration",
+        "summary": "Create an exploration",
+        "description": "Stores the exploration and its technology and topic links together or not at all. The technologies and topics are slugs of existing records; the slug is unique and stable, a taken slug is a conflict.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplorationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created exploration.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Exploration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/explorations/{slug}": {
+      "get": {
+        "operationId": "getExploration",
+        "summary": "Read an exploration",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The exploration with its technologies and topics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Exploration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateExploration",
+        "summary": "Update an exploration",
+        "description": "Changes only the fields sent, together or not at all; the slug cannot change. A sent `concepts`, `technologies` or `topics` list replaces the whole list in its order; an omitted one keeps it. The period is checked against the stored start or end.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplorationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated exploration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Exploration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteExploration",
+        "summary": "Delete an exploration",
+        "description": "Removes the exploration and its technology and topic links; the technologies and topics stay.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The exploration was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -4450,6 +4956,195 @@
         },
         "additionalProperties": false
       },
+      "ExplorationCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "built",
+              "tested",
+              "designed"
+            ],
+            "description": "How far the exploration got: `built` (it exists and runs), `tested` (it was tried out) or `designed` (it exists only as a design). Returned exactly as stored."
+          },
+          "concepts": {
+            "default": [],
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Plain-text concepts the exploration covers, in their intended order."
+          },
+          "startedOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the exploration, an ISO date."
+          },
+          "endedOn": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last day of the exploration, an ISO date; `null` marks an ongoing one."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "technologies": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged."
+          },
+          "topics": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "summary",
+          "status",
+          "startedOn",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "ExplorationUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "built",
+              "tested",
+              "designed"
+            ],
+            "description": "How far the exploration got: `built` (it exists and runs), `tested` (it was tried out) or `designed` (it exists only as a design). Returned exactly as stored."
+          },
+          "concepts": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Plain-text concepts the exploration covers, in their intended order."
+          },
+          "startedOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the exploration, an ISO date."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last day of the exploration, an ISO date; `null` marks an ongoing one."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "technologies": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged."
+          },
+          "topics": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged."
+          }
+        },
+        "additionalProperties": false
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -5181,6 +5876,125 @@
           "$ref": "#/components/schemas/Project"
         },
         "description": "Grouped by owning experience in the experience order, then by position, then by slug."
+      },
+      "ExplorationList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Exploration"
+        },
+        "description": "Ordered by position, then slug."
+      },
+      "Exploration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "built",
+              "tested",
+              "designed"
+            ],
+            "description": "How far the exploration got: `built` (it exists and runs), `tested` (it was tried out) or `designed` (it exists only as a design). Returned exactly as stored."
+          },
+          "concepts": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Plain-text concepts the exploration covers, in their intended order."
+          },
+          "startedOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the exploration, an ISO date."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last day of the exploration, an ISO date; `null` marks an ongoing one."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "technologies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Technology"
+            },
+            "description": "The linked technologies, in their intended order."
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            },
+            "description": "The linked topics, in their intended order."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "summary",
+          "status",
+          "concepts",
+          "startedOn",
+          "endedOn",
+          "position",
+          "technologies",
+          "topics",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
       }
     },
     "securitySchemes": {

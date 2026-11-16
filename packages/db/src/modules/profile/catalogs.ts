@@ -18,7 +18,8 @@ export const technologyColumns = {
   updatedAt: technologies.updatedAt,
 };
 
-const topicColumns = {
+/** The returned columns of a topic, also when another record resolves it. */
+export const topicColumns = {
   id: topics.id,
   slug: topics.slug,
   name: topics.name,
@@ -120,11 +121,16 @@ export function createCatalogPersistence(db: NodePgDatabase): CatalogPersistence
       return row ?? null;
     },
     async deleteTopic(slug) {
-      const rows = await db
-        .delete(topics)
-        .where(eq(topics.slug, slug))
-        .returning({ id: topics.id });
-      return rows.length > 0;
+      try {
+        const rows = await db
+          .delete(topics)
+          .where(eq(topics.slug, slug))
+          .returning({ id: topics.id });
+        return rows.length > 0 ? { ok: true } : { ok: false, reason: "not_found" };
+      } catch (error) {
+        if (isStillReferenced(error)) return { ok: false, reason: "referenced" };
+        throw error;
+      }
     },
   };
 }

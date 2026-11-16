@@ -80,9 +80,11 @@ export function topicRoutes(profile: ProfileService): RouteDefinition[] {
       path: ITEM,
       access: "private",
       summary: "Delete a topic",
+      description:
+        "A topic that an exploration still links is not deleted; remove those links first.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The topic was deleted." },
-      errors: ["not_found"],
+      errors: ["not_found", "conflict"],
       handle: async ({ params }) => {
         await profile.deleteTopic(params.slug);
         return undefined;

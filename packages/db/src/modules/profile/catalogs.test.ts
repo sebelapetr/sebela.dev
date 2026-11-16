@@ -241,8 +241,11 @@ describe("catalog persistence", () => {
     it("deletes a topic once", async () => {
       await profile.createTopic(topic("rag", 1));
 
-      await expect(profile.deleteTopic("rag")).resolves.toBe(true);
-      await expect(profile.deleteTopic("rag")).resolves.toBe(false);
+      await expect(profile.deleteTopic("rag")).resolves.toEqual({ ok: true });
+      await expect(profile.deleteTopic("rag")).resolves.toEqual({
+        ok: false,
+        reason: "not_found",
+      });
       await expect(profile.findTopic("rag")).resolves.toBeNull();
     });
   });

@@ -115,4 +115,17 @@ export {
 } from "./projects.js";
 export type { Project, ProjectCreate, ProjectLink, ProjectUpdate } from "./projects.js";
 export { CaseStudyCreateSchema, CaseStudySchema, CaseStudyUpdateSchema } from "./case-studies.js";
+export {
+  ExplorationCreateSchema,
+  ExplorationListSchema,
+  ExplorationSchema,
+  ExplorationUpdateSchema,
+  explorationStatuses,
+} from "./explorations.js";
+export type {
+  Exploration,
+  ExplorationCreate,
+  ExplorationStatus,
+  ExplorationUpdate,
+} from "./explorations.js";
 export type { CaseStudy, CaseStudyCreate, CaseStudyUpdate } from "./case-studies.js";

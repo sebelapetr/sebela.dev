@@ -1,5 +1,5 @@
-// The catalog, organization, experience, project and case-study service interfaces, private to the profile
-// module and re-exported by its index.
+// The catalog, organization, experience, project, case-study and exploration service interfaces,
+// private to the profile module and re-exported by its index.
 import type {
   CaseStudy,
   CaseStudyCreate,
@@ -7,6 +7,9 @@ import type {
   Experience,
   ExperienceCreate,
   ExperienceUpdate,
+  Exploration,
+  ExplorationCreate,
+  ExplorationUpdate,
   Organization,
   OrganizationCreate,
   OrganizationUpdate,
@@ -34,7 +37,8 @@ import type {
  *   disagreeing (for example only `tier: "secondary"` on a `core` technology) is
  *   `validation_failed`.
  * - `delete…`: removes the record; `not_found` for an unknown slug; deleting a technology that an
- *   experience links to is `conflict`, and nothing is deleted.
+ *   experience, a project or an exploration links to, or a topic that an exploration links to, is
+ *   `conflict`, and nothing is deleted.
  */
 export interface CatalogService {
   listTechnologies(): Promise<Technology[]>;
@@ -148,4 +152,30 @@ export interface CaseStudyService {
   createCaseStudy(project: string, input: CaseStudyCreate): Promise<CaseStudy>;
   updateCaseStudy(project: string, changes: CaseStudyUpdate): Promise<CaseStudy>;
   deleteCaseStudy(project: string): Promise<void>;
+}
+
+/**
+ * Operations on the explorations, addressed by slug, with their technologies and topics resolved.
+ * An exploration is independent work outside the career timeline: it refers to no experience and
+ * no project. Results are in the contract shape, the status exactly as stored; expected failures
+ * are `DomainError`s:
+ *
+ * - `listExplorations`: every exploration, ordered by position, then slug.
+ * - `getExploration`: the exploration, or `not_found`.
+ * - `createExploration`: stores the exploration and its technology and topic links together;
+ *   `conflict` when the slug is taken, also when creates race.
+ * - `updateExploration`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `technologies` or `topics` list replaces every link of that kind
+ *   in its order; an omitted one keeps them. `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` naming the field and writing nothing, unknown
+ *   or repeated `technologies` or `topics` and an `endedOn` before the (stored or given) start.
+ * - `deleteExploration`: removes the exploration and its links, never the technologies or topics;
+ *   `not_found` for an unknown slug.
+ */
+export interface ExplorationService {
+  listExplorations(): Promise<Exploration[]>;
+  getExploration(slug: string): Promise<Exploration>;
+  createExploration(input: ExplorationCreate): Promise<Exploration>;
+  updateExploration(slug: string, changes: ExplorationUpdate): Promise<Exploration>;
+  deleteExploration(slug: string): Promise<void>;
 }

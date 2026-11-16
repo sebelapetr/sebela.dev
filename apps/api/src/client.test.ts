@@ -505,4 +505,84 @@ describe("the generated API client", () => {
       bearer,
     ]);
   });
+
+  it("manages explorations: every status kept, ordered, relations replaced, invalid refused and deleted", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await client.POST("/v1/technologies", {
+      body: { slug: "fictional-runtime", name: "Runtime", tier: "secondary", position: 20 },
+    });
+    for (const [position, slug] of ["fictional-agents", "fictional-retrieval"].entries()) {
+      await client.POST("/v1/topics", { body: { slug, name: slug, position: position + 20 } });
+    }
+    const lab = {
+      slug: "fictional-lab",
+      name: "Lab",
+      summary: "A fictional exploration.",
+      status: "designed" as const,
+      concepts: ["Planning", "Memory"],
+      startedOn: "2025-01-01",
+      position: 1,
+      technologies: ["fictional-runtime"],
+      topics: ["fictional-agents", "fictional-retrieval"],
+    };
+
+    const created = await client.POST("/v1/explorations", { body: lab });
+    expect(created.response.status).toBe(201);
+    expect(created.data?.status).toBe("designed");
+    expect(created.data?.concepts).toEqual(lab.concepts);
+    expect(created.data?.topics.map(({ slug }) => slug)).toEqual(lab.topics);
+    const duplicate = await client.POST("/v1/explorations", { body: lab });
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/explorations", {
+      body: { ...lab, slug: "fictional-unknown", topics: ["fictional-missing"] },
+    });
+    expect(unknown.response.status).toBe(400);
+    expect(unknown.error?.error.fields).toEqual([
+      { path: "topics", message: expect.stringContaining("fictional-missing") as unknown },
+    ]);
+    await client.POST("/v1/explorations", {
+      body: { ...lab, slug: "fictional-built", status: "built", position: 0, topics: [] },
+    });
+
+    const listed = await client.GET("/v1/explorations");
+    expect(listed.data?.map(({ slug, status }) => [slug, status])).toEqual([
+      ["fictional-built", "built"],
+      ["fictional-lab", "designed"],
+    ]);
+
+    const replaced = await client.PATCH("/v1/explorations/{slug}", {
+      ...at("fictional-lab"),
+      body: { status: "tested", topics: ["fictional-retrieval"] },
+    });
+    expect(replaced.data?.status).toBe("tested");
+    expect(replaced.data?.topics.map(({ slug }) => slug)).toEqual(["fictional-retrieval"]);
+    expect(replaced.data?.technologies.map(({ slug }) => slug)).toEqual(lab.technologies);
+    const period = await client.PATCH("/v1/explorations/{slug}", {
+      ...at("fictional-lab"),
+      body: { endedOn: "2024-12-31" },
+    });
+    expect(period.error?.error.fields).toEqual([expect.objectContaining({ path: "endedOn" })]);
+    const linked = await client.DELETE("/v1/topics/{slug}", at("fictional-retrieval"));
+    expect(linked.response.status).toBe(409);
+    expect(linked.error?.error.code).toBe("conflict");
+
+    for (const slug of ["fictional-lab", "fictional-built"]) {
+      expect((await client.DELETE("/v1/explorations/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/explorations/{slug}", at("fictional-lab"));
+    expect(missing.error?.error.code).toBe("not_found");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(7).fill(bearer),
+      null,
+      bearer,
+      bearer,
+      bearer,
+      bearer,
+      bearer,
+      null,
+    ]);
+  });
 });
