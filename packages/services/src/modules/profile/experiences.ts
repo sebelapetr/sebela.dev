@@ -17,7 +17,7 @@ import type { ExperienceService } from "./types.js";
 
 const missing = (slug: string) => new DomainError("not_found", `There is no experience "${slug}".`);
 
-function toExperience(record: ExperienceRecord): Experience {
+export function toExperience(record: ExperienceRecord): Experience {
   return {
     ...record,
     organization: toOrganization(record.organization),

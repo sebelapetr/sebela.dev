@@ -13,7 +13,7 @@ import type { EducationService } from "./types.js";
 const missing = (slug: string) =>
   new DomainError("not_found", `There is no education record "${slug}".`);
 
-function toEducation(record: EducationRecord): Education {
+export function toEducation(record: EducationRecord): Education {
   return {
     ...record,
     createdAt: record.createdAt.toISOString(),

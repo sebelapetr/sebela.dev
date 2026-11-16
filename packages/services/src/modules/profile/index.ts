@@ -1,5 +1,5 @@
 import type { Person, PersonCreate, PersonUpdate } from "@sebela/contracts";
-import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db";
+import type { PersonFields, ProfilePersistence } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
 import { createCaseStudyService } from "./case-studies.js";
@@ -12,6 +12,7 @@ import { createExperienceService } from "./experiences.js";
 import { createExplorationService } from "./explorations.js";
 import { isMediaRefusal, mediaRefused } from "./media-references.js";
 import { createOrganizationService } from "./organizations.js";
+import { toPerson } from "./person.js";
 import { createProjectService } from "./projects.js";
 import { createServiceService } from "./services.js";
 import { createTestimonialService } from "./testimonials.js";
@@ -84,15 +85,6 @@ export interface ProfileService
 }
 
 const missing = () => new DomainError("not_found", "There is no person yet.");
-
-function toPerson(record: PersonRecord): Person {
-  return {
-    ...record,
-    links: record.links.map(({ label, url }) => ({ label, url })),
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-  };
-}
 
 export interface ProfileServiceOptions {
   /**
