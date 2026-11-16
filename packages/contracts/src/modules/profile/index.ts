@@ -129,3 +129,11 @@ export type {
   ExplorationUpdate,
 } from "./explorations.js";
 export type { CaseStudy, CaseStudyCreate, CaseStudyUpdate } from "./case-studies.js";
+export {
+  ServiceCreateSchema,
+  ServiceEvidenceInputSchema,
+  ServiceListSchema,
+  ServiceSchema,
+  ServiceUpdateSchema,
+  serviceEvidenceKinds,
+} from "./services.js";
