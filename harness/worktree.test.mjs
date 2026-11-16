@@ -244,6 +244,20 @@ test("regenerating a missing environment file gives the role a new password", (t
   assert.equal(settings.DATABASE_USER, worktree.database);
 });
 
+test("an environment file that appears during setup is kept and reported", (t) => {
+  const { databases, create, envPath } = fixture(t);
+  fs.rmSync(envPath);
+  const ensure = databases.ensure.bind(databases);
+  databases.ensure = (...args) => {
+    fs.writeFileSync(envPath, "FIXTURE=written-meanwhile\n");
+    return ensure(...args);
+  };
+
+  assert.throws(() => create(), /appeared.*new password.*delete it/s);
+
+  assert.equal(fs.readFileSync(envPath, "utf8"), "FIXTURE=written-meanwhile\n");
+});
+
 test("an environment symlink counts as an existing file and keeps the password", (t) => {
   const { mainRoot, databases, create, worktree, envPath } = fixture(t);
   const password = databases.passwords.get(worktree.database);
