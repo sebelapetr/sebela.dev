@@ -109,6 +109,7 @@ describe("authentication of the private routes", () => {
     await expect(backend.services.profile.listExplorations()).resolves.toEqual([]);
     await expect(backend.services.profile.listServices()).resolves.toEqual([]);
     await expect(backend.services.profile.listEducation()).resolves.toEqual([]);
+    await expect(backend.services.profile.listTestimonials()).resolves.toEqual([]);
   });
 
   it("permits a valid key, and refuses it on the next request after revocation", async () => {
