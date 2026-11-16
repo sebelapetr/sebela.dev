@@ -57,6 +57,13 @@
       "when": 1794848357931,
       "tag": "0007_services",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794849912883,
+      "tag": "0008_education",
+      "breakpoints": true
     }
   ]
 }
