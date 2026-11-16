@@ -12,23 +12,23 @@ The trust boundary of the repository. It may import `@sebela/services`, `@sebela
 | -------------------------------------- | ------------------------------------------------------------------------------------ |
 | Migrate the database (never at start)  | `pnpm --filter @sebela/db db:migrate`                                                |
 | Run in development (watch, from `src`) | `pnpm --filter @sebela/api dev`                                                      |
-| Build, then run the built server       | `pnpm --filter @sebela/api build`, `pnpm --filter @sebela/api start`                 |
+| Build, then run the built server       | `pnpm --filter @sebela/api start`                                                    |
 | Create, list or revoke an API key      | `pnpm --silent --filter @sebela/api api-keys create <name>` / `list` / `revoke <id>` |
 
-`dev`, `start` and `api-keys` read the process environment, then `.env.local`, `.env` and `.env.example` of the checkout (the earlier source wins). `api-keys` builds first and talks to the database through the services, so it needs no running server and no existing key. A new key is printed once; only its hash is stored, and `list` shows metadata only.
+`dev`, `start` and `api-keys` read the process environment, then `.env.local`, `.env` and `.env.example` of the checkout (the earlier source wins). Workspace packages resolve to their built `dist/`, so each command first builds what it runs from a fresh checkout: `dev` the workspace packages the API depends on (`--filter "@sebela/api^..."`), `start` and `api-keys` those and the API itself (`--filter "@sebela/api..."`). `api-keys` talks to the database through the services, so it needs no running server and no existing key. A new key is printed once; only its hash is stored, and `list` shows metadata only.
 
 ## Configuration
 
 Validated once by `readApiConfig` in `src/config.ts` when the process starts; an invalid or missing variable stops it with the variable's name, never its value. No fallbacks. Placeholders and meanings are in `.env.example`.
 
-| Variable                                                                                         | Meaning                                                                                                                                            |
-| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `API_HOST`, `API_PORT`                                                                           | Interface and port to listen on (`0` picks a free port).                                                                                           |
-| `API_BODY_LIMIT_BYTES`                                                                           | Largest request body, enforced while it is received (413 beyond it).                                                                               |
-| `API_TRUSTED_PROXIES`                                                                            | Comma-separated proxy addresses whose `X-Forwarded-For` is believed. Empty: forwarded headers are ignored.                                         |
-| `API_RATE_LIMIT_HEALTH`, `API_RATE_LIMIT_PUBLIC`, `API_RATE_LIMIT_PRIVATE`, `API_RATE_LIMIT_KEY` | `<max>/<seconds>` fixed-window budgets: health per client, public per client, private per client before the key is verified, and per verified key. |
-| `API_RATE_LIMIT_MAX_TRACKED`                                                                     | Most callers tracked at once; the oldest window is evicted beyond it, so memory stays bounded.                                                     |
-| `POSTGRES_HOST`, `POSTGRES_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`          | Database settings, validated by `readDatabaseConfig` from `@sebela/services`.                                                                      |
+| Variable                                                                                         | Meaning                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_HOST`, `API_PORT`                                                                           | Interface and port to listen on (`0` picks a free port).                                                                                                                                                 |
+| `API_BODY_LIMIT_BYTES`                                                                           | Largest request body, enforced while it is received (413 beyond it).                                                                                                                                     |
+| `API_TRUSTED_PROXIES`                                                                            | Comma-separated proxy addresses whose `X-Forwarded-For` is believed. Empty: forwarded headers are ignored. Exact match: a proxy reached over IPv4 on a dual-stack listener is listed as `::ffff:<ipv4>`. |
+| `API_RATE_LIMIT_HEALTH`, `API_RATE_LIMIT_PUBLIC`, `API_RATE_LIMIT_PRIVATE`, `API_RATE_LIMIT_KEY` | `<max>/<seconds>` fixed-window budgets: health per client, public per client, private per client before the key is verified, and per verified key.                                                       |
+| `API_RATE_LIMIT_MAX_TRACKED`                                                                     | Most callers tracked at once; the oldest window is evicted beyond it, so memory stays bounded.                                                                                                           |
+| `POSTGRES_HOST`, `POSTGRES_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`          | Database settings, validated by `readDatabaseConfig` from `@sebela/services`.                                                                                                                            |
 
 ## HTTP behaviour
 

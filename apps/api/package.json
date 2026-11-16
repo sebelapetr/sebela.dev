@@ -6,11 +6,11 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "api-keys": "tsc --project tsconfig.build.json && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/api-keys.js",
+    "api-keys": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/api-keys.js",
     "build": "tsc --project tsconfig.build.json",
-    "dev": "node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --watch --import tsx src/server.ts",
+    "dev": "pnpm --silent --filter \"@sebela/api^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --watch --import tsx src/server.ts",
     "lint": "eslint .",
-    "start": "node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/server.js",
+    "start": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
