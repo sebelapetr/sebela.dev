@@ -81,6 +81,7 @@ async function loadExperiences(
     ...row,
     technologies: linked.get(row.id) ?? [],
     projects: owned.get(row.slug) ?? [],
+    testimonials: [],
   }));
 }
 
