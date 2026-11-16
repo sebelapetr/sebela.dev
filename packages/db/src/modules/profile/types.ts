@@ -76,7 +76,7 @@ export interface CatalogPersistence {
   updateTopic(slug: string, changes: Partial<TopicFields>): Promise<TopicRecord | null>;
   /**
    * Deletes the topic; `not_found` when there is none, `referenced` (and nothing deleted) while
-   * an exploration or another record still links to it.
+   * an exploration, a current-focus entry or another record still links to it.
    */
   deleteTopic(slug: string): Promise<DeleteTopicResult>;
 }
@@ -315,8 +315,8 @@ export interface ProjectPersistence {
   ): Promise<UpdateProjectResult>;
   /**
    * Deletes the project and its technology links, never its experience or technologies;
-   * `not_found` when there is none, `referenced` (and nothing deleted) while a case study or a
-   * service naming it as evidence still refers to it.
+   * `not_found` when there is none, `referenced` (and nothing deleted) while a case study, a
+   * service naming it as evidence or a current-focus entry still refers to it.
    */
   deleteProject(slug: string): Promise<DeleteProjectResult>;
 }
