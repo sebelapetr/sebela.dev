@@ -94,6 +94,8 @@ export function createBunnyS3Driver(
       try {
         await client.send(new DeleteObjectCommand({ Bucket: config.zone, Key: key }));
       } catch (error) {
+        // A missing key counts as removed; any other failure, another 404 included, does not.
+        if (error instanceof S3ServiceException && error.name === "NoSuchKey") return;
         throw storageError("delete", error);
       }
     },

@@ -384,13 +384,13 @@ importers:
       '@sebela/db':
         specifier: workspace:*
         version: link:../db
-      '@smithy/types':
-        specifier: 4.20.0
-        version: 4.20.0
     devDependencies:
       '@sebela/config':
         specifier: workspace:*
         version: link:../config
+      '@smithy/types':
+        specifier: 4.20.0
+        version: 4.20.0
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
