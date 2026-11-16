@@ -138,6 +138,12 @@ export {
 } from "./education.js";
 export type { Education, EducationCreate, EducationKind, EducationUpdate } from "./education.js";
 export {
+  TestimonialCreateSchema,
+  TestimonialListSchema,
+  TestimonialSchema,
+  TestimonialUpdateSchema,
+} from "./testimonials.js";
+export {
   ServiceCreateSchema,
   ServiceEvidenceInputSchema,
   ServiceEvidenceSchema,

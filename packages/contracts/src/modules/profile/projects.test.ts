@@ -223,6 +223,7 @@ describe("ProjectSchema and ProjectListSchema", () => {
       },
       technologies: [],
       projects: [project, { ...project, slug: "fleet", selectedForHomepage: false }],
+      testimonials: [],
     };
     expect(ExperienceSchema.parse(experience)).toEqual(experience);
     expect(ExperienceSchema.safeParse({ ...experience, projects: undefined }).success).toBe(false);
