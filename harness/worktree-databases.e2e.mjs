@@ -315,6 +315,23 @@ try {
     sql(env.POSTGRES_DB, `DROP DATABASE "${foreign}";`);
   });
 
+  await step(
+    "a database another worktree's role planted for a worktree is refused and kept",
+    () => {
+      // A worktree role may create databases and comment on those it owns, so the comment alone
+      // proves nothing: the owner of the database decides.
+      const planted = databaseName("feat/7-planted");
+      sqlIn(first, `CREATE DATABASE "${planted}";`);
+      sqlIn(first, `COMMENT ON DATABASE "${planted}" IS 'sebela worktree:feat-7-planted';`);
+      assert.throws(() => create("feat/7-planted"), /refusing/);
+      assert.equal(fs.existsSync(path.join(mainRoot, ".worktrees", "feat-7-planted")), false);
+      assert.equal(worktreeRoles().includes(planted), false);
+      assert.throws(() => remove("feat/7-planted"), /refusing/);
+      assert.ok(databaseExists(planted));
+      sql(env.POSTGRES_DB, `DROP DATABASE "${planted}";`);
+    },
+  );
+
   await step("without a running service no worktree is created and no slot is held", () => {
     compose("stop", "postgres");
     try {
