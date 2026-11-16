@@ -71,6 +71,10 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
     "none",
     // Only the MCP servers agents need: library documentation and a browser for UI checks. The
     // owner's personal servers and claude.ai connectors (mail, calendar, drive) are not loaded.
+    // Only the repository's own settings: the owner's ~/.claude (plugins, rules, agents) would make
+    // an unattended run depend on whatever is installed on the machine.
+    "--setting-sources",
+    "project,local",
     "--strict-mcp-config",
     "--mcp-config",
     path.join(mainRoot, "scripts", "harness", "mcp.json"),

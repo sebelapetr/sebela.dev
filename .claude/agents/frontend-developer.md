@@ -46,3 +46,4 @@ A short summary for the pull request: what changed, how it was verified, anythin
 - Hard-code a port, host or database name.
 - Put real personal data anywhere, or access environment files other than `.env.example` and `.env.local` inside your assigned worktree.
 - Guess when the issue or the docs are unclear. Stop and report.
+- Write temporary files outside your worktree. Scratch files and throwaway helpers go in `.tmp/` inside the worktree (git ignores it), never in `/tmp`.
