@@ -11,6 +11,7 @@ import { createExplorationService } from "./explorations.js";
 import { createOrganizationService } from "./organizations.js";
 import { createProjectService } from "./projects.js";
 import { createServiceService } from "./services.js";
+import { createTestimonialService } from "./testimonials.js";
 import type {
   CaseStudyService,
   CatalogService,
@@ -20,6 +21,7 @@ import type {
   OrganizationService,
   ProjectService,
   ServiceService,
+  TestimonialService,
 } from "./types.js";
 
 export type {
@@ -31,6 +33,7 @@ export type {
   OrganizationService,
   ProjectService,
   ServiceService,
+  TestimonialService,
 } from "./types.js";
 
 /**
@@ -46,8 +49,9 @@ export type {
  * It also includes the catalog operations of `CatalogService`, the organization operations of
  * `OrganizationService`, the experience operations of `ExperienceService`, the project
  * operations of `ProjectService`, the case-study operations of `CaseStudyService`, the
- * exploration operations of `ExplorationService`, the service operations of `ServiceService` and
- * the education operations of `EducationService`.
+ * exploration operations of `ExplorationService`, the service operations of `ServiceService`, the
+ * education operations of `EducationService` and the testimonial operations of
+ * `TestimonialService`.
  */
 export interface ProfileService
   extends
@@ -58,7 +62,8 @@ export interface ProfileService
     CaseStudyService,
     ExplorationService,
     ServiceService,
-    EducationService {
+    EducationService,
+    TestimonialService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -86,6 +91,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createExplorationService(persistence),
     ...createServiceService(persistence),
     ...createEducationService(persistence),
+    ...createTestimonialService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();

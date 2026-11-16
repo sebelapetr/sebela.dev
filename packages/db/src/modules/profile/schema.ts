@@ -425,3 +425,29 @@ export const education = profileSchema.table(
     ),
   ],
 );
+
+/**
+ * Testimonials: quotes from clients and colleagues, each tied to the experience it is about. The
+ * experience key is required and has no cascade, so every testimonial belongs to exactly one
+ * experience and an experience is never deleted while a testimonial belongs to it.
+ */
+export const testimonials = profileSchema.table(
+  "testimonials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    experienceId: uuid("experience_id")
+      .notNull()
+      .references(() => experiences.id),
+    quote: text("quote").notNull(),
+    authorName: text("author_name").notNull(),
+    authorRole: text("author_role").notNull(),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("testimonials_experience_id_index").on(table.experienceId),
+    check("testimonials_position_not_negative", sql`${table.position} >= 0`),
+  ],
+);

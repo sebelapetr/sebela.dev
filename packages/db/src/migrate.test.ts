@@ -52,6 +52,7 @@ describe("migrateDatabase", () => {
       "profile.service_evidence",
       "profile.services",
       "profile.technologies",
+      "profile.testimonials",
       "profile.topics",
     ]);
   });

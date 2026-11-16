@@ -150,8 +150,8 @@ export interface ExperienceRelations {
 }
 
 /**
- * An experience with its organization, technologies (in link order) and projects (by position,
- * then slug) resolved.
+ * An experience with its organization, technologies (in link order), and projects and
+ * testimonials (each by position, then slug) resolved.
  */
 export interface ExperienceRecord extends ExperienceFields {
   id: string;
@@ -159,6 +159,7 @@ export interface ExperienceRecord extends ExperienceFields {
   organization: OrganizationRecord;
   technologies: TechnologyRecord[];
   projects: ProjectRecord[];
+  testimonials: TestimonialRecord[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -213,7 +214,8 @@ export interface ExperiencePersistence {
   ): Promise<UpdateExperienceResult>;
   /**
    * Deletes the experience and its technology links; `not_found` when there is none,
-   * `referenced` (and nothing deleted) while a project or another record still refers to it.
+   * `referenced` (and nothing deleted) while a project, a testimonial or another record still
+   * refers to it.
    */
   deleteExperience(slug: string): Promise<DeleteExperienceResult>;
 }
@@ -622,4 +624,76 @@ export interface EducationPersistence {
   updateEducation(slug: string, changes: Partial<EducationFields>): Promise<UpdateEducationResult>;
   /** Deletes the education record; `not_found` when there is none. */
   deleteEducation(slug: string): Promise<DeleteEducationResult>;
+}
+
+/** Writable fields of a testimonial. The slug is fixed when it is created. */
+export interface TestimonialFields {
+  /** What the author said, plain text. */
+  quote: string;
+  authorName: string;
+  /** The author's role; the organization comes from the experience. */
+  authorRole: string;
+  /** Ascending order within the experience; ties are ordered by slug. */
+  position: number;
+}
+
+/** Relations of a testimonial as written: the slug of an existing experience. */
+export interface TestimonialRelations {
+  /** The slug of the experience the testimonial belongs to. */
+  experience: string;
+}
+
+/** A testimonial with the experience it belongs to (by slug). */
+export interface TestimonialRecord extends TestimonialFields, TestimonialRelations {
+  id: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update of a testimonial wrote nothing, besides `conflict` and `not_found`:
+ *
+ * - `unknown_experience`: no experience has the given slug.
+ */
+export interface TestimonialWriteFailure {
+  ok: false;
+  reason: "unknown_experience";
+}
+
+export type CreateTestimonialResult =
+  | { ok: true; testimonial: TestimonialRecord }
+  | { ok: false; reason: "conflict" }
+  | TestimonialWriteFailure;
+
+export type UpdateTestimonialResult =
+  | { ok: true; testimonial: TestimonialRecord }
+  | { ok: false; reason: "not_found" }
+  | TestimonialWriteFailure;
+
+export type DeleteTestimonialResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/**
+ * Persistence operations of the testimonials, addressed by slug. Every testimonial belongs to
+ * exactly one experience; an experience with a testimonial cannot be deleted.
+ */
+export interface TestimonialPersistence {
+  /** Every testimonial, grouped by experience in the experience order, then by position and slug. */
+  listTestimonials(): Promise<TestimonialRecord[]>;
+  /** The testimonial with the slug, or `null`. */
+  findTestimonial(slug: string): Promise<TestimonialRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `TestimonialWriteFailure`. */
+  createTestimonial(
+    fields: TestimonialFields & TestimonialRelations & { slug: string },
+  ): Promise<CreateTestimonialResult>;
+  /**
+   * Changes only the given fields. A given `experience` moves the testimonial to that experience.
+   * `not_found` when there is no such testimonial; see `TestimonialWriteFailure`.
+   */
+  updateTestimonial(
+    slug: string,
+    changes: Partial<TestimonialFields & TestimonialRelations>,
+  ): Promise<UpdateTestimonialResult>;
+  /** Deletes the testimonial, never its experience; `not_found` when there is none. */
+  deleteTestimonial(slug: string): Promise<DeleteTestimonialResult>;
 }

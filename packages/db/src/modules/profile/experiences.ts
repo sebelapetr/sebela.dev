@@ -12,7 +12,9 @@ import {
   organizations,
   projects,
   technologies,
+  testimonials,
 } from "./schema.js";
+import { loadTestimonials } from "./testimonials.js";
 import type {
   ExperienceFields,
   ExperiencePersistence,
@@ -21,6 +23,7 @@ import type {
   ExperienceWriteFailure,
   ProjectRecord,
   TechnologyRecord,
+  TestimonialRecord,
 } from "./types.js";
 
 const experienceColumns = {
@@ -41,8 +44,8 @@ const experienceColumns = {
 const PERIOD_CHECK = "experiences_period_is_ordered";
 
 /**
- * The experiences with their organization, their technologies in link order and their projects by
- * position, then slug.
+ * The experiences with their organization, their technologies in link order, and their projects
+ * and testimonials, each by position, then slug.
  */
 async function loadExperiences(
   db: Executor,
@@ -77,10 +80,18 @@ async function loadExperiences(
   for (const project of await loadProjects(db, inArray(projects.experienceId, ids))) {
     owned.set(project.experience, [...(owned.get(project.experience) ?? []), project]);
   }
+  const quoted = new Map<string, TestimonialRecord[]>();
+  for (const testimonial of await loadTestimonials(db, inArray(testimonials.experienceId, ids))) {
+    quoted.set(testimonial.experience, [
+      ...(quoted.get(testimonial.experience) ?? []),
+      testimonial,
+    ]);
+  }
   return rows.map((row) => ({
     ...row,
     technologies: linked.get(row.id) ?? [],
     projects: owned.get(row.slug) ?? [],
+    testimonials: quoted.get(row.slug) ?? [],
   }));
 }
 
@@ -145,7 +156,8 @@ function scalarChanges(
  * experience and its links are stored completely or not at all. Slugs are unique in the database,
  * the period rule is a check constraint, an update locks its experience so concurrent
  * replacements of the links serialize, and the links cascade only with their experience. Projects
- * refer to their experience without a cascade, so an experience that owns one is not deleted.
+ * and testimonials refer to their experience without a cascade, so an experience with one is not
+ * deleted.
  */
 export function createExperiencePersistence(db: NodePgDatabase): ExperiencePersistence {
   return {

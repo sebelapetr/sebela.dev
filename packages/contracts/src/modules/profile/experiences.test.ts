@@ -109,6 +109,7 @@ describe("ExperienceCreateSchema", () => {
       { ...lead, technologies: [...Array(51).keys()].map((n) => `t${String(n)}`) },
     ],
     ["projects before they exist", { ...lead, projects: [] }],
+    ["testimonials, which name their experience themselves", { ...lead, testimonials: [] }],
     ["an unexpected field", { ...lead, position: 1 }],
   ])("rejects %s", (_, input) => {
     expect(ExperienceCreateSchema.safeParse(input).success).toBe(false);
@@ -192,6 +193,7 @@ describe("ExperienceSchema and ExperienceListSchema", () => {
         },
       ],
       projects: [],
+      testimonials: [],
     };
     expect(ExperienceSchema.parse(experience)).toEqual(experience);
     expect(ExperienceListSchema.parse([experience])).toEqual([experience]);

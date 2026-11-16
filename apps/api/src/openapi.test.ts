@@ -21,7 +21,7 @@ interface Document {
   openapi: string;
   paths: Record<string, Record<string, Operation>>;
   components: {
-    schemas: Record<string, { properties?: Record<string, unknown> }>;
+    schemas: Record<string, { properties?: Record<string, unknown>; required?: string[] }>;
     securitySchemes: Record<string, unknown>;
   };
 }
@@ -403,6 +403,52 @@ describe("the OpenAPI document and the reference", () => {
     for (const date of ["startedOn", "endedOn"]) {
       expect(JSON.stringify(education[date])).toContain('"null"');
     }
+  });
+
+  it("documents the testimonials from their contract schemas and embeds them in experiences", () => {
+    expect(operation("GET", "/v1/testimonials").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TestimonialList" } },
+    });
+    expect(operation("GET", "/v1/testimonials/:slug").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Testimonial" } },
+    });
+    expect(operation("POST", "/v1/testimonials").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TestimonialCreate" } },
+    });
+    expect(operation("PATCH", "/v1/testimonials/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/TestimonialUpdate" } },
+    });
+    expect(operation("POST", "/v1/testimonials").responses["201"]?.headers).toHaveProperty(
+      "Location",
+    );
+    expect(Object.keys(operation("POST", "/v1/testimonials").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    expect(Object.keys(operation("PATCH", "/v1/testimonials/:slug").responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/testimonials/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "401", "404"]),
+    );
+    // Nothing refers to a testimonial, so its delete is never a conflict.
+    expect(operation("DELETE", "/v1/testimonials/:slug").responses).not.toHaveProperty("409");
+    for (const [method, path] of [
+      ["POST", "/v1/testimonials"],
+      ["PATCH", "/v1/testimonials/:slug"],
+      ["DELETE", "/v1/testimonials/:slug"],
+    ] as const) {
+      expect(operation(method, path).security).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(operation("GET", "/v1/testimonials").security).toEqual([]);
+    expect(operation("GET", "/v1/testimonials/:slug").parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+    // An experience carries its testimonials.
+    const experience = document.components.schemas["Experience"];
+    expect(experience?.required).toContain("testimonials");
+    expect(JSON.stringify(experience?.properties?.["testimonials"])).toContain(
+      "#/components/schemas/Testimonial",
+    );
   });
 
   it("documents the health route", () => {

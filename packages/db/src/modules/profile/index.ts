@@ -10,6 +10,7 @@ import { createOrganizationPersistence } from "./organizations.js";
 import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
 import { createServicePersistence } from "./services.js";
+import { createTestimonialPersistence } from "./testimonials.js";
 import type {
   CaseStudyPersistence,
   CatalogPersistence,
@@ -19,6 +20,7 @@ import type {
   OrganizationPersistence,
   ProjectPersistence,
   ServicePersistence,
+  TestimonialPersistence,
 } from "./types.js";
 
 export type {
@@ -32,6 +34,7 @@ export type {
   CreateProjectResult,
   CreateServiceResult,
   CreateTechnologyResult,
+  CreateTestimonialResult,
   CreateExperienceResult,
   CreateExplorationResult,
   CreateTopicResult,
@@ -43,6 +46,7 @@ export type {
   DeleteProjectResult,
   DeleteServiceResult,
   DeleteTechnologyResult,
+  DeleteTestimonialResult,
   DeleteTopicResult,
   EducationFields,
   EducationKind,
@@ -80,6 +84,11 @@ export type {
   TechnologyGroup,
   TechnologyRecord,
   TechnologyTier,
+  TestimonialFields,
+  TestimonialPersistence,
+  TestimonialRecord,
+  TestimonialRelations,
+  TestimonialWriteFailure,
   TopicFields,
   TopicRecord,
   UpdateCaseStudyResult,
@@ -89,6 +98,7 @@ export type {
   UpdateProjectResult,
   UpdateServiceResult,
   UpdateTechnologyResult,
+  UpdateTestimonialResult,
 } from "./types.js";
 
 export interface PersonLinkRecord {
@@ -129,7 +139,8 @@ export interface ProfilePersistence
     ProjectPersistence,
     CaseStudyPersistence,
     ServicePersistence,
-    EducationPersistence {
+    EducationPersistence,
+    TestimonialPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -169,6 +180,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createCaseStudyPersistence(db),
     ...createServicePersistence(db),
     ...createEducationPersistence(db),
+    ...createTestimonialPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;

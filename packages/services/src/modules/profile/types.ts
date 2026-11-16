@@ -1,5 +1,5 @@
-// The catalog, organization, experience, project, case-study, exploration, service and education
-// interfaces, private to the profile module and re-exported by its index.
+// The catalog, organization, experience, project, case-study, exploration, service, education and
+// testimonial interfaces, private to the profile module and re-exported by its index.
 import type {
   CaseStudy,
   CaseStudyCreate,
@@ -25,6 +25,9 @@ import type {
   Technology,
   TechnologyCreate,
   TechnologyUpdate,
+  Testimonial,
+  TestimonialCreate,
+  TestimonialUpdate,
   Topic,
   TopicCreate,
   TopicUpdate,
@@ -80,8 +83,9 @@ export interface OrganizationService {
 }
 
 /**
- * Operations on the experiences, addressed by slug, with their organization, technologies and
- * projects (by position, then slug) resolved. Results are in the contract shape; expected failures are `DomainError`s:
+ * Operations on the experiences, addressed by slug, with their organization, technologies, and
+ * projects and testimonials (each by position, then slug) resolved. Results are in the contract
+ * shape; expected failures are `DomainError`s:
  *
  * - `listExperiences`: every experience, current roles (no end) first, then by start, latest
  *   first, then by end, latest first, then by slug.
@@ -95,8 +99,8 @@ export interface OrganizationService {
  *   unknown `organization`, unknown or repeated `technologies` and an `endedOn` before the
  *   (stored or given) start.
  * - `deleteExperience`: removes the experience and its technology links; `not_found` for an
- *   unknown slug; `conflict` (and nothing deleted) while it owns a project or another record
- *   still refers to it.
+ *   unknown slug; `conflict` (and nothing deleted) while it owns a project, has a testimonial or
+ *   another record still refers to it.
  */
 export interface ExperienceService {
   listExperiences(): Promise<Experience[]>;
@@ -233,4 +237,30 @@ export interface EducationService {
   createEducation(input: EducationCreate): Promise<Education>;
   updateEducation(slug: string, changes: EducationUpdate): Promise<Education>;
   deleteEducation(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the testimonials, addressed by slug. Every testimonial belongs to exactly one
+ * experience, named by its slug. Results are in the contract shape; expected failures are
+ * `DomainError`s:
+ *
+ * - `listTestimonials`: every testimonial, grouped by experience in the experience order, then by
+ *   position, then by slug.
+ * - `getTestimonial`: the testimonial, or `not_found`.
+ * - `createTestimonial`: stores the testimonial; `conflict` when the slug is taken, also when
+ *   creates race.
+ * - `updateTestimonial`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `experience` moves the testimonial to that experience.
+ *   `not_found` for an unknown slug.
+ * - Create and update refuse an unknown `experience` as `validation_failed` naming `experience`
+ *   and write nothing.
+ * - `deleteTestimonial`: removes the testimonial, never its experience; `not_found` for an
+ *   unknown slug. Nothing refers to a testimonial, so a delete never conflicts.
+ */
+export interface TestimonialService {
+  listTestimonials(): Promise<Testimonial[]>;
+  getTestimonial(slug: string): Promise<Testimonial>;
+  createTestimonial(input: TestimonialCreate): Promise<Testimonial>;
+  updateTestimonial(slug: string, changes: TestimonialUpdate): Promise<Testimonial>;
+  deleteTestimonial(slug: string): Promise<void>;
 }
