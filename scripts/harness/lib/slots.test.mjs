@@ -13,6 +13,7 @@ import {
   envFileContent,
   freeSlot,
   portsForSlot,
+  existingIssueBranch,
   slotOf,
   worktreeDirName,
 } from "./slots.mjs";
@@ -176,4 +177,23 @@ test("the environment file carries the slot and its ports", () => {
     ...Object.fromEntries(Object.entries(shifted(20)).map(([name, port]) => [name, String(port)])),
     EXTRA: "x",
   });
+});
+
+// --- resuming an issue's earlier branch ------------------------------------------
+
+test("an earlier branch of the same issue is found under another name", () => {
+  const branches = ["master", "phase/01-foundation", "feat/17-hardcoded-config-check", "origin/feat/18-postgres"];
+  assert.equal(existingIssueBranch("feat/17-reject-hardcoded-endpoints", branches), "feat/17-hardcoded-config-check");
+  assert.equal(existingIssueBranch("fix/18-other-name", branches), "feat/18-postgres");
+});
+
+test("the requested branch itself, other issues and branches without an issue are not matches", () => {
+  const branches = ["feat/17-hardcoded-config-check", "feat/170-other", "docs/finalize-phase-plans"];
+  assert.equal(existingIssueBranch("feat/17-hardcoded-config-check", branches), null);
+  assert.equal(existingIssueBranch("feat/1-x", branches), null);
+  assert.equal(existingIssueBranch("docs/finalize-phase-plans-2", branches), null);
+});
+
+test("a local branch is preferred over a remote one of the same issue", () => {
+  assert.equal(existingIssueBranch("feat/5-b", ["origin/feat/5-a", "feat/5-c"]), "feat/5-c");
 });

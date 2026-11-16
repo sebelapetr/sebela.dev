@@ -265,3 +265,16 @@ test("removing a worktree again is harmless", (t) => {
   assert.equal(databases.owners.size, 0);
   assert.deepEqual(listWorktrees({ mainRoot }), []);
 });
+
+test("creating a worktree for an issue with an earlier branch continues that branch", (t) => {
+  const { mainRoot, create, worktree } = fixture(t);
+  const earlier = create("feat/17-hardcoded-config-check");
+  execFileSync("git", ["-C", earlier.path, "-c", "user.name=F", "-c", "user.email=f@example.invalid", "commit", "--allow-empty", "-m", "earlier work"]);
+
+  const again = create("feat/17-reject-hardcoded-endpoints");
+
+  assert.equal(again.path, earlier.path);
+  assert.equal(again.resumed, "feat/17-hardcoded-config-check");
+  assert.equal(branchExists(mainRoot, "feat/17-reject-hardcoded-endpoints"), false);
+  assert.equal(listWorktrees({ mainRoot }).length, 2, `${worktree.name} and the earlier one only`);
+});

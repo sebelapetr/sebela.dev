@@ -21,6 +21,7 @@ import {
   emptyState,
   envFileContent,
   freeSlot,
+  existingIssueBranch,
   worktreeDirName,
 } from "./lib/slots.mjs";
 
@@ -108,8 +109,23 @@ function withLock(lockDir, fn) {
 // then writes its environment file. When the database cannot be ensured, whatever this call added
 // is undone (a new worktree and branch, a new slot) and the error is thrown; an existing worktree
 // keeps its slot and its environment file.
+function branchExistsIn(mainRoot, branch) {
+  return (
+    gitSucceeds(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], mainRoot) ||
+    gitSucceeds(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], mainRoot)
+  );
+}
+
+// Local branches as `<name>`, remote ones as `origin/<name>`.
+function allBranches(mainRoot) {
+  return git(["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin"], { cwd: mainRoot })
+    .split("\n")
+    .filter(Boolean)
+    .map((ref) => ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, ""));
+}
+
 export function createWorktree({
-  branch,
+  branch: requested,
   base = "HEAD",
   mainRoot = mainRootFrom(),
   env = process.env,
@@ -119,6 +135,8 @@ export function createWorktree({
   const basePorts = loadBasePorts(env);
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
+  const resumed = branchExistsIn(mainRoot, requested) ? null : existingIssueBranch(requested, allBranches(mainRoot));
+  const branch = resumed ?? requested;
   const name = worktreeDirName(branch);
   const database = databaseName(name);
   const worktreePath = path.join(p.dir, name);
@@ -168,7 +186,7 @@ export function createWorktree({
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  return { path: worktreePath, slot, name, database };
+  return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
 }
 
 // Removes a worktree this call has just added; it holds no work yet. A failure here is added to the
@@ -253,6 +271,7 @@ function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
   if (command === "create" && options._[0]) {
     const result = createWorktree({ branch: options._[0], base: options.base });
+    if (result.resumed) console.error(`issue already has branch ${result.resumed}; continuing it`);
     console.error(`worktree ${result.name} on slot ${result.slot} with database ${result.database}`);
     console.log(result.path);
   } else if (command === "remove" && options._[0]) {
