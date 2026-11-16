@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { breaksCheck } from "./database-errors.js";
 import { type Executor, now } from "./relations.js";
 import { education } from "./schema.js";
@@ -45,7 +45,7 @@ async function refusable<Result>(write: () => Promise<Result>) {
  * leave exactly one row. Each write is one statement and the period checks apply to the
  * resulting row, so an update that would leave an invalid period changes nothing.
  */
-export function createEducationPersistence(db: NodePgDatabase): EducationPersistence {
+export function createEducationPersistence(db: Database): EducationPersistence {
   return {
     listEducation() {
       return loadEducation(db);

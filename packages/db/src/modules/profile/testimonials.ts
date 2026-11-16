@@ -1,6 +1,6 @@
 import { asc, eq, type SQL } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { experienceOrder, type Executor, now, WriteRefused } from "./relations.js";
 import { experiences, testimonials } from "./schema.js";
 import type {
@@ -76,7 +76,7 @@ async function refusable<T>(write: () => Promise<T>): Promise<T | TestimonialWri
  * testimonial cannot be deleted. Slugs are unique in the database; each write runs in one
  * transaction, so a refused move changes nothing.
  */
-export function createTestimonialPersistence(db: NodePgDatabase): TestimonialPersistence {
+export function createTestimonialPersistence(db: Database): TestimonialPersistence {
   return {
     listTestimonials() {
       return loadTestimonials(db, undefined);

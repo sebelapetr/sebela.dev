@@ -1,11 +1,11 @@
 // Write helpers shared by records with ordered catalog links; private to the profile module.
 import { asc, desc, inArray, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { experiences, technologies, topics } from "./schema.js";
 
 /** A connection or an open transaction; both run the same queries. */
-export type Executor = Pick<NodePgDatabase, "select" | "insert" | "update" | "delete">;
+export type Executor = Pick<Database, "select" | "insert" | "update" | "delete">;
 
 /** `clock_timestamp()`, not `now()`: it advances also within one transaction. */
 export const now = sql`clock_timestamp()`;

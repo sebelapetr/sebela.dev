@@ -1,6 +1,6 @@
 import { asc, eq, inArray, type SQL } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { type Executor, now, WriteRefused } from "./relations.js";
 import { experiences, explorations, projects, serviceEvidence, services } from "./schema.js";
 import type {
@@ -182,7 +182,7 @@ async function refusable<T>(write: () => Promise<T>): Promise<T | ServiceWriteFa
  * serialize, the evidence rows cascade only with their service, and a named project or
  * exploration cannot be deleted. A check constraint keeps each row to the columns of its kind.
  */
-export function createServicePersistence(db: NodePgDatabase): ServicePersistence {
+export function createServicePersistence(db: Database): ServicePersistence {
   return {
     listServices() {
       return loadServices(db, undefined);

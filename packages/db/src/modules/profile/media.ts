@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { isStillReferenced } from "./database-errors.js";
 import { type Executor, now, WriteRefused } from "./relations.js";
 import { media } from "./schema.js";
@@ -79,7 +79,7 @@ function isMediaReferenceFailure(failure: unknown): failure is MediaReferenceFai
  * organizations and projects refer to media through foreign keys without a cascade, so a
  * referenced delete is refused by the database and returned as `referenced`.
  */
-export function createMediaPersistence(db: NodePgDatabase): MediaPersistence {
+export function createMediaPersistence(db: Database): MediaPersistence {
   return {
     listMedia() {
       return db.select(mediaColumns).from(media).orderBy(desc(media.createdAt), desc(media.id));

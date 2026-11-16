@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { isStillReferenced } from "./database-errors.js";
 import { checkMediaReferences, type MediaReference, refusingMedia } from "./media.js";
 import { organizations } from "./schema.js";
@@ -31,7 +31,7 @@ const now = sql`clock_timestamp()`;
  * exactly one row; referencing tables hold foreign keys, so a referenced row is never deleted. A
  * write that sets a logo checks it and locks it in the same transaction.
  */
-export function createOrganizationPersistence(db: NodePgDatabase): OrganizationPersistence {
+export function createOrganizationPersistence(db: Database): OrganizationPersistence {
   return {
     listOrganizations() {
       return db

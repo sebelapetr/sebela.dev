@@ -1,6 +1,6 @@
 import { asc, eq, inArray, type SQL } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { loadCaseStudies } from "./case-studies.js";
 import { technologyColumns } from "./catalogs.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
@@ -137,7 +137,7 @@ function scalarChanges(
  * the database, the period rule is a check constraint, an update locks its project so concurrent
  * replacements of the links serialize, and the links cascade only with their project.
  */
-export function createProjectPersistence(db: NodePgDatabase): ProjectPersistence {
+export function createProjectPersistence(db: Database): ProjectPersistence {
   return {
     listProjects() {
       return loadProjects(db, undefined);
