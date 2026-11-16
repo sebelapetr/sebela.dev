@@ -30,7 +30,8 @@ const inconsistent = () =>
     ],
   );
 
-function toTechnology(record: TechnologyRecord): Technology {
+/** The technology in the contract shape; also used where another record resolves it. */
+export function toTechnology(record: TechnologyRecord): Technology {
   return {
     ...record,
     createdAt: record.createdAt.toISOString(),
@@ -74,7 +75,13 @@ export function createCatalogService(persistence: ProfilePersistence): CatalogSe
       throw result.reason === "not_found" ? missing("technology", slug) : inconsistent();
     },
     async deleteTechnology(slug) {
-      if (!(await persistence.deleteTechnology(slug))) throw missing("technology", slug);
+      const result = await persistence.deleteTechnology(slug);
+      if (result.ok) return;
+      if (result.reason === "not_found") throw missing("technology", slug);
+      throw new DomainError(
+        "conflict",
+        `The technology "${slug}" is still linked from other records; remove those links first.`,
+      );
     },
     async listTopics() {
       return (await persistence.listTopics()).map(toTopic);

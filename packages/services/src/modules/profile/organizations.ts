@@ -8,7 +8,8 @@ import type { OrganizationService } from "./types.js";
 const missing = (slug: string) =>
   new DomainError("not_found", `There is no organization "${slug}".`);
 
-function toOrganization(record: OrganizationRecord): Organization {
+/** The organization in the contract shape; also used where another record resolves it. */
+export function toOrganization(record: OrganizationRecord): Organization {
   return {
     ...record,
     createdAt: record.createdAt.toISOString(),

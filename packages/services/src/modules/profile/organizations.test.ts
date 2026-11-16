@@ -101,8 +101,8 @@ describe("organization service", () => {
   });
 
   it("refuses to delete a referenced organization as a conflict", async () => {
-    // Persistence reports a reference that a foreign key holds (tested in @sebela/db); no table
-    // refers to organizations yet, so this persistence reports one for every delete.
+    // Persistence reports a reference that a foreign key holds (tested in @sebela/db); this one
+    // reports it for every delete. A real experience reference is in `experiences.test.ts`.
     const referenced = createProfileService({
       ...persistence.profile,
       deleteOrganization: () => Promise.resolve({ ok: false, reason: "referenced" }),
