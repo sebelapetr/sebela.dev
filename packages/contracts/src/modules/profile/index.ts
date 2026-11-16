@@ -145,6 +145,13 @@ export {
 } from "./testimonials.js";
 export type { Testimonial, TestimonialCreate, TestimonialUpdate } from "./testimonials.js";
 export {
+  CurrentFocusCreateSchema,
+  CurrentFocusListSchema,
+  CurrentFocusSchema,
+  CurrentFocusUpdateSchema,
+} from "./current-focus.js";
+export type { CurrentFocus, CurrentFocusCreate, CurrentFocusUpdate } from "./current-focus.js";
+export {
   ServiceCreateSchema,
   ServiceEvidenceInputSchema,
   ServiceEvidenceSchema,

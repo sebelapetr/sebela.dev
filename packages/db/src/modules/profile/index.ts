@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { createCaseStudyPersistence } from "./case-studies.js";
 import { createCatalogPersistence } from "./catalogs.js";
+import { createCurrentFocusPersistence } from "./current-focus.js";
 import { createEducationPersistence } from "./education.js";
 import { createExperiencePersistence } from "./experiences.js";
 import { createExplorationPersistence } from "./explorations.js";
@@ -14,6 +15,7 @@ import { createTestimonialPersistence } from "./testimonials.js";
 import type {
   CaseStudyPersistence,
   CatalogPersistence,
+  CurrentFocusPersistence,
   EducationPersistence,
   ExperiencePersistence,
   ExplorationPersistence,
@@ -28,7 +30,14 @@ export type {
   CaseStudyPersistence,
   CaseStudyRecord,
   CatalogPersistence,
+  CurrentFocusFields,
+  CurrentFocusPersistence,
+  CurrentFocusProjectRecord,
+  CurrentFocusRecord,
+  CurrentFocusRelations,
+  CurrentFocusWriteFailure,
   CreateCaseStudyResult,
+  CreateCurrentFocusResult,
   CreateEducationResult,
   CreateOrganizationResult,
   CreateProjectResult,
@@ -39,6 +48,7 @@ export type {
   CreateExplorationResult,
   CreateTopicResult,
   DeleteCaseStudyResult,
+  DeleteCurrentFocusResult,
   DeleteEducationResult,
   DeleteExperienceResult,
   DeleteExplorationResult,
@@ -92,6 +102,7 @@ export type {
   TopicFields,
   TopicRecord,
   UpdateCaseStudyResult,
+  UpdateCurrentFocusResult,
   UpdateEducationResult,
   UpdateExperienceResult,
   UpdateExplorationResult,
@@ -140,7 +151,8 @@ export interface ProfilePersistence
     CaseStudyPersistence,
     ServicePersistence,
     EducationPersistence,
-    TestimonialPersistence {
+    TestimonialPersistence,
+    CurrentFocusPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -181,6 +193,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createServicePersistence(db),
     ...createEducationPersistence(db),
     ...createTestimonialPersistence(db),
+    ...createCurrentFocusPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;

@@ -76,7 +76,7 @@ export interface CatalogPersistence {
   updateTopic(slug: string, changes: Partial<TopicFields>): Promise<TopicRecord | null>;
   /**
    * Deletes the topic; `not_found` when there is none, `referenced` (and nothing deleted) while
-   * an exploration or another record still links to it.
+   * an exploration, a current-focus entry or another record still links to it.
    */
   deleteTopic(slug: string): Promise<DeleteTopicResult>;
 }
@@ -315,8 +315,8 @@ export interface ProjectPersistence {
   ): Promise<UpdateProjectResult>;
   /**
    * Deletes the project and its technology links, never its experience or technologies;
-   * `not_found` when there is none, `referenced` (and nothing deleted) while a case study or a
-   * service naming it as evidence still refers to it.
+   * `not_found` when there is none, `referenced` (and nothing deleted) while a case study, a
+   * service naming it as evidence or a current-focus entry still refers to it.
    */
   deleteProject(slug: string): Promise<DeleteProjectResult>;
 }
@@ -696,4 +696,93 @@ export interface TestimonialPersistence {
   ): Promise<UpdateTestimonialResult>;
   /** Deletes the testimonial, never its experience; `not_found` when there is none. */
   deleteTestimonial(slug: string): Promise<DeleteTestimonialResult>;
+}
+
+/** Writable scalar fields of a current-focus entry. The slug is fixed when it is created. */
+export interface CurrentFocusFields {
+  title: string;
+  /** Markdown. */
+  description: string;
+  /** An absolute `http` or `https` address with more about the focus, or `null`. */
+  link: string | null;
+  /** Ascending order of the entries; ties are ordered by slug. */
+  position: number;
+}
+
+/** Relations of a current-focus entry as written: slugs of existing records. */
+export interface CurrentFocusRelations {
+  /** The slug of the project the focus is about, or `null` for none. */
+  project: string | null;
+  /** Slugs of the topics, each once, in their intended order. */
+  topics: string[];
+}
+
+/** The project a current-focus entry is about, with what a page needs to link to it. */
+export interface CurrentFocusProjectRecord {
+  slug: string;
+  name: string;
+  /** The slug of the experience the project belongs to. */
+  experience: string;
+}
+
+/** A current-focus entry with its optional project and its topics resolved in link order. */
+export interface CurrentFocusRecord extends CurrentFocusFields {
+  id: string;
+  slug: string;
+  project: CurrentFocusProjectRecord | null;
+  topics: TopicRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update of a current-focus entry wrote nothing, besides `conflict` and
+ * `not_found`:
+ *
+ * - `unknown_project`: no project has the given slug.
+ * - `unknown_topics`: some topic slugs exist nowhere; `slugs` lists them.
+ * - `repeated_topics`: a topic slug is given more than once.
+ */
+export type CurrentFocusWriteFailure =
+  | { ok: false; reason: "unknown_project" }
+  | { ok: false; reason: "unknown_topics"; slugs: string[] }
+  | { ok: false; reason: "repeated_topics" };
+
+export type CreateCurrentFocusResult =
+  | { ok: true; focus: CurrentFocusRecord }
+  | { ok: false; reason: "conflict" }
+  | CurrentFocusWriteFailure;
+
+export type UpdateCurrentFocusResult =
+  | { ok: true; focus: CurrentFocusRecord }
+  | { ok: false; reason: "not_found" }
+  | CurrentFocusWriteFailure;
+
+export type DeleteCurrentFocusResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/**
+ * Persistence operations of the current focus, addressed by slug. Each write of an entry, its
+ * project and its topic links is one transaction: it is stored completely or not at all. A project
+ * or topic an entry links to cannot be deleted.
+ */
+export interface CurrentFocusPersistence {
+  /** Every entry, ordered by position, then slug. */
+  listCurrentFocus(): Promise<CurrentFocusRecord[]>;
+  /** The entry with the slug, or `null`. */
+  findCurrentFocus(slug: string): Promise<CurrentFocusRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `CurrentFocusWriteFailure`. */
+  createCurrentFocus(
+    fields: CurrentFocusFields & CurrentFocusRelations & { slug: string },
+  ): Promise<CreateCurrentFocusResult>;
+  /**
+   * Changes only the given fields. A given `project` replaces the project and `null` removes it;
+   * given `topics` replace every topic link. Omitted fields keep their value. `not_found` when
+   * there is no such entry; see `CurrentFocusWriteFailure`.
+   */
+  updateCurrentFocus(
+    slug: string,
+    changes: Partial<CurrentFocusFields & CurrentFocusRelations>,
+  ): Promise<UpdateCurrentFocusResult>;
+  /** Deletes the entry and its topic links, never the project or topics; `not_found` when none. */
+  deleteCurrentFocus(slug: string): Promise<DeleteCurrentFocusResult>;
 }

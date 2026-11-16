@@ -451,3 +451,47 @@ export const testimonials = profileSchema.table(
     check("testimonials_position_not_negative", sql`${table.position} >= 0`),
   ],
 );
+
+/**
+ * The current focus: what is being built or learned right now. The project key is optional and
+ * has no cascade, so a project is never deleted while a focus entry is about it.
+ */
+export const currentFocus = profileSchema.table(
+  "current_focus",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    link: text("link"),
+    projectId: uuid("project_id").references(() => projects.id),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("current_focus_project_id_index").on(table.projectId),
+    check("current_focus_position_not_negative", sql`${table.position} >= 0`),
+  ],
+);
+
+/**
+ * Ordered topic links of a focus entry. They cascade with the entry; a linked topic cannot be
+ * deleted.
+ */
+export const currentFocusTopics = profileSchema.table(
+  "current_focus_topics",
+  {
+    currentFocusId: uuid("current_focus_id")
+      .notNull()
+      .references(() => currentFocus.id, { onDelete: "cascade" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.currentFocusId, table.topicId] }),
+    unique("current_focus_topics_position_unique").on(table.currentFocusId, table.position),
+  ],
+);

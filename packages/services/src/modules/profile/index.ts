@@ -4,6 +4,7 @@ import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db"
 import { DomainError } from "../../errors.js";
 import { createCaseStudyService } from "./case-studies.js";
 import { createCatalogService } from "./catalogs.js";
+import { createCurrentFocusService } from "./current-focus.js";
 import { definedChanges } from "./changes.js";
 import { createEducationService } from "./education.js";
 import { createExperienceService } from "./experiences.js";
@@ -15,6 +16,7 @@ import { createTestimonialService } from "./testimonials.js";
 import type {
   CaseStudyService,
   CatalogService,
+  CurrentFocusService,
   EducationService,
   ExperienceService,
   ExplorationService,
@@ -27,6 +29,7 @@ import type {
 export type {
   CaseStudyService,
   CatalogService,
+  CurrentFocusService,
   EducationService,
   ExperienceService,
   ExplorationService,
@@ -50,8 +53,8 @@ export type {
  * `OrganizationService`, the experience operations of `ExperienceService`, the project
  * operations of `ProjectService`, the case-study operations of `CaseStudyService`, the
  * exploration operations of `ExplorationService`, the service operations of `ServiceService`, the
- * education operations of `EducationService` and the testimonial operations of
- * `TestimonialService`.
+ * education operations of `EducationService`, the testimonial operations of
+ * `TestimonialService` and the current-focus operations of `CurrentFocusService`.
  */
 export interface ProfileService
   extends
@@ -63,7 +66,8 @@ export interface ProfileService
     ExplorationService,
     ServiceService,
     EducationService,
-    TestimonialService {
+    TestimonialService,
+    CurrentFocusService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -92,6 +96,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createServiceService(persistence),
     ...createEducationService(persistence),
     ...createTestimonialService(persistence),
+    ...createCurrentFocusService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();
