@@ -1,10 +1,19 @@
 // @ts-check
 
-import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import ts from "typescript";
+import {
+  SCOPE,
+  exportFiles,
+  exportsMap,
+  findWorkspaceRoot,
+  importTargets,
+  isRecord,
+  matchSubpath,
+  memberContaining,
+  memberNamed,
+} from "./import-resolution.js";
+import { createModuleGraph, isModuleEntry, isToolingConfig, moduleOf } from "./module-graph.js";
 
 /**
  * The `sebela/import-boundaries` rule: the dependency table and the API trust boundary from
@@ -24,17 +33,19 @@ import ts from "typescript";
  * - Aliases are checked where they lead: `#` subpath imports through the `imports` map of the
  *   importer's `package.json`, and, in type-checked TypeScript files, any other bare specifier
  *   that the TypeScript program resolves to a file of the workspace (for example `paths`).
+ * - Within a member, the backend module layout holds (see `module-graph.js`): a file outside a
+ *   module `src/modules/<name>/` imports only its entry `index.<ext>`, never another of its files;
+ *   the one exception is a tooling configuration `*.config.<ext>` directly in the member folder,
+ *   which no other file of the member imports. A declared export of a package that leads to a
+ *   private module file is rejected where it is imported.
+ * - No import closes a cycle between the modules of a member: modules depend on each other in one
+ *   direction only, also through files outside the modules. Cycles across members cannot arise,
+ *   because the dependency table is acyclic.
  *
  * Checked forms: static imports and re-exports (including type-only ones), dynamic `import()`,
  * `require()`, TypeScript `import x = require()` and `typeof import()`. Only specifiers written as
  * string literals (or template literals without substitutions) can be checked.
  */
-
-const SCOPE = "@sebela/";
-const WORKSPACE_MARKER = "pnpm-workspace.yaml";
-
-/** The apps of the repository layout. Apps are deployables and are never imported. */
-const APPS = new Set(["web", "api", "mcp-admin", "llm-agent"]);
 
 /**
  * The dependency table of `docs/repository-structure.md`: the packages each member may import,
@@ -53,190 +64,8 @@ const DEPENDENCIES = new Map([
   ["packages/config", []],
 ]);
 
-/**
- * @typedef {object} Member
- * @property {string} dir The member folder relative to the workspace root, e.g. `apps/web`.
- * @property {string} name The folder name, which is also the package name after `@sebela/`.
- * @property {boolean} [installed] Reached through `node_modules/@sebela/<name>`.
- */
-
-/**
- * Where a specifier leads: a workspace package by name, or a file path.
- *
- * @typedef {{ kind: "package", name: string, subpath: string } | { kind: "path", file: string }} Target
- */
-
-/** @typedef {Record<string, unknown>} SubpathMap The `exports` or `imports` map of a manifest. */
-
-/**
- * The nearest ancestor of `dir` that contains the workspace marker, or `undefined`.
- *
- * @param {string} dir
- * @returns {string | undefined}
- */
-function findWorkspaceRoot(dir) {
-  for (let current = dir; ; current = path.dirname(current)) {
-    if (fs.existsSync(path.join(current, WORKSPACE_MARKER))) return current;
-    if (path.dirname(current) === current) return undefined;
-  }
-}
-
-/**
- * @param {string} name
- * @param {string} root
- * @returns {Member}
- */
-function memberNamed(name, root) {
-  const kind = APPS.has(name) || fs.existsSync(path.join(root, "apps", name)) ? "apps" : "packages";
-  return { dir: `${kind}/${name}`, name };
-}
-
-/**
- * The workspace member that contains `file`, or `undefined` for a root file or a file outside the
- * workspace. A path through `node_modules/@sebela/<name>` belongs to the member `<name>`.
- *
- * @param {string} file
- * @param {string} root
- * @returns {Member | undefined}
- */
-function memberContaining(file, root) {
-  const relative = path.relative(root, file);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) return undefined;
-  const segments = relative.split(path.sep);
-
-  const installed = segments.lastIndexOf("node_modules");
-  if (installed !== -1 && `${segments[installed + 1] ?? ""}/` === SCOPE) {
-    const name = segments[installed + 2];
-    if (name) return { ...memberNamed(name, root), installed: true };
-  }
-
-  const [kind, name] = segments;
-  if ((kind === "apps" || kind === "packages") && name) return { dir: `${kind}/${name}`, name };
-  return undefined;
-}
-
-/**
- * Resolves a package-name, `file:`, absolute or relative specifier. Other specifiers (third-party
- * packages, built-ins, aliases) give `undefined`.
- *
- * @param {string} specifier
- * @param {string} fromDir
- * @returns {Target | undefined}
- */
-function resolveSpecifier(specifier, fromDir) {
-  if (specifier.startsWith(SCOPE)) {
-    const rest = specifier.slice(SCOPE.length);
-    const slash = rest.indexOf("/");
-    const name = slash === -1 ? rest : rest.slice(0, slash);
-    return name
-      ? { kind: "package", name, subpath: slash === -1 ? "" : rest.slice(slash) }
-      : undefined;
-  }
-
-  if (specifier.startsWith("file:")) {
-    try {
-      return { kind: "path", file: fileURLToPath(specifier) };
-    } catch {
-      return undefined;
-    }
-  }
-
-  const withoutQuery = specifier.replace(/[?#].*$/u, "");
-  if (path.isAbsolute(withoutQuery)) return { kind: "path", file: path.normalize(withoutQuery) };
-  if (/^\.\.?(?:\/|$)/u.test(withoutQuery)) {
-    return { kind: "path", file: path.resolve(fromDir, withoutQuery) };
-  }
-  return undefined;
-}
-
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * The parsed `package.json` in `dir`, or `undefined` when it is missing or unreadable.
- *
- * @param {string} dir
- * @returns {Record<string, unknown> | undefined}
- */
-function readManifest(dir) {
-  try {
-    /** @type {unknown} */
-    const manifest = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
-    return isRecord(manifest) ? manifest : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The entry points of a member as an `exports` map keyed by subpath (`.`, `./x`, `./x/*`).
- * Without a manifest or an `exports` field only the package root is an entry point; a string,
- * array or object of conditions describes the package root as well.
- *
- * @param {Member} member
- * @param {string} root
- * @returns {SubpathMap}
- */
-function exportsMap(member, root) {
-  const field = readManifest(path.join(root, member.dir))?.["exports"];
-  if (field === undefined || field === null) return { ".": true };
-  if (!isRecord(field)) return { ".": field };
-  const subpaths = Object.entries(field).filter(([key]) => key.startsWith("."));
-  return subpaths.length === 0 ? { ".": field } : Object.fromEntries(subpaths);
-}
-
-/**
- * Resolves `request` against a subpath map as Node.js does: an exact key first, then the pattern
- * key with the longest prefix. Returns the matched target and the text `*` stands for.
- *
- * @param {SubpathMap} map
- * @param {string} request
- * @returns {{ value: unknown, star: string } | undefined}
- */
-function matchSubpath(map, request) {
-  if (Object.hasOwn(map, request)) return { value: map[request], star: "" };
-
-  /** @type {{ key: string, prefix: number, star: string } | undefined} */
-  let best;
-  for (const key of Object.keys(map)) {
-    const star = key.indexOf("*");
-    if (star === -1) continue;
-    const prefix = key.slice(0, star);
-    const suffix = key.slice(star + 1);
-    const matches =
-      request.startsWith(prefix) &&
-      request.endsWith(suffix) &&
-      request.length > prefix.length + suffix.length;
-    if (matches && prefix.length > (best?.prefix ?? -1)) {
-      best = {
-        key,
-        prefix: prefix.length,
-        star: request.slice(prefix.length, request.length - suffix.length),
-      };
-    }
-  }
-  return best && { value: map[best.key], star: best.star };
-}
-
-/**
- * Every string target of a subpath map value, including those nested in conditions and
- * fallback arrays, with `*` replaced by `star`.
- *
- * @param {unknown} value
- * @param {string} star
- * @returns {string[]}
- */
-function stringTargets(value, star) {
-  if (typeof value === "string") return [value.replaceAll("*", star)];
-  if (Array.isArray(value)) return value.flatMap((item) => stringTargets(item, star));
-  if (isRecord(value)) return Object.values(value).flatMap((item) => stringTargets(item, star));
-  return [];
-}
+/** @typedef {import("./import-resolution.js").Member} Member */
+/** @typedef {import("./import-resolution.js").Target} Target */
 
 /**
  * @param {readonly string[]} names
@@ -272,32 +101,6 @@ function staticString(node) {
   return undefined;
 }
 
-/** @type {WeakMap<ts.Program, ts.ModuleResolutionCache>} */
-const resolutionCaches = new WeakMap();
-
-/**
- * The workspace file a bare specifier resolves to through the TypeScript program (for example a
- * `paths` alias), or `undefined` for an unresolved specifier or an installed library.
- *
- * @param {ts.Program} program
- * @param {string} specifier
- * @param {string} file
- * @returns {string | undefined}
- */
-function resolveThroughProgram(program, specifier, file) {
-  const options = program.getCompilerOptions();
-  let cache = resolutionCaches.get(program);
-  if (cache === undefined) {
-    cache = ts.createModuleResolutionCache(program.getCurrentDirectory(), (name) => name, options);
-    resolutionCaches.set(program, cache);
-  }
-  const { resolvedModule } = ts.resolveModuleName(specifier, file, options, ts.sys, cache);
-  if (resolvedModule === undefined || resolvedModule.isExternalLibraryImport === true) {
-    return undefined;
-  }
-  return path.resolve(resolvedModule.resolvedFileName);
-}
-
 /** @type {import("eslint").Rule.RuleModule} */
 const importBoundaries = {
   meta: {
@@ -320,6 +123,12 @@ const importBoundaries = {
         "'{{specifier}}' reaches into {{targetDir}} by path or alias, bypassing the public entry of {{target}}. Import it by its package name through a declared entry point instead.",
       pathOutsideMember:
         "'{{specifier}}' leaves {{importer}} by path or alias. Code outside a package is imported only by package name through a declared entry point.",
+      privateModuleFile:
+        "'{{specifier}}' imports a private file of the module {{module}}. Code outside a module uses only its entry {{module}}/index (backend module layout in docs/repository-structure.md).",
+      toolingConfigImport:
+        "'{{specifier}}' imports the tooling configuration {{config}}. Only tooling configurations may read private module files, so no other code imports them; import the module entry instead.",
+      moduleCycle:
+        "'{{specifier}}' closes a circular dependency between modules of {{member}}: {{cycle}}. Modules depend on each other in one direction only; move the shared part into a module both can use, or invert the dependency.",
     },
   },
 
@@ -331,37 +140,19 @@ const importBoundaries = {
     /** @type {string} */
     const root = found;
     const importer = memberContaining(file, root);
-    const fromDir = path.dirname(file);
     const manifestDir = importer === undefined ? root : path.join(root, importer.dir);
-    const program = /** @type {{ program?: ts.Program | null } | undefined} */ (
+    const program = /** @type {{ program?: import("typescript").Program | null } | undefined} */ (
       context.sourceCode.parserServices
     )?.program;
-
-    /**
-     * Where `specifier` leads: directly, through the `imports` map of the importer's manifest, or
-     * through the TypeScript program.
-     *
-     * @param {string} specifier
-     * @returns {Target[]}
-     */
-    function targetsOf(specifier) {
-      if (specifier.startsWith("#")) {
-        const imports = readManifest(manifestDir)?.["imports"];
-        const match = isRecord(imports) ? matchSubpath(imports, specifier) : undefined;
-        if (match === undefined) return [];
-        return stringTargets(match.value, match.star).flatMap((mapped) => {
-          const target = resolveSpecifier(mapped, manifestDir);
-          return target === undefined ? [] : [target];
-        });
-      }
-
-      const direct = resolveSpecifier(specifier, fromDir);
-      if (direct !== undefined) return [direct];
-
-      if (program == null || specifier.startsWith("node:")) return [];
-      const resolved = resolveThroughProgram(program, specifier, file);
-      return resolved === undefined ? [] : [{ kind: "path", file: resolved }];
-    }
+    const resolution = {
+      file,
+      manifestDir,
+      compilerOptions: program?.getCompilerOptions(),
+      currentDirectory: program?.getCurrentDirectory(),
+    };
+    const importerIsTooling = isToolingConfig(file, root);
+    /** @type {ReturnType<typeof createModuleGraph> | undefined} */
+    let graph;
 
     /**
      * Checks the importer's row of the dependency table for `target`. Reports and returns false
@@ -449,6 +240,69 @@ const importBoundaries = {
     }
 
     /**
+     * Checks the backend module layout for one file `target` that `specifier` loads, once the
+     * dependency table and the package boundaries allow it. Reports and returns false when it is
+     * not allowed.
+     *
+     * @param {import("eslint").Rule.Node} node
+     * @param {string} specifier
+     * @param {string} target
+     */
+    function checkModuleTarget(node, specifier, target) {
+      if (importer === undefined) return true;
+      const module = moduleOf(target, root);
+      const sameMember = module?.member.dir === importer.dir;
+      if (
+        module !== undefined &&
+        !isModuleEntry(target, module) &&
+        path.relative(module.dir, file).startsWith("..") &&
+        !(importerIsTooling && sameMember)
+      ) {
+        context.report({
+          node,
+          messageId: "privateModuleFile",
+          data: { specifier, module: module.label },
+        });
+        return false;
+      }
+
+      const member = memberContaining(target, root);
+      if (member?.dir !== importer.dir || member.installed === true) return true;
+      if (isToolingConfig(target, root) && !importerIsTooling) {
+        const config = path.relative(root, target).split(path.sep).join("/");
+        context.report({
+          node,
+          messageId: "toolingConfigImport",
+          data: { specifier, config: config.replace(/\.(?:[cm]?[jt]sx?)$/u, "") },
+        });
+        return false;
+      }
+
+      graph ??= createModuleGraph({ root, member: importer, importer: file, ...resolution });
+      const cycle = graph.cycleThrough(target);
+      if (cycle !== undefined) {
+        context.report({
+          node,
+          messageId: "moduleCycle",
+          data: { specifier, member: importer.dir, cycle: cycle.join(" -> ") },
+        });
+        return false;
+      }
+      return true;
+    }
+
+    /**
+     * The files a target loads: the file of a path, or every file a declared export leads to.
+     *
+     * @param {Target} target
+     * @returns {string[]}
+     */
+    function filesOf(target) {
+      if (target.kind === "path") return [target.file];
+      return exportFiles(memberNamed(target.name, root), target.subpath, root);
+    }
+
+    /**
      * Checks the module specifier held by `source`, reporting at most one violation.
      *
      * @param {unknown} source
@@ -457,8 +311,14 @@ const importBoundaries = {
       const specifier = staticString(source);
       if (specifier === undefined) return;
       const node = /** @type {import("eslint").Rule.Node} */ (source);
-      for (const target of targetsOf(specifier)) {
+      const targets = importTargets(specifier, resolution);
+      for (const target of targets) {
         if (!checkTarget(node, specifier, target)) return;
+      }
+      for (const target of targets) {
+        for (const loaded of filesOf(target)) {
+          if (!checkModuleTarget(node, specifier, loaded)) return;
+        }
       }
     }
 
