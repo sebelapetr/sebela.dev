@@ -143,6 +143,7 @@ export {
   TestimonialSchema,
   TestimonialUpdateSchema,
 } from "./testimonials.js";
+export type { Testimonial, TestimonialCreate, TestimonialUpdate } from "./testimonials.js";
 export {
   ServiceCreateSchema,
   ServiceEvidenceInputSchema,

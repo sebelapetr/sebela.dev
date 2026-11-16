@@ -11,6 +11,7 @@ import {
 } from "./fields.js";
 import { OrganizationSchema } from "./organizations.js";
 import { ProjectSchema } from "./projects.js";
+import { TestimonialSchema } from "./testimonials.js";
 
 export const experienceKinds = ["main_job", "side_project", "own_business"] as const;
 
@@ -48,8 +49,8 @@ const relationFields = {
 };
 
 /**
- * An experience: a role at an organization over a period, with its technologies and its projects
- * resolved.
+ * An experience: a role at an organization over a period, with its technologies, its projects and
+ * its testimonials resolved.
  */
 export const ExperienceSchema = z
   .object({
@@ -64,6 +65,11 @@ export const ExperienceSchema = z
       description:
         "The projects delivered within the experience, by position, then slug; each says " +
         "whether it is selected for the homepage.",
+    }),
+    testimonials: z.array(TestimonialSchema).meta({
+      description:
+        "The quotes of clients and colleagues about the experience, by position, then slug; the " +
+        "organization above is their context.",
     }),
     ...timestamps,
   })
