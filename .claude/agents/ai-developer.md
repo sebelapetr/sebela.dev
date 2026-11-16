@@ -1,7 +1,8 @@
 ---
 name: ai-developer
 model: opus
-effort: high
+effort: medium
+autoCompactWindow: 150000
 description: "Implements MCP and AI issues in a worktree: the admin MCP server, the Python AI runtime, public MCP and agent package and the retrieval package. Works evals-first. Use for issues in apps/mcp-admin, apps/ai-service, apps/mcp-public, packages/llm-agent and packages/memory."
 ---
 
