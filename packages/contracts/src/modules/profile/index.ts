@@ -136,6 +136,7 @@ export {
   EducationUpdateSchema,
   educationKinds,
 } from "./education.js";
+export type { Education, EducationCreate, EducationKind, EducationUpdate } from "./education.js";
 export {
   ServiceCreateSchema,
   ServiceEvidenceInputSchema,
