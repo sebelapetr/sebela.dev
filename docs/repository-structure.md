@@ -236,7 +236,7 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 
 ### The shared Postgres
 
-`compose.yaml` in the repository root defines one service, `postgres`: PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
+`compose.yaml` in the repository root defines one service, `postgres`: PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag and the digest of its multi-architecture index, so a re-pushed tag cannot change what runs; tag and digest are upgraded together), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
 
 ```bash
 cp .env.example .env               # once; set your own POSTGRES_PASSWORD before the first start
