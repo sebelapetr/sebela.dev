@@ -1,15 +1,6 @@
 import { z } from "zod";
 
-/** Lower-case letters and digits in words joined by single hyphens, for example `next-js`. */
-const KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-const key = (description: string) =>
-  z.string().min(1).max(100).regex(KEY_PATTERN, "Use lower-case words joined by hyphens.").meta({
-    description,
-  });
-
-/** The stable, unique address of a record; set when it is created and never changed. */
-const SlugSchema = key("The stable, unique address of the record, for example `paldock`.");
+import { key, SlugSchema, timestamps } from "./fields.js";
 
 const NameSchema = z.string().trim().min(1).max(100);
 
@@ -19,8 +10,6 @@ const PositionSchema = z
   .min(0)
   .max(1_000_000)
   .meta({ description: "Ascending order in the list; ties are ordered by slug." });
-
-const timestamps = { createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() };
 
 /** Path parameters of a route that addresses one record by its slug. */
 export const SlugParamsSchema = z.strictObject({ slug: SlugSchema });
