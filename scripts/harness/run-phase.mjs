@@ -69,6 +69,11 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
     "auto",
     "--permission-prompts",
     "none",
+    // Only the MCP servers agents need: library documentation and a browser for UI checks. The
+    // owner's personal servers and claude.ai connectors (mail, calendar, drive) are not loaded.
+    "--strict-mcp-config",
+    "--mcp-config",
+    path.join(mainRoot, "scripts", "harness", "mcp.json"),
     "--name",
     `loop ${phase} #${iteration}`,
   ];
@@ -77,7 +82,7 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
       cwd: mainRoot,
       // Subagents must run in the foreground: a print-mode session ends when the orchestrator
       // stops, and a background developer would be cut off.
-      env: { ...process.env, SEBELA_UNATTENDED: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" },
+      env: { ...process.env, SEBELA_UNATTENDED: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1", ENABLE_CLAUDEAI_MCP_SERVERS: "false" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
