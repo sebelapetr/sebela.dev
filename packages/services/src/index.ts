@@ -1,4 +1,4 @@
-export { readDatabaseConfig } from "@sebela/db";
+export { demoSeedFolder, readDatabaseConfig } from "@sebela/db";
 export type { DatabaseConfig } from "@sebela/db";
 export { DomainError } from "./errors.js";
 export type { DomainErrorCode, DomainErrorField } from "./errors.js";
