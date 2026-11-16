@@ -42,8 +42,9 @@ function deny(reason) {
   return { reason };
 }
 
+// Each refusal also says how to reach the same goal allowed, so an agent does not guess.
 const ENV_REASON =
-  "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md).";
+  "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md). If .env only appears as text in content you write, use the Edit or Write tool: they check the file you change, not its content.";
 
 function allowedEnvPath(filePath, worktreeRoot) {
   return (
@@ -96,7 +97,117 @@ function checkSearchPattern({
 // The harness that governs the loop. Unattended runs change it only inside a worktree, through a
 // pull request; never in the main checkout, and never inside any .git directory.
 const HARNESS_DIRS = [".claude", ".github", "harness"];
-const HARNESS_IN_COMMAND = /(^|[\s'"=/<>|;&(])(\.claude\/settings|\.git\/(hooks|config)\b)/;
+const SETTINGS_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.claude\/settings/;
+const GIT_INTERNALS_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.git\/(hooks|config)\b/;
+const HARNESS_REASON =
+  "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md). To read a harness file, use the Read or Grep tool, or a plain cat, grep, head or sed -n.";
+
+// Splits a shell command into its simple commands (separated by ; & | or newlines) as lists of
+// words without quotes. Null when it cannot tell what runs: command substitution, redirection
+// into a file, a heredoc or an unbalanced quote. Discarding output (2>&1, >/dev/null) is fine.
+function simpleCommands(command) {
+  if (/`|\$\(/.test(command)) return null;
+  const cleaned = command
+    .replace(/(^|\s)\d?>&\d(?=\s|$)/g, " ")
+    .replace(/\d?>\s*\/dev\/null/g, " ");
+  const commands = [];
+  let words = [];
+  let word = null;
+  let quote = null;
+  const endWord = () => {
+    if (word !== null) words.push(word);
+    word = null;
+  };
+  for (const char of cleaned) {
+    if (quote) {
+      if (char === quote) quote = null;
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      word ??= "";
+    } else if (char === "<" || char === ">") {
+      return null;
+    } else if (/[;&|\n]/.test(char)) {
+      endWord();
+      if (words.length) commands.push(words);
+      words = [];
+    } else if (/\s/.test(char)) {
+      endWord();
+    } else {
+      word = (word ?? "") + char;
+    }
+  }
+  if (quote) return null;
+  endWord();
+  if (words.length) commands.push(words);
+  return commands;
+}
+
+// Programs that only read and print, with the arguments that keep them so.
+const READ_ONLY_GIT = new Set(["diff", "show", "log", "status", "ls-files", "grep", "blame"]);
+function readsOnly([program, ...args]) {
+  if (["cd", "cat", "head", "tail", "grep", "wc", "ls", "diff", "echo"].includes(program)) {
+    return true;
+  }
+  if (program === "sed") return args[0] === "-n" && /^\d+(,\d+)?p$/.test(args[1] ?? "");
+  if (program === "git") {
+    // `git -C <dir>` only says where; what follows decides.
+    while (args[0] === "-C" && args.length > 2) args.splice(0, 2);
+    return (
+      READ_ONLY_GIT.has(args[0]) && !args.some((arg) => /^(-O|--output|--open-files)/.test(arg))
+    );
+  }
+  return false;
+}
+
+function isReadOnlyCommand(command) {
+  const commands = simpleCommands(command);
+  return commands !== null && commands.every(readsOnly);
+}
+
+// `git config` that only prints a value or the list; anything with a value to set is a change.
+const GIT_CONFIG_READ_FLAGS = new Set([
+  "--get",
+  "--get-all",
+  "--list",
+  "-l",
+  "--show-origin",
+  "--show-scope",
+  "--local",
+  "--worktree",
+  "--null",
+  "-z",
+  "--name-only",
+  "--includes",
+]);
+const GIT_CONFIG = new RegExp(`${AT_COMMAND}git\\s+config\\b`);
+function changesGitConfig(command) {
+  if (!GIT_CONFIG.test(command)) return false;
+  const commands = simpleCommands(command);
+  if (commands === null) return true;
+  return commands
+    .filter(([program, sub]) => program === "git" && sub === "config")
+    .some((words) => {
+      const args = words.slice(2);
+      const values = args.filter((arg) => !arg.startsWith("-"));
+      return (
+        !args.every((arg) => !arg.startsWith("-") || GIT_CONFIG_READ_FLAGS.has(arg)) ||
+        values.length > 1
+      );
+    });
+}
+
+// Leaving .context out of a search (`--exclude-dir=.context`, `-path ./.context -prune`,
+// `':!.context'`) does not read it; every other mention still counts.
+const CONTEXT_EXCLUSIONS = [
+  /--exclude-dir=(['"]?)\.context\1(?=\s|$)/g,
+  /-path\s+(['"]?)\.\/\.context\1\s+-prune(?=\s|$)/g,
+  /(['"]):(?:!|\(exclude\))\.context\1(?=\s|$)/g,
+];
+function mentionsContext(command) {
+  const rest = CONTEXT_EXCLUSIONS.reduce((text, pattern) => text.replace(pattern, " "), command);
+  return CONTEXT_IN_COMMAND.test(rest);
+}
 
 // The one place in the main checkout's .claude/ that agents write to: their own memory, shared
 // by every worktree and ignored by git.
@@ -196,8 +307,14 @@ function branchNamedBy(ref, currentBranch) {
 
 // What the phase loop never needs: changing the repository's settings, secrets or credentials.
 const UNATTENDED_FORBIDDEN = new RegExp(
-  `${AT_COMMAND}(gh\\s+(api|repo|secret|auth|label|workflow|ruleset|variable)\\b|git\\s+config\\b)`,
+  `${AT_COMMAND}gh\\s+(api|repo|secret|auth|label|workflow|ruleset|variable)\\b`,
 );
+// `git -c` sets configuration for one command, hooks included.
+const ONE_OFF_GIT_CONFIG = new RegExp(
+  `${AT_COMMAND}git(?:\\s+(?:-C\\s+\\S+|--git-dir=\\S+|--work-tree=\\S+))*\\s+(-c\\s|--config-env)`,
+);
+const SETTINGS_REASON =
+  "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md). To read a release of another repository, use `gh release view --repo <owner>/<repo>`; to read a Git setting, `git config --get <key>`.";
 
 // The command may run somewhere other than the directory the hook looked at.
 const MOVES =
@@ -242,7 +359,9 @@ function checkPush(fullCommand, { currentBranch }) {
     return deny("Push one named branch, not all of them (docs/git-workflow.md).");
   }
   if (/\s(--force(-with-lease)?|-f)(\s|=|$)/.test(command) || /[\s:]\+[\w/.-]+/.test(command)) {
-    return deny("Force-pushing is not allowed (docs/git-workflow.md).");
+    return deny(
+      "Force-pushing is not allowed (docs/git-workflow.md). To bring a pushed branch up to date, run `git merge origin/phase/<phase>` instead of rebasing, then push normally.",
+    );
   }
   const masterRefused = deny(
     "Nobody but the owner changes master; push your issue or phase branch instead.",
@@ -352,19 +471,24 @@ export function evaluateToolCall({
     const command = String(toolInput?.command ?? "");
     const environment = checkShellEnvironment(command, { mainRoot, cwd, worktreeRoot, realpath });
     if (environment) return environment;
-    if (unattended && HARNESS_IN_COMMAND.test(command)) {
-      return deny(
-        "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).",
-      );
+    if (
+      unattended &&
+      (GIT_INTERNALS_IN_COMMAND.test(command) ||
+        (SETTINGS_IN_COMMAND.test(command) && !isReadOnlyCommand(command)))
+    ) {
+      return deny(HARNESS_REASON);
     }
-    if (unattended && UNATTENDED_FORBIDDEN.test(command)) {
-      return deny(
-        "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md).",
-      );
+    if (
+      unattended &&
+      (UNATTENDED_FORBIDDEN.test(command) ||
+        ONE_OFF_GIT_CONFIG.test(command) ||
+        changesGitConfig(command))
+    ) {
+      return deny(SETTINGS_REASON);
     }
-    if (restricted && CONTEXT_IN_COMMAND.test(command)) {
+    if (restricted && mentionsContext(command)) {
       return deny(
-        ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).",
+        ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md). To search the checkout, leave it out with --exclude-dir=.context (grep) or -path ./.context -prune (find).",
       );
     }
     return (

@@ -464,6 +464,97 @@ test("unattended agents may keep their shared memory in the main checkout, and n
   );
 });
 
+// --- needless refusals (found in the phase 0–2 transcripts) ----------------
+
+const loop = { unattended: true, isSubagent: true };
+
+test("reading the harness settings with a read-only shell command is allowed", () => {
+  for (const command of [
+    "cd /repo/.worktrees/feat-1-x && cat .claude/settings.json",
+    'grep -n -A6 "WorktreeCreate\\|WorktreeRemove" .claude/settings.json',
+    "cat .claude/settings.json | head -40",
+    "sed -n 1,80p .claude/settings.json",
+    "git diff origin/phase/01-x...HEAD -- .claude/settings.json package.json 2>&1 | head",
+    "git -C /repo/.worktrees/feat-1-x diff origin/phase/01-x...HEAD -- .claude/settings.json",
+    "ls .claude && wc -l .claude/settings.json >/dev/null",
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+});
+
+test("anything that could write the harness settings through the shell is still refused", () => {
+  for (const command of [
+    "sed -i s/x/y/ .claude/settings.json",
+    "cat x > .claude/settings.json",
+    "cat .claude/settings.json | tee .claude/settings.json",
+    "cp /tmp/s .claude/settings.json",
+    "python3 - <<'EOF'\nopen('.claude/settings.json','w')\nEOF",
+    "cat $(echo .claude/settings.json)",
+    "sed -n 'w out' .claude/settings.json",
+    "find .claude/settings.json -delete",
+    "cat .git/config",
+    "cat .git/hooks/pre-commit",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
+test("a refusal says how to do the same safely", () => {
+  assert.match(bash("sed -i s/x/y/ .claude/settings.json", loop).reason, /Read or Grep tool/);
+  assert.match(bash("python3 fix.py .env", loop).reason, /Edit or Write tool/);
+  assert.match(
+    bash("gh api repos/actions/checkout/releases/latest", loop).reason,
+    /gh release view/,
+  );
+  assert.match(
+    bash("git push --force-with-lease origin feat/1-x", loop).reason,
+    /git merge origin\/phase/,
+  );
+  assert.match(bash("grep -rn x . | grep -v .context", loop).reason, /--exclude-dir=\.context/);
+});
+
+test("reading Git configuration is allowed, changing it is not", () => {
+  for (const command of [
+    "git config core.hooksPath",
+    "git config --get core.hooksPath",
+    "git config --list --show-origin",
+    "pnpm install --frozen-lockfile 2>&1 | tail -5 && git config core.hooksPath",
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+  for (const command of [
+    "git config core.hooksPath /dev/null",
+    "git config --unset core.hooksPath",
+    "git config --global user.name x",
+    "git config -e",
+    "git config --add a.b c",
+    "git config --replace-all a.b c",
+    "git config --get core.hooksPath && git config core.hooksPath x",
+    "git -c core.hooksPath=/dev/null commit -m x",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
+test("leaving .context out of a search is not reading it", () => {
+  for (const command of [
+    "grep -rn slugify --exclude-dir=.context .",
+    "grep -rn x --exclude-dir=node_modules --exclude-dir=.context --include=*.md .",
+    "find . -path ./.git -prune -o -path ./.context -prune -o -type f -print",
+    "git grep -n x -- . ':!.context'",
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+  for (const command of [
+    "ls -A .context",
+    "grep -r x --exclude-dir=.context .context/",
+    "find . -path ./.context -o -print",
+    "find .context -type f",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {
