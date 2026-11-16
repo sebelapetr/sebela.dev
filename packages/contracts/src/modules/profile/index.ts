@@ -132,8 +132,17 @@ export type { CaseStudy, CaseStudyCreate, CaseStudyUpdate } from "./case-studies
 export {
   ServiceCreateSchema,
   ServiceEvidenceInputSchema,
+  ServiceEvidenceSchema,
   ServiceListSchema,
   ServiceSchema,
   ServiceUpdateSchema,
   serviceEvidenceKinds,
+} from "./services.js";
+export type {
+  Service,
+  ServiceCreate,
+  ServiceEvidence,
+  ServiceEvidenceInput,
+  ServiceEvidenceKind,
+  ServiceUpdate,
 } from "./services.js";
