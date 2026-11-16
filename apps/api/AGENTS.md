@@ -1,0 +1,75 @@
+# @sebela/api
+
+The Hono HTTP API, the only gateway to the data. Read the root `AGENTS.md` first; this file covers only what is specific to this app.
+
+## What it is
+
+The trust boundary of the repository. It may import `@sebela/services`, `@sebela/contracts` and `@sebela/config` (dependency table in `docs/repository-structure.md`), never `@sebela/db`: database settings, persistence and test databases reach it through `@sebela/services`. Routes stay thin; domain rules live in services and SQL in db.
+
+## Commands
+
+| Task                                   | Command                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| Migrate the database (never at start)  | `pnpm --filter @sebela/db db:migrate`                                                |
+| Run in development (watch, from `src`) | `pnpm --filter @sebela/api dev`                                                      |
+| Build, then run the built server       | `pnpm --filter @sebela/api build`, `pnpm --filter @sebela/api start`                 |
+| Create, list or revoke an API key      | `pnpm --silent --filter @sebela/api api-keys create <name>` / `list` / `revoke <id>` |
+
+`dev`, `start` and `api-keys` read the process environment, then `.env.local`, `.env` and `.env.example` of the checkout (the earlier source wins). `api-keys` builds first and talks to the database through the services, so it needs no running server and no existing key. A new key is printed once; only its hash is stored, and `list` shows metadata only.
+
+## Configuration
+
+Validated once by `readApiConfig` in `src/config.ts` when the process starts; an invalid or missing variable stops it with the variable's name, never its value. No fallbacks. Placeholders and meanings are in `.env.example`.
+
+| Variable                                                                                         | Meaning                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_HOST`, `API_PORT`                                                                           | Interface and port to listen on (`0` picks a free port).                                                                                           |
+| `API_BODY_LIMIT_BYTES`                                                                           | Largest request body, enforced while it is received (413 beyond it).                                                                               |
+| `API_TRUSTED_PROXIES`                                                                            | Comma-separated proxy addresses whose `X-Forwarded-For` is believed. Empty: forwarded headers are ignored.                                         |
+| `API_RATE_LIMIT_HEALTH`, `API_RATE_LIMIT_PUBLIC`, `API_RATE_LIMIT_PRIVATE`, `API_RATE_LIMIT_KEY` | `<max>/<seconds>` fixed-window budgets: health per client, public per client, private per client before the key is verified, and per verified key. |
+| `API_RATE_LIMIT_MAX_TRACKED`                                                                     | Most callers tracked at once; the oldest window is evicted beyond it, so memory stays bounded.                                                     |
+| `POSTGRES_HOST`, `POSTGRES_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`          | Database settings, validated by `readDatabaseConfig` from `@sebela/services`.                                                                      |
+
+## HTTP behaviour
+
+- Versioned routes live under `/v1`. `GET /v1/person` is public; `POST`, `PATCH` and `DELETE /v1/person` are private. `GET /health`, `GET /openapi.json` and `GET /reference` are public and need no key.
+- Order of checks on every route: per-client rate budget, refusal of credentials in the query string, then on private routes bearer-key verification and the per-key budget, then on body routes the content type, the size and the Zod schema. A handler never runs for a request that failed an earlier check.
+- Every failure is the common `ErrorResponse` of `@sebela/contracts` (`error.code`, `error.message`, optional `error.fields`). Statuses: 400 `malformed_json` / `validation_failed` / `credentials_in_url`, 401 `unauthorized` with `WWW-Authenticate: Bearer`, 404 `not_found`, 409 `conflict`, 413 `payload_too_large`, 415 `unsupported_media_type`, 429 `rate_limited` with `Retry-After`, 500 `internal_error` without details.
+- Every response carries `X-Content-Type-Options: nosniff`; CORS is not enabled. Request and error logs are redacted: no bearer token or `sebela_` key reaches them.
+- `onWrite` in `createApp` is the attachment point for successful-write notifications. The default is a no-op; a failing notifier is logged and never fails the write.
+
+## Module map
+
+| Module                | Entry                          | Responsibility and hidden decisions                                                                                                                                                                    | Depends on                                            | Tests                |
+| --------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | -------------------- |
+| `src/modules/profile` | `src/modules/profile/index.ts` | `profileRoutes(profile)`: the person routes at the stable address `/v1/person`, their contract schemas, documented errors and the `Location` of a create. Domain errors map in `middleware/errors.ts`. | `@sebela/contracts`, `@sebela/services`, `routing.ts` | `src/person.test.ts` |
+
+Adapters outside modules (required HTTP, security and process adapters, not domain modules):
+
+| File                               | Responsibility                                                                                                                             | Tests                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `src/app.ts`                       | `createApp(dependencies)`: composes middleware, system routes and module routes and returns `{ app, routes }`. No listening, no migration. | all API tests                                                                                  |
+| `src/routing.ts`                   | `RouteDefinition`, `RouteDocumentation`, `defineRoute`: the one route description used for registration and for OpenAPI.                   | through `app.ts`                                                                               |
+| `src/openapi.ts`                   | `createOpenApiDocument(routes)`: the OpenAPI 3.1 document from the same Zod schemas, with bearer security and the actual errors.           | `src/openapi.test.ts`                                                                          |
+| `src/config.ts`                    | `readApiConfig(env)`.                                                                                                                      | `src/config.test.ts`                                                                           |
+| `src/server.ts`                    | Startup: reads configuration once, opens services, listens, closes the pool on `SIGTERM`/`SIGINT`.                                         | `src/server.test.ts` (process-start smoke)                                                     |
+| `src/cli/api-keys.ts`              | `runApiKeyCommand(args, services, output)` and the `api-keys` entry point.                                                                 | `src/cli/api-keys.test.ts`                                                                     |
+| `src/middleware/authentication.ts` | `authenticate(apiKeys)` (bearer key, constant-time verification in services) and `refuseCredentialsInUrl`.                                 | `src/middleware/authentication.test.ts` (route-registry property test)                         |
+| `src/middleware/rate-limit.ts`     | `createRateLimitStore`: bounded fixed-window counters with expiry cleanup and eviction, driven by an injected clock.                       | `src/middleware/rate-limit.test.ts`                                                            |
+| `src/middleware/limits.ts`         | `createRateLimits(config, now)`: per-client budgets (health, public, private) and the per-key budget, 429 with `Retry-After`.              | `src/middleware/rate-limiting.test.ts`                                                         |
+| `src/middleware/context.ts`        | `ApiEnv` and `clientAddress`, which believes `X-Forwarded-For` only from a trusted proxy.                                                  | through `rate-limiting.test.ts`                                                                |
+| `src/middleware/json-body.ts`      | `jsonBody(schema, maxBytes)`: content type, streamed size limit, JSON parse and schema validation.                                         | `src/middleware/errors.test.ts`                                                                |
+| `src/middleware/errors.ts`         | `ApiError` and `handleErrors`: domain and expected errors to statuses, anything else to a detail-free 500.                                 | `src/middleware/errors.test.ts`                                                                |
+| `src/middleware/logging.ts`        | `requestLog`, `redact`, `noSniff`.                                                                                                         | `src/middleware/authentication.test.ts` (redaction), `src/middleware/errors.test.ts` (nosniff) |
+
+`src/test-support.ts` builds an app over a temporary database for the tests; it is excluded from the build.
+
+## Adding a route
+
+1. Add or extend the contract schemas in `@sebela/contracts` and the service operation in `@sebela/services`, each test-first.
+2. Add a `defineRoute` entry to the owning module's `index.ts` with its access, body schema, success and errors, and register the module in `app.ts`. OpenAPI and the route-registry property test pick it up from there; a private route needs valid route parameters in the property test.
+3. Update this module map and the OpenAPI expectations.
+
+## Tests
+
+`pnpm --filter @sebela/api test`. Vitest against real Postgres: each test file creates its own temporary migrated database through `@sebela/services/testing` with small fictional fixtures. Rate-limit tests use a controlled clock. `src/server.test.ts` starts the real server process against an empty, unmigrated database and checks that it serves health and does not migrate. Tests need a running Postgres and `DATABASE_USER`/`DATABASE_PASSWORD`; see `packages/db/AGENTS.md`.
