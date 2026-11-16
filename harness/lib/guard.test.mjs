@@ -561,6 +561,11 @@ test("Git configuration cannot be changed by quoting, wrappers, editors or other
     "T=1; git -c core.hooksPath=y commit -m z",
     'git commit -m "$(echo x)" && sh -c "git config core.hooksPath x"',
     "X=$(git config core.hooksPath /dev/null)",
+    "x=$(git -c core.hooks$P=y commit -m z)",
+    "x=$(git -c core.hooks:Path=y commit -m z)",
+    "eval git commit -m 'x; git config core.hooksPath y' $(true)",
+    "bash -c \"git commit -m 'git config core.hooksPath y'\" $(true)",
+    "foo -m 'git config core.hooksPath x' $(true)",
     'git commit -m "x" && (sh -c "git config core.hooksPath x")',
     'git commit -m "$(echo config)" -c core.hooksPath=x',
   ]) {

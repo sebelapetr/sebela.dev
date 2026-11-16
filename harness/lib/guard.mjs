@@ -266,7 +266,7 @@ const GIT_FILES_ENVIRONMENT = /(^|[\s;&|(])(export\s+)?(HOME|XDG_CONFIG_HOME|GIT
 const GIT_WORD = /(^|[\s/])git(\s|$)/;
 // `config` as a word, git's `-c <name>=<value>` (not python's or sh's `-c <code>`), and the
 // options that point git at other configuration or programs.
-const CONFIG_WORD = /(^|\s)(config(\s|$)|-c\s*[\w.-]+=|--config-env|--exec-path)/;
+const CONFIG_WORD = /(^|\s)(config(\s|$)|-c\s*[^\s=]+=|--config-env|--exec-path)/;
 
 // Whether a command could change Git configuration, for good or for one command. It fails
 // closed: git run by another program (a wrapper such as `sh -c` or `stdbuf`) together with a
@@ -285,16 +285,29 @@ function changesGitConfig(command) {
   });
 }
 
+// A literal message of git commit, tag or merge (no expansion in it) is text, not a command, and
+// may mention config. Nothing is left out when something could run that text as a command: eval,
+// a shell, xargs, source.
+const RUNS_TEXT = /(^|[\s;&|(])(eval|sh|bash|zsh|dash|xargs|source|\.)\s/;
+const COMMIT_MESSAGE =
+  /(\bgit\s+(?:commit|tag|merge)\b[^;&|\n]*?\s(?:-m|--message)(?:=|\s+))("[^"$`\\]*"|'[^'$`]*')/;
+function withoutCommitMessages(command) {
+  if (RUNS_TEXT.test(command)) return command;
+  let text = command;
+  for (let previous = ""; previous !== text;) {
+    previous = text;
+    text = text.replace(COMMIT_MESSAGE, "$1msg");
+  }
+  return text;
+}
+
 // For a command the parser cannot read: every git invocation must start plainly — nothing in
 // front of git, only safe or place options, and a subcommand other than config — before the
 // first word the shell could expand. Expansions after the subcommand cannot set configuration.
 const GIT_AT_COMMAND =
   /(^|[;&|(\n]\s*)(?:(?:do|then|else|elif|!)\s+)?([^\s;&|=]+=[^\s;&|]*\s+|env\s+)*([^\s;&|]*\/)?git(\s+|$)([^;&|\n]*)/g;
 function unreadableGitChange(command) {
-  // A literal commit message (no expansion in it) is text, not a command: it may mention config.
-  const plain = command
-    .replace(/(\s(?:-m|--message)(?:=|\s+))("[^"$`\\]*"|'[^']*')/g, "$1msg")
-    .replace(/['"\\]/g, "");
+  const plain = withoutCommitMessages(command).replace(/['"\\]/g, "");
   for (const match of plain.matchAll(GIT_AT_COMMAND)) {
     if (match[2]) return true;
     const words = match[5].split(/\s+/).filter(Boolean);
