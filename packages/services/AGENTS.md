@@ -1,0 +1,29 @@
+# @sebela/services
+
+Domain operations of the backend. Read the root `AGENTS.md` first; this file covers only what is specific to this package.
+
+## What it is
+
+A library used by `apps/api` (HTTP routes and the API-key CLI). It may import `@sebela/db`, `@sebela/contracts`, `@sebela/memory` and `@sebela/config` (dependency table in `docs/repository-structure.md`). It writes no SQL: it asks `@sebela/db` for persistence operations and never sees a table, query builder or connection.
+
+## Public interface
+
+| Export                     | Entry            | What it provides                                                                                                                                                                                                                                                                                                              |
+| -------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@sebela/services`         | `src/index.ts`   | `openServices(databaseConfig, options)` returning `{ profile, apiKeys, close }`; `readDatabaseConfig(env)` and `DatabaseConfig`, re-exported from db so the API validates its database settings without importing db; `DomainError` with `code` `not_found`, `conflict` or `validation_failed`; the service and result types. |
+| `@sebela/services/testing` | `src/testing.ts` | Test support for `apps/api`: `createTemporaryDatabase`, re-exported from `@sebela/db/testing`. Never used by runtime code.                                                                                                                                                                                                    |
+
+Expected failures are `DomainError`s, which the API maps to statuses. Anything else thrown is unexpected.
+
+## Module map
+
+| Module                 | Entry                           | Responsibility and hidden decisions                                                                                                                                                                                                                                                                                                                                                        | Depends on                                     | Tests                                   |
+| ---------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | --------------------------------------- |
+| `src/modules/profile`  | `src/modules/profile/index.ts`  | `ProfileService`: get, create, update and delete the person. Returns the contract `Person` (ISO timestamps). Missing person → `not_found`; a second create, also a racing one → `conflict`. An update changes only the fields given.                                                                                                                                                       | `@sebela/db`, `@sebela/contracts`, `errors.ts` | `src/modules/profile/profile.test.ts`   |
+| `src/modules/api-keys` | `src/modules/api-keys/index.ts` | `ApiKeyService`: create a named key `sebela_<16 hex public id>_<43 base64url secret>` (256 random bits, returned once, stored as SHA-256 hash), list metadata, revoke one key, verify a presented key. Verification looks the key up by its public id and compares hashes with `timingSafeEqual`, also against a placeholder for an unknown id; every failure is the same `{ ok: false }`. | `@sebela/db`, `errors.ts`                      | `src/modules/api-keys/api-keys.test.ts` |
+
+Files outside modules: `errors.ts` (`DomainError`), `services.ts` (composition over one persistence pool), `index.ts` and `testing.ts`. Module tests build their service from their own entry and `@sebela/db`, never through `services.ts` or `index.ts`, which would close a module cycle.
+
+## Tests
+
+`pnpm --filter @sebela/services test`. Integration tests against real Postgres: each test file creates its own temporary migrated database through `@sebela/db/testing` with small fictional fixtures. They need a running Postgres and the role in `DATABASE_USER`/`DATABASE_PASSWORD`; see `packages/db/AGENTS.md`.

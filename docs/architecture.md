@@ -61,7 +61,7 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
 ## Data
 
 - **PostgreSQL is the single canonical source.** Nothing in the repository mirrors live content.
-- One database, separate Postgres schemas per domain: `profile`, `ai_roadmap`, later schemas for chat and retrieval state. Domains are linked through shared topics and technologies.
+- One database, separate Postgres schemas per domain: `profile`, `auth` (API keys), `ai_roadmap`, later schemas for chat and retrieval state. Migrations are applied by the db package's own command (`pnpm --filter @sebela/db db:migrate`); starting the API never migrates. Domains are linked through shared topics and technologies.
 - Content is written through the API — by agents using `mcp-admin` — and appears on the website without a redeploy.
 - The repository ships a fictional demo seed. The owner's real data is loaded once from a private seed outside the repository; afterwards safety comes from database backups.
 
@@ -80,6 +80,8 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
   - **Public** — no authentication; read-only, except that a visitor may create, continue and delete their own chat conversation (phase 7). The website and the assistant use these.
   - **Private** — protected by an API key checked in middleware. Every write is a private route.
 - API keys are created with a command, shown once and stored only as a hash. Each has a name and can be revoked on its own. A key is used only by server-side callers and never reaches a browser: the website calls public routes only.
+- Every request passes the same checks in order, before any handler: a per-client rate budget (health has its own), refusal of credentials in the query string, then on private routes the bearer key and a per-key budget, then on routes with a body its content type, size and schema. Rate limits are bounded, in memory and per process; `X-Forwarded-For` counts only from configured trusted proxies. Every failure uses the common error shape of `@sebela/contracts`; CORS is not enabled. Details: `apps/api/AGENTS.md`.
+- A successful write passes through one notification attachment point in the API, a no-op until a consumer exists (for example web invalidation or reindexing).
 - There is no visibility model: everything in the database is public content. A private flag is introduced only when a real use case needs it. See `docs/domain-context.md`.
 
 ## Website

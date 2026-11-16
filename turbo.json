@@ -13,7 +13,14 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": [
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD"
+      ]
     },
     "//#lint:root": {},
     "//#check:config": {

@@ -5,6 +5,11 @@ packages:
 # Refuse to install on a Node.js version outside the declared engines range.
 engineStrict: true
 
+# Dependency build scripts that were reviewed. esbuild's install script only checks for the native
+# binary, which its platform package already provides, so it does not need to run.
+allowBuilds:
+  esbuild: false
+
 # One version of each shared tool for the whole workspace. Packages refer to it with `catalog:`.
 catalog:
   "@eslint/js": 10.0.1
@@ -15,3 +20,5 @@ catalog:
   turbo: 2.11.11
   typescript: 6.0.3
   typescript-eslint: 8.72.2
+  vitest: 5.1.0
+  zod: 4.6.7
