@@ -20,8 +20,6 @@ const ITEM = "/v1/education/:slug";
  * education record, so a delete never conflicts.
  */
 export function educationRoutes(profile: ProfileService): RouteDefinition[] {
-  const pending = (operation: string) =>
-    Promise.reject(new Error(`${operation} is not wired to ${typeof profile} yet`));
   return [
     defineRoute({
       operationId: "listEducation",
@@ -37,7 +35,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
         schema: EducationListSchema,
       },
       errors: [],
-      handle: () => pending("listEducation"),
+      handle: () => profile.listEducation(),
     }),
     defineRoute({
       operationId: "getEducation",
@@ -52,7 +50,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
         schema: EducationSchema,
       },
       errors: ["not_found"],
-      handle: ({ params }) => pending(`getEducation ${params.slug}`),
+      handle: ({ params }) => profile.getEducation(params.slug),
     }),
     defineRoute({
       operationId: "createEducation",
@@ -70,7 +68,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
         location: ITEM,
       },
       errors: ["conflict"],
-      handle: ({ body }) => pending(`createEducation ${body.slug}`),
+      handle: ({ body }) => profile.createEducation(body),
     }),
     defineRoute({
       operationId: "updateEducation",
@@ -88,7 +86,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
         schema: EducationSchema,
       },
       errors: ["not_found"],
-      handle: ({ params }) => pending(`updateEducation ${params.slug}`),
+      handle: ({ params, body }) => profile.updateEducation(params.slug, body),
     }),
     defineRoute({
       operationId: "deleteEducation",
@@ -99,7 +97,10 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
       params: SlugParamsSchema,
       response: { status: 204, description: "The education record was deleted." },
       errors: ["not_found"],
-      handle: ({ params }) => pending(`deleteEducation ${params.slug}`),
+      handle: async ({ params }) => {
+        await profile.deleteEducation(params.slug);
+        return undefined;
+      },
     }),
   ];
 }
