@@ -2,10 +2,11 @@
 // listens. It never migrates the database; that is the db package's own command.
 import { serve } from "@hono/node-server";
 
-import { openServices, readDatabaseConfig } from "@sebela/services";
+import { openServices, readDatabaseConfig, readMediaConfig } from "@sebela/services";
 
 import { createApp, type Logger } from "./app.js";
 import { readApiConfig } from "./config.js";
+import { logCleanupFailure } from "./modules/media/index.js";
 
 const log: Logger = (line) => {
   process.stdout.write(`${line}\n`);
@@ -13,7 +14,9 @@ const log: Logger = (line) => {
 
 function start() {
   const config = readApiConfig(process.env);
-  const services = openServices(readDatabaseConfig(process.env));
+  const services = openServices(readDatabaseConfig(process.env), {
+    media: { config: readMediaConfig(process.env), onCleanupFailure: logCleanupFailure(log) },
+  });
   const { app } = createApp({ services, config, log });
   const host = config.host.includes(":") ? `[${config.host}]` : config.host;
 

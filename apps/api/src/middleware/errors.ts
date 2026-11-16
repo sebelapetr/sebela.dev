@@ -24,7 +24,13 @@ export class ApiError extends Error {
   }
 }
 
-const domainStatus = { not_found: 404, conflict: 409, validation_failed: 400 } as const;
+const domainStatus = {
+  not_found: 404,
+  conflict: 409,
+  validation_failed: 400,
+  payload_too_large: 413,
+  unsupported_media_type: 415,
+} as const satisfies Record<DomainError["code"], ContentfulStatusCode>;
 
 function send(c: Context, error: ApiError) {
   const body: ErrorResponse = {

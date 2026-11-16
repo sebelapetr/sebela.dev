@@ -13,5 +13,6 @@ coverage/
 !.worktrees/README.md
 .idea/
 .tmp/
+.storage/
 .claude/agent-memory-local/*
 !.claude/agent-memory-local/README.md

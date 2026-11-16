@@ -19,10 +19,17 @@ export interface RouteDocumentation {
   readonly access: "public" | "private";
   readonly summary: string;
   readonly description?: string;
+  /** The per-client budget, when it is not the one of its access, for example `upload`. */
+  readonly budget?: RateBudget;
   /** The path parameters, `:name` in `path`; validated before the body. */
   readonly params?: z.ZodObject;
   /** The JSON request body; validated before the handler runs. */
   readonly body?: z.ZodType;
+  /**
+   * A `multipart/form-data` body instead of JSON: `schema` documents the form, `fileField` names its
+   * one file part. The handler receives the other fields validated and the file as an `UploadedFile`.
+   */
+  readonly upload?: { readonly schema: z.ZodObject; readonly fileField: string };
   readonly response: {
     readonly status: 200 | 201 | 204;
     readonly description: string;
@@ -34,13 +41,33 @@ export interface RouteDocumentation {
      * property of the result, for example `/v1/topics/:slug`.
      */
     readonly location?: string;
+    /**
+     * The media types of a binary success. The handler returns a `FileResponse`, which is sent with
+     * its own type and a sandboxing content security policy.
+     */
+    readonly file?: readonly string[];
   };
   readonly errors: readonly RouteError[];
 }
 
-/** A JSON route as a module contributes it: its documentation and what it does. */
+/** The file part of a multipart body, as the handler receives it. */
+export interface UploadedFile {
+  readonly bytes: Uint8Array;
+  /** The name the client sent; informational only, never a destination. */
+  readonly filename: string;
+  /** The type the client declared for the part; may be empty. */
+  readonly declaredType: string;
+}
+
+/** The success of a route with a binary `response.file`. */
+export interface FileResponse {
+  readonly bytes: Uint8Array;
+  readonly mediaType: string;
+}
+
+/** A route as a module contributes it: its documentation and what it does. */
 export interface RouteDefinition extends RouteDocumentation {
-  /** Runs the operation; the result is sent as the JSON success body. */
+  /** Runs the operation; the result is sent as the JSON success body, or as a file. */
   handle(input: { readonly body: unknown; readonly params: unknown }): Promise<unknown>;
 }
 
@@ -59,9 +86,12 @@ export function defineRoute<Body = undefined, Params = undefined>(
   return route;
 }
 
+/** A `:name` path parameter, with an optional Hono pattern such as `{.+}`. */
+export const PARAMETER = /:([A-Za-z]+)(?:\{[^}]*\})?/g;
+
 /** The `Location` of a created record: the template with each `:name` taken from the result. */
 export function fillLocation(template: string, result: unknown): string {
-  return template.replace(/:([A-Za-z]+)/g, (_, name: string) => {
+  return template.replace(PARAMETER, (_, name: string) => {
     const value: unknown =
       typeof result === "object" && result !== null ? Reflect.get(result, name) : "";
     return encodeURIComponent(String(value));

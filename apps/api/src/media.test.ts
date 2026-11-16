@@ -316,7 +316,8 @@ describe("the media API", () => {
         `/v1/media/files/${name}`,
         `/v1/media/files/other/${name}`,
         `/v1/media/files/test/..%2F..%2F${name}`,
-        `/v1/media/files/test/%2e%2e/test/${name}`,
+        // Encoded slashes are not path segments, so the URL parser cannot resolve them away.
+        `/v1/media/files/test%2F%2e%2e%2Ftest%2F${name}`,
         `/v1/media/files/..%2F..%2Fetc%2Fpasswd`,
         "/v1/media/files/test/%00.png",
       ]) {

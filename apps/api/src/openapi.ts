@@ -6,7 +6,7 @@ import {
 
 import { ErrorResponseSchema } from "@sebela/contracts";
 
-import type { RouteDocumentation } from "./routing.js";
+import { PARAMETER, type RouteDocumentation } from "./routing.js";
 
 const errorContent = { "application/json": { schema: ErrorResponseSchema } };
 
@@ -18,11 +18,14 @@ const error = (description: string, extra: object = {}) => ({
 
 function responses(route: RouteDocumentation): ZodOpenApiOperationObject["responses"] {
   const { response } = route;
-  const success = response.schema
-    ? { content: { [response.mediaType ?? "application/json"]: { schema: response.schema } } }
-    : response.mediaType
-      ? { content: { [response.mediaType]: {} } }
-      : {};
+  const binary = { schema: { type: "string" as const, format: "binary" } };
+  const success = response.file
+    ? { content: Object.fromEntries(response.file.map((type) => [type, binary])) }
+    : response.schema
+      ? { content: { [response.mediaType ?? "application/json"]: { schema: response.schema } } }
+      : response.mediaType
+        ? { content: { [response.mediaType]: {} } }
+        : {};
   const location = response.location
     ? {
         headers: {
@@ -57,6 +60,15 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
           "415": error("`unsupported_media_type`: the body is not `application/json`."),
         }
       : {}),
+    ...(route.upload
+      ? {
+          "413": error("`payload_too_large`: the file or the form exceeds the configured limit."),
+          "415": error(
+            "`unsupported_media_type`: the body is not `multipart/form-data`, or the file is not an " +
+              "accepted type or contradicts its declared type or extension.",
+          ),
+        }
+      : {}),
     "429": error("`rate_limited`: a rate-limit budget is exhausted.", {
       headers: {
         "Retry-After": {
@@ -74,6 +86,7 @@ function badRequest(route: RouteDocumentation): string {
   const invalid = [
     ...(route.params ? ["a malformed path parameter"] : []),
     ...(route.body ? ["an invalid body or a broken domain rule"] : []),
+    ...(route.upload ? ["an invalid form, a malformed file or an image over the size limit"] : []),
   ];
   return [
     ...(route.body ? ["`malformed_json`"] : []),
@@ -94,6 +107,14 @@ function operation(route: RouteDocumentation): ZodOpenApiOperationObject {
     ...(route.body
       ? { requestBody: { required: true, content: { "application/json": { schema: route.body } } } }
       : {}),
+    ...(route.upload
+      ? {
+          requestBody: {
+            required: true,
+            content: { "multipart/form-data": { schema: route.upload.schema } },
+          },
+        }
+      : {}),
     responses: responses(route),
   };
 }
@@ -104,7 +125,7 @@ export function createOpenApiDocument(
 ): ReturnType<typeof createDocument> {
   const paths: ZodOpenApiPathsObject = {};
   for (const route of routes) {
-    const path = route.path.replace(/:([A-Za-z]+)/g, "{$1}");
+    const path = route.path.replace(PARAMETER, "{$1}");
     paths[path] = { ...paths[path], [route.method.toLowerCase()]: operation(route) };
   }
   return createDocument({

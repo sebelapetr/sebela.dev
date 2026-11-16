@@ -52,7 +52,7 @@ export function organizationRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Create an organization",
       description:
-        "The slug is unique and stable; a taken slug is a conflict. A logo cannot be attached yet.",
+        "The slug is unique and stable; a taken slug is a conflict. `logoId` attaches uploaded image media; a PDF or unknown media is refused.",
       body: OrganizationCreateSchema,
       response: {
         status: 201,

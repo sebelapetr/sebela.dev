@@ -60,7 +60,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Create a project",
       description:
-        "Stores the project in its experience together with its technology links, or nothing. The experience and the technologies are slugs of existing records; the slug is unique and stable across all experiences, a taken slug is a conflict.",
+        "Stores the project in its experience together with its technology links, or nothing. The experience and the technologies are slugs of existing records; the slug is unique and stable across all experiences, a taken slug is a conflict. `coverId` attaches uploaded image media; a PDF or unknown media is refused.",
       body: ProjectCreateSchema,
       response: {
         status: 201,
