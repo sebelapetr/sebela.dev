@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 
 import type { Database } from "../../database.js";
 import { isStillReferenced } from "./database-errors.js";
@@ -14,7 +14,7 @@ export const mediaColumns = {
   width: media.width,
   height: media.height,
   altText: media.altText,
-  sha256: sql<string | null>`null`,
+  sha256: media.sha256,
   createdAt: media.createdAt,
   updatedAt: media.updatedAt,
 };
@@ -93,8 +93,14 @@ export function createMediaPersistence(db: Database): MediaPersistence {
       const [row] = await db.select(mediaColumns).from(media).where(eq(media.key, key));
       return row ?? null;
     },
-    findMediaByDigest(sha256) {
-      return Promise.reject(new Error(`Not implemented yet: ${sha256}`));
+    async findMediaByDigest(sha256) {
+      const [row] = await db
+        .select(mediaColumns)
+        .from(media)
+        .where(eq(media.sha256, sha256))
+        .orderBy(asc(media.createdAt), asc(media.id))
+        .limit(1);
+      return row ?? null;
     },
     async createMedia(fields) {
       const [row] = await db.insert(media).values(fields).returning(mediaColumns);

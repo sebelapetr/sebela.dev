@@ -23,7 +23,7 @@ export function createPersistence(config: DatabaseConfig): Persistence {
   return {
     profile: createProfilePersistence(connection.db),
     apiKeys: createApiKeyPersistence(connection.db),
-    transaction: (work) => Promise.reject(new Error(`Not implemented yet: ${String(work)}`)),
+    transaction: (work) => connection.db.transaction((tx) => work(createProfilePersistence(tx))),
     close: () => connection.close(),
   };
 }
