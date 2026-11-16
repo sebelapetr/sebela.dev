@@ -67,20 +67,20 @@ Details: `docs/git-workflow.md`.
 
 ## Commands
 
-| Task                                                                                   | Command                                                                                                        |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Install dependencies (Node.js 26, pnpm 12.21.0); also enables the Git hooks            | `pnpm install --frozen-lockfile`                                                                               |
-| Enable the Git hooks in a checkout installed before                                    | `pnpm run prepare`                                                                                             |
-| Lint, typecheck, test, build                                                           | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`                                                       |
-| Start the shared Postgres (owner, main checkout, `.env` created from `.env.example`)   | `docker compose up --detach --wait`                                                                            |
-| Create a worktree for a branch, with its own database                                  | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path; needs the running Postgres) |
-| Remove it, drop its database and free its slot                                         | `node scripts/harness/worktree.mjs remove <branch> [--delete-branch]`                                          |
-| List worktree slots                                                                    | `node scripts/harness/worktree.mjs list`                                                                       |
-| Run a phase unattended (owner only)                                                    | `scripts/run-phase.sh <phase-folder> [--base <branch>]`                                                        |
-| Harness tests (plain Node, no install needed)                                          | `node --test scripts/harness/`                                                                                 |
-| Worktree databases end to end against a disposable Postgres (needs Docker; also in CI) | `node scripts/harness/worktree-databases.e2e.mjs`                                                              |
-| Check for hard-coded ports, hosts and database names (plain Node)                      | `node scripts/checks/hardcoded-config.mjs` (also part of `pnpm lint`)                                          |
-| What CI runs: root checks, then the package tasks the change affects                   | `pnpm ci:root`, then `pnpm ci:affected` (compares with `TURBO_SCM_BASE`; see `docs/testing.md`, CI)            |
+| Task                                                                                   | Command                                                                                                |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Install dependencies (Node.js 26, pnpm 12.21.0); also enables the Git hooks            | `pnpm install --frozen-lockfile`                                                                       |
+| Enable the Git hooks in a checkout installed before                                    | `pnpm run prepare`                                                                                     |
+| Lint, typecheck, test, build                                                           | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`                                               |
+| Start the shared Postgres (owner, main checkout, `.env` created from `.env.example`)   | `docker compose up --detach --wait`                                                                    |
+| Create a worktree for a branch, with its own database                                  | `node harness/worktree.mjs create <branch> --base <ref>` (prints its path; needs the running Postgres) |
+| Remove it, drop its database and free its slot                                         | `node harness/worktree.mjs remove <branch> [--delete-branch]`                                          |
+| List worktree slots                                                                    | `node harness/worktree.mjs list`                                                                       |
+| Run a phase unattended (owner only)                                                    | `harness/run-phase.sh <phase-folder> [--base <branch>]`                                                |
+| Harness tests (plain Node, no install needed)                                          | `node --test harness/`                                                                                 |
+| Worktree databases end to end against a disposable Postgres (needs Docker; also in CI) | `node harness/worktree-databases.e2e.mjs`                                                              |
+| Check for hard-coded ports, hosts and database names (plain Node)                      | `node scripts/checks/hardcoded-config.mjs` (also part of `pnpm lint`)                                  |
+| What CI runs: root checks, then the package tasks the change affects                   | `pnpm ci:root`, then `pnpm ci:affected` (compares with `TURBO_SCM_BASE`; see `docs/testing.md`, CI)    |
 
 Supported versions and what each command covers: `docs/repository-structure.md` (Toolchain and workspace). Shared lint, TypeScript and Prettier configuration: `packages/config/AGENTS.md`.
 

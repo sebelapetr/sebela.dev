@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CI commit-message check: the commits a pull request or a push brings, and the title of an issue
 // pull request, against the Conventional Commits rules of the commit-msg hook
-// (../harness/lib/commit-message.mjs; docs/git-workflow.md, "Commits").
+// (../../harness/lib/commit-message.mjs; docs/git-workflow.md, "Commits").
 //
 //   node scripts/checks/commit-messages.mjs
 //
@@ -17,7 +17,7 @@
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import { checkCommitMessage } from "../harness/lib/commit-message.mjs";
+import { checkCommitMessage } from "../../harness/lib/commit-message.mjs";
 
 const ZERO = /^0+$/;
 const FIELD = "\x1f";

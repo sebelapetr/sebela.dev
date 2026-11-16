@@ -53,7 +53,10 @@ export function classifyRun({ exitCode, stdout, stderr }) {
   if (!result) {
     const text = `${stderr ?? ""}\n${stdout ?? ""}`;
     if (LIMIT_PATTERN.test(text)) return { kind: "limit" };
-    return { kind: "crash", detail: `exit ${exitCode}, no JSON result: ${text.trim().slice(0, 500)}` };
+    return {
+      kind: "crash",
+      detail: `exit ${exitCode}, no JSON result: ${text.trim().slice(0, 500)}`,
+    };
   }
 
   if (result.is_error) {
@@ -62,7 +65,8 @@ export function classifyRun({ exitCode, stdout, stderr }) {
     }
     return {
       kind: "crash",
-      detail: `${result.subtype ?? "error"}: ${result.terminal_reason ?? ""} ${result.result ?? ""}`.trim(),
+      detail:
+        `${result.subtype ?? "error"}: ${result.terminal_reason ?? ""} ${result.result ?? ""}`.trim(),
     };
   }
 
@@ -86,7 +90,12 @@ export function classifyRun({ exitCode, stdout, stderr }) {
 // Returns { next, label, consecutiveFailures }:
 //   next   "continue" | "wait" | "stop" | "done"
 //   label  label to add to the reported issue, or null
-export function decideNext({ run, consecutiveFailures, issueLabels = [], maxConsecutiveFailures = 3 }) {
+export function decideNext({
+  run,
+  consecutiveFailures,
+  issueLabels = [],
+  maxConsecutiveFailures = 3,
+}) {
   if (run.kind === "limit") {
     return { next: "wait", label: null, consecutiveFailures };
   }

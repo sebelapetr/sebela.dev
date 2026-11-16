@@ -95,7 +95,7 @@ function checkSearchPattern({
 
 // The harness that governs the loop. Unattended runs change it only inside a worktree, through a
 // pull request; never in the main checkout, and never inside any .git directory.
-const HARNESS_DIRS = [".claude", ".github", path.join("scripts", "harness")];
+const HARNESS_DIRS = [".claude", ".github", "harness"];
 const HARNESS_IN_COMMAND = /(^|[\s'"=/<>|;&(])(\.claude\/settings|\.git\/(hooks|config)\b)/;
 
 // The one place in the main checkout's .claude/ that agents write to: their own memory, shared

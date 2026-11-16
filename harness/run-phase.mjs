@@ -2,7 +2,7 @@
 // The phase loop: runs the orchestrator unattended, one issue per iteration, until the phase is done.
 // Design: .plan/00-overview/harness-prd.md. Decisions: ./lib/loop.mjs.
 //
-//   node scripts/harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10]
+//   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10]
 //                                       [--max-failures 3] [--max-iterations 50]
 //
 // It holds no state of its own: what is done is read from GitHub by the orchestrator each time,
@@ -83,7 +83,7 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
     "project,local",
     "--strict-mcp-config",
     "--mcp-config",
-    path.join(mainRoot, "scripts", "harness", "mcp.json"),
+    path.join(mainRoot, "harness", "mcp.json"),
     "--name",
     `loop ${phase} #${iteration}`,
   ];
