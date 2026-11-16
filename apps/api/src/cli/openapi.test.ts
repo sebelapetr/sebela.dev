@@ -58,6 +58,6 @@ describe("exporting the OpenAPI document", () => {
       run(process.execPath, ["--import", "tsx", command], {
         env: { PATH: process.env["PATH"] ?? "" },
       }),
-    ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining("Usage") as unknown });
+    ).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining("Usage") as unknown });
   });
 });

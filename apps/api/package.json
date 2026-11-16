@@ -10,6 +10,7 @@
     "build": "tsc --project tsconfig.build.json",
     "dev": "pnpm --silent --filter \"@sebela/api^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --watch --import tsx src/server.ts",
     "lint": "eslint .",
+    "openapi:export": "pnpm --silent --filter \"@sebela/api...\" build && node dist/cli/openapi.js",
     "start": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"

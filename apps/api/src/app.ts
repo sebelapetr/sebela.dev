@@ -3,7 +3,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { every } from "hono/combine";
 import { z } from "zod";
 
-import type { Services } from "@sebela/services";
+import type { ProfileService, Services } from "@sebela/services";
 
 import type { ApiConfig } from "./config.js";
 import { authenticate, refuseCredentialsInUrl } from "./middleware/authentication.js";
@@ -84,9 +84,38 @@ const systemRoutes = {
   },
 } satisfies Record<string, RouteDocumentation>;
 
-/** The OpenAPI document of the API, built without services, configuration or a database. */
-export function describeApi(): ReturnType<typeof createOpenApiDocument> {
-  throw new Error("Not implemented.");
+type OpenApiDocument = ReturnType<typeof createOpenApiDocument>;
+
+/** The module routes, in registration and documentation order. */
+const moduleRoutes = (services: Pick<Services, "profile">): RouteDefinition[] => [
+  ...profileRoutes(services.profile),
+];
+
+/** Every documented route, in the order of the OpenAPI document. */
+const documentedRoutes = (modules: readonly RouteDefinition[]): RouteDocumentation[] => [
+  systemRoutes.health,
+  ...modules,
+  systemRoutes.openapi,
+  systemRoutes.reference,
+];
+
+const documentationOnly = (): Promise<never> =>
+  Promise.reject(new Error("This service only describes the API; it serves no request."));
+
+/** A profile service for describing routes; describing never calls it. */
+const describingProfile: ProfileService = {
+  getPerson: documentationOnly,
+  createPerson: documentationOnly,
+  updatePerson: documentationOnly,
+  deletePerson: documentationOnly,
+};
+
+/**
+ * The OpenAPI document that `createApp` serves at `/openapi.json`, built without services,
+ * configuration or a database. Deterministic: the same routes and schemas give the same document.
+ */
+export function describeApi(): OpenApiDocument {
+  return createOpenApiDocument(documentedRoutes(moduleRoutes({ profile: describingProfile })));
 }
 
 const writeLog: Logger = (line) => {
@@ -106,7 +135,8 @@ export function createApp(dependencies: AppDependencies): Api {
   const onWrite = dependencies.onWrite ?? (() => Promise.resolve());
   const limits = createRateLimits(config, dependencies.now ?? Date.now);
   const app = new Hono<ApiEnv>();
-  const documented: RouteDocumentation[] = [];
+  const modules = moduleRoutes(services);
+  const documented = documentedRoutes(modules);
 
   app.use(noSniff, requestLog(log));
   app.onError(handleErrors(log));
@@ -129,7 +159,6 @@ export function createApp(dependencies: AppDependencies): Api {
   };
 
   const register = (route: RouteDefinition) => {
-    documented.push(route);
     app.on(route.method, route.path, guard(route), async (c) => {
       const result = await route.handle({ body: c.get("body") });
       if (route.method !== "GET") {
@@ -141,13 +170,11 @@ export function createApp(dependencies: AppDependencies): Api {
     });
   };
 
-  documented.push(systemRoutes.health);
   app.get("/health", guard(systemRoutes.health), (c) => c.json({ status: "ok" as const }));
 
-  for (const route of profileRoutes(services.profile)) register(route);
+  for (const route of modules) register(route);
 
-  documented.push(systemRoutes.openapi, systemRoutes.reference);
-  const document = createOpenApiDocument(documented);
+  const document: OpenApiDocument = createOpenApiDocument(documented);
   app.get("/openapi.json", guard(systemRoutes.openapi), (c) => c.json(document));
   app.get(
     "/reference",
