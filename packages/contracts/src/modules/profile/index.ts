@@ -72,4 +72,17 @@ export {
   TopicListSchema,
   TopicSchema,
   TopicUpdateSchema,
+  technologyGroups,
+  technologyTiers,
+} from "./catalogs.js";
+export type {
+  SlugParams,
+  Technology,
+  TechnologyCreate,
+  TechnologyGroup,
+  TechnologyTier,
+  TechnologyUpdate,
+  Topic,
+  TopicCreate,
+  TopicUpdate,
 } from "./catalogs.js";

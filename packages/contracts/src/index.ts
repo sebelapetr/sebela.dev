@@ -14,5 +14,21 @@ export {
   TopicListSchema,
   TopicSchema,
   TopicUpdateSchema,
+  technologyGroups,
+  technologyTiers,
 } from "./modules/profile/index.js";
-export type { Person, PersonCreate, PersonLink, PersonUpdate } from "./modules/profile/index.js";
+export type {
+  Person,
+  PersonCreate,
+  PersonLink,
+  PersonUpdate,
+  SlugParams,
+  Technology,
+  TechnologyCreate,
+  TechnologyGroup,
+  TechnologyTier,
+  TechnologyUpdate,
+  Topic,
+  TopicCreate,
+  TopicUpdate,
+} from "./modules/profile/index.js";
