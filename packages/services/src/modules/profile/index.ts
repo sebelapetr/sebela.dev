@@ -1,16 +1,18 @@
 import type { Person, PersonCreate, PersonUpdate } from "@sebela/contracts";
-import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db";
+import type { PersonFields, ProfilePersistence } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
 import { createCaseStudyService } from "./case-studies.js";
 import { createCatalogService } from "./catalogs.js";
 import { createCurrentFocusService } from "./current-focus.js";
 import { definedChanges } from "./changes.js";
+import { createCvService, type MediaAddress } from "./cv.js";
 import { createEducationService } from "./education.js";
 import { createExperienceService } from "./experiences.js";
 import { createExplorationService } from "./explorations.js";
 import { isMediaRefusal, mediaRefused } from "./media-references.js";
 import { createOrganizationService } from "./organizations.js";
+import { toPerson } from "./person.js";
 import { createProjectService } from "./projects.js";
 import { createServiceService } from "./services.js";
 import { createTestimonialService } from "./testimonials.js";
@@ -18,6 +20,7 @@ import type {
   CaseStudyService,
   CatalogService,
   CurrentFocusService,
+  CvService,
   EducationService,
   ExperienceService,
   ExplorationService,
@@ -31,6 +34,7 @@ export type {
   CaseStudyService,
   CatalogService,
   CurrentFocusService,
+  CvService,
   EducationService,
   ExperienceService,
   ExplorationService,
@@ -58,7 +62,8 @@ export type {
  * operations of `ProjectService`, the case-study operations of `CaseStudyService`, the
  * exploration operations of `ExplorationService`, the service operations of `ServiceService`, the
  * education operations of `EducationService`, the testimonial operations of
- * `TestimonialService` and the current-focus operations of `CurrentFocusService`.
+ * `TestimonialService`, the current-focus operations of `CurrentFocusService` and the assembled
+ * CV of `CvService`.
  */
 export interface ProfileService
   extends
@@ -71,7 +76,8 @@ export interface ProfileService
     ServiceService,
     EducationService,
     TestimonialService,
-    CurrentFocusService {
+    CurrentFocusService,
+    CvService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -80,17 +86,20 @@ export interface ProfileService
 
 const missing = () => new DomainError("not_found", "There is no person yet.");
 
-function toPerson(record: PersonRecord): Person {
-  return {
-    ...record,
-    links: record.links.map(({ label, url }) => ({ label, url })),
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-  };
+export interface ProfileServiceOptions {
+  /**
+   * The public address of a media key, used for the CV PDF in the assembled CV. Without it no key
+   * can be addressed and the PDF's `url` is `null`, as for a key the storage cannot address.
+   */
+  readonly mediaAddress?: MediaAddress;
 }
 
-export function createProfileService(persistence: ProfilePersistence): ProfileService {
+export function createProfileService(
+  persistence: ProfilePersistence,
+  options: ProfileServiceOptions = {},
+): ProfileService {
   return {
+    ...createCvService(persistence, options.mediaAddress ?? (() => null)),
     ...createCatalogService(persistence),
     ...createOrganizationService(persistence),
     ...createExperienceService(persistence),

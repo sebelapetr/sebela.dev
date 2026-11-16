@@ -5927,6 +5927,74 @@
         }
       }
     },
+    "/v1/cv": {
+      "get": {
+        "operationId": "getCv",
+        "summary": "Read the assembled CV",
+        "description": "The person with contacts and summary, the experiences selected for the CV, the technologies in their tiers and groups, the education records, the explorations in a section of their own with their status exactly as stored (`built`, `tested` or `designed`) and the current, manually uploaded CV PDF or `null`. Absent sections are empty lists. While there is no person this answers 404 `not_found` and creates nothing.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The assembled CV.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cv"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/media": {
       "get": {
         "operationId": "listMedia",
@@ -9921,12 +9989,183 @@
         ],
         "additionalProperties": false
       },
-      "MediaList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Media"
+      "Cv": {
+        "type": "object",
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "experiences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Experience"
+            },
+            "description": "The experiences selected for the CV (`inCv`), current roles first, then by start, latest first, then by end, latest first, then by slug."
+          },
+          "technologies": {
+            "type": "object",
+            "properties": {
+              "primary": {
+                "type": "object",
+                "properties": {
+                  "core": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Technology"
+                    },
+                    "description": "The primary core technologies. In catalog order: position, then slug."
+                  },
+                  "aiEngineeringFocus": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Technology"
+                    },
+                    "description": "The primary technologies of the AI engineering focus. In catalog order: position, then slug."
+                  }
+                },
+                "required": [
+                  "core",
+                  "aiEngineeringFocus"
+                ],
+                "additionalProperties": false
+              },
+              "secondary": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Technology"
+                },
+                "description": "The secondary technologies. In catalog order: position, then slug."
+              }
+            },
+            "required": [
+              "primary",
+              "secondary"
+            ],
+            "additionalProperties": false,
+            "description": "The technology catalog in its tiers and groups."
+          },
+          "education": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Education"
+            },
+            "description": "Every education record, by position, then slug."
+          },
+          "explorations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CvExploration"
+            },
+            "description": "Every exploration with its actual status, by position, then slug; a section of its own."
+          },
+          "cvPdf": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Media"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current, manually uploaded CV PDF the person names (`cvPdfId`), or `null` when there is none. It is never generated or updated from this data."
+          }
         },
-        "description": "Ordered by creation, newest first, then by identifier."
+        "required": [
+          "person",
+          "experiences",
+          "technologies",
+          "education",
+          "explorations",
+          "cvPdf"
+        ],
+        "additionalProperties": false,
+        "description": "`person` holds the contacts, links and summary (`shortBio`, `longBio`); the other fields are the CV's sections."
+      },
+      "CvExploration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Markdown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "built",
+              "tested",
+              "designed"
+            ],
+            "description": "How far the exploration got: `built` (it exists and runs), `tested` (it was tried out) or `designed` (it exists only as a design). Returned exactly as stored."
+          },
+          "concepts": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Plain-text concepts the exploration covers, in their intended order."
+          },
+          "startedOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the exploration, an ISO date."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last day of the exploration, an ISO date; `null` marks an ongoing one."
+          },
+          "technologies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Technology"
+            },
+            "description": "The linked technologies, in their intended order."
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "summary",
+          "status",
+          "concepts",
+          "startedOn",
+          "endedOn",
+          "technologies"
+        ],
+        "additionalProperties": false,
+        "description": "An exploration in the CV's own section: independent work outside the career timeline, never an experience or a delivered project. `designed` means it exists only as a design."
       },
       "Media": {
         "type": "object",
@@ -10032,6 +10271,13 @@
           "updatedAt"
         ],
         "additionalProperties": false
+      },
+      "MediaList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Media"
+        },
+        "description": "Ordered by creation, newest first, then by identifier."
       }
     },
     "securitySchemes": {

@@ -19,6 +19,8 @@ export type {
   CurrentFocusRecord,
   CurrentFocusRelations,
   CurrentFocusWriteFailure,
+  CvPersistence,
+  CvRecord,
   CreateCaseStudyResult,
   CreateCurrentFocusResult,
   CreateEducationResult,

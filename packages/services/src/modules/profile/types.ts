@@ -1,6 +1,6 @@
 // The catalog, organization, experience, project, case-study, exploration, service, education,
-// testimonial and current-focus interfaces, private to the profile module and re-exported by its
-// index.
+// testimonial, current-focus and CV interfaces, private to the profile module and re-exported by
+// its index.
 import type {
   CaseStudy,
   CaseStudyCreate,
@@ -8,6 +8,7 @@ import type {
   CurrentFocus,
   CurrentFocusCreate,
   CurrentFocusUpdate,
+  Cv,
   Education,
   EducationCreate,
   EducationUpdate,
@@ -295,4 +296,20 @@ export interface CurrentFocusService {
   createCurrentFocus(input: CurrentFocusCreate): Promise<CurrentFocus>;
   updateCurrentFocus(slug: string, changes: CurrentFocusUpdate): Promise<CurrentFocus>;
   deleteCurrentFocus(slug: string): Promise<void>;
+}
+
+/**
+ * The assembled CV: the data the print-friendly CV page renders, read from the stored profile on
+ * every call and never stored as a copy. Expected failures are `DomainError`s:
+ *
+ * - `getCv`: the person with contacts, links and summary; only the experiences selected for the
+ *   CV (`inCv`) in the experience order, fully resolved; the technologies split into primary core,
+ *   primary AI engineering focus and secondary, each in catalog order; every education record and
+ *   every exploration (concise, with its status exactly as stored, in a section of its own, never
+ *   among the experiences) by position, then slug; and the current CV PDF the person names, or
+ *   `null`. Absent sections are empty lists. Everything comes from one consistent snapshot and
+ *   nothing is written. `not_found` while there is no person.
+ */
+export interface CvService {
+  getCv(): Promise<Cv>;
 }

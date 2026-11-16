@@ -569,6 +569,26 @@ export interface paths {
         patch: operations["updateCurrentFocus"];
         trace?: never;
     };
+    "/v1/cv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the assembled CV
+         * @description The person with contacts and summary, the experiences selected for the CV, the technologies in their tiers and groups, the education records, the explorations in a section of their own with their status exactly as stored (`built`, `tested` or `designed`) and the current, manually uploaded CV PDF or `null`. Absent sections are empty lists. While there is no person this answers 404 `not_found` and creates nothing.
+         */
+        get: operations["getCv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/media": {
         parameters: {
             query?: never;
@@ -1588,8 +1608,55 @@ export interface components {
             /** @description The slug of the experience it belongs to. */
             experience: string;
         };
-        /** @description Ordered by creation, newest first, then by identifier. */
-        MediaList: components["schemas"]["Media"][];
+        /** @description `person` holds the contacts, links and summary (`shortBio`, `longBio`); the other fields are the CV's sections. */
+        Cv: {
+            person: components["schemas"]["Person"];
+            /** @description The experiences selected for the CV (`inCv`), current roles first, then by start, latest first, then by end, latest first, then by slug. */
+            experiences: components["schemas"]["Experience"][];
+            /** @description The technology catalog in its tiers and groups. */
+            technologies: {
+                primary: {
+                    /** @description The primary core technologies. In catalog order: position, then slug. */
+                    core: components["schemas"]["Technology"][];
+                    /** @description The primary technologies of the AI engineering focus. In catalog order: position, then slug. */
+                    aiEngineeringFocus: components["schemas"]["Technology"][];
+                };
+                /** @description The secondary technologies. In catalog order: position, then slug. */
+                secondary: components["schemas"]["Technology"][];
+            };
+            /** @description Every education record, by position, then slug. */
+            education: components["schemas"]["Education"][];
+            /** @description Every exploration with its actual status, by position, then slug; a section of its own. */
+            explorations: components["schemas"]["CvExploration"][];
+            /** @description The current, manually uploaded CV PDF the person names (`cvPdfId`), or `null` when there is none. It is never generated or updated from this data. */
+            cvPdf: components["schemas"]["Media"] | null;
+        };
+        /** @description An exploration in the CV's own section: independent work outside the career timeline, never an experience or a delivered project. `designed` means it exists only as a design. */
+        CvExploration: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /**
+             * @description How far the exploration got: `built` (it exists and runs), `tested` (it was tried out) or `designed` (it exists only as a design). Returned exactly as stored.
+             * @enum {string}
+             */
+            status: "built" | "tested" | "designed";
+            /** @description Plain-text concepts the exploration covers, in their intended order. */
+            concepts: string[];
+            /**
+             * Format: date
+             * @description The first day of the exploration, an ISO date.
+             */
+            startedOn: string;
+            /** @description The last day of the exploration, an ISO date; `null` marks an ongoing one. */
+            endedOn: string | null;
+            /** @description The linked technologies, in their intended order. */
+            technologies: components["schemas"]["Technology"][];
+        };
         Media: {
             /**
              * Format: uuid
@@ -1615,6 +1682,8 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description Ordered by creation, newest first, then by identifier. */
+        MediaList: components["schemas"]["Media"][];
     };
     responses: never;
     parameters: never;
@@ -6007,6 +6076,64 @@ export interface operations {
             };
             /** @description `unsupported_media_type`: the body is not `application/json`. */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The assembled CV. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cv"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

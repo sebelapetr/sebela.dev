@@ -53,14 +53,19 @@ const unconfiguredMedia: MediaService = {
 export function openServices(config: DatabaseConfig, options: ServicesOptions = {}): Services {
   const persistence = createPersistence(config);
   const { media } = options;
+  const opened = media === undefined ? undefined : openStorage(media.config.storage);
   return {
-    profile: createProfileService(persistence.profile),
+    // The assembled CV addresses its PDF through the same storage the media service uses.
+    profile: createProfileService(
+      persistence.profile,
+      opened === undefined ? {} : { mediaAddress: (key) => opened.storage.publicAddress(key) },
+    ),
     apiKeys: createApiKeyService(persistence.apiKeys, options.apiKeys),
     media:
-      media === undefined
+      media === undefined || opened === undefined
         ? unconfiguredMedia
         : createMediaService(persistence.profile, {
-            storage: openStorage(media.config.storage),
+            storage: opened,
             limits: media.config.limits,
             onCleanupFailure: (failure) => {
               media.onCleanupFailure(failure);
