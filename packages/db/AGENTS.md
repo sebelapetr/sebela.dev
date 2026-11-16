@@ -28,7 +28,7 @@ Files outside modules: `config.ts` (environment validation), `connection.ts` (th
 
 - Migrations are generated from the schema files and committed in `migrations/` (SQL plus Drizzle's `meta/` journal). Never edit an applied migration; change `schema.ts` and generate a new one.
 - Generate: `pnpm --filter @sebela/db db:generate --name <what-changed>`. It needs no database.
-- Apply: `pnpm --filter @sebela/db db:migrate`. It builds the package and runs `dist/cli/migrate.js` with the settings of the process environment, then `.env.local`, `.env` and `.env.example` of the checkout (the earlier source wins). It migrates an empty database and does nothing on an up-to-date one. The API never runs migrations when it starts.
+- Apply: `pnpm --filter @sebela/db db:migrate`. It builds the package and runs `dist/cli/migrate.js` with the settings of the process environment, then `.env.local`, `.env` and `.env.example` of the checkout (the earlier source wins). It migrates an empty database and does nothing on an up-to-date one. The API never runs migrations when it starts. In the container stack of the main checkout the same `dist/cli/migrate.js` is the one-off service `migrate` of `compose.yaml`, which the API waits for (`apps/api/AGENTS.md`, "Container stack"); the image therefore carries `migrations/` and `seed/demo/` beside `dist/`.
 - Each domain gets its own PostgreSQL schema (`profile`, `auth`). Drizzle records applied migrations in the `drizzle` schema.
 
 ## Adding an entity end to end

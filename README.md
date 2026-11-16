@@ -81,16 +81,16 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 
 ### Stack
 
-| Area             | Technology                                                                 | Status                                                                     |
-| ---------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                  |
-| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Planned (phase 3)                                                          |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Planned (phase 2)                                                          |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector delivered locally; Drizzle and retrieval planned  |
-| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                          |
-| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Node's test runner for tooling delivered; the rest arrive with their apps  |
-| Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                    |
-| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                        | Compose for local Postgres and CI delivered; images and deployment planned |
+| Area             | Technology                                                                 | Status                                                                                 |
+| ---------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                              |
+| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Planned (phase 3)                                                                      |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Planned (phase 2)                                                                      |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector delivered locally; Drizzle and retrieval planned              |
+| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                                      |
+| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Node's test runner for tooling delivered; the rest arrive with their apps              |
+| Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                                |
+| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                        | Compose for local Postgres and the API, API image and CI delivered; deployment planned |
 
 The visual direction is editorial and monochrome: strong typography, generous whitespace, light and dark themes. See [design](docs/design.md).
 
@@ -186,6 +186,17 @@ docker compose up --detach --wait
 
 This one command starts PostgreSQL 18 with pgvector and returns when the service is healthy. Run it in the main checkout: the stack has a fixed project name, so the main checkout and every worktree share this one container, each with its own database. `docker compose down` stops it and keeps the data; `docker compose down --volumes` deletes the data as well.
 
+To run the API in a container as well, from the main checkout:
+
+```sh
+pnpm stack:up                         # build the image, migrate, then start the API
+pnpm stack:seed                       # load the fictional demo seed (explicit, never automatic)
+pnpm stack:api-keys create my-laptop  # print the first API key once; store it yourself
+pnpm stack:down                       # stop and remove the API containers; Postgres keeps running
+```
+
+`stack:up` starts a one-off migration service once Postgres is healthy and the API only after the migrations succeeded; a failed migration keeps the API down. Running `stack:up` again applies only new migrations; neither a start nor a restart seeds or resets content. Uploaded media live in the volume `api-media` and survive restarts. To stop everything, Postgres included, run `docker compose --profile api down` (a plain `docker compose down` leaves the API running); add `--volumes` only to delete the data and the media. The API runs in a container or on the host (`pnpm --filter @sebela/api start`), not both: they publish the same port. Worktrees always use the host. The image holds code and the demo seed only; personal content is loaded from a folder outside the repository at run time. Details: [`apps/api/AGENTS.md`](apps/api/AGENTS.md#container-stack).
+
 ### 4. Run the quality checks
 
 ```sh
@@ -195,7 +206,7 @@ pnpm test       # package tests, harness tests and check tests
 pnpm build
 ```
 
-CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres. You can run that test yourself with Docker: `node harness/worktree-databases.e2e.mjs`. Details: [testing](docs/testing.md).
+CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres and a smoke check of the containerised API stack. You can run both yourself with Docker: `node harness/worktree-databases.e2e.mjs` and `pnpm test:api-stack`; each removes its containers, volumes and images at the end. Details: [testing](docs/testing.md).
 
 ### 5. Work in an isolated worktree
 
