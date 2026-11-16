@@ -94,6 +94,7 @@ describe("catalog service", () => {
     it("refuses a technology whose group disagrees with its tier", async () => {
       await expect(profile.createTechnology({ ...typescript, group: null })).rejects.toMatchObject({
         code: "validation_failed",
+        fields: [{ path: "group", message: expect.any(String) as unknown }],
       });
     });
 
@@ -117,7 +118,10 @@ describe("catalog service", () => {
 
       const refused = profile.updateTechnology("typescript", { tier: "secondary" });
 
-      await expect(refused).rejects.toMatchObject({ code: "validation_failed" });
+      await expect(refused).rejects.toMatchObject({
+        code: "validation_failed",
+        fields: [{ path: "group", message: expect.any(String) as unknown }],
+      });
       await expect(refused).rejects.toThrow(/group/);
       await expect(profile.getTechnology("typescript")).resolves.toMatchObject({ tier: "primary" });
     });

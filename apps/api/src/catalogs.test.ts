@@ -170,7 +170,13 @@ describe("the technology and topic catalog API", () => {
       );
 
       expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({ error: { code: "validation_failed" } });
+      expect(await response.json()).toEqual({
+        error: {
+          code: "validation_failed",
+          message: anyText,
+          fields: [{ path: "group", message: anyText }],
+        },
+      });
       expect(await (await request("/v1/technologies/typescript")).json()).toMatchObject({
         tier: "primary",
         group: "core",
