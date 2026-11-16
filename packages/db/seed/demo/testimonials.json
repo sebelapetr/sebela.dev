@@ -1,0 +1,34 @@
+[
+  {
+    "slug": "lumen-editor-in-chief",
+    "experience": "lumen-press-staff-engineer",
+    "quote": "Alex wrote the test questions before writing the assistant. That is why we trusted it with our archive.",
+    "authorName": "Mira Example",
+    "authorRole": "Editor-in-chief, Lumen Press (fictional)",
+    "position": 0
+  },
+  {
+    "slug": "harbor-head-of-ecommerce",
+    "experience": "harbor-retail-senior-developer",
+    "quote": "We replaced the whole store without one checkout outage in a peak season.",
+    "authorName": "Jonas Sample",
+    "authorRole": "Head of e-commerce, Harbor Retail Group (fictional)",
+    "position": 0
+  },
+  {
+    "slug": "quill-client-accounting",
+    "experience": "quill-studio-consulting",
+    "quote": "Four weeks later our staff stopped asking the same handbook questions.",
+    "authorName": "Dana Placeholder",
+    "authorRole": "Managing partner of a fictional accounting firm",
+    "position": 0
+  },
+  {
+    "slug": "northwind-team-lead",
+    "experience": "northwind-freight-developer",
+    "quote": "A junior who asked the right questions and shipped the tracking integration on time.",
+    "authorName": "Hana Fictive",
+    "authorRole": "Team lead, Northwind Freight (fictional)",
+    "position": 0
+  }
+]
