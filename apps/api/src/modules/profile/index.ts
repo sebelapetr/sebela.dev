@@ -23,6 +23,6 @@ export function profileRoutes(profile: ProfileService): RouteDefinition[] {
     ...organizationRoutes(profile),
     ...experienceRoutes(profile),
     ...projectRoutes(profile),
-    ...caseStudyRoutes(),
+    ...caseStudyRoutes(profile),
   ];
 }

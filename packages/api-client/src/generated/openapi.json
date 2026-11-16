@@ -2865,7 +2865,7 @@
       "delete": {
         "operationId": "deleteProject",
         "summary": "Delete a project",
-        "description": "Removes the project and its technology links; the experience and the technologies stay. A project that other records still refer to is not deleted.",
+        "description": "Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.",
         "security": [
           {
             "bearerAuth": []
@@ -2973,6 +2973,7 @@
       "get": {
         "operationId": "getCaseStudy",
         "summary": "Read the case study of a project",
+        "description": "The long-form narrative of the project and the person's role in it; the body is Markdown as written, never HTML. The project's own read carries the same case study.",
         "security": [],
         "parameters": [
           {
@@ -3053,6 +3054,7 @@
       "post": {
         "operationId": "createCaseStudy",
         "summary": "Create the case study of a project",
+        "description": "Stores the case study of the existing project named in the path. A project has at most one case study; a second one, also from a competing create, is a conflict. The body is Markdown, stored as written.",
         "security": [
           {
             "bearerAuth": []
@@ -3203,6 +3205,7 @@
       "patch": {
         "operationId": "updateCaseStudy",
         "summary": "Update the case study of a project",
+        "description": "Changes only the fields sent; the project it belongs to cannot change.",
         "security": [
           {
             "bearerAuth": []
@@ -3335,6 +3338,7 @@
       "delete": {
         "operationId": "deleteCaseStudy",
         "summary": "Delete the case study of a project",
+        "description": "Removes the case study and leaves the project. A project with a case study cannot be deleted until its case study is.",
         "security": [
           {
             "bearerAuth": []

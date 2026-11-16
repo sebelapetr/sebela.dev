@@ -280,7 +280,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a project
-         * @description Removes the project and its technology links; the experience and the technologies stay. A project that other records still refer to is not deleted.
+         * @description Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.
          */
         delete: operations["deleteProject"];
         options?: never;
@@ -299,16 +299,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read the case study of a project */
+        /**
+         * Read the case study of a project
+         * @description The long-form narrative of the project and the person's role in it; the body is Markdown as written, never HTML. The project's own read carries the same case study.
+         */
         get: operations["getCaseStudy"];
         put?: never;
-        /** Create the case study of a project */
+        /**
+         * Create the case study of a project
+         * @description Stores the case study of the existing project named in the path. A project has at most one case study; a second one, also from a competing create, is a conflict. The body is Markdown, stored as written.
+         */
         post: operations["createCaseStudy"];
-        /** Delete the case study of a project */
+        /**
+         * Delete the case study of a project
+         * @description Removes the case study and leaves the project. A project with a case study cannot be deleted until its case study is.
+         */
         delete: operations["deleteCaseStudy"];
         options?: never;
         head?: never;
-        /** Update the case study of a project */
+        /**
+         * Update the case study of a project
+         * @description Changes only the fields sent; the project it belongs to cannot change.
+         */
         patch: operations["updateCaseStudy"];
         trace?: never;
     };
