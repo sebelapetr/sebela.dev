@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createApiClient,
   type ApiClient,
+  type Cv,
   type ErrorResponse,
   type MediaUpload,
 } from "@sebela/api-client";
@@ -136,6 +137,32 @@ describe("the generated API client", () => {
     expect(deleted.response.status).toBe(204);
     expect(deleted.error).toBeUndefined();
     expect((await client.GET("/v1/person")).response.status).toBe(404);
+  });
+
+  it("reads the public assembled CV: not found without a person, then its typed sections", async () => {
+    const { client, authorizations } = consumer(key);
+
+    const missing = await client.GET("/v1/cv");
+    expect(missing.response.status).toBe(404);
+    expect(missing.data).toBeUndefined();
+    expect(missing.error).toEqual({ error: { code: "not_found", message: anyText } });
+
+    expect((await client.POST("/v1/person", { body: person })).response.status).toBe(201);
+    const found = await client.GET("/v1/cv");
+    expect(found.error).toBeUndefined();
+    const cv: Cv | undefined = found.data;
+    expect(cv?.person).toMatchObject(person);
+    expect(cv).toMatchObject({
+      experiences: [],
+      technologies: { primary: { core: [], aiEngineeringFocus: [] }, secondary: [] },
+      education: [],
+      explorations: [],
+      cvPdf: null,
+    });
+    expect((await client.DELETE("/v1/person")).response.status).toBe(204);
+
+    // The CV is public, so the key never goes with it.
+    expect(authorizations).toEqual([null, `Bearer ${key}`, null, `Bearer ${key}`]);
   });
 
   it("manages the catalogs: public reads, keyed writes, path parameters and errors", async () => {

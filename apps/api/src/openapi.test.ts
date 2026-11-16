@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { PersonSchema } from "@sebela/contracts";
+import { CvSchema, PersonSchema } from "@sebela/contracts";
 
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
@@ -540,6 +540,21 @@ describe("the OpenAPI document and the reference", () => {
       "application/pdf": binary,
     });
     expect(Object.keys(file.responses)).toEqual(expect.arrayContaining(["200", "404", "429"]));
+  });
+
+  it("documents the public assembled CV from its contract schemas", () => {
+    const read = operation("GET", "/v1/cv");
+
+    expect(read.security).toEqual([]);
+    expect(read.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Cv" } },
+    });
+    expect(Object.keys(read.responses)).toContain("404");
+    expect(Object.keys(document.components.schemas["Cv"]?.properties ?? {}).sort()).toEqual(
+      Object.keys(CvSchema.shape).sort(),
+    );
+    expect(document.components.schemas).toHaveProperty("CvExploration");
+    expect(document.paths["/v1/cv"]).toEqual({ get: read });
   });
 
   it("documents the health route", () => {
