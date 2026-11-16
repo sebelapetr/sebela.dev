@@ -8,12 +8,12 @@ There is a small number of agents, one per role. What differs between parts of t
 
 ## Instruction files
 
-| File | Holds |
-|---|---|
-| `AGENTS.md` (root) | Repository-wide rules |
+| File                         | Holds                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md` (root)           | Repository-wide rules                                                                                      |
 | `<app or package>/AGENTS.md` | Only what is specific to that part: how to add an endpoint, how to write a migration, how to run its tests |
-| `.claude/rules/*.md` | Short reminders that point to a document in `docs/`; some are scoped to paths |
-| `docs/` | The full, binding description |
+| `.claude/rules/*.md`         | Short reminders that point to a document in `docs/`; some are scoped to paths                              |
+| `docs/`                      | The full, binding description                                                                              |
 
 There are no `CLAUDE.md` files. Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read `AGENTS.md` too.
 
@@ -29,14 +29,14 @@ Root instructions and the always-loaded Claude deep-module rule point to the can
 
 ## Roles
 
-| Agent | Does | Works in |
-|---|---|---|
-| orchestrator | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository |
-| backend-developer | Implements | `api`, `db`, `services`, `contracts` |
-| frontend-developer | Implements; takes screenshots for visual review | `web`, `ui` |
-| ai-developer | Implements evals-first | `mcp-admin`, `llm-agent` (Python), `memory` |
-| reviewer | Checks; has no write access to code | Whole repository |
-| docs-keeper | Keeps `docs/`, rules and `AGENTS.md` files in line with the code | Documentation |
+| Agent              | Does                                                                                                                            | Works in                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| orchestrator       | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository                            |
+| backend-developer  | Implements                                                                                                                      | `api`, `db`, `services`, `contracts`        |
+| frontend-developer | Implements; takes screenshots for visual review                                                                                 | `web`, `ui`                                 |
+| ai-developer       | Implements evals-first                                                                                                          | `mcp-admin`, `llm-agent` (Python), `memory` |
+| reviewer           | Checks; has no write access to code                                                                                             | Whole repository                            |
+| docs-keeper        | Keeps `docs/`, rules and `AGENTS.md` files in line with the code                                                                | Documentation                               |
 
 Definitions live in `.claude/agents/`. A dedicated agent for a single app is added only if that part proves to need one.
 
@@ -44,12 +44,12 @@ Definitions live in `.claude/agents/`. A dedicated agent for a single app is add
 
 Each agent pins its model and effort level in the frontmatter of its `.claude/agents/<name>.md`, so a run does not depend on what the owner last chose in an interactive session.
 
-| Agent | Model | Effort | Why |
-|---|---|---|---|
-| orchestrator | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code |
-| backend-, frontend-, ai-developer | opus | high | Writes the code and the tests, where mistakes cost most |
-| reviewer | opus | high | Must find what the developer missed |
-| docs-keeper | sonnet | low | Compares documents with merged code |
+| Agent                             | Model  | Effort | Why                                                             |
+| --------------------------------- | ------ | ------ | --------------------------------------------------------------- |
+| orchestrator                      | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code |
+| backend-, frontend-, ai-developer | opus   | high   | Writes the code and the tests, where mistakes cost most         |
+| reviewer                          | opus   | high   | Must find what the developer missed                             |
+| docs-keeper                       | sonnet | low    | Compares documents with merged code                             |
 
 The environment variable `CLAUDE_CODE_EFFORT_LEVEL` overrides the effort fields; the phase loop does not set it.
 

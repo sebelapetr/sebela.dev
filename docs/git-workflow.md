@@ -15,11 +15,11 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 ## Branches
 
-| Branch | Purpose | Who merges into it |
-|---|---|---|
-| `master` | The only long-lived branch | The owner only |
-| `phase/<phase-folder>` | Integration branch of a phase, for example `phase/02-api-db` | The orchestrator, after review and green CI |
-| `<type>/<issue-number>-<short-slug>` | One issue, for example `feat/12-profile-experience-api` | — |
+| Branch                               | Purpose                                                      | Who merges into it                          |
+| ------------------------------------ | ------------------------------------------------------------ | ------------------------------------------- |
+| `master`                             | The only long-lived branch                                   | The owner only                              |
+| `phase/<phase-folder>`               | Integration branch of a phase, for example `phase/02-api-db` | The orchestrator, after review and green CI |
+| `<type>/<issue-number>-<short-slug>` | One issue, for example `feat/12-profile-experience-api`      | —                                           |
 
 - `<type>` is a Conventional Commits type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 - An issue branch is cut from the phase branch and its pull request targets the phase branch.

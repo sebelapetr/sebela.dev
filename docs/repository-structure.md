@@ -76,11 +76,11 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 
 ## Toolchain and workspace
 
-| Tool | Version | Declared in |
-| --- | --- | --- |
-| Node.js | 26, the current LTS line | `.nvmrc` (`26`) and `engines.node` in `package.json` (`>=26.0.0 <27.0.0`). `engineStrict` in `pnpm-workspace.yaml` makes installation fail on another version. |
-| pnpm | 12.21.0 | `packageManager` in `package.json`. CI installs exactly this version. |
-| Turborepo, ESLint, TypeScript, Prettier, typescript-eslint | Exact versions | The `catalog` in `pnpm-workspace.yaml`; packages depend on them with `catalog:`. |
+| Tool                                                       | Version                  | Declared in                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js                                                    | 26, the current LTS line | `.nvmrc` (`26`) and `engines.node` in `package.json` (`>=26.0.0 <27.0.0`). `engineStrict` in `pnpm-workspace.yaml` makes installation fail on another version. |
+| pnpm                                                       | 12.21.0                  | `packageManager` in `package.json`. CI installs exactly this version.                                                                                          |
+| Turborepo, ESLint, TypeScript, Prettier, typescript-eslint | Exact versions           | The `catalog` in `pnpm-workspace.yaml`; packages depend on them with `catalog:`.                                                                               |
 
 - **Prerequisites:** Git, Node.js 26 and pnpm 12.21.0. Install that pnpm version directly (for example `npm install --global pnpm@12.21.0`): pnpm 10 cannot switch itself to the native pnpm 12 executable, so an older global pnpm fails instead of switching.
 - **Installation is locked:** `pnpm install --frozen-lockfile` installs exactly what `pnpm-lock.yaml` records. Change dependencies with `pnpm add` / `pnpm remove` and commit the updated lockfile in the same change.
@@ -91,16 +91,16 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 
 Run from the repository root. Turborepo runs a task in every package that defines it, after the `build` of the packages it depends on, and caches the result.
 
-| Command | What it runs |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | The locked installation, as in CI |
-| `pnpm lint` | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`) |
-| `pnpm typecheck` | `typecheck` of every package |
-| `pnpm test` | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`) |
-| `pnpm build` | `build` of every package |
-| `pnpm test:harness` | Only the harness tests, through `node --test scripts/harness/` |
-| `pnpm check:config` | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached. |
-| `pnpm test:checks` | Only the tests of the repository checks, through `node --test scripts/checks/` |
+| Command                          | What it runs                                                                                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | The locked installation, as in CI                                                                                                                                                                                                |
+| `pnpm lint`                      | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`) |
+| `pnpm typecheck`                 | `typecheck` of every package                                                                                                                                                                                                     |
+| `pnpm test`                      | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`)                                                                                                          |
+| `pnpm build`                     | `build` of every package                                                                                                                                                                                                         |
+| `pnpm test:harness`              | Only the harness tests, through `node --test scripts/harness/`                                                                                                                                                                   |
+| `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                     |
+| `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                   |
 
 The harness (`scripts/harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test scripts/harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
@@ -143,11 +143,11 @@ packages/api-client/src/
 
 SQL migrations stay in `packages/db/migrations/`, fictional seed data in `packages/db/seed/demo/`, and tests beside the behaviour they exercise. App startup/configuration, middleware and CLI adapters stay outside domain modules. The source entry convention is fixed; internal filenames evolve as real functionality arrives. No folders above need to be scaffolded before their phase.
 
-| Caller | Allowed import surface |
-| --- | --- |
-| A private file inside its own module | Other private files of that same module |
-| Another module or app/package composition code | That module's explicit `index.ts` entry |
-| Another package | Declared package exports, initially the package-root entry |
+| Caller                                           | Allowed import surface                                                                  |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| A private file inside its own module             | Other private files of that same module                                                 |
+| Another module or app/package composition code   | That module's explicit `index.ts` entry                                                 |
+| Another package                                  | Declared package exports, initially the package-root entry                              |
 | Framework/tooling running within its own package | A narrowly documented internal access needed by the tool; never a runtime client bypass |
 
 Do not import another module's private file by a relative path or alias, reach into another package's source tree, or use an undeclared package subpath. Do not create cycles between modules. An entry exports selected operations and types, never an automatic `export *` of all internals. Package entry files re-export module entries deliberately. Shared transport contracts belong in contracts; a private backend helper type does not become a client contract merely to expose it.
@@ -160,15 +160,15 @@ Each backend app/package `AGENTS.md` must map actual module paths to public entr
 
 The API is the trust boundary: writes and authentication are enforced there and nowhere else. The import rules exist to keep it that way.
 
-| Package or app | May import |
-|---|---|
-| `apps/web`, `apps/mcp-admin` | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP |
-| `apps/llm-agent` (Python) | Nothing from the TypeScript packages; a client generated from the OpenAPI document — and it reaches data only through the API's public routes |
-| `apps/api` | `services`, `contracts`, `config` |
-| `packages/services` | `db`, `contracts`, `memory`, `config` |
-| `packages/db` | nothing from this repository except `config` |
-| `packages/contracts` | nothing from this repository except `config` |
-| `packages/config` | nothing from this repository |
+| Package or app               | May import                                                                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`, `apps/mcp-admin` | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP                                     |
+| `apps/llm-agent` (Python)    | Nothing from the TypeScript packages; a client generated from the OpenAPI document — and it reaches data only through the API's public routes |
+| `apps/api`                   | `services`, `contracts`, `config`                                                                                                             |
+| `packages/services`          | `db`, `contracts`, `memory`, `config`                                                                                                         |
+| `packages/db`                | nothing from this repository except `config`                                                                                                  |
+| `packages/contracts`         | nothing from this repository except `config`                                                                                                  |
+| `packages/config`            | nothing from this repository                                                                                                                  |
 
 `packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and `llm-agent` has no database access at all. A lint rule enforces this; do not disable it.
 
@@ -189,13 +189,13 @@ The diagnostic names the specifier, the importing member and what it may import 
 
 Several agents work in parallel, each in its own git worktree. They share one Postgres container and nothing else.
 
-| Service | Main checkout | Worktree with slot N |
-|---|---|---|
-| web | 3000 | 3000 + N × 10 |
-| api | 3001 | 3001 + N × 10 |
-| mcp-admin | 3002 | 3002 + N × 10 |
-| llm-agent | 3003 | 3003 + N × 10 |
-| postgres | 5440 (one shared container) | same port, separate database |
+| Service   | Main checkout               | Worktree with slot N         |
+| --------- | --------------------------- | ---------------------------- |
+| web       | 3000                        | 3000 + N × 10                |
+| api       | 3001                        | 3001 + N × 10                |
+| mcp-admin | 3002                        | 3002 + N × 10                |
+| llm-agent | 3003                        | 3003 + N × 10                |
+| postgres  | 5440 (one shared container) | same port, separate database |
 
 - The worktree setup script (`node scripts/harness/worktree.mjs create`, also run by the `WorktreeCreate` hook) takes the lowest free slot, creates the worktree's own database in the shared Postgres, or reuses it, and then writes the ports and the database name to the worktree's `.env.local`. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment). Migrations and the demo seed are added to setup in phase 2, when they exist.
 - Running setup again for an existing worktree keeps its slot and its database and preserves its `.env.local`, including local edits. A missing environment file is generated; an existing file or symbolic link is never overwritten, so a worktree whose `.env.local` predates its database gets `DATABASE_NAME` only after that file is deleted and setup runs again.
@@ -239,12 +239,12 @@ Compose takes every setting from the process environment or from the `.env` file
 
 **Scope.** Without arguments it checks every file of the repository that Git lists — tracked, or untracked and not ignored — and that is executable:
 
-| Files | Checked as |
-| --- | --- |
+| Files                                                                                                                                                        | Checked as                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
 | `*.js`, `*.mjs`, `*.cjs`, `*.jsx`, `*.ts`, `*.tsx`, `*.mts`, `*.cts`; files without an extension whose interpreter line names `node`, `deno`, `bun` or `tsx` | JavaScript and TypeScript |
-| `*.py`; files without an extension whose interpreter line names `python` | Python |
-| `*.sh`, `*.bash`; files without an extension whose interpreter line names `sh`, `bash`, `dash` or `zsh` | Shell |
-| The `scripts` of every `package.json` | Shell commands |
+| `*.py`; files without an extension whose interpreter line names `python`                                                                                     | Python                    |
+| `*.sh`, `*.bash`; files without an extension whose interpreter line names `sh`, `bash`, `dash` or `zsh`                                                      | Shell                     |
+| The `scripts` of every `package.json`                                                                                                                        | Shell commands            |
 
 This covers application code, tests and scripts alike, including the harness and the check itself. Given paths, it checks only those files and directories; its tests use this for the fixtures.
 
@@ -252,11 +252,11 @@ This covers application code, tests and scripts alike, including the harness and
 
 "Assigned" below means `=` (also after a type annotation, such as `port: number =` or `WORKER_PORT: int =`, and for a parameter default), `:` in an object literal, `??=` and `||=`; in the shell only `=`.
 
-| Rule | What it finds |
-| --- | --- |
-| `port` | A port-named variable or key (`API_PORT`, `PGPORT`, `port`, `api_port`, `apiPort`) assigned a number of two to five digits; an explicit port in a URL (`scheme://host:<number>`); `.listen(<number>)`; `--port <number>` and `-p <number>`. Port `0`, "any free port", is allowed. |
-| `local-host` | `localhost`, `127.x.x.x`, `0.0.0.0` and a quoted or bracketed `::1`. |
-| `database-name` | A database-named variable or key (`DATABASE_NAME`, `POSTGRES_DB`, `PGDATABASE`, `database`, `dbName`) assigned a string literal; the database of a connection URL (`postgres://…/<name>`); `CREATE`, `DROP` or `ALTER DATABASE <name>`; in shell commands also `createdb` and `dropdb <name>` and `psql`, `pg_dump` or `pg_restore` with `-d <name>` or `--dbname`. |
+| Rule                  | What it finds                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`                | A port-named variable or key (`API_PORT`, `PGPORT`, `port`, `api_port`, `apiPort`) assigned a number of two to five digits; an explicit port in a URL (`scheme://host:<number>`); `.listen(<number>)`; `--port <number>` and `-p <number>`. Port `0`, "any free port", is allowed.                                                                                         |
+| `local-host`          | `localhost`, `127.x.x.x`, `0.0.0.0` and a quoted or bracketed `::1`.                                                                                                                                                                                                                                                                                                       |
+| `database-name`       | A database-named variable or key (`DATABASE_NAME`, `POSTGRES_DB`, `PGDATABASE`, `database`, `dbName`) assigned a string literal; the database of a connection URL (`postgres://…/<name>`); `CREATE`, `DROP` or `ALTER DATABASE <name>`; in shell commands also `createdb` and `dropdb <name>` and `psql`, `pg_dump` or `pg_restore` with `-d <name>` or `--dbname`.        |
 | `environment-default` | A port, host, database, URL or DSN variable read from the environment with a literal fallback: `process.env.API_PORT ?? …`, `env["API_URL"] \|\| …`, `os.getenv("API_HOST", …)` (also with `default=`), `os.environ.get(…, …)`, `os.environ.setdefault("DB_HOST", …)`, `${WEB_PORT:-…}`. The value belongs in `.env.example`; the code fails when the variable is not set. |
 
 A value built from the environment passes: `Number(process.env.API_PORT)`, `` `http://${host}:${port}` ``, `os.environ["DATABASE_URL"]`, `createdb "$DATABASE_NAME"`, `next dev --port $WEB_PORT`.
