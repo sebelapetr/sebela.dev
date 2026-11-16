@@ -174,3 +174,5 @@ export type {
   ServiceEvidenceKind,
   ServiceUpdate,
 } from "./services.js";
+export { CvExplorationSchema, CvSchema } from "./cv.js";
+export type { Cv, CvExploration } from "./cv.js";
