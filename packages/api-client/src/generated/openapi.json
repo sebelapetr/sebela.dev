@@ -4443,6 +4443,500 @@
         }
       }
     },
+    "/v1/education": {
+      "get": {
+        "operationId": "listEducation",
+        "summary": "List the education records",
+        "description": "Schools, courses, certifications and other learning milestones, by position, then slug. Each carries its kind exactly as stored.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Every education record, in order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EducationList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createEducation",
+        "summary": "Create an education record",
+        "description": "At least one of `startedOn` and `endedOn` is required: a start alone marks ongoing learning, an end alone a completion on that day, and the end is never before the start. The slug is unique and stable; a taken slug is a conflict.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EducationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created education record.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Education"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/education/{slug}": {
+      "get": {
+        "operationId": "getEducation",
+        "summary": "Read an education record",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The education record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Education"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateEducation",
+        "summary": "Update an education record",
+        "description": "Changes only the fields sent; the slug cannot change. The period is checked on the resulting record: it keeps at least one date and the end is never before the start.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EducationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated education record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Education"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteEducation",
+        "summary": "Delete an education record",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The education record was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -5845,6 +6339,181 @@
         },
         "additionalProperties": false
       },
+      "EducationCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "school",
+              "course",
+              "certification",
+              "milestone"
+            ],
+            "description": "`school` (a formal study programme), `course`, `certification` or `milestone` (any other learning achievement)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "institution": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The school, provider or issuer; `null` when there is none."
+          },
+          "startedOn": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first day, an ISO date; `null` when only the day of completion is known, as for a certification awarded on one day."
+          },
+          "endedOn": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day of completion, an ISO date, not before the start; `null` with a start marks ongoing learning. At least one of `startedOn` and `endedOn` is set."
+          },
+          "description": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown; `null` when there is none."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          }
+        },
+        "required": [
+          "slug",
+          "kind",
+          "title",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "EducationUpdate": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "school",
+              "course",
+              "certification",
+              "milestone"
+            ],
+            "description": "`school` (a formal study programme), `course`, `certification` or `milestone` (any other learning achievement)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "institution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The school, provider or issuer; `null` when there is none."
+          },
+          "startedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first day, an ISO date; `null` when only the day of completion is known, as for a certification awarded on one day."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day of completion, an ISO date, not before the start; `null` with a start marks ongoing learning. At least one of `startedOn` and `endedOn` is set."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown; `null` when there is none."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          }
+        },
+        "additionalProperties": false
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -6900,6 +7569,127 @@
           "name",
           "summary",
           "status"
+        ],
+        "additionalProperties": false
+      },
+      "EducationList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Education"
+        },
+        "description": "Ordered by position, then slug."
+      },
+      "Education": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "school",
+              "course",
+              "certification",
+              "milestone"
+            ],
+            "description": "`school` (a formal study programme), `course`, `certification` or `milestone` (any other learning achievement)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "institution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The school, provider or issuer; `null` when there is none."
+          },
+          "startedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first day, an ISO date; `null` when only the day of completion is known, as for a certification awarded on one day."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day of completion, an ISO date, not before the start; `null` with a start marks ongoing learning. At least one of `startedOn` and `endedOn` is set."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown; `null` when there is none."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in the list; ties are ordered by slug."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "kind",
+          "title",
+          "institution",
+          "startedOn",
+          "endedOn",
+          "description",
+          "position",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       }

@@ -5,6 +5,7 @@ import { DomainError } from "../../errors.js";
 import { createCaseStudyService } from "./case-studies.js";
 import { createCatalogService } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
+import { createEducationService } from "./education.js";
 import { createExperienceService } from "./experiences.js";
 import { createExplorationService } from "./explorations.js";
 import { createOrganizationService } from "./organizations.js";
@@ -13,6 +14,7 @@ import { createServiceService } from "./services.js";
 import type {
   CaseStudyService,
   CatalogService,
+  EducationService,
   ExperienceService,
   ExplorationService,
   OrganizationService,
@@ -23,6 +25,7 @@ import type {
 export type {
   CaseStudyService,
   CatalogService,
+  EducationService,
   ExperienceService,
   ExplorationService,
   OrganizationService,
@@ -43,7 +46,8 @@ export type {
  * It also includes the catalog operations of `CatalogService`, the organization operations of
  * `OrganizationService`, the experience operations of `ExperienceService`, the project
  * operations of `ProjectService`, the case-study operations of `CaseStudyService`, the
- * exploration operations of `ExplorationService` and the service operations of `ServiceService`.
+ * exploration operations of `ExplorationService`, the service operations of `ServiceService` and
+ * the education operations of `EducationService`.
  */
 export interface ProfileService
   extends
@@ -53,7 +57,8 @@ export interface ProfileService
     ProjectService,
     CaseStudyService,
     ExplorationService,
-    ServiceService {
+    ServiceService,
+    EducationService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -80,6 +85,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createCaseStudyService(persistence),
     ...createExplorationService(persistence),
     ...createServiceService(persistence),
+    ...createEducationService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();

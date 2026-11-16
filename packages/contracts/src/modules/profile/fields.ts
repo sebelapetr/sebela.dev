@@ -28,13 +28,14 @@ export const DateSchema = z.iso.date();
 const PERIOD_RULE = "The end cannot be before the start.";
 const UNIQUE_TECHNOLOGIES = "List each technology once.";
 
-/** The end is not before the start. Checked when both are in the same body. */
+/** The end is not before the start. Checked when both are set in the same body. */
 export function endFollowsStart(
-  value: { startedOn?: string | undefined; endedOn?: string | null | undefined },
+  value: { startedOn?: string | null | undefined; endedOn?: string | null | undefined },
   context: z.core.$RefinementCtx,
 ) {
   const { startedOn, endedOn } = value;
-  if (startedOn === undefined || endedOn === undefined || endedOn === null) return;
+  if (startedOn === undefined || startedOn === null) return;
+  if (endedOn === undefined || endedOn === null) return;
   // ISO dates of the same format compare chronologically as strings.
   if (endedOn < startedOn) {
     context.addIssue({ code: "custom", path: ["endedOn"], message: PERIOD_RULE });

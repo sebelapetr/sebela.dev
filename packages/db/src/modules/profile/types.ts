@@ -552,3 +552,74 @@ export interface ServicePersistence {
    */
   deleteService(slug: string): Promise<DeleteServiceResult>;
 }
+
+/** What kind of learning an education record is. */
+export type EducationKind = "school" | "course" | "certification" | "milestone";
+
+/**
+ * Writable fields of an education record. The slug is fixed when it is created. The period is
+ * flexible: at least one date is set, a start alone marks ongoing learning and an end alone a
+ * completion on that day.
+ */
+export interface EducationFields {
+  /** Stored and returned exactly as written. */
+  kind: EducationKind;
+  title: string;
+  /** The school, provider or issuer, or `null`. */
+  institution: string | null;
+  /** Calendar date, `YYYY-MM-DD`, or `null` when only the end is known. */
+  startedOn: string | null;
+  /** Calendar date, `YYYY-MM-DD`, not before the start; `null` marks ongoing learning. */
+  endedOn: string | null;
+  /** Markdown, or `null`. */
+  description: string | null;
+  /** Ascending order of the education records; ties are ordered by slug. */
+  position: number;
+}
+
+/** An education record. It refers to no other record and none refers to it. */
+export interface EducationRecord extends EducationFields {
+  id: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Why a create or an update of an education record wrote nothing, besides `conflict` and
+ * `not_found`:
+ *
+ * - `invalid_period`: the end would be before the start.
+ * - `undated_period`: neither the start nor the end would be set.
+ */
+export type EducationWriteFailure =
+  { ok: false; reason: "invalid_period" } | { ok: false; reason: "undated_period" };
+
+export type CreateEducationResult =
+  | { ok: true; education: EducationRecord }
+  | { ok: false; reason: "conflict" }
+  | EducationWriteFailure;
+
+export type UpdateEducationResult =
+  | { ok: true; education: EducationRecord }
+  | { ok: false; reason: "not_found" }
+  | EducationWriteFailure;
+
+export type DeleteEducationResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/** Persistence operations of the education records, addressed by slug. */
+export interface EducationPersistence {
+  /** Every education record, ordered by position, then slug. */
+  listEducation(): Promise<EducationRecord[]>;
+  /** The education record with the slug, or `null`. */
+  findEducation(slug: string): Promise<EducationRecord | null>;
+  /** `conflict` when the slug is taken, also for a racing create; see `EducationWriteFailure`. */
+  createEducation(fields: EducationFields & { slug: string }): Promise<CreateEducationResult>;
+  /**
+   * Changes only the given fields; the period is checked on the resulting record. `not_found`
+   * when there is no such record; see `EducationWriteFailure`.
+   */
+  updateEducation(slug: string, changes: Partial<EducationFields>): Promise<UpdateEducationResult>;
+  /** Deletes the education record; `not_found` when there is none. */
+  deleteEducation(slug: string): Promise<DeleteEducationResult>;
+}

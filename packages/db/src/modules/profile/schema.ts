@@ -384,3 +384,44 @@ export const serviceEvidence = profileSchema.table(
     ),
   ],
 );
+
+/** What kind of learning an education record is; the database stores nothing else. */
+export const educationKind = profileSchema.enum("education_kind", [
+  "school",
+  "course",
+  "certification",
+  "milestone",
+]);
+
+/**
+ * Education: schools, courses, certifications and other learning milestones, in their intended
+ * order. The period is flexible but never empty: a start alone marks ongoing learning, an end
+ * alone a completion on that day, and the database refuses an end before the start.
+ */
+export const education = profileSchema.table(
+  "education",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    kind: educationKind("kind").notNull(),
+    title: text("title").notNull(),
+    institution: text("institution"),
+    startedOn: date("started_on", { mode: "string" }),
+    endedOn: date("ended_on", { mode: "string" }),
+    description: text("description"),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("education_position_not_negative", sql`${table.position} >= 0`),
+    check(
+      "education_period_is_dated",
+      sql`${table.startedOn} IS NOT NULL OR ${table.endedOn} IS NOT NULL`,
+    ),
+    check(
+      "education_period_is_ordered",
+      sql`${table.startedOn} IS NULL OR ${table.endedOn} IS NULL OR ${table.endedOn} >= ${table.startedOn}`,
+    ),
+  ],
+);

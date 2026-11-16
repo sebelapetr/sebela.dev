@@ -720,4 +720,73 @@ describe("the generated API client", () => {
       null,
     ]);
   });
+
+  it("manages education: flexible periods, kinds as stored, ordered, refused and deleted", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    const course = {
+      slug: "fictional-course",
+      kind: "course" as const,
+      title: "Fictional course",
+      institution: "Fictional Academy",
+      startedOn: "2021-02-01",
+      endedOn: null,
+      description: null,
+      position: 1,
+    };
+
+    const created = await client.POST("/v1/education", { body: course });
+    expect(created.response.status).toBe(201);
+    expect(created.data).toMatchObject(course);
+    const duplicate = await client.POST("/v1/education", { body: course });
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const undated = await client.POST("/v1/education", {
+      body: { ...course, slug: "fictional-undated", startedOn: null },
+    });
+    expect(undated.response.status).toBe(400);
+    expect(undated.error?.error.fields?.map(({ path }) => path)).toEqual(["startedOn", "endedOn"]);
+    await client.POST("/v1/education", {
+      body: {
+        slug: "fictional-certificate",
+        kind: "certification",
+        title: "Fictional certificate",
+        endedOn: "2022-05-14",
+        position: 1,
+      },
+    });
+
+    const listed = await client.GET("/v1/education");
+    expect(listed.data?.map(({ slug, kind }) => [slug, kind])).toEqual([
+      ["fictional-certificate", "certification"],
+      ["fictional-course", "course"],
+    ]);
+    const read = await client.GET("/v1/education/{slug}", at("fictional-certificate"));
+    expect(read.data).toMatchObject({ startedOn: null, endedOn: "2022-05-14", institution: null });
+
+    const reversed = await client.PATCH("/v1/education/{slug}", {
+      ...at("fictional-course"),
+      body: { endedOn: "2020-01-01" },
+    });
+    expect(reversed.error?.error.fields).toEqual([expect.objectContaining({ path: "endedOn" })]);
+    const finished = await client.PATCH("/v1/education/{slug}", {
+      ...at("fictional-course"),
+      body: { endedOn: "2021-06-30", kind: "milestone" },
+    });
+    expect(finished.data).toMatchObject({ kind: "milestone", endedOn: "2021-06-30" });
+
+    for (const slug of ["fictional-course", "fictional-certificate"]) {
+      expect((await client.DELETE("/v1/education/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/education/{slug}", at("fictional-course"));
+    expect(missing.error?.error.code).toBe("not_found");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(4).fill(bearer),
+      null,
+      null,
+      ...Array<string>(4).fill(bearer),
+      null,
+    ]);
+  });
 });

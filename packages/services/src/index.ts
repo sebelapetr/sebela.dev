@@ -13,6 +13,7 @@ export type {
 export type {
   CaseStudyService,
   CatalogService,
+  EducationService,
   ExperienceService,
   OrganizationService,
   ProfileService,

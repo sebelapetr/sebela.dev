@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { createCaseStudyPersistence } from "./case-studies.js";
 import { createCatalogPersistence } from "./catalogs.js";
+import { createEducationPersistence } from "./education.js";
 import { createExperiencePersistence } from "./experiences.js";
 import { createExplorationPersistence } from "./explorations.js";
 import { createOrganizationPersistence } from "./organizations.js";
@@ -12,6 +13,7 @@ import { createServicePersistence } from "./services.js";
 import type {
   CaseStudyPersistence,
   CatalogPersistence,
+  EducationPersistence,
   ExperiencePersistence,
   ExplorationPersistence,
   OrganizationPersistence,
@@ -25,6 +27,7 @@ export type {
   CaseStudyRecord,
   CatalogPersistence,
   CreateCaseStudyResult,
+  CreateEducationResult,
   CreateOrganizationResult,
   CreateProjectResult,
   CreateServiceResult,
@@ -33,6 +36,7 @@ export type {
   CreateExplorationResult,
   CreateTopicResult,
   DeleteCaseStudyResult,
+  DeleteEducationResult,
   DeleteExperienceResult,
   DeleteExplorationResult,
   DeleteOrganizationResult,
@@ -40,6 +44,11 @@ export type {
   DeleteServiceResult,
   DeleteTechnologyResult,
   DeleteTopicResult,
+  EducationFields,
+  EducationKind,
+  EducationPersistence,
+  EducationRecord,
+  EducationWriteFailure,
   ExperienceFields,
   ExperienceKind,
   ExperiencePersistence,
@@ -74,6 +83,7 @@ export type {
   TopicFields,
   TopicRecord,
   UpdateCaseStudyResult,
+  UpdateEducationResult,
   UpdateExperienceResult,
   UpdateExplorationResult,
   UpdateProjectResult,
@@ -118,7 +128,8 @@ export interface ProfilePersistence
     ExplorationPersistence,
     ProjectPersistence,
     CaseStudyPersistence,
-    ServicePersistence {
+    ServicePersistence,
+    EducationPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -157,6 +168,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createProjectPersistence(db),
     ...createCaseStudyPersistence(db),
     ...createServicePersistence(db),
+    ...createEducationPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
