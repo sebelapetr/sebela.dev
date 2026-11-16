@@ -137,6 +137,16 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/pre-compact.mjs\""
+          }
+        ]
+      }
     ]
   }
 }
