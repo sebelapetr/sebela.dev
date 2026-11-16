@@ -464,6 +464,210 @@ test("unattended agents may keep their shared memory in the main checkout, and n
   );
 });
 
+// --- needless refusals (found in the phase 0–2 transcripts) ----------------
+
+const loop = { unattended: true, isSubagent: true };
+
+test("reading the harness settings with a read-only shell command is allowed", () => {
+  for (const command of [
+    "cd /repo/.worktrees/feat-1-x && cat .claude/settings.json",
+    'grep -n -A6 "WorktreeCreate\\|WorktreeRemove" .claude/settings.json',
+    "cat .claude/settings.json | head -40",
+    "sed -n 1,80p .claude/settings.json",
+    "git diff origin/phase/01-x...HEAD -- .claude/settings.json package.json 2>&1 | head",
+    "git -C /repo/.worktrees/feat-1-x diff origin/phase/01-x...HEAD -- .claude/settings.json",
+    "ls .claude && wc -l .claude/settings.json >/dev/null",
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+});
+
+test("anything that could write the harness settings through the shell is still refused", () => {
+  for (const command of [
+    "sed -i s/x/y/ .claude/settings.json",
+    "cat x > .claude/settings.json",
+    "cat .claude/settings.json | tee .claude/settings.json",
+    "cp /tmp/s .claude/settings.json",
+    "python3 - <<'EOF'\nopen('.claude/settings.json','w')\nEOF",
+    "cat $(echo .claude/settings.json)",
+    "sed -n 'w out' .claude/settings.json",
+    "find .claude/settings.json -delete",
+    "cat .git/config",
+    "cat .git/hooks/pre-commit",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
+test("what the shell would read differently from the guard is refused", () => {
+  for (const command of [
+    "cat \\' > .claude/settings.json \\'",
+    'cat .claude/settings.json \\" > .claude/settings.json \\"',
+    "git diff $X -- .claude/settings.json",
+    'git diff "$X" -- .claude/settings.json',
+    "git diff {--output=.claude/settings.json,} HEAD",
+    "git diff --outpu* .claude/settings.json",
+    "git grep -nO vi x -- .claude/settings.json",
+    "git diff --ext-diff -- .claude/settings.json",
+    "cat .claude/settings.json # > nothing",
+    "sed -n 1,80p .claude/settings.json -i",
+    "sed -n 1p .claude/settings.json --in-place",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
+test("Git configuration cannot be changed around the parser", () => {
+  for (const command of [
+    "git -C . config core.hooksPath /dev/null",
+    "git --no-pager config core.hooksPath x",
+    "env git config core.hooksPath x",
+    "A=1 git config core.hooksPath x",
+    "/usr/bin/git config core.hooksPath x",
+    'sh -c "git config core.hooksPath x"',
+    "(git config core.hooksPath x)",
+    "git config $(echo core.hooksPath x)",
+    "git --no-pager -c core.hooksPath=/dev/null commit -m x",
+    "git -C . -c core.hooksPath=x commit -m x",
+    "git --config-env=core.hooksPath=X commit -m x",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x",
+    "export GIT_CONFIG_PARAMETERS=x && git commit -m x",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+  assert.equal(bash("git -C /repo/.worktrees/feat-1-x config --get core.hooksPath", loop), null);
+  assert.equal(bash('git commit -m "use git config for hooks"', loop), null);
+});
+
+test("Git configuration cannot be changed by quoting, wrappers, editors or other config files", () => {
+  for (const command of [
+    "g'i't config core.hooksPath /dev/null",
+    'g"it" config core.hooksPath /dev/null',
+    "stdbuf -o0 git config core.hooksPath /dev/null",
+    "busybox git config core.hooksPath x",
+    "git config edit",
+    "git config set core.hooksPath x",
+    "git config unset core.hooksPath",
+    "git --attr-source HEAD config core.hooksPath x",
+    "git --exec-path=/tmp/evil status",
+    "HOME=/tmp/h git commit -m x",
+    "XDG_CONFIG_HOME=/tmp/x git commit -m x",
+    "GIT_DIR=/tmp/g git commit -m x",
+    "env HOME=/tmp/h git commit -m x",
+    "export HOME=/tmp/h && git commit -m x",
+    "git config $X core.hooksPath",
+    "for f in $(git config core.hooksPath x); do :; done",
+    "x=$(git -c core.hooksPath=y commit -m z)",
+    "T=1; git -c core.hooksPath=y commit -m z",
+    'git commit -m "$(echo x)" && sh -c "git config core.hooksPath x"',
+    "X=$(git config core.hooksPath /dev/null)",
+    "x=$(git -c core.hooks$P=y commit -m z)",
+    "x=$(git -c core.hooks:Path=y commit -m z)",
+    "eval git commit -m 'x; git config core.hooksPath y' $(true)",
+    "bash -c \"git commit -m 'git config core.hooksPath y'\" $(true)",
+    "foo -m 'git config core.hooksPath x' $(true)",
+    'git commit -m "x" && (sh -c "git config core.hooksPath x")',
+    'git commit -m "$(echo config)" -c core.hooksPath=x',
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+  for (const command of [
+    "git config get core.hooksPath",
+    "git config list",
+    "git config --list",
+    "git --no-pager log --oneline -3",
+    "git -C /repo/.worktrees/feat-1-x status",
+    "cd x && for f in $(git ls-files); do cat $f; done",
+    "B=origin/phase/01-x; git show $B:package.json | grep -n node",
+    "for c in a b; do git show --stat $c | head; done",
+    'env -i PATH="$PATH" HOME="$HOME" docker compose config',
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+});
+
+test("abbreviated git options that write a file are refused on harness reads", () => {
+  for (const command of [
+    "git diff --outp=.claude/settings.json HEAD",
+    "git diff --o=.claude/settings.json HEAD",
+    "git grep --open x -- .claude/settings.json",
+    "git show --te HEAD -- .claude/settings.json",
+    "git diff --ext -- .claude/settings.json",
+    "./git diff -- .claude/settings.json",
+    "tools/git log -- .claude/settings.json",
+    "git --git-dir=/tmp/x/.git log -- .claude/settings.json",
+    "git --work-tree /tmp diff -- .claude/settings.json",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+  assert.equal(bash("git log --oneline -- .claude/settings.json", loop), null);
+});
+
+test("a commit message mentioning config in a command the guard cannot read points to -F", () => {
+  const refusal = bash(
+    'git add a && git commit -q -m "feat(config): share the lint config" && (cd packages/config && node --test)',
+    loop,
+  );
+  assert.match(refusal.reason, /git commit -F/);
+  assert.equal(bash('git commit -q -m "feat(config): share the lint config"', loop), null);
+});
+
+test("a refusal says how to do the same safely", () => {
+  assert.match(bash("sed -i s/x/y/ .claude/settings.json", loop).reason, /Read or Grep tool/);
+  assert.match(bash("python3 fix.py .env", loop).reason, /Edit or Write tool/);
+  assert.match(
+    bash("gh api repos/actions/checkout/releases/latest", loop).reason,
+    /gh release view/,
+  );
+  assert.match(
+    bash("git push --force-with-lease origin feat/1-x", loop).reason,
+    /git merge origin\/phase/,
+  );
+  assert.match(bash("grep -rn x . | grep -v .context", loop).reason, /--exclude-dir=\.context/);
+});
+
+test("reading Git configuration is allowed, changing it is not", () => {
+  for (const command of [
+    "git config core.hooksPath",
+    "git config --get core.hooksPath",
+    "git config --list --show-origin",
+    "pnpm install --frozen-lockfile 2>&1 | tail -5 && git config core.hooksPath",
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+  for (const command of [
+    "git config core.hooksPath /dev/null",
+    "git config --unset core.hooksPath",
+    "git config --global user.name x",
+    "git config -e",
+    "git config --add a.b c",
+    "git config --replace-all a.b c",
+    "git config --get core.hooksPath && git config core.hooksPath x",
+    "git -c core.hooksPath=/dev/null commit -m x",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
+test("leaving .context out of a search is not reading it", () => {
+  for (const command of [
+    "grep -rn slugify --exclude-dir=.context .",
+    "grep -rn x --exclude-dir=node_modules --exclude-dir=.context --include=*.md .",
+    "find . -path ./.git -prune -o -path ./.context -prune -o -type f -print",
+    "git grep -n x -- . ':!.context'",
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+  for (const command of [
+    "ls -A .context",
+    "grep -r x --exclude-dir=.context .context/",
+    "find . -path ./.context -o -print",
+    "find .context -type f",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {

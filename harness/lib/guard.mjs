@@ -42,8 +42,9 @@ function deny(reason) {
   return { reason };
 }
 
+// Each refusal also says how to reach the same goal allowed, so an agent does not guess.
 const ENV_REASON =
-  "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md).";
+  "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md). If .env only appears as text in content you write, use the Edit or Write tool: they check the file you change, not its content.";
 
 function allowedEnvPath(filePath, worktreeRoot) {
   return (
@@ -96,7 +97,234 @@ function checkSearchPattern({
 // The harness that governs the loop. Unattended runs change it only inside a worktree, through a
 // pull request; never in the main checkout, and never inside any .git directory.
 const HARNESS_DIRS = [".claude", ".github", "harness"];
-const HARNESS_IN_COMMAND = /(^|[\s'"=/<>|;&(])(\.claude\/settings|\.git\/(hooks|config)\b)/;
+const SETTINGS_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.claude\/settings/;
+const GIT_INTERNALS_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.git\/(hooks|config)\b/;
+const HARNESS_REASON =
+  "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md). To read a harness file, use the Read or Grep tool, or a plain cat, grep, head or sed -n.";
+
+// Splits a shell command into its simple commands (separated by ; & | or newlines) as lists of
+// words without quotes. It fails closed: null for anything the shell could read differently from
+// this parser — a backslash outside single quotes, any expansion ($, braces, globs, ~ is harmless
+// and kept), a subshell, a comment, redirection into a file, a heredoc or an unbalanced quote.
+// Discarding output (2>&1, >/dev/null) is fine.
+function simpleCommands(command) {
+  const cleaned = command
+    .replace(/(^|\s)\d?>&\d(?=\s|$)/g, " ")
+    .replace(/(^|\s)\d?>\s*\/dev\/null(?=\s|$)/g, " ");
+  const commands = [];
+  let words = [];
+  let word = null;
+  let quote = null;
+  const endWord = () => {
+    if (word !== null) words.push(word);
+    word = null;
+  };
+  const chars = [...cleaned];
+  for (let i = 0; i < chars.length; i += 1) {
+    const char = chars[i];
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      else word += char;
+    } else if (quote === '"') {
+      if (char === '"') quote = null;
+      else if (char === "$" || char === "`") return null;
+      else if (char === "\\" && /[$`"\\\n]/.test(chars[i + 1] ?? "")) return null;
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      word ??= "";
+    } else if (/[\\$`<>(){}*?[\]#]/.test(char)) {
+      return null;
+    } else if (/[;&|\n]/.test(char)) {
+      endWord();
+      if (words.length) commands.push(words);
+      words = [];
+    } else if (/\s/.test(char)) {
+      endWord();
+    } else {
+      word = (word ?? "") + char;
+    }
+  }
+  if (quote) return null;
+  endWord();
+  if (words.length) commands.push(words);
+  return commands;
+}
+
+// What a git invocation runs: the subcommand and its arguments. `unsafe` when anything could
+// make git read other configuration than the repository's: words in front of git (`env`,
+// variable assignments) or a global option other than the few that only say where or how to
+// print (`-c`, `--config-env`, `--exec-path`, `--attr-source`, …). Null when the words do not
+// invoke git.
+// Only -C: --git-dir and --work-tree could point git at another repository and its configuration.
+const GIT_PLACE_OPTIONS = new Set(["-C"]);
+const GIT_SAFE_OPTIONS = new Set([
+  "--no-pager",
+  "-P",
+  "-p",
+  "--paginate",
+  "--no-replace-objects",
+  "--no-optional-locks",
+  "--literal-pathspecs",
+  "--glob-pathspecs",
+  "--noglob-pathspecs",
+  "--icase-pathspecs",
+]);
+function gitInvocation(words) {
+  let i = 0;
+  if (words[i] === "env") i += 1;
+  while (i < words.length && /^[A-Za-z_]\w*=/.test(words[i])) i += 1;
+  if (path.basename(words[i] ?? "") !== "git") return null;
+  let unsafe = i > 0;
+  const plain = words[i] === "git";
+  i += 1;
+  while (i < words.length && words[i].startsWith("-")) {
+    const [option, value] = words[i].split(/=(.*)/);
+    if (GIT_PLACE_OPTIONS.has(option)) i += value === undefined ? 2 : 1;
+    else {
+      if (!GIT_SAFE_OPTIONS.has(words[i])) unsafe = true;
+      i += 1;
+    }
+  }
+  // Only the git on the PATH can be trusted to be git; ./git or tools/git could be anything.
+  return { sub: words[i], args: words.slice(i + 1), unsafe, plain };
+}
+
+// Programs that only read and print, with the arguments that keep them so.
+const READ_ONLY_GIT = new Set(["diff", "show", "log", "status", "ls-files", "grep", "blame"]);
+// Options of those that write a file or run a program — --output, -O (open in a pager), external
+// diff and text conversion drivers — also abbreviated, as git accepts any unique prefix.
+const GIT_WRITING_OPTIONS = [
+  "output",
+  "output-directory",
+  "open-files-in-pager",
+  "ext-diff",
+  "textconv",
+];
+function writesOrRuns(arg) {
+  if (/^-[^-]/.test(arg)) return arg.includes("O");
+  if (!arg.startsWith("--")) return false;
+  const name = arg.slice(2).split("=")[0];
+  return name.length > 0 && GIT_WRITING_OPTIONS.some((option) => option.startsWith(name));
+}
+function readsOnly(words) {
+  const [program, ...args] = words;
+  if (["cd", "cat", "head", "tail", "grep", "wc", "ls", "diff", "echo"].includes(program)) {
+    return true;
+  }
+  // GNU sed takes options after the files too, so no other argument may be an option.
+  if (program === "sed") {
+    return (
+      args[0] === "-n" &&
+      /^\d+(,\d+)?p$/.test(args[1] ?? "") &&
+      args.slice(2).every((arg) => !arg.startsWith("-"))
+    );
+  }
+  const git = gitInvocation(words);
+  return Boolean(
+    git?.plain && !git.unsafe && READ_ONLY_GIT.has(git.sub) && !git.args.some(writesOrRuns),
+  );
+}
+
+function isReadOnlyCommand(command) {
+  const commands = simpleCommands(command);
+  return commands !== null && commands.every(readsOnly);
+}
+
+// `git config` forms that only print: a key with --get or --get-all (or alone), --list, and the
+// newer `git config get <key>` and `git config list`. Anything else — a value, edit, set, unset,
+// a section rename — is a change.
+const GIT_CONFIG_PRINT_FLAGS = new Set([
+  "--get",
+  "--get-all",
+  "--list",
+  "-l",
+  "--show-origin",
+  "--show-scope",
+  "--local",
+  "--worktree",
+  "--null",
+  "-z",
+  "--name-only",
+  "--includes",
+]);
+function readsGitConfig(args) {
+  if (!args.every((arg) => !arg.startsWith("-") || GIT_CONFIG_PRINT_FLAGS.has(arg))) return false;
+  const values = args.filter((arg) => !arg.startsWith("-"));
+  const isKey = (value) => /^[\w-]+(\.[^\s]+)?\.[\w-]+$/.test(value ?? "");
+  if (values[0] === "get") return values.length === 2 && isKey(values[1]);
+  if (values[0] === "list") return values.length === 1;
+  if (values.length === 0) return args.includes("--list") || args.includes("-l");
+  return values.length === 1 && isKey(values[0]);
+}
+
+// Configuration through the environment reaches every git command, hooks included: the
+// GIT_CONFIG_* variables, and HOME, XDG_CONFIG_HOME or any GIT_* variable that points git at other
+// configuration files or another repository.
+const GIT_CONFIG_ENVIRONMENT =
+  /\bGIT_CONFIG(_COUNT|_KEY_|_VALUE_|_PARAMETERS|_GLOBAL|_SYSTEM|_NOSYSTEM)?\b/;
+const GIT_FILES_ENVIRONMENT = /(^|[\s;&|(])(export\s+)?(HOME|XDG_CONFIG_HOME|GIT_[A-Z_]+)=/;
+const GIT_WORD = /(^|[\s/])git(\s|$)/;
+// `config` as a word, git's `-c <name>=<value>` (not python's or sh's `-c <code>`), and the
+// options that point git at other configuration or programs.
+const CONFIG_WORD = /(^|\s)(config(\s|$)|-c\s*[^\s=]+=|--config-env|--exec-path)/;
+
+// Whether a command could change Git configuration, for good or for one command. It fails
+// closed: git run by another program (a wrapper such as `sh -c` or `stdbuf`) together with a
+// configuration word counts as a change, and so does a command the parser cannot read in which
+// git is not plainly invoked with its subcommand first.
+function changesGitConfig(command) {
+  if (GIT_CONFIG_ENVIRONMENT.test(command)) return true;
+  if (GIT_FILES_ENVIRONMENT.test(command) && /\bgit\b/.test(command)) return true;
+  const commands = simpleCommands(command);
+  if (commands === null) return unreadableGitChange(command);
+  return commands.some((words) => {
+    const git = gitInvocation(words);
+    if (git) return git.unsafe || (git.sub === "config" && !readsGitConfig(git.args));
+    const text = words.join(" ");
+    return GIT_WORD.test(text) && CONFIG_WORD.test(text);
+  });
+}
+
+// For a command the parser cannot read: every git invocation must start plainly — nothing in
+// front of git, only safe or place options, and a subcommand other than config — before the
+// first word the shell could expand. Expansions after the subcommand cannot set configuration.
+const GIT_AT_COMMAND =
+  /(^|[;&|(\n]\s*)(?:(?:do|then|else|elif|!)\s+)?([^\s;&|=]+=[^\s;&|]*\s+|env\s+)*([^\s;&|]*\/)?git(\s+|$)([^;&|\n]*)/g;
+function unreadableGitChange(command) {
+  // Quotes are dropped, not honoured: git and a configuration word count wherever they appear,
+  // a commit message included (write such a message to a file and use git commit -F).
+  const plain = command.replace(/['"\\]/g, "");
+  for (const match of plain.matchAll(GIT_AT_COMMAND)) {
+    if (match[2]) return true;
+    const words = match[5].split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < words.length && words[i].startsWith("-")) {
+      const [option, value] = words[i].split(/=(.*)/);
+      if (/[$`{}*?[\]()]/.test(words[i])) return true;
+      if (GIT_PLACE_OPTIONS.has(option)) i += value === undefined ? 2 : 1;
+      else if (GIT_SAFE_OPTIONS.has(words[i])) i += 1;
+      else return true;
+    }
+    // A closing parenthesis only ends a command substitution such as $(git ls-files).
+    const sub = words[i]?.replace(/\)+$/, "");
+    if (!sub || /[$`{}*?[\]()]/.test(sub) || sub === "config") return true;
+  }
+  // Anywhere else — after =, inside $( ), behind a wrapper — git with a configuration word counts.
+  return GIT_WORD.test(plain) && CONFIG_WORD.test(plain);
+}
+
+// Leaving .context out of a search (`--exclude-dir=.context`, `-path ./.context -prune`,
+// `':!.context'`) does not read it; every other mention still counts.
+const CONTEXT_EXCLUSIONS = [
+  /--exclude-dir=(['"]?)\.context\1(?=\s|$)/g,
+  /-path\s+(['"]?)\.\/\.context\1\s+-prune(?=\s|$)/g,
+  /(['"]):(?:!|\(exclude\))\.context\1(?=\s|$)/g,
+];
+function mentionsContext(command) {
+  const rest = CONTEXT_EXCLUSIONS.reduce((text, pattern) => text.replace(pattern, " "), command);
+  return CONTEXT_IN_COMMAND.test(rest);
+}
 
 // The one place in the main checkout's .claude/ that agents write to: their own memory, shared
 // by every worktree and ignored by git.
@@ -196,8 +424,10 @@ function branchNamedBy(ref, currentBranch) {
 
 // What the phase loop never needs: changing the repository's settings, secrets or credentials.
 const UNATTENDED_FORBIDDEN = new RegExp(
-  `${AT_COMMAND}(gh\\s+(api|repo|secret|auth|label|workflow|ruleset|variable)\\b|git\\s+config\\b)`,
+  `${AT_COMMAND}gh\\s+(api|repo|secret|auth|label|workflow|ruleset|variable)\\b`,
 );
+const SETTINGS_REASON =
+  "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md). To read a release of another repository, use `gh release view --repo <owner>/<repo>`; to read a Git setting, `git config --get <key>`; for a commit message that mentions configuration, write it to a file in .tmp/ and use `git commit -F <file>`.";
 
 // The command may run somewhere other than the directory the hook looked at.
 const MOVES =
@@ -242,7 +472,9 @@ function checkPush(fullCommand, { currentBranch }) {
     return deny("Push one named branch, not all of them (docs/git-workflow.md).");
   }
   if (/\s(--force(-with-lease)?|-f)(\s|=|$)/.test(command) || /[\s:]\+[\w/.-]+/.test(command)) {
-    return deny("Force-pushing is not allowed (docs/git-workflow.md).");
+    return deny(
+      "Force-pushing is not allowed (docs/git-workflow.md). To bring a pushed branch up to date, run `git merge origin/phase/<phase>` instead of rebasing, then push normally.",
+    );
   }
   const masterRefused = deny(
     "Nobody but the owner changes master; push your issue or phase branch instead.",
@@ -352,19 +584,19 @@ export function evaluateToolCall({
     const command = String(toolInput?.command ?? "");
     const environment = checkShellEnvironment(command, { mainRoot, cwd, worktreeRoot, realpath });
     if (environment) return environment;
-    if (unattended && HARNESS_IN_COMMAND.test(command)) {
-      return deny(
-        "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).",
-      );
+    if (
+      unattended &&
+      (GIT_INTERNALS_IN_COMMAND.test(command) ||
+        (SETTINGS_IN_COMMAND.test(command) && !isReadOnlyCommand(command)))
+    ) {
+      return deny(HARNESS_REASON);
     }
-    if (unattended && UNATTENDED_FORBIDDEN.test(command)) {
-      return deny(
-        "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md).",
-      );
+    if (unattended && (UNATTENDED_FORBIDDEN.test(command) || changesGitConfig(command))) {
+      return deny(SETTINGS_REASON);
     }
-    if (restricted && CONTEXT_IN_COMMAND.test(command)) {
+    if (restricted && mentionsContext(command)) {
       return deny(
-        ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).",
+        ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md). To search the checkout, leave it out with --exclude-dir=.context (grep) or -path ./.context -prune (find).",
       );
     }
     return (
