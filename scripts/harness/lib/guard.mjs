@@ -77,9 +77,14 @@ function checkSearchPattern({ toolName, toolInput, restricted, cwd, mainRoot, wo
 const HARNESS_DIRS = [".claude", ".github", path.join("scripts", "harness")];
 const HARNESS_IN_COMMAND = /(^|[\s'"=/<>|;&(])(\.claude\/settings|\.git\/(hooks|config)\b)/;
 
+// The one place in the main checkout's .claude/ that agents write to: their own memory, shared
+// by every worktree and ignored by git.
+const AGENT_MEMORY_DIR = path.join(".claude", "agent-memory-local");
+
 function isHarnessFile(filePath, mainRoot) {
   if (filePath.split(path.sep).includes(".git")) return true;
   if (isInside(filePath, path.join(mainRoot, ".worktrees"))) return false;
+  if (isInside(filePath, path.join(mainRoot, AGENT_MEMORY_DIR))) return false;
   return HARNESS_DIRS.some((dir) => isInside(filePath, path.join(mainRoot, dir)));
 }
 
