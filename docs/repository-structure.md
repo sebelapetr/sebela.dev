@@ -45,7 +45,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── .claude/
 │   ├── skills/              grill-me, to-prd, to-issues, later content skills
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
-│   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward
+│   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI [1]
 ├── compose.yaml             base stack: postgres, later api, web, mcp [1]

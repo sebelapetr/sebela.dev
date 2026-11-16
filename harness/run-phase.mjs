@@ -3,7 +3,7 @@
 // Design: .plan/00-overview/harness-prd.md. Decisions: ./lib/loop.mjs.
 //
 //   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10] [--steward-minutes 15]
-//                                       [--max-failures 3] [--max-iterations 50]
+//                                       [--max-failures 3] [--max-iterations 50] [--no-notify]
 //
 // It holds no state of its own: what is done is read from GitHub by the orchestrator each time,
 // so the loop can be stopped (Ctrl+C) and started again at any point.
@@ -19,6 +19,10 @@ import {
   classifyRun,
   decideNext,
 } from "./lib/loop.mjs";
+import { newProblem, notify } from "./lib/notify.mjs";
+import { formatCost, iterationStats } from "./lib/phase-report.mjs";
+import { writePhaseReport } from "./phase-report.mjs";
+import { checkReadiness } from "./preflight.mjs";
 import { checkOnce, failedIssues } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
@@ -29,6 +33,7 @@ function parseArgs(argv) {
     maxFailures: 3,
     maxIterations: 50,
     stewardMinutes: 15,
+    notify: true,
     _: [],
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -38,6 +43,7 @@ function parseArgs(argv) {
     else if (arg === "--max-failures") options.maxFailures = Number(argv[++i]);
     else if (arg === "--max-iterations") options.maxIterations = Number(argv[++i]);
     else if (arg === "--steward-minutes") options.stewardMinutes = Number(argv[++i]);
+    else if (arg === "--no-notify") options.notify = false;
     else options._.push(arg);
   }
   options.phase = options._[0];
@@ -46,6 +52,15 @@ function parseArgs(argv) {
 
 function log(message) {
   console.log(`[${new Date().toISOString()}] ${message}`);
+}
+
+const YELLOW = "\x1b[33m";
+const RED = "\x1b[31m";
+const RESET = "\x1b[0m";
+
+// A Windows notification for what the owner should see without watching the console.
+function alert(options, lines) {
+  if (options.notify) notify({ title: `sebela.dev · ${options.phase}`, lines });
 }
 
 function prompt({ phase, base }) {
@@ -165,7 +180,7 @@ function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardStat
     if (running) return;
     running = true;
     try {
-      await checkOnce({
+      const verdict = await checkOnce({
         mainRoot,
         phase,
         sessionId,
@@ -174,6 +189,10 @@ function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardStat
         state: stewardState,
         logDir,
       });
+      if (newProblem(stewardState.lastStatus, verdict.status)) {
+        alert(options, ["[steward] problem", verdict.findings.join("; ")]);
+      }
+      stewardState.lastStatus = verdict.status;
     } catch (error) {
       log(`steward check failed: ${error.message}`);
     } finally {
@@ -188,7 +207,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.phase) {
     console.error(
-      "usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N]",
+      "usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N] [--no-notify]",
     );
     process.exit(64);
   }
@@ -205,7 +224,20 @@ async function main() {
   // The steward compares with what had already failed when the loop started.
   const stewardState = { failedAtStart: failedIssues(options.phase) };
   let consecutiveFailures = 0;
+  let waiting = false;
   for (let iteration = 1; iteration <= options.maxIterations && !interrupted; iteration += 1) {
+    // Without Docker, Postgres or gh every agent would fail or improvise; stop and say what to do.
+    const readiness = checkReadiness({ mainRoot, base: options.base });
+    if (iteration === 1) {
+      for (const warning of readiness.warnings) log(`${YELLOW}warning: ${warning}${RESET}`);
+    }
+    if (readiness.blocking.length > 0) {
+      for (const problem of readiness.blocking) log(`${RED}not ready: ${problem}${RESET}`);
+      log("fix that and run the same command again to continue.");
+      alert(options, ["the loop cannot start an iteration", readiness.blocking.join("; ")]);
+      process.exitCode = 1;
+      return;
+    }
     log(`iteration ${iteration}: starting the orchestrator for ${options.phase}`);
     const sessionId = randomUUID();
     const stopSteward = startSteward({
@@ -242,10 +274,12 @@ async function main() {
       JSON.stringify({ iteration, run, decision, raw }, null, 2),
     );
 
+    const cost = formatCost(iterationStats({ iteration, run, raw }));
+    const spent = cost ? ` (${cost})` : "";
     const what =
       run.kind === "report"
-        ? `${run.outcome}${run.issue ? ` #${run.issue}` : ""}: ${run.summary}`
-        : run.kind;
+        ? `${run.outcome}${run.issue ? ` #${run.issue}` : ""}${spent}: ${run.summary}`
+        : `${run.kind}${spent}`;
     log(`iteration ${iteration}: ${what} -> ${decision.next}`);
     if (run.kind === "crash") log(`  ${run.detail}`);
 
@@ -256,21 +290,35 @@ async function main() {
 
     if (decision.next === "done") {
       log("phase done: the phase pull request is open for review.");
+      const report = await writePhaseReport({ mainRoot, phase: options.phase }).catch((error) =>
+        log(`the phase report failed: ${error.message}`),
+      );
+      if (report) log(`phase report: ${report}`);
+      alert(options, ["phase done", "the phase pull request is open for review"]);
       return;
     }
     if (decision.next === "stop") {
       log(`stopping after ${consecutiveFailures} failed runs in a row. See ${logDir}.`);
+      alert(options, ["the loop stopped", `${consecutiveFailures} failed runs in a row`]);
       process.exitCode = 1;
       return;
     }
     if (decision.next === "wait") {
       log(`usage limit reached; waiting ${options.waitMinutes} minutes.`);
+      if (!waiting)
+        alert(options, ["usage limit reached", "the loop waits and retries on its own"]);
+      waiting = true;
       iteration -= 1;
       await sleep(options.waitMinutes * 60_000);
+    } else {
+      waiting = false;
     }
   }
   if (interrupted) log("interrupted; run the same command again to continue.");
-  else log(`reached ${options.maxIterations} iterations; run again to continue.`);
+  else {
+    log(`reached ${options.maxIterations} iterations; run again to continue.`);
+    alert(options, ["the loop stopped", `reached ${options.maxIterations} iterations`]);
+  }
 }
 
 main();
