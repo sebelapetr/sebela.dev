@@ -93,3 +93,10 @@ export {
   OrganizationUpdateSchema,
 } from "./organizations.js";
 export type { Organization, OrganizationCreate, OrganizationUpdate } from "./organizations.js";
+export {
+  ExperienceCreateSchema,
+  ExperienceListSchema,
+  ExperienceSchema,
+  ExperienceUpdateSchema,
+  experienceKinds,
+} from "./experiences.js";
