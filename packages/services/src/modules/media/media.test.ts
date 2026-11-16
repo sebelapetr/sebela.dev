@@ -491,20 +491,11 @@ describe("media service", () => {
       return null;
     };
 
-    it("accepts a file an upload would accept, storing and recording nothing", async () => {
+    it("accepts a file an upload would accept and returns its type, storing and recording nothing", async () => {
+      expect(checkMediaUpload(png(), limits)).toBe("image/png");
       expect(
-        thrown(() => {
-          checkMediaUpload(png(), limits);
-        }),
-      ).toBeNull();
-      expect(
-        thrown(() => {
-          checkMediaUpload(
-            { bytes: samplePdf(), filename: "cv.pdf", declaredType: "application/pdf" },
-            limits,
-          );
-        }),
-      ).toBeNull();
+        checkMediaUpload({ bytes: samplePdf(), filename: "cv.pdf", declaredType: "" }, limits),
+      ).toBe("application/pdf");
       expect(await filesBelow(folder)).toEqual([]);
       await expect(media.listMedia()).resolves.toEqual([]);
     });
