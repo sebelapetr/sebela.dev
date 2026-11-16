@@ -72,6 +72,7 @@ Details: `docs/git-workflow.md`.
 | Install dependencies (Node.js 26, pnpm 12.21.0); also enables the Git hooks               | `pnpm install --frozen-lockfile`                                                                       |
 | Enable the Git hooks in a checkout installed before                                       | `pnpm run prepare`                                                                                     |
 | Lint, typecheck, test, build                                                              | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`                                               |
+| Load the fictional demo seed (or a seed folder) into a migrated database                  | `pnpm --silent --filter @sebela/api seed [folder]` (`packages/db/seed/README.md`)                      |
 | Start the shared Postgres (owner, main checkout, `.env` created from `.env.example`)      | `docker compose up --detach --wait`                                                                    |
 | Create a worktree for a branch, with its own database and role                            | `node harness/worktree.mjs create <branch> --base <ref>` (prints its path; needs the running Postgres) |
 | Remove it, drop its databases and role and free its slot                                  | `node harness/worktree.mjs remove <branch> [--delete-branch]`                                          |
