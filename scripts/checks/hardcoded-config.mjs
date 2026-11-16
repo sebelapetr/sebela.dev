@@ -36,8 +36,10 @@ const MESSAGES = {
 // the shell: API_PORT, PGPORT, port, api_port, apiPort; DATABASE_NAME, POSTGRES_DB, dbName.
 const PORT_NAME = String.raw`(?:\b(?:[A-Z0-9_]*_|PG)?PORT|\b(?:[a-z0-9_]*_)?port|\b[A-Za-z][A-Za-z0-9]*Port|\bPort)\b`;
 const DATABASE_NAME = String.raw`(?:\b(?:[A-Z0-9_]*_|PG)?(?:DATABASE|DB)(?:_NAME)?|\b(?:[a-z0-9_]*_)?(?:database|db)(?:_name)?|\b[A-Za-z][A-Za-z0-9]*(?:Database|Db)(?:Name)?|\b(?:database|db)Name)\b`;
-// In code: `=`, `:`, `??=` and `||=`, but not a comparison or an arrow. In the shell: only `=`.
-const ASSIGNED = String.raw`["'\x60]?\s*(?::|=|\?\?=|\|\|=)(?![=>])\s*`;
+// In code: `=` after an optional type annotation (`port: number =`, `adminPort?: number | undefined
+// =`), `:`, `??=` and `||=`, but not a comparison or an arrow. In the shell: only `=`.
+const TYPE_ANNOTATION = String.raw`\??\s*:\s*[\w.<>[\]|&\s]+?\s*`;
+const ASSIGNED = String.raw`["'\x60]?\s*(?:(?:${TYPE_ANNOTATION})?=|:|\?\?=|\|\|=)(?![=>])\s*`;
 const QUOTE = String.raw`["'\x60]`;
 const NAME_LITERAL = String.raw`[A-Za-z_][\w.-]*`;
 // Settings whose fallback would be a hidden endpoint or database.
@@ -90,7 +92,7 @@ const RULES = {
     ...COMMON_RULES,
     rule(
       "environment-default",
-      String.raw`\bos\.(?:environ\.get|getenv)\(\s*["'](?<name>\w+)["']\s*,\s*(?<value>["'][^"']+["']|\d+)`,
+      String.raw`\bos\.(?:environ\.(?:get|setdefault)|getenv)\(\s*["'](?<name>\w+)["']\s*,\s*(?:default\s*=\s*)?(?<value>["'][^"']+["']|\d+)`,
       { variable: true },
     ),
   ],
@@ -129,23 +131,33 @@ function languageOf(file) {
   return null;
 }
 
-// Full-line comments are documentation. A comment after code on the same line is still checked.
-function documentationLines(lines, language) {
-  const skipped = new Set();
+// A comment that starts a line is documentation and is blanked out, keeping every column in place.
+// Code after a block comment that closes on the line is checked, and so is a comment after code.
+function withoutDocumentation(lines, language) {
+  const blank = (text) => text.replace(/[^\s]/g, " ");
   let inBlock = false;
-  lines.forEach((line, index) => {
-    const text = line.trim();
-    if (language === "js") {
-      if (inBlock) {
-        skipped.add(index);
-        inBlock = !text.includes("*/");
-      } else if (text.startsWith("/*")) {
-        skipped.add(index);
-        inBlock = !text.includes("*/", 2);
-      } else if (text.startsWith("//")) skipped.add(index);
-    } else if (text.startsWith("#")) skipped.add(index);
+  return lines.map((line) => {
+    if (language !== "js") return line.trim().startsWith("#") ? blank(line) : line;
+    let code = line;
+    let from = 0;
+    for (;;) {
+      if (!inBlock) {
+        const start = code.slice(from).search(/\S/);
+        if (start === -1) return code;
+        const at = from + start;
+        if (code.startsWith("//", at)) return code.slice(0, at) + blank(code.slice(at));
+        if (!code.startsWith("/*", at)) return code;
+        inBlock = true;
+        from = at + 2;
+        code = code.slice(0, at) + "  " + code.slice(from);
+      }
+      const end = code.indexOf("*/", from);
+      if (end === -1) return code.slice(0, from) + blank(code.slice(from));
+      inBlock = false;
+      code = code.slice(0, from) + blank(code.slice(from, end + 2)) + code.slice(end + 2);
+      from = end + 2;
+    }
   });
-  return skipped;
 }
 
 function findingsIn(text, language) {
@@ -167,16 +179,13 @@ function findingsIn(text, language) {
 }
 
 function checkSource(content, language) {
-  const lines = content.split("\n");
-  const skipped = documentationLines(lines, language);
+  const lines = withoutDocumentation(content.split("\n"), language);
   return lines.flatMap((line, index) =>
-    skipped.has(index)
-      ? []
-      : findingsIn(line, language).map(({ rule, offset }) => ({
-          rule,
-          line: index + 1,
-          column: offset + 1,
-        })),
+    findingsIn(line, language).map(({ rule, offset }) => ({
+      rule,
+      line: index + 1,
+      column: offset + 1,
+    })),
   );
 }
 
@@ -205,9 +214,10 @@ function checkManifest(content) {
   });
 }
 
+// Returns null for a file that is not executable and therefore not read.
 function checkFile(file) {
   const language = languageOf(file);
-  if (!language) return [];
+  if (!language) return null;
   const content = fs.readFileSync(file, "utf8");
   return language === "package" ? checkManifest(content) : checkSource(content, language);
 }
@@ -259,9 +269,13 @@ function main(args, cwd) {
     ? { base: cwd, files: args.flatMap((arg) => walk(path.resolve(cwd, arg))) }
     : repositoryFiles(cwd);
   let count = 0;
+  let checked = 0;
   for (const file of files) {
+    const findings = checkFile(file);
+    if (!findings) continue;
+    checked += 1;
     const shown = path.relative(base, file).split(path.sep).join("/");
-    for (const { rule: id, line, column } of checkFile(file)) {
+    for (const { rule: id, line, column } of findings) {
       console.error(`${shown}:${line}:${column} ${id}: ${MESSAGES[id]}`);
       count += 1;
     }
@@ -272,7 +286,7 @@ function main(args, cwd) {
     );
     return 1;
   }
-  console.log(`No hard-coded ports, local hosts or database names in ${files.length} file(s).`);
+  console.log(`No hard-coded ports, local hosts or database names in ${checked} file(s).`);
   return 0;
 }
 

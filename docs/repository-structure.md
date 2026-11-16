@@ -228,21 +228,23 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 
 This covers application code, tests and scripts alike, including the harness and the check itself. Given paths, it checks only those files and directories; its tests use this for the fixtures.
 
-**Findings.** Each is reported as `file:line:column rule: message`, pointing at the hard-coded value. Any finding makes the command exit with 1; a check that cannot run (for example outside a Git repository) exits with 2.
+**Findings.** Each is reported as `file:line:column rule: message`, pointing at the hard-coded value. Any finding makes the command exit with 1; a check that cannot run (for example outside a Git repository) exits with 2. A clean run names the number of executable files it read.
+
+"Assigned" below means `=` (also after a type annotation, such as `port: number =` or `WORKER_PORT: int =`, and for a parameter default), `:` in an object literal, `??=` and `||=`; in the shell only `=`.
 
 | Rule | What it finds |
 | --- | --- |
 | `port` | A port-named variable or key (`API_PORT`, `PGPORT`, `port`, `api_port`, `apiPort`) assigned a number of two to five digits; an explicit port in a URL (`scheme://host:<number>`); `.listen(<number>)`; `--port <number>` and `-p <number>`. Port `0`, "any free port", is allowed. |
 | `local-host` | `localhost`, `127.x.x.x`, `0.0.0.0` and a quoted or bracketed `::1`. |
 | `database-name` | A database-named variable or key (`DATABASE_NAME`, `POSTGRES_DB`, `PGDATABASE`, `database`, `dbName`) assigned a string literal; the database of a connection URL (`postgres://…/<name>`); `CREATE`, `DROP` or `ALTER DATABASE <name>`; in shell commands also `createdb` and `dropdb <name>` and `psql`, `pg_dump` or `pg_restore` with `-d <name>` or `--dbname`. |
-| `environment-default` | A port, host, database, URL or DSN variable read from the environment with a literal fallback: `process.env.API_PORT ?? …`, `env["API_URL"] \|\| …`, `os.getenv("API_HOST", …)`, `${WEB_PORT:-…}`. The value belongs in `.env.example`; the code fails when the variable is not set. |
+| `environment-default` | A port, host, database, URL or DSN variable read from the environment with a literal fallback: `process.env.API_PORT ?? …`, `env["API_URL"] \|\| …`, `os.getenv("API_HOST", …)` (also with `default=`), `os.environ.get(…, …)`, `os.environ.setdefault("DB_HOST", …)`, `${WEB_PORT:-…}`. The value belongs in `.env.example`; the code fails when the variable is not set. |
 
 A value built from the environment passes: `Number(process.env.API_PORT)`, `` `http://${host}:${port}` ``, `os.environ["DATABASE_URL"]`, `createdb "$DATABASE_NAME"`, `next dev --port $WEB_PORT`.
 
 **What is not executable configuration.** These narrow rules are the only exceptions; there is no inline suppression and no excluded runtime or harness directory.
 
 1. Documentation and declarations are not read: Markdown, HTML, YAML (Compose files, workflows), JSON other than the `scripts` of a `package.json`, `.env.example` and Dockerfiles.
-2. A full-line comment is documentation: a line starting with `//` or inside a `/* … */` block that starts a line in JavaScript and TypeScript, a line starting with `#` in Python and shell. A comment after code on the same line is checked.
+2. A comment that starts a line is documentation: in JavaScript and TypeScript a `//` comment and a `/* … */` block that starts a line, up to where it closes; in Python and shell a line starting with `#`. Code after a block comment that closes on the same line is checked, and so is a comment after code.
 3. The deliberate negative fixtures of the check, exactly the folder `scripts/checks/fixtures/hardcoded-config/`, are left out of the repository scan. Its tests check them explicitly: `rejected/` must fail at the listed locations, `accepted/` must pass.
 4. Files that Git ignores (`node_modules/`, `.worktrees/`, build output, environment files) are not part of the repository.
 
