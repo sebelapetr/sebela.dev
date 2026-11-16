@@ -1,7 +1,7 @@
 ---
 name: steward
 model: haiku
-effort: low
+effort: medium
 description: "Watches an unattended phase-loop run for the owner. Started by harness/steward.mjs with facts the harness gathered and the latest transcript of the working agent; returns whether the run is healthy. Has no tools and changes nothing."
 ---
 
