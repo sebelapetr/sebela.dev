@@ -113,4 +113,4 @@ All jobs use the Node.js version from `.nvmrc`; pnpm comes from `packageManager`
 
 **CI checks the head of the branch, not each commit.** A test-first issue branch has a commit with a failing test before the implementation; only the tip of the branch must pass.
 
-**Evidence that a failure fails the pipeline** is part of the issue that set the pipeline up (#20): a deliberately broken commit failed the checks of its pull request, and the corrected commit passed. No model evals, release pipeline or deployment runs in CI in phase 1.
+**Evidence that a failure fails the pipeline** is recorded on the pull request that set the pipeline up (#75, issue #20): the run of a deliberately broken commit and the run of the commit that reverted it are linked there. No model evals, release pipeline or deployment runs in CI in phase 1.

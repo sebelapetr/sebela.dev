@@ -62,8 +62,9 @@ function requireCommit(cwd, ref) {
     git(cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   } catch {
     throw new Error(
-      `The commit ${ref} is not in this checkout; check out the full history ` +
-        "(actions/checkout with fetch-depth: 0).",
+      `The commit ${ref} is not in this checkout. Check out the full history ` +
+        "(actions/checkout with fetch-depth: 0); if it is, the push rewrote the branch and " +
+        `${ref} no longer exists on it, which a shared branch never allows (no force-push).`,
     );
   }
 }
