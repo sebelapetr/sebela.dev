@@ -45,6 +45,9 @@ jobs:
   # and build of the packages the change affects. The comparison base is the pull request's base or
   # the commit before the push; full history makes it resolvable. When Turborepo cannot resolve it
   # (a new branch, a rewritten history) it treats every package as affected.
+  # The backend integration tests need a real Postgres: the `postgres` service of compose.yaml, with
+  # the documented settings of .env.example and a password that exists only in this job. Each test
+  # file creates and drops its own temporary database in it.
   quality:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
@@ -52,6 +55,8 @@ jobs:
       TURBO_TELEMETRY_DISABLED: "1"
       TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
       TURBO_SCM_HEAD: HEAD
+      POSTGRES_PASSWORD: ci-only-disposable-password
+      DATABASE_PASSWORD: ci-only-disposable-password
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,6 +68,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Postgres for the integration tests
+        run: docker compose --env-file .env.example up --detach --wait
       - name: Affected packages and why
         run: pnpm exec turbo query affected --packages
       - name: Root checks (root lint, hard-coded configuration, harness and check tests)
