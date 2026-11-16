@@ -6,7 +6,7 @@ import { type Executor, now, WriteRefused } from "./relations.js";
 import { media } from "./schema.js";
 import type { MediaPersistence, MediaReferenceFailure } from "./types.js";
 
-const columns = {
+export const mediaColumns = {
   id: media.id,
   key: media.key,
   mediaType: media.mediaType,
@@ -82,18 +82,18 @@ function isMediaReferenceFailure(failure: unknown): failure is MediaReferenceFai
 export function createMediaPersistence(db: NodePgDatabase): MediaPersistence {
   return {
     listMedia() {
-      return db.select(columns).from(media).orderBy(desc(media.createdAt), desc(media.id));
+      return db.select(mediaColumns).from(media).orderBy(desc(media.createdAt), desc(media.id));
     },
     async findMedia(id) {
-      const [row] = await db.select(columns).from(media).where(eq(media.id, id));
+      const [row] = await db.select(mediaColumns).from(media).where(eq(media.id, id));
       return row ?? null;
     },
     async findMediaByKey(key) {
-      const [row] = await db.select(columns).from(media).where(eq(media.key, key));
+      const [row] = await db.select(mediaColumns).from(media).where(eq(media.key, key));
       return row ?? null;
     },
     async createMedia(fields) {
-      const [row] = await db.insert(media).values(fields).returning(columns);
+      const [row] = await db.insert(media).values(fields).returning(mediaColumns);
       if (!row) throw new Error("The recorded media is missing.");
       return row;
     },
@@ -102,12 +102,12 @@ export function createMediaPersistence(db: NodePgDatabase): MediaPersistence {
         .update(media)
         .set({ altText, updatedAt: now })
         .where(eq(media.id, id))
-        .returning(columns);
+        .returning(mediaColumns);
       return row ?? null;
     },
     async deleteMedia(id) {
       try {
-        const [row] = await db.delete(media).where(eq(media.id, id)).returning(columns);
+        const [row] = await db.delete(media).where(eq(media.id, id)).returning(mediaColumns);
         return row ? { ok: true, media: row } : { ok: false, reason: "not_found" };
       } catch (error) {
         if (isStillReferenced(error)) return { ok: false, reason: "referenced" };

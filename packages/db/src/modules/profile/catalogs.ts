@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
+import type { Executor } from "./relations.js";
 import { technologies, topics } from "./schema.js";
 import type { CatalogPersistence } from "./types.js";
 
@@ -31,6 +32,21 @@ export const topicColumns = {
 /** `clock_timestamp()`, not `now()`: it advances also within one transaction. */
 const now = sql`clock_timestamp()`;
 
+/** Every technology in catalog order: tier, group, position, then slug. */
+export function loadTechnologies(db: Executor) {
+  // Enum columns sort in declaration order: primary, secondary; core, ai_engineering_focus.
+  // A secondary technology has no group, and nulls sort last, after both groups.
+  return db
+    .select(technologyColumns)
+    .from(technologies)
+    .orderBy(
+      asc(technologies.tier),
+      asc(technologies.group),
+      asc(technologies.position),
+      asc(technologies.slug),
+    );
+}
+
 /**
  * The ordered technology and topic catalogs. Slugs are unique in the database, so concurrent
  * creates of one slug leave exactly one row, and the tier/group rule is a check constraint.
@@ -38,17 +54,7 @@ const now = sql`clock_timestamp()`;
 export function createCatalogPersistence(db: NodePgDatabase): CatalogPersistence {
   return {
     listTechnologies() {
-      // Enum columns sort in declaration order: primary, secondary; core, ai_engineering_focus.
-      // A secondary technology has no group, and nulls sort last, after both groups.
-      return db
-        .select(technologyColumns)
-        .from(technologies)
-        .orderBy(
-          asc(technologies.tier),
-          asc(technologies.group),
-          asc(technologies.position),
-          asc(technologies.slug),
-        );
+      return loadTechnologies(db);
     },
     async findTechnology(slug) {
       const [row] = await db

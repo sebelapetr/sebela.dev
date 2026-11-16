@@ -47,7 +47,7 @@ function byExploration<T>(rows: { explorationId: string; target: T }[]): Map<str
 }
 
 /** The explorations by position, then slug, with their technologies and topics in link order. */
-async function loadExplorations(
+export async function loadExplorations(
   db: Executor,
   where: SQL | undefined,
 ): Promise<ExplorationRecord[]> {

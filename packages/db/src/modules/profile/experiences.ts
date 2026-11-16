@@ -47,7 +47,7 @@ const PERIOD_CHECK = "experiences_period_is_ordered";
  * The experiences with their organization, their technologies in link order, and their projects
  * and testimonials, each by position, then slug.
  */
-async function loadExperiences(
+export async function loadExperiences(
   db: Executor,
   where: ReturnType<typeof eq> | undefined,
 ): Promise<ExperienceRecord[]> {

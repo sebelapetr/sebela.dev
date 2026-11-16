@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { breaksCheck } from "./database-errors.js";
-import { now } from "./relations.js";
+import { type Executor, now } from "./relations.js";
 import { education } from "./schema.js";
 import type { EducationPersistence, EducationWriteFailure } from "./types.js";
 
@@ -19,6 +19,11 @@ const columns = {
   createdAt: education.createdAt,
   updatedAt: education.updatedAt,
 };
+
+/** Every education record, by position, then slug. */
+export function loadEducation(db: Executor) {
+  return db.select(columns).from(education).orderBy(asc(education.position), asc(education.slug));
+}
 
 /** Runs one write and turns a broken period check into its failure; other errors propagate. */
 async function refusable<Result>(write: () => Promise<Result>) {
@@ -43,10 +48,7 @@ async function refusable<Result>(write: () => Promise<Result>) {
 export function createEducationPersistence(db: NodePgDatabase): EducationPersistence {
   return {
     listEducation() {
-      return db
-        .select(columns)
-        .from(education)
-        .orderBy(asc(education.position), asc(education.slug));
+      return loadEducation(db);
     },
     async findEducation(slug) {
       const [row] = await db.select(columns).from(education).where(eq(education.slug, slug));
