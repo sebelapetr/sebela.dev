@@ -24,7 +24,8 @@ import { createModuleGraph, isModuleEntry, isToolingConfig, moduleOf } from "./m
  *   member; any other file of the workspace (the harness, root configuration) is a root file.
  * - A member imports another workspace member only by its package name `@sebela/<name>`, and only
  *   if its row in the dependency table allows it. Nothing imports an app. A member without a row
- *   imports no workspace package until its row is added here and in the documentation.
+ *   imports no workspace package until its row is added here and in the documentation. A few
+ *   packages are allowed in a member's test files only (`TEST_DEPENDENCIES`).
  * - Every `@sebela/*` specifier must name a declared entry point: a subpath listed in `exports` of
  *   the target's `package.json`, or only the package root when the target declares no `exports`
  *   or does not exist yet. Subpath patterns (`./x/*`) and `null` exclusions are honoured.
@@ -57,13 +58,24 @@ const DEPENDENCIES = new Map([
   ["apps/web", ["api-client", "contracts", "ui", "config"]],
   ["apps/mcp-admin", ["api-client", "contracts", "config"]],
   ["apps/llm-agent", []],
-  ["apps/api", ["services", "contracts", "api-client", "config"]],
+  ["apps/api", ["services", "contracts", "config"]],
   ["packages/services", ["db", "contracts", "memory", "config"]],
   ["packages/db", ["config"]],
   ["packages/contracts", ["config"]],
   ["packages/api-client", ["config"]],
   ["packages/config", []],
 ]);
+
+/**
+ * Packages a member may import only in its test files (`*.test.<ext>`), besides its row above:
+ * the API's consumer contract tests call the API through its generated client.
+ *
+ * @type {ReadonlyMap<string, readonly string[]>}
+ */
+const TEST_DEPENDENCIES = new Map([["apps/api", ["api-client"]]]);
+
+/** A test file: `<name>.test.<ext>`. */
+const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 
 /** @typedef {import("./import-resolution.js").Member} Member */
 /** @typedef {import("./import-resolution.js").Target} Target */
@@ -112,6 +124,8 @@ const importBoundaries = {
     },
     schema: [],
     messages: {
+      testOnlyPackage:
+        "'{{specifier}}' imports {{target}}, which {{importer}} may import only in its tests (*.test.<ext>). Outside them {{importer}} may import {{allowed}} (dependency table in docs/repository-structure.md).",
       forbiddenPackage:
         "'{{specifier}}' imports {{target}}, which {{importer}} may not import. {{importer}} may import {{allowed}} (dependency table in docs/repository-structure.md).",
       appImport:
@@ -152,6 +166,7 @@ const importBoundaries = {
       currentDirectory: program?.getCurrentDirectory(),
     };
     const importerIsTooling = isToolingConfig(file, root);
+    const importerIsTest = TEST_FILE.test(path.basename(file));
     /** @type {ReturnType<typeof createModuleGraph> | undefined} */
     let graph;
 
@@ -180,6 +195,15 @@ const importBoundaries = {
         return false;
       }
       if (!allowed.includes(target.name)) {
+        if (TEST_DEPENDENCIES.get(importer.dir)?.includes(target.name)) {
+          if (importerIsTest) return true;
+          context.report({
+            node,
+            messageId: "testOnlyPackage",
+            data: { ...data, importer: importer.dir, allowed: packageList(allowed) },
+          });
+          return false;
+        }
         context.report({
           node,
           messageId: "forbiddenPackage",

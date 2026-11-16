@@ -4,7 +4,7 @@ The Hono HTTP API, the only gateway to the data. Read the root `AGENTS.md` first
 
 ## What it is
 
-The trust boundary of the repository. It may import `@sebela/services`, `@sebela/contracts` and `@sebela/config` (dependency table in `docs/repository-structure.md`), never `@sebela/db`; `@sebela/api-client` only as a development dependency of its consumer contract tests. Database settings, persistence and test databases reach it through `@sebela/services`. Routes stay thin; domain rules live in services and SQL in db.
+The trust boundary of the repository. It may import `@sebela/services`, `@sebela/contracts` and `@sebela/config` (dependency table in `docs/repository-structure.md`), never `@sebela/db`; `@sebela/api-client` only in test files (`*.test.<ext>`), as a development dependency of its consumer contract tests; the import-boundaries rule rejects it anywhere else. Database settings, persistence and test databases reach it through `@sebela/services`. Routes stay thin; domain rules live in services and SQL in db.
 
 ## Commands
 

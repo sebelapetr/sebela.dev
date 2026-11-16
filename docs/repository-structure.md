@@ -195,18 +195,18 @@ Each backend app/package `AGENTS.md` must map actual module paths to public entr
 
 The API is the trust boundary: content writes and content authentication are enforced there. FastAPI separately authenticates internal generation and limits AI execution. The import rules exist to keep it that way.
 
-| Package or app                | May import                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP    |
-| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client |
-| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app       |
-| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers      |
-| `apps/api`                    | `services`, `contracts`, `config`; `api-client` only in its consumer contract tests                          |
-| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                        |
-| `packages/db`                 | nothing from this repository except `config`                                                                 |
-| `packages/contracts`          | nothing from this repository except `config`                                                                 |
-| `packages/api-client`         | nothing from this repository except `config`; generated from the API's OpenAPI document, never its source    |
-| `packages/config`             | nothing from this repository                                                                                 |
+| Package or app                | May import                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP            |
+| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client         |
+| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app               |
+| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers              |
+| `apps/api`                    | `services`, `contracts`, `config`; `api-client` only in test files (`*.test.<ext>`), for its consumer contract tests |
+| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                                |
+| `packages/db`                 | nothing from this repository except `config`                                                                         |
+| `packages/contracts`          | nothing from this repository except `config`                                                                         |
+| `packages/api-client`         | nothing from this repository except `config`; generated from the API's OpenAPI document, never its source            |
+| `packages/config`             | nothing from this repository                                                                                         |
 
 `packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and both Python apps and `packages/llm-agent` have no database access at all. A lint rule enforces this; do not disable it.
 
@@ -225,7 +225,7 @@ The API is the trust boundary: content writes and content authentication are enf
 
 **Limits.** The rule checks import syntax, not design. Information hiding, a cohesive interface, documented guarantees, and selected exports instead of a barrel of every internal file are left to the reviewer (see [code standards](code-standards.md#enforcement-and-review)). JavaScript files have no type information, so their `paths` aliases are resolved neither for their own imports nor in the cycle search. Specifiers computed at run time are invisible.
 
-Each diagnostic names the specifier and what is allowed instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A change to the table above changes the `DEPENDENCIES` map in the rule and its tests in the same pull request.
+Each diagnostic names the specifier and what is allowed instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A package allowed only in test files is listed in the rule's `TEST_DEPENDENCIES` map; elsewhere in the member it is rejected with a message saying so. A change to the table above changes the `DEPENDENCIES` and `TEST_DEPENDENCIES` maps in the rule and its tests in the same pull request.
 
 ## Ports and worktree isolation
 
