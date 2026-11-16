@@ -7,6 +7,7 @@ export type { Services, ServicesOptions } from "./services.js";
 export { readMediaConfig } from "./modules/media/index.js";
 export type {
   CleanupFailure,
+  EnsuredMedia,
   MediaConfig,
   MediaFile,
   MediaLimits,

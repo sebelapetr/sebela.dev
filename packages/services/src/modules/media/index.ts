@@ -38,6 +38,13 @@ export interface MediaUploadInput {
   readonly altText?: string | null | undefined;
 }
 
+/** Media `ensureMedia` reused or uploaded. */
+export interface EnsuredMedia {
+  readonly media: Media;
+  /** `true` when the file was stored and recorded by this call. */
+  readonly created: boolean;
+}
+
 /** A stored file with the type its content proved. */
 export interface MediaFile {
   readonly bytes: Uint8Array;
@@ -58,6 +65,13 @@ export interface MediaService {
    * refused file stores nothing; a failed metadata write removes the stored file again.
    */
   uploadMedia(input: MediaUploadInput): Promise<Media>;
+  /**
+   * The oldest recorded media with exactly the content of `input`, or else a new upload of it;
+   * `created` tells which. Reused media keeps its file and key; its alt text changes to a given
+   * one (`null` clears it) and is kept when `altText` is omitted. Refuses what `uploadMedia`
+   * refuses. Media recorded without a content digest is never reused.
+   */
+  ensureMedia(input: MediaUploadInput): Promise<EnsuredMedia>;
   /** Changes the alt text; the file itself cannot be replaced. */
   updateMedia(id: string, changes: MediaUpdate): Promise<Media>;
   /**
@@ -113,6 +127,14 @@ export function readMediaConfig(env: Environment, cwd: string = process.cwd()): 
   return { storage, limits: { maxBytes, maxImageDimension } };
 }
 
+/**
+ * Checks a file exactly as `uploadMedia` would, without storing or recording anything, so a caller
+ * can refuse a whole batch before its first upload. Throws the refusal `uploadMedia` would throw.
+ */
+export function checkMediaUpload(input: MediaUploadInput, limits: MediaLimits): void {
+  throw new Error(`Not implemented yet: ${input.filename} ${String(limits.maxBytes)}`);
+}
+
 export function createMediaService(
   persistence: MediaPersistence,
   options: MediaServiceOptions,
@@ -165,6 +187,10 @@ export function createMediaService(
         });
         throw error;
       }
+    },
+
+    ensureMedia(input) {
+      return Promise.reject(new Error(`Not implemented yet: ${input.filename}`));
     },
 
     async updateMedia(id, changes) {

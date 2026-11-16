@@ -44,6 +44,7 @@ const unconfiguredMedia: MediaService = {
   listMedia: unconfigured,
   getMedia: unconfigured,
   uploadMedia: unconfigured,
+  ensureMedia: unconfigured,
   updateMedia: unconfigured,
   deleteMedia: unconfigured,
   readMediaFile: unconfigured,

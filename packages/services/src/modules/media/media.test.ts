@@ -13,6 +13,7 @@ import { samplePdf, samplePng, sampleJpeg, sampleWebp } from "../../testing.js";
 import { createProfileService } from "../profile/index.js";
 import { openStorage, type OpenedStorage, type Storage } from "../storage/index.js";
 import {
+  checkMediaUpload,
   createMediaService,
   readMediaConfig,
   type CleanupFailure,
@@ -114,6 +115,13 @@ describe("media service", () => {
     createMediaService(over.profile, {
       storage: { storage, files: opened.files },
       limits,
+      onCleanupFailure: (failure) => failures.push(failure),
+    });
+
+  const serviceWithLimits = (given: MediaLimits) =>
+    createMediaService(persistence.profile, {
+      storage: opened,
+      limits: given,
       onCleanupFailure: (failure) => failures.push(failure),
     });
 
@@ -419,6 +427,114 @@ describe("media service", () => {
       await expect(serviceWith(cannotStore).uploadMedia(png())).rejects.toThrow(/unavailable/);
 
       await expect(media.listMedia()).resolves.toEqual([]);
+    });
+  });
+
+  describe("ensure", () => {
+    it("reuses recorded media with the same content and stores no new file", async () => {
+      const uploaded = await media.uploadMedia(png());
+
+      const ensured = await media.ensureMedia(png({ filename: "copy-of-office.png" }));
+
+      expect(ensured).toEqual({ media: uploaded, created: false });
+      expect(await filesBelow(folder)).toHaveLength(1);
+      await expect(media.listMedia()).resolves.toHaveLength(1);
+    });
+
+    it("changes the alt text of reused media to a given one and keeps it when omitted", async () => {
+      const uploaded = await media.uploadMedia(png());
+
+      const changed = await media.ensureMedia(png({ altText: "A changed fictional office." }));
+      expect(changed.media).toMatchObject({
+        id: uploaded.id,
+        altText: "A changed fictional office.",
+      });
+      const kept = await media.ensureMedia(png({ altText: undefined }));
+      expect(kept.media).toMatchObject({ id: uploaded.id, altText: "A changed fictional office." });
+      const cleared = await media.ensureMedia(png({ altText: null }));
+      expect(cleared).toMatchObject({ media: { id: uploaded.id, altText: null }, created: false });
+    });
+
+    it("uploads content that is not recorded yet", async () => {
+      const uploaded = await media.uploadMedia(png());
+
+      const ensured = await media.ensureMedia(
+        png({ bytes: samplePng({ width: 41, height: 30 }), altText: "Another office." }),
+      );
+
+      expect(ensured.created).toBe(true);
+      expect(ensured.media).toMatchObject({ width: 41, height: 30, altText: "Another office." });
+      expect(ensured.media.id).not.toBe(uploaded.id);
+      expect(MediaSchema.parse(ensured.media)).toEqual(ensured.media);
+      expect(await filesBelow(folder)).toHaveLength(2);
+    });
+
+    it("refuses content an upload would refuse and stores nothing", async () => {
+      const bytes = corrupted(samplePng({ width: 40, height: 30 }), 1);
+      const expected = await refusal(media.uploadMedia(png({ bytes })));
+
+      const error = await refusal(media.ensureMedia(png({ bytes })));
+
+      expect(error.code).toBe(expected.code);
+      expect(await filesBelow(folder)).toEqual([]);
+      await expect(media.listMedia()).resolves.toEqual([]);
+    });
+  });
+
+  describe("check", () => {
+    const thrown = (check: () => void) => {
+      try {
+        check();
+      } catch (error) {
+        return error;
+      }
+      return null;
+    };
+
+    it("accepts a file an upload would accept, storing and recording nothing", async () => {
+      expect(
+        thrown(() => {
+          checkMediaUpload(png(), limits);
+        }),
+      ).toBeNull();
+      expect(
+        thrown(() => {
+          checkMediaUpload(
+            { bytes: samplePdf(), filename: "cv.pdf", declaredType: "application/pdf" },
+            limits,
+          );
+        }),
+      ).toBeNull();
+      expect(await filesBelow(folder)).toEqual([]);
+      await expect(media.listMedia()).resolves.toEqual([]);
+    });
+
+    it.each<[string, MediaUploadInput, MediaLimits, DomainErrorCode]>([
+      ["a file over the size limit", png(), { ...limits, maxBytes: 10 }, "payload_too_large"],
+      [
+        "an image over the dimension limit",
+        png(),
+        { ...limits, maxImageDimension: 20 },
+        "validation_failed",
+      ],
+      [
+        "a file of an unsupported type",
+        png({
+          bytes: Buffer.from("plain fictional text"),
+          filename: "notes.txt",
+          declaredType: "",
+        }),
+        limits,
+        "unsupported_media_type",
+      ],
+    ])("refuses %s as an upload would", async (_name, input, given, code) => {
+      const error = thrown(() => {
+        checkMediaUpload(input, given);
+      });
+
+      expect(error).toBeInstanceOf(DomainError);
+      expect((error as DomainError).code).toBe(code);
+      expect((await refusal(serviceWithLimits(given).uploadMedia(input))).code).toBe(code);
     });
   });
 
