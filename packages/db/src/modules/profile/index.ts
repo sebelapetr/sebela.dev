@@ -180,7 +180,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createCaseStudyPersistence(db),
     ...createServicePersistence(db),
     ...createEducationPersistence(db),
-    ...createTestimonialPersistence(),
+    ...createTestimonialPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
