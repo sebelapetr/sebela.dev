@@ -11,6 +11,7 @@ import { DomainError } from "../../errors.js";
 import { toCaseStudy } from "./case-studies.js";
 import { toTechnology } from "./catalogs.js";
 import { definedChanges } from "./changes.js";
+import { mediaRefused } from "./media-references.js";
 import type { ProjectService } from "./types.js";
 
 const missing = (slug: string) => new DomainError("not_found", `There is no project "${slug}".`);
@@ -49,8 +50,9 @@ function refused(
       return invalid("technologies", "List each technology once.");
     case "invalid_period":
       return invalid("endedOn", "The end cannot be before the start.");
-    default:
-      return new DomainError("conflict", "Not implemented yet.");
+    case "unknown_media":
+    case "unsuitable_media":
+      return mediaRefused(failure);
   }
 }
 

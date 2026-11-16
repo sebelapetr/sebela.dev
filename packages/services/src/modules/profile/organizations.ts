@@ -3,6 +3,7 @@ import type { OrganizationFields, OrganizationRecord, ProfilePersistence } from 
 
 import { DomainError } from "../../errors.js";
 import { definedChanges } from "./changes.js";
+import { isMediaRefusal, mediaRefused } from "./media-references.js";
 import type { OrganizationService } from "./types.js";
 
 const missing = (slug: string) =>
@@ -34,6 +35,7 @@ export function createOrganizationService(persistence: ProfilePersistence): Orga
     async createOrganization(input) {
       const result = await persistence.createOrganization(input);
       if (!result.ok) {
+        if (isMediaRefusal(result)) throw mediaRefused(result);
         throw new DomainError("conflict", `An organization "${input.slug}" already exists.`);
       }
       return toOrganization(result.organization);
@@ -43,7 +45,7 @@ export function createOrganizationService(persistence: ProfilePersistence): Orga
         slug,
         definedChanges<OrganizationFields>(changes),
       );
-      if (!result.ok) throw missing(slug);
+      if (!result.ok) throw isMediaRefusal(result) ? mediaRefused(result) : missing(slug);
       return toOrganization(result.organization);
     },
     async deleteOrganization(slug) {

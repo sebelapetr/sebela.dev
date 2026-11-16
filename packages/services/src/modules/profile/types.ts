@@ -75,6 +75,8 @@ export interface CatalogService {
  * - `createOrganization`: `conflict` when the slug is taken, also when creates race.
  * - `updateOrganization`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
  *   advances `updatedAt`; `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` on `logoId` and writing nothing, a logo that
+ *   names no media or a PDF; `null` clears the logo.
  * - `deleteOrganization`: removes the organization; `not_found` for an unknown slug; `conflict`
  *   (and nothing deleted) while another record, such as an experience, still refers to it.
  */
@@ -129,8 +131,8 @@ export interface ExperienceService {
  *   list replaces every link in its order and an omitted one keeps them. `not_found` for an
  *   unknown slug.
  * - Create and update refuse, as `validation_failed` naming the field and writing nothing, an
- *   unknown `experience`, unknown or repeated `technologies` and an `endedOn` before the (stored
- *   or given) start.
+ *   unknown `experience`, unknown or repeated `technologies`, an `endedOn` before the (stored
+ *   or given) start and a `coverId` that names no media or a PDF; `null` clears the cover.
  * - Every project carries its case study, or `null` without one; it is written only through
  *   `CaseStudyService`.
  * - `deleteProject`: removes the project and its technology links, never its experience or

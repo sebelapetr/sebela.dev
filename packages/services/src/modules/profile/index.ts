@@ -9,6 +9,7 @@ import { definedChanges } from "./changes.js";
 import { createEducationService } from "./education.js";
 import { createExperienceService } from "./experiences.js";
 import { createExplorationService } from "./explorations.js";
+import { isMediaRefusal, mediaRefused } from "./media-references.js";
 import { createOrganizationService } from "./organizations.js";
 import { createProjectService } from "./projects.js";
 import { createServiceService } from "./services.js";
@@ -47,6 +48,9 @@ export type {
  * - `createPerson`: creates the person; `conflict` when one exists, also when creates race.
  * - `updatePerson`: changes only the given fields, keeps `id` and `createdAt` and advances
  *   `updatedAt`; `not_found` while there is no person.
+ * - Create and update refuse, as `validation_failed` naming the field and writing nothing, a
+ *   `photoId` that names no media or a PDF and a `cvPdfId` that names no media or an image; `null`
+ *   clears either.
  * - `deletePerson`: removes the person; `not_found` while there is none.
  *
  * It also includes the catalog operations of `CatalogService`, the organization operations of
@@ -104,12 +108,15 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     },
     async createPerson(input) {
       const result = await persistence.createPerson(input);
-      if (!result.ok) throw new DomainError("conflict", "The person already exists.");
+      if (!result.ok) {
+        if (isMediaRefusal(result)) throw mediaRefused(result);
+        throw new DomainError("conflict", "The person already exists.");
+      }
       return toPerson(result.person);
     },
     async updatePerson(changes) {
       const result = await persistence.updatePerson(definedChanges<PersonFields>(changes));
-      if (!result.ok) throw missing();
+      if (!result.ok) throw isMediaRefusal(result) ? mediaRefused(result) : missing();
       return toPerson(result.person);
     },
     async deletePerson() {
