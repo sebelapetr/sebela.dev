@@ -37,7 +37,8 @@ import type {
  *   disagreeing (for example only `tier: "secondary"` on a `core` technology) is
  *   `validation_failed`.
  * - `delete…`: removes the record; `not_found` for an unknown slug; deleting a technology that an
- *   experience links to is `conflict`, and nothing is deleted.
+ *   experience, a project or an exploration links to, or a topic that an exploration links to, is
+ *   `conflict`, and nothing is deleted.
  */
 export interface CatalogService {
   listTechnologies(): Promise<Technology[]>;
