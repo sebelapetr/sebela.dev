@@ -539,6 +539,57 @@ test("Git configuration cannot be changed around the parser", () => {
   assert.equal(bash('git commit -m "use git config for hooks"', loop), null);
 });
 
+test("Git configuration cannot be changed by quoting, wrappers, editors or other config files", () => {
+  for (const command of [
+    "g'i't config core.hooksPath /dev/null",
+    'g"it" config core.hooksPath /dev/null',
+    "stdbuf -o0 git config core.hooksPath /dev/null",
+    "busybox git config core.hooksPath x",
+    "git config edit",
+    "git config set core.hooksPath x",
+    "git config unset core.hooksPath",
+    "git --attr-source HEAD config core.hooksPath x",
+    "git --exec-path=/tmp/evil status",
+    "HOME=/tmp/h git commit -m x",
+    "XDG_CONFIG_HOME=/tmp/x git commit -m x",
+    "GIT_DIR=/tmp/g git commit -m x",
+    "env HOME=/tmp/h git commit -m x",
+    "export HOME=/tmp/h && git commit -m x",
+    "git config $X core.hooksPath",
+    "for f in $(git config core.hooksPath x); do :; done",
+    "x=$(git -c core.hooksPath=y commit -m z)",
+    "T=1; git -c core.hooksPath=y commit -m z",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+  for (const command of [
+    "git config get core.hooksPath",
+    "git config list",
+    "git config --list",
+    "git --no-pager log --oneline -3",
+    "git -C /repo/.worktrees/feat-1-x status",
+    "cd x && for f in $(git ls-files); do cat $f; done",
+    "B=origin/phase/01-x; git show $B:package.json | grep -n node",
+    "for c in a b; do git show --stat $c | head; done",
+    'env -i PATH="$PATH" HOME="$HOME" docker compose config',
+  ]) {
+    assert.equal(bash(command, loop), null, command);
+  }
+});
+
+test("abbreviated git options that write a file are refused on harness reads", () => {
+  for (const command of [
+    "git diff --outp=.claude/settings.json HEAD",
+    "git diff --o=.claude/settings.json HEAD",
+    "git grep --open x -- .claude/settings.json",
+    "git show --te HEAD -- .claude/settings.json",
+    "git diff --ext -- .claude/settings.json",
+  ]) {
+    assert.ok(bash(command, loop), command);
+  }
+  assert.equal(bash("git log --oneline -- .claude/settings.json", loop), null);
+});
+
 test("a refusal says how to do the same safely", () => {
   assert.match(bash("sed -i s/x/y/ .claude/settings.json", loop).reason, /Read or Grep tool/);
   assert.match(bash("python3 fix.py .env", loop).reason, /Edit or Write tool/);
