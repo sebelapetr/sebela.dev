@@ -1,12 +1,12 @@
 # Phase 0 — Harness
 
-| | |
-|---|---|
-| Status | Done — tried in `.plan/00-trial/result.md` |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Built | By hand, in an interactive session on `phase/00-overview` — the loop cannot build itself |
-| Result | A phase can be started with one command and processed unattended up to a pull request |
+|        |                                                                                          |
+| ------ | ---------------------------------------------------------------------------------------- |
+| Status | Done — tried in `.plan/00-trial/result.md`                                               |
+| Date   | 2026-11-15                                                                               |
+| Parent | `.plan/00-overview/prd.md`                                                               |
+| Built  | By hand, in an interactive session on `phase/00-overview` — the loop cannot build itself |
+| Result | A phase can be started with one command and processed unattended up to a pull request    |
 
 ## Problem Statement
 
@@ -41,14 +41,14 @@ The harness is: the phase loop, worktree isolation, agent definitions, hooks, pe
 - The script holds no state. Everything is read from GitHub each time: issue labels, pull requests, the phase branch.
 - Outcomes of a run and what follows:
 
-| Outcome | Next |
-|---|---|
-| Issue merged into the phase branch | Next iteration |
-| Usage limit reached | Wait ten minutes, retry the same step |
-| Issue failed, first time | Label `agent-retry`; next iteration; the issue may be retried |
-| Issue failed, second time | Label `agent-failed`, skip it |
-| Several consecutive failed runs | Stop |
-| No ready issue left | The orchestrator opens the phase pull request; the loop ends |
+| Outcome                            | Next                                                          |
+| ---------------------------------- | ------------------------------------------------------------- |
+| Issue merged into the phase branch | Next iteration                                                |
+| Usage limit reached                | Wait ten minutes, retry the same step                         |
+| Issue failed, first time           | Label `agent-retry`; next iteration; the issue may be retried |
+| Issue failed, second time          | Label `agent-failed`, skip it                                 |
+| Several consecutive failed runs    | Stop                                                          |
+| No ready issue left                | The orchestrator opens the phase pull request; the loop ends  |
 
 - This decision table is a small pure module with no shell, network or agent in it, so it is testable without running anything.
 - A usage limit is recognised from the run's JSON result (an API error with status 429 or 529, or a limit message) or from its error output. Established from the documentation; it is confirmed the first time a real limit occurs, and the raw output of every run is logged for that purpose.
@@ -92,7 +92,7 @@ One workflow on pull requests and on phase branches that runs the tests present 
 
 ## Out of Scope
 
-- Parallel processing of issues.
+- Parallel processing of issues — planned in `parallel-harness-prd.md`.
 - Running the loop from CI or on a server.
 - Sandboxing beyond worktrees and permissions.
 - Anything belonging to the application toolchain (phase 1).
