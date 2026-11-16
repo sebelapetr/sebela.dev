@@ -158,6 +158,11 @@ const describingProfile: ProfileService = {
   createTestimonial: documentationOnly,
   updateTestimonial: documentationOnly,
   deleteTestimonial: documentationOnly,
+  listCurrentFocus: documentationOnly,
+  getCurrentFocus: documentationOnly,
+  createCurrentFocus: documentationOnly,
+  updateCurrentFocus: documentationOnly,
+  deleteCurrentFocus: documentationOnly,
 };
 
 /**
