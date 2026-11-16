@@ -28,7 +28,7 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 7. Open the issue pull request against the phase branch, in the format from `docs/git-workflow.md`, with the roles filled in and screenshots attached for UI work.
 8. Wait for CI (`gh pr checks <number> --watch`). When it is green, merge with `gh pr merge <number> --squash --delete-branch`. If CI fails, send the failure back to the developer.
 9. Close the issue with a comment naming the pull request (`gh issue close <n> --comment "Merged into phase/<phase-folder> in #<pr>."`). `Closes #<n>` only works for merges into `master`, so this is always your job.
-10. Run the `docs-keeper` on the merged change, then remove the worktree and its local branch: `node scripts/harness/worktree.mjs remove <branch> --delete-branch`.
+10. Run the `docs-keeper` on the merged change: give it the pull request number and the squash commit on the phase branch, and tell it to `git fetch origin` and read the change with `git show <commit>`. Then remove the worktree and its local branch: `node scripts/harness/worktree.mjs remove <branch> --delete-branch`.
 
 ## When the phase is done
 

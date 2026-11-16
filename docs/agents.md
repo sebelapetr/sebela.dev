@@ -92,6 +92,7 @@ scripts/run-phase.sh <phase-folder>
 - **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed or phase done). The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
 - **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`. Logs are in `.worktrees/logs/<phase>/`.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
+- **MCP servers:** the loop loads only `scripts/harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
 - **Foreground subagents:** the loop sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, so the orchestrator waits for each developer and reviewer instead of ending its run while they still work.
 
 The reviewer agent is the only check between issues inside a phase, so a mistake in one issue can carry into the next before the owner sees it. CI on the phase branch and the owner's review of the whole phase are the safety net.
