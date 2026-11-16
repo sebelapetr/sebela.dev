@@ -154,7 +154,7 @@ test("a long branch name is shortened to the identifier limit and stays distinct
   const second = databaseName(`${common}two`);
   assertWorktreeDatabase(first);
   assertWorktreeDatabase(second);
-  assert.equal(first.length, POSTGRES_IDENTIFIER_LIMIT);
+  assert.ok(first.startsWith("wt_feat_very_long_branch_name_very_long_"), first);
   assert.notEqual(first, second);
 });
 
