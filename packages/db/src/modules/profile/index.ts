@@ -103,7 +103,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
   return {
     ...createCatalogPersistence(db),
     ...createOrganizationPersistence(db),
-    ...createExperiencePersistence(),
+    ...createExperiencePersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
