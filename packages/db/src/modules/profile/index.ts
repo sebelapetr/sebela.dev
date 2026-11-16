@@ -1,4 +1,7 @@
+import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+
+import { persons } from "./schema.js";
 
 export interface PersonLinkRecord {
   label: string;
@@ -36,12 +39,50 @@ export interface ProfilePersistence {
   deletePerson(): Promise<boolean>;
 }
 
+const columns = {
+  id: persons.id,
+  name: persons.name,
+  headline: persons.headline,
+  shortBio: persons.shortBio,
+  longBio: persons.longBio,
+  location: persons.location,
+  email: persons.email,
+  links: persons.links,
+  availability: persons.availability,
+  careerStartedOn: persons.careerStartedOn,
+  createdAt: persons.createdAt,
+  updatedAt: persons.updatedAt,
+};
+
+/**
+ * The singleton person in `profile.persons`. There is at most one row: the unique `singleton`
+ * column decides concurrent creates inside the database, and the loser sees a conflict.
+ */
 export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence {
-  const notImplemented = () => Promise.reject(new Error(`not implemented over ${typeof db}`));
   return {
-    findPerson: notImplemented,
-    createPerson: notImplemented,
-    updatePerson: notImplemented,
-    deletePerson: notImplemented,
+    async findPerson() {
+      const [row] = await db.select(columns).from(persons).limit(1);
+      return row ?? null;
+    },
+    async createPerson(fields) {
+      const [row] = await db
+        .insert(persons)
+        .values(fields)
+        .onConflictDoNothing({ target: persons.singleton })
+        .returning(columns);
+      return row ? { ok: true, person: row } : { ok: false, reason: "conflict" };
+    },
+    async updatePerson(changes) {
+      // `clock_timestamp()`, not `now()`: it advances also within one transaction.
+      const [row] = await db
+        .update(persons)
+        .set({ ...changes, updatedAt: sql`clock_timestamp()` })
+        .returning(columns);
+      return row ?? null;
+    },
+    async deletePerson() {
+      const rows = await db.delete(persons).returning({ id: persons.id });
+      return rows.length > 0;
+    },
   };
 }
