@@ -872,4 +872,104 @@ describe("the generated API client", () => {
       ...Array<string>(2).fill(bearer),
     ]);
   });
+  it("manages the current focus: optional project, ordered topics, cleared, refused and protecting them", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    const { profile } = backend.services;
+    await profile.createOrganization({
+      slug: "lumen-labs",
+      name: "Lumen Labs",
+      website: null,
+      description: null,
+    });
+    await profile.createExperience({
+      slug: "lumen-builder",
+      organization: "lumen-labs",
+      title: "Engineer",
+      kind: "main_job",
+      summary: "A fictional role.",
+      responsibilities: [],
+      startedOn: "2024-01-01",
+      endedOn: null,
+      inCv: true,
+      technologies: [],
+    });
+    await profile.createProject({
+      slug: "lumen-console",
+      experience: "lumen-builder",
+      name: "Lumen console",
+      summary: "A fictional project.",
+      problem: "A fictional problem.",
+      workDone: "Fictional work.",
+      result: "A fictional result.",
+      startedOn: "2024-02-01",
+      endedOn: null,
+      links: [],
+      selectedForHomepage: false,
+      position: 0,
+      technologies: [],
+    });
+    for (const [position, slug] of ["lumen-evals", "lumen-agents"].entries()) {
+      await profile.createTopic({ slug, name: slug, position });
+    }
+    const focus = {
+      slug: "lumen-harness",
+      title: "A fictional harness",
+      description: "Scoring **fictional** agents.",
+      link: "https://example.com/lumen",
+      position: 1,
+      project: "lumen-console",
+      topics: ["lumen-agents", "lumen-evals"],
+    };
+
+    const created = await client.POST("/v1/current-focus", { body: focus });
+    expect(created.response.status).toBe(201);
+    expect(created.data?.project).toEqual({
+      slug: "lumen-console",
+      name: "Lumen console",
+      experience: "lumen-builder",
+    });
+    expect(created.data?.topics.map(({ slug }) => slug)).toEqual(["lumen-agents", "lumen-evals"]);
+    const duplicate = await client.POST("/v1/current-focus", { body: focus });
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/current-focus", {
+      body: { ...focus, slug: "lumen-unknown", topics: ["lumen-missing"] },
+    });
+    expect(unknown.error?.error.fields?.map(({ path }) => path)).toEqual(["topics"]);
+    await client.POST("/v1/current-focus", {
+      body: { slug: "lumen-reading", title: "Reading", description: "A book.", position: 0 },
+    });
+
+    const listed = await client.GET("/v1/current-focus");
+    expect(listed.data?.map(({ slug, project }) => [slug, project?.slug ?? null])).toEqual([
+      ["lumen-reading", null],
+      ["lumen-harness", "lumen-console"],
+    ]);
+    const cleared = await client.PATCH("/v1/current-focus/{slug}", {
+      ...at("lumen-harness"),
+      body: { project: null, link: null, topics: ["lumen-evals"] },
+    });
+    expect(cleared.data).toMatchObject({ project: null, link: null });
+    expect(cleared.data?.topics.map(({ slug }) => slug)).toEqual(["lumen-evals"]);
+    const read = await client.GET("/v1/current-focus/{slug}", at("lumen-harness"));
+    expect(read.data).toEqual(cleared.data);
+
+    const protectedTopic = await client.DELETE("/v1/topics/{slug}", at("lumen-evals"));
+    expect(protectedTopic.error?.error.code).toBe("conflict");
+    for (const slug of ["lumen-harness", "lumen-reading"]) {
+      expect((await client.DELETE("/v1/current-focus/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/current-focus/{slug}", at("lumen-harness"));
+    expect(missing.error?.error.code).toBe("not_found");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(4).fill(bearer),
+      null,
+      bearer,
+      null,
+      ...Array<string>(3).fill(bearer),
+      null,
+    ]);
+  });
 });
