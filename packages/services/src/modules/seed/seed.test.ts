@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -619,6 +619,37 @@ describe("seed service", () => {
       const error = await refusal(seed().loadSeed(missing));
       expect(error.code).toBe("validation_failed");
       expect(JSON.stringify([error.message, error.fields])).not.toContain(missing);
+    });
+
+    it("refuses a file whose symbolic link leads out of the seed folder", async () => {
+      const outside = join(seedFolder, "outside.jpg");
+      await writeFile(outside, portrait);
+      const folder = await writeSeed(await mkdtemp(join(seedFolder, "symlink-")), fixture());
+      await rm(join(folder, "files/portrait.jpg"));
+      await symlink(outside, join(folder, "files/portrait.jpg"));
+
+      const error = await refusal(seed().loadSeed(folder));
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path)).toEqual(["person.json.photo.file"]);
+      expect(JSON.stringify([error.message, error.fields])).not.toContain(seedFolder);
+      await expectEmpty();
+    });
+
+    it.each([
+      ["an unreadable attached file", "files/portrait.jpg"],
+      ["an unreadable folder of attached files", "files"],
+      ["an unreadable seed folder", "."],
+    ])("refuses %s without naming any path", async (_case, target) => {
+      const folder = await writeSeed(await mkdtemp(join(seedFolder, "unreadable-")), fixture());
+      await chmod(join(folder, target), 0o000);
+      try {
+        const error = await refusal(seed().loadSeed(folder));
+        expect(error.code).toBe("validation_failed");
+        expect(JSON.stringify([error.message, error.fields])).not.toContain(seedFolder);
+      } finally {
+        await chmod(join(folder, target), 0o700);
+      }
+      await expectEmpty();
     });
   });
 

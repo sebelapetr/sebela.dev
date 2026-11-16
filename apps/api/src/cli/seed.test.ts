@@ -214,6 +214,29 @@ describe("the seed CLI", () => {
       expect(result.code).toBe(1);
       expect(result.err).not.toContain(scratch);
     });
+
+    it("reports a file-system failure by its code, without the path it names", async () => {
+      const path = join(scratch, "private", "person.json");
+      const failing = {
+        seed: {
+          loadSeed: () =>
+            Promise.reject(
+              Object.assign(new Error(`EIO: i/o error, read '${path}'`), {
+                code: "EIO",
+                syscall: "read",
+                path,
+              }),
+            ),
+        },
+      };
+      const io = capture();
+
+      const code = await runSeedCommand([path], failing, io.output);
+
+      expect(code).toBe(1);
+      expect(io.err()).toContain("EIO");
+      expect(io.err()).not.toContain(scratch);
+    });
   });
 
   it("explains its usage on extra arguments and options", async () => {
