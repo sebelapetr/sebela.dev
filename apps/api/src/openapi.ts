@@ -37,8 +37,11 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
     [String(response.status)]: { description: response.description, ...success, ...location },
     "400": error(
       route.body
-        ? "`malformed_json`, `validation_failed` (with `fields`) or `credentials_in_url`."
-        : "`credentials_in_url`: a credential was sent in the query string.",
+        ? "`malformed_json`, `validation_failed` (with `fields`, also for a malformed path " +
+            "parameter or a domain rule) or `credentials_in_url`."
+        : route.params
+          ? "`validation_failed` (a malformed path parameter, with `fields`) or `credentials_in_url`."
+          : "`credentials_in_url`: a credential was sent in the query string.",
     ),
     ...(route.access === "private"
       ? {
@@ -79,6 +82,7 @@ function operation(route: RouteDocumentation): ZodOpenApiOperationObject {
     summary: route.summary,
     ...(route.description ? { description: route.description } : {}),
     security: route.access === "private" ? [{ bearerAuth: [] }] : [],
+    ...(route.params ? { requestParams: { path: route.params } } : {}),
     ...(route.body
       ? { requestBody: { required: true, content: { "application/json": { schema: route.body } } } }
       : {}),
