@@ -1,14 +1,105 @@
-// Maintenance adapter: loads a seed folder straight through the services. Not implemented yet.
-import type { Services } from "@sebela/services";
+// Maintenance adapter: loads a seed folder straight through the services, so it works against a
+// migrated database without a running HTTP server and without an API key.
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
+import {
+  demoSeedFolder,
+  DomainError,
+  openServices,
+  readDatabaseConfig,
+  readMediaConfig,
+  type SeedKind,
+  type Services,
+} from "@sebela/services";
+
+import { logCleanupFailure } from "../modules/media/index.js";
 import type { CommandOutput } from "./api-keys.js";
 
-export function runSeedCommand(
+const USAGE = `Usage: seed [folder]
+
+  Loads a seed folder (format: packages/db/seed/README.md) into the database. Without a folder it
+  loads the fictional demo seed. A relative folder is resolved against the directory the command
+  was started from. Records are matched by slug and overwritten with the seed's values.
+`;
+
+const kindLabels: Record<SeedKind, string> = {
+  person: "person",
+  technologies: "technologies",
+  topics: "topics",
+  organizations: "organizations",
+  experiences: "experiences",
+  projects: "projects",
+  caseStudies: "case studies",
+  explorations: "explorations",
+  services: "services",
+  education: "education",
+  testimonials: "testimonials",
+  currentFocus: "current focus",
+};
+
+/**
+ * Runs the seed command (`[folder]`) through the services and returns the exit code: 0 on success,
+ * 1 for a refused seed, 2 for bad usage. Prints counts and refusals by file and field, never seed
+ * content or the folder's path.
+ */
+export async function runSeedCommand(
   args: readonly string[],
   services: Pick<Services, "seed">,
   output: CommandOutput,
   cwd: string = process.cwd(),
 ): Promise<number> {
-  output.err(`Usage: seed [folder] (${String(args.length)} ${typeof services} ${cwd})\n`);
-  return Promise.resolve(2);
+  const [folder, ...extra] = args;
+  if (extra.length > 0 || folder?.startsWith("-") === true || folder === "") {
+    output.err(USAGE);
+    return 2;
+  }
+  try {
+    const report = await services.seed.loadSeed(
+      folder === undefined ? demoSeedFolder : resolve(cwd, folder),
+    );
+    for (const [kind, label] of Object.entries(kindLabels) as [SeedKind, string][]) {
+      const { created, updated } = report.records[kind];
+      output.out(`${label}: ${String(created)} created, ${String(updated)} updated\n`);
+    }
+    const { uploaded, reused, removed } = report.media;
+    output.out(
+      `media: ${String(uploaded)} uploaded, ${String(reused)} reused, ${String(removed)} removed\n`,
+    );
+    return 0;
+  } catch (error) {
+    if (error instanceof DomainError) {
+      output.err(`${error.message}\n`);
+      for (const field of error.fields ?? []) output.err(`  ${field.path}: ${field.message}\n`);
+      return 1;
+    }
+    throw error;
+  }
+}
+
+async function main() {
+  const services = openServices(readDatabaseConfig(process.env), {
+    media: {
+      config: readMediaConfig(process.env),
+      onCleanupFailure: logCleanupFailure((line) => process.stderr.write(`${line}\n`)),
+    },
+  });
+  try {
+    // pnpm runs package scripts in the package folder; INIT_CWD is where the command was started.
+    process.exitCode = await runSeedCommand(
+      process.argv.slice(2),
+      services,
+      { out: (text) => process.stdout.write(text), err: (text) => process.stderr.write(text) },
+      process.env["INIT_CWD"] ?? process.cwd(),
+    );
+  } finally {
+    await services.close();
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
 }
