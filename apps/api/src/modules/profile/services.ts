@@ -12,12 +12,12 @@ import { defineRoute, type RouteDefinition } from "../../routing.js";
 const LIST = "/v1/services";
 const ITEM = "/v1/services/:slug";
 
-const notImplemented = (service: ProfileService): Promise<never> =>
-  Promise.reject(new Error(`Not implemented over ${typeof service}.`));
-
 /**
  * The HTTP routes of the services, addressed by stable slug: public list and read with the
- * evidence resolved in its order, authenticated create, update and delete.
+ * evidence resolved in its order, authenticated create, update and delete. Each piece of evidence
+ * is typed by `kind`: a project or an exploration by slug, or a link within the site. An unknown
+ * or repeated project or exploration, an unsupported kind or an unsafe link is a
+ * `validation_failed` naming `evidence`; a taken slug is a `conflict`.
  */
 export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
   return [
@@ -31,7 +31,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
         "By position, then slug. Each service carries its evidence in its defined order, each piece typed by `kind`: a project or an exploration resolved to what a page needs, or a link within the site.",
       response: { status: 200, description: "Every service, in order.", schema: ServiceListSchema },
       errors: [],
-      handle: () => notImplemented(profile),
+      handle: () => profile.listServices(),
     }),
     defineRoute({
       operationId: "getService",
@@ -46,7 +46,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
         schema: ServiceSchema,
       },
       errors: ["not_found"],
-      handle: () => notImplemented(profile),
+      handle: ({ params }) => profile.getService(params.slug),
     }),
     defineRoute({
       operationId: "createService",
@@ -64,7 +64,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
         location: ITEM,
       },
       errors: ["conflict"],
-      handle: () => notImplemented(profile),
+      handle: ({ body }) => profile.createService(body),
     }),
     defineRoute({
       operationId: "updateService",
@@ -78,7 +78,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
       body: ServiceUpdateSchema,
       response: { status: 200, description: "The updated service.", schema: ServiceSchema },
       errors: ["not_found"],
-      handle: () => notImplemented(profile),
+      handle: ({ params, body }) => profile.updateService(params.slug, body),
     }),
     defineRoute({
       operationId: "deleteService",
@@ -91,7 +91,10 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
       params: SlugParamsSchema,
       response: { status: 204, description: "The service was deleted." },
       errors: ["not_found"],
-      handle: () => notImplemented(profile),
+      handle: async ({ params }) => {
+        await profile.deleteService(params.slug);
+        return undefined;
+      },
     }),
   ];
 }

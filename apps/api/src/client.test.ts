@@ -691,6 +691,10 @@ describe("the generated API client", () => {
       ["fictional-offer", 3],
     ]);
 
+    const named = await client.DELETE("/v1/explorations/{slug}", at("fictional-sketch"));
+    expect(named.response.status).toBe(409);
+    expect(named.error?.error.code).toBe("conflict");
+
     const replaced = await client.PATCH("/v1/services/{slug}", {
       ...at("fictional-offer"),
       body: { evidence: [{ kind: "link", label: "Roadmap", path: "/roadmap" }] },
@@ -701,9 +705,6 @@ describe("the generated API client", () => {
       body: { evidence: [{ kind: "link", label: "x", path: "javascript:alert(1)" }] },
     });
     expect(unsafe.response.status).toBe(400);
-    const named = await client.DELETE("/v1/explorations/{slug}", at("fictional-sketch"));
-    expect(named.response.status).toBe(409);
-    expect(named.error?.error.code).toBe("conflict");
 
     for (const slug of ["fictional-offer", "fictional-first"]) {
       expect((await client.DELETE("/v1/services/{slug}", at(slug))).response.status).toBe(204);

@@ -178,15 +178,15 @@ describe("the service API", () => {
   });
 
   it("lists services by position, then slug", async () => {
-    for (const service of [automation, prototyping, { ...prototyping, slug: "a-review" }]) {
+    for (const service of [automation, prototyping, { ...prototyping, slug: "data-review" }]) {
       expect((await create(service)).status).toBe(201);
     }
 
     const listed = ServiceListSchema.parse(await (await request("/v1/services")).json());
 
     expect(listed.map((service) => service.slug)).toEqual([
-      "a-review",
       "ai-prototyping",
+      "data-review",
       "process-automation",
     ]);
     expect(targets(listed[2] as Service)).toEqual(["routing-engine", "/roadmap", "agent-lab"]);
