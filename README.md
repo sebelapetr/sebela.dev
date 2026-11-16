@@ -195,15 +195,15 @@ pnpm test       # package tests, harness tests and check tests
 pnpm build
 ```
 
-CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres. You can run that test yourself with Docker: `node scripts/harness/worktree-databases.e2e.mjs`. Details: [testing](docs/testing.md).
+CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres. You can run that test yourself with Docker: `node harness/worktree-databases.e2e.mjs`. Details: [testing](docs/testing.md).
 
 ### 5. Work in an isolated worktree
 
 Code changes happen in a worktree per branch, never in the main checkout. With the infrastructure running, from the main checkout:
 
 ```sh
-node scripts/harness/worktree.mjs create feat/12-profile-api --base master   # prints the worktree path
-node scripts/harness/worktree.mjs list                                       # slots in use
+node harness/worktree.mjs create feat/12-profile-api --base master   # prints the worktree path
+node harness/worktree.mjs list                                       # slots in use
 cd .worktrees/feat-12-profile-api && pnpm install --frozen-lockfile
 ```
 
@@ -214,7 +214,7 @@ cd .worktrees/feat-12-profile-api && pnpm install --frozen-lockfile
 Remove the worktree when its branch is done:
 
 ```sh
-node scripts/harness/worktree.mjs remove feat/12-profile-api --delete-branch
+node harness/worktree.mjs remove feat/12-profile-api --delete-branch
 ```
 
 Removal drops the worktree's database first, then removes the worktree and frees its slot. It refuses uncommitted work unless you pass `--force`, needs the running Postgres, and only ever drops a database it created for that worktree. Slots, ports and databases in detail: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
@@ -243,7 +243,7 @@ Completed phase → phase PR → owner review → merge into master
 | **Reviewer**           | Check acceptance criteria, boundaries, security and verification evidence without editing code.         |
 | **Docs keeper**        | Keep documentation and agent instructions aligned with implementation.                                  |
 
-The owner runs a phase unattended with `scripts/run-phase.sh <phase-folder>`. The loop is sequential: one issue per iteration, each with a fresh agent context, and its state held in GitHub. It skips issues that need a human decision and bounds retries on failing work. Hooks keep agents inside the rules: a guard refuses forbidden actions such as editing code in the main checkout or reading other environment files, edited files are formatted, a developer's handoff is refused while lint or typecheck fail, and creating or removing a worktree sets up or drops its database. The orchestrator squash-merges reviewed issue pull requests into the phase branch; **only the owner merges into `master`.**
+The owner runs a phase unattended with `harness/run-phase.sh <phase-folder>`. The loop is sequential: one issue per iteration, each with a fresh agent context, and its state held in GitHub. It skips issues that need a human decision and bounds retries on failing work. Hooks keep agents inside the rules: a guard refuses forbidden actions such as editing code in the main checkout or reading other environment files, edited files are formatted, a developer's handoff is refused while lint or typecheck fail, and creating or removing a worktree sets up or drops its database. The orchestrator squash-merges reviewed issue pull requests into the phase branch; **only the owner merges into `master`.**
 
 See [agent orchestration](docs/agents.md), [permissions](docs/permissions.md) and [git workflow](docs/git-workflow.md).
 

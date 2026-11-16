@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-off GitHub set-up for the harness: labels and protection of master.
 # Outward-facing: run it only with the owner's approval. Safe to run again.
-#   scripts/harness/setup-github.sh
+#   harness/setup-github.sh
 set -euo pipefail
 
 label() { gh label create "$1" --color "$2" --description "$3" --force >/dev/null; echo "label $1"; }

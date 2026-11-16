@@ -45,7 +45,7 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 
 ### Local hooks
 
-`pnpm install` enables the repository's Git hooks: the root `prepare` script (`scripts/harness/git-hooks/install.mjs`) sets `core.hooksPath` to `scripts/harness/git-hooks`. The path is relative, so Git resolves it in the worktree a commit is made in: every worktree runs the hooks it checked out, with its own installed tools, and one setting serves all worktrees of the repository. pnpm runs `prepare` only when it installs something; in a checkout that was installed before, run `pnpm run prepare`.
+`pnpm install` enables the repository's Git hooks: the root `prepare` script (`harness/git-hooks/install.mjs`) sets `core.hooksPath` to `harness/git-hooks`. The path is relative, so Git resolves it in the worktree a commit is made in: every worktree runs the hooks it checked out, with its own installed tools, and one setting serves all worktrees of the repository. pnpm runs `prepare` only when it installs something; in a checkout that was installed before, run `pnpm run prepare`.
 
 | Hook         | What it does                                                                                                                                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -55,12 +55,12 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 - **What is checked is what is committed.** A file whose working copy equals its staged content is formatted in place and staged again. A partially staged file is formatted from its staged content directly into the index; its working copy, with the unstaged edits, stays exactly as it was. Lint reads the staged content too. Other unstaged and untracked files are never touched.
 - **Paths are data.** File names go to Git separated by NUL bytes and to the tools after `--` or as an option value, never through a shell or as a pattern, so spaces, brackets, a leading dash or non-ASCII characters are safe.
 - **Fast by design.** The hooks do not run the typecheck or the tests; the [handoff checks](permissions.md#handoff-checks) and CI do. Without installed tools in the checkout the commit stops and names `pnpm install --frozen-lockfile`.
-- **No takeover.** If `core.hooksPath` already points elsewhere, the installer keeps it and says so. The phase loop does not change repository settings, so under `SEBELA_UNATTENDED=1` the installer only reports; the owner's one `pnpm install` in the main checkout enables the hooks for every worktree.
+- **No takeover.** If `core.hooksPath` already points elsewhere, the installer keeps it and says so. The one exception is the harness's own former path, `scripts/harness/git-hooks` (before [decision 0013](decisions/0013-harness-at-the-top-level.md)), which it moves to the current one. The phase loop does not change repository settings, so under `SEBELA_UNATTENDED=1` the installer only reports; the owner's one `pnpm install` in the main checkout enables the hooks for every worktree.
 - A failing hook is fixed, not bypassed: do not commit with `--no-verify`.
 
 ### What CI validates
 
-The `Commit messages` workflow (`.github/workflows/commit-messages.yml`, `scripts/checks/commit-messages.mjs`) applies the rules of the `commit-msg` hook, from the same module (`scripts/harness/lib/commit-message.mjs`), to what reaches GitHub. It runs on every pull request, again whenever a pull request's title is edited, and on pushes to `master` and `phase/**`.
+The `Commit messages` workflow (`.github/workflows/commit-messages.yml`, `scripts/checks/commit-messages.mjs`) applies the rules of the `commit-msg` hook, from the same module (`harness/lib/commit-message.mjs`), to what reaches GitHub. It runs on every pull request, again whenever a pull request's title is edited, and on pushes to `master` and `phase/**`.
 
 | Event                                              | Commits checked                                   | Merge commits | `fixup!`, `squash!`, `amend!` | Title                                                                                                                              |
 | -------------------------------------------------- | ------------------------------------------------- | ------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |

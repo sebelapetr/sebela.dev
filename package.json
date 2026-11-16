@@ -7,13 +7,13 @@
     "node": ">=26.0.0 <27.0.0"
   },
   "scripts": {
-    "prepare": "node scripts/harness/git-hooks/install.mjs",
+    "prepare": "node harness/git-hooks/install.mjs",
     "lint": "turbo run lint lint:root check:config",
     "lint:root": "eslint .",
     "check:config": "node scripts/checks/hardcoded-config.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test test:harness test:checks",
-    "test:harness": "node --test scripts/harness/",
+    "test:harness": "node --test harness/",
     "test:checks": "node --test scripts/checks/",
     "build": "turbo run build",
     "ci:root": "turbo run lint:root check:config test:harness test:checks --continue",

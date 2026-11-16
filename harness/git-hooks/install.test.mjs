@@ -10,7 +10,7 @@ import path from "node:path";
 import { createRepo, git, GIT_ENV } from "../lib/hook-fixtures.mjs";
 
 const INSTALLER = path.join(import.meta.dirname, "install.mjs");
-const HOOKS_PATH = "scripts/harness/git-hooks";
+const HOOKS_PATH = "harness/git-hooks";
 
 const cleanups = [];
 after(() => cleanups.forEach((cleanup) => cleanup()));
@@ -92,6 +92,24 @@ test("a hooks path someone else configured is kept and reported", () => {
   assert.equal(run.status, 0);
   assert.equal(hooksPath(repo), ".husky");
   assert.match(run.stderr, /\.husky/);
+  assert.match(run.stderr, /not enabled/);
+});
+
+test("the hooks path of the harness's former location is moved to the current one", () => {
+  const { repo } = setup();
+  git(repo, "config", "core.hooksPath", "scripts/harness/git-hooks");
+  const run = install(repo);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(hooksPath(repo), HOOKS_PATH);
+  assert.match(run.stderr + run.stdout, /enabled/);
+});
+
+test("the phase loop does not move a former hooks path either", () => {
+  const { repo } = setup();
+  git(repo, "config", "core.hooksPath", "scripts/harness/git-hooks");
+  const run = install(repo, { SEBELA_UNATTENDED: "1" });
+  assert.equal(run.status, 0);
+  assert.equal(hooksPath(repo), "scripts/harness/git-hooks");
   assert.match(run.stderr, /not enabled/);
 });
 

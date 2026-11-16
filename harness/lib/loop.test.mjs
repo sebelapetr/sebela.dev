@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { FAILED_LABEL, RETRY_LABEL, classifyRun, decideNext } from "./loop.mjs";
 
 const success = (report) =>
-  JSON.stringify({ type: "result", subtype: "success", is_error: false, structured_output: report });
+  JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    structured_output: report,
+  });
 
 // --- classifyRun -----------------------------------------------------------
 
@@ -17,12 +22,22 @@ test("a structured report is read from a successful run", () => {
 });
 
 test("an API error with status 429 is a usage limit", () => {
-  const stdout = JSON.stringify({ subtype: "success", is_error: true, api_error_status: 429, result: "" });
+  const stdout = JSON.stringify({
+    subtype: "success",
+    is_error: true,
+    api_error_status: 429,
+    result: "",
+  });
   assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "limit");
 });
 
 test("an overloaded API is treated like a limit", () => {
-  const stdout = JSON.stringify({ subtype: "success", is_error: true, api_error_status: 529, result: "" });
+  const stdout = JSON.stringify({
+    subtype: "success",
+    is_error: true,
+    api_error_status: 529,
+    result: "",
+  });
   assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "limit");
 });
 
@@ -41,7 +56,12 @@ test("a limit reported only on stderr is recognised", () => {
 });
 
 test("other API errors are crashes", () => {
-  const stdout = JSON.stringify({ subtype: "success", is_error: true, api_error_status: 500, result: "boom" });
+  const stdout = JSON.stringify({
+    subtype: "success",
+    is_error: true,
+    api_error_status: 500,
+    result: "boom",
+  });
   assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "crash");
 });
 
@@ -80,7 +100,10 @@ test("a usage limit waits and does not count as a failure", () => {
 });
 
 test("no ready issue left ends the loop", () => {
-  assert.equal(decideNext({ run: report("phase_done", null), consecutiveFailures: 0 }).next, "done");
+  assert.equal(
+    decideNext({ run: report("phase_done", null), consecutiveFailures: 0 }).next,
+    "done",
+  );
 });
 
 test("the first failure of an issue marks it for one retry", () => {
@@ -99,7 +122,11 @@ test("the second failure of the same issue marks it as failed", () => {
 });
 
 test("consecutive failures stop the loop at the limit", () => {
-  const decision = decideNext({ run: report("failed"), consecutiveFailures: 2, maxConsecutiveFailures: 3 });
+  const decision = decideNext({
+    run: report("failed"),
+    consecutiveFailures: 2,
+    maxConsecutiveFailures: 3,
+  });
   assert.equal(decision.next, "stop");
   assert.equal(decision.consecutiveFailures, 3);
 });

@@ -12,7 +12,9 @@ try {
   if (!input.name) throw new Error("WorktreeCreate input has no name");
   const mainRoot = mainRootFrom(input.cwd ?? process.cwd());
   const result = createWorktree({ branch: input.name, base: "HEAD", mainRoot });
-  process.stderr.write(`worktree ${result.name} on slot ${result.slot} with database ${result.database}\n`);
+  process.stderr.write(
+    `worktree ${result.name} on slot ${result.slot} with database ${result.database}\n`,
+  );
   process.stdout.write(`${result.path}\n`);
 } catch (error) {
   process.stderr.write(`worktree-create hook failed: ${error.message}\n`);

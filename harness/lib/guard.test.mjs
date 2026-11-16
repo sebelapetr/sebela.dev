@@ -62,7 +62,7 @@ test("shell commands naming only the example file are allowed", () => {
 
 test("words that merely contain .env are not refused", () => {
   assert.equal(bash("pnpm test --filter dotenv"), null);
-  assert.equal(bash("node scripts/harness/worktree.mjs create feat/1-env-docs"), null);
+  assert.equal(bash("node harness/worktree.mjs create feat/1-env-docs"), null);
 });
 
 test("agents may read, create and edit local environment files inside their own worktree", () => {
@@ -368,7 +368,7 @@ test("unattended runs cannot edit the harness that governs them in the main chec
   for (const file_path of [
     "/repo/.claude/settings.json",
     "/repo/.claude/agents/orchestrator.md",
-    "/repo/scripts/harness/hooks/pre-tool-use.mjs",
+    "/repo/harness/hooks/pre-tool-use.mjs",
     "/repo/.github/workflows/ci.yml",
     "/repo/.git/hooks/pre-commit",
     "/repo/.git/worktrees/feat-1-x/HEAD",
@@ -389,7 +389,7 @@ test("unattended runs may change the harness inside a worktree, through a pull r
     null,
   );
   assert.equal(call("Edit", { file_path: "/repo/docs/agents.md" }, { unattended: true }), null);
-  assert.equal(bash("node scripts/harness/worktree.mjs list", { unattended: true }), null);
+  assert.equal(bash("node harness/worktree.mjs list", { unattended: true }), null);
   assert.equal(call("Edit", { file_path: "/repo/.claude/settings.json" }), null);
 });
 

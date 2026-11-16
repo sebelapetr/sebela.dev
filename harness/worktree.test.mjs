@@ -10,17 +10,27 @@ import { createWorktree, listWorktrees, removeWorktree } from "./worktree.mjs";
 
 // The services of the port scheme in docs/repository-structure.md, and their documented ports.
 const SERVICE_PORTS = ["WEB_PORT", "API_PORT", "MCP_ADMIN_PORT", "LLM_AGENT_PORT"];
-const EXAMPLE_FILE = path.join(import.meta.dirname, "..", "..", ".env.example");
+const EXAMPLE_FILE = path.join(import.meta.dirname, "..", ".env.example");
 const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
 
 function mainCheckout(t) {
   const mainRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-worktree-test-"));
   t.after(() => fs.rmSync(mainRoot, { recursive: true, force: true }));
-  const git = (...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", mainRoot, ...args], {
-    stdio: "ignore",
-  });
+  const git = (...args) =>
+    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", mainRoot, ...args], {
+      stdio: "ignore",
+    });
   git("init", "-b", "master");
-  git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "fixture");
+  git(
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@example.invalid",
+    "commit",
+    "--allow-empty",
+    "-m",
+    "fixture",
+  );
   return mainRoot;
 }
 
@@ -31,7 +41,8 @@ function fakeDatabases() {
   const owners = new Map();
   const claim = (name, owner) => {
     const holder = owners.get(name);
-    if (holder !== undefined && holder !== owner) throw new Error(`fixture: ${name} belongs to ${holder}`);
+    if (holder !== undefined && holder !== owner)
+      throw new Error(`fixture: ${name} belongs to ${holder}`);
   };
   return {
     owners,
@@ -56,12 +67,26 @@ function fixture(t, env = {}) {
   const remove = (target = "fix/fixture", options = {}) =>
     removeWorktree({ mainRoot, target, databases, ...options });
   const worktree = create();
-  return { mainRoot, databases, create, remove, worktree, envPath: path.join(worktree.path, ".env.local") };
+  return {
+    mainRoot,
+    databases,
+    create,
+    remove,
+    worktree,
+    envPath: path.join(worktree.path, ".env.local"),
+  };
 }
 
 function branchExists(mainRoot, branch) {
   try {
-    execFileSync("git", ["-C", mainRoot, "show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
+    execFileSync("git", [
+      "-C",
+      mainRoot,
+      "show-ref",
+      "--verify",
+      "--quiet",
+      `refs/heads/${branch}`,
+    ]);
     return true;
   } catch {
     return false;
@@ -80,7 +105,10 @@ test("creating an existing worktree preserves its edited environment and slot", 
 
 test("creating a worktree generates missing environment settings", (t) => {
   const { create, worktree, envPath } = fixture(t);
-  assert.match(fs.readFileSync(envPath, "utf8"), new RegExp(`^WORKTREE_SLOT=${worktree.slot}$`, "m"));
+  assert.match(
+    fs.readFileSync(envPath, "utf8"),
+    new RegExp(`^WORKTREE_SLOT=${worktree.slot}$`, "m"),
+  );
   fs.rmSync(envPath);
 
   create();
@@ -135,7 +163,13 @@ test("an invalid port configuration stops before a worktree is created", (t) => 
   const databases = fakeDatabases();
 
   assert.throws(
-    () => createWorktree({ mainRoot, branch: "fix/fixture", env: { API_PORT: "not-a-port" }, databases }),
+    () =>
+      createWorktree({
+        mainRoot,
+        branch: "fix/fixture",
+        env: { API_PORT: "not-a-port" },
+        databases,
+      }),
     /API_PORT must be/,
   );
   assert.equal(fs.existsSync(path.join(mainRoot, ".worktrees", "fix-fixture")), false);
@@ -269,7 +303,18 @@ test("removing a worktree again is harmless", (t) => {
 test("creating a worktree for an issue with an earlier branch continues that branch", (t) => {
   const { mainRoot, create, worktree } = fixture(t);
   const earlier = create("feat/17-hardcoded-config-check");
-  execFileSync("git", ["-C", earlier.path, "-c", "user.name=F", "-c", "user.email=f@example.invalid", "commit", "--allow-empty", "-m", "earlier work"]);
+  execFileSync("git", [
+    "-C",
+    earlier.path,
+    "-c",
+    "user.name=F",
+    "-c",
+    "user.email=f@example.invalid",
+    "commit",
+    "--allow-empty",
+    "-m",
+    "earlier work",
+  ]);
 
   const again = create("feat/17-reject-hardcoded-endpoints");
 

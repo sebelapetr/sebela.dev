@@ -9,11 +9,15 @@ import { mainRootFrom } from "../worktree.mjs";
 import { readHookInput } from "./read-input.mjs";
 
 function lookupPrBase(number) {
-  return execFileSync("gh", ["pr", "view", String(number), "--json", "baseRefName", "-q", ".baseRefName"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: 15_000,
-  }).trim();
+  return execFileSync(
+    "gh",
+    ["pr", "view", String(number), "--json", "baseRefName", "-q", ".baseRefName"],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 15_000,
+    },
+  ).trim();
 }
 
 function isLink(target) {
@@ -37,9 +41,13 @@ function currentBranchIn(cwd) {
 
 function worktreeRootIn(cwd, mainRoot) {
   try {
-    const [root, common] = execFileSync("git", [
-      "-C", cwd, "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir",
-    ], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().split("\n");
+    const [root, common] = execFileSync(
+      "git",
+      ["-C", cwd, "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    )
+      .trim()
+      .split("\n");
     return root !== mainRoot && path.dirname(common) === mainRoot ? root : null;
   } catch {
     return null;

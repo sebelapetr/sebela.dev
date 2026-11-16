@@ -12,7 +12,10 @@
 
 import { spawnSync } from "node:child_process";
 
-const HOOKS_PATH = "scripts/harness/git-hooks";
+const HOOKS_PATH = "harness/git-hooks";
+// Where the hooks lived before the harness moved to the top level (docs/decisions/0013). A
+// checkout configured then points at a folder that no longer exists; that setting is ours to move.
+const FORMER_HOOKS_PATHS = new Set(["scripts/harness/git-hooks"]);
 
 function git(args) {
   const run = spawnSync("git", args, { encoding: "utf8" });
@@ -26,7 +29,7 @@ function enableHooks(env) {
   }
   const configured = git(["config", "--get", "core.hooksPath"]).stdout.trim();
   if (configured === HOOKS_PATH) return { notice: `Git hooks: enabled (${HOOKS_PATH}).` };
-  if (configured) {
+  if (configured && !FORMER_HOOKS_PATHS.has(configured)) {
     return {
       warning:
         `Git hooks: not enabled, because core.hooksPath is already set to "${configured}". ` +

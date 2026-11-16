@@ -27,7 +27,7 @@ A rule with `paths` in its frontmatter loads when an agent reads, writes or edit
 | ------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `shared-configuration.md` | `packages/config/`, every `eslint.config.js`, `prettier.config.js`, `.prettierignore`, every `tsconfig*.json` | `packages/config/AGENTS.md`, code standards, dependency rules                      |
 | `repository-checks.md`    | `scripts/checks/`                                                                                             | The hard-coded configuration check, the CI commit-message check, testing (tooling) |
-| `harness.md`              | `scripts/harness/`, `scripts/run-phase.sh`, `.claude/settings.json`, `.claude/agents/`                        | Permissions, agents, git workflow (local hooks), worktree isolation                |
+| `harness.md`              | `harness/`, `.claude/settings.json`, `.claude/agents/`                                                        | Permissions, agents, git workflow (local hooks), worktree isolation                |
 | `toolchain-and-ci.md`     | Every `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `.nvmrc`, `.github/workflows/`   | Toolchain and workspace, root commands, CI                                         |
 | `local-infrastructure.md` | `compose.yaml`, `.env.example`                                                                                | Ports and worktree isolation, the shared Postgres, configuration and environment   |
 
@@ -88,7 +88,7 @@ When no ready issue of the phase remains, the orchestrator opens the phase pull 
 A phase can run unattended:
 
 ```
-scripts/run-phase.sh <phase-folder>
+harness/run-phase.sh <phase-folder>
 ```
 
 - **One iteration, one issue.** The script starts Claude Code non-interactively with the orchestrator agent and the instruction to take the next ready issue of the phase through to a merged issue pull request. Every iteration starts with a clean context.
@@ -104,7 +104,7 @@ scripts/run-phase.sh <phase-folder>
 - **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed or phase done). The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
 - **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`. Logs are in `.worktrees/logs/<phase>/`.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
-- **MCP servers:** the loop loads only `scripts/harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
+- **MCP servers:** the loop loads only `harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
 - **Settings:** the loop loads only the repository's settings (`--setting-sources project,local`). The owner's `~/.claude` — plugins, global rules, personal agents and skills — does not reach an unattended run, so it behaves the same on any machine.
 - **Agent memory:** developers and the reviewer have `memory: local`. Their memory lives in the main checkout under `.claude/agent-memory-local/<agent>/` (ignored by git), shared by all worktrees and runs, and is the one place in the main checkout's `.claude/` an unattended run may write. It holds verified, practical findings; `docs/` and `AGENTS.md` win over it. The orchestrator, as the main session, uses Claude Code's auto memory for the repository; subagents do not see that.
 - **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide.

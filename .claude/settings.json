@@ -2,9 +2,9 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(node scripts/harness/*)",
-      "Bash(node --test scripts/harness/)",
-      "Bash(scripts/run-phase.sh *)",
+      "Bash(node harness/*)",
+      "Bash(node --test harness/)",
+      "Bash(harness/run-phase.sh *)",
       "Bash(pnpm *)",
       "Bash(docker compose *)",
       "Bash(git status)",
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/pre-tool-use.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/pre-tool-use.mjs\""
           }
         ]
       },
@@ -79,7 +79,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/developer-handoff.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/developer-handoff.mjs\"",
             "timeout": 960
           }
         ]
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/post-tool-use.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/post-tool-use.mjs\""
           }
         ]
       },
@@ -100,7 +100,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/format-edited-file.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/format-edited-file.mjs\"",
             "timeout": 60
           }
         ]
@@ -112,7 +112,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/developer-handoff.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/developer-handoff.mjs\"",
             "timeout": 960
           }
         ]
@@ -123,7 +123,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/worktree-create.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/worktree-create.mjs\""
           }
         ]
       }
@@ -133,7 +133,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/harness/hooks/worktree-remove.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/harness/hooks/worktree-remove.mjs\""
           }
         ]
       }

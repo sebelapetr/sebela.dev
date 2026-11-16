@@ -88,7 +88,7 @@ test("several files select each package once, in order", () => {
 });
 
 test("root files select only the root checks", () => {
-  assert.deepEqual(selectChecks(["scripts/harness/lib/x.mjs", "docs/testing.md"], MEMBERS), {
+  assert.deepEqual(selectChecks(["harness/lib/x.mjs", "docs/testing.md"], MEMBERS), {
     all: false,
     packages: [],
   });

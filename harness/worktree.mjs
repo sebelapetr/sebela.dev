@@ -2,9 +2,9 @@
 // Creates and removes worktrees with their own slot (ports) and their own database in the shared
 // Postgres — see docs/repository-structure.md ("Ports and worktree isolation").
 //
-//   node scripts/harness/worktree.mjs create <branch> [--base <ref>]
-//   node scripts/harness/worktree.mjs remove <branch-or-path> [--force] [--delete-branch]
-//   node scripts/harness/worktree.mjs list
+//   node harness/worktree.mjs create <branch> [--base <ref>]
+//   node harness/worktree.mjs remove <branch-or-path> [--force] [--delete-branch]
+//   node harness/worktree.mjs list
 //
 // `create` prints the worktree path as its last line (the WorktreeCreate hook relies on it).
 
@@ -27,7 +27,7 @@ import {
 
 // The checkout this script belongs to: its documented example configuration and its compose.yaml,
 // so the harness, the ports it reads and the database service it uses come from the same revision.
-const CHECKOUT_ROOT = path.join(import.meta.dirname, "..", "..");
+const CHECKOUT_ROOT = path.join(import.meta.dirname, "..");
 const EXAMPLE_FILE = path.join(CHECKOUT_ROOT, ".env.example");
 
 // Settings from the process environment, falling back to the documented example for any that are
@@ -53,7 +53,11 @@ function defaultDatabases(env) {
 }
 
 function git(args, options = {}) {
-  return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
+  return execFileSync("git", args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    ...options,
+  }).trim();
 }
 
 function gitSucceeds(args, cwd) {
@@ -118,7 +122,9 @@ function branchExistsIn(mainRoot, branch) {
 
 // Local branches as `<name>`, remote ones as `origin/<name>`.
 function allBranches(mainRoot) {
-  return git(["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin"], { cwd: mainRoot })
+  return git(["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin"], {
+    cwd: mainRoot,
+  })
     .split("\n")
     .filter(Boolean)
     .map((ref) => ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, ""));
@@ -135,7 +141,9 @@ export function createWorktree({
   const basePorts = loadBasePorts(env);
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
-  const resumed = branchExistsIn(mainRoot, requested) ? null : existingIssueBranch(requested, allBranches(mainRoot));
+  const resumed = branchExistsIn(mainRoot, requested)
+    ? null
+    : existingIssueBranch(requested, allBranches(mainRoot));
   const branch = resumed ?? requested;
   const name = worktreeDirName(branch);
   const database = databaseName(name);
@@ -146,8 +154,12 @@ export function createWorktree({
     if (gitSucceeds(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], mainRoot)) {
       git(["worktree", "add", worktreePath, branch], { cwd: mainRoot });
       added = { branch: false };
-    } else if (gitSucceeds(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], mainRoot)) {
-      git(["worktree", "add", "--track", "-b", branch, worktreePath, `origin/${branch}`], { cwd: mainRoot });
+    } else if (
+      gitSucceeds(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], mainRoot)
+    ) {
+      git(["worktree", "add", "--track", "-b", branch, worktreePath, `origin/${branch}`], {
+        cwd: mainRoot,
+      });
       added = { branch: true };
     } else {
       git(["worktree", "add", "--no-track", "-b", branch, worktreePath, base], { cwd: mainRoot });
@@ -272,15 +284,23 @@ function main() {
   if (command === "create" && options._[0]) {
     const result = createWorktree({ branch: options._[0], base: options.base });
     if (result.resumed) console.error(`issue already has branch ${result.resumed}; continuing it`);
-    console.error(`worktree ${result.name} on slot ${result.slot} with database ${result.database}`);
+    console.error(
+      `worktree ${result.name} on slot ${result.slot} with database ${result.database}`,
+    );
     console.log(result.path);
   } else if (command === "remove" && options._[0]) {
-    const result = removeWorktree({ target: options._[0], force: options.force, deleteBranch: options.deleteBranch });
+    const result = removeWorktree({
+      target: options._[0],
+      force: options.force,
+      deleteBranch: options.deleteBranch,
+    });
     console.error(`removed ${result.name} and its database ${result.database}`);
   } else if (command === "list") {
     for (const { slot, name } of listWorktrees()) console.log(`${slot}\t${name}`);
   } else {
-    console.error("usage: worktree.mjs create <branch> [--base <ref>] | remove <branch-or-path> [--force] [--delete-branch] | list");
+    console.error(
+      "usage: worktree.mjs create <branch> [--base <ref>] | remove <branch-or-path> [--force] [--delete-branch] | list",
+    );
     process.exit(64);
   }
 }

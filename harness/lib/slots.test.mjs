@@ -19,7 +19,7 @@ import {
 } from "./slots.mjs";
 
 // The base ports are configuration: they come from the documented example, never from the code.
-const EXAMPLE_FILE = path.join(import.meta.dirname, "..", "..", "..", ".env.example");
+const EXAMPLE_FILE = path.join(import.meta.dirname, "..", "..", ".env.example");
 const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
 const base = basePortsFrom(example);
 const shifted = (by) =>
@@ -160,7 +160,14 @@ test("a long branch name is shortened to the identifier limit and stays distinct
 });
 
 test("unusual branch names give valid database names", () => {
-  for (const branch of ["12-starts-with-digit", "fix/čeština-ŘÍZENÍ", "feat/emoji-🚀-x", "a", "_x_", "x.y.z"]) {
+  for (const branch of [
+    "12-starts-with-digit",
+    "fix/čeština-ŘÍZENÍ",
+    "feat/emoji-🚀-x",
+    "a",
+    "_x_",
+    "x.y.z",
+  ]) {
     assertWorktreeDatabase(databaseName(branch));
   }
 });
@@ -182,13 +189,25 @@ test("the environment file carries the slot and its ports", () => {
 // --- resuming an issue's earlier branch ------------------------------------------
 
 test("an earlier branch of the same issue is found under another name", () => {
-  const branches = ["master", "phase/01-foundation", "feat/17-hardcoded-config-check", "origin/feat/18-postgres"];
-  assert.equal(existingIssueBranch("feat/17-reject-hardcoded-endpoints", branches), "feat/17-hardcoded-config-check");
+  const branches = [
+    "master",
+    "phase/01-foundation",
+    "feat/17-hardcoded-config-check",
+    "origin/feat/18-postgres",
+  ];
+  assert.equal(
+    existingIssueBranch("feat/17-reject-hardcoded-endpoints", branches),
+    "feat/17-hardcoded-config-check",
+  );
   assert.equal(existingIssueBranch("fix/18-other-name", branches), "feat/18-postgres");
 });
 
 test("the requested branch itself, other issues and branches without an issue are not matches", () => {
-  const branches = ["feat/17-hardcoded-config-check", "feat/170-other", "docs/finalize-phase-plans"];
+  const branches = [
+    "feat/17-hardcoded-config-check",
+    "feat/170-other",
+    "docs/finalize-phase-plans",
+  ];
   assert.equal(existingIssueBranch("feat/17-hardcoded-config-check", branches), null);
   assert.equal(existingIssueBranch("feat/1-x", branches), null);
   assert.equal(existingIssueBranch("docs/finalize-phase-plans-2", branches), null);

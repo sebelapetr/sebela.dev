@@ -2,7 +2,7 @@
 // End-to-end run of the worktree databases against a real Postgres from compose.yaml — see
 // docs/repository-structure.md ("Ports and worktree isolation").
 //
-//   node scripts/harness/worktree-databases.e2e.mjs
+//   node harness/worktree-databases.e2e.mjs
 //
 // Needs Docker with Compose. It starts its own disposable Compose project from this checkout's
 // compose.yaml on a free host port, so the shared stack and its volume are never touched, and works
@@ -19,7 +19,7 @@ import { parseEnv } from "node:util";
 import { databaseName } from "./lib/slots.mjs";
 import { createWorktree, listWorktrees, loadSettings, removeWorktree } from "./worktree.mjs";
 
-const CHECKOUT_ROOT = path.join(import.meta.dirname, "..", "..");
+const CHECKOUT_ROOT = path.join(import.meta.dirname, "..");
 
 // The settings of this run: the documented ones, a project of its own and any free host port.
 const base = loadSettings(process.env);
