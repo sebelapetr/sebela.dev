@@ -106,7 +106,7 @@ describe("commit-message check: issue pull requests, squash-merged into the phas
     );
 
     assert.equal(result.status, 0, result.output);
-    assert.match(result.output, /5 commit\(s\)/);
+    assert.match(result.output, /4 commit\(s\)/);
     assert.match(result.output, /title/i);
   });
 
