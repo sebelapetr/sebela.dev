@@ -12,9 +12,6 @@ import { defineRoute, type RouteDefinition } from "../../routing.js";
 const LIST = "/v1/testimonials";
 const ITEM = "/v1/testimonials/:slug";
 
-const pending = (operation: string, profile: ProfileService): Promise<never> =>
-  Promise.reject(new Error(`${operation} is not wired to ${typeof profile} yet`));
-
 /**
  * The HTTP routes of the testimonials, addressed by stable slug: public list and read,
  * authenticated create, update and delete. Every testimonial belongs to exactly one experience,
@@ -38,7 +35,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
         schema: TestimonialListSchema,
       },
       errors: [],
-      handle: () => pending("listTestimonials", profile),
+      handle: () => profile.listTestimonials(),
     }),
     defineRoute({
       operationId: "getTestimonial",
@@ -53,7 +50,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
         schema: TestimonialSchema,
       },
       errors: ["not_found"],
-      handle: ({ params }) => pending(`getTestimonial ${params.slug}`, profile),
+      handle: ({ params }) => profile.getTestimonial(params.slug),
     }),
     defineRoute({
       operationId: "createTestimonial",
@@ -71,7 +68,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
         location: ITEM,
       },
       errors: ["conflict"],
-      handle: ({ body }) => pending(`createTestimonial ${body.slug}`, profile),
+      handle: ({ body }) => profile.createTestimonial(body),
     }),
     defineRoute({
       operationId: "updateTestimonial",
@@ -89,7 +86,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
         schema: TestimonialSchema,
       },
       errors: ["not_found"],
-      handle: ({ params }) => pending(`updateTestimonial ${params.slug}`, profile),
+      handle: ({ params, body }) => profile.updateTestimonial(params.slug, body),
     }),
     defineRoute({
       operationId: "deleteTestimonial",
@@ -101,7 +98,10 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
       params: SlugParamsSchema,
       response: { status: 204, description: "The testimonial was deleted." },
       errors: ["not_found"],
-      handle: ({ params }) => pending(`deleteTestimonial ${params.slug}`, profile),
+      handle: async ({ params }) => {
+        await profile.deleteTestimonial(params.slug);
+        return undefined;
+      },
     }),
   ];
 }

@@ -206,7 +206,7 @@ export interface paths {
         };
         /**
          * List the experiences
-         * @description Current roles (no end) first, then by start, latest first, then by end, latest first, then by slug. Each experience carries its organization, its technologies and its projects, each in their order.
+         * @description Current roles (no end) first, then by start, latest first, then by end, latest first, then by slug. Each experience carries its organization, its technologies, its projects and its testimonials, each in their order.
          */
         get: operations["listExperiences"];
         put?: never;
@@ -234,7 +234,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an experience
-         * @description Removes the experience and its technology links; the organization and the technologies stay. An experience that still owns projects, or that other records refer to, is not deleted.
+         * @description Removes the experience and its technology links; the organization and the technologies stay. An experience that still owns projects or testimonials, or that other records refer to, is not deleted.
          */
         delete: operations["deleteExperience"];
         options?: never;
@@ -3000,7 +3000,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The experience with its organization, technologies and projects. */
+            /** @description The experience with its organization, technologies, projects and testimonials. */
             200: {
                 headers: {
                     [name: string]: unknown;
