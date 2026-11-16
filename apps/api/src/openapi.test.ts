@@ -235,6 +235,42 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.components.schemas["Project"]?.properties).toHaveProperty("experience");
   });
 
+  it("documents the case study of a project from its contract schemas", () => {
+    const address = "/v1/projects/:slug/case-study";
+    expect(operation("GET", address).responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/CaseStudy" } },
+    });
+    expect(operation("GET", address).security).toEqual([]);
+    expect(operation("POST", address).requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/CaseStudyCreate" } },
+    });
+    expect(operation("PATCH", address).requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/CaseStudyUpdate" } },
+    });
+    expect(operation("POST", address).responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(operation("GET", address).responses)).toEqual(
+      expect.arrayContaining(["200", "400", "404"]),
+    );
+    // A project has at most one case study: a second create is a conflict.
+    expect(Object.keys(operation("POST", address).responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "404", "409"]),
+    );
+    expect(Object.keys(operation("PATCH", address).responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", address).responses)).toEqual(
+      expect.arrayContaining(["204", "400", "401", "404"]),
+    );
+    for (const method of ["POST", "PATCH", "DELETE"]) {
+      expect(operation(method, address).security).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(operation("GET", address).parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+    // A project carries its case study, or null; so does every project of an experience.
+    expect(document.components.schemas["Project"]?.properties).toHaveProperty("caseStudy");
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

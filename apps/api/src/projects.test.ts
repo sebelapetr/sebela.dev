@@ -126,9 +126,11 @@ describe("the project API", () => {
     const { technologies, ...fields } = routing;
     expect(body).toMatchObject(fields);
     expect(body.technologies.map((technology) => technology.slug)).toEqual(technologies);
-    // No cover, case study or visibility flag: those are not part of a project yet.
+    // No cover or visibility flag: those are not part of a project yet. The case study is written
+    // through its own address, so a new project has none.
+    expect(body.caseStudy).toBeNull();
     expect(Object.keys(body).sort()).toEqual(
-      [...Object.keys(routing), "id", "createdAt", "updatedAt"].sort(),
+      [...Object.keys(routing), "id", "caseStudy", "createdAt", "updatedAt"].sort(),
     );
 
     const read = await request("/v1/projects/routing-engine");

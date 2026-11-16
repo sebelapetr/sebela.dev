@@ -410,4 +410,99 @@ describe("the generated API client", () => {
       null,
     ]);
   });
+
+  it("manages the case study of a project: one per project, read with the project, protected and removed", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await client.POST("/v1/organizations", {
+      body: { slug: "fictional-studio", name: "Studio" },
+    });
+    await client.POST("/v1/experiences", {
+      body: {
+        slug: "fictional-studio-lead",
+        organization: "fictional-studio",
+        title: "Engineer",
+        kind: "main_job",
+        startedOn: "2019-01-01",
+        summary: "A fictional role.",
+        inCv: true,
+      },
+    });
+    await client.POST("/v1/projects", {
+      body: {
+        slug: "fictional-studied",
+        experience: "fictional-studio-lead",
+        name: "Studied project",
+        summary: "A fictional project.",
+        problem: "A fictional problem.",
+        workDone: "Fictional work.",
+        result: "A fictional result.",
+        startedOn: "2019-02-01",
+        position: 1,
+      },
+    });
+    const narrative = { role: "Lead engineer", body: "## Context\n\nA **fictional** story." };
+
+    const absent = await client.GET("/v1/projects/{slug}/case-study", at("fictional-studied"));
+    expect(absent.response.status).toBe(404);
+    expect(absent.error?.error.code).toBe("not_found");
+
+    const created = await client.POST("/v1/projects/{slug}/case-study", {
+      ...at("fictional-studied"),
+      body: narrative,
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe(
+      "/v1/projects/fictional-studied/case-study",
+    );
+    expect(created.data).toMatchObject({ project: "fictional-studied", ...narrative });
+    const project = await client.GET("/v1/projects/{slug}", at("fictional-studied"));
+    expect(project.data?.caseStudy).toEqual(created.data);
+
+    const second = await client.POST("/v1/projects/{slug}/case-study", {
+      ...at("fictional-studied"),
+      body: narrative,
+    });
+    expect(second.response.status).toBe(409);
+    expect(second.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/projects/{slug}/case-study", {
+      ...at("fictional-unknown"),
+      body: narrative,
+    });
+    expect(unknown.response.status).toBe(404);
+
+    const updated = await client.PATCH("/v1/projects/{slug}/case-study", {
+      ...at("fictional-studied"),
+      body: { role: "Architect" },
+    });
+    expect(updated.data).toMatchObject({ role: "Architect", body: narrative.body });
+    const protectedProject = await client.DELETE("/v1/projects/{slug}", at("fictional-studied"));
+    expect(protectedProject.response.status).toBe(409);
+    expect(protectedProject.error?.error.code).toBe("conflict");
+
+    const removed = await client.DELETE("/v1/projects/{slug}/case-study", at("fictional-studied"));
+    expect(removed.response.status).toBe(204);
+    const kept = await client.GET("/v1/projects/{slug}", at("fictional-studied"));
+    expect(kept.data?.caseStudy).toBeNull();
+    expect(
+      (await client.DELETE("/v1/projects/{slug}", at("fictional-studied"))).response.status,
+    ).toBe(204);
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      bearer,
+      bearer,
+      bearer,
+      null,
+      bearer,
+      null,
+      bearer,
+      bearer,
+      bearer,
+      bearer,
+      bearer,
+      null,
+      bearer,
+    ]);
+  });
 });
