@@ -191,7 +191,7 @@ describe("the OpenAPI document and the reference", () => {
     expect(Object.keys(operation("PATCH", "/v1/experiences/:slug").responses)).toEqual(
       expect.arrayContaining(["200", "400", "401", "404"]),
     );
-    // Future records that refer to an experience protect it: the delete may be a conflict.
+    // An experience that owns projects is not deleted: the delete may be a conflict.
     expect(Object.keys(operation("DELETE", "/v1/experiences/:slug").responses)).toEqual(
       expect.arrayContaining(["204", "400", "401", "404", "409"]),
     );
@@ -202,6 +202,37 @@ describe("the OpenAPI document and the reference", () => {
     expect(operation("GET", "/v1/experiences/:slug").parameters).toEqual([
       expect.objectContaining({ name: "slug", in: "path", required: true }),
     ]);
+  });
+
+  it("documents the projects from their contract schemas", () => {
+    expect(operation("GET", "/v1/projects").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ProjectList" } },
+    });
+    expect(operation("GET", "/v1/projects/:slug").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Project" } },
+    });
+    expect(operation("POST", "/v1/projects").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ProjectCreate" } },
+    });
+    expect(operation("PATCH", "/v1/projects/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ProjectUpdate" } },
+    });
+    expect(operation("POST", "/v1/projects").responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(operation("POST", "/v1/projects").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    expect(Object.keys(operation("PATCH", "/v1/projects/:slug").responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/projects/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "401", "404", "409"]),
+    );
+    expect(operation("GET", "/v1/projects/:slug").parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+    // An experience carries its projects; a project names its experience by slug.
+    expect(document.components.schemas["Experience"]?.properties).toHaveProperty("projects");
+    expect(document.components.schemas["Project"]?.properties).toHaveProperty("experience");
   });
 
   it("documents the health route", () => {
