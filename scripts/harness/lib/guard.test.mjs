@@ -331,6 +331,19 @@ test("a symbolic link that cannot be resolved is refused", () => {
   assert.ok(call("Write", { file_path: "/repo/.worktrees/x/dangling" }, { realpath: () => null }));
 });
 
+test("unattended agents may keep their shared memory in the main checkout, and nothing else there", () => {
+  assert.equal(
+    call("Write", { file_path: "/repo/.claude/agent-memory-local/backend-developer/postgres.md" }, { unattended: true }),
+    null,
+  );
+  assert.equal(
+    call("Edit", { file_path: "/repo/.claude/agent-memory-local/reviewer/MEMORY.md" }, { unattended: true }),
+    null,
+  );
+  assert.ok(call("Edit", { file_path: "/repo/.claude/agent-memory-local/../settings.json" }, { unattended: true }));
+  assert.ok(call("Write", { file_path: "/repo/.claude/agent-memory/reviewer/x.md" }, { unattended: true }));
+});
+
 // --- everything else -------------------------------------------------------
 
 test("ordinary commands pass", () => {
