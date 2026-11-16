@@ -1,6 +1,10 @@
 export { ErrorResponseSchema, errorCodes } from "./errors.js";
 export type { ErrorCode, ErrorResponse } from "./errors.js";
 export {
+  ExperienceCreateSchema,
+  ExperienceListSchema,
+  ExperienceSchema,
+  ExperienceUpdateSchema,
   OrganizationCreateSchema,
   OrganizationListSchema,
   OrganizationSchema,
@@ -18,10 +22,15 @@ export {
   TopicListSchema,
   TopicSchema,
   TopicUpdateSchema,
+  experienceKinds,
   technologyGroups,
   technologyTiers,
 } from "./modules/profile/index.js";
 export type {
+  Experience,
+  ExperienceCreate,
+  ExperienceKind,
+  ExperienceUpdate,
   Organization,
   OrganizationCreate,
   OrganizationUpdate,

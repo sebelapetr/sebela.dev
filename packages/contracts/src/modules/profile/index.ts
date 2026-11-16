@@ -100,3 +100,9 @@ export {
   ExperienceUpdateSchema,
   experienceKinds,
 } from "./experiences.js";
+export type {
+  Experience,
+  ExperienceCreate,
+  ExperienceKind,
+  ExperienceUpdate,
+} from "./experiences.js";
