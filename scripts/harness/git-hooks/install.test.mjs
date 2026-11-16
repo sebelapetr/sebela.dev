@@ -22,7 +22,9 @@ function setup() {
 }
 
 function install(cwd, env = {}) {
-  const { SEBELA_UNATTENDED: _ignored, ...base } = GIT_ENV;
+  // The tests may run inside the phase loop; each case sets the loop marker itself.
+  const base = { ...GIT_ENV };
+  delete base.SEBELA_UNATTENDED;
   return spawnSync(process.execPath, [INSTALLER], {
     cwd,
     env: { ...base, ...env },
