@@ -72,10 +72,22 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
 - Uploads go through a private API route; nothing uploads to the bucket directly.
 - The database stores a file's key; the public base address is configuration.
 - Uploads are proved by their content: PNG, JPEG, WebP and PDF only, within configured byte and image-dimension limits, checked structurally with work bounded by the file size. Pixels are deliberately never decoded: a structural walk keeps the work predictable and needs no image library, at the cost of accepting a well-formed file whose image data is corrupt. The API generates every key; a file name never chooses where a file goes.
-- Files of the local driver are served by the API itself at a public route under the key, inline, with the recorded type, `nosniff` and a content security policy that loads nothing. Images are also sandboxed; a PDF is not, because browser PDF viewers refuse to render a sandboxed document, and it is offered under the file name of its key, so the current CV opens in the browser; the Bunny driver (#36) serves them from its own address.
+- Files of the local driver are served by the API itself at a public route under the key, inline, with the recorded type, `nosniff` and a content security policy that loads nothing. Images are also sandboxed; a PDF is not, because browser PDF viewers refuse to render a sandboxed document, and it is offered under the file name of its key, so the current CV opens in the browser; files of the Bunny driver are served by the zone's CDN pull zone from `STORAGE_PUBLIC_BASE_URL`, never from the storage API.
 - Profile records refer to media by identifier (the person's photo and current CV PDF, an organization's logo, a project's cover). Referenced media cannot be deleted. The current CV PDF is uploaded as prepared, not generated.
 - A file the media workflow cannot remove, after a failed record write or a deleted record, is logged with its key without secrets and stays as an orphan no record refers to; it is removed by hand. A successful response never refers to a missing file.
 - Development and production use separate storage zones with separate keys.
+
+### Bunny Storage
+
+The `bunny-s3` driver talks to a Bunny storage zone through Bunny's S3-compatible API with the maintained AWS S3 client, path-style, using only PutObject and DeleteObject. Sources, checked on 2026-11-16: [S3 compatibility](https://bunny.net/docs/storage/s3) and the [storage changelog](https://bunny.net/docs/storage/changelog).
+
+- **Status.** S3 compatibility is a public preview (since 2026-07-09); behaviour may still change.
+- **Zone.** S3 compatibility must be enabled when the zone is created; an existing zone cannot be switched. Only the regions the documentation lists have an S3 endpoint (`https://<region>-s3.storage.bunnycdn.com`); other regions answer 501.
+- **Credentials.** The access key id is the zone name (also the bucket) and the secret is the zone password. They are signed into requests and never sent, logged or put into an error.
+- **Limitations that shape the driver.** No ACLs, object lock, versioning, server-side encryption or lifecycle rules, and conditional writes are not documented, so a new file is not guarded against replacement by the zone; keys carry 122 random bits instead. Bunny validates `x-amz-checksum-sha256`, so every upload sends it and the SDK's default CRC32 checksum is turned off. Metadata is limited to 2 KB; the driver sends none. Requests are rate-limited (500 per second).
+- **Delivery.** Public files are served by a CDN pull zone attached to the storage zone; `STORAGE_PUBLIC_BASE_URL` is its https address and may not be the storage endpoint. Presigned addresses are not used. Uploads still pass through the private API.
+- **Minimum configuration.** `STORAGE_DRIVER=bunny-s3`, `STORAGE_BUNNY_ENDPOINT`, `STORAGE_BUNNY_REGION`, `STORAGE_BUNNY_ZONE`, `STORAGE_BUNNY_PASSWORD`, `STORAGE_ENVIRONMENT`, `STORAGE_PUBLIC_BASE_URL` and, in `development`, `STORAGE_WORKTREE`.
+- **Zones and keys per environment.** Production has its own zone and password, held only by the production deployment. Development has a separate zone that every development worktree shares; each worktree writes below `development/<worktree>/` and its driver refuses any key outside that prefix, so it cannot touch another worktree's or production's files. A development worktree never needs the production password, and the local driver needs no key at all.
 - Logos of technologies are static assets of the website, not uploads.
 
 ## Access
