@@ -180,6 +180,7 @@ describe("ExperienceSchema and ExperienceListSchema", () => {
         name: "Northwind Example",
         website: null,
         description: null,
+        logoId: null,
       },
       technologies: [
         {

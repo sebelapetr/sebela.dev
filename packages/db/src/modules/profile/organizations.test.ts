@@ -107,18 +107,24 @@ describe("organization persistence", () => {
       website: null,
     });
 
-    expect(updated).toMatchObject({
+    if (!updated.ok) throw new Error("expected the updated organization");
+    expect(updated.organization).toMatchObject({
       ...northwind,
       name: "Northwind",
       website: null,
       id: created.organization.id,
       createdAt: created.organization.createdAt,
     });
-    expect(updated?.updatedAt.getTime()).toBeGreaterThan(created.organization.updatedAt.getTime());
+    expect(updated.organization.updatedAt.getTime()).toBeGreaterThan(
+      created.organization.updatedAt.getTime(),
+    );
   });
 
   it("updates nothing for an unknown slug", async () => {
-    await expect(profile.updateOrganization("missing", { name: "Missing" })).resolves.toBeNull();
+    await expect(profile.updateOrganization("missing", { name: "Missing" })).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
   });
 
   it("deletes an organization once", async () => {

@@ -17,6 +17,8 @@ const fictional: PersonCreate = {
   links: [{ label: "Site", url: "https://example.test" }],
   availability: null,
   careerStartedOn: "2010-09-01",
+  photoId: null,
+  cvPdfId: null,
 };
 
 describe("profile service", () => {

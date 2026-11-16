@@ -22,7 +22,7 @@ const northwind = {
 
 describe("OrganizationCreateSchema", () => {
   it("accepts an organization with a website and a description", () => {
-    expect(OrganizationCreateSchema.parse(northwind)).toEqual(northwind);
+    expect(OrganizationCreateSchema.parse(northwind)).toEqual({ ...northwind, logoId: null });
   });
 
   it("fills an unset website and description with null", () => {
@@ -31,6 +31,14 @@ describe("OrganizationCreateSchema", () => {
       name: "Acme",
       website: null,
       description: null,
+      logoId: null,
+    });
+  });
+
+  it("accepts a logo by media identifier", () => {
+    expect(OrganizationCreateSchema.parse({ ...northwind, logoId: stored.id })).toEqual({
+      ...northwind,
+      logoId: stored.id,
     });
   });
 
@@ -56,8 +64,8 @@ describe("OrganizationCreateSchema", () => {
       "a website that is too long",
       { ...northwind, website: `https://northwind.example.com/${"x".repeat(2048)}` },
     ],
-    ["a logo reference before media exists", { ...northwind, logo: "northwind.png" }],
-    ["a logo media identifier", { ...northwind, logoMediaId: stored.id }],
+    ["a logo file name in place of the media identifier", { ...northwind, logoId: "logo.png" }],
+    ["an embedded logo", { ...northwind, logo: "northwind.png" }],
     ["an unexpected field", { ...northwind, position: 1 }],
   ])("rejects %s", (_, input) => {
     expect(OrganizationCreateSchema.safeParse(input).success).toBe(false);
@@ -74,10 +82,13 @@ describe("OrganizationUpdateSchema", () => {
     expect(OrganizationUpdateSchema.parse({ name: "Northwind" })).toEqual({ name: "Northwind" });
   });
 
-  it("accepts clearing the website and the description", () => {
-    expect(OrganizationUpdateSchema.parse({ website: null, description: null })).toEqual({
+  it("accepts clearing the website, the description and the logo", () => {
+    expect(
+      OrganizationUpdateSchema.parse({ website: null, description: null, logoId: null }),
+    ).toEqual({
       website: null,
       description: null,
+      logoId: null,
     });
   });
 
@@ -86,7 +97,8 @@ describe("OrganizationUpdateSchema", () => {
     ["a change of the slug", { slug: "renamed" }],
     ["clearing the name", { name: null }],
     ["an invalid website", { website: "mailto:office@northwind.example.com" }],
-    ["a logo reference", { logo: "northwind.png" }],
+    ["a logo file name", { logoId: "northwind.png" }],
+    ["an embedded logo", { logo: "northwind.png" }],
   ])("rejects %s", (_, input) => {
     expect(OrganizationUpdateSchema.safeParse(input).success).toBe(false);
   });
@@ -94,7 +106,7 @@ describe("OrganizationUpdateSchema", () => {
 
 describe("OrganizationSchema and OrganizationListSchema", () => {
   it("describe stored organizations with identifiers and timestamps", () => {
-    const organization = { ...stored, ...northwind };
+    const organization = { ...stored, ...northwind, logoId: null };
     expect(OrganizationSchema.parse(organization)).toEqual(organization);
     expect(OrganizationListSchema.parse([organization])).toEqual([organization]);
     expect(OrganizationListSchema.parse([])).toEqual([]);

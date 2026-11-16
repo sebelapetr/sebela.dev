@@ -3,19 +3,26 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { every } from "hono/combine";
 import { z } from "zod";
 
-import type { ProfileService, Services } from "@sebela/services";
+import type { MediaService, ProfileService, Services } from "@sebela/services";
 
 import type { ApiConfig } from "./config.js";
 import { authenticate, refuseCredentialsInUrl } from "./middleware/authentication.js";
 import type { ApiEnv } from "./middleware/context.js";
 import { ApiError, handleErrors } from "./middleware/errors.js";
 import { jsonBody } from "./middleware/json-body.js";
+import { multipartBody } from "./middleware/multipart-body.js";
 import { pathParams } from "./middleware/path-params.js";
 import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
+import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { createOpenApiDocument } from "./openapi.js";
-import { fillLocation, type RouteDefinition, type RouteDocumentation } from "./routing.js";
+import {
+  fillLocation,
+  type FileResponse,
+  type RouteDefinition,
+  type RouteDocumentation,
+} from "./routing.js";
 
 export type { Logger };
 
@@ -29,7 +36,7 @@ export interface WriteEvent {
 export type WriteNotifier = (event: WriteEvent) => Promise<void>;
 
 export interface AppDependencies {
-  readonly services: Pick<Services, "profile" | "apiKeys">;
+  readonly services: Pick<Services, "profile" | "apiKeys" | "media">;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
@@ -43,7 +50,7 @@ export interface RouteSummary {
   readonly method: "GET" | "POST" | "PATCH" | "DELETE";
   readonly path: string;
   readonly access: "public" | "private";
-  /** Whether the route reads a JSON body. */
+  /** Whether the route reads a body, JSON or a multipart upload. */
   readonly hasBody: boolean;
 }
 
@@ -61,6 +68,7 @@ const systemRoutes = {
     path: "/health",
     access: "public",
     summary: "Liveness",
+    budget: "health",
     description: "Answers while the process runs; it does not check the database. Its own budget.",
     response: { status: 200, description: "The API is running.", schema: HealthSchema },
     errors: [],
@@ -88,8 +96,9 @@ const systemRoutes = {
 type OpenApiDocument = ReturnType<typeof createOpenApiDocument>;
 
 /** The module routes, in registration and documentation order. */
-const moduleRoutes = (services: Pick<Services, "profile">): RouteDefinition[] => [
+const moduleRoutes = (services: Pick<Services, "profile" | "media">): RouteDefinition[] => [
   ...profileRoutes(services.profile),
+  ...mediaRoutes(services.media),
 ];
 
 /** Every documented route, in the order of the OpenAPI document. */
@@ -165,13 +174,29 @@ const describingProfile: ProfileService = {
   deleteCurrentFocus: documentationOnly,
 };
 
+/** A media service for describing routes; describing never calls it. */
+const describingMedia: MediaService = {
+  listMedia: documentationOnly,
+  getMedia: documentationOnly,
+  uploadMedia: documentationOnly,
+  updateMedia: documentationOnly,
+  deleteMedia: documentationOnly,
+  readMediaFile: documentationOnly,
+};
+
 /**
  * The OpenAPI document that `createApp` serves at `/openapi.json`, built without services,
  * configuration or a database. Deterministic: the same routes and schemas give the same document.
  */
 export function describeApi(): OpenApiDocument {
-  return createOpenApiDocument(documentedRoutes(moduleRoutes({ profile: describingProfile })));
+  return createOpenApiDocument(
+    documentedRoutes(moduleRoutes({ profile: describingProfile, media: describingMedia })),
+  );
 }
+
+/** Served files load nothing, even when opened directly; sandboxed files also run no script. */
+const FILE_POLICY = "default-src 'none'";
+const SANDBOXED_FILE_POLICY = `${FILE_POLICY}; sandbox`;
 
 const writeLog: Logger = (line) => {
   process.stdout.write(`${line}\n`);
@@ -182,7 +207,10 @@ const writeLog: Logger = (line) => {
  *
  * Every route is rate limited per client first. Private routes then verify the API key and count
  * against its budget before path parameters or a body are read; path parameters are validated
- * next, and body routes accept only bounded JSON that their schema validates. Failures use the common error shape; unknown routes are a public-limited 404.
+ * next, and body routes accept only bounded JSON that their schema validates, or upload routes a
+ * bounded multipart form. Uploads draw from their own per-client budget instead of the private one.
+ * File routes send their bytes with their own type and a sandboxing content security policy.
+ * Failures use the common error shape; unknown routes are a public-limited 404.
  */
 export function createApp(dependencies: AppDependencies): Api {
   const { services, config } = dependencies;
@@ -200,11 +228,14 @@ export function createApp(dependencies: AppDependencies): Api {
   // path parameters, body.
   const guard = (route: RouteDocumentation): MiddlewareHandler<ApiEnv> =>
     every(
-      limits.perClient(route === systemRoutes.health ? "health" : route.access),
+      limits.perClient(route.budget ?? route.access),
       refuseCredentialsInUrl,
       ...(route.access === "private" ? [authenticate(services.apiKeys), limits.perKey()] : []),
       ...(route.params ? [pathParams(route.params)] : []),
       ...(route.body ? jsonBody(route.body, config.bodyLimitBytes) : []),
+      ...(route.upload
+        ? multipartBody(route.upload.schema, route.upload.fileField, config.uploadLimitBytes)
+        : []),
     );
 
   const notify = async (event: WriteEvent) => {
@@ -225,6 +256,14 @@ export function createApp(dependencies: AppDependencies): Api {
         c.header("Location", fillLocation(route.response.location, result));
       }
       if (route.response.status === 204) return c.body(null, 204);
+      if (route.response.file) {
+        const file = result as FileResponse;
+        return c.body(new Uint8Array(file.bytes), 200, {
+          "content-type": file.mediaType,
+          "content-security-policy": file.sandboxed ? SANDBOXED_FILE_POLICY : FILE_POLICY,
+          "content-disposition": file.sandboxed ? "inline" : `inline; filename="${file.fileName}"`,
+        });
+      }
       return c.json(result, route.response.status);
     });
   };
@@ -247,11 +286,11 @@ export function createApp(dependencies: AppDependencies): Api {
 
   return {
     app,
-    routes: documented.map(({ method, path, access, body }) => ({
+    routes: documented.map(({ method, path, access, body, upload }) => ({
       method,
       path,
       access,
-      hasBody: body !== undefined,
+      hasBody: body !== undefined || upload !== undefined,
     })),
   };
 }

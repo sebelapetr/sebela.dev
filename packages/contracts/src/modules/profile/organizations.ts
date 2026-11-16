@@ -1,15 +1,13 @@
 import { z } from "zod";
 
-import { HttpUrlSchema, SlugSchema, text, timestamps } from "./fields.js";
+import { HttpUrlSchema, mediaReference, SlugSchema, text, timestamps } from "./fields.js";
 
-/**
- * Writable fields of an organization. Its logo is not one of them yet: it is attached once media
- * exists, so a body cannot carry an unresolved logo reference.
- */
+/** Writable fields of an organization, the same when written and when read. */
 const organizationFields = {
   name: text(200),
   website: HttpUrlSchema.nullable().meta({ description: "The organization's own website." }),
   description: text(5000).nullable().meta({ description: "Markdown." }),
+  logoId: mediaReference("The identifier of the organization's logo, an uploaded image."),
 };
 
 /** An organization: a company or client that experiences refer to. */
@@ -23,13 +21,14 @@ export const OrganizationListSchema = z.array(OrganizationSchema).meta({
   description: "Ordered by name, ignoring case, then by slug.",
 });
 
-/** Body of creating an organization. An omitted website or description is `null`. */
+/** Body of creating an organization. An omitted website, description or logo is `null`. */
 export const OrganizationCreateSchema = z
   .strictObject({
     slug: SlugSchema,
     ...organizationFields,
     website: organizationFields.website.default(null),
     description: organizationFields.description.default(null),
+    logoId: organizationFields.logoId.default(null),
   })
   .meta({ id: "OrganizationCreate" });
 

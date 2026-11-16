@@ -27,7 +27,8 @@ export function personRoutes(profile: ProfileService): RouteDefinition[] {
       path: PATH,
       access: "private",
       summary: "Create the person",
-      description: "There is at most one person; a second create is a conflict.",
+      description:
+        "There is at most one person; a second create is a conflict. `photoId` attaches uploaded image media and `cvPdfId` an uploaded, manually prepared PDF; the wrong kind or unknown media is refused.",
       body: PersonCreateSchema,
       response: {
         status: 201,

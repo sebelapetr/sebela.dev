@@ -16,9 +16,16 @@ const northwind: OrganizationCreate = {
   name: "Northwind Example",
   website: "https://northwind.example.com/",
   description: "A fictional logistics company.",
+  logoId: null,
 };
 
-const acme: OrganizationCreate = { slug: "acme", name: "Acme", website: null, description: null };
+const acme: OrganizationCreate = {
+  slug: "acme",
+  name: "Acme",
+  website: null,
+  description: null,
+  logoId: null,
+};
 
 describe("organization service", () => {
   let database: TemporaryDatabase;

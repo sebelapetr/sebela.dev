@@ -106,6 +106,7 @@ describe("CaseStudySchema", () => {
       selectedForHomepage: true,
       position: 0,
       technologies: [],
+      coverId: null,
       caseStudy,
     };
     expect(ProjectSchema.parse(project)).toEqual(project);

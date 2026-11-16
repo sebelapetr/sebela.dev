@@ -19,6 +19,12 @@ export const key = (description: string) =>
 /** The stable, unique address of a record; set when it is created and never changed. */
 export const SlugSchema = key("The stable, unique address of the record, for example `paldock`.");
 
+/**
+ * A reference to uploaded media by its identifier; `null` means none is attached. The media must
+ * exist and be of the expected kind (image or PDF) when it is written.
+ */
+export const mediaReference = (description: string) => z.uuid().nullable().meta({ description });
+
 /** Creation and last-change times of a stored record. */
 export const timestamps = { createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() };
 

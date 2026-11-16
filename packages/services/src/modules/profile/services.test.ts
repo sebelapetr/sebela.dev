@@ -50,6 +50,7 @@ describe("service service", () => {
       name: "Northwind",
       website: null,
       description: null,
+      logoId: null,
     });
     await profile.createExperience({
       slug: "northwind-lead",
@@ -78,6 +79,7 @@ describe("service service", () => {
         selectedForHomepage: false,
         position,
         technologies: [],
+        coverId: null,
       });
     }
     for (const [position, slug] of ["agent-lab", "vector-notes"].entries()) {

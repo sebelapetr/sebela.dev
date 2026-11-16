@@ -62,8 +62,9 @@ describe("the person API", () => {
     const body = PersonSchema.parse(await created.json());
     expect(body).toMatchObject(full);
     expect(Object.keys(body).sort()).toEqual(
-      [...Object.keys(full), "id", "createdAt", "updatedAt"].sort(),
+      [...Object.keys(full), "id", "photoId", "cvPdfId", "createdAt", "updatedAt"].sort(),
     );
+    expect(body).toMatchObject({ photoId: null, cvPdfId: null });
 
     const read = await request("GET");
     expect(read.status).toBe(200);

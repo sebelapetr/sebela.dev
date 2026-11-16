@@ -47,6 +47,7 @@ describe("the case-study API", () => {
     auth = bearer((await backend.services.apiKeys.createKey("case-study routes")).key);
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "northwind",
       name: "Northwind",
       website: null,
@@ -78,6 +79,7 @@ describe("the case-study API", () => {
     }
     for (const [position, slug] of ["routing-engine", "fleet-dashboard"].entries()) {
       await profile.createProject({
+        coverId: null,
         slug,
         experience: "northwind-lead",
         name: slug,

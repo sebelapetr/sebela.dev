@@ -18,6 +18,8 @@ describe("PersonCreateSchema", () => {
       links: [],
       availability: null,
       careerStartedOn: null,
+      photoId: null,
+      cvPdfId: null,
     });
   });
 
@@ -30,6 +32,8 @@ describe("PersonCreateSchema", () => {
       links: [{ label: "Website", url: "https://example.com/alex" }],
       availability: "Open to one new client from next quarter.",
       careerStartedOn: "2015-09-01",
+      photoId: "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b",
+      cvPdfId: "1c9f6d3f-2e5b-4a7c-8d4f-3b8e9f0a1b2c",
     };
     expect(PersonCreateSchema.parse(full)).toEqual(full);
   });
@@ -52,6 +56,9 @@ describe("PersonCreateSchema", () => {
     ],
     ["a date that is not a calendar date", { ...minimal, careerStartedOn: "2015-02-30" }],
     ["a date with a time", { ...minimal, careerStartedOn: "2015-09-01T00:00:00Z" }],
+    ["a photo that is a file name", { ...minimal, photoId: "alex.png" }],
+    ["a CV PDF that is a path", { ...minimal, cvPdfId: "../cv.pdf" }],
+    ["an embedded photo", { ...minimal, photo: { url: "https://media.example.test/a.png" } }],
     ["a name that is too long", { ...minimal, name: "x".repeat(201) }],
     [
       "too many links",
@@ -74,6 +81,14 @@ describe("PersonUpdateSchema", () => {
 
   it("allows clearing an optional field", () => {
     expect(PersonUpdateSchema.parse({ email: null })).toEqual({ email: null });
+  });
+
+  it("attaches and clears the photo and the CV PDF by media identifier", () => {
+    const photoId = "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b";
+    expect(PersonUpdateSchema.parse({ photoId, cvPdfId: null })).toEqual({
+      photoId,
+      cvPdfId: null,
+    });
   });
 
   it.each([

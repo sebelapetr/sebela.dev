@@ -59,8 +59,9 @@ describe("the organization API", () => {
     const body = OrganizationSchema.parse(await created.json());
     expect(body).toMatchObject(northwind);
     expect(Object.keys(body).sort()).toEqual(
-      [...Object.keys(northwind), "id", "createdAt", "updatedAt"].sort(),
+      [...Object.keys(northwind), "id", "logoId", "createdAt", "updatedAt"].sort(),
     );
+    expect(body.logoId).toBeNull();
 
     const read = await request("/v1/organizations/northwind");
     expect(read.status).toBe(200);

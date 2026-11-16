@@ -6,6 +6,7 @@ import {
   DateSchema,
   endFollowsStart,
   HttpUrlSchema,
+  mediaReference,
   SlugSchema,
   technologiesAreUnique,
   text,
@@ -41,6 +42,7 @@ const scalarFields = {
   position: PositionSchema.meta({
     description: "Ascending order within the owning experience; ties are ordered by slug.",
   }),
+  coverId: mediaReference("The identifier of the project's cover, an uploaded image."),
 };
 
 const ExperienceSlugSchema = SlugSchema.meta({
@@ -95,8 +97,8 @@ export const ProjectListSchema = z.array(ProjectSchema).meta({
 
 /**
  * Body of creating a project in an existing experience together with its technology links. An
- * omitted end means an ongoing project; omitted links and technologies are empty and an omitted
- * homepage selection is `false`.
+ * omitted end means an ongoing project; omitted links and technologies are empty, an omitted
+ * homepage selection is `false` and an omitted cover is `null`.
  */
 export const ProjectCreateSchema = z
   .strictObject({
@@ -106,6 +108,7 @@ export const ProjectCreateSchema = z
     endedOn: scalarFields.endedOn.default(null),
     links: scalarFields.links.default([]),
     selectedForHomepage: scalarFields.selectedForHomepage.default(false),
+    coverId: scalarFields.coverId.default(null),
     technologies: relationFields.technologies.default([]),
   })
   .superRefine(endFollowsStart)

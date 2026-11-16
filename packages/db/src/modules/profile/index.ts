@@ -7,6 +7,12 @@ import { createCurrentFocusPersistence } from "./current-focus.js";
 import { createEducationPersistence } from "./education.js";
 import { createExperiencePersistence } from "./experiences.js";
 import { createExplorationPersistence } from "./explorations.js";
+import {
+  checkMediaReferences,
+  createMediaPersistence,
+  type MediaReference,
+  refusingMedia,
+} from "./media.js";
 import { createOrganizationPersistence } from "./organizations.js";
 import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
@@ -19,6 +25,8 @@ import type {
   EducationPersistence,
   ExperiencePersistence,
   ExplorationPersistence,
+  MediaPersistence,
+  MediaReferenceFailure,
   OrganizationPersistence,
   ProjectPersistence,
   ServicePersistence,
@@ -75,11 +83,19 @@ export type {
   ExplorationRelations,
   ExplorationStatus,
   ExplorationWriteFailure,
+  DeleteMediaResult,
+  MediaFields,
+  MediaPersistence,
+  MediaRecord,
+  MediaReferenceFailure,
+  MediaType,
   OrganizationFields,
+  OrganizationMedia,
   OrganizationPersistence,
   OrganizationRecord,
   ProjectFields,
   ProjectLinkRecord,
+  ProjectMedia,
   ProjectPersistence,
   ProjectRecord,
   ProjectRelations,
@@ -106,6 +122,7 @@ export type {
   UpdateEducationResult,
   UpdateExperienceResult,
   UpdateExplorationResult,
+  UpdateOrganizationResult,
   UpdateProjectResult,
   UpdateServiceResult,
   UpdateTechnologyResult,
@@ -131,14 +148,25 @@ export interface PersonFields {
   careerStartedOn: string | null;
 }
 
-export interface PersonRecord extends PersonFields {
+/** Media attached to the person, by media id; `null` while none is attached. */
+export interface PersonMedia {
+  /** An image. */
+  photoId: string | null;
+  /** A PDF: the current, manually prepared CV PDF. */
+  cvPdfId: string | null;
+}
+
+export interface PersonRecord extends PersonFields, PersonMedia {
   id: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export type CreatePersonResult =
-  { ok: true; person: PersonRecord } | { ok: false; reason: "conflict" };
+  { ok: true; person: PersonRecord } | { ok: false; reason: "conflict" } | MediaReferenceFailure;
+
+export type UpdatePersonResult =
+  { ok: true; person: PersonRecord } | { ok: false; reason: "not_found" } | MediaReferenceFailure;
 
 /** Persistence operations of the profile domain. */
 export interface ProfilePersistence
@@ -152,13 +180,17 @@ export interface ProfilePersistence
     ServicePersistence,
     EducationPersistence,
     TestimonialPersistence,
-    CurrentFocusPersistence {
+    CurrentFocusPersistence,
+    MediaPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
-  /** Creates the person; `conflict` when one already exists, also for a racing create. */
-  createPerson(fields: PersonFields): Promise<CreatePersonResult>;
-  /** Changes only the given fields; `null` when there is no person. */
-  updatePerson(changes: Partial<PersonFields>): Promise<PersonRecord | null>;
+  /**
+   * Creates the person; `conflict` when one already exists, also for a racing create; see
+   * `MediaReferenceFailure`. Omitted media is `null`.
+   */
+  createPerson(fields: PersonFields & Partial<PersonMedia>): Promise<CreatePersonResult>;
+  /** Changes only the given fields; `not_found` when there is no person. */
+  updatePerson(changes: Partial<PersonFields & PersonMedia>): Promise<UpdatePersonResult>;
   /** `true` when a person was deleted, `false` when there was none. */
   deletePerson(): Promise<boolean>;
 }
@@ -174,9 +206,17 @@ const columns = {
   links: persons.links,
   availability: persons.availability,
   careerStartedOn: persons.careerStartedOn,
+  photoId: persons.photoId,
+  cvPdfId: persons.cvPdfId,
   createdAt: persons.createdAt,
   updatedAt: persons.updatedAt,
 };
+
+/** The photo must be an image and the CV PDF a PDF. */
+const personMedia = (fields: Partial<PersonMedia>): MediaReference[] => [
+  { field: "photoId", id: fields.photoId, kind: "image" },
+  { field: "cvPdfId", id: fields.cvPdfId, kind: "pdf" },
+];
 
 /**
  * The singleton person in `profile.persons`. There is at most one row: the unique `singleton`
@@ -194,25 +234,40 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createEducationPersistence(db),
     ...createTestimonialPersistence(db),
     ...createCurrentFocusPersistence(db),
+    ...createMediaPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;
     },
-    async createPerson(fields) {
-      const [row] = await db
-        .insert(persons)
-        .values(fields)
-        .onConflictDoNothing({ target: persons.singleton })
-        .returning(columns);
-      return row ? { ok: true, person: row } : { ok: false, reason: "conflict" };
+    createPerson(fields) {
+      return refusingMedia(() =>
+        db.transaction(async (tx) => {
+          await checkMediaReferences(tx, personMedia(fields));
+          const [row] = await tx
+            .insert(persons)
+            .values(fields)
+            .onConflictDoNothing({ target: persons.singleton })
+            .returning(columns);
+          return row
+            ? ({ ok: true, person: row } as const)
+            : ({ ok: false, reason: "conflict" } as const);
+        }),
+      );
     },
-    async updatePerson(changes) {
-      // `clock_timestamp()`, not `now()`: it advances also within one transaction.
-      const [row] = await db
-        .update(persons)
-        .set({ ...changes, updatedAt: sql`clock_timestamp()` })
-        .returning(columns);
-      return row ?? null;
+    updatePerson(changes) {
+      return refusingMedia(() =>
+        db.transaction(async (tx) => {
+          await checkMediaReferences(tx, personMedia(changes));
+          // `clock_timestamp()`, not `now()`: it advances also within one transaction.
+          const [row] = await tx
+            .update(persons)
+            .set({ ...changes, updatedAt: sql`clock_timestamp()` })
+            .returning(columns);
+          return row
+            ? ({ ok: true, person: row } as const)
+            : ({ ok: false, reason: "not_found" } as const);
+        }),
+      );
     },
     async deletePerson() {
       const rows = await db.delete(persons).returning({ id: persons.id });

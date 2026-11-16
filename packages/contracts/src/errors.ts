@@ -11,8 +11,10 @@ import { z } from "zod";
  *   revoked keys are indistinguishable.
  * - `not_found` (404): no such route or record.
  * - `conflict` (409): the write contradicts existing content, for example a second person.
- * - `payload_too_large` (413): the body exceeds the configured limit.
- * - `unsupported_media_type` (415): the body is not `application/json`.
+ * - `payload_too_large` (413): the body or an uploaded file exceeds its configured limit.
+ * - `unsupported_media_type` (415): the body is not of the type the route accepts (`application/json`,
+ *   or `multipart/form-data` for an upload), or an uploaded file is not an accepted type, or its
+ *   declared type or extension does not match its content.
  * - `rate_limited` (429): a rate-limit budget is exhausted; `Retry-After` says when to retry.
  * - `internal_error` (500): an unexpected failure. No stack, SQL or secret is included.
  */

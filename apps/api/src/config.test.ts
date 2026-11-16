@@ -14,6 +14,8 @@ const env = {
   API_RATE_LIMIT_PUBLIC: "300/60",
   API_RATE_LIMIT_PRIVATE: "60/60",
   API_RATE_LIMIT_KEY: "30/10",
+  API_RATE_LIMIT_UPLOAD: "10/60",
+  MEDIA_MAX_BYTES: "10485760",
   API_RATE_LIMIT_MAX_TRACKED: "5000",
 };
 
@@ -23,12 +25,14 @@ describe("readApiConfig", () => {
       host: "api.test",
       port: Number(listenOn),
       bodyLimitBytes: 196_608,
+      uploadLimitBytes: 10_485_760,
       trustedProxies: [],
       rateLimits: {
         health: { max: 120, windowMs: 60_000 },
         public: { max: 300, windowMs: 60_000 },
         private: { max: 60, windowMs: 60_000 },
         key: { max: 30, windowMs: 10_000 },
+        upload: { max: 10, windowMs: 60_000 },
         maxTrackedCallers: 5000,
       },
     });
@@ -47,6 +51,14 @@ describe("readApiConfig", () => {
     expect(attempt).toThrow(/API_PORT/);
     expect(attempt).toThrow(/API_RATE_LIMIT_KEY/);
     expect(attempt).not.toThrow(/secret-ish/);
+  });
+
+  it("refuses a missing or non-positive upload limit", () => {
+    expect(() => readApiConfig({ ...env, MEDIA_MAX_BYTES: undefined })).toThrow(/MEDIA_MAX_BYTES/);
+    expect(() => readApiConfig({ ...env, MEDIA_MAX_BYTES: "0" })).toThrow(/MEDIA_MAX_BYTES/);
+    expect(() => readApiConfig({ ...env, API_RATE_LIMIT_UPLOAD: "1" })).toThrow(
+      /API_RATE_LIMIT_UPLOAD/,
+    );
   });
 
   it("refuses a budget without a positive limit and window", () => {

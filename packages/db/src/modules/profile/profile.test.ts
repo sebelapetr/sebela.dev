@@ -77,14 +77,18 @@ describe("profile persistence", () => {
       longBio: "Long",
     });
 
-    expect(updated).toMatchObject({ ...fictional, headline: "Changed", longBio: "Long" });
-    expect(updated?.id).toBe(created.person.id);
-    expect(updated?.createdAt).toEqual(created.person.createdAt);
-    expect(updated?.updatedAt.getTime()).toBeGreaterThan(created.person.updatedAt.getTime());
+    if (!updated.ok) throw new Error("expected the updated person");
+    expect(updated.person).toMatchObject({ ...fictional, headline: "Changed", longBio: "Long" });
+    expect(updated.person.id).toBe(created.person.id);
+    expect(updated.person.createdAt).toEqual(created.person.createdAt);
+    expect(updated.person.updatedAt.getTime()).toBeGreaterThan(created.person.updatedAt.getTime());
   });
 
   it("updates nothing while there is no person", async () => {
-    await expect(profile.updatePerson({ headline: "Changed" })).resolves.toBeNull();
+    await expect(profile.updatePerson({ headline: "Changed" })).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
   });
 
   it("deletes the person once", async () => {

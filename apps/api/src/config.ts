@@ -17,6 +17,11 @@ export interface ApiConfig {
   /** Largest accepted request body, enforced while it is received. */
   readonly bodyLimitBytes: number;
   /**
+   * Largest accepted uploaded file, `MEDIA_MAX_BYTES`, the limit the media service enforces too. An
+   * upload body may exceed it only by a fixed allowance for the form around the file.
+   */
+  readonly uploadLimitBytes: number;
+  /**
    * Addresses of reverse proxies whose `X-Forwarded-For` is believed. Empty: the client address is
    * the connection's, and forwarded headers are ignored. Addresses match exactly as the socket
    * reports them: a proxy reached over IPv4 on a dual-stack listener appears as `::ffff:<ipv4>` and
@@ -32,6 +37,8 @@ export interface ApiConfig {
     readonly private: RatePolicy;
     /** Per verified API key, private routes. */
     readonly key: RatePolicy;
+    /** Per client, uploads, instead of the private budget; counted before the key is verified. */
+    readonly upload: RatePolicy;
     /** Most callers tracked at once across all budgets; the oldest window is evicted beyond it. */
     readonly maxTrackedCallers: number;
   };
@@ -59,6 +66,8 @@ const ApiEnvironmentSchema = z.object({
   API_RATE_LIMIT_PUBLIC: ratePolicy,
   API_RATE_LIMIT_PRIVATE: ratePolicy,
   API_RATE_LIMIT_KEY: ratePolicy,
+  API_RATE_LIMIT_UPLOAD: ratePolicy,
+  MEDIA_MAX_BYTES: positive,
   API_RATE_LIMIT_MAX_TRACKED: positive,
 });
 
@@ -79,12 +88,14 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
     host: settings.API_HOST,
     port: settings.API_PORT,
     bodyLimitBytes: settings.API_BODY_LIMIT_BYTES,
+    uploadLimitBytes: settings.MEDIA_MAX_BYTES,
     trustedProxies: settings.API_TRUSTED_PROXIES,
     rateLimits: {
       health: settings.API_RATE_LIMIT_HEALTH,
       public: settings.API_RATE_LIMIT_PUBLIC,
       private: settings.API_RATE_LIMIT_PRIVATE,
       key: settings.API_RATE_LIMIT_KEY,
+      upload: settings.API_RATE_LIMIT_UPLOAD,
       maxTrackedCallers: settings.API_RATE_LIMIT_MAX_TRACKED,
     },
   };

@@ -43,9 +43,13 @@ describe("rate limiting", () => {
 
   it("limits every registered route and unknown paths, private ones before key verification", async () => {
     const config = testConfig({
-      rateLimits: { health: once, public: once, private: once, key: once },
+      rateLimits: { health: once, public: once, private: once, key: once, upload: once },
     });
-    const paths = backend.api().routes.map((route) => ({ method: route.method, path: route.path }));
+    // A route path is its own sample URL, without Hono parameter patterns such as `{.+}`.
+    const paths = backend.api().routes.map((route) => ({
+      method: route.method,
+      path: route.path.replace(/\{[^}]*\}/g, ""),
+    }));
     paths.push({ method: "GET", path: "/no-such-route" });
 
     for (const { method, path } of paths) {

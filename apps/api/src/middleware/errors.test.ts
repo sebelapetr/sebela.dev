@@ -93,7 +93,12 @@ describe("validation and error handling", () => {
   });
 
   it("rejects an update that changes nothing", async () => {
-    await backend.services.profile.createPerson({ ...person, ...emptyOptional });
+    await backend.services.profile.createPerson({
+      photoId: null,
+      cvPdfId: null,
+      ...person,
+      ...emptyOptional,
+    });
     const response = await backend
       .api()
       .app.request("/v1/person", { method: "PATCH", ...json({}, auth) }, connection());

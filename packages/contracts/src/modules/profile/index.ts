@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { HttpUrlSchema, text } from "./fields.js";
+import { HttpUrlSchema, mediaReference, text } from "./fields.js";
 
 export const PersonLinkSchema = z
   .strictObject({
@@ -24,6 +24,10 @@ const optional = {
   links: z.array(PersonLinkSchema).max(20),
   availability: text(500).nullable(),
   careerStartedOn: z.iso.date().nullable().meta({ description: "The date the career started." }),
+  photoId: mediaReference("The identifier of the person's photo, an uploaded image."),
+  cvPdfId: mediaReference(
+    "The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated.",
+  ),
 };
 
 /** The person, the singleton profile record. */
@@ -47,6 +51,8 @@ export const PersonCreateSchema = z
     links: optional.links.default([]),
     availability: optional.availability.default(null),
     careerStartedOn: optional.careerStartedOn.default(null),
+    photoId: optional.photoId.default(null),
+    cvPdfId: optional.cvPdfId.default(null),
   })
   .meta({ id: "PersonCreate" });
 

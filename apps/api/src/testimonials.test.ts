@@ -49,7 +49,13 @@ describe("the testimonial API", () => {
     auth = bearer((await backend.services.apiKeys.createKey("testimonial routes")).key);
     const { profile } = backend.services;
     for (const slug of ["northwind", "acme"]) {
-      await profile.createOrganization({ slug, name: slug, website: null, description: null });
+      await profile.createOrganization({
+        logoId: null,
+        slug,
+        name: slug,
+        website: null,
+        description: null,
+      });
     }
     const experience = {
       title: "Engineer",

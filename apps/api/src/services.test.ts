@@ -61,6 +61,7 @@ describe("the service API", () => {
     auth = bearer((await backend.services.apiKeys.createKey("service routes")).key);
     const { profile } = backend.services;
     await profile.createOrganization({
+      logoId: null,
       slug: "northwind",
       name: "Northwind",
       website: null,
@@ -80,6 +81,7 @@ describe("the service API", () => {
     });
     for (const [position, slug] of ["routing-engine", "fleet-dashboard"].entries()) {
       await profile.createProject({
+        coverId: null,
         slug,
         experience: "northwind-lead",
         name: slug,
