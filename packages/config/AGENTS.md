@@ -59,6 +59,7 @@ Prettier is configured once, in the root `prettier.config.js`, which re-exports 
 - Tool versions live in the `catalog` of `pnpm-workspace.yaml`. `typescript` stays within the range `typescript-eslint` supports (its peer dependency); update both together.
 - Keep the conventions in `docs/code-standards.md` and the export table above in step with the files.
 - A change to the dependency table in `docs/repository-structure.md` changes `DEPENDENCIES` in `import-boundaries.js` and its tests in the same pull request. A new rule behaviour starts with a failing case in `import-boundaries.test.js` (packages, entries, paths) or `module-boundaries.test.js` (modules, tooling, cycles).
+- The cycle search costs file reads and TypeScript parses. Each linted file that imports within its own member builds its own module graph; parsed specifiers are cached per file version for the whole lint run, while unit dependencies are cached only per linted file. If lint time of a large member grows noticeably, cache the member's dependency graph per lint run (keyed by the file versions) instead of widening what a single file reads.
 
 ## Checks
 
