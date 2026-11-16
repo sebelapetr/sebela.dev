@@ -1,15 +1,13 @@
 import { resolve } from "node:path";
 
+import { createBunnyS3Driver } from "./drivers/bunny-s3.js";
 import { createLocalDriver } from "./drivers/local.js";
 import { fileNameOf, segmentPattern, type StoredExtension } from "./keys.js";
 
 export type { StoredExtension } from "./keys.js";
 
-/** The validated storage settings of a process. Read once where it starts, then passed down. */
-export interface StorageConfig {
-  readonly driver: "local";
-  /** Absolute folder that holds every local file. */
-  readonly root: string;
+/** The key prefix and public base every driver shares. */
+interface StorageLayout {
   /** The environment folder, the first segment of every key. */
   readonly environment: string;
   /** The worktree folder below the environment, or `null` outside a development worktree. */
@@ -17,6 +15,29 @@ export interface StorageConfig {
   /** The address files are publicly served from, without a trailing slash. */
   readonly publicBaseUrl: string;
 }
+
+/** Files on local disk, served by the API. */
+export interface LocalStorageConfig extends StorageLayout {
+  readonly driver: "local";
+  /** Absolute folder that holds every local file. */
+  readonly root: string;
+}
+
+/** Bunny Storage through its S3-compatible API; files are served by the zone's CDN pull zone. */
+export interface BunnyS3StorageConfig extends StorageLayout {
+  readonly driver: "bunny-s3";
+  /** The S3 endpoint of the zone's region, an https origin without a path. */
+  readonly endpoint: string;
+  /** The region code the requests are signed for, for example `de`. */
+  readonly region: string;
+  /** The storage zone: the bucket and the access key id. */
+  readonly zone: string;
+  /** The zone password, the secret access key. Never logged or put into an error. */
+  readonly password: string;
+}
+
+/** The validated storage settings of a process. Read once where it starts, then passed down. */
+export type StorageConfig = LocalStorageConfig | BunnyS3StorageConfig;
 
 /**
  * Store a file, delete it, give its public address. Keys are `<environment>/[<worktree>/]<uuid>.<ext>`,
@@ -101,6 +122,7 @@ function publicBase(value: string | undefined): string | null {
 
 /** Opens the configured driver. Nothing touches the disk until the first operation. */
 export function openStorage(config: StorageConfig): OpenedStorage {
+  if (config.driver === "bunny-s3") return { storage: createBunnyS3Driver(config), files: null };
   const prefix =
     config.worktree === null ? [config.environment] : [config.environment, config.worktree];
   const local = createLocalDriver(config.root, prefix);
