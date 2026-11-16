@@ -58,6 +58,22 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 - **No takeover.** If `core.hooksPath` already points elsewhere, the installer keeps it and says so. The phase loop does not change repository settings, so under `SEBELA_UNATTENDED=1` the installer only reports; the owner's one `pnpm install` in the main checkout enables the hooks for every worktree.
 - A failing hook is fixed, not bypassed: do not commit with `--no-verify`.
 
+### What CI validates
+
+The `Commit messages` workflow (`.github/workflows/commit-messages.yml`, `scripts/checks/commit-messages.mjs`) applies the rules of the `commit-msg` hook, from the same module (`scripts/harness/lib/commit-message.mjs`), to what reaches GitHub. It runs on every pull request, again whenever a pull request's title is edited, and on pushes to `master` and `phase/**`.
+
+| Event                                              | Commits checked                                   | Merge commits | `fixup!`, `squash!`, `amend!` | Title                                                                                                                              |
+| -------------------------------------------------- | ------------------------------------------------- | ------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Issue pull request (head is not a `phase/` branch) | Base commit of the pull request to its head       | Pass          | Pass                          | Checked: it becomes the squash commit, so it must be a Conventional header itself — not a `Merge …` or autosquash header, one line |
+| Phase pull request (head is a `phase/` branch)     | Base commit of the pull request to its head       | Pass          | Refused                       | Not checked: a phase is merged with a merge commit                                                                                 |
+| Push to `master` or a phase branch                 | The commit before the push to the pushed commit   | Pass          | Refused                       | —                                                                                                                                  |
+| Push that creates a phase branch                   | The commits the branch adds to the default branch | Pass          | Refused                       | —                                                                                                                                  |
+
+- **Test-first history passes.** Only the message is checked, never the tree of each commit, so a red test commit followed by its implementation is accepted; CI's other jobs check the head of the branch.
+- **Autosquash markers are folded before they reach a shared branch.** On an issue branch the squash merge removes them; a phase branch and `master` keep every commit, so a `fixup!` there fails the check.
+- **The phase merge commit.** GitHub's default header `Merge pull request #N from …` passes as a message Git writes; a custom header for that merge commit must be in Conventional form.
+- `Revert "…"` passes everywhere.
+
 ## Issue pull requests
 
 - Opened by the orchestrator against the phase branch once checks are green and the reviewer has approved.
