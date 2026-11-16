@@ -80,6 +80,10 @@ export function worktreeDirName(branch) {
   return name;
 }
 
+export function databaseName() {
+  throw new Error("not implemented");
+}
+
 export function envFileContent(slot, basePorts, extra = {}) {
   const values = { WORKTREE_SLOT: slot, ...portsForSlot(slot, basePorts), ...extra };
   const lines = Object.entries(values).map(([key, value]) => `${key}=${value}`);
