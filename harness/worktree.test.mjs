@@ -35,10 +35,11 @@ function mainCheckout(t) {
 }
 
 // Stands in for the shared Postgres at the harness's database interface: it records which
-// worktree owns which database and can be told to fail. The real Postgres implementation is
-// exercised end to end by worktree-databases.e2e.mjs.
+// worktree owns which database and role, the role's current password, and can be told to fail.
+// The real Postgres implementation is exercised end to end by worktree-databases.e2e.mjs.
 function fakeDatabases() {
   const owners = new Map();
+  const passwords = new Map();
   const claim = (name, owner) => {
     const holder = owners.get(name);
     if (holder !== undefined && holder !== owner)
@@ -46,16 +47,21 @@ function fakeDatabases() {
   };
   return {
     owners,
+    passwords,
     failing: false,
-    ensure(name, owner) {
+    ensure(name, owner, { password } = {}) {
       if (this.failing) throw new Error("fixture: database service unavailable");
       claim(name, owner);
       owners.set(name, owner);
+      if (password !== undefined) passwords.set(name, password);
+      else if (!passwords.has(name)) passwords.set(name, "fixture-unknown-password");
+      return { user: name };
     },
     drop(name, owner) {
       if (this.failing) throw new Error("fixture: database service unavailable");
       claim(name, owner);
       owners.delete(name);
+      passwords.delete(name);
     },
   };
 }
@@ -187,6 +193,70 @@ test("creating a worktree gives it its own database and writes the name with its
   assert.equal(Number(settings.WORKTREE_SLOT), worktree.slot);
 });
 
+test("creating a worktree gives it its own role and writes its credentials", (t) => {
+  const { databases, worktree, envPath } = fixture(t);
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+
+  assert.equal(settings.DATABASE_USER, databaseName("fix/fixture"));
+  assert.equal(settings.DATABASE_PASSWORD, databases.passwords.get(worktree.database));
+  assert.match(settings.DATABASE_PASSWORD, /^[A-Za-z0-9_-]{43,}$/);
+});
+
+test("the password is not part of the result and the file is readable only by its owner", (t) => {
+  const { worktree, envPath } = fixture(t);
+  const { DATABASE_PASSWORD } = parseEnv(fs.readFileSync(envPath, "utf8"));
+
+  assert.equal(JSON.stringify(worktree).includes(DATABASE_PASSWORD), false);
+  assert.equal(fs.statSync(envPath).mode & 0o077, 0);
+});
+
+test("worktrees get different passwords", (t) => {
+  const { databases, create, worktree } = fixture(t);
+  const other = create("feat/other");
+
+  assert.notEqual(
+    databases.passwords.get(other.database),
+    databases.passwords.get(worktree.database),
+  );
+});
+
+test("creating a worktree again with its environment file keeps its password", (t) => {
+  const { databases, create, worktree, envPath } = fixture(t);
+  const settings = fs.readFileSync(envPath, "utf8");
+  const password = databases.passwords.get(worktree.database);
+
+  create();
+
+  assert.equal(fs.readFileSync(envPath, "utf8"), settings);
+  assert.equal(databases.passwords.get(worktree.database), password);
+});
+
+test("regenerating a missing environment file gives the role a new password", (t) => {
+  const { databases, create, worktree, envPath } = fixture(t);
+  const previous = databases.passwords.get(worktree.database);
+  fs.rmSync(envPath);
+
+  create();
+
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  assert.notEqual(settings.DATABASE_PASSWORD, previous);
+  assert.equal(settings.DATABASE_PASSWORD, databases.passwords.get(worktree.database));
+  assert.equal(settings.DATABASE_USER, worktree.database);
+});
+
+test("an environment symlink counts as an existing file and keeps the password", (t) => {
+  const { mainRoot, databases, create, worktree, envPath } = fixture(t);
+  const password = databases.passwords.get(worktree.database);
+  const target = path.join(mainRoot, "fixture-settings.txt");
+  fs.writeFileSync(target, "FIXTURE=keep\n");
+  fs.rmSync(envPath);
+  fs.symlinkSync(target, envPath);
+
+  create();
+
+  assert.equal(databases.passwords.get(worktree.database), password);
+});
+
 test("creating an existing worktree again reuses its database", (t) => {
   const { databases, create, worktree } = fixture(t);
 
@@ -249,6 +319,7 @@ test("removing a worktree drops only its database and frees only its slot", (t) 
 
   assert.equal(fs.existsSync(worktree.path), false);
   assert.deepEqual([...databases.owners], [[other.database, other.name]]);
+  assert.deepEqual([...databases.passwords.keys()], [other.database]);
   assert.deepEqual(listWorktrees({ mainRoot }), [{ slot: other.slot, name: other.name }]);
 });
 
