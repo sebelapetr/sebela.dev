@@ -169,6 +169,41 @@ describe("the OpenAPI document and the reference", () => {
     ]);
   });
 
+  it("documents the experiences from their contract schemas", () => {
+    expect(operation("GET", "/v1/experiences").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ExperienceList" } },
+    });
+    expect(operation("GET", "/v1/experiences/:slug").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Experience" } },
+    });
+    expect(operation("POST", "/v1/experiences").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ExperienceCreate" } },
+    });
+    expect(operation("PATCH", "/v1/experiences/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ExperienceUpdate" } },
+    });
+    expect(operation("POST", "/v1/experiences").responses["201"]?.headers).toHaveProperty(
+      "Location",
+    );
+    expect(Object.keys(operation("POST", "/v1/experiences").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    expect(Object.keys(operation("PATCH", "/v1/experiences/:slug").responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    // Future records that refer to an experience protect it: the delete may be a conflict.
+    expect(Object.keys(operation("DELETE", "/v1/experiences/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "401", "404", "409"]),
+    );
+    // A technology an experience links is not deleted either.
+    expect(Object.keys(operation("DELETE", "/v1/technologies/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "404", "409"]),
+    );
+    expect(operation("GET", "/v1/experiences/:slug").parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });
