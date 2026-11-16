@@ -145,7 +145,7 @@ The phases organise implementation; they are not separate public releases. Speci
 There is no runnable application in this checkout yet. The workspace, its quality checks and the local database are in place:
 
 - **Prerequisites:** Git, [Node.js](https://nodejs.org/) 26 (LTS; see `.nvmrc`), [pnpm](https://pnpm.io/) 12.21.0, for example `npm install --global pnpm@12.21.0`, and Docker with Compose.
-- **Install:** `pnpm install --frozen-lockfile`
+- **Install:** `pnpm install --frozen-lockfile`. It also enables the Git hooks that format and lint staged files and check commit messages ([local hooks](docs/git-workflow.md#local-hooks)).
 - **Infrastructure:** copy `.env.example` to `.env`, set a local `POSTGRES_PASSWORD`, then `docker compose up --detach --wait` starts PostgreSQL with pgvector. Every worktree gets its own database in it.
 - **Check:** `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` — the same commands CI runs.
 
