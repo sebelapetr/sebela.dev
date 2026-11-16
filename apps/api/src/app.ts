@@ -84,6 +84,11 @@ const systemRoutes = {
   },
 } satisfies Record<string, RouteDocumentation>;
 
+/** The OpenAPI document of the API, built without services, configuration or a database. */
+export function describeApi(): ReturnType<typeof createOpenApiDocument> {
+  throw new Error("Not implemented.");
+}
+
 const writeLog: Logger = (line) => {
   process.stdout.write(`${line}\n`);
 };
