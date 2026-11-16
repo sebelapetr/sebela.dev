@@ -50,6 +50,98 @@ export interface paths {
         patch: operations["updatePerson"];
         trace?: never;
     };
+    "/v1/technologies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the technologies
+         * @description Ordered by tier (primary first), group (core first), position and slug.
+         */
+        get: operations["listTechnologies"];
+        put?: never;
+        /**
+         * Create a technology
+         * @description The slug is unique and stable; a taken slug is a conflict.
+         */
+        post: operations["createTechnology"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/technologies/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a technology */
+        get: operations["getTechnology"];
+        put?: never;
+        post?: never;
+        /** Delete a technology */
+        delete: operations["deleteTechnology"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a technology
+         * @description Changes only the fields sent; the slug cannot change. A primary technology needs a group and a secondary one has none, also after combining with the stored values.
+         */
+        patch: operations["updateTechnology"];
+        trace?: never;
+    };
+    "/v1/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the topics
+         * @description Ordered by position and slug.
+         */
+        get: operations["listTopics"];
+        put?: never;
+        /**
+         * Create a topic
+         * @description The slug is unique and stable; a taken slug is a conflict.
+         */
+        post: operations["createTopic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/topics/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a topic */
+        get: operations["getTopic"];
+        put?: never;
+        post?: never;
+        /** Delete a topic */
+        delete: operations["deleteTopic"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a topic
+         * @description Changes only the fields sent; the slug cannot change.
+         */
+        patch: operations["updateTopic"];
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -132,6 +224,50 @@ export interface components {
             /** @description The date the career started. */
             careerStartedOn?: string | null;
         };
+        TechnologyCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /**
+             * @description `primary` technologies are shown prominently, `secondary` ones as plain text.
+             * @enum {string}
+             */
+            tier: "primary" | "secondary";
+            /**
+             * @description The group of a primary technology: `core` (with logos) or `ai_engineering_focus` (plain text). A secondary technology has none.
+             * @default null
+             */
+            group?: ("core" | "ai_engineering_focus") | null;
+            /** @default null */
+            logoKey?: string | null;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position: number;
+        };
+        TechnologyUpdate: {
+            name?: string;
+            /**
+             * @description `primary` technologies are shown prominently, `secondary` ones as plain text.
+             * @enum {string}
+             */
+            tier?: "primary" | "secondary";
+            /** @description The group of a primary technology: `core` (with logos) or `ai_engineering_focus` (plain text). A secondary technology has none. */
+            group?: ("core" | "ai_engineering_focus") | null;
+            logoKey?: string | null;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position?: number;
+        };
+        TopicCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position: number;
+        };
+        TopicUpdate: {
+            name?: string;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position?: number;
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -170,6 +306,44 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description Primary before secondary, `core` before `ai_engineering_focus`, then by position and slug. */
+        TechnologyList: components["schemas"]["Technology"][];
+        Technology: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /**
+             * @description `primary` technologies are shown prominently, `secondary` ones as plain text.
+             * @enum {string}
+             */
+            tier: "primary" | "secondary";
+            /** @description The group of a primary technology: `core` (with logos) or `ai_engineering_focus` (plain text). A secondary technology has none. */
+            group: ("core" | "ai_engineering_focus") | null;
+            logoKey: string | null;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Ordered by position, then slug. */
+        TopicList: components["schemas"]["Topic"][];
+        Topic: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Ascending order in the list; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -197,7 +371,7 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -246,7 +420,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -310,7 +484,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -395,7 +569,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -468,7 +642,741 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (with `fields`) or `credentials_in_url`. */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listTechnologies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every technology, in catalog order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnologyList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createTechnology: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TechnologyCreate"];
+            };
+        };
+        responses: {
+            /** @description The created technology. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Technology"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getTechnology: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The technology. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Technology"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteTechnology: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The technology was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateTechnology: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TechnologyUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated technology. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Technology"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listTopics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every topic, in catalog order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicCreate"];
+            };
+        };
+        responses: {
+            /** @description The created topic. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Topic"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The topic. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Topic"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The topic was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated topic. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Topic"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -553,7 +1461,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -602,7 +1510,7 @@ export interface operations {
                     "text/html": unknown;
                 };
             };
-            /** @description `credentials_in_url`: a credential was sent in the query string. */
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;

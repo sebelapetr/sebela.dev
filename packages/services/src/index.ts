@@ -1,7 +1,7 @@
 export { readDatabaseConfig } from "@sebela/db";
 export type { DatabaseConfig } from "@sebela/db";
 export { DomainError } from "./errors.js";
-export type { DomainErrorCode } from "./errors.js";
+export type { DomainErrorCode, DomainErrorField } from "./errors.js";
 export { openServices } from "./services.js";
 export type { Services } from "./services.js";
 export type {
@@ -10,4 +10,4 @@ export type {
   ApiKeyServiceOptions,
   KeyVerification,
 } from "./modules/api-keys/index.js";
-export type { ProfileService } from "./modules/profile/index.js";
+export type { CatalogService, ProfileService } from "./modules/profile/index.js";

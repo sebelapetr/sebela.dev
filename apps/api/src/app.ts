@@ -10,11 +10,12 @@ import { authenticate, refuseCredentialsInUrl } from "./middleware/authenticatio
 import type { ApiEnv } from "./middleware/context.js";
 import { ApiError, handleErrors } from "./middleware/errors.js";
 import { jsonBody } from "./middleware/json-body.js";
+import { pathParams } from "./middleware/path-params.js";
 import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { createOpenApiDocument } from "./openapi.js";
-import type { RouteDefinition, RouteDocumentation } from "./routing.js";
+import { fillLocation, type RouteDefinition, type RouteDocumentation } from "./routing.js";
 
 export type { Logger };
 
@@ -108,6 +109,16 @@ const describingProfile: ProfileService = {
   createPerson: documentationOnly,
   updatePerson: documentationOnly,
   deletePerson: documentationOnly,
+  listTechnologies: documentationOnly,
+  getTechnology: documentationOnly,
+  createTechnology: documentationOnly,
+  updateTechnology: documentationOnly,
+  deleteTechnology: documentationOnly,
+  listTopics: documentationOnly,
+  getTopic: documentationOnly,
+  createTopic: documentationOnly,
+  updateTopic: documentationOnly,
+  deleteTopic: documentationOnly,
 };
 
 /**
@@ -126,8 +137,8 @@ const writeLog: Logger = (line) => {
  * Composes the HTTP application. Has no side effects: it neither listens nor migrates.
  *
  * Every route is rate limited per client first. Private routes then verify the API key and count
- * against its budget before a body is read; body routes accept only bounded JSON that their schema
- * validates. Failures use the common error shape; unknown routes are a public-limited 404.
+ * against its budget before path parameters or a body are read; path parameters are validated
+ * next, and body routes accept only bounded JSON that their schema validates. Failures use the common error shape; unknown routes are a public-limited 404.
  */
 export function createApp(dependencies: AppDependencies): Api {
   const { services, config } = dependencies;
@@ -141,12 +152,14 @@ export function createApp(dependencies: AppDependencies): Api {
   app.use(noSniff, requestLog(log));
   app.onError(handleErrors(log));
 
-  // The checks in front of a route, in order: client budget, URL credentials, key, key budget, body.
+  // The checks in front of a route, in order: client budget, URL credentials, key, key budget,
+  // path parameters, body.
   const guard = (route: RouteDocumentation): MiddlewareHandler<ApiEnv> =>
     every(
       limits.perClient(route === systemRoutes.health ? "health" : route.access),
       refuseCredentialsInUrl,
       ...(route.access === "private" ? [authenticate(services.apiKeys), limits.perKey()] : []),
+      ...(route.params ? [pathParams(route.params)] : []),
       ...(route.body ? jsonBody(route.body, config.bodyLimitBytes) : []),
     );
 
@@ -160,11 +173,13 @@ export function createApp(dependencies: AppDependencies): Api {
 
   const register = (route: RouteDefinition) => {
     app.on(route.method, route.path, guard(route), async (c) => {
-      const result = await route.handle({ body: c.get("body") });
+      const result = await route.handle({ body: c.get("body"), params: c.get("params") });
       if (route.method !== "GET") {
         await notify({ operationId: route.operationId, method: route.method, path: c.req.path });
       }
-      if (route.response.location) c.header("Location", route.response.location);
+      if (route.response.location) {
+        c.header("Location", fillLocation(route.response.location, result));
+      }
       if (route.response.status === 204) return c.body(null, 204);
       return c.json(result, route.response.status);
     });

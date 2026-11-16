@@ -8,12 +8,20 @@
  */
 export type DomainErrorCode = "not_found" | "conflict" | "validation_failed";
 
+/** An offending input field of a `validation_failed` refusal, named by its dotted path. */
+export interface DomainErrorField {
+  readonly path: string;
+  readonly message: string;
+}
+
 export class DomainError extends Error {
   override readonly name = "DomainError";
 
   constructor(
     readonly code: DomainErrorCode,
     message: string,
+    /** The offending fields of a `validation_failed` refusal, when it is about specific fields. */
+    readonly fields?: readonly DomainErrorField[],
   ) {
     super(message);
   }

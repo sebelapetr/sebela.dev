@@ -45,7 +45,15 @@ export function handleErrors(log: Logger): ErrorHandler {
   return (error, c) => {
     if (error instanceof ApiError) return send(c, error);
     if (error instanceof DomainError) {
-      return send(c, new ApiError(domainStatus[error.code], error.code, error.message));
+      return send(
+        c,
+        new ApiError(
+          domainStatus[error.code],
+          error.code,
+          error.message,
+          error.fields && [...error.fields],
+        ),
+      );
     }
     log(redact(`error ${c.req.method} ${c.req.path}: ${error.name}: ${error.message}`));
     return send(c, new ApiError(500, "internal_error", "An unexpected error occurred."));

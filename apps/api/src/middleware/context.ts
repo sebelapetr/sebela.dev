@@ -11,6 +11,8 @@ export interface ApiEnv {
     keyId: string;
     /** The validated request body. */
     body: unknown;
+    /** The validated path parameters. */
+    params: unknown;
   };
 }
 

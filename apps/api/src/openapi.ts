@@ -35,11 +35,7 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
     : {};
   return {
     [String(response.status)]: { description: response.description, ...success, ...location },
-    "400": error(
-      route.body
-        ? "`malformed_json`, `validation_failed` (with `fields`) or `credentials_in_url`."
-        : "`credentials_in_url`: a credential was sent in the query string.",
-    ),
+    "400": error(badRequest(route)),
     ...(route.access === "private"
       ? {
           "401": error("`unauthorized`: the API key is missing, malformed, unknown or revoked.", {
@@ -73,12 +69,28 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
   };
 }
 
+/** What a 400 of the route can mean: only the checks the route actually runs. */
+function badRequest(route: RouteDocumentation): string {
+  const invalid = [
+    ...(route.params ? ["a malformed path parameter"] : []),
+    ...(route.body ? ["an invalid body or a broken domain rule"] : []),
+  ];
+  return [
+    ...(route.body ? ["`malformed_json`"] : []),
+    ...(invalid.length > 0
+      ? [`\`validation_failed\` (${invalid.join(" or ")}, with \`fields\`)`]
+      : []),
+    "`credentials_in_url` (a credential was sent in the query string)",
+  ].join(", ");
+}
+
 function operation(route: RouteDocumentation): ZodOpenApiOperationObject {
   return {
     operationId: route.operationId,
     summary: route.summary,
     ...(route.description ? { description: route.description } : {}),
     security: route.access === "private" ? [{ bearerAuth: [] }] : [],
+    ...(route.params ? { requestParams: { path: route.params } } : {}),
     ...(route.body
       ? { requestBody: { required: true, content: { "application/json": { schema: route.body } } } }
       : {}),

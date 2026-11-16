@@ -19,6 +19,8 @@ export interface RouteDocumentation {
   readonly access: "public" | "private";
   readonly summary: string;
   readonly description?: string;
+  /** The path parameters, `:name` in `path`; validated before the body. */
+  readonly params?: z.ZodObject;
   /** The JSON request body; validated before the handler runs. */
   readonly body?: z.ZodType;
   readonly response: {
@@ -27,7 +29,10 @@ export interface RouteDocumentation {
     readonly schema?: z.ZodType;
     /** Media type of a non-JSON success, for example the HTML reference. */
     readonly mediaType?: string;
-    /** A fixed `Location` header sent with the success. */
+    /**
+     * The `Location` header sent with the success. `:name` is filled with the URI-encoded `name`
+     * property of the result, for example `/v1/topics/:slug`.
+     */
     readonly location?: string;
   };
   readonly errors: readonly RouteError[];
@@ -36,18 +41,29 @@ export interface RouteDocumentation {
 /** A JSON route as a module contributes it: its documentation and what it does. */
 export interface RouteDefinition extends RouteDocumentation {
   /** Runs the operation; the result is sent as the JSON success body. */
-  handle(input: { readonly body: unknown }): Promise<unknown>;
+  handle(input: { readonly body: unknown; readonly params: unknown }): Promise<unknown>;
 }
 
 /**
- * Declares a route whose handler receives the parsed output of its body schema. The body type is
- * erased afterwards: the app validates with exactly this schema before it calls `handle`.
+ * Declares a route whose handler receives the parsed output of its body and path-parameter
+ * schemas. The types are erased afterwards: the app validates with exactly these schemas before it
+ * calls `handle`.
  */
-export function defineRoute<Body = undefined>(
-  route: Omit<RouteDefinition, "body" | "handle"> & {
+export function defineRoute<Body = undefined, Params = undefined>(
+  route: Omit<RouteDefinition, "body" | "params" | "handle"> & {
     readonly body?: z.ZodType<Body>;
-    handle(input: { readonly body: Body }): Promise<unknown>;
+    readonly params?: z.ZodObject & z.ZodType<Params>;
+    handle(input: { readonly body: Body; readonly params: Params }): Promise<unknown>;
   },
 ): RouteDefinition {
   return route;
+}
+
+/** The `Location` of a created record: the template with each `:name` taken from the result. */
+export function fillLocation(template: string, result: unknown): string {
+  return template.replace(/:([A-Za-z]+)/g, (_, name: string) => {
+    const value: unknown =
+      typeof result === "object" && result !== null ? Reflect.get(result, name) : "";
+    return encodeURIComponent(String(value));
+  });
 }

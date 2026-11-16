@@ -2,6 +2,11 @@ import type { Person, PersonCreate, PersonUpdate } from "@sebela/contracts";
 import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
+import { createCatalogService } from "./catalogs.js";
+import { definedChanges } from "./changes.js";
+import type { CatalogService } from "./types.js";
+
+export type { CatalogService } from "./types.js";
 
 /**
  * Operations on the person, the one profile record. Results are in the contract shape of
@@ -12,8 +17,10 @@ import { DomainError } from "../../errors.js";
  * - `updatePerson`: changes only the given fields, keeps `id` and `createdAt` and advances
  *   `updatedAt`; `not_found` while there is no person.
  * - `deletePerson`: removes the person; `not_found` while there is none.
+ *
+ * It also includes the catalog operations of `CatalogService`.
  */
-export interface ProfileService {
+export interface ProfileService extends CatalogService {
   getPerson(): Promise<Person>;
   createPerson(input: PersonCreate): Promise<Person>;
   updatePerson(changes: PersonUpdate): Promise<Person>;
@@ -31,13 +38,9 @@ function toPerson(record: PersonRecord): Person {
   };
 }
 
-/** Drops fields that are absent or `undefined`, so they stay unchanged. */
-function definedChanges(changes: PersonUpdate): Partial<PersonFields> {
-  return Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
-}
-
 export function createProfileService(persistence: ProfilePersistence): ProfileService {
   return {
+    ...createCatalogService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();
@@ -49,7 +52,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
       return toPerson(result.person);
     },
     async updatePerson(changes) {
-      const record = await persistence.updatePerson(definedChanges(changes));
+      const record = await persistence.updatePerson(definedChanges<PersonFields>(changes));
       if (!record) throw missing();
       return toPerson(record);
     },
