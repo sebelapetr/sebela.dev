@@ -91,7 +91,7 @@ export function createProjectService(persistence: ProfilePersistence): ProjectSe
       if (result.reason === "not_found") throw missing(slug);
       throw new DomainError(
         "conflict",
-        `The project "${slug}" still has a case study or another record referring to it; remove those first.`,
+        `The project "${slug}" still has a case study or is named as evidence by a service; remove those first.`,
       );
     },
   };
