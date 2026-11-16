@@ -271,6 +271,46 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.components.schemas["Project"]?.properties).toHaveProperty("caseStudy");
   });
 
+  it("documents the explorations from their contract schemas", () => {
+    expect(operation("GET", "/v1/explorations").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ExplorationList" } },
+    });
+    expect(operation("GET", "/v1/explorations/:slug").responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Exploration" } },
+    });
+    expect(operation("POST", "/v1/explorations").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ExplorationCreate" } },
+    });
+    expect(operation("PATCH", "/v1/explorations/:slug").requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ExplorationUpdate" } },
+    });
+    expect(operation("POST", "/v1/explorations").responses["201"]?.headers).toHaveProperty(
+      "Location",
+    );
+    expect(Object.keys(operation("POST", "/v1/explorations").responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    expect(Object.keys(operation("PATCH", "/v1/explorations/:slug").responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/explorations/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "400", "401", "404"]),
+    );
+    expect(operation("GET", "/v1/explorations").security).toEqual([]);
+    expect(operation("GET", "/v1/explorations/:slug").parameters).toEqual([
+      expect.objectContaining({ name: "slug", in: "path", required: true }),
+    ]);
+    // A topic an exploration links is not deleted: the delete may be a conflict.
+    expect(Object.keys(operation("DELETE", "/v1/topics/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "404", "409"]),
+    );
+    // Every defined status is documented, and an exploration names no experience or project.
+    const exploration = document.components.schemas["Exploration"]?.properties ?? {};
+    expect(exploration["status"]).toMatchObject({ enum: ["built", "tested", "designed"] });
+    expect(exploration).not.toHaveProperty("experience");
+    expect(exploration).not.toHaveProperty("project");
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });
