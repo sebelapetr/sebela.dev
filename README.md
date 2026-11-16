@@ -7,7 +7,7 @@
 The open-source engineering behind Petr Šebela's next professional website.
 
 [![Status: foundation](https://img.shields.io/badge/status-foundation-525252?style=flat-square)](.plan/01-foundation/prd.md)
-[![CI](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-525252?style=flat-square)](LICENSE)
 
 [The idea](#the-idea) · [Architecture](#architecture) · [AI & MCP](#ai--mcp) · [Roadmap](#roadmap) · [Getting started](#working-on-the-project) · [Documentation](#documentation)
@@ -146,7 +146,7 @@ The phases organise implementation; they are not separate public releases. Speci
 
 ## Working on the project
 
-There is no runnable application in this checkout yet. What you can run today is the workspace, its quality checks, the local database and the worktree tooling. Every command below was walked through from a clean clone.
+There is no runnable application in this checkout yet. What you can run today is the workspace, its quality checks, the local database and the worktree tooling.
 
 ### Prerequisites
 
@@ -157,7 +157,7 @@ There is no runnable application in this checkout yet. What you can run today is
 | [pnpm](https://pnpm.io/)            | 12.21.0 (`packageManager` in `package.json`). Install it directly, for example `npm install --global pnpm@12.21.0`; see the note below. |
 | Docker with the Compose plugin (v2) | A version that supports `docker compose up --wait`                                                                                      |
 
-An older global pnpm (10 or earlier) cannot switch itself to the native pnpm 12 executable and fails instead, so install pnpm 12.21.0 itself. Corepack is not needed.
+An older global pnpm, such as pnpm 10, cannot switch itself to the native pnpm 12 executable and fails instead, so install pnpm 12.21.0 itself. Corepack is not needed.
 
 ### 1. Install
 
@@ -194,7 +194,7 @@ pnpm test       # package tests, harness tests and check tests
 pnpm build
 ```
 
-CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres that you can also start yourself: `node scripts/harness/worktree-databases.e2e.mjs`. Details: [testing](docs/testing.md).
+CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres. You can run that test yourself with Docker: `node scripts/harness/worktree-databases.e2e.mjs`. Details: [testing](docs/testing.md).
 
 ### 5. Work in an isolated worktree
 
@@ -206,7 +206,7 @@ node scripts/harness/worktree.mjs list                                       # s
 cd .worktrees/feat-12-profile-api && pnpm install --frozen-lockfile
 ```
 
-- **Isolation.** The worktree takes the lowest free slot (1 to 9) and gets its own database in the shared Postgres, named after its folder (`wt_feat_12_profile_api_<hash>`). Its ports are the main checkout's ports plus ten times the slot. Nothing else is shared.
+- **Isolation.** The worktree takes the lowest free slot (1 to 9) and gets its own database in the shared Postgres, named after its folder (`wt_feat_12_profile_api_<hash>`). Its ports are the main checkout's ports plus ten times the slot, so its ports and its database are its own; the Postgres container is shared.
 - **Generated configuration.** `create` writes the worktree's `.env.local` itself: `WORKTREE_SLOT`, the ports of its slot and `DATABASE_NAME`. The base ports come from your process environment and otherwise from `.env.example`. Running `create` again reuses the slot and the database and never overwrites an existing `.env.local`; delete the file and run `create` again to regenerate it.
 - **Reading configuration.** Code reads ports, hosts and database names from the process environment and fails when one is missing. Load `.env.local` into the process (for example `node --env-file=.env.local …`) instead of copying values out of it. Coding agents never open or print real environment files; they may edit only the `.env.local` of the worktree they work in ([permissions](docs/permissions.md)).
 
