@@ -3,6 +3,7 @@ import type { ProfileService } from "@sebela/services";
 import type { RouteDefinition } from "../../routing.js";
 import { caseStudyRoutes } from "./case-studies.js";
 import { experienceRoutes } from "./experiences.js";
+import { explorationRoutes } from "./explorations.js";
 import { organizationRoutes } from "./organizations.js";
 import { personRoutes } from "./person.js";
 import { projectRoutes } from "./projects.js";
@@ -12,7 +13,7 @@ import { topicRoutes } from "./topics.js";
 /**
  * The HTTP routes of the profile: the person, the ordered technology and topic catalogs, the
  * organizations, the experiences that relate them, the projects each experience owns and the case
- * study of each project.
+ * study of each project, and the explorations outside the career timeline.
  * Path slugs and bodies are validated by the app before a handler runs.
  */
 export function profileRoutes(profile: ProfileService): RouteDefinition[] {
@@ -24,5 +25,6 @@ export function profileRoutes(profile: ProfileService): RouteDefinition[] {
     ...experienceRoutes(profile),
     ...projectRoutes(profile),
     ...caseStudyRoutes(profile),
+    ...explorationRoutes(profile),
   ];
 }
