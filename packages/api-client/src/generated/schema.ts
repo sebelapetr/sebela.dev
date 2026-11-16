@@ -243,6 +243,55 @@ export interface paths {
         patch: operations["updateExperience"];
         trace?: never;
     };
+    "/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the projects
+         * @description Grouped by owning experience in the experience order, then by position, then by slug. Each project names its experience by slug and carries its technologies in their order.
+         */
+        get: operations["listProjects"];
+        put?: never;
+        /**
+         * Create a project
+         * @description Stores the project in its experience together with its technology links, or nothing. The experience and the technologies are slugs of existing records; the slug is unique and stable across all experiences, a taken slug is a conflict.
+         */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a project */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a project
+         * @description Removes the project and its technology links; the experience and the technologies stay. A project that other records still refer to is not deleted.
+         */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a project
+         * @description Changes only the fields sent, together or not at all; the slug cannot change. A sent `experience` moves the project to that existing experience, which then is its only owner. A sent `technologies` list replaces every link in its order; an omitted one keeps them. The period is checked against the stored start or end.
+         */
+        patch: operations["updateProject"];
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -452,6 +501,82 @@ export interface components {
             /** @description Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged. */
             technologies?: string[];
         };
+        ProjectCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /** @description The problem the project solved. Markdown. */
+            problem: string;
+            /** @description The work done on the project. Markdown. */
+            workDone: string;
+            /** @description What the project achieved. Markdown. */
+            result: string;
+            /**
+             * Format: date
+             * @description The first day of the project, an ISO date.
+             */
+            startedOn: string;
+            /**
+             * @description The last day of the project, an ISO date; `null` marks an ongoing project.
+             * @default null
+             */
+            endedOn?: string | null;
+            /**
+             * @description Outside links, in their intended order.
+             * @default []
+             */
+            links?: components["schemas"]["ProjectLink"][];
+            /**
+             * @description Whether the project is selected for the homepage.
+             * @default false
+             */
+            selectedForHomepage?: boolean;
+            /** @description Ascending order within the owning experience; ties are ordered by slug. */
+            position: number;
+            /** @description The slug of the existing experience the project belongs to. On an update it moves the project to that experience. */
+            experience: string;
+            /**
+             * @description Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged.
+             * @default []
+             */
+            technologies?: string[];
+        };
+        ProjectLink: {
+            /** @description What the link leads to, for example `Repository`. */
+            label: string;
+            /** Format: uri */
+            url: string;
+        };
+        ProjectUpdate: {
+            name?: string;
+            /** @description Markdown. */
+            summary?: string;
+            /** @description The problem the project solved. Markdown. */
+            problem?: string;
+            /** @description The work done on the project. Markdown. */
+            workDone?: string;
+            /** @description What the project achieved. Markdown. */
+            result?: string;
+            /**
+             * Format: date
+             * @description The first day of the project, an ISO date.
+             */
+            startedOn?: string;
+            /** @description The last day of the project, an ISO date; `null` marks an ongoing project. */
+            endedOn?: string | null;
+            /** @description Outside links, in their intended order. */
+            links?: components["schemas"]["ProjectLink"][];
+            /** @description Whether the project is selected for the homepage. */
+            selectedForHomepage?: boolean;
+            /** @description Ascending order within the owning experience; ties are ordered by slug. */
+            position?: number;
+            /** @description The slug of the existing experience the project belongs to. On an update it moves the project to that experience. */
+            experience?: string;
+            /** @description Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged. */
+            technologies?: string[];
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -574,11 +699,51 @@ export interface components {
             organization: components["schemas"]["Organization"];
             /** @description The linked technologies, in their intended order. */
             technologies: components["schemas"]["Technology"][];
+            /** @description The projects delivered within the experience, by position, then slug; each says whether it is selected for the homepage. */
+            projects: components["schemas"]["Project"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
         };
+        Project: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of the experience the project belongs to; every project has exactly one. */
+            experience: string;
+            name: string;
+            /** @description Markdown. */
+            summary: string;
+            /** @description The problem the project solved. Markdown. */
+            problem: string;
+            /** @description The work done on the project. Markdown. */
+            workDone: string;
+            /** @description What the project achieved. Markdown. */
+            result: string;
+            /**
+             * Format: date
+             * @description The first day of the project, an ISO date.
+             */
+            startedOn: string;
+            /** @description The last day of the project, an ISO date; `null` marks an ongoing project. */
+            endedOn: string | null;
+            /** @description Outside links, in their intended order. */
+            links: components["schemas"]["ProjectLink"][];
+            /** @description Whether the project is selected for the homepage. */
+            selectedForHomepage: boolean;
+            /** @description Ascending order within the owning experience; ties are ordered by slug. */
+            position: number;
+            /** @description The linked technologies, in their intended order. */
+            technologies: components["schemas"]["Technology"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Grouped by owning experience in the experience order, then by position, then by slug. */
+        ProjectList: components["schemas"]["Project"][];
     };
     responses: never;
     parameters: never;
@@ -2370,6 +2535,382 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Experience"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every project, in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description The created project. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project with its technologies. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
                 };
             };
             /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
