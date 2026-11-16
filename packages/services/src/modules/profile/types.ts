@@ -1,4 +1,4 @@
-// The catalog, organization, experience, project, case-study and exploration service interfaces,
+// The catalog, organization, experience, project, case-study, exploration and service interfaces,
 // private to the profile module and re-exported by its index.
 import type {
   CaseStudy,
@@ -16,6 +16,9 @@ import type {
   Project,
   ProjectCreate,
   ProjectUpdate,
+  Service,
+  ServiceCreate,
+  ServiceUpdate,
   Technology,
   TechnologyCreate,
   TechnologyUpdate,
@@ -170,7 +173,7 @@ export interface CaseStudyService {
  * - Create and update refuse, as `validation_failed` naming the field and writing nothing, unknown
  *   or repeated `technologies` or `topics` and an `endedOn` before the (stored or given) start.
  * - `deleteExploration`: removes the exploration and its links, never the technologies or topics;
- *   `not_found` for an unknown slug.
+ *   `not_found` for an unknown slug, `conflict` while a service names it as evidence.
  */
 export interface ExplorationService {
   listExplorations(): Promise<Exploration[]>;
@@ -178,4 +181,28 @@ export interface ExplorationService {
   createExploration(input: ExplorationCreate): Promise<Exploration>;
   updateExploration(slug: string, changes: ExplorationUpdate): Promise<Exploration>;
   deleteExploration(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the services a client can order, addressed by slug, with their evidence resolved
+ * in its stored order. Results are in the contract shape; expected failures are `DomainError`s:
+ *
+ * - `listServices`: every service, ordered by position, then slug.
+ * - `getService`: the service, or `not_found`.
+ * - `createService`: stores the service and its evidence together; `conflict` when the slug is
+ *   taken, also when creates race.
+ * - `updateService`: changes only the given fields, keeps `id`, `slug` and `createdAt` and advances
+ *   `updatedAt`. A given `evidence` list replaces all evidence in its order; an omitted one keeps
+ *   it. `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` on `evidence` and writing nothing, unknown or
+ *   repeated projects and explorations.
+ * - `deleteService`: removes the service and its evidence, never the projects or explorations it
+ *   names; `not_found` for an unknown slug.
+ */
+export interface ServiceService {
+  listServices(): Promise<Service[]>;
+  getService(slug: string): Promise<Service>;
+  createService(input: ServiceCreate): Promise<Service>;
+  updateService(slug: string, changes: ServiceUpdate): Promise<Service>;
+  deleteService(slug: string): Promise<void>;
 }
