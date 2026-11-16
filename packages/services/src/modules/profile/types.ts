@@ -1,9 +1,12 @@
-// The catalog, organization, experience, project, case-study, exploration and service interfaces,
-// private to the profile module and re-exported by its index.
+// The catalog, organization, experience, project, case-study, exploration, service and education
+// interfaces, private to the profile module and re-exported by its index.
 import type {
   CaseStudy,
   CaseStudyCreate,
   CaseStudyUpdate,
+  Education,
+  EducationCreate,
+  EducationUpdate,
   Experience,
   ExperienceCreate,
   ExperienceUpdate,
@@ -205,4 +208,29 @@ export interface ServiceService {
   createService(input: ServiceCreate): Promise<Service>;
   updateService(slug: string, changes: ServiceUpdate): Promise<Service>;
   deleteService(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the education records, addressed by slug: schools, courses, certifications and
+ * other learning milestones. Results are in the contract shape, the kind exactly as stored;
+ * expected failures are `DomainError`s:
+ *
+ * - `listEducation`: every education record, ordered by position, then slug.
+ * - `getEducation`: the education record, or `not_found`.
+ * - `createEducation`: stores the record; `conflict` when the slug is taken, also when creates
+ *   race.
+ * - `updateEducation`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`; `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` writing nothing, a period judged on the
+ *   resulting record: an `endedOn` before the start names `endedOn`, and a record left without
+ *   any date names both `startedOn` and `endedOn`.
+ * - `deleteEducation`: removes the record; `not_found` for an unknown slug. Nothing refers to an
+ *   education record, so a delete never conflicts.
+ */
+export interface EducationService {
+  listEducation(): Promise<Education[]>;
+  getEducation(slug: string): Promise<Education>;
+  createEducation(input: EducationCreate): Promise<Education>;
+  updateEducation(slug: string, changes: EducationUpdate): Promise<Education>;
+  deleteEducation(slug: string): Promise<void>;
 }
