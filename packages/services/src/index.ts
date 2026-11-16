@@ -1,4 +1,4 @@
-export { readDatabaseConfig } from "@sebela/db";
+export { demoSeedFolder, readDatabaseConfig } from "@sebela/db";
 export type { DatabaseConfig } from "@sebela/db";
 export { DomainError } from "./errors.js";
 export type { DomainErrorCode, DomainErrorField } from "./errors.js";
@@ -7,12 +7,20 @@ export type { Services, ServicesOptions } from "./services.js";
 export { readMediaConfig } from "./modules/media/index.js";
 export type {
   CleanupFailure,
+  EnsuredMedia,
   MediaConfig,
   MediaFile,
   MediaLimits,
   MediaService,
   MediaUploadInput,
 } from "./modules/media/index.js";
+export type {
+  SeedCount,
+  SeedKind,
+  SeedReport,
+  SeedService,
+  SeedServiceOptions,
+} from "./modules/seed/index.js";
 export type { StorageConfig } from "./modules/storage/index.js";
 export type {
   ApiKeyInfo,

@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { type Executor, now } from "./relations.js";
 import { caseStudies, projects } from "./schema.js";
 import type { CaseStudyPersistence, CaseStudyRecord } from "./types.js";
@@ -36,7 +36,7 @@ const projectIdOf = (db: Executor, slug: string) =>
  * project reference decides racing creates inside the database; the reference has no cascade, so
  * a project keeps its case study until the case study itself is deleted.
  */
-export function createCaseStudyPersistence(db: NodePgDatabase): CaseStudyPersistence {
+export function createCaseStudyPersistence(db: Database): CaseStudyPersistence {
   return {
     async findCaseStudy(project) {
       const [row] = await db

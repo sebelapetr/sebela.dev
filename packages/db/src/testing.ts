@@ -27,8 +27,18 @@ export async function createTemporaryDatabase(
   const name = `test_${randomBytes(12).toString("hex")}`;
   await administer(base, (client) => client.query(`CREATE DATABASE "${name}"`));
   const config = { ...base, name };
+  // `FORCE` ends leftover sessions of the test, but Postgres 18 refuses it while an autovacuum
+  // worker runs on the database (terminating one needs `pg_signal_autovacuum_worker`). A plain drop
+  // stops autovacuum itself, so it is the fallback once the test's own sessions are gone.
   const drop = () =>
-    administer(base, (client) => client.query(`DROP DATABASE "${name}" WITH (FORCE)`));
+    administer(base, async (client) => {
+      try {
+        await client.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "42501")) throw error;
+        await client.query(`DROP DATABASE "${name}"`);
+      }
+    });
   if (options.migrated !== false) {
     try {
       await migrateDatabase(config);

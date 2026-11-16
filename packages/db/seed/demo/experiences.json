@@ -1,0 +1,69 @@
+[
+  {
+    "slug": "lumen-press-staff-engineer",
+    "title": "Staff engineer",
+    "kind": "main_job",
+    "organization": "lumen-press",
+    "startedOn": "2022-04-01",
+    "summary": "Leads the platform team of a **fictional** digital publisher: the reading app, the editorial tools and, since 2024, the AI features of both.",
+    "responsibilities": [
+      "Own the architecture of the reading platform and its editorial back office",
+      "Introduce retrieval-based search and summaries with an evaluation suite",
+      "Mentor four engineers and run the weekly design review"
+    ],
+    "inCv": true,
+    "technologies": ["typescript", "nextjs", "postgresql", "pgvector", "python", "langgraph"]
+  },
+  {
+    "slug": "harbor-retail-senior-developer",
+    "title": "Senior full-stack developer",
+    "kind": "main_job",
+    "organization": "harbor-retail",
+    "startedOn": "2019-02-01",
+    "endedOn": "2022-03-31",
+    "summary": "Built the online store and the warehouse tooling of a **fictional** retail group with forty shops.",
+    "responsibilities": [
+      "Move the store from a monolith to a TypeScript API with a React front end",
+      "Build the stock and picking tools used in two warehouses",
+      "Keep checkout available during seasonal peaks"
+    ],
+    "inCv": true,
+    "technologies": ["typescript", "nodejs", "react", "postgresql", "redis", "graphql", "terraform"]
+  },
+  {
+    "slug": "northwind-freight-developer",
+    "title": "Web developer",
+    "kind": "main_job",
+    "organization": "northwind-freight",
+    "startedOn": "2015-09-01",
+    "endedOn": "2019-01-31",
+    "summary": "Started a career on the booking portal of a **fictional** regional freight company.",
+    "responsibilities": [
+      "Maintain and extend the customer booking portal",
+      "Write the integrations with the carriers' tracking feeds"
+    ],
+    "inCv": true,
+    "technologies": ["php", "symfony", "postgresql", "bash"]
+  },
+  {
+    "slug": "quill-studio-consulting",
+    "title": "Independent consultant",
+    "kind": "own_business",
+    "organization": "quill-studio",
+    "startedOn": "2020-06-01",
+    "summary": "A **fictional** one-person studio for architecture reviews and small AI prototypes for local businesses.",
+    "responsibilities": ["Review web architectures", "Prototype assistants over company documents"],
+    "inCv": true,
+    "technologies": ["typescript", "python", "mcp", "docker"]
+  },
+  {
+    "slug": "open-shelf-maintainer",
+    "title": "Maintainer",
+    "kind": "side_project",
+    "organization": "open-shelf",
+    "startedOn": "2018-03-01",
+    "summary": "Co-maintains a **fictional** open-source catalogue for small community libraries.",
+    "inCv": false,
+    "technologies": ["typescript", "react", "playwright"]
+  }
+]

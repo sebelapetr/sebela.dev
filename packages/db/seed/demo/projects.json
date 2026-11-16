@@ -1,0 +1,146 @@
+[
+  {
+    "slug": "reading-assistant",
+    "experience": "lumen-press-staff-engineer",
+    "name": "Reading assistant",
+    "summary": "Answers readers' questions from the fictional publisher's own archive, with sources.",
+    "problem": "Readers searched an archive of twenty years by keywords and rarely found the article they remembered.",
+    "workDone": "Designed retrieval over the archive with pgvector, a small answering agent and an evaluation suite of two hundred real-looking questions.",
+    "result": "Four in five test questions are answered with a correct source; the suite runs on every change.",
+    "startedOn": "2024-03-01",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["python", "langgraph", "pgvector", "postgresql"],
+    "cover": {
+      "file": "files/cover-assistant.webp",
+      "altText": "A placeholder cover for the reading assistant."
+    },
+    "caseStudy": {
+      "role": "Technical lead",
+      "body": "## Context\n\nThe **fictional** Lumen Press wanted readers to find old articles by asking, not by guessing keywords.\n\n## Approach\n\nWe wrote the evaluation questions first, then tried three chunking strategies against them. The agent may only answer with a cited article and says so when it cannot.\n\n## Outcome\n\nThe assistant shipped to a test group; the evaluation suite now guards every change to prompts, chunking and models."
+    }
+  },
+  {
+    "slug": "editorial-workbench",
+    "experience": "lumen-press-staff-engineer",
+    "name": "Editorial workbench",
+    "summary": "One back office for planning, editing and publishing the fictional publisher's stories.",
+    "problem": "Editors juggled three tools and a shared spreadsheet to publish one story.",
+    "workDone": "Built a Next.js workbench over one PostgreSQL schema, with drafts, review and scheduled publishing.",
+    "result": "Publishing a story takes one tool and half the steps.",
+    "startedOn": "2022-06-01",
+    "endedOn": "2023-09-30",
+    "selectedForHomepage": true,
+    "position": 1,
+    "links": [
+      { "label": "Write-up", "url": "https://lumen-press.example.test/engineering/workbench" }
+    ],
+    "technologies": ["typescript", "nextjs", "postgresql"],
+    "cover": {
+      "file": "files/cover-booking.png",
+      "altText": "A placeholder cover for the editorial workbench."
+    },
+    "caseStudy": {
+      "role": "Lead engineer",
+      "body": "## Context\n\nA **fictional** newsroom with three tools and one spreadsheet.\n\n## Approach\n\nInterviews with six editors, a shared data model first and a workbench released one desk at a time.\n\n## Outcome\n\nThe old tools were switched off after four months."
+    }
+  },
+  {
+    "slug": "headline-tester",
+    "experience": "lumen-press-staff-engineer",
+    "name": "Headline tester",
+    "summary": "A small tool that compares headline variants on a share of the fictional readership.",
+    "problem": "Headline choices were made by gut feeling.",
+    "workDone": "Added variant assignment at the edge and a daily report.",
+    "result": "Editors test two headlines a day on average.",
+    "startedOn": "2023-02-01",
+    "endedOn": "2023-05-31",
+    "position": 2,
+    "technologies": ["typescript", "redis"]
+  },
+  {
+    "slug": "store-replatforming",
+    "experience": "harbor-retail-senior-developer",
+    "name": "Store replatforming",
+    "summary": "Moved the fictional retailer's online store to a TypeScript API and a React front end.",
+    "problem": "Every change to the old store risked the checkout.",
+    "workDone": "Strangled the monolith route by route behind a GraphQL API, with contract tests for each route.",
+    "result": "Releases went from monthly to daily without a checkout outage.",
+    "startedOn": "2019-04-01",
+    "endedOn": "2021-02-28",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["typescript", "nodejs", "react", "graphql", "postgresql"],
+    "cover": {
+      "file": "files/cover-catalog.webp",
+      "altText": "A placeholder cover for the store replatforming."
+    }
+  },
+  {
+    "slug": "warehouse-picking",
+    "experience": "harbor-retail-senior-developer",
+    "name": "Warehouse picking",
+    "summary": "Handheld picking lists for the fictional retailer's two warehouses.",
+    "problem": "Pickers walked the warehouse in the order orders arrived.",
+    "workDone": "Built a picking service that groups orders by aisle and a small handheld front end.",
+    "result": "Pickers walk about a third less per shift.",
+    "startedOn": "2021-03-01",
+    "endedOn": "2022-03-31",
+    "position": 1,
+    "technologies": ["typescript", "nodejs", "redis"],
+    "cover": {
+      "file": "files/cover-warehouse.jpg",
+      "altText": "A placeholder cover for warehouse picking."
+    }
+  },
+  {
+    "slug": "booking-portal",
+    "experience": "northwind-freight-developer",
+    "name": "Booking portal",
+    "summary": "The fictional freight company's portal for booking and tracking shipments.",
+    "problem": "Customers booked shipments by e-mail and phoned to track them.",
+    "workDone": "Extended the Symfony portal with online booking and live tracking from carrier feeds.",
+    "result": "Most bookings arrive through the portal.",
+    "startedOn": "2016-01-01",
+    "endedOn": "2018-12-31",
+    "position": 0,
+    "technologies": ["php", "symfony", "postgresql"]
+  },
+  {
+    "slug": "document-assistant-prototype",
+    "experience": "quill-studio-consulting",
+    "name": "Document assistant prototype",
+    "summary": "A prototype assistant that answers staff questions from a fictional firm's handbooks.",
+    "problem": "Staff of a small accounting firm asked the same handbook questions every week.",
+    "workDone": "Built a prototype exposing the handbooks to an assistant through an MCP server, with a short evaluation set.",
+    "result": "The firm kept the prototype for internal use.",
+    "startedOn": "2024-09-01",
+    "endedOn": "2024-11-30",
+    "position": 0,
+    "technologies": ["python", "mcp", "docker"]
+  },
+  {
+    "slug": "architecture-review-kit",
+    "experience": "quill-studio-consulting",
+    "name": "Architecture review kit",
+    "summary": "A repeatable checklist and report template for reviewing small web platforms.",
+    "problem": "Each review started from a blank page.",
+    "workDone": "Collected the questions of earlier reviews into a checklist and a report template.",
+    "result": "A review takes two days instead of five.",
+    "startedOn": "2020-06-01",
+    "position": 1,
+    "technologies": ["typescript"]
+  },
+  {
+    "slug": "community-catalogue",
+    "experience": "open-shelf-maintainer",
+    "name": "Community catalogue",
+    "summary": "An open-source catalogue for fictional community libraries.",
+    "problem": "Small libraries kept their catalogue in spreadsheets.",
+    "workDone": "Maintains the React front end and its Playwright suite.",
+    "result": "Used by a dozen fictional libraries.",
+    "startedOn": "2018-03-01",
+    "position": 0,
+    "technologies": ["typescript", "react", "playwright"]
+  }
+]

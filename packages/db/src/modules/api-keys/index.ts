@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { apiKeys } from "./schema.js";
 
 /** What may be shown about a key: never the key or its hash. */
@@ -39,7 +39,7 @@ const metadata = {
   revokedAt: apiKeys.revokedAt,
 };
 
-export function createApiKeyPersistence(db: NodePgDatabase): ApiKeyPersistence {
+export function createApiKeyPersistence(db: Database): ApiKeyPersistence {
   return {
     async insertKey(key) {
       const [row] = await db.insert(apiKeys).values(key).returning(metadata);

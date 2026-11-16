@@ -44,11 +44,15 @@ export const media = profileSchema.table(
     width: integer("width"),
     height: integer("height"),
     altText: text("alt_text"),
+    /** SHA-256 of the content in lower-case hex; `null` for media recorded before digests. */
+    sha256: text("sha256"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    index("media_sha256_index").on(table.sha256),
     check("media_byte_size_positive", sql`${table.byteSize} > 0`),
+    check("media_sha256_format", sql`${table.sha256} ~ '^[0-9a-f]{64}$'`),
     check(
       "media_dimensions_match_type",
       sql`(${table.mediaType} = 'application/pdf' AND ${table.width} IS NULL AND ${table.height} IS NULL) OR (${table.mediaType} <> 'application/pdf' AND ${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.width} > 0 AND ${table.height} > 0)`,

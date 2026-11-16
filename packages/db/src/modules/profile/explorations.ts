@@ -1,6 +1,6 @@
 import { asc, eq, inArray, type SQL } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { technologyColumns, topicColumns } from "./catalogs.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import { type Executor, now, technologyIds, topicIds, WriteRefused } from "./relations.js";
@@ -139,7 +139,7 @@ function scalarChanges(
  * only with their exploration. An exploration refers to no experience and no project; a service
  * that names it as evidence keeps it from being deleted.
  */
-export function createExplorationPersistence(db: NodePgDatabase): ExplorationPersistence {
+export function createExplorationPersistence(db: Database): ExplorationPersistence {
   return {
     listExplorations() {
       return loadExplorations(db, undefined);

@@ -1,5 +1,4 @@
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-
+import type { Database } from "../../database.js";
 import { createCaseStudyPersistence } from "./case-studies.js";
 import { createCatalogPersistence } from "./catalogs.js";
 import { createCurrentFocusPersistence } from "./current-focus.js";
@@ -151,7 +150,7 @@ export interface ProfilePersistence
     CvPersistence {}
 
 /** Every profile persistence operation over one database connection. */
-export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence {
+export function createProfilePersistence(db: Database): ProfilePersistence {
   return {
     ...createCatalogPersistence(db),
     ...createOrganizationPersistence(db),

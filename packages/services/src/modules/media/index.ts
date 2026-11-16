@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
+
 import type { Media, MediaType, MediaUpdate } from "@sebela/contracts";
 import type { MediaPersistence, MediaRecord } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
 import { readStorageConfig, type OpenedStorage, type StorageConfig } from "../storage/index.js";
-import { inspectUpload } from "./inspect.js";
+import { inspectUpload, type Inspected } from "./inspect.js";
 
 /** The upload limits of a process. */
 export interface MediaLimits {
@@ -38,6 +40,13 @@ export interface MediaUploadInput {
   readonly altText?: string | null | undefined;
 }
 
+/** Media `ensureMedia` reused or uploaded. */
+export interface EnsuredMedia {
+  readonly media: Media;
+  /** `true` when the file was stored and recorded by this call. */
+  readonly created: boolean;
+}
+
 /** A stored file with the type its content proved. */
 export interface MediaFile {
   readonly bytes: Uint8Array;
@@ -54,10 +63,18 @@ export interface MediaService {
   listMedia(): Promise<Media[]>;
   getMedia(id: string): Promise<Media>;
   /**
-   * Proves the type from the content, stores the file under a generated key, then records it. A
-   * refused file stores nothing; a failed metadata write removes the stored file again.
+   * Proves the type from the content, stores the file under a generated key, then records it with
+   * the SHA-256 digest of its content. A refused file stores nothing; a failed metadata write
+   * removes the stored file again.
    */
   uploadMedia(input: MediaUploadInput): Promise<Media>;
+  /**
+   * The oldest recorded media with exactly the content of `input`, or else a new upload of it;
+   * `created` tells which. Reused media keeps its file and key; its alt text changes to a given
+   * one (`null` clears it) and is kept when `altText` is omitted. Refuses what `uploadMedia`
+   * refuses. Media recorded without a content digest is never reused.
+   */
+  ensureMedia(input: MediaUploadInput): Promise<EnsuredMedia>;
   /** Changes the alt text; the file itself cannot be replaced. */
   updateMedia(id: string, changes: MediaUpdate): Promise<Media>;
   /**
@@ -113,6 +130,17 @@ export function readMediaConfig(env: Environment, cwd: string = process.cwd()): 
   return { storage, limits: { maxBytes, maxImageDimension } };
 }
 
+/**
+ * Checks a file exactly as `uploadMedia` would, without storing or recording anything, so a caller
+ * can refuse a whole batch before its first upload. Returns the type the content proves; throws the
+ * refusal `uploadMedia` would throw.
+ */
+export function checkMediaUpload(input: MediaUploadInput, limits: MediaLimits): MediaType {
+  return inspectUpload(input, limits).mediaType;
+}
+
+const digestOf = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
 export function createMediaService(
   persistence: MediaPersistence,
   options: MediaServiceOptions,
@@ -134,6 +162,29 @@ export function createMediaService(
 
   const notFound = () => new DomainError("not_found", "There is no such media.");
 
+  /** Stores the file under a generated key, then records it; a failed record removes the file. */
+  const store = async (input: MediaUploadInput, inspected: Inspected): Promise<Media> => {
+    const key = await storage.store({ bytes: input.bytes, extension: inspected.extension });
+    try {
+      return toMedia(
+        await persistence.createMedia({
+          key,
+          mediaType: inspected.mediaType,
+          byteSize: input.bytes.byteLength,
+          width: inspected.width,
+          height: inspected.height,
+          altText: input.altText ?? null,
+          sha256: digestOf(input.bytes),
+        }),
+      );
+    } catch (error) {
+      await storage.delete(key).catch((cleanupError: unknown) => {
+        options.onCleanupFailure({ operation: "upload", key, error: cleanupError });
+      });
+      throw error;
+    }
+  };
+
   return {
     async listMedia() {
       return (await persistence.listMedia()).map(toMedia);
@@ -146,25 +197,19 @@ export function createMediaService(
     },
 
     async uploadMedia(input) {
+      return store(input, inspectUpload(input, options.limits));
+    },
+
+    async ensureMedia(input) {
       const inspected = inspectUpload(input, options.limits);
-      const key = await storage.store({ bytes: input.bytes, extension: inspected.extension });
-      try {
-        return toMedia(
-          await persistence.createMedia({
-            key,
-            mediaType: inspected.mediaType,
-            byteSize: input.bytes.byteLength,
-            width: inspected.width,
-            height: inspected.height,
-            altText: input.altText ?? null,
-          }),
-        );
-      } catch (error) {
-        await storage.delete(key).catch((cleanupError: unknown) => {
-          options.onCleanupFailure({ operation: "upload", key, error: cleanupError });
-        });
-        throw error;
+      const recorded = await persistence.findMediaByDigest(digestOf(input.bytes));
+      if (recorded === null) return { media: await store(input, inspected), created: true };
+      if (input.altText === undefined || input.altText === recorded.altText) {
+        return { media: toMedia(recorded), created: false };
       }
+      const changed = await persistence.updateMedia(recorded.id, { altText: input.altText });
+      if (changed === null) throw notFound();
+      return { media: toMedia(changed), created: false };
     },
 
     async updateMedia(id, changes) {

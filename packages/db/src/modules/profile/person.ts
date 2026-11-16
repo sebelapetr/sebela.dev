@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { checkMediaReferences, type MediaReference, refusingMedia } from "./media.js";
 import { persons } from "./schema.js";
 import type { MediaReferenceFailure } from "./types.js";
@@ -87,7 +87,7 @@ const personMedia = (fields: Partial<PersonMedia>): MediaReference[] => [
  * The singleton person in `profile.persons`. There is at most one row: the unique `singleton`
  * column decides concurrent creates inside the database, and the loser sees a conflict.
  */
-export function createPersonPersistence(db: NodePgDatabase): PersonPersistence {
+export function createPersonPersistence(db: Database): PersonPersistence {
   return {
     async findPerson() {
       const [row] = await db.select(personColumns).from(persons).limit(1);

@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "northwind-freight",
+    "name": "Northwind Freight",
+    "website": "https://northwind.example.test/",
+    "logo": {
+      "file": "files/logo-northwind.png",
+      "altText": "The placeholder logo of the fictional Northwind Freight."
+    }
+  },
+  {
+    "slug": "harbor-retail",
+    "name": "Harbor Retail Group",
+    "website": "https://harbor-retail.example.test/",
+    "logo": {
+      "file": "files/logo-harbor.png",
+      "altText": "The placeholder logo of the fictional Harbor Retail Group."
+    }
+  },
+  {
+    "slug": "lumen-press",
+    "name": "Lumen Press",
+    "website": "https://lumen-press.example.test/",
+    "logo": {
+      "file": "files/logo-lumen.png",
+      "altText": "The placeholder logo of the fictional Lumen Press."
+    }
+  },
+  {
+    "slug": "quill-studio",
+    "name": "Quill Studio",
+    "website": "https://quill.example.test/",
+    "logo": {
+      "file": "files/logo-quill.png",
+      "altText": "The placeholder logo of the fictional Quill Studio."
+    }
+  },
+  {
+    "slug": "open-shelf",
+    "name": "Open Shelf Collective"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "name": "Alex Novara",
+  "headline": "Software engineer building reliable web platforms and practical AI tools",
+  "shortBio": "Alex is a **fictional** software engineer from the demo seed. Ten years of web platforms for logistics, retail and publishing, and lately agents, retrieval and evaluation.",
+  "longBio": "Alex Novara does not exist. This profile is the fictional demo seed of the repository, written so every page, the CV and the chatbot have realistic content to show.\n\nThe story: Alex started as a PHP developer at a regional freight company, moved to TypeScript platforms for retail and publishing, and runs a small consultancy on the side. Since 2024 Alex has been building and testing AI tools: retrieval over company documents, small agents with clear guardrails and evaluation suites that keep them honest.",
+  "location": "Harbour City",
+  "email": "alex@novara.example.test",
+  "links": [
+    { "label": "Website", "url": "https://novara.example.test/" },
+    { "label": "Code", "url": "https://code.example.test/alex-novara" },
+    { "label": "Network", "url": "https://network.example.test/in/alex-novara" }
+  ],
+  "availability": "Open to one consulting engagement from the next quarter.",
+  "careerStartedOn": "2015-09-01",
+  "photo": {
+    "file": "files/portrait.jpg",
+    "altText": "A placeholder portrait of the fictional Alex Novara."
+  },
+  "cvPdf": { "file": "files/cv.pdf" }
+}

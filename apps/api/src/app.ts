@@ -180,6 +180,7 @@ const describingMedia: MediaService = {
   listMedia: documentationOnly,
   getMedia: documentationOnly,
   uploadMedia: documentationOnly,
+  ensureMedia: documentationOnly,
   updateMedia: documentationOnly,
   deleteMedia: documentationOnly,
   readMediaFile: documentationOnly,

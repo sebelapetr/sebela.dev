@@ -1,6 +1,6 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { technologyColumns } from "./catalogs.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import { organizationColumns } from "./organizations.js";
@@ -159,7 +159,7 @@ function scalarChanges(
  * and testimonials refer to their experience without a cascade, so an experience with one is not
  * deleted.
  */
-export function createExperiencePersistence(db: NodePgDatabase): ExperiencePersistence {
+export function createExperiencePersistence(db: Database): ExperiencePersistence {
   return {
     listExperiences() {
       return loadExperiences(db, undefined);

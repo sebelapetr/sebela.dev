@@ -138,6 +138,31 @@ describe("media persistence", () => {
     ).rejects.toThrow();
   });
 
+  it("records the content digest and finds the oldest media with it", async () => {
+    const digest = "a".repeat(64);
+    const first = await created({ ...png(), sha256: digest });
+    await created({ ...png(), sha256: digest });
+    const other = await created({ ...pdf(), sha256: "b".repeat(64) });
+
+    expect(first.sha256).toBe(digest);
+    await expect(profile.findMediaByDigest(digest)).resolves.toEqual(first);
+    await expect(profile.findMediaByDigest("b".repeat(64))).resolves.toEqual(other);
+    await expect(profile.findMediaByDigest("c".repeat(64))).resolves.toBeNull();
+  });
+
+  it("records media without a digest as having none", async () => {
+    const media = await created(png());
+
+    expect(media.sha256).toBeNull();
+    await expect(profile.findMedia(media.id)).resolves.toMatchObject({ sha256: null });
+  });
+
+  it("refuses a digest that is not 64 lower-case hexadecimal digits in the database", async () => {
+    await expect(created({ ...png(), sha256: "A".repeat(64) })).rejects.toThrow();
+    await expect(created({ ...png(), sha256: "a".repeat(63) })).rejects.toThrow();
+    await expect(profile.listMedia()).resolves.toEqual([]);
+  });
+
   it("deletes media once and returns the deleted record", async () => {
     const media = await created(png());
 

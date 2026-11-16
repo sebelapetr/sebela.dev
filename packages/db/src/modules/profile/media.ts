@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { asc, desc, eq } from "drizzle-orm";
 
+import type { Database } from "../../database.js";
 import { isStillReferenced } from "./database-errors.js";
 import { type Executor, now, WriteRefused } from "./relations.js";
 import { media } from "./schema.js";
@@ -14,6 +14,7 @@ export const mediaColumns = {
   width: media.width,
   height: media.height,
   altText: media.altText,
+  sha256: media.sha256,
   createdAt: media.createdAt,
   updatedAt: media.updatedAt,
 };
@@ -79,7 +80,7 @@ function isMediaReferenceFailure(failure: unknown): failure is MediaReferenceFai
  * organizations and projects refer to media through foreign keys without a cascade, so a
  * referenced delete is refused by the database and returned as `referenced`.
  */
-export function createMediaPersistence(db: NodePgDatabase): MediaPersistence {
+export function createMediaPersistence(db: Database): MediaPersistence {
   return {
     listMedia() {
       return db.select(mediaColumns).from(media).orderBy(desc(media.createdAt), desc(media.id));
@@ -90,6 +91,15 @@ export function createMediaPersistence(db: NodePgDatabase): MediaPersistence {
     },
     async findMediaByKey(key) {
       const [row] = await db.select(mediaColumns).from(media).where(eq(media.key, key));
+      return row ?? null;
+    },
+    async findMediaByDigest(sha256) {
+      const [row] = await db
+        .select(mediaColumns)
+        .from(media)
+        .where(eq(media.sha256, sha256))
+        .orderBy(asc(media.createdAt), asc(media.id))
+        .limit(1);
       return row ?? null;
     },
     async createMedia(fields) {

@@ -1,5 +1,6 @@
 export { readDatabaseConfig } from "./config.js";
 export type { DatabaseConfig } from "./config.js";
+export { demoSeedFolder } from "./demo-seed.js";
 export { migrateDatabase } from "./migrate.js";
 export { createPersistence } from "./persistence.js";
 export type { Persistence } from "./persistence.js";

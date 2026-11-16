@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import type { Executor } from "./relations.js";
 import { technologies, topics } from "./schema.js";
@@ -51,7 +51,7 @@ export function loadTechnologies(db: Executor) {
  * The ordered technology and topic catalogs. Slugs are unique in the database, so concurrent
  * creates of one slug leave exactly one row, and the tier/group rule is a check constraint.
  */
-export function createCatalogPersistence(db: NodePgDatabase): CatalogPersistence {
+export function createCatalogPersistence(db: Database): CatalogPersistence {
   return {
     listTechnologies() {
       return loadTechnologies(db);

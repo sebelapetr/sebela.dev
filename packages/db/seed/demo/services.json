@@ -1,0 +1,41 @@
+[
+  {
+    "slug": "ai-assistant-prototype",
+    "name": "AI assistant prototype",
+    "summary": "A working assistant over your own documents in four weeks, with an evaluation set that shows how well it answers.",
+    "audience": "Small and medium firms with handbooks, archives or support answers nobody can find.",
+    "deliverable": "A running prototype, its evaluation results and a plan for going to production.",
+    "position": 0,
+    "evidence": [
+      { "kind": "project", "project": "reading-assistant" },
+      { "kind": "project", "project": "document-assistant-prototype" },
+      { "kind": "exploration", "exploration": "citation-checker" }
+    ]
+  },
+  {
+    "slug": "architecture-review",
+    "name": "Architecture review",
+    "summary": "A two-day review of a web platform: what holds, what will break first and what to change.",
+    "audience": "Teams about to grow a platform or replace part of it.",
+    "deliverable": "A written report with prioritised recommendations and a follow-up call.",
+    "position": 1,
+    "evidence": [
+      { "kind": "project", "project": "architecture-review-kit" },
+      { "kind": "project", "project": "store-replatforming" },
+      { "kind": "link", "label": "Projects", "path": "/projects" }
+    ]
+  },
+  {
+    "slug": "evaluation-setup",
+    "name": "Evaluation setup",
+    "summary": "An evaluation suite for an existing AI feature, so changes to prompts and models are measured, not guessed.",
+    "audience": "Teams that already ship an AI feature.",
+    "deliverable": "An evaluation suite in your repository, wired into continuous integration.",
+    "position": 2,
+    "evidence": [
+      { "kind": "exploration", "exploration": "chunking-benchmark" },
+      { "kind": "exploration", "exploration": "eval-dashboard" },
+      { "kind": "link", "label": "AI Engineering Roadmap", "path": "/roadmap" }
+    ]
+  }
+]

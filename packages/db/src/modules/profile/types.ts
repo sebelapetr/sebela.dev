@@ -826,10 +826,16 @@ export interface MediaFields {
   /** Pixels; `null` exactly for a PDF. */
   height: number | null;
   altText: string | null;
+  /**
+   * The SHA-256 digest of the content as 64 lower-case hexadecimal digits; `null` or omitted for
+   * media recorded without one. Not unique: the same file may be uploaded more than once.
+   */
+  sha256?: string | null;
 }
 
 export interface MediaRecord extends MediaFields {
   id: string;
+  sha256: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -862,6 +868,8 @@ export interface MediaPersistence {
   findMedia(id: string): Promise<MediaRecord | null>;
   /** The media stored under the key, or `null`. */
   findMediaByKey(key: string): Promise<MediaRecord | null>;
+  /** The oldest media whose content has the SHA-256 digest, or `null`; `null` digests never match. */
+  findMediaByDigest(sha256: string): Promise<MediaRecord | null>;
   /** Records media; throws when the key is taken or the database refuses the metadata. */
   createMedia(fields: MediaFields): Promise<MediaRecord>;
   /** Changes the alt text only; `null` when there is no such media. */

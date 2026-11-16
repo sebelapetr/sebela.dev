@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { loadTechnologies } from "./catalogs.js";
 import { loadEducation } from "./education.js";
 import { loadExperiences } from "./experiences.js";
@@ -39,7 +39,7 @@ export interface CvPersistence {
   readCv(): Promise<CvRecord | null>;
 }
 
-export function createCvPersistence(db: NodePgDatabase): CvPersistence {
+export function createCvPersistence(db: Database): CvPersistence {
   return {
     readCv() {
       return db.transaction(

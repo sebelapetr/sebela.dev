@@ -1,6 +1,6 @@
 import { asc, eq, inArray, type SQL } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import type { Database } from "../../database.js";
 import { topicColumns } from "./catalogs.js";
 import { type Executor, now, topicIds, WriteRefused } from "./relations.js";
 import { currentFocus, currentFocusTopics, experiences, projects, topics } from "./schema.js";
@@ -128,7 +128,7 @@ function scalarChanges(
  * topic links have no cascade towards their targets, so a linked project or topic cannot be
  * deleted; the topic links cascade only with their entry.
  */
-export function createCurrentFocusPersistence(db: NodePgDatabase): CurrentFocusPersistence {
+export function createCurrentFocusPersistence(db: Database): CurrentFocusPersistence {
   return {
     listCurrentFocus() {
       return loadCurrentFocus(db, undefined);
