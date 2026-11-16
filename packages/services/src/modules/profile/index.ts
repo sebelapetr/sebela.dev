@@ -1,5 +1,7 @@
 import type { Person, PersonCreate, PersonUpdate } from "@sebela/contracts";
-import type { ProfilePersistence } from "@sebela/db";
+import type { PersonFields, PersonRecord, ProfilePersistence } from "@sebela/db";
+
+import { DomainError } from "../../errors.js";
 
 /**
  * Operations on the person, the one profile record. Results are in the contract shape of
@@ -18,13 +20,41 @@ export interface ProfileService {
   deletePerson(): Promise<void>;
 }
 
-export function createProfileService(persistence: ProfilePersistence): ProfileService {
-  const notImplemented = () =>
-    Promise.reject(new Error(`not implemented over ${typeof persistence}`));
+const missing = () => new DomainError("not_found", "There is no person yet.");
+
+function toPerson(record: PersonRecord): Person {
   return {
-    getPerson: notImplemented,
-    createPerson: notImplemented,
-    updatePerson: notImplemented,
-    deletePerson: notImplemented,
+    ...record,
+    links: record.links.map(({ label, url }) => ({ label, url })),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+/** Drops fields that are absent or `undefined`, so they stay unchanged. */
+function definedChanges(changes: PersonUpdate): Partial<PersonFields> {
+  return Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
+}
+
+export function createProfileService(persistence: ProfilePersistence): ProfileService {
+  return {
+    async getPerson() {
+      const record = await persistence.findPerson();
+      if (!record) throw missing();
+      return toPerson(record);
+    },
+    async createPerson(input) {
+      const result = await persistence.createPerson(input);
+      if (!result.ok) throw new DomainError("conflict", "The person already exists.");
+      return toPerson(result.person);
+    },
+    async updatePerson(changes) {
+      const record = await persistence.updatePerson(definedChanges(changes));
+      if (!record) throw missing();
+      return toPerson(record);
+    },
+    async deletePerson() {
+      if (!(await persistence.deletePerson())) throw missing();
+    },
   };
 }
