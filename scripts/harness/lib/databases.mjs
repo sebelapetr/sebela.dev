@@ -43,6 +43,7 @@ export function composeDatabases({ root, env }) {
       const detail = error.stderr?.toString().trim() || error.message;
       throw new Error(
         `the shared Postgres did not run the statement (${detail}); is it running? Start it with \`docker compose up --detach --wait\` in the main checkout`,
+        { cause: error },
       );
     }
   };
