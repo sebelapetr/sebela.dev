@@ -1,0 +1,35 @@
+{
+  "name": "@sebela/services",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Domain operations of the backend: the person profile and API keys.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@sebela/contracts": "workspace:*",
+    "@sebela/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@sebela/config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
