@@ -1,12 +1,12 @@
 # Phase 3 — Website
 
-| | |
-|---|---|
-| Status | Approved |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Depends on | Phase 2 |
-| Result | The public website: all presentation pages, the CV, and a chat that works end to end on mock answers |
+|            |                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| Status     | Approved                                                                                             |
+| Date       | 2026-11-15                                                                                           |
+| Parent     | `.plan/00-overview/prd.md`                                                                           |
+| Depends on | Phase 2                                                                                              |
+| Result     | The public website: all presentation pages, the CV, and a chat that works end to end on mock answers |
 
 Approved implementation issues: [issues.md](issues.md). The owner reviews the hero and timeline through the two HITL issues; approval of this PRD does not replace that visual review.
 
@@ -83,16 +83,17 @@ Everything is rendered from the API, so a content change appears without a deplo
 33. As the owner, I want the chat UI built against the interface the real backend will implement, so that phase 7 replaces the mock without redoing the UI.
 
 ## Implementation Decisions
+
 ### Pages
 
-| Address | Page | In navigation |
-|---|---|---|
-| `/` | Homepage with the chat line in the hero | Name / logo |
-| `/experience` | Career timeline with projects and inline case studies, independent R&D, technologies, education, CV download | Yes |
-| `/services` | What a client can order | Yes |
-| `/ai-roadmap` | From phase 4 | Yes |
-| `/ask` | The chat | Button |
-| `/cv` | Print-friendly CV and PDF download | No — reached from Experience and the homepage |
+| Address       | Page                                                                                                         | In navigation                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `/`           | Homepage with the chat line in the hero                                                                      | Name / logo                                   |
+| `/experience` | Career timeline with projects and inline case studies, independent R&D, technologies, education, CV download | Yes                                           |
+| `/services`   | What a client can order                                                                                      | Yes                                           |
+| `/ai-roadmap` | From phase 4                                                                                                 | Yes                                           |
+| `/ask`        | The chat                                                                                                     | Button                                        |
+| `/cv`         | Print-friendly CV and PDF download                                                                           | No — reached from Experience and the homepage |
 
 - There is **no separate projects listing**. Projects are shown inside the experiences they belong to. The data model is unchanged: a project stays an entity linked to an experience.
 - There is **no contact page**. "Contact" in the navigation leads to the contact block `/#contact` on the homepage, from every page.
@@ -179,11 +180,11 @@ Three services and how the work runs. The page should not read like a young agen
 - **Header:** title and one sentence: "I help companies connect their systems, automate processes and add AI to the software they already have."
 - **Services** as numbered editorial rows, each with the same three parts — who it is for, what you get, evidence (links to items on `/experience`):
 
-| # | Service | For | You get | Evidence |
-|---|---|---|---|---|
-| 01 | Process automation & integrations | Companies where much is done by hand or systems are poorly connected | Systems connected through APIs; a concrete workflow automated; data and document processing; reporting | PumpYourSound, GearForce |
-| 02 | Custom software & internal tools | Companies that need software they cannot buy | Backend, database, internal tool or e-commerce, including deployment and operation | Paldock |
-| 03 | AI integration & internal AI tools | Companies that want useful AI capabilities in an existing product or internal workflow | AI features integrated into existing software; assistants over company data and documents; retrieval / RAG and structured LLM workflows; prototypes that validate whether an AI use case actually works | Booky (R&D), AI Roadmap |
+| #   | Service                            | For                                                                                    | You get                                                                                                                                                                                                 | Evidence                 |
+| --- | ---------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| 01  | Process automation & integrations  | Companies where much is done by hand or systems are poorly connected                   | Systems connected through APIs; a concrete workflow automated; data and document processing; reporting                                                                                                  | PumpYourSound, GearForce |
+| 02  | Custom software & internal tools   | Companies that need software they cannot buy                                           | Backend, database, internal tool or e-commerce, including deployment and operation                                                                                                                      | Paldock                  |
+| 03  | AI integration & internal AI tools | Companies that want useful AI capabilities in an existing product or internal workflow | AI features integrated into existing software; assistants over company data and documents; retrieval / RAG and structured LLM workflows; prototypes that validate whether an AI use case actually works | Booky (R&D), AI Roadmap  |
 
 - Booky is labelled explicitly as R&D: it is not a paid client reference.
 - **There is no fourth service.** Consulting and training is not offered as a service of its own — advising on what is and is not worth building is part of each of the three. "AI engineering advisory & workshops" may be added later, once there is evidence for it.
@@ -233,7 +234,7 @@ The chat is the whole page. No sidebar, no dashboard.
 
 - Prepared answers for the suggested questions, with sources, related links and at least one of each block type, kept as fixtures in the website. They include at least one "I don't know" answer, so that state is designed and tested too.
 - Any other question gets a general reply that the assistant is not connected yet, with links to the main pages.
-- Answers are streamed even in the mock, so the UI is built against real behaviour.
+- Answers are streamed even in the mock, so the UI is built against real behaviour. Phase 7 may send progress before buffering generation through Output Guard, then stream only approved content; the UI must not depend on immediate model-token delivery.
 - The mock sits behind the interface the real backend implements in phase 7.
 - The site launches only after all phases, so visitors never see the mock.
 
@@ -280,15 +281,15 @@ A fixed structure: context → problem → my role → solution → result → t
 
 ### Cross-linking
 
-| From | To |
-|---|---|
-| Homepage, Selected work | The item's anchor on `/experience` |
-| A service's evidence | The item's anchor on `/experience` |
-| Homepage, Now | The independent R&D block; the AI Roadmap |
-| Sources in a chat answer | Anchors on `/experience`, `/services`, later the AI Roadmap |
-| Homepage and Experience | The CV page and the PDF |
-| Footer, every page | The repository; the CV |
-| "Contact" in the navigation, closing buttons | `/#contact` |
+| From                                         | To                                                          |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| Homepage, Selected work                      | The item's anchor on `/experience`                          |
+| A service's evidence                         | The item's anchor on `/experience`                          |
+| Homepage, Now                                | The independent R&D block; the AI Roadmap                   |
+| Sources in a chat answer                     | Anchors on `/experience`, `/services`, later the AI Roadmap |
+| Homepage and Experience                      | The CV page and the PDF                                     |
+| Footer, every page                           | The repository; the CV                                      |
+| "Contact" in the navigation, closing buttons | `/#contact`                                                 |
 
 - Use a documented anchor convention based on stable record identity, never display order. Experiences, projects, case studies and source targets such as services, explorations and technology groups are addressable. Sources and evidence links use the same anchor builder as their destination.
 - Direct loads, client navigation, hash changes and browser back/forward expand all enclosing details before scrolling to the target. Account for the sticky header and reduced-motion preference; make the target keyboard-reachable. Hydration must not close the revealed detail or undo the scroll.

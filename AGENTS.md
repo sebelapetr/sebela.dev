@@ -30,8 +30,8 @@ The personal professional website of Petr Šebela (sebelapetr.cz): one site for 
 
 ## Hard rules
 
-1. **The API is the trust boundary.** Only `apps/api` reaches the database. `apps/web`, `apps/mcp-admin` and `apps/llm-agent` talk to the API over HTTP and never import `@sebela/db` or `@sebela/services`.
-2. **Every write to content is an authenticated, private API route.** Public routes are read-only, with one named exception from phase 7: a visitor may create and continue their own chat conversation. The API key is used by server-side callers only and never reaches client-side code.
+1. **The API is the trust boundary.** Only `apps/api` reaches the database. `apps/web`, `apps/mcp-admin` and `apps/ai-service` talk to the API over HTTP; `apps/mcp-public` uses the AI service's read interface. `web`, both MCP apps, `ai-service` and `packages/llm-agent` never import `@sebela/db` or `@sebela/services`. Python has no database access.
+2. **Every write to content is an authenticated, private API route.** Public routes are read-only, with one named exception from phase 7: a visitor may create, continue and delete their own chat conversation. The API key is used by server-side callers only and never reaches client-side code.
 3. **No real personal data in the repository.** Only the fictional demo seed and fictional test fixtures. Never copy anything from `.context/` into tracked files. Everything stored in the database is public content — there is no private flag.
 4. **Nothing is hard-coded about the environment.** Ports, hosts and database names come from environment variables. Each worktree has its own values.
 5. **Work in a worktree.** App and package code is never edited in the main checkout.

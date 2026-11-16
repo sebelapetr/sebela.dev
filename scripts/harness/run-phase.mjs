@@ -11,7 +11,13 @@
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { FAILED_LABEL, RETRY_LABEL, RUN_REPORT_SCHEMA, classifyRun, decideNext } from "./lib/loop.mjs";
+import {
+  FAILED_LABEL,
+  RETRY_LABEL,
+  RUN_REPORT_SCHEMA,
+  classifyRun,
+  decideNext,
+} from "./lib/loop.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
 function parseArgs(argv) {
@@ -42,7 +48,7 @@ Base branch: ${base}
 Handle exactly ONE issue, following your agent definition, docs/agents.md and docs/git-workflow.md:
 
 1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
-2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. An issue labelled \`agent-retry\` failed once before: read its comments first.
+2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. An issue labelled \`agent-retry\` failed once before: read its comments first. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
 3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
 4. If no such issue is left, open the phase pull request from phase/${phase} to ${base} (or update it if it exists) and report phase_done.
 
@@ -69,6 +75,15 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
     "auto",
     "--permission-prompts",
     "none",
+    // Only the MCP servers agents need: library documentation and a browser for UI checks. The
+    // owner's personal servers and claude.ai connectors (mail, calendar, drive) are not loaded.
+    // Only the repository's own settings: the owner's ~/.claude (plugins, rules, agents) would make
+    // an unattended run depend on whatever is installed on the machine.
+    "--setting-sources",
+    "project,local",
+    "--strict-mcp-config",
+    "--mcp-config",
+    path.join(mainRoot, "scripts", "harness", "mcp.json"),
     "--name",
     `loop ${phase} #${iteration}`,
   ];
@@ -77,7 +92,12 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
       cwd: mainRoot,
       // Subagents must run in the foreground: a print-mode session ends when the orchestrator
       // stops, and a background developer would be cut off.
-      env: { ...process.env, SEBELA_UNATTENDED: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" },
+      env: {
+        ...process.env,
+        SEBELA_UNATTENDED: "1",
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+        ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -94,16 +114,22 @@ function runOrchestrator({ mainRoot, phase, base, iteration }) {
 }
 
 function issueLabels(issue) {
-  const out = execFileSync("gh", ["issue", "view", String(issue), "--json", "labels", "-q", ".labels[].name"], {
-    encoding: "utf8",
-  });
+  const out = execFileSync(
+    "gh",
+    ["issue", "view", String(issue), "--json", "labels", "-q", ".labels[].name"],
+    {
+      encoding: "utf8",
+    },
+  );
   return out.split("\n").filter(Boolean);
 }
 
 function addLabel(issue, label) {
   // An issue that has failed for good is no longer up for a retry.
   const remove = label === FAILED_LABEL ? ["--remove-label", RETRY_LABEL] : [];
-  execFileSync("gh", ["issue", "edit", String(issue), "--add-label", label, ...remove], { stdio: "ignore" });
+  execFileSync("gh", ["issue", "edit", String(issue), "--add-label", label, ...remove], {
+    stdio: "ignore",
+  });
 }
 
 // Ctrl+C ends a wait at once instead of after it.
@@ -120,7 +146,9 @@ const sleep = (ms) =>
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.phase) {
-    console.error("usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N]");
+    console.error(
+      "usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N]",
+    );
     process.exit(64);
   }
   const mainRoot = mainRootFrom();
@@ -136,10 +164,16 @@ async function main() {
   let consecutiveFailures = 0;
   for (let iteration = 1; iteration <= options.maxIterations && !interrupted; iteration += 1) {
     log(`iteration ${iteration}: starting the orchestrator for ${options.phase}`);
-    const raw = await runOrchestrator({ mainRoot, phase: options.phase, base: options.base, iteration });
+    const raw = await runOrchestrator({
+      mainRoot,
+      phase: options.phase,
+      base: options.base,
+      iteration,
+    });
     const run = classifyRun(raw);
 
-    const labels = run.kind === "report" && run.outcome === "failed" && run.issue ? issueLabels(run.issue) : [];
+    const labels =
+      run.kind === "report" && run.outcome === "failed" && run.issue ? issueLabels(run.issue) : [];
     const decision = decideNext({
       run,
       consecutiveFailures,
@@ -154,7 +188,10 @@ async function main() {
       JSON.stringify({ iteration, run, decision, raw }, null, 2),
     );
 
-    const what = run.kind === "report" ? `${run.outcome}${run.issue ? ` #${run.issue}` : ""}: ${run.summary}` : run.kind;
+    const what =
+      run.kind === "report"
+        ? `${run.outcome}${run.issue ? ` #${run.issue}` : ""}: ${run.summary}`
+        : run.kind;
     log(`iteration ${iteration}: ${what} -> ${decision.next}`);
     if (run.kind === "crash") log(`  ${run.detail}`);
 

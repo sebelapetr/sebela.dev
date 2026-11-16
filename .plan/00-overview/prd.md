@@ -1,11 +1,11 @@
 # sebelapetr.cz — Overview PRD
 
-| | |
-|---|---|
-| Status | Approved |
-| Date | 2026-11-15 |
-| Owner | Petr Šebela |
-| Scope | Overview of the whole project. Each phase gets its own PRD in `.plan/NN-<phase>/prd.md`; those PRDs hold the detail (exact schema, endpoints, pages, tools) and must stay consistent with this document. |
+|        |                                                                                                                                                                                                          |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status | Approved                                                                                                                                                                                                 |
+| Date   | 2026-11-15                                                                                                                                                                                               |
+| Owner  | Petr Šebela                                                                                                                                                                                              |
+| Scope  | Overview of the whole project. Each phase gets its own PRD in `.plan/NN-<phase>/prd.md`; those PRDs hold the detail (exact schema, endpoints, pages, tools) and must stay consistent with this document. |
 
 ## Problem Statement
 
@@ -22,7 +22,7 @@ Separately, his learning roadmap lives in another application (Road to AI, `road
 
 A new sebelapetr.cz: a hybrid personal professional site built on one structured data model.
 
-- One identity, two paths. Positioning: *software engineer focused on AI systems, automation and modern software — available for selected projects and career opportunities.*
+- One identity, two paths. Positioning: _software engineer focused on AI systems, automation and modern software — available for selected projects and career opportunities._
 - The site answers, in this order: who he is, what he can do, what he has built, what he is doing now, where he is heading, how to work with him.
 - Every fact is stored once in PostgreSQL and reused by the website, the CV, the AI Roadmap, the chatbot and the MCP servers.
 - The learning roadmap moves into the site as the **AI Engineering Roadmap** — "AI Roadmap" for short. These two are the only names used; "AI Engineering Path" and "Road to AI" are retired.
@@ -33,12 +33,12 @@ The site launches publicly once all phases are done and replaces the current seb
 
 ## Audiences
 
-| Audience | What they need within 30 seconds | Primary path |
-|---|---|---|
-| Client | Whether Petr can solve their problem and what exactly he offers | Homepage → Services → Contact |
-| Recruiter / hiring manager | Seniority, stack, recent work, CV | Homepage → Experience → CV |
-| Technical evaluator | Depth: how he builds, tests and reasons | Experience and its case studies → repository |
-| AI agent | Structured, trustworthy facts about Petr | Public MCP server, `llms.txt` |
+| Audience                   | What they need within 30 seconds                                | Primary path                                 |
+| -------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
+| Client                     | Whether Petr can solve their problem and what exactly he offers | Homepage → Services → Contact                |
+| Recruiter / hiring manager | Seniority, stack, recent work, CV                               | Homepage → Experience → CV                   |
+| Technical evaluator        | Depth: how he builds, tests and reasons                         | Experience and its case studies → repository |
+| AI agent                   | Structured, trustworthy facts about Petr                        | Public MCP server, `llms.txt`                |
 
 ## User Stories
 
@@ -126,18 +126,18 @@ Folder names below are the `.plan/` folders. Each phase has its own PRD — all 
 
 Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1 to 8, each processed by the loop and merged by the owner.
 
-| # | Folder | Phase | Result |
-|---|---|---|---|
-| 0 | `00-overview` | Overview and harness | This document, the docs and agent rules, and the harness that lets later phases run unattended (`harness-prd.md`). Done by hand |
-| 0 | `00-trial` | Trial | A dry run of the harness on practice issues. Ends with a pull request that is closed, not merged |
-| 1 | `01-foundation` | Foundation | Turborepo, shared configuration, guard-rail checks, Docker Compose skeleton, full CI. The first phase processed by the loop. No application code |
-| 2 | `02-api-db` | API and database | `apps/api`, `packages/db`, `packages/services`, `packages/contracts`, `profile` schema, seed |
-| 3 | `03-web` | Website | `apps/web` with all presentation pages, CV, and a chat UI running on mock data |
-| 4 | `04-ai-roadmap` | AI Roadmap | `ai_roadmap` schema, API, pages, import of the existing data |
-| 5 | `05-mcp-admin` | MCP for content management | Secured MCP server that writes content through the API, plus agent skills that use it |
-| 6 | `06-rag-memory` | Retrieval | The project's own retrieval over public data: pgvector, hybrid search, measured with evals |
-| 7 | `07-llm-agent` | LLM agent: chatbot and public MCP | One Python service for the AI layer — the chat pipeline and the public read-only MCP server — plus the real chatbot and a `/mcp` page with setup instructions for connecting external AI clients |
-| 8 | `08-delivery` | Continuous delivery and launch | A version tag builds, verifies and deploys to the VPS; production Compose, reverse proxy, TLS, backups; loading the real data and switching the domain |
+| #   | Folder          | Phase                             | Result                                                                                                                                                                        |
+| --- | --------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | `00-overview`   | Overview and harness              | This document, the docs and agent rules, and the harness that lets later phases run unattended (`harness-prd.md`). Done by hand                                               |
+| 0   | `00-trial`      | Trial                             | A dry run of the harness on practice issues. Ends with a pull request that is closed, not merged                                                                              |
+| 1   | `01-foundation` | Foundation                        | Turborepo, shared configuration, guard-rail checks, Docker Compose skeleton, full CI. The first phase processed by the loop. No application code                              |
+| 2   | `02-api-db`     | API and database                  | `apps/api`, `packages/db`, `packages/services`, `packages/contracts`, `profile` schema, seed                                                                                  |
+| 3   | `03-web`        | Website                           | `apps/web` with all presentation pages, CV, and a chat UI running on mock data                                                                                                |
+| 4   | `04-ai-roadmap` | AI Roadmap                        | `ai_roadmap` schema, API, pages, import of the existing data                                                                                                                  |
+| 5   | `05-mcp-admin`  | MCP for content management        | Secured MCP server that writes content through the API, plus agent skills that use it                                                                                         |
+| 6   | `06-rag-memory` | Retrieval                         | The project's own retrieval over public data: pgvector, hybrid search, measured with evals                                                                                    |
+| 7   | `07-llm-agent`  | LLM agent: chatbot and public MCP | A FastAPI AI runtime, separate Python public MCP and shared agent package, plus the real chatbot and a `/mcp` page with setup instructions for connecting external AI clients |
+| 8   | `08-delivery`   | Continuous delivery and launch    | A version tag builds, verifies and deploys to the VPS; production Compose, reverse proxy, TLS, backups; loading the real data and switching the domain                        |
 
 ### Phase boundaries
 
@@ -157,7 +157,7 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 
 **6 — Retrieval.** The project's own retrieval implementation — no Cognee, no separate vector database. Public content is split into chunks, embedded through a hosted embeddings API and stored with pgvector in the same Postgres; search combines vector similarity with full-text search. Developed evals-first: a set of questions with known sources decides between the variants, and the measurements are published. Indexing follows writes directly; no worker unless that stops being enough.
 
-**7 — LLM agent.** One Python service for the whole AI layer: the chat pipeline (input guard, generation with read tools and search, output checks) and the public read-only MCP server, sharing one set of tools. The API gains conversations: visitor cookie, ownership, limits, bot detection, budget, storage. The website's mock is replaced, with a public `/mcp` setup page offering copyable connection instructions for Claude, Codex, Gemini and OpenCode, linked from the main navigation, `/ask` and the homepage chat entry point. Evals for desired and forbidden behaviour; monitoring of real conversations.
+**7 — LLM agent.** `apps/ai-service` (FastAPI), `apps/mcp-public` (Python MCP adapter) and `packages/llm-agent` (shared Python logic). Chat has three stages: Security Gateway (cheap classifier), Main Agent (tools loop) and Output Guard (deterministic). Chat and public MCP share read capabilities, with the latter exposed through FastAPI. The API gains conversations: visitor cookie, ownership, limits, bot detection, budget, storage. The website's mock is replaced, with a public `/mcp` setup page offering copyable connection instructions for Claude, Codex, Gemini and OpenCode, linked from the main navigation, `/ask` and the homepage chat entry point. Evals for desired and forbidden behaviour; monitoring of real conversations.
 
 **8 — Continuous delivery and launch.** Done last. A version tag builds the images, verifies the complete stack in the pipeline, deploys to the owner's server and rolls back on failure. Production only — no staging; the full-stack check and the rollback take its place. Production Compose stack behind a reverse proxy with TLS, backups with a rehearsed restore, monitoring. Then the launch: the owner's real data and the final roadmap import are loaded, and sebelapetr.cz is switched to the new site.
 
@@ -165,35 +165,27 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 
 ### Architecture
 
-```
-            Browser                              AI agents
-               |                                /         \
-           apps/web                 apps/llm-agent     apps/mcp-admin
-               |                     (public MCP,          |
-               |                      chat pipeline)       |
-               |                    /        |             |          HTTP only
-               +----------------- apps/api ---------------+          public reads, authenticated writes
-                                     |
-                             packages/services                       domain logic
-                              /              \
-                      packages/db        packages/memory
-                           |                  |
-                      PostgreSQL        pgvector (same Postgres)
+```text
+browser -> web -> api -> ai-service -> packages/llm-agent (chat pipeline)
+external agent -> mcp-public -> ai-service (read capabilities) -> api
+owner's agent -> mcp-admin -> api (authenticated content writes)
+api -> packages/services -> packages/db -> PostgreSQL
+                        -> packages/memory -> pgvector (same Postgres)
 
-   chat: browser -> web -> api (conversation, limits, budget, storage) -> llm-agent (answer) -> api (public reads)
+AI-service tools read public content/search through api over HTTP.
 ```
 
-- The API is the only gateway to data. The website, `mcp-admin` and `llm-agent` are API clients over HTTP.
-- The reason is security, not tidiness: the API is the trust boundary. The system has two MCP servers, write access for agents and a public chatbot. Authentication is enforced once, at that boundary, so no client can bypass it. This supersedes the earlier idea of MCP calling shared services directly.
+- The API is the only gateway to data. The website, `mcp-admin` and `ai-service` use the content API over HTTP; `mcp-public` uses FastAPI read capabilities.
+- The reason is security, not tidiness: the API is the trust boundary. The system has two MCP servers, write access for agents and a public chatbot. Content authentication is enforced at that boundary; internal AI generation has separate service authentication and admission. This supersedes the earlier idea of MCP calling shared services directly.
 - Only `apps/api` (and a future worker) may import `packages/db` and `packages/services`. A lint rule enforces this.
 - Postgres is the source of truth. The retrieval layer is derived and can be rebuilt from Postgres at any time.
 
 ### Monorepo
 
-- Turborepo with pnpm workspaces on the current Node LTS. TypeScript throughout, except `apps/llm-agent`, which is Python with its own toolchain and takes part in the same task pipeline and CI.
-- Apps: `web` (Next.js, frontend only), `api` (Hono), `mcp-admin` (TypeScript), `llm-agent` (Python: the chat pipeline and the public MCP server). `mcp-admin` and `llm-agent` stay separate apps because their threat models differ: one can write, the other is public and read-only.
+- Turborepo with pnpm workspaces on the current Node LTS. TypeScript throughout, except `apps/ai-service`, `apps/mcp-public` and `packages/llm-agent`, which use their own Python toolchain and take part in the same task pipeline and CI.
+- Apps: `web` (Next.js), `api` (Hono, content/web/conversations), `mcp-admin` (TypeScript, private API tools), `mcp-public` (Python, public MCP) and `ai-service` (Python/FastAPI, AI routes/runtime). The MCP apps are separate deployables with different trust models.
 - No `worker` by default. It is added only for a concrete background job; the first likely one is phase 6 (a change in Postgres triggers an asynchronous reindex).
-- Packages: `db` (Drizzle schema, migrations, repositories, seed), `services` (domain logic, storage), `contracts` (Zod schemas and types shared by API, web and MCP), `api-client` (typed client generated from the OpenAPI document), `ui` (shared React components and design tokens), `config` (shared lint and TypeScript configuration); later `memory` (retrieval).
+- Packages: `db` (Drizzle schema, migrations, repositories, seed), `services` (domain logic, storage), `contracts` (Zod schemas and types shared by API, web and MCP), `api-client` (typed client generated from the OpenAPI document), `ui` (shared React components and design tokens), `config` (shared lint and TypeScript configuration); later `memory` (retrieval) and `llm-agent` (Python pipelines, tools, guardrails, models and evals).
 - `packages/memory` is the retrieval layer: chunking, embedding, indexing and hybrid search on pgvector. The rest of the code calls index, search and delete operations only.
 
 ### Repository structure
@@ -201,8 +193,8 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 The maintained reference is `docs/repository-structure.md`; it holds the full tree, the dependency table and the port scheme. In short:
 
 ```
-apps/        web [3], api [2], mcp-admin [5], llm-agent [7]
-packages/    config [1], db [2], services [2], contracts [2], api-client [2], ui [3], memory [6]
+apps/        web [3], api [2], mcp-admin [5], mcp-public [7], ai-service [7]
+packages/    config [1], db [2], services [2], contracts [2], api-client [2], ui [3], memory [6], llm-agent [7]
 scripts/     worktree setup and cleanup, the phase loop, database helpers
 docs/        architecture, design, workflow, decisions
 .plan/       PRDs and issue overviews per phase
@@ -212,12 +204,12 @@ compose.yaml in the root; a Dockerfile inside each app
 
 - Package scope is `@sebela/*`.
 - The demo seed lives inside `packages/db`; the owner's private seed has the same format and is loaded from outside the repository by the same command.
-- End-to-end tests live in `apps/web/e2e`, evals in the `evals/` folder of `mcp-admin`, `llm-agent` and `memory`; all other tests sit next to the code.
+- End-to-end tests live in `apps/web/e2e`, evals in `apps/mcp-admin/evals`, `packages/llm-agent/evals` and `packages/memory/evals`; Python has package-local unit/integration test folders. Other tests sit next to the code.
 
 ### Parallel work in worktrees
 
 - Agents work in parallel, each in its own git worktree, sharing one Postgres container.
-- A setup script gives each worktree a slot: its own database (named after the branch, migrated and seeded with the demo seed) and its own ports for the website, the API, `mcp-admin` and `llm-agent`, and in development its own folder in object storage, written to that worktree's `.env.local`. A cleanup script drops the database and frees the slot.
+- A setup script gives each worktree a slot: its own database (named after the branch, migrated and seeded with the demo seed) and its own ports for the website, the API, `mcp-admin`, `ai-service` and `mcp-public`, and in development its own folder in object storage, written to that worktree's `.env.local`. A cleanup script drops the database and frees the slot.
 - Tests use a separate temporary database.
 - No port, host or database name is hard-coded anywhere; everything comes from the environment, and CI checks it.
 
@@ -227,7 +219,7 @@ compose.yaml in the root; a Dockerfile inside each app
 - **ORM:** Drizzle. Schema in TypeScript, SQL migrations generated and committed, Zod schemas derived from tables.
 - **Migrations:** applied by a dedicated one-off step before the API starts, never by the API on startup. No down migrations: fix forward, back up before deploy.
 - **Database layout:** one Postgres database with separate schemas per domain — `profile` (person, organizations, experiences, projects and case studies, explorations, services, technologies, topics, education, testimonials, current focus, media), `ai_roadmap` (areas, modules, resources, diary and time entries, books, events, project ideas, followed sources, glossary), and separate schemas for API keys, the record of writes, retrieval and chat conversations. Domains are linked through shared topics and technologies.
-- **API style:** REST. The OpenAPI document is generated automatically from the same Zod schemas the API validates with, and it is the contract for every client. Typed clients are generated from it — in TypeScript for the website and `mcp-admin`, and in Python for `llm-agent`. CI checks that the generated client is up to date.
+- **API style:** REST. The OpenAPI document is generated automatically from the same Zod schemas the API validates with, and it is the contract for every client. Typed clients are generated from it — in TypeScript for the website and `mcp-admin`, and in Python for `packages/llm-agent`. FastAPI publishes its own AI contract with Pydantic validation. CI checks that the generated client is up to date.
 
 ### Files
 
@@ -239,7 +231,7 @@ compose.yaml in the root; a Dockerfile inside each app
 ### Access
 
 - No user accounts and no login UI.
-- The API has two groups of routes. **Public** routes need no authentication and are read-only — with one named exception from phase 7: a visitor may create and continue their own chat conversation. The website and `llm-agent` use them. **Private** routes are protected by an API key checked in middleware; every write is a private route.
+- The API has two groups of routes. **Public** routes need no authentication and are read-only — with one named exception from phase 7: a visitor may create, continue and delete their own chat conversation. The website and AI read tools use them. **Private** routes are protected by an API key checked in middleware; every write is a private route.
 - API keys are created with a command, shown once and stored only as a hash. Each has a name and can be revoked on its own; keys do not expire by themselves. A key is used by server-side callers only and never reaches a browser.
 - There is no visibility model and API keys carry no scopes. Everything in the database is public content. A private flag is added only when a real use case needs it, and only where it is needed.
 - Built / tested / designed status is a data field on explorations — a fact about the record, not an access rule — so that neither the site nor the chatbot overstates it.
@@ -277,21 +269,21 @@ compose.yaml in the root; a Dockerfile inside each app
 
 ### AI features
 
-- The chatbot is a feature of the website, not a separate product. The UI is in `apps/web`; the conversation (visitor cookie, ownership, limits, budget, storage) is owned by `apps/api`; the answer is produced by `apps/llm-agent`.
-- The pipeline of one question: limits and bot detection → an input guard (a small model: injection, off-topic, abuse) → generation by a model with read tools and search → deterministic output checks (structure, sources, links) → a streamed answer. Stored conversations are scored afterwards, off the visitor's path.
+- The chatbot is a feature of the website, not a separate product. The UI is in `apps/web`; the conversation (visitor cookie, ownership, limits, budget, storage) is owned by `apps/api`; the answer is produced by `apps/ai-service` using `packages/llm-agent`.
+- The pipeline of one question: limits and bot detection → an input guard (a small model: injection, off-topic, abuse) → generation by a model with read tools and search → deterministic output checks (structure, sources, links) → buffered, validated answer delivery (progress can stream earlier). Stored conversations are scored afterwards, off the visitor's path.
 - No separate router: the generating model chooses between exact lookups and semantic search by calling tools.
-- The assistant has no API key and no write tool, and nothing in the database is private. That is the strongest guardrail.
+- The model has only public read tools and no content-write credential. Provider/service credentials remain outside model context. This bounds capabilities; adversarial evals still measure answer manipulation.
 - Answers carry typed blocks — contact, experience, service, exploration, roadmap, sources — rendered by the website's own components. Where a client supports it, the public MCP server returns UI through the MCP Apps extension.
 - Conversations are kept without a time limit, for analysis. The visitor's address is not stored with them.
-- Models come from Anthropic or OpenAI, chosen at the start of phase 7 and confirmed by evals. Budget is capped twice: at the provider and in the backend.
-- **Evals:** promptfoo in the repository, for desired and forbidden behaviour alike (grounding, unknown answers, direct and indirect prompt injection, unsupported claims, status integrity, source correctness, tool misuse). **Monitoring:** Langfuse for traces, cost and scoring of real conversations.
-- Two MCP servers, in two separate deployables in the same Compose stack, both API clients: `mcp-admin` (secured, write) and the public read-only MCP server inside `llm-agent`.
-- `mcp-admin` is written in TypeScript: it has many write tools with complex input and reuses the shared schemas and the generated client. The whole AI layer is one Python service, `llm-agent` (FastAPI, LangGraph): the chat pipeline and the public MCP server share one set of read tools. Its client is generated from the OpenAPI document, which also demonstrates that the contract works across languages. Python and LangGraph are what the market for AI engineering roles asks for.
-- `mcp-admin` is deployed as an HTTP service. It holds no key of its own: the caller's API key is passed on to the API, which verifies it.
+- Models come from Anthropic or OpenAI, chosen at the start of phase 7 and confirmed by evals. The API atomically reserves and reconciles spend against daily/monthly ceilings; runtime limits cover every call, retry and fallback. Provider limits add protection where available.
+- **Evals:** Promptfoo for component and end-to-end behaviour; pytest for deterministic Python contracts and failures. Code/model graders are supplemented by human review of ambiguous and sampled successful cases. **Monitoring:** redacted Langfuse traces, usage, costs and offline scores.
+- Two MCP deployables: TypeScript `mcp-admin` forwards caller keys to private content API routes; Python `mcp-public` calls public read capability routes on FastAPI and never runs the chat pipeline. External MCP agents bring their own model.
+- FastAPI is a separate AI runtime with internal authenticated generation and public bounded read capabilities. `packages/llm-agent` owns shared tools, three-stage LangGraph pipelines, LangChain OpenAI/Anthropic integrations, guardrails, context/cost controls and evals. Python never accesses Postgres directly.
+- Start with bounded single-process concurrency, cancellation/deadlines and durable idempotency in the API. No new worker, distributed AI platform or standalone provider proxy. Detailed contracts, failure behaviour and delivery slices are in phase 7.
 
 ### Deployment
 
-- Docker everywhere: a Dockerfile per app and one Compose stack (website, API, Postgres with pgvector, later `mcp-admin` and `llm-agent`). Local and production use the same composition.
+- Docker everywhere: a Dockerfile per app and one Compose stack (website, API, Postgres with pgvector, later `mcp-admin`, `mcp-public` and `ai-service`). Local and production use the same composition.
 - Target: Petr's own VPS.
 - Reverse proxy, TLS, production Compose overrides, backups, deployment pipelines and the domain switch belong to phase 8, not phase 1.
 - Releases are version tags on the main branch; there is no staging environment. A release is verified as a complete running stack in the pipeline before it is deployed, and a failed deployment rolls back.
@@ -306,7 +298,7 @@ compose.yaml in the root; a Dockerfile inside each app
 - **Strict test-first where correctness matters:** security, API contracts, services and domain logic, bug fixes. Tests are written first and must fail without the implementation; the reviewer agent checks this.
 - **Evidence-first where appearance matters:** layout, typography and responsive polish are accepted on written acceptance criteria, Playwright checks and screenshots, and a visual review. A test written before the markup is not required there. The project exists to ship a good product, not to demonstrate a methodology.
 - **Good tests check external behaviour**, not implementation: an HTTP request and its response, a rendered page, a tool call and its result.
-- **Unit and integration:** Vitest for TypeScript; the Python test runner for `llm-agent` is chosen in phase 7. API tests run against a real Postgres, not mocks of the database.
+- **Unit and integration:** Vitest for TypeScript; pytest for the Python apps/package. API tests run against a real Postgres, not mocks of the database.
 - **Authentication is tested as a property:** one test walks every route and asserts that each write and each private route rejects a request without a valid API key.
 - **End to end and visual:** Playwright, including screenshots at the three widths in both themes.
 - **Evals-driven development for MCP and AI features:** evals are written before the implementation, with promptfoo. Safety suites must pass completely; the others have a threshold set from the first baseline and never lowered. They cover desired and forbidden behaviour: tool selection, factual grounding, saying "I don't know", prompt injection, unsupported claims, source correctness. They call real models, so they run on demand and for changes to the AI parts, not on every pull request.

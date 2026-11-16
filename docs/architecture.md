@@ -4,41 +4,36 @@ How the system is layered and why. Parts belonging to later phases are described
 
 ## Overview
 
-```
-            Browser                              AI agents
-               |                                /         \
-           apps/web                 apps/llm-agent     apps/mcp-admin
-               |                     (public MCP,          |
-               |                      chat pipeline)       |
-               |                    /        |             |          HTTP only
-               +----------------- apps/api ---------------+          public reads, authenticated writes
-                                     |
-                             packages/services                       domain logic
-                              /              \
-                      packages/db        packages/memory
-                           |                  |
-                      PostgreSQL        pgvector (same Postgres)
+```text
+browser -> web -> api -> ai-service -> packages/llm-agent (chat pipeline)
+external agent -> mcp-public -> ai-service (read capabilities) -> api
+owner's agent -> mcp-admin -> api (authenticated content writes)
+api -> packages/services -> packages/db -> PostgreSQL
+                        -> packages/memory -> pgvector (same Postgres)
 
-   chat: browser -> web -> api (conversation, limits, budget, storage) -> llm-agent (answer) -> api (public reads)
+AI-service tools read public content/search through api over HTTP.
 ```
 
 ## The API is the trust boundary
 
-Every client — the website, `mcp-admin` and `llm-agent` — reaches data only through the API over HTTP.
+The website, `mcp-admin` and `ai-service` reach content only through `apps/api` over HTTP. The public MCP adapter reaches AI read capabilities through `ai-service`, which reads the content API. Only the API backend accesses persistence.
 
-This is a security decision, not a preference for HTTP. The system has write access for agents, two MCP servers with different threat models and a public chatbot. Authentication is enforced once, at one boundary. No client can bypass them, because no client has another way to the data.
+This is a security decision, not a preference for HTTP. The system has write access for agents, two MCP servers with different threat models and a public chatbot. Content authorization is enforced at the API. FastAPI separately authenticates its internal generation route and applies AI runtime admission; public MCP reads cannot invoke it. Neither Python app can bypass content authorization.
 
-The cost is a network hop and a second service to run. It is accepted.
+The cost is extra HTTP hops and independently managed runtime processes. This is accepted for the content and AI boundaries.
 
 ## Layers
 
-| Layer | Responsibility | Knows about |
-|---|---|---|
-| Clients (`web`, `mcp-admin`, `llm-agent`) | Presentation, protocol and the AI pipeline: pages, MCP tools, answers | The API contract only |
-| `api` | HTTP, authentication, validation, OpenAPI | `services`, `contracts` |
-| `services` | Domain logic, composition (for example assembling the CV) | `db`, `contracts`, `memory` |
-| `db` | Schema, migrations, repositories, seed | PostgreSQL |
-| `contracts` | Zod schemas and types shared by the API and its clients | Nothing else in the repository |
+| Layer                        | Responsibility                                                  | Knows about                                                            |
+| ---------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Clients (`web`, `mcp-admin`) | Presentation and administration protocol                        | The content API contract                                               |
+| `mcp-public`                 | Public read-only MCP transport                                  | The AI read-capability contract                                        |
+| `ai-service`                 | FastAPI AI routes, lifecycle and execution admission            | `llm-agent` package and public content API                             |
+| `llm-agent` package          | Three-stage pipelines, read tools, models, guardrails and evals | Generated content API models/client; no TypeScript imports or database |
+| `api`                        | HTTP, authentication, validation, OpenAPI                       | `services`, `contracts`                                                |
+| `services`                   | Domain logic, composition (for example assembling the CV)       | `db`, `contracts`, `memory`                                            |
+| `db`                         | Schema, migrations, repositories, seed                          | PostgreSQL                                                             |
+| `contracts`                  | Zod schemas and types shared by the API and its clients         | Nothing else in the repository                                         |
 
 A controller in the API stays thin: it validates input, calls a service, returns the result. Authentication is middleware on the private route group, not logic inside handlers.
 
@@ -71,7 +66,7 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
 
 - No user accounts and no login UI.
 - The API has two groups of routes:
-  - **Public** — no authentication; read-only, except that a visitor may create and continue their own chat conversation (phase 7). The website and the assistant use these.
+  - **Public** — no authentication; read-only, except that a visitor may create, continue and delete their own chat conversation (phase 7). The website and the assistant use these.
   - **Private** — protected by an API key checked in middleware. Every write is a private route.
 - API keys are created with a command, shown once and stored only as a hash. Each has a name and can be revoked on its own. A key is used only by server-side callers and never reaches a browser: the website calls public routes only.
 - There is no visibility model: everything in the database is public content. A private flag is introduced only when a real use case needs it. See `docs/domain-context.md`.
@@ -82,17 +77,18 @@ Next.js is used as a frontend only. Pages render on the server at request time, 
 
 From phase 3, committed API content writes notify a private website invalidation endpoint, authenticated with a dedicated server-only signing secret independent of content API keys. The website still reads only public API routes and holds no content API key. Validated content references map to affected pages, with safe duplicate delivery and bounded retries. Notification failure never undoes a committed write; time-based revalidation recovers from lost notifications. Freshness and failure criteria are defined in `.plan/03-web/prd.md` under "Cache invalidation guarantees".
 
-## MCP servers and the LLM agent
+## MCP servers and the AI runtime
 
-| App | Language | Capabilities | Callers |
-|---|---|---|---|
-| `mcp-admin` | TypeScript | Write, through private API routes | The owner's agents, with an API key |
-| `llm-agent` | Python | Read-only, through public API routes: the public MCP server and the chat pipeline | Any AI agent (MCP); the API (chat) |
+| App/package          | Language         | Responsibility                                                                        |
+| -------------------- | ---------------- | ------------------------------------------------------------------------------------- |
+| `apps/mcp-admin`     | TypeScript       | Authenticated management tools -> private content API; forwards caller key            |
+| `apps/mcp-public`    | Python           | Public read tools -> FastAPI capability routes; external agents bring their model     |
+| `apps/ai-service`    | Python / FastAPI | Separate AI HTTP routes, chat generation, read capabilities and runtime lifecycle     |
+| `packages/llm-agent` | Python           | Library: pipelines, shared read-tool implementations, providers, guardrails and evals |
 
-Both are API clients and both are deployed as HTTP services. They stay separate because their threat models differ: one can write, the other is public and read-only.
+Apps are separate deployables; the package is installed in Python app images and has no server lifecycle. Read capability implementations are shared through the package: chat invokes them internally and MCP calls them through FastAPI. The public MCP server exposes no chat tool. `mcp-admin` calls the content API directly and does not depend on the AI runtime.
 
-- `mcp-admin` reuses the shared schemas and the generated client. It stores no API key: it passes on the key its caller presents, and the API verifies it. Every write it causes is recorded.
-- `llm-agent` is the whole AI layer in one Python service (FastAPI, LangGraph). Its read tools are written once and used both by the public MCP server and by the chat agent. Its client is generated from the OpenAPI document — the contract does not depend on TypeScript.
+`apps/api` and `apps/ai-service` have separate routes and OpenAPI contracts. Content/event schemas are generated from the content API; FastAPI validates AI-specific contracts with Pydantic. Content authentication and its hashed-key store stay in TypeScript. Internal chat generation uses a separate service credential unavailable to the model, granting no content-write authority. Public AI read routes cannot call generation or private content routes.
 
 ## Retrieval
 
@@ -104,10 +100,12 @@ Both are API clients and both are deployed as HTTP services. They stay separate 
 - The browser never talks to the assistant. It talks to the website, which talks to the API.
 - **The API owns the conversation:** the anonymous visitor cookie, ownership of a conversation, rate limits, bot detection, the daily budget, and storage of every conversation.
 - **The assistant produces the answer:** an input guard (a small model), generation by a model with read tools and search, deterministic output checks. It is stateless; the API sends it the conversation so far.
-- The assistant has no API key and no write tool. A successful prompt injection has nothing to extract and nothing to change.
+- Model-visible tools are allowlisted public reads; provider/service credentials stay outside model context. No content-write key or write tool enters the pipeline. Injection can still corrupt answers; direct/indirect attack evals measure the residual risk.
+- `packages/llm-agent` runs exactly three LangGraph stages: Security Gateway (rules + cheap classifier, allow/block/uncertain), Main Agent (bounded tools loop) and Output Guard (deterministic schema/evidence/link checks, no LLM). Generation is buffered until validation; progress events may precede approved content.
+- LangChain provides configured OpenAI/Anthropic model integrations. API reservations enforce global cost ceilings; runtime limits bound each call/attempt. Cancellation, deadlines, concurrency and idempotency are explicit contracts, described in the phase-7 PRD.
 - Answers carry typed blocks (contact, experience, service, exploration, roadmap, sources) that the website renders with its own components.
 - Phase 3 defines the validated application event/block contract in `packages/contracts` and a browser-local mock adapter. Components depend on that contract rather than transport framing. Phase 7 implements the real API transport/adapter, including idempotent request identifiers and recoverable failures. The mock introduces no live conversation API or server-side storage.
-- Everything is traced; stored conversations are scored afterwards, off the visitor's path.
+- Langfuse receives redacted traces; scoring runs off the visitor path under its own budget. Promptfoo covers component/end-to-end evals, pytest deterministic failures, and human review covers ambiguous and sampled automatically passed answers. Telemetry failure never bypasses budgets or blocks valid answers.
 
 ## Background work
 

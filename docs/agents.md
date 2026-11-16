@@ -41,14 +41,14 @@ Root instructions and the always-loaded Claude deep-module rule point to the can
 
 ## Roles
 
-| Agent              | Does                                                                                                                            | Works in                                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| orchestrator       | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository                            |
-| backend-developer  | Implements                                                                                                                      | `api`, `db`, `services`, `contracts`        |
-| frontend-developer | Implements; takes screenshots for visual review                                                                                 | `web`, `ui`                                 |
-| ai-developer       | Implements evals-first                                                                                                          | `mcp-admin`, `llm-agent` (Python), `memory` |
-| reviewer           | Checks; has no write access to code                                                                                             | Whole repository                            |
-| docs-keeper        | Keeps `docs/`, rules and `AGENTS.md` files in line with the code                                                                | Documentation                               |
+| Agent              | Does                                                                                                                            | Works in                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| orchestrator       | Takes issues, creates worktrees, dispatches the other agents, opens pull requests, merges reviewed issues into the phase branch | Whole repository                                                                |
+| backend-developer  | Implements                                                                                                                      | `api`, `db`, `services`, `contracts`                                            |
+| frontend-developer | Implements; takes screenshots for visual review                                                                                 | `web`, `ui`                                                                     |
+| ai-developer       | Implements evals-first                                                                                                          | `mcp-admin`, `ai-service`, `mcp-public`, `llm-agent` (Python package), `memory` |
+| reviewer           | Checks; has no write access to code                                                                                             | Whole repository                                                                |
+| docs-keeper        | Keeps `docs/`, rules and `AGENTS.md` files in line with the code                                                                | Documentation                                                                   |
 
 Definitions live in `.claude/agents/`. A dedicated agent for a single app is added only if that part proves to need one.
 
@@ -56,14 +56,16 @@ Definitions live in `.claude/agents/`. A dedicated agent for a single app is add
 
 Each agent pins its model and effort level in the frontmatter of its `.claude/agents/<name>.md`, so a run does not depend on what the owner last chose in an interactive session.
 
-| Agent                             | Model  | Effort | Why                                                             |
-| --------------------------------- | ------ | ------ | --------------------------------------------------------------- |
-| orchestrator                      | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code |
-| backend-, frontend-, ai-developer | opus   | high   | Writes the code and the tests, where mistakes cost most         |
-| reviewer                          | opus   | high   | Must find what the developer missed                             |
-| docs-keeper                       | sonnet | low    | Compares documents with merged code                             |
+| Agent                             | Model  | Effort | Why                                                                                                                                                                                                                                                                           |
+| --------------------------------- | ------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| orchestrator                      | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code                                                                                                                                                                                                               |
+| backend-, frontend-, ai-developer | opus   | medium | Writes the code and the tests; the model is kept, the effort lowered because a developer's own reasoning is what fills its context (phase 1 measurement: 100–220k output tokens and up to 195k context per issue). Auto-compaction at 150 000 tokens caps unusually long runs |
+| reviewer                          | opus   | high   | Must find what the developer missed                                                                                                                                                                                                                                           |
+| docs-keeper                       | sonnet | low    | Compares documents with merged code                                                                                                                                                                                                                                           |
 
-The environment variable `CLAUDE_CODE_EFFORT_LEVEL` overrides the effort fields; the phase loop does not set it.
+The environment variables `CLAUDE_CODE_EFFORT_LEVEL` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` override these fields; the phase loop sets neither. The reviewer stays at high effort, so that lower developer effort is checked by a thorough review.
+
+An interrupted run can leave an issue's branch and worktree behind. The orchestrator continues that work instead of starting over (`.claude/agents/orchestrator.md`, step 3).
 
 ## Orchestration
 
@@ -102,6 +104,10 @@ scripts/run-phase.sh <phase-folder>
 - **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed or phase done). The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
 - **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`. Logs are in `.worktrees/logs/<phase>/`.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
+- **MCP servers:** the loop loads only `scripts/harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
+- **Settings:** the loop loads only the repository's settings (`--setting-sources project,local`). The owner's `~/.claude` — plugins, global rules, personal agents and skills — does not reach an unattended run, so it behaves the same on any machine.
+- **Agent memory:** developers and the reviewer have `memory: local`. Their memory lives in the main checkout under `.claude/agent-memory-local/<agent>/` (ignored by git), shared by all worktrees and runs, and is the one place in the main checkout's `.claude/` an unattended run may write. It holds verified, practical findings; `docs/` and `AGENTS.md` win over it. The orchestrator, as the main session, uses Claude Code's auto memory for the repository; subagents do not see that.
+- **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide.
 - **Foreground subagents:** the loop sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, so the orchestrator waits for each developer and reviewer instead of ending its run while they still work.
 
 The reviewer agent is the only check between issues inside a phase, so a mistake in one issue can carry into the next before the owner sees it. CI on the phase branch and the owner's review of the whole phase are the safety net.

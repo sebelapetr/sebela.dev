@@ -17,7 +17,10 @@ test("editing app code in the main checkout is refused", () => {
 });
 
 test("editing app code inside a worktree is allowed", () => {
-  assert.equal(call("Edit", { file_path: "/repo/.worktrees/feat-1-x/apps/api/src/index.ts" }), null);
+  assert.equal(
+    call("Edit", { file_path: "/repo/.worktrees/feat-1-x/apps/api/src/index.ts" }),
+    null,
+  );
 });
 
 test("editing docs, plans and agent configuration in the main checkout is allowed", () => {
@@ -67,41 +70,78 @@ test("agents may read, create and edit local environment files inside their own 
     assert.equal(call(tool, { file_path: ".env.local" }, own), null, tool);
     assert.equal(call(tool, { file_path: `${ownRoot}/apps/web/.env.local` }, own), null, tool);
   }
-  assert.equal(call("Read", { file_path: "../../.env.local" }, { ...own, cwd: `${ownRoot}/apps/web` }), null);
+  assert.equal(
+    call("Read", { file_path: "../../.env.local" }, { ...own, cwd: `${ownRoot}/apps/web` }),
+    null,
+  );
 });
 
 test("the local environment exception requires a confirmed worktree containing the session", () => {
   assert.ok(call("Read", { file_path: `${ownRoot}/.env.local` }, { cwd: ownRoot }));
   assert.ok(call("Read", { file_path: `${ownRoot}/.env.local` }, { ...own, cwd: mainRoot }));
-  assert.ok(call("Read", { file_path: ".env.local" }, { ...own, worktreeRoot: mainRoot, cwd: mainRoot }));
+  assert.ok(
+    call("Read", { file_path: ".env.local" }, { ...own, worktreeRoot: mainRoot, cwd: mainRoot }),
+  );
 });
 
 test("other worktrees, the main checkout and production environment files stay private", () => {
   for (const file_path of [
-    "/repo/.env.local", "/repo/.worktrees/other/.env.local", `${ownRoot}-other/.env.local`,
-    `${ownRoot}/.env`, `${ownRoot}/.env.production`, `${ownRoot}/.env.local.backup`,
+    "/repo/.env.local",
+    "/repo/.worktrees/other/.env.local",
+    `${ownRoot}-other/.env.local`,
+    `${ownRoot}/.env`,
+    `${ownRoot}/.env.production`,
+    `${ownRoot}/.env.local.backup`,
   ]) {
-    for (const tool of ["Read", "Write", "Edit"]) assert.ok(call(tool, { file_path }, own), file_path);
+    for (const tool of ["Read", "Write", "Edit"])
+      assert.ok(call(tool, { file_path }, own), file_path);
   }
 });
 
 test("the local environment exception checks symbolic link destinations too", () => {
-  for (const target of ["/repo/.env.local", "/outside/.env.local", `${ownRoot}/.env.production`, "/outside/plain.txt"]) {
-    const realpath = (p) => p === `${ownRoot}/.env.local` ? target : p;
+  for (const target of [
+    "/repo/.env.local",
+    "/outside/.env.local",
+    `${ownRoot}/.env.production`,
+    "/outside/plain.txt",
+  ]) {
+    const realpath = (p) => (p === `${ownRoot}/.env.local` ? target : p);
     assert.ok(call("Read", { file_path: ".env.local" }, { ...own, realpath }), target);
   }
-  assert.ok(call("Write", { file_path: ".env.local" }, {
-    ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? null : p,
-  }));
-  assert.equal(call("Read", { file_path: ".env.local" }, {
-    ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? `${ownRoot}/config/.env.local` : p,
-  }), null);
+  assert.ok(
+    call(
+      "Write",
+      { file_path: ".env.local" },
+      {
+        ...own,
+        realpath: (p) => (p === `${ownRoot}/.env.local` ? null : p),
+      },
+    ),
+  );
+  assert.equal(
+    call(
+      "Read",
+      { file_path: ".env.local" },
+      {
+        ...own,
+        realpath: (p) => (p === `${ownRoot}/.env.local` ? `${ownRoot}/config/.env.local` : p),
+      },
+    ),
+    null,
+  );
 });
 
 test("a linked session directory cannot turn another worktree into its own", () => {
-  assert.ok(call("Read", { file_path: ".env.local" }, {
-    ...own, realpath: (p) => p.replace(ownRoot, "/repo/.worktrees/other"),
-  }));
+  assert.ok(
+    call(
+      "Read",
+      { file_path: ".env.local" },
+      {
+        ...own,
+        realpath: (p) => p.replace(ownRoot, "/repo/.worktrees/other"),
+      },
+    ),
+  );
 });
 
 test("search tools may name the exact local file in their own worktree", () => {
@@ -115,23 +155,39 @@ test("search tools may name the exact local file in their own worktree", () => {
 
 test("simple shell commands may use local environment files in their own worktree", () => {
   for (const command of [
-    "cat .env.local", "sed -i 's/CUSTOM_SETTING=off/CUSTOM_SETTING=on/' .env.local",
-    "cp .env.example .env.local", "node --env-file=.env.local app.mjs",
-    `cat '${ownRoot}/apps/web/.env.local'`, `cat '${ownRoot}/folder with spaces/.env.local'`,
-  ]) assert.equal(bash(command, own), null, command);
+    "cat .env.local",
+    "sed -i 's/CUSTOM_SETTING=off/CUSTOM_SETTING=on/' .env.local",
+    "cp .env.example .env.local",
+    "node --env-file=.env.local app.mjs",
+    `cat '${ownRoot}/apps/web/.env.local'`,
+    `cat '${ownRoot}/folder with spaces/.env.local'`,
+  ])
+    assert.equal(bash(command, own), null, command);
 });
 
 test("shell commands cannot use the exception for foreign files or ambiguous paths", () => {
   for (const command of [
-    "cat /repo/.env.local", "cat ../other/.env.local", "cat .env.production",
-    "cat .env.local /repo/.env", "cd /repo && cat .env.local",
-    "cat $OTHER/.env.local", "cat ~/.env.local", "cat ../*/.env.local",
-    "cat '/other folder/.env.local'", "cat .env.local; cd /repo; cat .env.local",
-    'cat .env.local; python -c "open(\'.env.production\')"', "cat .env*", "cat .env.local*",
-  ]) assert.ok(bash(command, own), command);
-  assert.ok(bash("cat .env.local", {
-    ...own, realpath: (p) => p === `${ownRoot}/.env.local` ? "/repo/.env.local" : p,
-  }));
+    "cat /repo/.env.local",
+    "cat ../other/.env.local",
+    "cat .env.production",
+    "cat .env.local /repo/.env",
+    "cd /repo && cat .env.local",
+    "cat $OTHER/.env.local",
+    "cat ~/.env.local",
+    "cat ../*/.env.local",
+    "cat '/other folder/.env.local'",
+    "cat .env.local; cd /repo; cat .env.local",
+    "cat .env.local; python -c \"open('.env.production')\"",
+    "cat .env*",
+    "cat .env.local*",
+  ])
+    assert.ok(bash(command, own), command);
+  assert.ok(
+    bash("cat .env.local", {
+      ...own,
+      realpath: (p) => (p === `${ownRoot}/.env.local` ? "/repo/.env.local" : p),
+    }),
+  );
 });
 
 // --- the owner's private notes ---------------------------------------------
@@ -197,12 +253,21 @@ test("merging without a pull request number is refused", () => {
 });
 
 test("merging when the base cannot be confirmed is refused", () => {
-  assert.ok(bash("gh pr merge 43 --squash", { lookupPrBase: () => { throw new Error("offline"); } }));
+  assert.ok(
+    bash("gh pr merge 43 --squash", {
+      lookupPrBase: () => {
+        throw new Error("offline");
+      },
+    }),
+  );
 });
 
 test("subagents never merge", () => {
   assert.ok(
-    bash("gh pr merge 41 --squash", { isSubagent: true, lookupPrBase: lookup({ 41: "phase/02-api-db" }) }),
+    bash("gh pr merge 41 --squash", {
+      isSubagent: true,
+      lookupPrBase: lookup({ 41: "phase/02-api-db" }),
+    }),
   );
 });
 
@@ -213,13 +278,19 @@ test("a merge or push chained after another command is still checked", () => {
 
 test("text that only mentions a merge or a push is not treated as one", () => {
   assert.equal(bash("echo 'then run gh pr merge <number> --squash'"), null);
-  assert.equal(bash("python3 - <<'EOF'\ndoc = '(`gh pr merge <number>`) and `git push origin master`'\nEOF"), null);
+  assert.equal(
+    bash("python3 - <<'EOF'\ndoc = '(`gh pr merge <number>`) and `git push origin master`'\nEOF"),
+    null,
+  );
 });
 
 test("a real merge is recognised for the post-merge reminder, a mention is not", () => {
   assert.equal(invokesPrMerge("gh pr merge 41 --squash --delete-branch"), true);
   assert.equal(invokesPrMerge("gh pr checks 41 --watch && gh pr merge 41 --squash"), true);
-  assert.equal(invokesPrMerge("python3 - <<'EOF'\nx = 'merge with `gh pr merge <number>`'\nEOF"), false);
+  assert.equal(
+    invokesPrMerge("python3 - <<'EOF'\nx = 'merge with `gh pr merge <number>`'\nEOF"),
+    false,
+  );
   assert.equal(invokesPrMerge(undefined), false);
 });
 
@@ -271,7 +342,9 @@ test("search tools cannot be pointed at environment files by pattern", () => {
 
 test("search tools cannot be pointed at .context by pattern when restricted", () => {
   assert.ok(call("Glob", { pattern: ".context/**" }, { unattended: true }));
-  assert.ok(call("Grep", { pattern: "x", path: "/repo", glob: ".context/*.md" }, { isSubagent: true }));
+  assert.ok(
+    call("Grep", { pattern: "x", path: "/repo", glob: ".context/*.md" }, { isSubagent: true }),
+  );
 });
 
 test("unattended runs cannot change repository settings, secrets or credentials", () => {
@@ -307,7 +380,14 @@ test("unattended runs cannot edit the harness that governs them in the main chec
 });
 
 test("unattended runs may change the harness inside a worktree, through a pull request", () => {
-  assert.equal(call("Edit", { file_path: "/repo/.worktrees/ci-1-x/.github/workflows/ci.yml" }, { unattended: true }), null);
+  assert.equal(
+    call(
+      "Edit",
+      { file_path: "/repo/.worktrees/ci-1-x/.github/workflows/ci.yml" },
+      { unattended: true },
+    ),
+    null,
+  );
   assert.equal(call("Edit", { file_path: "/repo/docs/agents.md" }, { unattended: true }), null);
   assert.equal(bash("node scripts/harness/worktree.mjs list", { unattended: true }), null);
   assert.equal(call("Edit", { file_path: "/repo/.claude/settings.json" }), null);
@@ -315,20 +395,73 @@ test("unattended runs may change the harness inside a worktree, through a pull r
 
 test("a symbolic link does not hide where an edit really lands", () => {
   const realpath = (p) => p.replace("/repo/.worktrees/x/link", "/repo/.claude");
-  assert.ok(call("Edit", { file_path: "/repo/.worktrees/x/link/settings.json" }, { unattended: true, realpath }));
-  assert.ok(call("Edit", { file_path: "/repo/.worktrees/x/apps/web/page.tsx" }, {
-    realpath: (p) => p.replace("/repo/.worktrees/x/apps", "/repo/apps"),
-  }));
+  assert.ok(
+    call(
+      "Edit",
+      { file_path: "/repo/.worktrees/x/link/settings.json" },
+      { unattended: true, realpath },
+    ),
+  );
+  assert.ok(
+    call(
+      "Edit",
+      { file_path: "/repo/.worktrees/x/apps/web/page.tsx" },
+      {
+        realpath: (p) => p.replace("/repo/.worktrees/x/apps", "/repo/apps"),
+      },
+    ),
+  );
 });
 
 test("both the written and the resolved path are checked", () => {
   assert.ok(call("Read", { file_path: "/repo/.env" }, { realpath: () => "/repo/README.md" }));
-  assert.ok(call("Edit", { file_path: "/repo/.claude/settings.json" }, { unattended: true, realpath: () => "/tmp/x" }));
-  assert.equal(call("Read", { file_path: "/repo/docs/a.md" }, { realpath: () => "/repo/docs/b.md" }), null);
+  assert.ok(
+    call(
+      "Edit",
+      { file_path: "/repo/.claude/settings.json" },
+      { unattended: true, realpath: () => "/tmp/x" },
+    ),
+  );
+  assert.equal(
+    call("Read", { file_path: "/repo/docs/a.md" }, { realpath: () => "/repo/docs/b.md" }),
+    null,
+  );
 });
 
 test("a symbolic link that cannot be resolved is refused", () => {
   assert.ok(call("Write", { file_path: "/repo/.worktrees/x/dangling" }, { realpath: () => null }));
+});
+
+test("unattended agents may keep their shared memory in the main checkout, and nothing else there", () => {
+  assert.equal(
+    call(
+      "Write",
+      { file_path: "/repo/.claude/agent-memory-local/backend-developer/postgres.md" },
+      { unattended: true },
+    ),
+    null,
+  );
+  assert.equal(
+    call(
+      "Edit",
+      { file_path: "/repo/.claude/agent-memory-local/reviewer/MEMORY.md" },
+      { unattended: true },
+    ),
+    null,
+  );
+  assert.ok(
+    call(
+      "Edit",
+      { file_path: "/repo/.claude/agent-memory-local/../settings.json" },
+      { unattended: true },
+    ),
+  );
+  assert.ok(
+    call("Write", { file_path: "/repo/.claude/agent-memory/reviewer/x.md" }, { unattended: true }),
+  );
+  assert.ok(
+    call("Edit", { file_path: "/repo/.claude/agent-memory-local/README.md" }, { unattended: true }),
+  );
 });
 
 // --- everything else -------------------------------------------------------

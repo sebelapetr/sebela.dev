@@ -1,7 +1,9 @@
 ---
 name: backend-developer
 model: opus
-effort: high
+effort: medium
+memory: local
+autoCompactWindow: 150000
 description: "Implements backend issues in a worktree: the Hono API, the Drizzle database package, services and contracts. Works test-first. Use for issues in apps/api, packages/db, packages/services and packages/contracts."
 ---
 
@@ -44,3 +46,12 @@ A short summary for the pull request: what changed, how it was verified, anythin
 - Hard-code a port, host or database name.
 - Put real personal data anywhere, or access environment files other than `.env.example` and `.env.local` inside your assigned worktree.
 - Guess when the issue or the docs are unclear. Stop and report.
+- Write temporary files outside your worktree. Scratch files and throwaway helpers go in `.tmp/` inside the worktree (git ignores it), never in `/tmp`.
+
+## Memory
+
+You have a persistent memory directory; Claude Code gives you its path. It lies in the main checkout under `.claude/agent-memory-local/`, is shared by every worktree and every later run, and is not tracked by git. Never create memory files inside a worktree.
+
+- Read it before you start. Save only what you verified and what a later run would otherwise have to rediscover: how to run or debug something in this repository, a pitfall that cost you time, a fix for a recurring failure.
+- Never save secrets, environment values, personal data or anything from `.context/`.
+- Memory is a hint, not a rule. If it disagrees with `docs/`, `AGENTS.md` or the code, they win — correct or delete the memory.

@@ -20,7 +20,8 @@ export function invokesPrMerge(command) {
 }
 
 const ENV_FILE_NAME = /^\.env(\..+)?$/;
-const ENV_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.env(?!\.example(?![\w.-]))(\.[\w.-]+)?(?=$|[\s'";&|)<>/*?{}[\]])/;
+const ENV_IN_COMMAND =
+  /(^|[\s'"=/<>|;&(])\.env(?!\.example(?![\w.-]))(\.[\w.-]+)?(?=$|[\s'";&|)<>/*?{}[\]])/;
 const CONTEXT_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.context(\/|(?=$|[\s'";&|)<>]))/;
 
 function isInside(child, parent) {
@@ -41,33 +42,53 @@ function deny(reason) {
   return { reason };
 }
 
-const ENV_REASON = "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md).";
+const ENV_REASON =
+  "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md).";
 
 function allowedEnvPath(filePath, worktreeRoot) {
-  return path.basename(filePath) === ".env.example" ||
-    (path.basename(filePath) === ".env.local" && worktreeRoot && isInside(filePath, worktreeRoot));
+  return (
+    path.basename(filePath) === ".env.example" ||
+    (path.basename(filePath) === ".env.local" && worktreeRoot && isInside(filePath, worktreeRoot))
+  );
 }
 
 function checkEnvironmentReference(filePath, { worktreeRoot, realpath }) {
   const resolved = realpath(filePath);
-  return resolved !== null && allowedEnvPath(filePath, worktreeRoot) && allowedEnvPath(resolved, worktreeRoot)
-    ? null : deny(ENV_REASON);
+  return resolved !== null &&
+    allowedEnvPath(filePath, worktreeRoot) &&
+    allowedEnvPath(resolved, worktreeRoot)
+    ? null
+    : deny(ENV_REASON);
 }
 
 // Grep's glob and Glob's pattern can reach files that the searched directory does not name.
-function checkSearchPattern({ toolName, toolInput, restricted, cwd, mainRoot, worktreeRoot, realpath }) {
-  const pattern = toolName === "Grep" ? toolInput?.glob : toolName === "Glob" ? toolInput?.pattern : null;
+function checkSearchPattern({
+  toolName,
+  toolInput,
+  restricted,
+  cwd,
+  mainRoot,
+  worktreeRoot,
+  realpath,
+}) {
+  const pattern =
+    toolName === "Grep" ? toolInput?.glob : toolName === "Glob" ? toolInput?.pattern : null;
   if (!pattern) return null;
   const segments = String(pattern).split(/[\\/]/);
   if (segments.some((segment) => segment.startsWith(".env") && segment !== ".env.example")) {
     if (/[*?{}[\]]/.test(pattern)) return deny(ENV_REASON);
     const base = path.resolve(cwd ?? mainRoot, toolInput?.path ?? ".");
-    const verdict = checkEnvironmentReference(path.resolve(base, pattern), { worktreeRoot, realpath });
+    const verdict = checkEnvironmentReference(path.resolve(base, pattern), {
+      worktreeRoot,
+      realpath,
+    });
     if (verdict) return verdict;
   }
   const contextAt = segments.indexOf(".context");
   if (restricted && contextAt !== -1 && segments.slice(contextAt + 1).join("/") !== "README.md") {
-    return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");
+    return deny(
+      ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).",
+    );
   }
   return null;
 }
@@ -77,14 +98,43 @@ function checkSearchPattern({ toolName, toolInput, restricted, cwd, mainRoot, wo
 const HARNESS_DIRS = [".claude", ".github", path.join("scripts", "harness")];
 const HARNESS_IN_COMMAND = /(^|[\s'"=/<>|;&(])(\.claude\/settings|\.git\/(hooks|config)\b)/;
 
+// The one place in the main checkout's .claude/ that agents write to: their own memory, shared
+// by every worktree and ignored by git.
+const AGENT_MEMORY_DIR = path.join(".claude", "agent-memory-local");
+
 function isHarnessFile(filePath, mainRoot) {
   if (filePath.split(path.sep).includes(".git")) return true;
   if (isInside(filePath, path.join(mainRoot, ".worktrees"))) return false;
+  // Only inside an agent's own folder; the folder's README stays the owner's.
+  const memoryDir = path.join(mainRoot, AGENT_MEMORY_DIR);
+  if (
+    isInside(filePath, memoryDir) &&
+    path.dirname(filePath) !== memoryDir &&
+    filePath !== memoryDir
+  )
+    return false;
   return HARNESS_DIRS.some((dir) => isInside(filePath, path.join(mainRoot, dir)));
 }
 
-function checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath, worktreeRoot }) {
-  const fromPattern = checkSearchPattern({ toolName, toolInput, restricted, cwd, mainRoot, worktreeRoot, realpath });
+function checkFileTool({
+  toolName,
+  toolInput,
+  mainRoot,
+  cwd,
+  restricted,
+  unattended,
+  realpath,
+  worktreeRoot,
+}) {
+  const fromPattern = checkSearchPattern({
+    toolName,
+    toolInput,
+    restricted,
+    cwd,
+    mainRoot,
+    worktreeRoot,
+    realpath,
+  });
   if (fromPattern) return fromPattern;
   const raw = filePathOf(toolInput);
   if (!raw) return null;
@@ -113,11 +163,15 @@ function checkPath(filePath, { toolName, mainRoot, restricted, unattended, workt
     isInside(filePath, contextDir) &&
     filePath !== path.join(contextDir, "README.md")
   ) {
-    return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");
+    return deny(
+      ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).",
+    );
   }
 
   if (FILE_EDIT_TOOLS.has(toolName) && unattended && isHarnessFile(filePath, mainRoot)) {
-    return deny("The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).");
+    return deny(
+      "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).",
+    );
   }
 
   if (FILE_EDIT_TOOLS.has(toolName)) {
@@ -146,7 +200,8 @@ const UNATTENDED_FORBIDDEN = new RegExp(
 );
 
 // The command may run somewhere other than the directory the hook looked at.
-const MOVES = /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
+const MOVES =
+  /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
 
 // Only static shell paths get the exception. Expansions and directory changes are ambiguous.
 function checkShellEnvironment(command, facts) {
@@ -171,7 +226,10 @@ function checkShellEnvironment(command, facts) {
   const mentions = [...command.matchAll(new RegExp(ENV_IN_COMMAND.source, "g"))];
   if (!references.length || references.length !== mentions.length) return deny(ENV_REASON);
   for (const reference of references) {
-    const verdict = checkEnvironmentReference(path.resolve(facts.cwd ?? facts.mainRoot, reference), facts);
+    const verdict = checkEnvironmentReference(
+      path.resolve(facts.cwd ?? facts.mainRoot, reference),
+      facts,
+    );
     if (verdict) return verdict;
   }
   return null;
@@ -186,10 +244,15 @@ function checkPush(fullCommand, { currentBranch }) {
   if (/\s(--force(-with-lease)?|-f)(\s|=|$)/.test(command) || /[\s:]\+[\w/.-]+/.test(command)) {
     return deny("Force-pushing is not allowed (docs/git-workflow.md).");
   }
-  const masterRefused = deny("Nobody but the owner changes master; push your issue or phase branch instead.");
+  const masterRefused = deny(
+    "Nobody but the owner changes master; push your issue or phase branch instead.",
+  );
   // After "git push": options, then the remote, then refspecs.
   const afterPush = command.slice(command.search(/\spush\b/) + 5);
-  const positional = afterPush.trim().split(/\s+/).filter((part) => part && !part.startsWith("-"));
+  const positional = afterPush
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part && !part.startsWith("-"));
   const refspecs = positional.slice(1);
   const branchKnown = Boolean(currentBranch) && !MOVES.test(fullCommand);
   const unknownBranch = deny("Name the branch to push explicitly (git push origin <branch>).");
@@ -210,7 +273,11 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
   if (isSubagent) {
     return deny("Only the orchestrator merges, and only into a phase branch.");
   }
-  if (/\s(--repo|-R)(\s|=)/.test(command) || /https?:\/\//.test(command) || /\bGH_(REPO|HOST)=/.test(fullCommand)) {
+  if (
+    /\s(--repo|-R)(\s|=)/.test(command) ||
+    /https?:\/\//.test(command) ||
+    /\bGH_(REPO|HOST)=/.test(fullCommand)
+  ) {
     return deny("Merge pull requests of this repository only, by number.");
   }
   const number = command.match(/\bgh\s+pr\s+merge\s+(?:[^\s-]\S*\s+)*?(\d+)\b/)?.[1];
@@ -257,15 +324,28 @@ export function evaluateToolCall({
 }) {
   const restricted = isSubagent || unattended;
   // The hook confirms Git ownership; both the session and the real directory must stay inside it.
-  if (!worktreeRoot || worktreeRoot === mainRoot ||
+  if (
+    !worktreeRoot ||
+    worktreeRoot === mainRoot ||
     !isInside(worktreeRoot, path.join(mainRoot, ".worktrees")) ||
     worktreeRoot === path.join(mainRoot, ".worktrees") ||
     !isInside(path.resolve(cwd ?? mainRoot), worktreeRoot) ||
     realpath(worktreeRoot) !== worktreeRoot ||
-    !isInside(realpath(path.resolve(cwd ?? mainRoot)) ?? mainRoot, worktreeRoot)) worktreeRoot = null;
+    !isInside(realpath(path.resolve(cwd ?? mainRoot)) ?? mainRoot, worktreeRoot)
+  )
+    worktreeRoot = null;
 
   if (FILE_EDIT_TOOLS.has(toolName) || FILE_READ_TOOLS.has(toolName)) {
-    return checkFileTool({ toolName, toolInput, mainRoot, cwd, restricted, unattended, realpath, worktreeRoot });
+    return checkFileTool({
+      toolName,
+      toolInput,
+      mainRoot,
+      cwd,
+      restricted,
+      unattended,
+      realpath,
+      worktreeRoot,
+    });
   }
 
   if (toolName === "Bash") {
@@ -273,15 +353,23 @@ export function evaluateToolCall({
     const environment = checkShellEnvironment(command, { mainRoot, cwd, worktreeRoot, realpath });
     if (environment) return environment;
     if (unattended && HARNESS_IN_COMMAND.test(command)) {
-      return deny("The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).");
+      return deny(
+        "The phase loop does not change the harness in the main checkout or inside .git (docs/permissions.md).",
+      );
     }
     if (unattended && UNATTENDED_FORBIDDEN.test(command)) {
-      return deny("The phase loop does not change repository settings, secrets or credentials (docs/permissions.md).");
+      return deny(
+        "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md).",
+      );
     }
     if (restricted && CONTEXT_IN_COMMAND.test(command)) {
-      return deny(".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).");
+      return deny(
+        ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md).",
+      );
     }
-    return checkPush(command, { currentBranch }) ?? checkMerge(command, { isSubagent, lookupPrBase });
+    return (
+      checkPush(command, { currentBranch }) ?? checkMerge(command, { isSubagent, lookupPrBase })
+    );
   }
 
   return null;

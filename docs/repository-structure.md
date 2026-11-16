@@ -14,8 +14,8 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   │   └── Dockerfile
 │   ├── mcp-admin/           secured MCP server for content management, TypeScript [5]
 │   │   └── evals/
-│   └── llm-agent/           the AI layer, Python: chat pipeline and public MCP server [7]
-│       └── evals/
+│   ├── mcp-public/          Python, public read-only MCP transport [7]
+│   └── ai-service/          Python / FastAPI, AI HTTP routes and runtime [7]
 ├── packages/
 │   ├── config/              shared ESLint, TypeScript and Prettier configuration, incl. tsconfig.base.json [1]
 │   ├── db/                  Drizzle schema, migrations, repositories [2]
@@ -24,7 +24,11 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── contracts/           Zod schemas and types shared by API, web and MCP [2]
 │   ├── api-client/          typed client generated from the OpenAPI document [2]
 │   ├── ui/                  shared React components, design tokens [3]
-│   └── memory/              indexing and retrieval [6]
+│   ├── memory/              indexing and retrieval [6]
+│   └── llm-agent/           Python library: pipelines, read tools, guardrails, evals [7]
+│       ├── src/llm_agent/   importable package; responsibility folders per phase-7 PRD
+│       ├── tests/          unit and integration tests
+│       └── evals/          Promptfoo datasets and graders
 ├── scripts/
 │   ├── run-phase.sh         starts the phase loop [0]
 │   ├── harness/             the loop, worktree slots and databases, Claude Code and Git hooks, GitHub set-up — plain Node, no dependencies [0, hooks 1]
@@ -68,8 +72,8 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 - **Package scope:** `@sebela/*`, for example `@sebela/db`.
 - **Apps are deployables, packages are libraries.** An app never imports another app.
 - **Dockerfiles** live in the app they build. Compose files live in the repository root.
-- **Tests** sit next to the code they test. Only end-to-end tests (`apps/web/e2e/`) and evals (the `evals/` folder of `mcp-admin`, `llm-agent` and `memory`) have their own folders.
-- **Two languages:** everything is TypeScript except `apps/llm-agent`, which is Python with its own toolchain. It is part of the monorepo's task pipeline and CI like any other app.
+- **Tests** sit next to the code they test. End-to-end tests live in `apps/web/e2e/`; evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Python uses package-local `tests/unit/` and `tests/integration/`.
+- **Two languages:** `apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python with their own dependency toolchain and participate in monorepo tasks/CI. Other apps/packages use TypeScript.
 - **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command.
 - **Language:** code, docs, `AGENTS.md`, README and PRDs are in English.
 - **Agent instructions:** the root `AGENTS.md` holds repository-wide rules; every app and package has its own `AGENTS.md` with what is specific to it. There are no `CLAUDE.md` files: Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read it too.
@@ -172,19 +176,21 @@ Each backend app/package `AGENTS.md` must map actual module paths to public entr
 
 ## Dependency rules
 
-The API is the trust boundary: writes and authentication are enforced there and nowhere else. The import rules exist to keep it that way.
+The API is the trust boundary: content writes and content authentication are enforced there. FastAPI separately authenticates internal generation and limits AI execution. The import rules exist to keep it that way.
 
-| Package or app               | May import                                                                                                                                    |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`, `apps/mcp-admin` | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP                                     |
-| `apps/llm-agent` (Python)    | Nothing from the TypeScript packages; a client generated from the OpenAPI document — and it reaches data only through the API's public routes |
-| `apps/api`                   | `services`, `contracts`, `config`                                                                                                             |
-| `packages/services`          | `db`, `contracts`, `memory`, `config`                                                                                                         |
-| `packages/db`                | nothing from this repository except `config`                                                                                                  |
-| `packages/contracts`         | nothing from this repository except `config`                                                                                                  |
-| `packages/config`            | nothing from this repository                                                                                                                  |
+| Package or app                | May import                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP    |
+| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client |
+| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app       |
+| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers      |
+| `apps/api`                    | `services`, `contracts`, `config`                                                                            |
+| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                        |
+| `packages/db`                 | nothing from this repository except `config`                                                                 |
+| `packages/contracts`          | nothing from this repository except `config`                                                                 |
+| `packages/config`             | nothing from this repository                                                                                 |
 
-`packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and `llm-agent` has no database access at all. A lint rule enforces this; do not disable it.
+`packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and both Python apps and `packages/llm-agent` have no database access at all. A lint rule enforces this; do not disable it.
 
 ### The `sebela/import-boundaries` lint rule
 
@@ -203,14 +209,16 @@ The diagnostic names the specifier, the importing member and what it may import 
 
 Several agents work in parallel, each in its own git worktree. They share one Postgres container and nothing else.
 
-| Service   | Main checkout               | Worktree with slot N         |
-| --------- | --------------------------- | ---------------------------- |
-| web       | 3000                        | 3000 + N × 10                |
-| api       | 3001                        | 3001 + N × 10                |
-| mcp-admin | 3002                        | 3002 + N × 10                |
-| llm-agent | 3003                        | 3003 + N × 10                |
-| postgres  | 5440 (one shared container) | same port, separate database |
+| Service        | Main checkout               | Worktree with slot N         |
+| -------------- | --------------------------- | ---------------------------- |
+| web            | 3000                        | 3000 + N × 10                |
+| api            | 3001                        | 3001 + N × 10                |
+| mcp-admin      | 3002                        | 3002 + N × 10                |
+| ai-service [7] | 3003                        | 3003 + N × 10                |
+| mcp-public [7] | 3004                        | 3004 + N × 10                |
+| postgres       | 5440 (one shared container) | same port, separate database |
 
+- The AI-service and public-MCP port assignments above are targets for phase 7; that phase updates worktree environment generation, task wrappers and Compose before these apps run.
 - The worktree setup script (`node scripts/harness/worktree.mjs create`, also run by the `WorktreeCreate` hook) takes the lowest free slot, creates the worktree's own database in the shared Postgres, or reuses it, and then writes the ports and the database name to the worktree's `.env.local`. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment). Migrations and the demo seed are added to setup in phase 2, when they exist. If the requested issue branch `<type>/<n>-<slug>` does not exist but another branch of the same issue `n` does, locally or on `origin`, the script continues that branch and its worktree instead of starting a second one, and says so; an interrupted issue keeps its work.
 - Running setup again for an existing worktree keeps its slot and its database and preserves its `.env.local`, including local edits. A missing environment file is generated; an existing file or symbolic link is never overwritten, so a worktree whose `.env.local` predates its database gets `DATABASE_NAME` only after that file is deleted and setup runs again.
 - The cleanup script (`node scripts/harness/worktree.mjs remove`, also run by the `WorktreeRemove` hook) drops the worktree's database, removes the worktree and frees the slot.
