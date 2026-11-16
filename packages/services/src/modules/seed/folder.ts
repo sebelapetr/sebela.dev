@@ -1,5 +1,6 @@
 // Reads and checks a seed folder without writing anything; private to the seed module.
 import { createHash } from "node:crypto";
+import type { Dirent, Stats } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -148,7 +149,13 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
   const declarations: Declaration[] = [];
 
   const known = new Set<string>(Object.values(dataFiles));
-  for (const entry of await readdir(root, { withFileTypes: true })) {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    throw unreadableFolder();
+  }
+  for (const entry of entries) {
     if (entry.name.endsWith(".json") && !known.has(entry.name)) {
       issues.push({
         path: entry.name,
@@ -343,14 +350,19 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
   };
 }
 
-/** The real path of the seed folder; `validation_failed` when it is missing or no folder. */
+// File-system errors name the path they failed on, so none of them is passed on: every one becomes
+// a path-free refusal.
+const unreadableFolder = () =>
+  new DomainError("validation_failed", "The seed folder cannot be read.");
+
+/** The real path of the seed folder; `validation_failed` when it is missing, no folder or unreadable. */
 async function openRoot(folder: string | URL): Promise<string> {
   const path = typeof folder === "string" ? resolve(folder) : fileURLToPath(folder);
   try {
     const real = await realpath(path);
     if ((await stat(real)).isDirectory()) return real;
   } catch (error) {
-    if (!hasCode(error, "ENOENT") && !hasCode(error, "ENOTDIR")) throw error;
+    if (!hasCode(error, "ENOENT") && !hasCode(error, "ENOTDIR")) throw unreadableFolder();
   }
   throw new DomainError("validation_failed", "The seed folder does not exist or is not a folder.");
 }
@@ -417,15 +429,24 @@ async function readInside(
   try {
     real = await realpath(resolve(root, file));
   } catch (error) {
-    if (!hasCode(error, "ENOENT") && !hasCode(error, "ENOTDIR")) throw error;
-    report("There is no such file in the seed folder.");
+    report(
+      hasCode(error, "ENOENT") || hasCode(error, "ENOTDIR")
+        ? "There is no such file in the seed folder."
+        : "The file cannot be read.",
+    );
     return null;
   }
   if (!real.startsWith(root + sep)) {
     report("Use a file inside the seed folder.");
     return null;
   }
-  const info = await stat(real);
+  let info: Stats;
+  try {
+    info = await stat(real);
+  } catch {
+    report("The file cannot be read.");
+    return null;
+  }
   if (!info.isFile()) {
     report("Use a regular file.");
     return null;
@@ -434,5 +455,10 @@ async function readInside(
     report(`The file is larger than the upload limit of ${String(limits.maxBytes)} bytes.`);
     return null;
   }
-  return readFile(real);
+  try {
+    return await readFile(real);
+  } catch {
+    report("The file cannot be read.");
+    return null;
+  }
 }

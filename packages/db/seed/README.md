@@ -11,7 +11,7 @@ pnpm --filter @sebela/api seed <folder>   # any other seed folder, for example a
 The command runs the backend services in-process (`SeedService.loadSeed` in `@sebela/services`). It
 needs the database settings and the media settings of the environment (see `apps/api/AGENTS.md`),
 but no running HTTP server and no API key. It prints counts only, never content and never the
-folder's path. The exit code is 0 for a load, 1 for a refused seed and 2 for bad usage.
+folder's path. The exit code is 0 for a load, 1 for a refused or unreadable seed and 2 for bad usage.
 
 The repository contains only the fictional demo seed in `demo/`. Its records double as an example
 of every file below.
@@ -40,7 +40,7 @@ Each record has exactly the fields of the API's create request for its kind (the
 
 - **Media are declared as files, not identifiers.** Instead of `photoId` and `cvPdfId` (person),
   `logoId` (organization) and `coverId` (project), a record declares `photo`, `cvPdf`, `logo` or
-  `cover` as `{ "file": "files/portrait.jpg", "altText": "…" }` or `null`. `altText` is optional.
+  `cover` as `{ "file": "files/portrait.jpg", "altText": "…" }` or `null`. `altText` is optional. An absent key behaves exactly like `null`: the record has no such attachment, so loading it clears one that is set (see superseded media below).
   A media identifier in a seed record is refused.
 - **A project may carry its case study** as `caseStudy: { "role": "…", "body": "…" }`.
 - **References are slugs**, as in the API: an experience names its `organization` and
@@ -69,9 +69,13 @@ A slug is unique within its file.
 - **A rerun of an unchanged folder changes nothing**: no new records, links or media.
 - **Changing a record in the seed** and loading again updates that record only.
 - **Superseded media are removed.** When a seed record stops referring to a file (it declares
-  another one or `null`), the media it referred to before are deleted after the load, together
-  with their stored files, unless anything still refers to them. This also applies to media
-  attached by hand to a record the seed names.
+  another one, `null` or omits the key), the media it referred to before are deleted after the
+  load, together with their stored files, unless anything still refers to them. This also applies
+  to media attached by hand to a record the seed names: a rerun clears a photo, CV PDF, logo or
+  cover the seed does not declare and deletes that media if nothing else uses it.
+- **Reuse ignores the storage prefix.** A file is reused when any media record has identical
+  content, even one stored under another environment or worktree prefix; such a record keeps its
+  key, so its public address stays `null` in this environment.
 
 ## Errors
 
@@ -79,6 +83,8 @@ A slug is unique within its file.
   record passes the API's input schemas, every attached file passes the upload checks and every
   reference resolves. Every problem found is reported in one refusal, each by file and field, for
   example `experiences.json[0].technologies[1]`. Nothing is written.
+- A folder, data file or attached file that cannot be read (missing permissions, for example) is
+  refused the same way, without the path the file system named.
 - A failure during the load itself (for example a constraint the database refuses) rolls back every
   record written by this load and removes the files it stored. A file that cannot be removed is
   reported on the error output by its storage key.

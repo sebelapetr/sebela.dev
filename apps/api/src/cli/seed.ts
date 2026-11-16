@@ -40,8 +40,8 @@ const kindLabels: Record<SeedKind, string> = {
 
 /**
  * Runs the seed command (`[folder]`) through the services and returns the exit code: 0 on success,
- * 1 for a refused seed, 2 for bad usage. Prints counts and refusals by file and field, never seed
- * content or the folder's path.
+ * 1 for a refused or unreadable seed, 2 for bad usage. Prints counts and refusals by file and field,
+ * never seed content or the folder's path (a file-system failure is reported by its code).
  */
 export async function runSeedCommand(
   args: readonly string[],
@@ -71,6 +71,11 @@ export async function runSeedCommand(
     if (error instanceof DomainError) {
       output.err(`${error.message}\n`);
       for (const field of error.fields ?? []) output.err(`  ${field.path}: ${field.message}\n`);
+      return 1;
+    }
+    // A Node file-system error names the path it failed on; print its code only.
+    if (error instanceof Error && "syscall" in error && "code" in error) {
+      output.err(`The seed folder could not be read (${String(error.code)}).\n`);
       return 1;
     }
     throw error;

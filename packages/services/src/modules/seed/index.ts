@@ -55,7 +55,7 @@ export interface SeedReport {
  * - Every data file is optional; an absent one leaves its kind untouched.
  * - Attached files are reused by content, so an unchanged file is never stored twice. Media a seed
  *   record stopped referring to is deleted after the load unless anything still uses it.
- * - A folder that does not exist, is malformed, fails the API's input schemas or upload checks, or
+ * - A folder that does not exist, cannot be read, is malformed, fails the API's input schemas or upload checks, or
  *   refers to records neither it nor the database has is refused as one `validation_failed` naming
  *   every problem by file and field (`experiences.json[0].technologies[1]`), before any write.
  *   Messages never contain the folder's path.
