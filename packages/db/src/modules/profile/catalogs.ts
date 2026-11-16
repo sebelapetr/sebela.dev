@@ -98,7 +98,7 @@ export function createCatalogPersistence(db: NodePgDatabase): CatalogPersistence
         .delete(technologies)
         .where(eq(technologies.slug, slug))
         .returning({ id: technologies.id });
-      return rows.length > 0;
+      return rows.length > 0 ? { ok: true } : { ok: false, reason: "not_found" };
     },
     listTopics() {
       return db.select(topicColumns).from(topics).orderBy(asc(topics.position), asc(topics.slug));
