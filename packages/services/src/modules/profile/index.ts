@@ -91,7 +91,7 @@ export function createProfileService(persistence: ProfilePersistence): ProfileSe
     ...createExplorationService(persistence),
     ...createServiceService(persistence),
     ...createEducationService(persistence),
-    ...createTestimonialService(),
+    ...createTestimonialService(persistence),
     async getPerson() {
       const record = await persistence.findPerson();
       if (!record) throw missing();
