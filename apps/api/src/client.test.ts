@@ -789,4 +789,87 @@ describe("the generated API client", () => {
       null,
     ]);
   });
+
+  it("manages testimonials: tied to an experience, ordered, moved, refused and protecting it", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    const { profile } = backend.services;
+    await profile.createOrganization({
+      slug: "quarry-works",
+      name: "Quarry Works",
+      website: null,
+      description: null,
+    });
+    for (const slug of ["quarry-lead", "quarry-intern"]) {
+      await profile.createExperience({
+        slug,
+        organization: "quarry-works",
+        title: "Engineer",
+        kind: "main_job",
+        summary: "A fictional role.",
+        responsibilities: [],
+        startedOn: slug === "quarry-lead" ? "2019-01-01" : "2018-01-01",
+        endedOn: "2019-12-31",
+        inCv: true,
+        technologies: [],
+      });
+    }
+    const quote = {
+      slug: "quinn-on-quarry",
+      experience: "quarry-lead",
+      quote: "A fictional colleague liked the fictional work.",
+      authorName: "Quinn Placeholder",
+      authorRole: "Site Manager",
+      position: 2,
+    };
+
+    const created = await client.POST("/v1/testimonials", { body: quote });
+    expect(created.response.status).toBe(201);
+    expect(created.data).toMatchObject(quote);
+    const duplicate = await client.POST("/v1/testimonials", { body: quote });
+    expect(duplicate.error?.error.code).toBe("conflict");
+    const orphan = await client.POST("/v1/testimonials", {
+      body: { ...quote, slug: "quinn-orphan", experience: "quarry-missing" },
+    });
+    expect(orphan.response.status).toBe(400);
+    expect(orphan.error?.error.fields?.map(({ path }) => path)).toEqual(["experience"]);
+    await client.POST("/v1/testimonials", {
+      body: { ...quote, slug: "quill-on-quarry", authorName: "Quill Example", position: 1 },
+    });
+
+    const lead = await client.GET("/v1/experiences/{slug}", at("quarry-lead"));
+    expect(lead.data?.testimonials.map(({ slug }) => slug)).toEqual([
+      "quill-on-quarry",
+      "quinn-on-quarry",
+    ]);
+    const moved = await client.PATCH("/v1/testimonials/{slug}", {
+      ...at("quinn-on-quarry"),
+      body: { experience: "quarry-intern", authorRole: "Mentor" },
+    });
+    expect(moved.data).toMatchObject({ experience: "quarry-intern", authorRole: "Mentor" });
+    const read = await client.GET("/v1/testimonials/{slug}", at("quinn-on-quarry"));
+    expect(read.data).toEqual(moved.data);
+
+    const protectedExperience = await client.DELETE("/v1/experiences/{slug}", at("quarry-intern"));
+    expect(protectedExperience.error?.error.code).toBe("conflict");
+    for (const slug of ["quinn-on-quarry", "quill-on-quarry"]) {
+      expect((await client.DELETE("/v1/testimonials/{slug}", at(slug))).response.status).toBe(204);
+    }
+    const missing = await client.GET("/v1/testimonials/{slug}", at("quinn-on-quarry"));
+    expect(missing.error?.error.code).toBe("not_found");
+    for (const slug of ["quarry-lead", "quarry-intern"]) {
+      expect((await client.DELETE("/v1/experiences/{slug}", at(slug))).response.status).toBe(204);
+    }
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(4).fill(bearer),
+      null,
+      bearer,
+      null,
+      ...Array<string>(3).fill(bearer),
+      null,
+      ...Array<string>(2).fill(bearer),
+    ]);
+  });
 });
