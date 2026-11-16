@@ -73,7 +73,7 @@ Tests follow the same rule as the code: no hard-coded port, local host address o
 
 ## Databases
 
-- Each worktree has its own database (see `docs/repository-structure.md`). The harness tests check the worktree lifecycle through a fake at the harness's database interface, so `node --test harness/` needs no Docker; `node harness/worktree-databases.e2e.mjs` checks the same lifecycle against a real, disposable Postgres from `compose.yaml`, on demand and in the CI job `Worktree database lifecycle` (see [Worktree databases](repository-structure.md#worktree-databases)).
+- Each worktree has its own database and database role, and its tests connect with that role's credentials (see `docs/repository-structure.md`). The harness tests check the worktree lifecycle through a fake at the harness's database interface, so `node --test harness/` needs no Docker; `node harness/worktree-databases.e2e.mjs` checks the same lifecycle against a real, disposable Postgres from `compose.yaml`, on demand and in the CI job `Worktree database lifecycle` (see [Worktree databases](repository-structure.md#worktree-databases)).
 - Tests use a separate temporary database, so they never touch the data an agent is looking at in the browser.
 - Tests use small fictional fixtures, never the demo seed, so that editing demo content cannot break a test.
 
