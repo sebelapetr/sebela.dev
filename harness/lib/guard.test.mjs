@@ -559,6 +559,10 @@ test("Git configuration cannot be changed by quoting, wrappers, editors or other
     "for f in $(git config core.hooksPath x); do :; done",
     "x=$(git -c core.hooksPath=y commit -m z)",
     "T=1; git -c core.hooksPath=y commit -m z",
+    'git commit -m "$(echo x)" && sh -c "git config core.hooksPath x"',
+    "X=$(git config core.hooksPath /dev/null)",
+    'git commit -m "x" && (sh -c "git config core.hooksPath x")',
+    'git commit -m "$(echo config)" -c core.hooksPath=x',
   ]) {
     assert.ok(bash(command, loop), command);
   }
@@ -572,6 +576,7 @@ test("Git configuration cannot be changed by quoting, wrappers, editors or other
     "B=origin/phase/01-x; git show $B:package.json | grep -n node",
     "for c in a b; do git show --stat $c | head; done",
     'env -i PATH="$PATH" HOME="$HOME" docker compose config',
+    'git add a && git commit -q -m "feat(config): share the lint config" && (cd packages/config && node --test)',
   ]) {
     assert.equal(bash(command, loop), null, command);
   }
@@ -584,6 +589,8 @@ test("abbreviated git options that write a file are refused on harness reads", (
     "git grep --open x -- .claude/settings.json",
     "git show --te HEAD -- .claude/settings.json",
     "git diff --ext -- .claude/settings.json",
+    "./git diff -- .claude/settings.json",
+    "tools/git log -- .claude/settings.json",
   ]) {
     assert.ok(bash(command, loop), command);
   }

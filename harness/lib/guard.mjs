@@ -175,6 +175,7 @@ function gitInvocation(words) {
   while (i < words.length && /^[A-Za-z_]\w*=/.test(words[i])) i += 1;
   if (path.basename(words[i] ?? "") !== "git") return null;
   let unsafe = i > 0;
+  const plain = words[i] === "git";
   i += 1;
   while (i < words.length && words[i].startsWith("-")) {
     const [option, value] = words[i].split(/=(.*)/);
@@ -184,7 +185,8 @@ function gitInvocation(words) {
       i += 1;
     }
   }
-  return { sub: words[i], args: words.slice(i + 1), unsafe };
+  // Only the git on the PATH can be trusted to be git; ./git or tools/git could be anything.
+  return { sub: words[i], args: words.slice(i + 1), unsafe, plain };
 }
 
 // Programs that only read and print, with the arguments that keep them so.
@@ -218,7 +220,9 @@ function readsOnly(words) {
     );
   }
   const git = gitInvocation(words);
-  return Boolean(git && !git.unsafe && READ_ONLY_GIT.has(git.sub) && !git.args.some(writesOrRuns));
+  return Boolean(
+    git?.plain && !git.unsafe && READ_ONLY_GIT.has(git.sub) && !git.args.some(writesOrRuns),
+  );
 }
 
 function isReadOnlyCommand(command) {
@@ -260,7 +264,9 @@ const GIT_CONFIG_ENVIRONMENT =
   /\bGIT_CONFIG(_COUNT|_KEY_|_VALUE_|_PARAMETERS|_GLOBAL|_SYSTEM|_NOSYSTEM)?\b/;
 const GIT_FILES_ENVIRONMENT = /(^|[\s;&|(])(export\s+)?(HOME|XDG_CONFIG_HOME|GIT_[A-Z_]+)=/;
 const GIT_WORD = /(^|[\s/])git(\s|$)/;
-const CONFIG_WORD = /(^|\s)(config|-c\S*|--config-env\S*|--exec-path\S*)(\s|$)/;
+// `config` as a word, git's `-c <name>=<value>` (not python's or sh's `-c <code>`), and the
+// options that point git at other configuration or programs.
+const CONFIG_WORD = /(^|\s)(config(\s|$)|-c\s*[\w.-]+=|--config-env|--exec-path)/;
 
 // Whether a command could change Git configuration, for good or for one command. It fails
 // closed: git run by another program (a wrapper such as `sh -c` or `stdbuf`) together with a
@@ -285,7 +291,10 @@ function changesGitConfig(command) {
 const GIT_AT_COMMAND =
   /(^|[;&|(\n]\s*)(?:(?:do|then|else|elif|!)\s+)?([^\s;&|=]+=[^\s;&|]*\s+|env\s+)*([^\s;&|]*\/)?git(\s+|$)([^;&|\n]*)/g;
 function unreadableGitChange(command) {
-  const plain = command.replace(/['"\\]/g, "");
+  // A literal commit message (no expansion in it) is text, not a command: it may mention config.
+  const plain = command
+    .replace(/(\s(?:-m|--message)(?:=|\s+))("[^"$`\\]*"|'[^']*')/g, "$1msg")
+    .replace(/['"\\]/g, "");
   for (const match of plain.matchAll(GIT_AT_COMMAND)) {
     if (match[2]) return true;
     const words = match[5].split(/\s+/).filter(Boolean);
@@ -301,8 +310,8 @@ function unreadableGitChange(command) {
     const sub = words[i]?.replace(/\)+$/, "");
     if (!sub || /[$`{}*?[\]()]/.test(sub) || sub === "config") return true;
   }
-  const outside = plain.replace(GIT_AT_COMMAND, " ");
-  return GIT_WORD.test(outside) && CONFIG_WORD.test(outside);
+  // Anywhere else — after =, inside $( ), behind a wrapper — git with a configuration word counts.
+  return GIT_WORD.test(plain) && CONFIG_WORD.test(plain);
 }
 
 // Leaving .context out of a search (`--exclude-dir=.context`, `-path ./.context -prune`,
