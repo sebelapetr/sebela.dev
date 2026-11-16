@@ -2,7 +2,7 @@
   "name": "@sebela/services",
   "version": "0.0.0",
   "private": true,
-  "description": "Domain operations of the backend: the person profile and API keys.",
+  "description": "Domain operations of the backend: the person profile, media, API keys and the seed loader.",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -24,7 +24,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1169.0",
     "@sebela/contracts": "workspace:*",
-    "@sebela/db": "workspace:*"
+    "@sebela/db": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@sebela/config": "workspace:*",

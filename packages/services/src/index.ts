@@ -14,6 +14,13 @@ export type {
   MediaService,
   MediaUploadInput,
 } from "./modules/media/index.js";
+export type {
+  SeedCount,
+  SeedKind,
+  SeedReport,
+  SeedService,
+  SeedServiceOptions,
+} from "./modules/seed/index.js";
 export type { StorageConfig } from "./modules/storage/index.js";
 export type {
   ApiKeyInfo,
