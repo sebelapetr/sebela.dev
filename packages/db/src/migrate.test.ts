@@ -26,7 +26,7 @@ describe("migrateDatabase", () => {
     database = undefined;
   });
 
-  it("creates the person and API-key tables in separate schemas of an empty database", async () => {
+  it("creates the profile and API-key tables in separate schemas of an empty database", async () => {
     database = await createTemporaryDatabase(base, { migrated: false });
 
     await migrateDatabase(database.config);
@@ -36,7 +36,12 @@ describe("migrateDatabase", () => {
       `SELECT table_schema || '.' || table_name AS name FROM information_schema.tables
        WHERE table_schema IN ('profile', 'auth') ORDER BY name`,
     );
-    expect(tables.map((row) => row["name"])).toEqual(["auth.api_keys", "profile.persons"]);
+    expect(tables.map((row) => row["name"])).toEqual([
+      "auth.api_keys",
+      "profile.persons",
+      "profile.technologies",
+      "profile.topics",
+    ]);
   });
 
   it("does nothing when the database is already migrated", async () => {

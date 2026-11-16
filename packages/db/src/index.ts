@@ -9,9 +9,19 @@ export type {
   ApiKeyPersistence,
 } from "./modules/api-keys/index.js";
 export type {
+  CatalogPersistence,
   CreatePersonResult,
+  CreateTechnologyResult,
+  CreateTopicResult,
   PersonFields,
   PersonLinkRecord,
   PersonRecord,
   ProfilePersistence,
+  TechnologyFields,
+  TechnologyGroup,
+  TechnologyRecord,
+  TechnologyTier,
+  TopicFields,
+  TopicRecord,
+  UpdateTechnologyResult,
 } from "./modules/profile/index.js";
