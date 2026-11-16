@@ -19,6 +19,18 @@ There are no `CLAUDE.md` files. Claude Code reads `AGENTS.md` directly when no `
 
 A subagent may start without project instructions loaded. Every agent therefore begins by reading the root `AGENTS.md` and the `AGENTS.md` of each part it will touch.
 
+### Path-scoped rules
+
+A rule with `paths` in its frontmatter loads when an agent reads, writes or edits a matching file; the others load in every session. Each scoped rule names the binding documents of its area and repeats only the few points most often missed. A rule is added when its area exists — no empty app or package is created to hold one — and is extended when an app or package arrives in a later phase.
+
+| Rule                      | Loads for                                                                                                     | Points to                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `shared-configuration.md` | `packages/config/`, every `eslint.config.js`, `prettier.config.js`, `.prettierignore`, every `tsconfig*.json` | `packages/config/AGENTS.md`, code standards, dependency rules                    |
+| `repository-checks.md`    | `scripts/checks/`                                                                                             | The hard-coded configuration check, testing (tooling)                            |
+| `harness.md`              | `scripts/harness/`, `scripts/run-phase.sh`, `.claude/settings.json`, `.claude/agents/`                        | Permissions, agents, git workflow (local hooks), worktree isolation              |
+| `toolchain-and-ci.md`     | Every `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `.nvmrc`, `.github/workflows/`   | Toolchain and workspace, root commands, CI                                       |
+| `local-infrastructure.md` | `compose.yaml`, `.env.example`                                                                                | Ports and worktree isolation, the shared Postgres, configuration and environment |
+
 ## Project-local design and testing references
 
 The repository carries `codebase-design` and `tdd` under `.claude/skills/`. They adapt Matt Pocock's references to the binding docs: interface design and incremental behaviour tests, with our API trust boundary, real-Postgres integration and existing approval model. Read the relevant `SKILL.md` directly when a harness has no skill invocation tool. No global skill installation or duplicate in a user-level directory is needed.
@@ -60,7 +72,7 @@ For each issue of a phase:
 1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed.
 2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database and ports.
 3. It dispatches the developer agent that matches the area of the issue.
-4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary.
+4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
 5. The orchestrator dispatches the reviewer.
 6. The reviewer approves or returns objections; objections go back to the developer.
 7. The orchestrator opens the issue pull request against the phase branch.

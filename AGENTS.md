@@ -69,7 +69,8 @@ Details: `docs/git-workflow.md`.
 
 | Task                                                                                 | Command                                                                                                        |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| Install dependencies (Node.js 26, pnpm 12.21.0)                                      | `pnpm install --frozen-lockfile`                                                                               |
+| Install dependencies (Node.js 26, pnpm 12.21.0); also enables the Git hooks          | `pnpm install --frozen-lockfile`                                                                               |
+| Enable the Git hooks in a checkout installed before                                  | `pnpm run prepare`                                                                                             |
 | Lint, typecheck, test, build                                                         | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`                                                       |
 | Start the shared Postgres (owner, main checkout, `.env` created from `.env.example`) | `docker compose up --detach --wait`                                                                            |
 | Create a worktree for a branch, with its own database                                | `node scripts/harness/worktree.mjs create <branch> --base <ref>` (prints its path; needs the running Postgres) |
@@ -81,6 +82,10 @@ Details: `docs/git-workflow.md`.
 | Check for hard-coded ports, hosts and database names (plain Node)                    | `node scripts/checks/hardcoded-config.mjs` (also part of `pnpm lint`)                                          |
 
 Supported versions and what each command covers: `docs/repository-structure.md` (Toolchain and workspace). Shared lint, TypeScript and Prettier configuration: `packages/config/AGENTS.md`.
+
+## Hooks and handoff
+
+Your edits are formatted as you make them. Commits format and lint the staged files and check the message against Conventional Commits. A developer agent's handoff is refused while lint or typecheck of what it changed fail; fix the failures, do not bypass them (no `--no-verify`). Details: `docs/permissions.md` (Hooks) and `docs/git-workflow.md` (Local hooks).
 
 ## Language
 

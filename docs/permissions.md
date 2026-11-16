@@ -43,13 +43,31 @@ The local environment exception requires a session running inside a Git-confirme
 
 Development environment files stay ignored by Git. Production credentials are kept outside development worktrees. Never copy environment values into commits, documentation, pull requests or public logs. The guard checks paths, not whether a value is a production credential.
 
-| When                                           | What happens                                                                      |
-| ---------------------------------------------- | --------------------------------------------------------------------------------- |
-| After a file is edited                         | The file is formatted                                                             |
-| Before a file is edited                        | An edit to app or package code in the main checkout is blocked                    |
-| When a developer agent finishes                | Typecheck and lint run for the packages it changed; failures go back to the agent |
-| When a worktree is created or removed          | The setup or cleanup script runs                                                  |
-| After an issue is merged into the phase branch | The orchestrator is reminded to run the docs-keeper                               |
+| When                                           | What happens                                                                                    | Hook (`scripts/harness/`)                                                    |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Before any tool call it guards                 | The guard below refuses what this document denies                                               | `hooks/pre-tool-use.mjs` (PreToolUse)                                        |
+| After a file is edited or written              | The file is formatted with the shared Prettier configuration                                    | `hooks/format-edited-file.mjs` (PostToolUse on Edit, Write, MultiEdit)       |
+| When a developer agent hands off or stops      | Lint and typecheck run for the parts it changed, in its worktree; failures go back to the agent | `hooks/developer-handoff.mjs` (PreToolUse on SubagentHandback, SubagentStop) |
+| When a worktree is created or removed          | The setup or cleanup script runs                                                                | `hooks/worktree-create.mjs`, `hooks/worktree-remove.mjs`                     |
+| After an issue is merged into the phase branch | The orchestrator is reminded to run the docs-keeper                                             | `hooks/post-tool-use.mjs` (PostToolUse on Bash)                              |
+| Before a commit, in every checkout             | Staged files are formatted and linted; the commit message is checked                            | Git hooks in `git-hooks/`, see [git workflow](git-workflow.md#local-hooks)   |
+
+### Formatting after an edit
+
+The file is formatted by the Prettier of the checkout it belongs to (`node_modules/.bin/prettier`, started in that checkout's root), so that checkout's configuration, `.prettierignore` and `.gitignore` apply and a worktree never uses another checkout's tools. Prettier skips file types it does not support. Files outside this repository, environment files, anything inside `.git` and symbolic links that lead out of their checkout are left alone. When Prettier cannot format the file, for example because of a syntax error, or the checkout has no installed tools, the reason goes back to the agent. The hook writes the file directly; that is no tool call, so formatting cannot trigger the hook again.
+
+### Handoff checks
+
+A developer agent (`backend-developer`, `frontend-developer`, `ai-developer`) hands off only work whose lint and typecheck pass. The same check runs at two points:
+
+- **Handing back.** Before its `SubagentHandback` call, which delivers the report to the caller, the checks run. A failure refuses the call with the failing output, so the report does not reach the orchestrator until the checks pass.
+- **Stopping.** When the developer stops, the checks run again. A failure keeps it working with the failing output. If it stops a second time while they still fail (`stop_hook_active`), the hook does not block again — that would loop — but reports the failure to the session as a system message.
+
+**Which worktree.** The hook reads the developer's own transcript and takes the worktrees under `.worktrees/` that its edits, writes and shell commands name, plus the directory the session runs in. Paths it only read, prompts and tool output do not count. Each candidate must be a Git worktree of this repository; the main checkout holds no developer work and is not checked. A developer that acted in no worktree has nothing to check. A transcript that cannot be read refuses the handoff.
+
+**Which parts.** In each worktree the hook compares with the nearest branch the issue branch can have been cut from (`master`, `main` or `phase/*`, local or on `origin`): committed, staged, unstaged and untracked files since the merge base. A file in `apps/<name>` or `packages/<name>` selects that package; Turborepo adds its dependents. A change to `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json` or `.nvmrc`, or a branch without such a base, selects every package. The root tasks `lint:root` and `check:config` always run; Turborepo replays cached results for anything unchanged.
+
+**The command.** `turbo run lint typecheck lint:root check:config --continue --output-logs=errors-only` with `--filter=//` and `--filter=<package>...` for each selected package, run with the worktree's own Turborepo, so every failure is reported in one pass. Tests are not part of it; CI runs them. A missing tool, a timeout or a check that cannot start counts as a failure. Other agents and the main session are not checked.
 
 ## How it is enforced
 
@@ -67,5 +85,5 @@ The phase loop runs Claude Code without a person present. In that mode nothing c
 
 ## Notes
 
-- Project settings add to the owner's global Claude Code settings; they must not replace the global hooks.
+- Project settings add to the owner's global Claude Code settings; they must not replace the global hooks. A new project hook is a new entry next to the existing ones, never a replacement of the guard, the worktree hooks or the merge reminder.
 - Access to data at runtime (public and private API routes, API keys) is a different subject. See `docs/architecture.md` and `docs/domain-context.md`.

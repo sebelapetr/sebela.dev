@@ -27,13 +27,13 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── memory/              indexing and retrieval [6]
 ├── scripts/
 │   ├── run-phase.sh         starts the phase loop [0]
-│   ├── harness/             the loop, worktree slots and databases, hooks, GitHub set-up — plain Node, no dependencies [0]
+│   ├── harness/             the loop, worktree slots and databases, Claude Code and Git hooks, GitHub set-up — plain Node, no dependencies [0, hooks 1]
 │   └── checks/              repository checks: the hard-coded configuration check — plain Node, no dependencies [1]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
 │   ├── skills/              grill-me, to-prd, to-issues, later content skills
-│   ├── rules/               short rules that point to the relevant docs
+│   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI [1]
@@ -93,7 +93,7 @@ Run from the repository root. Turborepo runs a task in every package that define
 
 | Command                          | What it runs                                                                                                                                                                                                                     |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | The locked installation, as in CI                                                                                                                                                                                                |
+| `pnpm install --frozen-lockfile` | The locked installation, as in CI; its `prepare` script enables the [Git hooks](git-workflow.md#local-hooks)                                                                                                                     |
 | `pnpm lint`                      | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`) |
 | `pnpm typecheck`                 | `typecheck` of every package                                                                                                                                                                                                     |
 | `pnpm test`                      | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`)                                                                                                          |
@@ -101,8 +101,9 @@ Run from the repository root. Turborepo runs a task in every package that define
 | `pnpm test:harness`              | Only the harness tests, through `node --test scripts/harness/`                                                                                                                                                                   |
 | `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                     |
 | `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                   |
+| `pnpm run prepare`               | Only the Git hooks installer, through `node scripts/harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                  |
 
-The harness (`scripts/harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test scripts/harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
+The harness (`scripts/harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test scripts/harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`scripts/harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
 
