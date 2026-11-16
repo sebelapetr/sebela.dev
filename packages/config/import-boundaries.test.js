@@ -61,8 +61,13 @@ describe("import boundaries: the dependency table", () => {
     ],
     [
       "apps/api/src/app.ts",
-      ["@sebela/services", "@sebela/contracts"],
-      ["@sebela/db", "@sebela/memory", "@sebela/api-client", "@sebela/ui"],
+      ["@sebela/services", "@sebela/contracts", "@sebela/api-client"],
+      ["@sebela/db", "@sebela/memory", "@sebela/ui"],
+    ],
+    [
+      "packages/api-client/src/index.ts",
+      [],
+      ["@sebela/contracts", "@sebela/services", "@sebela/db", "@sebela/ui"],
     ],
     [
       "packages/services/src/index.ts",
@@ -110,6 +115,7 @@ describe("import boundaries: the dependency table", () => {
       "packages/services/eslint.config.js",
       "packages/db/eslint.config.js",
       "packages/contracts/eslint.config.js",
+      "packages/api-client/eslint.config.js",
     ]) {
       await assertAllowed(importer, `export { createConfig } from "@sebela/config/eslint";\n`);
     }
