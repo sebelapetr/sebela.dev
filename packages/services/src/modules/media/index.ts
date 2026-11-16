@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
+
 import type { Media, MediaType, MediaUpdate } from "@sebela/contracts";
 import type { MediaPersistence, MediaRecord } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
 import { readStorageConfig, type OpenedStorage, type StorageConfig } from "../storage/index.js";
-import { inspectUpload } from "./inspect.js";
+import { inspectUpload, type Inspected } from "./inspect.js";
 
 /** The upload limits of a process. */
 export interface MediaLimits {
@@ -61,8 +63,9 @@ export interface MediaService {
   listMedia(): Promise<Media[]>;
   getMedia(id: string): Promise<Media>;
   /**
-   * Proves the type from the content, stores the file under a generated key, then records it. A
-   * refused file stores nothing; a failed metadata write removes the stored file again.
+   * Proves the type from the content, stores the file under a generated key, then records it with
+   * the SHA-256 digest of its content. A refused file stores nothing; a failed metadata write
+   * removes the stored file again.
    */
   uploadMedia(input: MediaUploadInput): Promise<Media>;
   /**
@@ -132,8 +135,10 @@ export function readMediaConfig(env: Environment, cwd: string = process.cwd()): 
  * can refuse a whole batch before its first upload. Throws the refusal `uploadMedia` would throw.
  */
 export function checkMediaUpload(input: MediaUploadInput, limits: MediaLimits): void {
-  throw new Error(`Not implemented yet: ${input.filename} ${String(limits.maxBytes)}`);
+  inspectUpload(input, limits);
 }
+
+const digestOf = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 export function createMediaService(
   persistence: MediaPersistence,
@@ -156,6 +161,29 @@ export function createMediaService(
 
   const notFound = () => new DomainError("not_found", "There is no such media.");
 
+  /** Stores the file under a generated key, then records it; a failed record removes the file. */
+  const store = async (input: MediaUploadInput, inspected: Inspected): Promise<Media> => {
+    const key = await storage.store({ bytes: input.bytes, extension: inspected.extension });
+    try {
+      return toMedia(
+        await persistence.createMedia({
+          key,
+          mediaType: inspected.mediaType,
+          byteSize: input.bytes.byteLength,
+          width: inspected.width,
+          height: inspected.height,
+          altText: input.altText ?? null,
+          sha256: digestOf(input.bytes),
+        }),
+      );
+    } catch (error) {
+      await storage.delete(key).catch((cleanupError: unknown) => {
+        options.onCleanupFailure({ operation: "upload", key, error: cleanupError });
+      });
+      throw error;
+    }
+  };
+
   return {
     async listMedia() {
       return (await persistence.listMedia()).map(toMedia);
@@ -168,29 +196,19 @@ export function createMediaService(
     },
 
     async uploadMedia(input) {
-      const inspected = inspectUpload(input, options.limits);
-      const key = await storage.store({ bytes: input.bytes, extension: inspected.extension });
-      try {
-        return toMedia(
-          await persistence.createMedia({
-            key,
-            mediaType: inspected.mediaType,
-            byteSize: input.bytes.byteLength,
-            width: inspected.width,
-            height: inspected.height,
-            altText: input.altText ?? null,
-          }),
-        );
-      } catch (error) {
-        await storage.delete(key).catch((cleanupError: unknown) => {
-          options.onCleanupFailure({ operation: "upload", key, error: cleanupError });
-        });
-        throw error;
-      }
+      return store(input, inspectUpload(input, options.limits));
     },
 
-    ensureMedia(input) {
-      return Promise.reject(new Error(`Not implemented yet: ${input.filename}`));
+    async ensureMedia(input) {
+      const inspected = inspectUpload(input, options.limits);
+      const recorded = await persistence.findMediaByDigest(digestOf(input.bytes));
+      if (recorded === null) return { media: await store(input, inspected), created: true };
+      if (input.altText === undefined || input.altText === recorded.altText) {
+        return { media: toMedia(recorded), created: false };
+      }
+      const changed = await persistence.updateMedia(recorded.id, { altText: input.altText });
+      if (changed === null) throw notFound();
+      return { media: toMedia(changed), created: false };
     },
 
     async updateMedia(id, changes) {
