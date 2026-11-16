@@ -8,7 +8,7 @@ const listenOn = process.env["API_PORT"];
 const env = {
   API_HOST: "api.test",
   API_PORT: listenOn,
-  API_BODY_LIMIT_BYTES: "65536",
+  API_BODY_LIMIT_BYTES: "196608",
   API_TRUSTED_PROXIES: "",
   API_RATE_LIMIT_HEALTH: "120/60",
   API_RATE_LIMIT_PUBLIC: "300/60",
@@ -22,7 +22,7 @@ describe("readApiConfig", () => {
     expect(readApiConfig(env)).toEqual({
       host: "api.test",
       port: Number(listenOn),
-      bodyLimitBytes: 65536,
+      bodyLimitBytes: 196_608,
       trustedProxies: [],
       rateLimits: {
         health: { max: 120, windowMs: 60_000 },
