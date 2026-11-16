@@ -135,8 +135,10 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
       access: "public",
       summary: "Download a media file",
       description:
-        "Serves a recorded file under its storage key with the type its content proved, `nosniff` " +
-        "and a sandboxing content security policy. Only files the API stores itself are served here.",
+        "Serves a recorded file inline under its storage key with the type its content proved, " +
+        "`nosniff` and a content security policy that loads nothing. Images are also sandboxed; " +
+        "a PDF is not, because browser PDF viewers refuse sandboxed documents, and it is offered " +
+        "under the file name of its key. Only files the API stores itself are served here.",
       params: FileKeyParamsSchema,
       response: { status: 200, description: "The file.", file: mediaTypes },
       errors: ["not_found"],
@@ -144,7 +146,8 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
         if (!KEY_CHARACTERS.test(params.key)) throw missingFile();
         const file = await media.readMediaFile(params.key);
         if (file === null) throw missingFile();
-        return file;
+        const pdf = file.mediaType === "application/pdf";
+        return { ...file, sandboxed: !pdf, fileName: params.key.split("/").at(-1) ?? "" };
       },
     }),
   ];

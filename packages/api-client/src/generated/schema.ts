@@ -627,7 +627,7 @@ export interface paths {
         };
         /**
          * Download a media file
-         * @description Serves a recorded file under its storage key with the type its content proved, `nosniff` and a sandboxing content security policy. Only files the API stores itself are served here.
+         * @description Serves a recorded file inline under its storage key with the type its content proved, `nosniff` and a content security policy that loads nothing. Images are also sandboxed; a PDF is not, because browser PDF viewers refuse sandboxed documents, and it is offered under the file name of its key. Only files the API stores itself are served here.
          */
         get: operations["getMediaFile"];
         put?: never;

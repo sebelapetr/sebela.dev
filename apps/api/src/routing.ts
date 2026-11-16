@@ -43,7 +43,7 @@ export interface RouteDocumentation {
     readonly location?: string;
     /**
      * The media types of a binary success. The handler returns a `FileResponse`, which is sent with
-     * its own type and a sandboxing content security policy.
+     * its own type, `Content-Disposition: inline` and a content security policy that loads nothing.
      */
     readonly file?: readonly string[];
   };
@@ -63,6 +63,13 @@ export interface UploadedFile {
 export interface FileResponse {
   readonly bytes: Uint8Array;
   readonly mediaType: string;
+  /**
+   * Whether the policy adds `sandbox`. A file a browser renders with a built-in viewer that the
+   * sandbox stops, such as a PDF, is sent without it and names its file instead.
+   */
+  readonly sandboxed: boolean;
+  /** The file name offered with an unsandboxed file; it must be a safe, unquoted name. */
+  readonly fileName: string;
 }
 
 /** A route as a module contributes it: its documentation and what it does. */

@@ -194,8 +194,9 @@ export function describeApi(): OpenApiDocument {
   );
 }
 
-/** Served files run no script and load nothing, even when opened directly. */
-const FILE_POLICY = "default-src 'none'; sandbox";
+/** Served files load nothing, even when opened directly; sandboxed files also run no script. */
+const FILE_POLICY = "default-src 'none'";
+const SANDBOXED_FILE_POLICY = `${FILE_POLICY}; sandbox`;
 
 const writeLog: Logger = (line) => {
   process.stdout.write(`${line}\n`);
@@ -259,7 +260,8 @@ export function createApp(dependencies: AppDependencies): Api {
         const file = result as FileResponse;
         return c.body(new Uint8Array(file.bytes), 200, {
           "content-type": file.mediaType,
-          "content-security-policy": FILE_POLICY,
+          "content-security-policy": file.sandboxed ? SANDBOXED_FILE_POLICY : FILE_POLICY,
+          "content-disposition": file.sandboxed ? "inline" : `inline; filename="${file.fileName}"`,
         });
       }
       return c.json(result, route.response.status);

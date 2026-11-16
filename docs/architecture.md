@@ -72,7 +72,7 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
 - Uploads go through a private API route; nothing uploads to the bucket directly.
 - The database stores a file's key; the public base address is configuration.
 - Uploads are proved by their content: PNG, JPEG, WebP and PDF only, within configured byte and image-dimension limits, checked structurally with work bounded by the file size. The API generates every key; a file name never chooses where a file goes.
-- Files of the local driver are served by the API itself at a public route under the key, with the recorded type, `nosniff` and a sandboxing content security policy; the Bunny driver (#36) serves them from its own address.
+- Files of the local driver are served by the API itself at a public route under the key, inline, with the recorded type, `nosniff` and a content security policy that loads nothing. Images are also sandboxed; a PDF is not, because browser PDF viewers refuse to render a sandboxed document, and it is offered under the file name of its key, so the current CV opens in the browser; the Bunny driver (#36) serves them from its own address.
 - Profile records refer to media by identifier (the person's photo and current CV PDF, an organization's logo, a project's cover). Referenced media cannot be deleted. The current CV PDF is uploaded as prepared, not generated.
 - A file the media workflow cannot remove, after a failed record write or a deleted record, is logged with its key without secrets and stays as an orphan no record refers to; it is removed by hand. A successful response never refers to a missing file.
 - Development and production use separate storage zones with separate keys.
