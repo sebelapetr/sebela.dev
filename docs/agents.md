@@ -47,11 +47,13 @@ Each agent pins its model and effort level in the frontmatter of its `.claude/ag
 | Agent | Model | Effort | Why |
 |---|---|---|---|
 | orchestrator | sonnet | medium | Coordinates issues, worktrees and pull requests; writes no code |
-| backend-, frontend-, ai-developer | opus | high | Writes the code and the tests, where mistakes cost most |
+| backend-, frontend-, ai-developer | opus | medium | Writes the code and the tests; the model is kept, the effort lowered because a developer's own reasoning is what fills its context (phase 1 measurement: 100–220k output tokens and up to 195k context per issue). Auto-compaction at 150 000 tokens caps unusually long runs |
 | reviewer | opus | high | Must find what the developer missed |
 | docs-keeper | sonnet | low | Compares documents with merged code |
 
-The environment variable `CLAUDE_CODE_EFFORT_LEVEL` overrides the effort fields; the phase loop does not set it.
+The environment variables `CLAUDE_CODE_EFFORT_LEVEL` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` override these fields; the phase loop sets neither. The reviewer stays at high effort, so that lower developer effort is checked by a thorough review.
+
+An interrupted run can leave an issue's branch and worktree behind. The orchestrator continues that work instead of starting over (`.claude/agents/orchestrator.md`, step 3).
 
 ## Orchestration
 
