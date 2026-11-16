@@ -342,6 +342,7 @@ test("unattended agents may keep their shared memory in the main checkout, and n
   );
   assert.ok(call("Edit", { file_path: "/repo/.claude/agent-memory-local/../settings.json" }, { unattended: true }));
   assert.ok(call("Write", { file_path: "/repo/.claude/agent-memory/reviewer/x.md" }, { unattended: true }));
+  assert.ok(call("Edit", { file_path: "/repo/.claude/agent-memory-local/README.md" }, { unattended: true }));
 });
 
 // --- everything else -------------------------------------------------------

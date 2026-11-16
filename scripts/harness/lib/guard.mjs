@@ -84,7 +84,9 @@ const AGENT_MEMORY_DIR = path.join(".claude", "agent-memory-local");
 function isHarnessFile(filePath, mainRoot) {
   if (filePath.split(path.sep).includes(".git")) return true;
   if (isInside(filePath, path.join(mainRoot, ".worktrees"))) return false;
-  if (isInside(filePath, path.join(mainRoot, AGENT_MEMORY_DIR))) return false;
+  // Only inside an agent's own folder; the folder's README stays the owner's.
+  const memoryDir = path.join(mainRoot, AGENT_MEMORY_DIR);
+  if (isInside(filePath, memoryDir) && path.dirname(filePath) !== memoryDir && filePath !== memoryDir) return false;
   return HARNESS_DIRS.some((dir) => isInside(filePath, path.join(mainRoot, dir)));
 }
 
