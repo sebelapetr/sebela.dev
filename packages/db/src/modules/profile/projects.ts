@@ -1,4 +1,4 @@
-import { asc, eq, inArray, type SQL } from "drizzle-orm";
+import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { loadCaseStudies } from "./case-studies.js";
@@ -29,6 +29,7 @@ const projectColumns = {
   links: projects.links,
   selectedForHomepage: projects.selectedForHomepage,
   position: projects.position,
+  coverId: sql<string | null>`null`,
   createdAt: projects.createdAt,
   updatedAt: projects.updatedAt,
 };

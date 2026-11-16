@@ -12,6 +12,7 @@ export const organizationColumns = {
   name: organizations.name,
   website: organizations.website,
   description: organizations.description,
+  logoId: sql<string | null>`null`,
   createdAt: organizations.createdAt,
   updatedAt: organizations.updatedAt,
 };
@@ -52,7 +53,7 @@ export function createOrganizationPersistence(db: NodePgDatabase): OrganizationP
         .set({ ...changes, updatedAt: now })
         .where(eq(organizations.slug, slug))
         .returning(organizationColumns);
-      return row ?? null;
+      return row ? { ok: true, organization: row } : { ok: false, reason: "not_found" };
     },
     async deleteOrganization(slug) {
       try {

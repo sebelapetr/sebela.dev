@@ -90,7 +90,13 @@ export interface OrganizationFields {
   description: string | null;
 }
 
-export interface OrganizationRecord extends OrganizationFields {
+/** Media attached to an organization, by media id; `null` while none is attached. */
+export interface OrganizationMedia {
+  /** An image. */
+  logoId: string | null;
+}
+
+export interface OrganizationRecord extends OrganizationFields, OrganizationMedia {
   id: string;
   slug: string;
   createdAt: Date;
@@ -98,7 +104,14 @@ export interface OrganizationRecord extends OrganizationFields {
 }
 
 export type CreateOrganizationResult =
-  { ok: true; organization: OrganizationRecord } | { ok: false; reason: "conflict" };
+  | { ok: true; organization: OrganizationRecord }
+  | { ok: false; reason: "conflict" }
+  | MediaReferenceFailure;
+
+export type UpdateOrganizationResult =
+  | { ok: true; organization: OrganizationRecord }
+  | { ok: false; reason: "not_found" }
+  | MediaReferenceFailure;
 
 export type DeleteOrganizationResult =
   { ok: true } | { ok: false; reason: "not_found" | "referenced" };
@@ -109,15 +122,18 @@ export interface OrganizationPersistence {
   listOrganizations(): Promise<OrganizationRecord[]>;
   /** The organization with the slug, or `null`. */
   findOrganization(slug: string): Promise<OrganizationRecord | null>;
-  /** `conflict` when the slug is taken, also for a racing create. */
+  /**
+   * `conflict` when the slug is taken, also for a racing create; see `MediaReferenceFailure`. An
+   * omitted logo is `null`.
+   */
   createOrganization(
-    fields: OrganizationFields & { slug: string },
+    fields: OrganizationFields & Partial<OrganizationMedia> & { slug: string },
   ): Promise<CreateOrganizationResult>;
-  /** Changes only the given fields; `null` when there is no such organization. */
+  /** Changes only the given fields; `not_found` when there is no such organization. */
   updateOrganization(
     slug: string,
-    changes: Partial<OrganizationFields>,
-  ): Promise<OrganizationRecord | null>;
+    changes: Partial<OrganizationFields & OrganizationMedia>,
+  ): Promise<UpdateOrganizationResult>;
   /**
    * Deletes the organization; `not_found` when there is none, `referenced` (and nothing deleted)
    * while another record still refers to it through a foreign key.
@@ -255,8 +271,14 @@ export interface ProjectRelations {
   technologies: string[];
 }
 
+/** Media attached to a project, by media id; `null` while none is attached. */
+export interface ProjectMedia {
+  /** An image. */
+  coverId: string | null;
+}
+
 /** A project with its owning experience (by slug) and its technologies (in link order). */
-export interface ProjectRecord extends ProjectFields {
+export interface ProjectRecord extends ProjectFields, ProjectMedia {
   id: string;
   slug: string;
   /** The slug of the owning experience. */
@@ -275,8 +297,10 @@ export interface ProjectRecord extends ProjectFields {
  * - `unknown_technologies`: some technology slugs exist nowhere; `slugs` lists them.
  * - `repeated_technologies`: a technology slug is given more than once.
  * - `invalid_period`: the end would be before the start.
+ * - `unknown_media`, `unsuitable_media`: see `MediaReferenceFailure`.
  */
 export type ProjectWriteFailure =
+  | MediaReferenceFailure
   | { ok: false; reason: "unknown_experience" }
   | { ok: false; reason: "unknown_technologies"; slugs: string[] }
   | { ok: false; reason: "repeated_technologies" }
@@ -302,7 +326,7 @@ export interface ProjectPersistence {
   findProject(slug: string): Promise<ProjectRecord | null>;
   /** `conflict` when the slug is taken, also for a racing create; see `ProjectWriteFailure`. */
   createProject(
-    fields: ProjectFields & ProjectRelations & { slug: string },
+    fields: ProjectFields & Partial<ProjectMedia> & ProjectRelations & { slug: string },
   ): Promise<CreateProjectResult>;
   /**
    * Changes only the given fields. A given `experience` moves the project to that experience;
@@ -311,7 +335,7 @@ export interface ProjectPersistence {
    */
   updateProject(
     slug: string,
-    changes: Partial<ProjectFields & ProjectRelations>,
+    changes: Partial<ProjectFields & ProjectMedia & ProjectRelations>,
   ): Promise<UpdateProjectResult>;
   /**
    * Deletes the project and its technology links, never its experience or technologies;
@@ -785,4 +809,66 @@ export interface CurrentFocusPersistence {
   ): Promise<UpdateCurrentFocusResult>;
   /** Deletes the entry and its topic links, never the project or topics; `not_found` when none. */
   deleteCurrentFocus(slug: string): Promise<DeleteCurrentFocusResult>;
+}
+
+/** The accepted media types; the database refuses any other. */
+export type MediaType = "image/png" | "image/jpeg" | "image/webp" | "application/pdf";
+
+/** Metadata of an uploaded file as it is stored. Width and height are set exactly for images. */
+export interface MediaFields {
+  /** The storage key; unique. Never a deployment-specific address. */
+  key: string;
+  mediaType: MediaType;
+  /** Positive. */
+  byteSize: number;
+  /** Pixels; `null` exactly for a PDF. */
+  width: number | null;
+  /** Pixels; `null` exactly for a PDF. */
+  height: number | null;
+  altText: string | null;
+}
+
+export interface MediaRecord extends MediaFields {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type DeleteMediaResult =
+  { ok: true; media: MediaRecord } | { ok: false; reason: "not_found" | "referenced" };
+
+/**
+ * Why a write that attaches media wrote nothing:
+ *
+ * - `unknown_media`: no media has the id given in `field`.
+ * - `unsuitable_media`: the media in `field` is of the wrong kind, for example a PDF as a photo.
+ */
+export interface MediaReferenceFailure {
+  ok: false;
+  reason: "unknown_media" | "unsuitable_media";
+  /** The written field, for example `photoId`. */
+  field: string;
+}
+
+/**
+ * Persistence operations of media metadata. The files themselves are not stored here. Person,
+ * organization and project rows refer to media through foreign keys without a cascade, so
+ * referenced media is never deleted.
+ */
+export interface MediaPersistence {
+  /** Every media record, newest first, then by id. */
+  listMedia(): Promise<MediaRecord[]>;
+  /** The media with the id, or `null`. */
+  findMedia(id: string): Promise<MediaRecord | null>;
+  /** The media stored under the key, or `null`. */
+  findMediaByKey(key: string): Promise<MediaRecord | null>;
+  /** Records media; throws when the key is taken or the database refuses the metadata. */
+  createMedia(fields: MediaFields): Promise<MediaRecord>;
+  /** Changes the alt text only; `null` when there is no such media. */
+  updateMedia(id: string, changes: { altText: string | null }): Promise<MediaRecord | null>;
+  /**
+   * Deletes the record and returns it, so its file can be removed; `not_found` when there is none,
+   * `referenced` (and nothing deleted) while a person, organization or project refers to it.
+   */
+  deleteMedia(id: string): Promise<DeleteMediaResult>;
 }
