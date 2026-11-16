@@ -465,7 +465,12 @@ describe("bunny-s3 storage", () => {
     storage = createBunnyS3Driver(bunnyConfig(), fake.transport);
   });
 
-  const sent = () => fake.exchanges.map(({ method, url }) => `${method} ${url}`);
+  /** Method and address of each request; the query (the SDK's `x-id` operation marker) is left out. */
+  const sent = () =>
+    fake.exchanges.map(({ method, url }) => {
+      const { origin, pathname } = new URL(url);
+      return `${method} ${origin}${pathname}`;
+    });
   const mentionsPassword = (exchange: S3Exchange) =>
     [exchange.url, ...Object.values(exchange.headers), Buffer.from(exchange.body).toString()].some(
       (part) => part.includes("fictional-zone-password"),

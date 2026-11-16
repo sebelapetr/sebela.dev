@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import { createBunnyS3Driver } from "./drivers/bunny-s3.js";
 import { createLocalDriver } from "./drivers/local.js";
-import { fileNameOf, segmentPattern, type StoredExtension } from "./keys.js";
+import { addressOf, prefixOf, segmentPattern, type StoredExtension } from "./keys.js";
 
 export type { StoredExtension } from "./keys.js";
 
@@ -70,69 +70,103 @@ export interface OpenedStorage {
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
+/** A Bunny S3 region code, such as `de` or `syd`. */
+const regionPattern = /^[a-z][a-z0-9-]{0,31}$/;
+/** A zone password: printable, without whitespace. */
+const passwordPattern = /^[\x21-\x7e]{1,256}$/;
+
 /**
- * Reads the storage settings from an environment such as `process.env`. A relative
- * `STORAGE_LOCAL_ROOT` is resolved against `cwd`. Throws an error naming every missing or invalid
- * variable, never their values; there are no fallbacks. `bunny-s3` is refused until its driver
- * exists, so a cloud selection never writes to local disk.
+ * Reads the storage settings from an environment such as `process.env`. Throws an error naming
+ * every missing or invalid variable, never their values; there are no fallbacks, so a cloud
+ * selection never writes to local disk.
+ *
+ * - `local`: `STORAGE_LOCAL_ROOT`, resolved against `cwd` when relative.
+ * - `bunny-s3`: `STORAGE_BUNNY_ENDPOINT` (a bare https origin), `STORAGE_BUNNY_REGION`,
+ *   `STORAGE_BUNNY_ZONE` and `STORAGE_BUNNY_PASSWORD`. `STORAGE_PUBLIC_BASE_URL` must be https and
+ *   must not address the storage endpoint, and `STORAGE_WORKTREE` is required in `development`,
+ *   where every worktree shares the development zone.
  */
 export function readStorageConfig(env: Environment, cwd: string = process.cwd()): StorageConfig {
   const driver = env["STORAGE_DRIVER"];
-  if (driver === "bunny-s3") {
-    throw new Error(
-      "Invalid storage configuration: STORAGE_DRIVER=bunny-s3 is not available yet (#36); use local.",
-    );
-  }
   const invalid: string[] = [];
-  if (driver !== "local") invalid.push("STORAGE_DRIVER");
-
-  const root = env["STORAGE_LOCAL_ROOT"] ?? "";
-  if (root.length === 0 || root.includes("\0")) invalid.push("STORAGE_LOCAL_ROOT");
+  if (driver !== "local" && driver !== "bunny-s3") invalid.push("STORAGE_DRIVER");
 
   const environment = env["STORAGE_ENVIRONMENT"] ?? "";
   if (!segmentPattern.test(environment)) invalid.push("STORAGE_ENVIRONMENT");
 
   const worktree = env["STORAGE_WORKTREE"] ?? "";
-  if (worktree !== "" && !segmentPattern.test(worktree)) invalid.push("STORAGE_WORKTREE");
+  const worktreeRequired = driver === "bunny-s3" && environment === "development";
+  if (worktree === "" ? worktreeRequired : !segmentPattern.test(worktree)) {
+    invalid.push("STORAGE_WORKTREE");
+  }
 
-  const base = publicBase(env["STORAGE_PUBLIC_BASE_URL"]);
-  if (base === null) invalid.push("STORAGE_PUBLIC_BASE_URL");
-
-  if (invalid.length > 0 || base === null) {
+  const layout = { environment, worktree: worktree === "" ? null : worktree };
+  const fail = (): never => {
     throw new Error(
       `Invalid storage configuration: set ${invalid.join(", ")} (documented in .env.example)`,
     );
-  }
-  return {
-    driver: "local",
-    root: resolve(cwd, root),
-    environment,
-    worktree: worktree === "" ? null : worktree,
-    publicBaseUrl: base,
   };
+
+  if (driver === "bunny-s3") {
+    const endpoint = httpsOrigin(env["STORAGE_BUNNY_ENDPOINT"]);
+    if (endpoint === null) invalid.push("STORAGE_BUNNY_ENDPOINT");
+    const region = env["STORAGE_BUNNY_REGION"] ?? "";
+    if (!regionPattern.test(region)) invalid.push("STORAGE_BUNNY_REGION");
+    const zone = env["STORAGE_BUNNY_ZONE"] ?? "";
+    if (!segmentPattern.test(zone)) invalid.push("STORAGE_BUNNY_ZONE");
+    const password = env["STORAGE_BUNNY_PASSWORD"] ?? "";
+    if (!passwordPattern.test(password)) invalid.push("STORAGE_BUNNY_PASSWORD");
+    const base = publicBase(env["STORAGE_PUBLIC_BASE_URL"], ["https:"]);
+    if (base === null || (endpoint !== null && addressesHost(base, endpoint))) {
+      invalid.push("STORAGE_PUBLIC_BASE_URL");
+    }
+    if (invalid.length > 0 || endpoint === null || base === null) return fail();
+    return { driver, endpoint, region, zone, password, ...layout, publicBaseUrl: base };
+  }
+
+  const root = env["STORAGE_LOCAL_ROOT"] ?? "";
+  if (root.length === 0 || root.includes("\0")) invalid.push("STORAGE_LOCAL_ROOT");
+  const base = publicBase(env["STORAGE_PUBLIC_BASE_URL"], ["http:", "https:"]);
+  if (base === null) invalid.push("STORAGE_PUBLIC_BASE_URL");
+  if (invalid.length > 0 || base === null) return fail();
+  return { driver: "local", root: resolve(cwd, root), ...layout, publicBaseUrl: base };
 }
 
-/** An http(s) address without query, fragment or trailing slash, or `null`. */
-function publicBase(value: string | undefined): string | null {
+/** An address without credentials, query, fragment or trailing slash, or `null`. */
+function publicBase(value: string | undefined, protocols: readonly string[]): string | null {
   if (value === undefined || !URL.canParse(value)) return null;
   const url = new URL(value);
-  if (!["http:", "https:"].includes(url.protocol) || url.search || url.hash) return null;
+  if (!protocols.includes(url.protocol) || url.username || url.password) return null;
+  if (url.search || url.hash) return null;
   return url.href.replace(/\/+$/, "");
+}
+
+/** The origin of an https address that is nothing but an origin, or `null`. */
+function httpsOrigin(value: string | undefined): string | null {
+  if (value === undefined || !URL.canParse(value)) return null;
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (url.pathname !== "/" || url.search || url.hash || value.includes("?")) return null;
+  return url.origin;
+}
+
+/** Whether the address is on the host of the origin or on one of its subdomains (a bucket host). */
+function addressesHost(address: string, origin: string): boolean {
+  const host = new URL(origin).hostname;
+  const target = new URL(address).hostname;
+  return target === host || target.endsWith(`.${host}`);
 }
 
 /** Opens the configured driver. Nothing touches the disk until the first operation. */
 export function openStorage(config: StorageConfig): OpenedStorage {
   if (config.driver === "bunny-s3") return { storage: createBunnyS3Driver(config), files: null };
-  const prefix =
-    config.worktree === null ? [config.environment] : [config.environment, config.worktree];
+  const prefix = prefixOf(config);
   const local = createLocalDriver(config.root, prefix);
   return {
     storage: {
       store: (file) => local.store(file),
       delete: (key) => local.delete(key),
-      publicAddress(key) {
-        return fileNameOf(prefix, key) === null ? null : `${config.publicBaseUrl}/${key}`;
-      },
+      publicAddress: (key) => addressOf(prefix, config.publicBaseUrl, key),
     },
     files: { read: (key) => local.read(key) },
   };
