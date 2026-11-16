@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { CaseStudySchema } from "./case-studies.js";
 import { PositionSchema, TechnologySchema } from "./catalogs.js";
 import {
   DateSchema,
@@ -64,8 +65,8 @@ const relationFields = {
 };
 
 /**
- * A project delivered within one experience, with its technologies resolved. The owning experience
- * is named by its slug.
+ * A project delivered within one experience, with its technologies and its case study resolved. The
+ * owning experience is named by its slug.
  */
 export const ProjectSchema = z
   .object({
@@ -76,6 +77,11 @@ export const ProjectSchema = z
     technologies: z
       .array(TechnologySchema)
       .meta({ description: "The linked technologies, in their intended order." }),
+    caseStudy: CaseStudySchema.nullable().meta({
+      description:
+        "The long-form case study of the project, or `null` while it has none. It is written at " +
+        "`/v1/projects/{slug}/case-study`, never in a project body.",
+    }),
     ...timestamps,
   })
   .meta({ id: "Project" });

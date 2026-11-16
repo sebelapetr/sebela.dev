@@ -126,7 +126,7 @@ describe("ProjectCreateSchema", () => {
       { ...routing, technologies: [...Array(51).keys()].map((n) => `t${String(n)}`) },
     ],
     ["a cover before media exists", { ...routing, cover: "routing-cover" }],
-    ["a case study before case studies exist", { ...routing, caseStudy: { body: "x" } }],
+    ["an embedded case study, which has its own route", { ...routing, caseStudy: { body: "x" } }],
     ["a visibility flag", { ...routing, visible: true }],
     ["a draft flag", { ...routing, draft: false }],
   ])("rejects %s", (_, input) => {
@@ -191,7 +191,7 @@ describe("ProjectUpdateSchema", () => {
 });
 
 describe("ProjectSchema and ProjectListSchema", () => {
-  const project = { ...stored, ...routing, technologies: [technology] };
+  const project = { ...stored, ...routing, technologies: [technology], caseStudy: null };
 
   it("describe stored projects with their owning experience and technologies", () => {
     expect(ProjectSchema.parse(project)).toEqual(project);

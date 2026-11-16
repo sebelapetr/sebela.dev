@@ -1,6 +1,7 @@
 import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import { loadCaseStudies } from "./case-studies.js";
 import { technologyColumns } from "./catalogs.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
 import { experienceOrder, type Executor, now, technologyIds, WriteRefused } from "./relations.js";
@@ -35,7 +36,7 @@ const projectColumns = {
 const PERIOD_CHECK = "projects_period_is_ordered";
 
 /**
- * The projects with their technologies in link order: grouped by owning experience in the
+ * The projects with their technologies in link order and their case study: grouped by owning experience in the
  * experience order, then by position and slug. Within one experience that is position, then slug.
  */
 export async function loadProjects(db: Executor, where: SQL | undefined): Promise<ProjectRecord[]> {
@@ -47,22 +48,23 @@ export async function loadProjects(db: Executor, where: SQL | undefined): Promis
     .orderBy(...experienceOrder, asc(projects.position), asc(projects.slug));
   if (rows.length === 0) return [];
 
+  const ids = rows.map((row) => row.id);
+  const caseStudies = await loadCaseStudies(db, ids);
   const links = await db
     .select({ projectId: projectTechnologies.projectId, technology: technologyColumns })
     .from(projectTechnologies)
     .innerJoin(technologies, eq(projectTechnologies.technologyId, technologies.id))
-    .where(
-      inArray(
-        projectTechnologies.projectId,
-        rows.map((row) => row.id),
-      ),
-    )
+    .where(inArray(projectTechnologies.projectId, ids))
     .orderBy(asc(projectTechnologies.projectId), asc(projectTechnologies.position));
   const linked = new Map<string, TechnologyRecord[]>();
   for (const { projectId, technology } of links) {
     linked.set(projectId, [...(linked.get(projectId) ?? []), technology]);
   }
-  return rows.map((row) => ({ ...row, technologies: linked.get(row.id) ?? [] }));
+  return rows.map((row) => ({
+    ...row,
+    technologies: linked.get(row.id) ?? [],
+    caseStudy: caseStudies.get(row.id) ?? null,
+  }));
 }
 
 async function loadProject(db: Executor, id: string): Promise<ProjectRecord> {

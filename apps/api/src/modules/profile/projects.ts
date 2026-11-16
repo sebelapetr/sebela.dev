@@ -17,7 +17,8 @@ const ITEM = "/v1/projects/:slug";
  * technologies resolved and the owning experience named by slug, authenticated create, update and
  * delete. A missing or unknown experience, an unknown or repeated technology, an invalid link or
  * an end before the start is a `validation_failed` naming the field; a taken slug and a
- * still-referenced project are a `conflict`.
+ * project with a case study or other references are a `conflict`. Each project carries its case
+ * study, or `null`; the case study is written at its own address.
  */
 export function projectRoutes(profile: ProfileService): RouteDefinition[] {
   return [
@@ -95,7 +96,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Delete a project",
       description:
-        "Removes the project and its technology links; the experience and the technologies stay. A project that other records still refer to is not deleted.",
+        "Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The project was deleted." },
       errors: ["not_found", "conflict"],

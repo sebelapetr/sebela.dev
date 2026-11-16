@@ -280,7 +280,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a project
-         * @description Removes the project and its technology links; the experience and the technologies stay. A project that other records still refer to is not deleted.
+         * @description Removes the project and its technology links; the experience and the technologies stay. A project with a case study, or one that other records still refer to, is not deleted.
          */
         delete: operations["deleteProject"];
         options?: never;
@@ -290,6 +290,38 @@ export interface paths {
          * @description Changes only the fields sent, together or not at all; the slug cannot change. A sent `experience` moves the project to that existing experience, which then is its only owner. A sent `technologies` list replaces every link in its order; an omitted one keeps them. The period is checked against the stored start or end.
          */
         patch: operations["updateProject"];
+        trace?: never;
+    };
+    "/v1/projects/{slug}/case-study": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the case study of a project
+         * @description The long-form narrative of the project and the person's role in it; the body is Markdown as written, never HTML. The project's own read carries the same case study.
+         */
+        get: operations["getCaseStudy"];
+        put?: never;
+        /**
+         * Create the case study of a project
+         * @description Stores the case study of the existing project named in the path. A project has at most one case study; a second one, also from a competing create, is a conflict. The body is Markdown, stored as written.
+         */
+        post: operations["createCaseStudy"];
+        /**
+         * Delete the case study of a project
+         * @description Removes the case study and leaves the project. A project with a case study cannot be deleted until its case study is.
+         */
+        delete: operations["deleteCaseStudy"];
+        options?: never;
+        head?: never;
+        /**
+         * Update the case study of a project
+         * @description Changes only the fields sent; the project it belongs to cannot change.
+         */
+        patch: operations["updateCaseStudy"];
         trace?: never;
     };
     "/openapi.json": {
@@ -577,6 +609,18 @@ export interface components {
             /** @description Slugs of existing technologies, each once, in their intended order. On an update the list replaces every link; an omitted list leaves the links unchanged. */
             technologies?: string[];
         };
+        CaseStudyCreate: {
+            /** @description The person's own role in the project, as plain text, for example `Lead engineer`. */
+            role: string;
+            /** @description The long-form account of the project. Markdown, stored as written; never HTML. */
+            body: string;
+        };
+        CaseStudyUpdate: {
+            /** @description The person's own role in the project, as plain text, for example `Lead engineer`. */
+            role?: string;
+            /** @description The long-form account of the project. Markdown, stored as written; never HTML. */
+            body?: string;
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -737,6 +781,22 @@ export interface components {
             position: number;
             /** @description The linked technologies, in their intended order. */
             technologies: components["schemas"]["Technology"][];
+            /** @description The long-form case study of the project, or `null` while it has none. It is written at `/v1/projects/{slug}/case-study`, never in a project body. */
+            caseStudy: components["schemas"]["CaseStudy"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CaseStudy: {
+            /** Format: uuid */
+            id: string;
+            /** @description The slug of the project the case study explains. */
+            project: string;
+            /** @description The person's own role in the project, as plain text, for example `Lead engineer`. */
+            role: string;
+            /** @description The long-form account of the project. Markdown, stored as written; never HTML. */
+            body: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2911,6 +2971,336 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCaseStudy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case study. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseStudy"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createCaseStudy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseStudyCreate"];
+            };
+        };
+        responses: {
+            /** @description The created case study. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseStudy"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteCaseStudy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case study was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateCaseStudy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseStudyUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated case study. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseStudy"];
                 };
             };
             /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */

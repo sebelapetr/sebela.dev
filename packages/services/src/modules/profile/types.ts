@@ -1,6 +1,9 @@
-// The catalog, organization, experience and project service interfaces, private to the profile
+// The catalog, organization, experience, project and case-study service interfaces, private to the profile
 // module and re-exported by its index.
 import type {
+  CaseStudy,
+  CaseStudyCreate,
+  CaseStudyUpdate,
   Experience,
   ExperienceCreate,
   ExperienceUpdate,
@@ -110,9 +113,11 @@ export interface ExperienceService {
  * - Create and update refuse, as `validation_failed` naming the field and writing nothing, an
  *   unknown `experience`, unknown or repeated `technologies` and an `endedOn` before the (stored
  *   or given) start.
+ * - Every project carries its case study, or `null` without one; it is written only through
+ *   `CaseStudyService`.
  * - `deleteProject`: removes the project and its technology links, never its experience or
- *   technologies; `not_found` for an unknown slug; `conflict` (and nothing deleted) while another
- *   record still refers to it.
+ *   technologies; `not_found` for an unknown slug; `conflict` (and nothing deleted) while it has a
+ *   case study or another record still refers to it.
  */
 export interface ProjectService {
   listProjects(): Promise<Project[]>;
@@ -120,4 +125,27 @@ export interface ProjectService {
   createProject(input: ProjectCreate): Promise<Project>;
   updateProject(slug: string, changes: ProjectUpdate): Promise<Project>;
   deleteProject(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the case studies, at most one per project and addressed by the project's slug.
+ * Results are in the contract shape; expected failures are `DomainError`s:
+ *
+ * - `getCaseStudy`: the case study of the project, or `not_found` for an unknown project or a
+ *   project without one.
+ * - `createCaseStudy`: stores the case study of the project; `not_found` for an unknown project;
+ *   `conflict` when the project has one, also when creates race.
+ * - `updateCaseStudy`: changes only the given fields, keeps `id` and `createdAt` and advances
+ *   `updatedAt`; `not_found` for an unknown project or a project without one.
+ * - `deleteCaseStudy`: removes the case study and leaves its project; `not_found` for an unknown
+ *   project or a project without one.
+ *
+ * A project that has a case study cannot be deleted (`ProjectService.deleteProject` answers
+ * `conflict`); the case study goes first.
+ */
+export interface CaseStudyService {
+  getCaseStudy(project: string): Promise<CaseStudy>;
+  createCaseStudy(project: string, input: CaseStudyCreate): Promise<CaseStudy>;
+  updateCaseStudy(project: string, changes: CaseStudyUpdate): Promise<CaseStudy>;
+  deleteCaseStudy(project: string): Promise<void>;
 }

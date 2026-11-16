@@ -1,12 +1,14 @@
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import { createCaseStudyPersistence } from "./case-studies.js";
 import { createCatalogPersistence } from "./catalogs.js";
 import { createExperiencePersistence } from "./experiences.js";
 import { createOrganizationPersistence } from "./organizations.js";
 import { createProjectPersistence } from "./projects.js";
 import { persons } from "./schema.js";
 import type {
+  CaseStudyPersistence,
   CatalogPersistence,
   ExperiencePersistence,
   OrganizationPersistence,
@@ -14,12 +16,17 @@ import type {
 } from "./types.js";
 
 export type {
+  CaseStudyFields,
+  CaseStudyPersistence,
+  CaseStudyRecord,
   CatalogPersistence,
+  CreateCaseStudyResult,
   CreateOrganizationResult,
   CreateProjectResult,
   CreateTechnologyResult,
   CreateExperienceResult,
   CreateTopicResult,
+  DeleteCaseStudyResult,
   DeleteExperienceResult,
   DeleteOrganizationResult,
   DeleteProjectResult,
@@ -45,6 +52,7 @@ export type {
   TechnologyTier,
   TopicFields,
   TopicRecord,
+  UpdateCaseStudyResult,
   UpdateExperienceResult,
   UpdateProjectResult,
   UpdateTechnologyResult,
@@ -80,7 +88,12 @@ export type CreatePersonResult =
 
 /** Persistence operations of the profile domain. */
 export interface ProfilePersistence
-  extends CatalogPersistence, OrganizationPersistence, ExperiencePersistence, ProjectPersistence {
+  extends
+    CatalogPersistence,
+    OrganizationPersistence,
+    ExperiencePersistence,
+    ProjectPersistence,
+    CaseStudyPersistence {
   /** The person, or `null` when none exists. */
   findPerson(): Promise<PersonRecord | null>;
   /** Creates the person; `conflict` when one already exists, also for a racing create. */
@@ -116,6 +129,7 @@ export function createProfilePersistence(db: NodePgDatabase): ProfilePersistence
     ...createOrganizationPersistence(db),
     ...createExperiencePersistence(db),
     ...createProjectPersistence(db),
+    ...createCaseStudyPersistence(db),
     async findPerson() {
       const [row] = await db.select(columns).from(persons).limit(1);
       return row ?? null;

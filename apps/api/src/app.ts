@@ -134,6 +134,10 @@ const describingProfile: ProfileService = {
   createProject: documentationOnly,
   updateProject: documentationOnly,
   deleteProject: documentationOnly,
+  getCaseStudy: documentationOnly,
+  createCaseStudy: documentationOnly,
+  updateCaseStudy: documentationOnly,
+  deleteCaseStudy: documentationOnly,
 };
 
 /**

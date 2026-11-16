@@ -11,6 +11,7 @@ export type {
   KeyVerification,
 } from "./modules/api-keys/index.js";
 export type {
+  CaseStudyService,
   CatalogService,
   ExperienceService,
   OrganizationService,
