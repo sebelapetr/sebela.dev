@@ -1,0 +1,38 @@
+{
+  "name": "@sebela/services",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Domain operations of the backend: the person profile, media, API keys and the seed loader.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1169.0",
+    "@sebela/contracts": "workspace:*",
+    "@sebela/db": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@sebela/config": "workspace:*",
+    "@smithy/types": "4.20.0",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

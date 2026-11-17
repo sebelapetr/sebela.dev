@@ -76,7 +76,7 @@ An interrupted run can leave an issue's branch and worktree behind. The orchestr
 For each issue of a phase:
 
 1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed.
-2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role and ports.
+2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role, ports and storage folder, is installed and migrated, and an empty profile is loaded with the demo seed.
 3. It dispatches the developer agent that matches the area of the issue.
 4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
 5. The orchestrator dispatches the reviewer.
@@ -115,7 +115,7 @@ harness/run-phase.sh <phase-folder>
 - **MCP servers:** the loop loads only `harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
 - **Settings:** the loop loads only the repository's settings (`--setting-sources project,local`). The owner's `~/.claude` — plugins, global rules, personal agents and skills — does not reach an unattended run, so it behaves the same on any machine.
 - **Agent memory:** developers and the reviewer have `memory: local`. Their memory lives in the main checkout under `.claude/agent-memory-local/<agent>/` (ignored by git), shared by all worktrees and runs, and is the one place in the main checkout's `.claude/` an unattended run may write. It holds verified, practical findings; `docs/` and `AGENTS.md` win over it. The orchestrator, as the main session, uses Claude Code's auto memory for the repository; subagents do not see that.
-- **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide.
+- **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide. The local storage driver of a development API keeps its uploads there too (`.tmp/storage/` by default, see `apps/api/AGENTS.md`).
 - **Foreground subagents:** the loop sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, so the orchestrator waits for each developer and reviewer instead of ending its run while they still work.
 
 ### The steward

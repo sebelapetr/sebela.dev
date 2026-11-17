@@ -1,0 +1,48 @@
+[
+  {
+    "slug": "citation-checker",
+    "name": "Citation checker",
+    "summary": "**Built**: a second model pass that refuses answers whose citations do not support them.",
+    "status": "built",
+    "concepts": ["Grounded answers", "Self-checking", "Refusal on missing evidence"],
+    "startedOn": "2024-10-01",
+    "endedOn": "2025-01-31",
+    "position": 0,
+    "technologies": ["python", "langgraph"],
+    "topics": ["retrieval", "guardrails"]
+  },
+  {
+    "slug": "chunking-benchmark",
+    "name": "Chunking benchmark",
+    "summary": "**Tested**: three chunking strategies compared on the same fictional question set.",
+    "status": "tested",
+    "concepts": ["Chunk size", "Overlap", "Retrieval recall"],
+    "startedOn": "2024-05-01",
+    "endedOn": "2024-06-30",
+    "position": 1,
+    "technologies": ["python", "pgvector"],
+    "topics": ["retrieval", "evaluation"]
+  },
+  {
+    "slug": "tool-permission-model",
+    "name": "Tool permission model",
+    "summary": "**Designed**: a permission model for agents that act through tools, with read and write scopes.",
+    "status": "designed",
+    "concepts": ["Least privilege", "Human approval", "Audit trail"],
+    "startedOn": "2025-03-01",
+    "position": 2,
+    "technologies": ["mcp"],
+    "topics": ["agents", "tool-use", "guardrails"]
+  },
+  {
+    "slug": "eval-dashboard",
+    "name": "Evaluation dashboard",
+    "summary": "**Built**: a small dashboard that tracks evaluation scores across prompt and model changes.",
+    "status": "built",
+    "concepts": ["Regression tracking", "Pass thresholds"],
+    "startedOn": "2025-05-01",
+    "position": 3,
+    "technologies": ["typescript", "nextjs", "postgresql"],
+    "topics": ["evaluation"]
+  }
+]

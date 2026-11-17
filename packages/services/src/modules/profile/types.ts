@@ -1,0 +1,315 @@
+// The catalog, organization, experience, project, case-study, exploration, service, education,
+// testimonial, current-focus and CV interfaces, private to the profile module and re-exported by
+// its index.
+import type {
+  CaseStudy,
+  CaseStudyCreate,
+  CaseStudyUpdate,
+  CurrentFocus,
+  CurrentFocusCreate,
+  CurrentFocusUpdate,
+  Cv,
+  Education,
+  EducationCreate,
+  EducationUpdate,
+  Experience,
+  ExperienceCreate,
+  ExperienceUpdate,
+  Exploration,
+  ExplorationCreate,
+  ExplorationUpdate,
+  Organization,
+  OrganizationCreate,
+  OrganizationUpdate,
+  Project,
+  ProjectCreate,
+  ProjectUpdate,
+  Service,
+  ServiceCreate,
+  ServiceUpdate,
+  Technology,
+  TechnologyCreate,
+  TechnologyUpdate,
+  Testimonial,
+  TestimonialCreate,
+  TestimonialUpdate,
+  Topic,
+  TopicCreate,
+  TopicUpdate,
+} from "@sebela/contracts";
+
+/**
+ * Operations on the ordered technology and topic catalogs, addressed by slug. Results are in the
+ * contract shape; expected failures are `DomainError`s:
+ *
+ * - `listTechnologies`/`listTopics`: every record in catalog order, possibly none.
+ * - `get…`: the record, or `not_found`.
+ * - `create…`: `conflict` when the slug is taken, also when creates race; a technology whose group
+ *   disagrees with its tier is `validation_failed`.
+ * - `update…`: changes only the given fields, keeps `id`, `slug` and `createdAt` and advances
+ *   `updatedAt`; `not_found` for an unknown slug; a technology change that leaves group and tier
+ *   disagreeing (for example only `tier: "secondary"` on a `core` technology) is
+ *   `validation_failed`.
+ * - `delete…`: removes the record; `not_found` for an unknown slug; deleting a technology that an
+ *   experience, a project or an exploration links to, or a topic that an exploration links to, is
+ *   `conflict`, and nothing is deleted.
+ */
+export interface CatalogService {
+  listTechnologies(): Promise<Technology[]>;
+  getTechnology(slug: string): Promise<Technology>;
+  createTechnology(input: TechnologyCreate): Promise<Technology>;
+  updateTechnology(slug: string, changes: TechnologyUpdate): Promise<Technology>;
+  deleteTechnology(slug: string): Promise<void>;
+  listTopics(): Promise<Topic[]>;
+  getTopic(slug: string): Promise<Topic>;
+  createTopic(input: TopicCreate): Promise<Topic>;
+  updateTopic(slug: string, changes: TopicUpdate): Promise<Topic>;
+  deleteTopic(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the organizations, addressed by slug. Results are in the contract shape; expected
+ * failures are `DomainError`s:
+ *
+ * - `listOrganizations`: every organization, ordered by name ignoring case, then by slug.
+ * - `getOrganization`: the organization, or `not_found`.
+ * - `createOrganization`: `conflict` when the slug is taken, also when creates race.
+ * - `updateOrganization`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`; `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` on `logoId` and writing nothing, a logo that
+ *   names no media or a PDF; `null` clears the logo.
+ * - `deleteOrganization`: removes the organization; `not_found` for an unknown slug; `conflict`
+ *   (and nothing deleted) while another record, such as an experience, still refers to it.
+ */
+export interface OrganizationService {
+  listOrganizations(): Promise<Organization[]>;
+  getOrganization(slug: string): Promise<Organization>;
+  createOrganization(input: OrganizationCreate): Promise<Organization>;
+  updateOrganization(slug: string, changes: OrganizationUpdate): Promise<Organization>;
+  deleteOrganization(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the experiences, addressed by slug, with their organization, technologies, and
+ * projects and testimonials (each by position, then slug) resolved. Results are in the contract
+ * shape; expected failures are `DomainError`s:
+ *
+ * - `listExperiences`: every experience, current roles (no end) first, then by start, latest
+ *   first, then by end, latest first, then by slug.
+ * - `getExperience`: the experience, or `not_found`.
+ * - `createExperience`: stores the experience and its technology links together; `conflict` when
+ *   the slug is taken, also when creates race.
+ * - `updateExperience`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `technologies` list replaces every link in its order; an omitted
+ *   one keeps them. `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` naming the field and writing nothing, an
+ *   unknown `organization`, unknown or repeated `technologies` and an `endedOn` before the
+ *   (stored or given) start.
+ * - `deleteExperience`: removes the experience and its technology links; `not_found` for an
+ *   unknown slug; `conflict` (and nothing deleted) while it owns a project, has a testimonial or
+ *   another record still refers to it.
+ */
+export interface ExperienceService {
+  listExperiences(): Promise<Experience[]>;
+  getExperience(slug: string): Promise<Experience>;
+  createExperience(input: ExperienceCreate): Promise<Experience>;
+  updateExperience(slug: string, changes: ExperienceUpdate): Promise<Experience>;
+  deleteExperience(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the projects, addressed by slug. Every project belongs to exactly one experience,
+ * named by its slug; its technologies are resolved. Results are in the contract shape; expected
+ * failures are `DomainError`s:
+ *
+ * - `listProjects`: every project, grouped by owning experience in the experience order, then by
+ *   position, then by slug.
+ * - `getProject`: the project, or `not_found`.
+ * - `createProject`: stores the project and its technology links together; `conflict` when the
+ *   slug is taken, also when creates race.
+ * - `updateProject`: changes only the given fields, keeps `id`, `slug` and `createdAt` and advances
+ *   `updatedAt`. A given `experience` moves the project to that experience; a given `technologies`
+ *   list replaces every link in its order and an omitted one keeps them. `not_found` for an
+ *   unknown slug.
+ * - Create and update refuse, as `validation_failed` naming the field and writing nothing, an
+ *   unknown `experience`, unknown or repeated `technologies`, an `endedOn` before the (stored
+ *   or given) start and a `coverId` that names no media or a PDF; `null` clears the cover.
+ * - Every project carries its case study, or `null` without one; it is written only through
+ *   `CaseStudyService`.
+ * - `deleteProject`: removes the project and its technology links, never its experience or
+ *   technologies; `not_found` for an unknown slug; `conflict` (and nothing deleted) while it has a
+ *   case study or another record still refers to it.
+ */
+export interface ProjectService {
+  listProjects(): Promise<Project[]>;
+  getProject(slug: string): Promise<Project>;
+  createProject(input: ProjectCreate): Promise<Project>;
+  updateProject(slug: string, changes: ProjectUpdate): Promise<Project>;
+  deleteProject(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the case studies, at most one per project and addressed by the project's slug.
+ * Results are in the contract shape; expected failures are `DomainError`s:
+ *
+ * - `getCaseStudy`: the case study of the project, or `not_found` for an unknown project or a
+ *   project without one.
+ * - `createCaseStudy`: stores the case study of the project; `not_found` for an unknown project;
+ *   `conflict` when the project has one, also when creates race.
+ * - `updateCaseStudy`: changes only the given fields, keeps `id` and `createdAt` and advances
+ *   `updatedAt`; `not_found` for an unknown project or a project without one.
+ * - `deleteCaseStudy`: removes the case study and leaves its project; `not_found` for an unknown
+ *   project or a project without one.
+ *
+ * A project that has a case study cannot be deleted (`ProjectService.deleteProject` answers
+ * `conflict`); the case study goes first.
+ */
+export interface CaseStudyService {
+  getCaseStudy(project: string): Promise<CaseStudy>;
+  createCaseStudy(project: string, input: CaseStudyCreate): Promise<CaseStudy>;
+  updateCaseStudy(project: string, changes: CaseStudyUpdate): Promise<CaseStudy>;
+  deleteCaseStudy(project: string): Promise<void>;
+}
+
+/**
+ * Operations on the explorations, addressed by slug, with their technologies and topics resolved.
+ * An exploration is independent work outside the career timeline: it refers to no experience and
+ * no project. Results are in the contract shape, the status exactly as stored; expected failures
+ * are `DomainError`s:
+ *
+ * - `listExplorations`: every exploration, ordered by position, then slug.
+ * - `getExploration`: the exploration, or `not_found`.
+ * - `createExploration`: stores the exploration and its technology and topic links together;
+ *   `conflict` when the slug is taken, also when creates race.
+ * - `updateExploration`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `technologies` or `topics` list replaces every link of that kind
+ *   in its order; an omitted one keeps them. `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` naming the field and writing nothing, unknown
+ *   or repeated `technologies` or `topics` and an `endedOn` before the (stored or given) start.
+ * - `deleteExploration`: removes the exploration and its links, never the technologies or topics;
+ *   `not_found` for an unknown slug, `conflict` while a service names it as evidence.
+ */
+export interface ExplorationService {
+  listExplorations(): Promise<Exploration[]>;
+  getExploration(slug: string): Promise<Exploration>;
+  createExploration(input: ExplorationCreate): Promise<Exploration>;
+  updateExploration(slug: string, changes: ExplorationUpdate): Promise<Exploration>;
+  deleteExploration(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the services a client can order, addressed by slug, with their evidence resolved
+ * in its stored order. Results are in the contract shape; expected failures are `DomainError`s:
+ *
+ * - `listServices`: every service, ordered by position, then slug.
+ * - `getService`: the service, or `not_found`.
+ * - `createService`: stores the service and its evidence together; `conflict` when the slug is
+ *   taken, also when creates race.
+ * - `updateService`: changes only the given fields, keeps `id`, `slug` and `createdAt` and advances
+ *   `updatedAt`. A given `evidence` list replaces all evidence in its order; an omitted one keeps
+ *   it. `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` on `evidence` and writing nothing, unknown or
+ *   repeated projects and explorations.
+ * - `deleteService`: removes the service and its evidence, never the projects or explorations it
+ *   names; `not_found` for an unknown slug.
+ */
+export interface ServiceService {
+  listServices(): Promise<Service[]>;
+  getService(slug: string): Promise<Service>;
+  createService(input: ServiceCreate): Promise<Service>;
+  updateService(slug: string, changes: ServiceUpdate): Promise<Service>;
+  deleteService(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the education records, addressed by slug: schools, courses, certifications and
+ * other learning milestones. Results are in the contract shape, the kind exactly as stored;
+ * expected failures are `DomainError`s:
+ *
+ * - `listEducation`: every education record, ordered by position, then slug.
+ * - `getEducation`: the education record, or `not_found`.
+ * - `createEducation`: stores the record; `conflict` when the slug is taken, also when creates
+ *   race.
+ * - `updateEducation`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`; `not_found` for an unknown slug.
+ * - Create and update refuse, as `validation_failed` writing nothing, a period judged on the
+ *   resulting record: an `endedOn` before the start names `endedOn`, and a record left without
+ *   any date names both `startedOn` and `endedOn`.
+ * - `deleteEducation`: removes the record; `not_found` for an unknown slug. Nothing refers to an
+ *   education record, so a delete never conflicts.
+ */
+export interface EducationService {
+  listEducation(): Promise<Education[]>;
+  getEducation(slug: string): Promise<Education>;
+  createEducation(input: EducationCreate): Promise<Education>;
+  updateEducation(slug: string, changes: EducationUpdate): Promise<Education>;
+  deleteEducation(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the testimonials, addressed by slug. Every testimonial belongs to exactly one
+ * experience, named by its slug. Results are in the contract shape; expected failures are
+ * `DomainError`s:
+ *
+ * - `listTestimonials`: every testimonial, grouped by experience in the experience order, then by
+ *   position, then by slug.
+ * - `getTestimonial`: the testimonial, or `not_found`.
+ * - `createTestimonial`: stores the testimonial; `conflict` when the slug is taken, also when
+ *   creates race.
+ * - `updateTestimonial`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `experience` moves the testimonial to that experience.
+ *   `not_found` for an unknown slug.
+ * - Create and update refuse an unknown `experience` as `validation_failed` naming `experience`
+ *   and write nothing.
+ * - `deleteTestimonial`: removes the testimonial, never its experience; `not_found` for an
+ *   unknown slug. Nothing refers to a testimonial, so a delete never conflicts.
+ */
+export interface TestimonialService {
+  listTestimonials(): Promise<Testimonial[]>;
+  getTestimonial(slug: string): Promise<Testimonial>;
+  createTestimonial(input: TestimonialCreate): Promise<Testimonial>;
+  updateTestimonial(slug: string, changes: TestimonialUpdate): Promise<Testimonial>;
+  deleteTestimonial(slug: string): Promise<void>;
+}
+
+/**
+ * Operations on the current focus, addressed by slug: what is being built or learned right now,
+ * each entry optionally about one project and linked to ordered topics. Results are in the
+ * contract shape with the project and topics resolved; expected failures are `DomainError`s:
+ *
+ * - `listCurrentFocus`: every entry, ordered by position, then slug.
+ * - `getCurrentFocus`: the entry, or `not_found`.
+ * - `createCurrentFocus`: stores the entry with its project and topic links; `conflict` when the
+ *   slug is taken, also when creates race.
+ * - `updateCurrentFocus`: changes only the given fields, keeps `id`, `slug` and `createdAt` and
+ *   advances `updatedAt`. A given `project` replaces the project and `null` removes it; a given
+ *   `topics` list replaces every topic link; omitted fields keep their value. `not_found` for an
+ *   unknown slug.
+ * - Create and update refuse, as `validation_failed` writing nothing, an unknown `project` and
+ *   unknown or repeated `topics`, each naming its field.
+ * - `deleteCurrentFocus`: removes the entry and its topic links, never the project or topics;
+ *   `not_found` for an unknown slug. Nothing refers to an entry, so a delete never conflicts.
+ */
+export interface CurrentFocusService {
+  listCurrentFocus(): Promise<CurrentFocus[]>;
+  getCurrentFocus(slug: string): Promise<CurrentFocus>;
+  createCurrentFocus(input: CurrentFocusCreate): Promise<CurrentFocus>;
+  updateCurrentFocus(slug: string, changes: CurrentFocusUpdate): Promise<CurrentFocus>;
+  deleteCurrentFocus(slug: string): Promise<void>;
+}
+
+/**
+ * The assembled CV: the data the print-friendly CV page renders, read from the stored profile on
+ * every call and never stored as a copy. Expected failures are `DomainError`s:
+ *
+ * - `getCv`: the person with contacts, links and summary; only the experiences selected for the
+ *   CV (`inCv`) in the experience order, fully resolved; the technologies split into primary core,
+ *   primary AI engineering focus and secondary, each in catalog order; every education record and
+ *   every exploration (concise, with its status exactly as stored, in a section of its own, never
+ *   among the experiences) by position, then slug; and the current CV PDF the person names, or
+ *   `null`. Absent sections are empty lists. Everything comes from one consistent snapshot and
+ *   nothing is written. `not_found` while there is no person.
+ */
+export interface CvService {
+  getCv(): Promise<Cv>;
+}

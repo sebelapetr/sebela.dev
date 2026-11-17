@@ -45,6 +45,9 @@ jobs:
   # and build of the packages the change affects. The comparison base is the pull request's base or
   # the commit before the push; full history makes it resolvable. When Turborepo cannot resolve it
   # (a new branch, a rewritten history) it treats every package as affected.
+  # The backend integration tests need a real Postgres: the `postgres` service of compose.yaml, with
+  # the documented settings of .env.example and a password that exists only in this job. Each test
+  # file creates and drops its own temporary database in it.
   quality:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
@@ -52,6 +55,8 @@ jobs:
       TURBO_TELEMETRY_DISABLED: "1"
       TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
       TURBO_SCM_HEAD: HEAD
+      POSTGRES_PASSWORD: ci-only-disposable-password
+      DATABASE_PASSWORD: ci-only-disposable-password
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,12 +68,19 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Postgres for the integration tests
+        run: docker compose --env-file .env.example up --detach --wait
       - name: Affected packages and why
         run: pnpm exec turbo query affected --packages
       - name: Root checks (root lint, hard-coded configuration, harness and check tests)
         run: pnpm ci:root
       - name: Affected package tasks (lint, typecheck, test, build)
         run: pnpm ci:affected
+      # On every run, not only when the API is affected: regenerates the OpenAPI document and the
+      # client from the API source (no database or secrets) and fails on any difference from the
+      # committed files.
+      - name: Generated API client matches the API
+        run: pnpm check:api-client
 
   # Real-Postgres lifecycle of the worktree databases: a disposable Compose project from
   # compose.yaml on a free port. Plain Node and Docker, no installed dependencies.
@@ -81,3 +93,32 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: node harness/worktree-databases.e2e.mjs
+
+  # Backend setup of real worktrees: two worktrees of a temporary clone are installed, migrated,
+  # given their own local storage folder and seeded, serve and accept uploads through their own API,
+  # and are removed one by one. A disposable Compose project; no cloud keys.
+  worktree-backend:
+    name: Worktree backend setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: node harness/worktree-backend.e2e.mjs
+
+  # The containerised API stack of compose.yaml (profile `api`): builds the API image, then checks
+  # migration ordering, health, the OpenAPI document and reference, a seeded public read, a write
+  # with a key from the CLI and a local media download, in a disposable Compose project with its own
+  # volumes, removed at the end. Plain Node and Docker, no installed dependencies.
+  api-stack:
+    name: API stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/checks/api-stack.e2e.mjs

@@ -1,10 +1,34 @@
 # Local infrastructure: one Postgres with pgvector, shared by the main checkout and every worktree.
 # Each worktree works in its own database in it (docs/repository-structure.md, "Ports and worktree
 # isolation"). Every setting comes from the environment — the process environment or a `.env`
-# file next to this one — and is documented in `.env.example`; a missing one stops Compose.
+# file next to this one — and is documented in `.env.example`. A missing Postgres setting stops
+# Compose. Compose interpolates every service, also those of an inactive profile, so the services
+# of the profile `api` require nothing here: Postgres-only commands work with the Postgres settings
+# alone. A missing API setting is empty in the containers, where the API's and the migration's own
+# validation stops them with its name (`API_TRUSTED_PROXIES` and `STORAGE_WORKTREE` may be empty).
+# `pnpm stack:up` checks the two host-side settings, `API_HOST` and `API_PORT`, before it starts.
+#
+# `docker compose up` starts Postgres only. The profile `api` adds the containerised API stack of
+# the main checkout (apps/api/AGENTS.md, "Container stack"): the one-off migration service and the
+# API, both from the image of apps/api/Dockerfile. Worktrees run the API on the host instead.
 #
 # The fixed project name makes every checkout address the same stack and volume.
 name: sebela
+
+# The database settings of the containers. Inside the Compose network the API reaches Postgres by
+# its service name on the container port; these two values are part of this declaration, not
+# settings, like the API's own container port below. The database, role and password are the
+# checkout's own (DATABASE_*).
+x-database-environment: &database-environment
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  DATABASE_NAME: ${DATABASE_NAME:-}
+  DATABASE_USER: ${DATABASE_USER:-}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
+
+x-api-build: &api-build
+  context: .
+  dockerfile: apps/api/Dockerfile
 
 services:
   postgres:
@@ -38,5 +62,77 @@ services:
       start_interval: 1s
     restart: unless-stopped
 
+  # Applies the committed migrations once and exits. It starts when Postgres is healthy; the API
+  # starts only when it has exited successfully, so a failed migration keeps the API down. The API
+  # itself never migrates, and nothing here loads a seed.
+  migrate:
+    profiles: [api]
+    build: *api-build
+    command: [node, /app/packages/db/dist/cli/migrate.js]
+    environment: *database-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # The API server. The seed and the first API key are explicit one-off commands in this service's
+  # container (`pnpm stack:seed`, `pnpm stack:api-keys create <name>`), never part of a start.
+  api:
+    profiles: [api]
+    build: *api-build
+    environment:
+      <<: *database-environment
+      # The container listens on every interface on its own declared port; the host publishes it
+      # on API_HOST and API_PORT only.
+      API_HOST: 0.0.0.0
+      API_PORT: "8080"
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-}
+      API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:-}
+      API_RATE_LIMIT_HEALTH: ${API_RATE_LIMIT_HEALTH:-}
+      API_RATE_LIMIT_PUBLIC: ${API_RATE_LIMIT_PUBLIC:-}
+      API_RATE_LIMIT_PRIVATE: ${API_RATE_LIMIT_PRIVATE:-}
+      API_RATE_LIMIT_KEY: ${API_RATE_LIMIT_KEY:-}
+      API_RATE_LIMIT_MAX_TRACKED: ${API_RATE_LIMIT_MAX_TRACKED:-}
+      API_RATE_LIMIT_UPLOAD: ${API_RATE_LIMIT_UPLOAD:-}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-}
+      # Local files live on the media volume below, not in the checkout, so they survive a restart
+      # or a rebuilt container. The key namespaces (environment, worktree) apply below this folder.
+      STORAGE_LOCAL_ROOT: /var/lib/sebela/media
+      STORAGE_ENVIRONMENT: ${STORAGE_ENVIRONMENT:-}
+      STORAGE_WORKTREE: ${STORAGE_WORKTREE:-}
+      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-}
+      STORAGE_BUNNY_ENDPOINT: ${STORAGE_BUNNY_ENDPOINT:-}
+      STORAGE_BUNNY_REGION: ${STORAGE_BUNNY_REGION:-}
+      STORAGE_BUNNY_ZONE: ${STORAGE_BUNNY_ZONE:-}
+      STORAGE_BUNNY_PASSWORD: ${STORAGE_BUNNY_PASSWORD:-}
+      MEDIA_MAX_BYTES: ${MEDIA_MAX_BYTES:-}
+      MEDIA_MAX_IMAGE_DIMENSION: ${MEDIA_MAX_IMAGE_DIMENSION:-}
+    # Empty host settings would publish on every interface on a random port, so start the stack
+    # with `pnpm stack:up`, which refuses that.
+    ports:
+      - "${API_HOST:-}:${API_PORT:-}:8080"
+    volumes:
+      - api-media:/var/lib/sebela/media
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Healthy once the API answers its health route (which does not touch the database).
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --eval
+        - >-
+          fetch("http://127.0.0.1:" + process.env.API_PORT + "/health")
+          .then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  # Local uploaded media of the container stack. Removed only by `down --volumes`.
+  api-media:
