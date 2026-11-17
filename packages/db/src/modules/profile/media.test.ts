@@ -67,6 +67,7 @@ describe("media persistence", () => {
 
   beforeEach(async () => {
     await profile.deletePerson();
+    for (const { slug } of await profile.listTestimonials()) await profile.deleteTestimonial(slug);
     for (const { slug } of await profile.listProjects()) await profile.deleteProject(slug);
     for (const { slug } of await profile.listExperiences()) await profile.deleteExperience(slug);
     for (const { slug } of await profile.listOrganizations()) {
@@ -352,6 +353,86 @@ describe("media persistence", () => {
         reason: "unknown_media",
         field: "coverId",
       });
+    });
+  });
+
+  describe("attached to a testimonial", () => {
+    const words = {
+      slug: "dana-on-routing",
+      experience: "northwind-lead",
+      quote: "A fictional quote.",
+      authorName: "Dana Placeholder",
+      authorRole: "Head of Operations",
+      position: 0,
+    };
+
+    beforeEach(async () => {
+      await profile.createOrganization({
+        slug: "northwind",
+        name: "Northwind Example",
+        website: null,
+        description: null,
+      });
+      await profile.createExperience({
+        slug: "northwind-lead",
+        title: "Lead",
+        kind: "main_job",
+        startedOn: "2021-01-01",
+        endedOn: null,
+        summary: "Fictional.",
+        responsibilities: [],
+        inCv: true,
+        organization: "northwind",
+        technologies: [],
+      });
+    });
+
+    it("attaches an author photo, refuses a referenced delete and clears it", async () => {
+      const photo = await created(png());
+
+      await expect(
+        profile.createTestimonial({ ...words, authorPhotoId: photo.id }),
+      ).resolves.toMatchObject({ ok: true, testimonial: { authorPhotoId: photo.id } });
+      await expect(profile.findTestimonial(words.slug)).resolves.toMatchObject({
+        authorPhotoId: photo.id,
+      });
+      await expect(profile.findExperience("northwind-lead")).resolves.toMatchObject({
+        testimonials: [{ authorPhotoId: photo.id }],
+      });
+      await expect(profile.deleteMedia(photo.id)).resolves.toEqual({
+        ok: false,
+        reason: "referenced",
+      });
+
+      await expect(
+        profile.updateTestimonial(words.slug, { quote: "Another fictional quote." }),
+      ).resolves.toMatchObject({ ok: true, testimonial: { authorPhotoId: photo.id } });
+      await expect(
+        profile.updateTestimonial(words.slug, { authorPhotoId: null }),
+      ).resolves.toMatchObject({ ok: true, testimonial: { authorPhotoId: null } });
+      await expect(profile.deleteMedia(photo.id)).resolves.toMatchObject({ ok: true });
+    });
+
+    it("refuses a PDF or unknown media as an author photo and writes nothing", async () => {
+      const document = await created(pdf());
+      const unknown = "00000000-0000-4000-8000-000000000000";
+
+      await expect(
+        profile.createTestimonial({ ...words, authorPhotoId: document.id }),
+      ).resolves.toEqual({ ok: false, reason: "unsuitable_media", field: "authorPhotoId" });
+      await expect(profile.listTestimonials()).resolves.toEqual([]);
+
+      await profile.createTestimonial(words);
+      await expect(
+        profile.updateTestimonial(words.slug, { quote: "Changed.", authorPhotoId: unknown }),
+      ).resolves.toEqual({ ok: false, reason: "unknown_media", field: "authorPhotoId" });
+      await expect(profile.findTestimonial(words.slug)).resolves.toMatchObject({
+        quote: words.quote,
+        authorPhotoId: null,
+      });
+      await expect(
+        profile.updateTestimonial("missing", { authorPhotoId: unknown }),
+      ).resolves.toEqual({ ok: false, reason: "not_found" });
     });
   });
 });

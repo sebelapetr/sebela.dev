@@ -110,10 +110,11 @@ describe("the testimonial API", () => {
     expect(created.status).toBe(201);
     expect(created.headers.get("location")).toBe("/v1/testimonials/dana-on-routing");
     const body = TestimonialSchema.parse(await created.json());
-    expect(body).toMatchObject(kindWords);
-    // No photo or visibility flag: a testimonial is public content and has no media yet.
+    expect(body).toMatchObject({ ...kindWords, authorPhotoId: null });
+    // No visibility flag: a testimonial is public content. The author photo is a media
+    // identifier, empty unless one is attached.
     expect(Object.keys(body).sort()).toEqual(
-      [...Object.keys(kindWords), "id", "createdAt", "updatedAt"].sort(),
+      [...Object.keys(kindWords), "authorPhotoId", "id", "createdAt", "updatedAt"].sort(),
     );
 
     const read = await request("/v1/testimonials/dana-on-routing");
@@ -180,7 +181,17 @@ describe("the testimonial API", () => {
       "authorRole",
     ],
     ["a negative position", { ...kindWords, position: -1 }, "position"],
-    ["an author photo", { ...kindWords, authorPhoto: "dana" }, "authorPhoto"],
+    ["an embedded author photo", { ...kindWords, authorPhoto: "dana" }, "authorPhoto"],
+    [
+      "an author photo that is a file name",
+      { ...kindWords, authorPhotoId: "dana.png" },
+      "authorPhotoId",
+    ],
+    [
+      "an unknown author photo",
+      { ...kindWords, authorPhotoId: "00000000-0000-4000-8000-000000000000" },
+      "authorPhotoId",
+    ],
   ])("refuses %s with the field and stores nothing", async (_, body, field) => {
     const response = await create(body);
 
@@ -261,6 +272,11 @@ describe("the testimonial API", () => {
     ["a removed owner", { experience: null }, "experience"],
     ["an empty quote", { quote: " " }, "quote"],
     ["an unknown experience", { quote: "Changed.", experience: "missing" }, "experience"],
+    [
+      "an unknown author photo",
+      { quote: "Changed.", authorPhotoId: "00000000-0000-4000-8000-000000000000" },
+      "authorPhotoId",
+    ],
   ])("refuses an update with %s and changes nothing", async (_, body, field) => {
     const created = await (await create(kindWords)).json();
 

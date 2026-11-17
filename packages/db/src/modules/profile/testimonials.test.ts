@@ -97,7 +97,7 @@ describe("testimonial persistence", () => {
   it("creates a testimonial that names its experience", async () => {
     const created = await profile.createTestimonial(kindWords);
 
-    expect(created).toMatchObject({ ok: true, testimonial: kindWords });
+    expect(created).toMatchObject({ ok: true, testimonial: { ...kindWords, authorPhotoId: null } });
     const found = await profile.findTestimonial("dana-on-routing");
     expect(found).toMatchObject(kindWords);
     expect(found?.id).toEqual(expect.any(String));
