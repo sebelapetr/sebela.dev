@@ -8,6 +8,7 @@
 // from this checkout's compose.yaml, with the documented settings of `.env.example` only (never a
 // `.env`), free host ports and a random database password that exists only in this run. It checks:
 //
+// - the Postgres-only Compose configuration needs none of the API settings;
 // - a failed migration keeps the API from starting;
 // - the migration service migrates an empty database before the API starts, and the API seeds
 //   nothing by itself;

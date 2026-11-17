@@ -189,10 +189,10 @@ This one command starts PostgreSQL 18 with pgvector and returns when the service
 To run the API in a container as well, from the main checkout:
 
 ```sh
-pnpm stack:up                         # build the image, migrate, then start the API
-pnpm stack:seed                       # load the fictional demo seed (explicit, never automatic)
-pnpm stack:api-keys create my-laptop  # print the first API key once; store it yourself
-pnpm stack:down                       # stop and remove the API containers; Postgres keeps running
+pnpm stack:up                                  # build the image, migrate, then start the API
+pnpm stack:seed                                # load the fictional demo seed (explicit, never automatic)
+pnpm --silent stack:api-keys create my-laptop  # print the first API key once; store it yourself
+pnpm stack:down                                # stop and remove the API containers; Postgres keeps running
 ```
 
 `stack:up` starts a one-off migration service once Postgres is healthy and the API only after the migrations succeeded; a failed migration keeps the API down. Running `stack:up` again applies only new migrations; neither a start nor a restart seeds or resets content. Uploaded media live in the volume `api-media` and survive restarts. To stop everything, Postgres included, run `docker compose --profile api down` (a plain `docker compose down` leaves the API running); add `--volumes` only to delete the data and the media. The API runs in a container or on the host (`pnpm --filter @sebela/api start`), not both: they publish the same port. Worktrees always use the host. The image holds code and the demo seed only; personal content is loaded from a folder outside the repository at run time. Details: [`apps/api/AGENTS.md`](apps/api/AGENTS.md#container-stack).
