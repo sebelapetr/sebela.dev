@@ -35,7 +35,8 @@ const skills = [
 ] as const;
 
 const pdfPath = join(fixtureFolder("with-experience"), "files", "cv.pdf");
-// The API's end-to-end server keeps its files in the checkout's `.tmp/e2e-storage-*` folders.
+// The API's end-to-end server keeps its files in the checkout's `.tmp/e2e-storage-*` folders, a
+// documented part of its interface (`apps/api/AGENTS.md`, Commands).
 const scratch = fileURLToPath(new URL("../../../.tmp", import.meta.url));
 
 const widths = [360, 768, 1280] as const;
@@ -82,10 +83,14 @@ function today(): string {
 async function storedPdfs(): Promise<string[]> {
   const expected = await readFile(pdfPath);
   const found: string[] = [];
-  for (const entry of await readdir(scratch, { withFileTypes: true, recursive: true })) {
-    if (!entry.isFile() || !entry.parentPath.includes("e2e-storage-")) continue;
-    const path = join(entry.parentPath, entry.name);
-    if ((await readFile(path)).equals(expected)) found.push(path);
+  for (const root of await readdir(scratch, { withFileTypes: true })) {
+    if (!root.isDirectory() || !root.name.startsWith("e2e-storage-")) continue;
+    const folder = join(scratch, root.name);
+    for (const entry of await readdir(folder, { withFileTypes: true, recursive: true })) {
+      if (!entry.isFile()) continue;
+      const path = join(entry.parentPath, entry.name);
+      if ((await readFile(path)).equals(expected)) found.push(path);
+    }
   }
   return found;
 }
