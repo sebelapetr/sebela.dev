@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@sebela/api-client": "workspace:*",
+    "@sebela/contracts": "workspace:*",
     "@sebela/ui": "workspace:*",
     "lucide-react": "catalog:",
     "next": "catalog:",
