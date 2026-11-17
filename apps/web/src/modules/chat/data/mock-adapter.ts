@@ -51,7 +51,8 @@ function chunks(text: string): string[] {
 
 /**
  * A chat adapter that answers from the prepared answers: start, the text in deltas of a few words
- * with a pause before each, the related links, then the completion with the answer's outcome. Every
+ * with a pause before each, each block, the sources (none for an answer that rests on none), the
+ * related links, then the completion with the answer's outcome. Every
  * stream satisfies the chat contract (`validateChatStream`). Aborting stops it between events.
  */
 export function createMockChatAdapter(options: MockChatAdapterOptions): ChatAdapter {
@@ -73,6 +74,14 @@ export function createMockChatAdapter(options: MockChatAdapterOptions): ChatAdap
           type: "text_delta",
           text,
         })),
+        ...answer.blocks.map((block) => (): ChatStreamEvent => ({
+          ...base(),
+          type: "block",
+          block,
+        })),
+        ...(answer.sources.length > 0
+          ? [(): ChatStreamEvent => ({ ...base(), type: "sources", sources: [...answer.sources] })]
+          : []),
         () => ({ ...base(), type: "related", links: [...answer.related] }),
         () => ({ ...base(), type: "complete", outcome: answer.outcome }),
       ];

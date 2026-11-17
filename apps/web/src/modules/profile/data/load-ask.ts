@@ -1,5 +1,7 @@
 import type { ApiClient, Experience, Exploration, Service, Technology } from "@sebela/api-client";
 
+import { isWebUrl } from "./image";
+
 /**
  * What the Ask page needs from the profile: the name its assistant speaks about and the public
  * records its answers rest on, each list in the API's order.
@@ -29,20 +31,45 @@ export interface LoadAskOptions {
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
- * Reads the person's name from the API's public person route, uncached and limited in time. A
- * person that does not exist makes the page missing; a failed read makes it unavailable.
+ * Reads the Ask page's content from the API's public routes: the person, the experiences, the
+ * services, the explorations and the technologies, uncached and limited in time. A person that
+ * does not exist makes the page missing; a failed read of the person or of any list makes the
+ * whole content unavailable, so an answer never rests on a profile with a part silently missing.
  */
 export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): Promise<AskResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
   try {
-    const read = await client.GET("/v1/person", {
-      cache: "no-store",
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (read.data === undefined) {
-      return read.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
+    const [person, experiences, services, explorations, technologies] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/experiences", init()),
+      client.GET("/v1/services", init()),
+      client.GET("/v1/explorations", init()),
+      client.GET("/v1/technologies", init()),
+    ]);
+    if (person.data === undefined) {
+      return person.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
     }
-    throw new Error(`not implemented for ${read.data.name}`);
+    if (
+      experiences.data === undefined ||
+      services.data === undefined ||
+      explorations.data === undefined ||
+      technologies.data === undefined
+    ) {
+      return { status: "unavailable" };
+    }
+    return {
+      status: "ready",
+      content: {
+        name: person.data.name,
+        email: person.data.email,
+        links: person.data.links.filter((link) => isWebUrl(link.url)),
+        experiences: experiences.data,
+        services: services.data,
+        explorations: explorations.data,
+        technologies: technologies.data,
+      },
+    };
   } catch {
     return { status: "unavailable" };
   }

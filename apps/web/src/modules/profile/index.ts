@@ -1,5 +1,6 @@
 // The profile module: the website's read of the API's public profile, experience, services and CV
-// routes (and the person's name for the Ask page), and of the current CV PDF's file. Server-only.
+// routes (and the records the Ask page's answers rest on), and of the current CV PDF's file.
+// Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -63,7 +64,7 @@ export const getServices = cache((): Promise<ServicesResult> => loadServices(api
 
 /**
  * The Ask page's content for the current request: the person's name the assistant speaks about,
- * read once per request (React `cache`). Never cached across requests.
+ * their contact and the public records its answers rest on, read once per request (React `cache`). Never cached across requests.
  */
 export const getAsk = cache((): Promise<AskResult> => loadAsk(apiClient()));
 

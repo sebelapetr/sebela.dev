@@ -4,7 +4,7 @@
 import type { ExplorationStatus } from "@sebela/api-client";
 
 import type { AskContent } from "../../profile";
-import type { TechnologyGroupKey } from "../../_shared";
+import { TECHNOLOGY_GROUP_KEYS, technologyGroupOf, type TechnologyGroupKey } from "../../_shared";
 
 export interface EvidenceExperience {
   readonly slug: string;
@@ -52,10 +52,60 @@ export interface AskEvidence {
  * targets, cut at a word with an ellipsis to at most `max` characters; empty without words.
  */
 export function plainText(markdown: string, max = 280): string {
-  throw new Error(`not implemented for ${String(markdown.length)}/${String(max)}`);
+  const paragraph = markdown.trim().split(/\n\s*\n/, 1)[0] ?? "";
+  const words = paragraph
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s?)/, ""))
+    .join(" ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_~`]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (words.length <= max) return words;
+  const cut = words.slice(0, max - 1);
+  const space = words[max - 1] === " " ? cut.length : cut.lastIndexOf(" ");
+  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+function summaryOf(markdown: string | null): string | null {
+  const text = markdown === null ? "" : plainText(markdown);
+  return text === "" ? null : text;
 }
 
 /** The Ask page's content reduced to the evidence its answers may rest on. */
 export function toAskEvidence(content: AskContent): AskEvidence {
-  throw new Error(`not implemented for ${content.name}`);
+  const shown = new Set(content.technologies.map(technologyGroupOf));
+  return {
+    name: content.name,
+    contact: {
+      email: content.email,
+      links: content.links.map(({ label, url }) => ({ label, url })),
+    },
+    experiences: content.experiences.map((experience) => ({
+      slug: experience.slug,
+      title: experience.title,
+      organization: experience.organization.name,
+      startedOn: experience.startedOn,
+      endedOn: experience.endedOn,
+      summary: summaryOf(experience.summary),
+      technologies: experience.technologies.map(({ name }) => name),
+      projects: experience.projects.map(({ slug, name, caseStudy }) => ({
+        slug,
+        name,
+        caseStudy: caseStudy !== null,
+      })),
+    })),
+    services: content.services.map(({ slug, name, summary }) => ({
+      slug,
+      name,
+      summary: plainText(summary),
+    })),
+    explorations: content.explorations.map(({ slug, name, summary, status }) => ({
+      slug,
+      name,
+      summary: summaryOf(summary),
+      status,
+    })),
+    technologyGroups: TECHNOLOGY_GROUP_KEYS.filter((key) => shown.has(key)),
+  };
 }
