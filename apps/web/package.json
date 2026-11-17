@@ -11,12 +11,13 @@
     "start": "node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local scripts/next.mjs start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local node_modules/@playwright/test/cli.js test",
     "typecheck": "next typegen && tsc --project tsconfig.json"
   },
   "dependencies": {
     "@sebela/api-client": "workspace:*",
     "@sebela/ui": "workspace:*",
+    "lucide-react": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
