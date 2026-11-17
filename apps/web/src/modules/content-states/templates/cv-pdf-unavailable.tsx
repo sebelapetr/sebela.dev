@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@sebela/ui/components/button";
 import { cn } from "@sebela/ui/lib/utils";
 
-import { routes } from "../../_shared";
+import { cvPdfRoutes, routes } from "../../_shared";
 import { StatePage } from "../components/state-page";
 
 /**
@@ -23,7 +23,7 @@ export function CvPdfUnavailableTemplate() {
             Read the CV
           </Link>
           <a
-            href={routes.cvPdf}
+            href={cvPdfRoutes.download}
             className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline"
           >
             Try the download again

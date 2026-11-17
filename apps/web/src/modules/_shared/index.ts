@@ -11,4 +11,4 @@ export { toEducationRows, type EducationRow } from "./education";
 export { experienceKindLabel } from "./experience-kind";
 export { explorationStatusText, type ExplorationStatusText } from "./exploration-status";
 export { formatDate, formatPeriod } from "./period";
-export { routes } from "./site";
+export { cvPdfRoutes, routes } from "./site";

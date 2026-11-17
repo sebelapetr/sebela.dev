@@ -1,4 +1,4 @@
-import { routes } from "../../_shared";
+import { cvPdfRoutes, routes } from "../../_shared";
 import type { CvPdfFile } from "../../profile";
 
 /**
@@ -23,7 +23,7 @@ export function cvPdfResponse(file: CvPdfFile): Response {
     case "none":
       return redirect(routes.cv);
     case "unavailable":
-      return redirect(routes.cvPdfUnavailable);
+      return redirect(cvPdfRoutes.unavailable);
   }
 }
 

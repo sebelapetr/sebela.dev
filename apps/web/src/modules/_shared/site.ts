@@ -10,9 +10,13 @@ export const routes = {
   services: "/services",
   experience: "/experience",
   cv: "/cv",
-  /** The current CV PDF as a download (`/cv/pdf`); without one, a redirect to the CV page. */
-  cvPdf: "/cv/pdf",
-  /** Where a CV PDF download that failed ends up. */
-  cvPdfUnavailable: "/cv/pdf/unavailable",
   contact: "/#contact",
+} as const;
+
+/** The CV PDF's addresses: a download and its failure page, not pages of the site to link to. */
+export const cvPdfRoutes = {
+  /** The current CV PDF as a download; without one, a redirect to the CV page. */
+  download: "/cv/pdf",
+  /** Where a CV PDF download that failed ends up. */
+  unavailable: "/cv/pdf/unavailable",
 } as const;

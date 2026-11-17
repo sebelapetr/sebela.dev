@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowRight } from "lucide-react";
 
 import { formatDate } from "../period";
-import { routes } from "../site";
+import { cvPdfRoutes, routes } from "../site";
 
 const linkClass =
   "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline";
@@ -30,7 +30,7 @@ export function CvActions({
       <ul className="flex flex-col sm:flex-row sm:flex-wrap sm:gap-x-6">
         {pdf === null ? null : (
           <li>
-            <a href={routes.cvPdf} className={linkClass}>
+            <a href={cvPdfRoutes.download} className={linkClass}>
               Download CV
               <ArrowDown aria-hidden="true" className="size-4" />
             </a>
