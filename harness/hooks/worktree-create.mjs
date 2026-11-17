@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // WorktreeCreate hook: replaces Claude Code's default `git worktree add`, so that a worktree
 // created by Claude Code gets a slot, its database and its .env.local like one created by the
-// scripts. Without a running database service the hook fails and no worktree is created.
+// scripts: migrated, with its storage folder and the demo seed in an empty profile. Without a
+// running database service the hook fails and no worktree is created; a failing backend stage
+// fails the hook and keeps the worktree, so creating it again retries.
 // Must print the worktree path as the last line of stdout; everything else goes to stderr.
 
 import { createWorktree, mainRootFrom } from "../worktree.mjs";

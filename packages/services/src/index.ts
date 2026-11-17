@@ -21,7 +21,8 @@ export type {
   SeedService,
   SeedServiceOptions,
 } from "./modules/seed/index.js";
-export type { StorageConfig } from "./modules/storage/index.js";
+export { openStorageNamespace, readStorageConfig } from "./modules/storage/index.js";
+export type { StorageConfig, StorageNamespace } from "./modules/storage/index.js";
 export type {
   ApiKeyInfo,
   ApiKeyService,

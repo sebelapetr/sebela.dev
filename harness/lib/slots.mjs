@@ -136,7 +136,25 @@ export function existingIssueBranch(branch, branches) {
   return remote ?? null;
 }
 
-// Not implemented yet.
-export function storageWorktreeName() {
-  throw new Error("not implemented yet");
+// The storage folder of a worktree below `<environment>/`, STORAGE_WORKTREE: `<slug>-<hash>`, at most
+// 63 characters of lower-case letters, digits and hyphens. Like databaseName it depends only on the
+// folder name, and the hash keeps folders that normalise alike apart, so no two worktrees share a
+// storage folder.
+const STORAGE_FOLDER_LIMIT = 63;
+
+export function storageWorktreeName(branch) {
+  let folder;
+  try {
+    folder = worktreeDirName(branch);
+  } catch {
+    throw new Error(`cannot derive a storage folder name from branch "${branch}"`);
+  }
+  const hash = createHash("sha256").update(folder).digest("hex").slice(0, HASH_LENGTH);
+  const room = STORAGE_FOLDER_LIMIT - hash.length - 1;
+  const slug = folder
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, room)
+    .replace(/^-+|-+$/g, "");
+  return slug ? `${slug}-${hash}` : hash;
 }

@@ -1,7 +1,12 @@
 import type { Persistence } from "@sebela/db";
 
 import { DomainError, type DomainErrorField } from "../../errors.js";
-import { createMediaService, type CleanupFailure, type MediaLimits } from "../media/index.js";
+import {
+  createMediaService,
+  type CleanupFailure,
+  type MediaLimits,
+  type MediaService,
+} from "../media/index.js";
 import {
   createProfileService,
   type ProfileService,
@@ -64,6 +69,12 @@ export interface SeedReport {
  */
 export interface SeedService {
   loadSeed(folder: string | URL): Promise<SeedReport>;
+  /**
+   * Loads the seed like `loadSeed`, but only into an empty profile: no person, no record of any
+   * kind and no media. Otherwise returns `null` and writes nothing, so content already edited is
+   * never overwritten. The folder is read and validated first, so an invalid seed is refused
+   * either way. Two loads started at the same moment into one empty profile are not serialised.
+   */
   loadSeedIntoEmpty(folder: string | URL): Promise<SeedReport | null>;
 }
 
@@ -107,6 +118,30 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
       fields ?? [{ path: location, message: error.message }],
     );
   }
+}
+
+/** Whether the profile holds no person, no record of any kind and no media. */
+async function isEmpty(profile: ProfileService, media: MediaService): Promise<boolean> {
+  const person = await profile.getPerson().catch((error: unknown) => {
+    if (isRefusal(error, "not_found")) return null;
+    throw error;
+  });
+  if (person !== null) return false;
+  const lists: (() => Promise<readonly unknown[]>)[] = [
+    () => profile.listTechnologies(),
+    () => profile.listTopics(),
+    () => profile.listOrganizations(),
+    () => profile.listExperiences(),
+    () => profile.listProjects(),
+    () => profile.listExplorations(),
+    () => profile.listServices(),
+    () => profile.listEducation(),
+    () => profile.listTestimonials(),
+    () => profile.listCurrentFocus(),
+    () => media.listMedia(),
+  ];
+  for (const list of lists) if ((await list()).length > 0) return false;
+  return true;
 }
 
 /**
@@ -189,225 +224,237 @@ export function createSeedService(
     options.mediaAddress === undefined ? {} : { mediaAddress: options.mediaAddress };
 
   return {
-    loadSeedIntoEmpty() {
-      return Promise.reject(new Error("Not implemented yet."));
-    },
-
     async loadSeed(folder) {
-      const data = await readSeedFolder(folder, options.limits);
-      const counts = emptyCounts();
-      const media = { uploaded: 0, reused: 0, removed: 0 };
-      /** Keys this load stored, removed again when it fails. */
-      const storedKeys: string[] = [];
-      /** Media seed records referred to before this load and no longer do. */
-      const superseded = new Set<string>();
+      const report = await load(folder, false);
+      if (report === null) throw new Error("A full seed load was skipped.");
+      return report;
+    },
+    loadSeedIntoEmpty: (folder) => load(folder, true),
+  };
 
-      try {
-        await persistence.transaction(async (tx) => {
-          const profile = createProfileService(tx, profileOptions);
-          const mediaService = createMediaService(tx, mediaOptions);
+  /** Loads the folder; with `onlyIntoEmpty`, returns `null` without a write unless it is empty. */
+  async function load(folder: string | URL, onlyIntoEmpty: boolean): Promise<SeedReport | null> {
+    const data = await readSeedFolder(folder, options.limits);
+    const counts = emptyCounts();
+    const media = { uploaded: 0, reused: 0, removed: 0 };
+    /** Keys this load stored, removed again when it fails. */
+    const storedKeys: string[] = [];
+    /** Media seed records referred to before this load and no longer do. */
+    const superseded = new Set<string>();
+    /** Whether the load ran; `false` when the profile was not empty and nothing was written. */
+    let loaded: boolean;
 
-          const problems = await checkReferences(data, profile);
-          if (problems.length > 0) {
-            throw new DomainError(
-              "validation_failed",
-              "The seed refers to records that do not exist; nothing was loaded.",
-              problems,
-            );
+    try {
+      loaded = await persistence.transaction(async (tx) => {
+        const profile = createProfileService(tx, profileOptions);
+        const mediaService = createMediaService(tx, mediaOptions);
+
+        if (onlyIntoEmpty && !(await isEmpty(profile, mediaService))) {
+          return false;
+        }
+
+        const problems = await checkReferences(data, profile);
+        if (problems.length > 0) {
+          throw new DomainError(
+            "validation_failed",
+            "The seed refers to records that do not exist; nothing was loaded.",
+            problems,
+          );
+        }
+
+        const mediaIds = new Map<string, string>();
+        for (const [digest, file] of data.files) {
+          const ensured = await mediaService.ensureMedia({
+            bytes: file.bytes,
+            filename: file.filename,
+            declaredType: "",
+            altText: file.altText,
+          });
+          if (ensured.created) {
+            storedKeys.push(ensured.media.key);
+            media.uploaded += 1;
+          } else {
+            media.reused += 1;
           }
+          mediaIds.set(digest, ensured.media.id);
+        }
+        const mediaId = (digest: string | null) =>
+          digest === null ? null : (mediaIds.get(digest) ?? null);
+        const supersede = (before: string | null, after: string | null) => {
+          if (before !== null && before !== after) superseded.add(before);
+        };
 
-          const mediaIds = new Map<string, string>();
-          for (const [digest, file] of data.files) {
-            const ensured = await mediaService.ensureMedia({
-              bytes: file.bytes,
-              filename: file.filename,
-              declaredType: "",
-              altText: file.altText,
+        /** Creates a record, or overwrites the one with its slug. */
+        const upsert = async <T extends { slug: string }, R, Field extends string = never>(
+          kind: SeedKind,
+          records: readonly Located<T, Field>[],
+          find: (slug: string) => Promise<R>,
+          create: (value: T) => Promise<unknown>,
+          update: (slug: string, changes: Omit<T, "slug">, existing: R) => Promise<unknown>,
+          prepare: (record: Located<T, Field>) => T = ({ value }) => value,
+        ) => {
+          for (const record of records) {
+            const value = prepare(record);
+            const { slug, ...changes } = value;
+            await at(record.location, async () => {
+              const existing = await find(slug).catch((error: unknown) => {
+                if (isRefusal(error, "not_found")) return null;
+                throw error;
+              });
+              if (existing === null) {
+                await create(value);
+                counts[kind].created += 1;
+              } else {
+                await update(slug, changes, existing);
+                counts[kind].updated += 1;
+              }
             });
-            if (ensured.created) {
-              storedKeys.push(ensured.media.key);
-              media.uploaded += 1;
+          }
+        };
+
+        await upsert(
+          "technologies",
+          data.technologies,
+          (slug) => profile.getTechnology(slug),
+          (value) => profile.createTechnology(value),
+          (slug, changes) => profile.updateTechnology(slug, changes),
+        );
+        await upsert(
+          "topics",
+          data.topics,
+          (slug) => profile.getTopic(slug),
+          (value) => profile.createTopic(value),
+          (slug, changes) => profile.updateTopic(slug, changes),
+        );
+        await upsert(
+          "organizations",
+          data.organizations,
+          (slug) => profile.getOrganization(slug),
+          (value) => profile.createOrganization(value),
+          (slug, changes, existing) => {
+            supersede(existing.logoId, changes.logoId);
+            return profile.updateOrganization(slug, changes);
+          },
+          ({ value, files }) => ({ ...value, logoId: mediaId(files.logoId) }),
+        );
+
+        if (data.person !== null) {
+          const { location, files } = data.person;
+          const value = {
+            ...data.person.value,
+            photoId: mediaId(files.photoId),
+            cvPdfId: mediaId(files.cvPdfId),
+          };
+          await at(location, async () => {
+            const existing = await profile.getPerson().catch((error: unknown) => {
+              if (isRefusal(error, "not_found")) return null;
+              throw error;
+            });
+            if (existing === null) {
+              await profile.createPerson(value);
+              counts.person.created += 1;
             } else {
-              media.reused += 1;
+              supersede(existing.photoId, value.photoId);
+              supersede(existing.cvPdfId, value.cvPdfId);
+              await profile.updatePerson(value);
+              counts.person.updated += 1;
             }
-            mediaIds.set(digest, ensured.media.id);
-          }
-          const mediaId = (digest: string | null) =>
-            digest === null ? null : (mediaIds.get(digest) ?? null);
-          const supersede = (before: string | null, after: string | null) => {
-            if (before !== null && before !== after) superseded.add(before);
-          };
-
-          /** Creates a record, or overwrites the one with its slug. */
-          const upsert = async <T extends { slug: string }, R, Field extends string = never>(
-            kind: SeedKind,
-            records: readonly Located<T, Field>[],
-            find: (slug: string) => Promise<R>,
-            create: (value: T) => Promise<unknown>,
-            update: (slug: string, changes: Omit<T, "slug">, existing: R) => Promise<unknown>,
-            prepare: (record: Located<T, Field>) => T = ({ value }) => value,
-          ) => {
-            for (const record of records) {
-              const value = prepare(record);
-              const { slug, ...changes } = value;
-              await at(record.location, async () => {
-                const existing = await find(slug).catch((error: unknown) => {
-                  if (isRefusal(error, "not_found")) return null;
-                  throw error;
-                });
-                if (existing === null) {
-                  await create(value);
-                  counts[kind].created += 1;
-                } else {
-                  await update(slug, changes, existing);
-                  counts[kind].updated += 1;
-                }
-              });
-            }
-          };
-
-          await upsert(
-            "technologies",
-            data.technologies,
-            (slug) => profile.getTechnology(slug),
-            (value) => profile.createTechnology(value),
-            (slug, changes) => profile.updateTechnology(slug, changes),
-          );
-          await upsert(
-            "topics",
-            data.topics,
-            (slug) => profile.getTopic(slug),
-            (value) => profile.createTopic(value),
-            (slug, changes) => profile.updateTopic(slug, changes),
-          );
-          await upsert(
-            "organizations",
-            data.organizations,
-            (slug) => profile.getOrganization(slug),
-            (value) => profile.createOrganization(value),
-            (slug, changes, existing) => {
-              supersede(existing.logoId, changes.logoId);
-              return profile.updateOrganization(slug, changes);
-            },
-            ({ value, files }) => ({ ...value, logoId: mediaId(files.logoId) }),
-          );
-
-          if (data.person !== null) {
-            const { location, files } = data.person;
-            const value = {
-              ...data.person.value,
-              photoId: mediaId(files.photoId),
-              cvPdfId: mediaId(files.cvPdfId),
-            };
-            await at(location, async () => {
-              const existing = await profile.getPerson().catch((error: unknown) => {
-                if (isRefusal(error, "not_found")) return null;
-                throw error;
-              });
-              if (existing === null) {
-                await profile.createPerson(value);
-                counts.person.created += 1;
-              } else {
-                supersede(existing.photoId, value.photoId);
-                supersede(existing.cvPdfId, value.cvPdfId);
-                await profile.updatePerson(value);
-                counts.person.updated += 1;
-              }
-            });
-          }
-
-          await upsert(
-            "experiences",
-            data.experiences,
-            (slug) => profile.getExperience(slug),
-            (value) => profile.createExperience(value),
-            (slug, changes) => profile.updateExperience(slug, changes),
-          );
-          await upsert(
-            "projects",
-            data.projects,
-            (slug) => profile.getProject(slug),
-            (value) => profile.createProject(value),
-            (slug, changes, existing) => {
-              supersede(existing.coverId, changes.coverId);
-              return profile.updateProject(slug, changes);
-            },
-            ({ value, files }) => ({ ...value, coverId: mediaId(files.coverId) }),
-          );
-          for (const project of data.projects) {
-            const { caseStudy } = project;
-            if (caseStudy === undefined) continue;
-            const slug = project.value.slug;
-            await at(`${project.location}.caseStudy`, async () => {
-              const existing = await profile.getCaseStudy(slug).catch((error: unknown) => {
-                if (isRefusal(error, "not_found")) return null;
-                throw error;
-              });
-              if (existing === null) {
-                await profile.createCaseStudy(slug, caseStudy);
-                counts.caseStudies.created += 1;
-              } else {
-                await profile.updateCaseStudy(slug, caseStudy);
-                counts.caseStudies.updated += 1;
-              }
-            });
-          }
-          await upsert(
-            "explorations",
-            data.explorations,
-            (slug) => profile.getExploration(slug),
-            (value) => profile.createExploration(value),
-            (slug, changes) => profile.updateExploration(slug, changes),
-          );
-          await upsert(
-            "education",
-            data.education,
-            (slug) => profile.getEducation(slug),
-            (value) => profile.createEducation(value),
-            (slug, changes) => profile.updateEducation(slug, changes),
-          );
-          await upsert(
-            "testimonials",
-            data.testimonials,
-            (slug) => profile.getTestimonial(slug),
-            (value) => profile.createTestimonial(value),
-            (slug, changes) => profile.updateTestimonial(slug, changes),
-          );
-          await upsert(
-            "services",
-            data.services,
-            (slug) => profile.getService(slug),
-            (value) => profile.createService(value),
-            (slug, changes) => profile.updateService(slug, changes),
-          );
-          await upsert(
-            "currentFocus",
-            data.currentFocus,
-            (slug) => profile.getCurrentFocus(slug),
-            (value) => profile.createCurrentFocus(value),
-            (slug, changes) => profile.updateCurrentFocus(slug, changes),
-          );
-        });
-      } catch (error) {
-        for (const key of storedKeys) {
-          await options.storage.storage.delete(key).catch((cleanupError: unknown) => {
-            options.onCleanupFailure({ operation: "upload", key, error: cleanupError });
           });
         }
-        throw error;
-      }
 
-      const mediaService = createMediaService(persistence.profile, mediaOptions);
-      for (const id of superseded) {
-        try {
-          await mediaService.deleteMedia(id);
-          media.removed += 1;
-        } catch (error) {
-          if (!isRefusal(error, "conflict", "not_found")) throw error;
+        await upsert(
+          "experiences",
+          data.experiences,
+          (slug) => profile.getExperience(slug),
+          (value) => profile.createExperience(value),
+          (slug, changes) => profile.updateExperience(slug, changes),
+        );
+        await upsert(
+          "projects",
+          data.projects,
+          (slug) => profile.getProject(slug),
+          (value) => profile.createProject(value),
+          (slug, changes, existing) => {
+            supersede(existing.coverId, changes.coverId);
+            return profile.updateProject(slug, changes);
+          },
+          ({ value, files }) => ({ ...value, coverId: mediaId(files.coverId) }),
+        );
+        for (const project of data.projects) {
+          const { caseStudy } = project;
+          if (caseStudy === undefined) continue;
+          const slug = project.value.slug;
+          await at(`${project.location}.caseStudy`, async () => {
+            const existing = await profile.getCaseStudy(slug).catch((error: unknown) => {
+              if (isRefusal(error, "not_found")) return null;
+              throw error;
+            });
+            if (existing === null) {
+              await profile.createCaseStudy(slug, caseStudy);
+              counts.caseStudies.created += 1;
+            } else {
+              await profile.updateCaseStudy(slug, caseStudy);
+              counts.caseStudies.updated += 1;
+            }
+          });
         }
+        await upsert(
+          "explorations",
+          data.explorations,
+          (slug) => profile.getExploration(slug),
+          (value) => profile.createExploration(value),
+          (slug, changes) => profile.updateExploration(slug, changes),
+        );
+        await upsert(
+          "education",
+          data.education,
+          (slug) => profile.getEducation(slug),
+          (value) => profile.createEducation(value),
+          (slug, changes) => profile.updateEducation(slug, changes),
+        );
+        await upsert(
+          "testimonials",
+          data.testimonials,
+          (slug) => profile.getTestimonial(slug),
+          (value) => profile.createTestimonial(value),
+          (slug, changes) => profile.updateTestimonial(slug, changes),
+        );
+        await upsert(
+          "services",
+          data.services,
+          (slug) => profile.getService(slug),
+          (value) => profile.createService(value),
+          (slug, changes) => profile.updateService(slug, changes),
+        );
+        await upsert(
+          "currentFocus",
+          data.currentFocus,
+          (slug) => profile.getCurrentFocus(slug),
+          (value) => profile.createCurrentFocus(value),
+          (slug, changes) => profile.updateCurrentFocus(slug, changes),
+        );
+        return true;
+      });
+    } catch (error) {
+      for (const key of storedKeys) {
+        await options.storage.storage.delete(key).catch((cleanupError: unknown) => {
+          options.onCleanupFailure({ operation: "upload", key, error: cleanupError });
+        });
       }
+      throw error;
+    }
+    if (!loaded) return null;
 
-      return { records: counts, media };
-    },
-  };
+    const mediaService = createMediaService(persistence.profile, mediaOptions);
+    for (const id of superseded) {
+      try {
+        await mediaService.deleteMedia(id);
+        media.removed += 1;
+      } catch (error) {
+        if (!isRefusal(error, "conflict", "not_found")) throw error;
+      }
+    }
+
+    return { records: counts, media };
+  }
 }

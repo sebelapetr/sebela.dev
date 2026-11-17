@@ -16,11 +16,13 @@ import {
 import { logCleanupFailure } from "../modules/media/index.js";
 import type { CommandOutput } from "./api-keys.js";
 
-const USAGE = `Usage: seed [folder]
+const USAGE = `Usage: seed [--if-empty] [folder]
 
   Loads a seed folder (format: packages/db/seed/README.md) into the database. Without a folder it
   loads the fictional demo seed. A relative folder is resolved against the directory the command
   was started from. Records are matched by slug and overwritten with the seed's values.
+
+  --if-empty  Load only into an empty profile; a profile that holds anything is left as it is.
 `;
 
 const kindLabels: Record<SeedKind, string> = {
@@ -39,8 +41,8 @@ const kindLabels: Record<SeedKind, string> = {
 };
 
 /**
- * Runs the seed command (`[folder]`) through the services and returns the exit code: 0 on success,
- * 1 for a refused or unreadable seed, 2 for bad usage. Prints counts and refusals by file and field,
+ * Runs the seed command (`[--if-empty] [folder]`) through the services and returns the exit code:
+ * 0 on success or a skipped load, 1 for a refused or unreadable seed, 2 for bad usage. Prints counts and refusals by file and field,
  * never seed content or the folder's path (a file-system failure is reported by its code).
  */
 export async function runSeedCommand(
@@ -49,15 +51,21 @@ export async function runSeedCommand(
   output: CommandOutput,
   cwd: string = process.cwd(),
 ): Promise<number> {
-  const [folder, ...extra] = args;
+  const ifEmpty = args[0] === "--if-empty";
+  const [folder, ...extra] = ifEmpty ? args.slice(1) : args;
   if (extra.length > 0 || folder?.startsWith("-") === true || folder === "") {
     output.err(USAGE);
     return 2;
   }
   try {
-    const report = await services.seed.loadSeed(
-      folder === undefined ? demoSeedFolder : resolve(cwd, folder),
-    );
+    const source = folder === undefined ? demoSeedFolder : resolve(cwd, folder);
+    const report = ifEmpty
+      ? await services.seed.loadSeedIntoEmpty(source)
+      : await services.seed.loadSeed(source);
+    if (report === null) {
+      output.out("The profile already holds content; the seed was skipped.\n");
+      return 0;
+    }
     for (const [kind, label] of Object.entries(kindLabels) as [SeedKind, string][]) {
       const { created, updated } = report.records[kind];
       output.out(`${label}: ${String(created)} created, ${String(updated)} updated\n`);
