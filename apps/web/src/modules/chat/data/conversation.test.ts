@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { endChatStream, receiveChatEvent, startChatTurn, type ChatTurn } from "./conversation";
+import {
+  canRetryChatTurn,
+  endChatStream,
+  receiveChatEvent,
+  restartChatTurn,
+  startChatTurn,
+  timeOutChatTurn,
+  type ChatTurn,
+} from "./conversation";
 
 const REQUEST = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const MESSAGE = "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f";
@@ -283,5 +291,135 @@ describe("receiveChatEvent with unsafe payloads", () => {
     const title = "<script>alert(1)</script>";
     const turn = afterStart({ type: "block", block: { ...experienceCard, title } });
     expect(turn.blocks).toEqual([{ ...experienceCard, title }]);
+  });
+});
+
+describe("timeOutChatTurn", () => {
+  it("fails an open turn as timed out, keeping its partial answer, with a retry allowed", () => {
+    const streaming = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      event(1, { type: "text_delta", text: "Partial" }),
+    ]);
+
+    expect(timeOutChatTurn(streaming)).toMatchObject({
+      status: "failed",
+      text: "Partial",
+      error: { code: "timeout", retryable: true },
+    });
+  });
+
+  it("times out a turn that never received an event", () => {
+    expect(timeOutChatTurn(startChatTurn(REQUEST, "Q?"))).toMatchObject({
+      status: "failed",
+      error: { code: "timeout" },
+    });
+  });
+
+  it("leaves an ended turn as it is", () => {
+    const complete = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      event(1, { type: "complete", outcome: "answered" }),
+    ]);
+
+    expect(timeOutChatTurn(complete)).toBe(complete);
+  });
+});
+
+describe("canRetryChatTurn", () => {
+  const started = [event(0, { type: "start" }), event(1, { type: "text_delta", text: "Part" })];
+
+  it("allows a retry of an interrupted answer: the failure is ambiguous, the visitor decides", () => {
+    expect(canRetryChatTurn(endChatStream(receiveAll(startChatTurn(REQUEST, "Q?"), started)))).toBe(
+      true,
+    );
+  });
+
+  it("allows a retry when the error says a retry may help", () => {
+    const failed = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "error", code: "unavailable", retryable: true }),
+    ]);
+    expect(canRetryChatTurn(failed)).toBe(true);
+  });
+
+  it("refuses a retry when the error says it cannot help", () => {
+    const failed = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "error", code: "invalid_request", retryable: false }),
+    ]);
+    expect(canRetryChatTurn(failed)).toBe(false);
+  });
+
+  it.each([
+    ["pending", startChatTurn(REQUEST, "Q?")],
+    ["streaming", receiveAll(startChatTurn(REQUEST, "Q?"), started)],
+    [
+      "refused",
+      receiveAll(startChatTurn(REQUEST, "Q?"), [
+        event(0, { type: "start" }),
+        event(1, { type: "complete", outcome: "refused" }),
+      ]),
+    ],
+    [
+      "unavailable",
+      receiveAll(startChatTurn(REQUEST, "Q?"), [
+        event(0, { type: "start" }),
+        event(1, { type: "complete", outcome: "unavailable" }),
+      ]),
+    ],
+  ])("offers no retry for a %s answer", (_label, turn) => {
+    expect(canRetryChatTurn(turn)).toBe(false);
+  });
+});
+
+describe("restartChatTurn", () => {
+  it("replaces the failed attempt: same request and question, the partial answer gone", () => {
+    const failed = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      event(1, { type: "text_delta", text: "Partial" }),
+      event(2, { type: "error", code: "internal", retryable: true }),
+    ]);
+
+    expect(restartChatTurn(failed)).toEqual(startChatTurn(REQUEST, "Q?"));
+  });
+
+  it("accepts the new attempt's events from the beginning, under its own message", () => {
+    const failed = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      event(1, { type: "text_delta", text: "Partial" }),
+      event(2, { type: "error", code: "internal", retryable: true }),
+    ]);
+    const other = "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";
+    const retried = receiveAll(restartChatTurn(failed), [
+      { requestId: REQUEST, messageId: other, eventId: 0, type: "start" },
+      { requestId: REQUEST, messageId: other, eventId: 1, type: "text_delta", text: "Whole." },
+      { requestId: REQUEST, messageId: other, eventId: 2, type: "complete", outcome: "answered" },
+    ]);
+
+    expect(retried).toMatchObject({ status: "complete", text: "Whole.", error: null });
+  });
+});
+
+describe("receiveChatEvent with a stream delivered twice", () => {
+  it("shows every piece once and completes", () => {
+    const events = [
+      event(0, { type: "start" }),
+      event(1, { type: "text_delta", text: "Once " }),
+      event(2, { type: "text_delta", text: "only." }),
+      event(3, { type: "complete", outcome: "answered" }),
+    ];
+    const turn = receiveAll(
+      startChatTurn(REQUEST, "Q?"),
+      events.flatMap((raw) => [raw, raw]),
+    );
+
+    expect(turn).toMatchObject({ status: "complete", text: "Once only." });
+  });
+
+  it("fails an event of another message of the same request as an invalid stream", () => {
+    const turn = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      { ...event(1, { type: "text_delta", text: "Foreign" }), messageId: REQUEST },
+    ]);
+
+    expect(turn).toMatchObject({ status: "failed", text: "", error: { code: "invalid_stream" } });
   });
 });

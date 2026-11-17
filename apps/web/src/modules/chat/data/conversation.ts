@@ -97,3 +97,15 @@ export function endChatStream(turn: ChatTurn): ChatTurn {
 function fail(turn: ChatTurn, code: ChatErrorCode): ChatTurn {
   return { ...turn, status: "failed", error: { code, retryable: true } };
 }
+
+export function canRetryChatTurn(turn: ChatTurn): boolean {
+  throw new Error("not implemented: " + turn.requestId);
+}
+
+export function restartChatTurn(turn: ChatTurn): ChatTurn {
+  throw new Error("not implemented: " + turn.requestId);
+}
+
+export function timeOutChatTurn(turn: ChatTurn): ChatTurn {
+  throw new Error("not implemented: " + turn.requestId);
+}

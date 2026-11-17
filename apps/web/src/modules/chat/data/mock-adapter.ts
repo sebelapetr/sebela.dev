@@ -7,6 +7,21 @@ import type { ChatAdapter } from "../types/adapter";
 import type { AskEvidence } from "./evidence";
 import { preparedAnswer } from "./prepared-answers";
 
+export type MockChatScenario =
+  | "error-before-start"
+  | "transport-failure"
+  | "stall"
+  | "interrupt"
+  | "error-after-start"
+  | "not-retryable"
+  | "refused"
+  | "duplicates"
+  | "invalid-payload";
+
+export function parseMockChatScenarios(value: unknown): MockChatScenario[] {
+  throw new Error("not implemented: " + String(value));
+}
+
 export interface MockChatAdapterOptions {
   /** The public profile the answers rest on, reduced for the browser. */
   readonly evidence: AskEvidence;
@@ -16,6 +31,7 @@ export interface MockChatAdapterOptions {
   readonly wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Creates the identifier of each assistant message; `crypto.randomUUID` by default. */
   readonly createId?: () => string;
+  readonly nextScenario?: () => MockChatScenario | null;
 }
 
 const DEFAULT_CHUNK_DELAY_MS = 40;

@@ -41,6 +41,9 @@ export interface ConversationSnapshot {
 /** What became of a question: sent, refused while another is answering, or not a valid question. */
 export type SubmitResult = "sent" | "busy" | "invalid";
 
+/** What became of a retry: sent, refused while another is answering, or not a turn to retry. */
+export type RetryResult = "sent" | "busy" | "not_retryable";
+
 export interface ConversationStore {
   /** The current state; the same object until something changes. */
   getSnapshot(): ConversationSnapshot;
@@ -59,6 +62,7 @@ export interface ConversationStore {
    * creating its random address for a new chat. Refused while another question is answering.
    */
   submit(question: string): SubmitResult;
+  retry(requestId: string): RetryResult;
   /** Cancels the request in flight and forgets the open conversation in this tab. */
   newChat(): void;
 }
@@ -68,6 +72,7 @@ export interface ConversationStoreOptions {
   readonly storage: ChatStorage;
   /** Creates random identifiers (UUID) of conversations and requests. */
   readonly createId: () => string;
+  readonly idleTimeoutMs?: number;
 }
 
 const conversationKey = (id: string) => `sebela-chat:${id}`;
@@ -270,6 +275,9 @@ export function createConversationStore({
       if (handedOff !== null && turns.length === 0) submit(handedOff);
     },
     submit,
+    retry(requestId) {
+      throw new Error("not implemented: " + requestId);
+    },
     newChat() {
       cancel();
       if (state.conversationId !== null) {
