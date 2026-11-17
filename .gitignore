@@ -6,6 +6,7 @@ node_modules/
 !.env.example
 .turbo/
 .next/
+next-env.d.ts
 dist/
 coverage/
 .claude/settings.local.json
@@ -15,3 +16,5 @@ coverage/
 .tmp/
 .claude/agent-memory-local/*
 !.claude/agent-memory-local/README.md
+playwright-report/
+test-results/
