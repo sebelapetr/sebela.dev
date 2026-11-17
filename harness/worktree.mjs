@@ -221,6 +221,8 @@ export function createWorktree({
           ...credentials,
           STORAGE_WORKTREE: storageWorktreeName(name),
           STORAGE_PUBLIC_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}/v1/media/files`,
+          // The website reads this worktree's own API, not the main checkout's.
+          WEB_API_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}`,
         }),
         { flag: "wx", mode: 0o600 },
       );

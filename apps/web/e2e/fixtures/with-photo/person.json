@@ -1,0 +1,24 @@
+{
+  "name": "Jordan Vale",
+  "headline": "Fictional engineer of small, dependable web systems",
+  "shortBio": "Jordan is a **fictional** person from the website's browser tests. Builds tidy `TypeScript` services and writes about them on [the example blog](https://blog.example.test/).",
+  "longBio": "Jordan Vale does not exist. This profile only feeds the website's end-to-end tests.",
+  "location": "Testville",
+  "email": "jordan@vale.example.test",
+  "links": [
+    {
+      "label": "Website",
+      "url": "https://vale.example.test/"
+    },
+    {
+      "label": "Code",
+      "url": "https://code.example.test/jordan-vale"
+    }
+  ],
+  "availability": "Fictional availability.",
+  "careerStartedOn": "2018-03-01",
+  "photo": {
+    "file": "files/portrait.png",
+    "altText": "A grey placeholder portrait of the fictional Jordan Vale."
+  }
+}
