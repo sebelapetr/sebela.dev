@@ -33,12 +33,19 @@ export function Hero({ profile }: { readonly profile: HomepageProfile }) {
           <InlineMarkdown>{profile.shortBio}</InlineMarkdown>
         </div>
         <ChatSlot />
+        {/* The pages are rendered on request; prefetching them on every homepage view would read
+            all their content at once (see TextLink). */}
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-6">
-          <Link href={routes.services} className={cn(buttonVariants({ size: "lg" }))}>
+          <Link
+            href={routes.services}
+            prefetch={false}
+            className={cn(buttonVariants({ size: "lg" }))}
+          >
             Work with me
           </Link>
           <Link
             href={routes.experience}
+            prefetch={false}
             className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline"
           >
             View my experience

@@ -1,6 +1,6 @@
 import { Timeline } from "@sebela/ui/components/timeline";
 
-import { CvActions, Footer, toEducationRows } from "../../_shared";
+import { careerYears, CvActions, Footer, toEducationRows } from "../../_shared";
 import type { ExperienceContent } from "../../profile";
 import { EducationList } from "../components/education";
 import { ExperienceEntry } from "../components/experience-entry";
@@ -9,7 +9,7 @@ import { Technologies } from "../components/technologies";
 import { toExplorationRows } from "../data/explorations";
 import { toTechnologyGroups } from "../data/technologies";
 import { TECHNOLOGY_LOGO_KEYS } from "../data/technology-logos";
-import { careerYears, toTimelineEntries } from "../data/timeline";
+import { toTimelineEntries } from "../data/timeline";
 import { deepLinkIndex } from "../stores/deep-link";
 import { DisclosuresProvider } from "../stores/disclosures";
 

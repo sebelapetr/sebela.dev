@@ -57,6 +57,7 @@ export function SelectedWork({ items }: { readonly items: readonly SelectedWorkI
               <p>
                 <Link
                   href={item.href}
+                  prefetch={false}
                   aria-label={`${linkLabel(item)}: ${item.name}`}
                   className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline"
                 >
@@ -71,6 +72,7 @@ export function SelectedWork({ items }: { readonly items: readonly SelectedWorkI
       <p>
         <Link
           href={routes.experience}
+          prefetch={false}
           className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline"
         >
           View full experience

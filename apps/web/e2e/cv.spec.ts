@@ -114,13 +114,13 @@ test.describe("CV and its PDF read from the API", () => {
   }) => {
     await page.goto(website.url);
     await hydrated(page);
-    // The homepage offers the PDF too, with its date.
-    const contact = page.locator("#contact");
-    await expect(contact.getByRole("link", { name: "Download CV" })).toHaveAttribute(
+    // The homepage's experience snapshot offers the PDF too, with its date.
+    const snapshot = page.getByRole("region", { name: "Experience", exact: true });
+    await expect(snapshot.getByRole("link", { name: "Download CV" })).toHaveAttribute(
       "href",
       "/cv/pdf",
     );
-    await expect(contact.locator("time")).toHaveAttribute("datetime", today());
+    await expect(snapshot.locator("time")).toHaveAttribute("datetime", today());
 
     await page.getByRole("link", { name: "View my experience" }).click();
     await expect(page).toHaveURL(/\/experience$/u);
@@ -321,8 +321,8 @@ test.describe("CV and its PDF read from the API", () => {
         });
         await page.goto(website.url);
         await page.mouse.move(0, 0);
-        await page.locator("#contact").screenshot({
-          path: testInfo.outputPath(`homepage-contact-${String(width)}-${scheme}.png`),
+        await page.getByRole("region", { name: "Experience", exact: true }).screenshot({
+          path: testInfo.outputPath(`homepage-experience-${String(width)}-${scheme}.png`),
         });
       });
     }

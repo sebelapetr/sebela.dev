@@ -142,13 +142,19 @@ test.describe("selected work and deep links into the experience page", () => {
       "href",
       "/experience",
     );
-    // Selected work sits between the hero and the contact block.
+    // Selected work is the first evidence after the hero and What I do (homepage-narrative.spec.ts
+    // has the whole order).
     const order = await page
       .locator("main > section")
       .evaluateAll((sections) =>
         sections.map((element) => element.getAttribute("aria-labelledby")),
       );
-    expect(order).toEqual(["hero-heading", "selected-work-heading", "contact-heading"]);
+    expect(order.slice(0, 4)).toEqual([
+      "hero-heading",
+      "what-i-do-heading",
+      "selected-work-heading",
+      "experience-snapshot-heading",
+    ]);
   });
 
   test("shows the projects inside their own experience, with the case study behind a disclosure", async ({

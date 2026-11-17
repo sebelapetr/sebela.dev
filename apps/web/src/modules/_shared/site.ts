@@ -10,6 +10,8 @@ export const routes = {
   services: "/services",
   experience: "/experience",
   cv: "/cv",
+  /** A short placeholder until the AI Roadmap arrives in phase 4. */
+  aiRoadmap: "/ai-roadmap",
   contact: "/#contact",
 } as const;
 
