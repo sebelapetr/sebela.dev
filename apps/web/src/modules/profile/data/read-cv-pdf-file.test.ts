@@ -202,7 +202,7 @@ describe("readCvPdfFile", () => {
   });
 
   it("reads a plain http file only from the API's own origin, where local storage is served", async () => {
-    const api = "http://localhost:4100";
+    const api = "http://api.example.test";
     const url = `${api}/v1/media/files/test/cv.pdf`;
     const requests: string[] = [];
     const answer = (request: Request): Promise<Response> => {
