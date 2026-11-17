@@ -6,7 +6,7 @@
 
 The open-source engineering behind Petr Šebela's next professional website.
 
-[![Status: foundation](https://img.shields.io/badge/status-foundation-525252?style=flat-square)](.plan/01-foundation/prd.md)
+[![Status: API & database](https://img.shields.io/badge/status-API_%26_database-525252?style=flat-square)](.plan/02-api-db/prd.md)
 [![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-525252?style=flat-square)](LICENSE)
 
@@ -19,7 +19,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Foundation stage.** This checkout contains the specifications, architecture decisions and agent instructions, the development harness and the foundation: a pnpm and Turborepo workspace with shared lint, TypeScript and Prettier configuration, a local PostgreSQL with pgvector and a separate database per worktree, Git hooks, guardrail checks and CI. The applications — website, API, assistant, retrieval and both MCP servers — are **planned** and arrive in later phases; sections describing them say what they are designed to do, not what runs today. The replacement for sebelapetr.cz will launch after all delivery phases are complete.
+> **API & database stage.** This checkout contains the specifications, architecture decisions and agent instructions, the development harness, the foundation (a pnpm and Turborepo workspace with shared lint, TypeScript and Prettier configuration, a local PostgreSQL with pgvector and a separate database and role per worktree, Git hooks, guardrail checks and CI) and the backend: the Hono content API with its profile domain, API-key authentication, media uploads, the assembled CV data, OpenAPI, the generated TypeScript client and a fictional demo seed. The website, AI Roadmap, assistant, retrieval and both MCP servers are **planned** and arrive in later phases; sections describing them say what they are designed to do, not what runs today. The replacement for sebelapetr.cz will launch after all delivery phases are complete.
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -50,7 +50,7 @@ The repository is part of the portfolio too: architecture decisions, testing pol
 
 ## Architecture
 
-**The API is the trust boundary.** Every client reaches content through HTTP. Only the API's backend layers access the database. The diagram shows the target design; none of these apps exists yet.
+**The API is the trust boundary.** Every client reaches content through HTTP. Only the API's backend layers access the database. The diagram shows the target design. Today the API with its services, database package, contracts and generated TypeScript client exists; the website, the AI service, retrieval and both MCP servers are planned.
 
 ```mermaid
 flowchart TB
@@ -71,7 +71,7 @@ flowchart TB
     memory --> postgres
 ```
 
-- **One contract across languages.** OpenAPI drives generated TypeScript and Python clients; Zod provides API validation and shared TypeScript schemas.
+- **One contract across languages.** OpenAPI drives generated clients; Zod provides API validation and shared TypeScript schemas. The TypeScript client is generated and drift-checked in CI today; the Python client of phase 7 is generated from the same committed `openapi.json` ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-7-not-scaffolded)).
 - **Authenticated content writes.** Private API routes verify API keys. Keys stay server-side; the public assistant has no content-write credentials or tools.
 - **A bounded chat exception.** Public chat routes may create, continue and delete the caller's own conversation. The API checks ownership, limits and budget.
 - **Rebuildable retrieval.** The search index is derived from canonical content in PostgreSQL.
@@ -85,10 +85,10 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 | ---------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                              |
 | Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Planned (phase 3)                                                                      |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Planned (phase 2)                                                                      |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector delivered locally; Drizzle and retrieval planned              |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Delivered; the TypeScript client is generated, the Python client follows in phase 7    |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 6)            |
 | AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                                      |
-| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Node's test runner for tooling delivered; the rest arrive with their apps              |
+| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Vitest for the backend and Node's test runner for tooling delivered; the rest planned  |
 | Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                                |
 | Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                        | Compose for local Postgres and the API, API image and CI delivered; deployment planned |
 
@@ -130,7 +130,7 @@ Public content is split into chunks, embedded and indexed with pgvector in the s
 
 ## Roadmap
 
-The phases organise implementation; they are not separate public releases. Specifications are drafts until approved. The harness (phase 00) and the foundation (phase 01) are delivered; phases 02 to 08 are planned.
+The phases organise implementation; they are not separate public releases. Specifications are drafts until approved. The harness (phase 00), the foundation (phase 01) and the API and database (phase 02) are delivered; phases 03 to 08 are planned.
 
 | Phase                       | Deliverable                                                                       | Specification                                                                      |
 | --------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -147,7 +147,7 @@ The phases organise implementation; they are not separate public releases. Speci
 
 ## Working on the project
 
-There is no runnable application in this checkout yet. What you can run today is the workspace, its quality checks, the local database and the worktree tooling.
+What you can run today is the workspace, its quality checks, the local database, the worktree tooling and the content API with its demo data. The website, the assistant and the MCP servers do not exist yet.
 
 ### Prerequisites
 
@@ -231,7 +231,38 @@ node harness/worktree.mjs remove feat/12-profile-api --delete-branch
 
 Removal first removes the worktree's storage folder, then drops its database, every temporary database its role still owns and the role, then removes the worktree and frees its slot. When the storage folder cannot be removed, nothing else is removed. It refuses uncommitted work unless you pass `--force`, needs the running Postgres, and only ever drops a database or role it created for that worktree. Slots, ports and databases in detail: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
 
-Application commands will be documented as the application phases land. Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
+### 6. Use the API on the host
+
+In a worktree (or the main checkout with its `.env`), the backend commands read the process environment, then `.env.local`, `.env` and `.env.example`; each builds what it runs first. A worktree created by `create` is already migrated and seeded: `db:migrate` then only applies new migrations, and `seed` is optional and resets the records the seed names.
+
+```sh
+pnpm --filter @sebela/db db:migrate                          # migrations are separate; the API never migrates
+pnpm --silent --filter @sebela/api seed                      # load the fictional demo seed again (overwrites what it names)
+pnpm --silent --filter @sebela/api api-keys create my-agent  # prints the key once; only its hash is stored
+pnpm --filter @sebela/api start                              # or `dev` to watch the sources
+```
+
+Public reads need no key; every write is a private route and needs the key as a bearer token, never in the URL. In these examples `API_HOST` and `API_PORT` stand for the checkout's own values and `API_KEY` for the printed key:
+
+```sh
+curl "http://$API_HOST:$API_PORT/v1/experiences"
+curl -X POST "http://$API_HOST:$API_PORT/v1/topics" -H "Authorization: Bearer $API_KEY" \
+     -H 'Content-Type: application/json' -d '{"slug":"evals","name":"Evals","position":9}'
+curl -X POST "http://$API_HOST:$API_PORT/v1/media" -H "Authorization: Bearer $API_KEY" -F 'file=@cv.pdf;type=application/pdf'
+curl -X PATCH "http://$API_HOST:$API_PORT/v1/person" -H "Authorization: Bearer $API_KEY" \
+     -H 'Content-Type: application/json' -d '{"cvPdfId":"<media id>"}'
+curl "http://$API_HOST:$API_PORT/v1/cv"
+pnpm --silent --filter @sebela/api api-keys list             # metadata only; `revoke <id>` takes effect on the next request
+```
+
+The interactive reference is served at `/reference`, the document at `/openapi.json`; every route, its access and its errors are listed in [`apps/api/AGENTS.md`](apps/api/AGENTS.md#http-behaviour).
+
+- **Two kinds of CV.** `GET /v1/cv` is CV _data_, assembled from the stored profile on every request; the website will render the CV page from it. The CV _PDF_ is a separate file you prepare yourself, upload with `POST /v1/media` and attach as the person's `cvPdfId`. The API never generates or updates the PDF, so it can differ from the data until you upload a new one.
+- **Generated clients.** `pnpm generate:api-client` exports the OpenAPI document into `packages/api-client/src/generated/` and regenerates the typed TypeScript client; `pnpm check:api-client`, run by CI on every change, fails when the committed files differ. A Python client (phase 7) is generated from the same committed `openapi.json`, without the TypeScript toolchain ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-7-not-scaffolded)).
+- **Storage without cloud credentials.** The default `STORAGE_DRIVER=local` keeps uploads on local disk and is served by the API itself; tests, CI and every command above need no Bunny credentials. The `STORAGE_BUNNY_*` settings are optional and only needed with `STORAGE_DRIVER=bunny-s3` ([Bunny Storage](docs/architecture.md#bunny-storage)).
+- **Cleanup is for development only.** `node harness/worktree.mjs remove` drops one worktree's databases, role and storage folder, and `pnpm --silent --filter @sebela/api storage remove <worktree>` removes only that storage folder. `pnpm stack:down` removes the API containers and keeps every database, while `docker compose --profile api down --volumes` deletes the shared Postgres volume, with every checkout's and worktree's database, and the media volume. `storage` refuses `STORAGE_ENVIRONMENT=production` and folders it does not own, and no command resets or deletes production content; production safety comes from backups ([release workflow](docs/release-workflow.md)).
+
+Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
 
 Start with [AGENTS.md](AGENTS.md) and the relevant phase specification. Documentation in `docs/` is binding; behaviour and its documentation change together.
 
@@ -266,7 +297,7 @@ See [agent orchestration](docs/agents.md), [permissions](docs/permissions.md) an
 - **Evals-first:** MCP and AI behaviour, including grounding, unknown answers, source correctness and direct and indirect prompt injection. Safety suites must pass completely; other thresholds are set from the baseline and never lowered to pass a run.
 - **Merge gate:** lint, typecheck, tests and build, enforced by CI on every pull request. API integration tests use real PostgreSQL and fictional fixtures.
 
-The merge gate, the harness and check tests (Node's built-in test runner) and the worktree database run are in place today. Vitest, Playwright and promptfoo suites arrive with the apps they verify. Details: [testing policy](docs/testing.md).
+The merge gate, the harness and check tests (Node's built-in test runner), the backend's Vitest suites against temporary PostgreSQL databases, the worktree runs, the API stack smoke check and the generated-client drift check are in place today. Playwright, pytest and Promptfoo suites arrive with the apps they verify. Details: [testing policy](docs/testing.md).
 
 ## Documentation
 

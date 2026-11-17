@@ -19,7 +19,7 @@ The site answers, in order: who he is, what he can do, what he has built, what h
 
 ## Entities of the profile domain
 
-Draft; the exact schema is defined in the phase 2 PRD.
+Delivered in phase 2: the schema and migrations are in `packages/db`, the transport contracts in `packages/contracts` and the routes, with their access and errors, in `apps/api/AGENTS.md`.
 
 | Entity        | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
