@@ -8,10 +8,23 @@ import { apiCommand, mediaBaseUrl, origin, required, webCommand } from "./e2e/st
 const apiUrl = origin(required("API_HOST"), required("API_PORT"));
 const webUrl = origin(required("WEB_HOST"), required("WEB_PORT"));
 
+// Spec files run in parallel, the tests of one file in order: a file's blocks share the API and
+// website they start, each on its own temporary database and free ports. E2E_WORKERS overrides
+// the default of 3 on a development machine and 4 in CI (`docs/testing.md`, Website browser tests).
+function workers(): number {
+  const value = process.env["E2E_WORKERS"];
+  if (value === undefined || value === "") return process.env["CI"] ? 4 : 3;
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error("E2E_WORKERS must be a whole number of at least 1");
+  }
+  return count;
+}
+
 export default defineConfig({
   testDir: "e2e",
   fullyParallel: false,
-  workers: 1,
+  workers: workers(),
   forbidOnly: Boolean(process.env["CI"]),
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: webUrl, trace: "retain-on-failure" },
