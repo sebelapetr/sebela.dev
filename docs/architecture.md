@@ -16,7 +16,7 @@ AI-service tools read public content/search through api over HTTP.
 
 ## The API is the trust boundary
 
-The website, `mcp-admin` and `ai-service` reach content only through `apps/api` over HTTP. The public MCP adapter reaches AI read capabilities through `ai-service`, which reads the content API. Only the API backend accesses persistence.
+The website, `mcp-admin` and `ai-service` reach content only through `apps/api` over HTTP. The website's one other read, the current CV PDF's public stored file at the address the API gives, is described under Website. The public MCP adapter reaches AI read capabilities through `ai-service`, which reads the content API. Only the API backend accesses persistence.
 
 This is a security decision, not a preference for HTTP. The system has write access for agents, two MCP servers with different threat models and a public chatbot. Content authorization is enforced at the API. FastAPI separately authenticates its internal generation route and applies AI runtime admission; public MCP reads cannot invoke it. Neither Python app can bypass content authorization.
 
@@ -105,6 +105,8 @@ The `bunny-s3` driver talks to a Bunny storage zone through Bunny's S3-compatibl
 ## Website
 
 Next.js is used as a frontend only. Pages render on the server at request time, with caching and invalidation when content changes — not at build time. The build therefore needs no running API, and a content edit needs no deploy.
+
+The website reads content from the API's public routes only. One read leaves the API: for the CV PDF download (`/cv/pdf`) the website's server fetches the current PDF's stored file from the public `url` the API's media gives, which is the API's own file route with local storage and the storage's CDN pull zone (`STORAGE_PUBLIC_BASE_URL`) in production. It fetches only an https address or plain http on the API's own origin, follows no redirect, sends no credentials and passes the file on only when it arrives whole as a PDF. This is a public file anyone can fetch, not a way around the API's access rules: which file is current is still decided by the API.
 
 From phase 3, committed API content writes notify a private website invalidation endpoint, authenticated with a dedicated server-only signing secret independent of content API keys. The website still reads only public API routes and holds no content API key. Validated content references map to affected pages, with safe duplicate delivery and bounded retries. Notification failure never undoes a committed write; time-based revalidation recovers from lost notifications. Freshness and failure criteria are defined in `.plan/03-web/prd.md` under "Cache invalidation guarantees".
 
