@@ -93,6 +93,9 @@ function fakeBackend(databases) {
       });
       if (this.failing) throw new Error("fixture: storage remove failed");
     },
+    teardownMissing({ owner }) {
+      this.calls.push({ step: "teardown-missing", owner });
+    },
   };
 }
 
@@ -552,7 +555,7 @@ test("a worktree with uncommitted work keeps its storage", (t) => {
   );
 });
 
-test("a worktree folder that is already gone needs no storage teardown", (t) => {
+test("a worktree folder that is already gone gets a storage notice instead of a teardown", (t) => {
   const { mainRoot, databases, backend, remove, worktree } = fixture(t);
   execFileSync("git", ["-C", mainRoot, "worktree", "remove", "--force", worktree.path]);
 
@@ -561,6 +564,10 @@ test("a worktree folder that is already gone needs no storage teardown", (t) => 
   assert.equal(
     backend.calls.some(({ step }) => step === "teardown"),
     false,
+  );
+  assert.deepEqual(
+    backend.calls.filter(({ step }) => step === "teardown-missing"),
+    [{ step: "teardown-missing", owner: worktree.name }],
   );
   assert.equal(databases.owners.size, 0);
 });

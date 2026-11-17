@@ -204,16 +204,35 @@ test("teardown refuses a worktree whose tools are not installed, unless forced",
 });
 
 test("teardown skips storage for a worktree that never had a storage folder", (t) => {
-  for (const env of [null, "DATABASE_NAME=fixture\n"]) {
-    const root = worktree(t, { env });
-    const runner = fakeRunner();
-    const { backend, notices } = maintenance(runner);
+  const root = worktree(t, { env: "DATABASE_NAME=fixture\n" });
+  const runner = fakeRunner();
+  const { backend, notices } = maintenance(runner);
 
-    backend.teardown({ root, owner: OWNER });
+  backend.teardown({ root, owner: OWNER });
 
-    assert.deepEqual(runner.calls, []);
-    assert.match(notices.join(""), /storage/);
-  }
+  assert.deepEqual(runner.calls, []);
+  assert.match(notices.join(""), /no storage folder/);
+});
+
+test("teardown without the environment file says the storage folder may be left behind", (t) => {
+  const root = worktree(t, { env: null });
+  const runner = fakeRunner();
+  const { backend, notices } = maintenance(runner);
+
+  backend.teardown({ root, owner: OWNER });
+
+  assert.deepEqual(runner.calls, []);
+  assert.match(notices.join(""), new RegExp(`${OWNER}.*not removed.*bunny-s3.*by hand`, "s"));
+});
+
+test("a worktree folder that is gone gets a notice that its storage folder was not checked", () => {
+  const runner = fakeRunner();
+  const { backend, notices } = maintenance(runner);
+
+  backend.teardownMissing({ owner: OWNER });
+
+  assert.deepEqual(runner.calls, []);
+  assert.match(notices.join(""), new RegExp(`${OWNER}.*not removed.*bunny-s3.*by hand`, "s"));
 });
 
 test("teardown skips a checkout without the storage command", (t) => {
