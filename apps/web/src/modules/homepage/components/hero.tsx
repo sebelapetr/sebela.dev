@@ -7,11 +7,13 @@ import { cn } from "@sebela/ui/lib/utils";
 import type { HomepageProfile } from "../../profile";
 import { routes } from "../../_shared";
 import { InlineMarkdown } from "./markdown";
+import { ChatSlot } from "./chat-slot";
 import { Portrait } from "./portrait";
 
 /**
  * The opening of the homepage: who the person is (name, headline and short bio from the API), the
- * photo, and the two calls to action — clients to services, employers to experience.
+ * photo, the reserved place of the chat entry and the two calls to action — clients to services,
+ * employers to experience.
  */
 export function Hero({ profile }: { readonly profile: HomepageProfile }) {
   return (
@@ -24,16 +26,13 @@ export function Hero({ profile }: { readonly profile: HomepageProfile }) {
       </div>
       <div className="flex min-w-0 flex-col gap-6">
         <h1 id="hero-heading" className="flex flex-col gap-3">
-          <span className="font-mono text-sm tracking-tight text-muted-foreground">
-            {profile.name}
-          </span>
-          <span className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-            {profile.headline}
-          </span>
+          <span className="type-label">{profile.name}</span>
+          <span className="type-display">{profile.headline}</span>
         </h1>
-        <div className="max-w-prose text-lg leading-relaxed text-pretty text-muted-foreground [&_p+p]:mt-4">
+        <div className="type-lead [&_p+p]:mt-4">
           <InlineMarkdown>{profile.shortBio}</InlineMarkdown>
         </div>
+        <ChatSlot />
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-6">
           <Link href={routes.services} className={cn(buttonVariants({ size: "lg" }))}>
             Work with me

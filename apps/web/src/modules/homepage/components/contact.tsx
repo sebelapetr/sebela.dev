@@ -16,7 +16,7 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
       aria-labelledby="contact-heading"
       className="flex scroll-mt-8 flex-col gap-6"
     >
-      <h2 id="contact-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+      <h2 id="contact-heading" className="type-heading">
         Have a project or a role in mind?
       </h2>
       {contact.email === null ? null : (
