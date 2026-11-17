@@ -227,6 +227,7 @@ describe("the seed CLI", () => {
                 path,
               }),
             ),
+          loadSeedIntoEmpty: () => Promise.reject(new Error("Not used by this test.")),
         },
       };
       const io = capture();
@@ -236,6 +237,45 @@ describe("the seed CLI", () => {
       expect(code).toBe(1);
       expect(io.err()).toContain("EIO");
       expect(io.err()).not.toContain(scratch);
+    });
+  });
+
+  describe("with --if-empty", () => {
+    it("loads the seed into an empty profile", async () => {
+      const folder = join(scratch, "private");
+      await writeSmallSeed(folder);
+
+      const result = await run(["--if-empty", folder]);
+
+      expect(result.code, result.err).toBe(0);
+      expect(result.out).toMatch(/topics: 1 created, 0 updated/);
+    });
+
+    it("skips a profile that already holds content, keeping its edits", async () => {
+      const folder = join(scratch, "private");
+      await writeSmallSeed(folder);
+      await run([folder]);
+      await backend.services.profile.updateTopic("fictional-topic", { name: "Edited by hand" });
+
+      const result = await run(["--if-empty", folder]);
+
+      expect(result.code, result.err).toBe(0);
+      expect(result.out).toMatch(/skipped/i);
+      expect(result.out).not.toMatch(/created/);
+      expect((await read("/v1/topics", TopicListSchema)).map(({ name }) => name)).toContain(
+        "Edited by hand",
+      );
+    });
+
+    it("still refuses an invalid seed", async () => {
+      const folder = join(scratch, "invalid");
+      await mkdir(folder);
+      await writeFile(join(folder, "topics.json"), "[{ not json");
+
+      const result = await run(["--if-empty", folder]);
+
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("topics.json");
     });
   });
 

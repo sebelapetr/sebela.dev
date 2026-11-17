@@ -72,7 +72,7 @@ An interrupted run can leave an issue's branch and worktree behind. The orchestr
 For each issue of a phase:
 
 1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed.
-2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role and ports.
+2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role, ports and storage folder, is installed and migrated, and an empty profile is loaded with the demo seed.
 3. It dispatches the developer agent that matches the area of the issue.
 4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
 5. The orchestrator dispatches the reviewer.

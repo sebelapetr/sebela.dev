@@ -94,6 +94,21 @@ jobs:
           node-version-file: .nvmrc
       - run: node harness/worktree-databases.e2e.mjs
 
+  # Backend setup of real worktrees: two worktrees of a temporary clone are installed, migrated,
+  # given their own local storage folder and seeded, serve and accept uploads through their own API,
+  # and are removed one by one. A disposable Compose project; no cloud keys.
+  worktree-backend:
+    name: Worktree backend setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: node harness/worktree-backend.e2e.mjs
+
   # The containerised API stack of compose.yaml (profile `api`): builds the API image, then checks
   # migration ordering, health, the OpenAPI document and reference, a seeded public read, a write
   # with a key from the CLI and a local media download, in a disposable Compose project with its own

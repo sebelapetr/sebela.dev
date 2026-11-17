@@ -53,7 +53,7 @@ const unconfiguredMedia: MediaService = {
   readMediaFile: unconfigured,
 };
 
-const unconfiguredSeed: SeedService = { loadSeed: unconfigured };
+const unconfiguredSeed: SeedService = { loadSeed: unconfigured, loadSeedIntoEmpty: unconfigured };
 
 /** Composes the services over a migrated database. Connects on the first operation. */
 export function openServices(config: DatabaseConfig, options: ServicesOptions = {}): Services {

@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 
-import { createBunnyS3Driver } from "./drivers/bunny-s3.js";
-import { createLocalDriver } from "./drivers/local.js";
+import { createBunnyS3Driver, createBunnyS3NamespaceStore } from "./drivers/bunny-s3.js";
+import { createLocalDriver, createLocalNamespaceStore } from "./drivers/local.js";
 import { addressOf, prefixOf, segmentPattern, type StoredExtension } from "./keys.js";
+import { ownedNamespace } from "./namespace.js";
 
 export type { StoredExtension } from "./keys.js";
 
@@ -170,4 +171,30 @@ export function openStorage(config: StorageConfig): OpenedStorage {
     },
     files: { read: (key) => local.read(key) },
   };
+}
+
+/**
+ * The storage folder of one development worktree, `<environment>/<worktree>/`, claimed by an owner
+ * marker so only the worktree that prepared it can remove it. Every operation refuses, without
+ * touching storage, a configuration without a worktree folder, the production environment and an
+ * invalid owner name.
+ */
+export interface StorageNamespace {
+  /** Creates the folder and its marker, or reuses the folder this owner already holds. */
+  prepare(): Promise<"created" | "reused">;
+  /** Removes every file of the folder this owner holds; a folder that does not exist is absent. */
+  remove(): Promise<"removed" | "absent">;
+}
+
+/**
+ * Opens the namespace of the configured worktree for `owner`, the worktree's name. Refuses a folder
+ * another owner's marker claims and files without a marker, and on local disk a prefix folder or
+ * marker that is a symbolic link. Nothing is touched until the first operation.
+ */
+export function openStorageNamespace(config: StorageConfig, owner: string): StorageNamespace {
+  const store =
+    config.driver === "bunny-s3"
+      ? createBunnyS3NamespaceStore(config)
+      : createLocalNamespaceStore(config.root, prefixOf(config));
+  return ownedNamespace(config, owner, store);
 }
