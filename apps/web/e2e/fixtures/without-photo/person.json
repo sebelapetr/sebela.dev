@@ -1,0 +1,17 @@
+{
+  "name": "Robin Ash Moor",
+  "headline": "Fictional profile without a photo or an email address",
+  "shortBio": "Robin is a fictional person with no photo.",
+  "longBio": "Robin does not exist.",
+  "location": "Testville",
+  "email": null,
+  "links": [
+    {
+      "label": "Website",
+      "url": "https://moor.example.test/"
+    }
+  ],
+  "availability": "Fictional availability.",
+  "careerStartedOn": "2018-03-01",
+  "photo": null
+}
