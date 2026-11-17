@@ -5,7 +5,11 @@
     "quote": "Casey made the dispatch tools quiet enough that nobody talks about them any more.",
     "authorName": "Riley Sample",
     "authorRole": "Head of operations, Fernway Logistics (fictional)",
-    "position": 0
+    "position": 0,
+    "authorPhoto": {
+      "file": "files/avatar-riley.png",
+      "altText": "An illustrated placeholder avatar of the fictional Riley Sample."
+    }
   },
   {
     "slug": "pinecrest-product-owner",

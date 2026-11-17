@@ -5,7 +5,11 @@
     "quote": "Alex wrote the test questions before writing the assistant. That is why we trusted it with our archive.",
     "authorName": "Mira Example",
     "authorRole": "Editor-in-chief, Lumen Press (fictional)",
-    "position": 0
+    "position": 0,
+    "authorPhoto": {
+      "file": "files/avatar-mira.png",
+      "altText": "An illustrated placeholder avatar of the fictional Mira Example."
+    }
   },
   {
     "slug": "harbor-head-of-ecommerce",
@@ -29,6 +33,10 @@
     "quote": "A junior who asked the right questions and shipped the tracking integration on time.",
     "authorName": "Hana Fictive",
     "authorRole": "Team lead, Northwind Freight (fictional)",
-    "position": 0
+    "position": 0,
+    "authorPhoto": {
+      "file": "files/avatar-hana.png",
+      "altText": "An illustrated placeholder avatar of the fictional Hana Fictive."
+    }
   }
 ]

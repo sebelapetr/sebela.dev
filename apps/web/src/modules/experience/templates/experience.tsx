@@ -13,7 +13,7 @@ import { careerYears, toTimelineEntries } from "../data/timeline";
  * published experience on one timeline in the API's order. Without experiences the page says so.
  */
 export function ExperienceTemplate({ content }: { readonly content: ExperienceContent }) {
-  const entries = toTimelineEntries(content.experiences, content.logos);
+  const entries = toTimelineEntries(content.experiences, content.logos, content.authorPhotos);
   const years = careerYears(content.careerStartedOn, new Date());
   return (
     <>

@@ -8,6 +8,7 @@ import type {
 
 import { DomainError } from "../../errors.js";
 import { definedChanges } from "./changes.js";
+import { isMediaRefusal, mediaRefused } from "./media-references.js";
 import type { TestimonialService } from "./types.js";
 
 const missing = (slug: string) =>
@@ -29,8 +30,8 @@ function unknownExperience(experience: string | undefined): DomainError {
 }
 
 /**
- * The testimonials, each belonging to exactly one experience. Persistence judges the experience
- * and slug uniqueness on stored rows inside one transaction, so a refused write leaves nothing
+ * The testimonials, each belonging to exactly one experience, with an optional author photo.
+ * Persistence judges the experience, the author photo and slug uniqueness on stored rows inside one transaction, so a refused write leaves nothing
  * behind.
  */
 export function createTestimonialService(persistence: ProfilePersistence): TestimonialService {
@@ -49,6 +50,7 @@ export function createTestimonialService(persistence: ProfilePersistence): Testi
       if (result.reason === "conflict") {
         throw new DomainError("conflict", `A testimonial "${input.slug}" already exists.`);
       }
+      if (isMediaRefusal(result)) throw mediaRefused(result);
       throw unknownExperience(input.experience);
     },
     async updateTestimonial(slug, changes) {
@@ -58,6 +60,7 @@ export function createTestimonialService(persistence: ProfilePersistence): Testi
       );
       if (result.ok) return toTestimonial(result.testimonial);
       if (result.reason === "not_found") throw missing(slug);
+      if (isMediaRefusal(result)) throw mediaRefused(result);
       throw unknownExperience(changes.experience);
     },
     async deleteTestimonial(slug) {

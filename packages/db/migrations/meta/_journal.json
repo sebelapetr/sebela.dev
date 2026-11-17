@@ -92,6 +92,13 @@
       "when": 1794866038627,
       "tag": "0012_media-digest",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794917405361,
+      "tag": "0013_testimonial-author-photo",
+      "breakpoints": true
     }
   ]
 }

@@ -862,7 +862,7 @@ describe("the generated API client", () => {
 
     const created = await client.POST("/v1/testimonials", { body: quote });
     expect(created.response.status).toBe(201);
-    expect(created.data).toMatchObject(quote);
+    expect(created.data).toMatchObject({ ...quote, authorPhotoId: null });
     const duplicate = await client.POST("/v1/testimonials", { body: quote });
     expect(duplicate.error?.error.code).toBe("conflict");
     const orphan = await client.POST("/v1/testimonials", {
@@ -1073,6 +1073,51 @@ describe("the generated API client", () => {
 
     const cleared = await client.PATCH("/v1/person", { body: { photoId: null } });
     expect(cleared.data?.photoId).toBeNull();
+
+    await backend.services.profile.createOrganization({
+      logoId: null,
+      slug: "avatar-works",
+      name: "Avatar Works",
+      website: null,
+      description: null,
+    });
+    await backend.services.profile.createExperience({
+      slug: "avatar-lead",
+      organization: "avatar-works",
+      title: "Engineer",
+      kind: "main_job",
+      summary: "A fictional role.",
+      responsibilities: [],
+      startedOn: "2019-01-01",
+      endedOn: null,
+      inCv: true,
+      technologies: [],
+    });
+    const praised = await client.POST("/v1/testimonials", {
+      body: {
+        slug: "ava-on-avatars",
+        experience: "avatar-lead",
+        quote: "A fictional compliment.",
+        authorName: "Ava Placeholder",
+        authorRole: "Site Manager",
+        position: 0,
+        authorPhotoId: photoId,
+      },
+    });
+    expect(praised.data?.authorPhotoId).toBe(photoId);
+    const unsuitable = await client.PATCH("/v1/testimonials/{slug}", {
+      params: { path: { slug: "ava-on-avatars" } },
+      body: { authorPhotoId: cv.data?.id ?? "" },
+    });
+    expect(unsuitable.error?.error.fields?.map(({ path }) => path)).toEqual(["authorPhotoId"]);
+    const unattached = await client.PATCH("/v1/testimonials/{slug}", {
+      params: { path: { slug: "ava-on-avatars" } },
+      body: { authorPhotoId: null },
+    });
+    expect(unattached.data?.authorPhotoId).toBeNull();
+    await backend.services.profile.deleteTestimonial("ava-on-avatars");
+    await backend.services.profile.deleteExperience("avatar-lead");
+    await backend.services.profile.deleteOrganization("avatar-works");
     expect((await client.DELETE("/v1/media/{id}", at(photoId))).response.status).toBe(204);
     const missing = await client.GET("/v1/media/{id}", at(photoId));
     expect(missing.error?.error.code).toBe("not_found");
@@ -1087,7 +1132,7 @@ describe("the generated API client", () => {
       null,
       bearer,
       null,
-      ...Array<string>(5).fill(bearer),
+      ...Array<string>(8).fill(bearer),
       null,
       ...Array<string>(2).fill(bearer),
     ]);

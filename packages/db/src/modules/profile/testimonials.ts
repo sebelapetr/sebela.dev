@@ -1,9 +1,11 @@
 import { asc, eq, type SQL } from "drizzle-orm";
 
 import type { Database } from "../../database.js";
+import { checkMediaReferences, type MediaReference } from "./media.js";
 import { experienceOrder, type Executor, now, WriteRefused } from "./relations.js";
 import { experiences, testimonials } from "./schema.js";
 import type {
+  TestimonialMedia,
   TestimonialPersistence,
   TestimonialRecord,
   TestimonialWriteFailure,
@@ -17,6 +19,7 @@ const testimonialColumns = {
   authorName: testimonials.authorName,
   authorRole: testimonials.authorRole,
   position: testimonials.position,
+  authorPhotoId: testimonials.authorPhotoId,
   createdAt: testimonials.createdAt,
   updatedAt: testimonials.updatedAt,
 };
@@ -59,6 +62,11 @@ async function experienceId(tx: Executor, slug: string): Promise<string> {
   return row.id;
 }
 
+/** The author photo must be an image. */
+const authorPhoto = (fields: Partial<TestimonialMedia>): MediaReference[] => [
+  { field: "authorPhotoId", id: fields.authorPhotoId, kind: "image" },
+];
+
 /** Runs a write; a refusal rolls it back and becomes its failure. */
 async function refusable<T>(write: () => Promise<T>): Promise<T | TestimonialWriteFailure> {
   try {
@@ -73,8 +81,9 @@ async function refusable<T>(write: () => Promise<T>): Promise<T | TestimonialWri
 /**
  * The testimonials, each belonging to exactly one experience. The experience is a required foreign
  * key without a cascade: a write locks it against a concurrent delete, and an experience with a
- * testimonial cannot be deleted. Slugs are unique in the database; each write runs in one
- * transaction, so a refused move changes nothing.
+ * testimonial cannot be deleted. The optional author photo is an image, locked `FOR KEY SHARE`
+ * while a write attaches it, so attached media cannot be deleted. Slugs are unique in the
+ * database; each write runs in one transaction, so a refused move or photo changes nothing.
  */
 export function createTestimonialPersistence(db: Database): TestimonialPersistence {
   return {
@@ -88,6 +97,7 @@ export function createTestimonialPersistence(db: Database): TestimonialPersisten
     createTestimonial({ experience, ...fields }) {
       return refusable(() =>
         db.transaction(async (tx) => {
+          await checkMediaReferences(tx, authorPhoto(fields));
           const [row] = await tx
             .insert(testimonials)
             .values({ ...fields, experienceId: await experienceId(tx, experience) })
@@ -108,6 +118,7 @@ export function createTestimonialPersistence(db: Database): TestimonialPersisten
             .for("update");
           if (!current) return { ok: false, reason: "not_found" } as const;
 
+          await checkMediaReferences(tx, authorPhoto(fields));
           const owner =
             experience === undefined ? {} : { experienceId: await experienceId(tx, experience) };
           await tx

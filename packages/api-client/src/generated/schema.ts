@@ -310,7 +310,7 @@ export interface paths {
         put?: never;
         /**
          * Create a testimonial
-         * @description The testimonial belongs to the existing experience named by `experience`; an unknown experience is refused with that field. The slug is unique and stable; a taken slug is a conflict.
+         * @description The testimonial belongs to the existing experience named by `experience`; an unknown experience is refused with that field. The slug is unique and stable; a taken slug is a conflict. `authorPhotoId` attaches uploaded image media as the author photo; a PDF or unknown media is refused.
          */
         post: operations["createTestimonial"];
         delete?: never;
@@ -332,14 +332,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a testimonial
-         * @description Removes the testimonial; its experience stays.
+         * @description Removes the testimonial; its experience and its author photo stay.
          */
         delete: operations["deleteTestimonial"];
         options?: never;
         head?: never;
         /**
          * Update a testimonial
-         * @description Changes only the fields sent; the slug cannot change. A sent `experience` moves the testimonial to that existing experience; an unknown one is refused and changes nothing.
+         * @description Changes only the fields sent; `null` clears the author photo; the slug cannot change. A sent `experience` moves the testimonial to that existing experience; an unknown one is refused and changes nothing.
          */
         patch: operations["updateTestimonial"];
         trace?: never;
@@ -626,7 +626,7 @@ export interface paths {
         post?: never;
         /**
          * Delete media
-         * @description Deletes the record and its file. Media attached to the person, an organization or a project is not deleted; clear the reference first.
+         * @description Deletes the record and its file. Media attached to the person, an organization, a project or a testimonial is not deleted; clear the reference first.
          */
         delete: operations["deleteMedia"];
         options?: never;
@@ -984,6 +984,11 @@ export interface components {
             authorRole: string;
             /** @description Ascending order within the experience; ties are ordered by slug. */
             position: number;
+            /**
+             * @description The identifier of the author's photo, an uploaded image; `null` without one.
+             * @default null
+             */
+            authorPhotoId?: string | null;
         };
         TestimonialUpdate: {
             /** @description The slug of the existing experience the testimonial belongs to. On an update it moves the testimonial to that experience. */
@@ -996,6 +1001,8 @@ export interface components {
             authorRole?: string;
             /** @description Ascending order within the experience; ties are ordered by slug. */
             position?: number;
+            /** @description The identifier of the author's photo, an uploaded image; `null` without one. */
+            authorPhotoId?: string | null;
         };
         CaseStudyCreate: {
             /** @description The person's own role in the project, as plain text, for example `Lead engineer`. */
@@ -1444,6 +1451,8 @@ export interface components {
             authorRole: string;
             /** @description Ascending order within the experience; ties are ordered by slug. */
             position: number;
+            /** @description The identifier of the author's photo, an uploaded image; `null` without one. */
+            authorPhotoId: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

@@ -104,6 +104,7 @@ export type {
   TechnologyRecord,
   TechnologyTier,
   TestimonialFields,
+  TestimonialMedia,
   TestimonialPersistence,
   TestimonialRecord,
   TestimonialRelations,

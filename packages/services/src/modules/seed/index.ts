@@ -417,7 +417,11 @@ export function createSeedService(
           data.testimonials,
           (slug) => profile.getTestimonial(slug),
           (value) => profile.createTestimonial(value),
-          (slug, changes) => profile.updateTestimonial(slug, changes),
+          (slug, changes, existing) => {
+            supersede(existing.authorPhotoId, changes.authorPhotoId);
+            return profile.updateTestimonial(slug, changes);
+          },
+          ({ value, files }) => ({ ...value, authorPhotoId: mediaId(files.authorPhotoId) }),
         );
         await upsert(
           "services",

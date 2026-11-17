@@ -473,7 +473,8 @@ export const education = profileSchema.table(
 /**
  * Testimonials: quotes from clients and colleagues, each tied to the experience it is about. The
  * experience key is required and has no cascade, so every testimonial belongs to exactly one
- * experience and an experience is never deleted while a testimonial belongs to it.
+ * experience and an experience is never deleted while a testimonial belongs to it. The optional
+ * author photo refers to an uploaded image, also without a cascade, so referenced media is kept.
  */
 export const testimonials = profileSchema.table(
   "testimonials",
@@ -487,6 +488,7 @@ export const testimonials = profileSchema.table(
     authorName: text("author_name").notNull(),
     authorRole: text("author_role").notNull(),
     position: integer("position").notNull(),
+    authorPhotoId: uuid("author_photo_id").references(() => media.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -130,6 +130,11 @@ describe("the seed CLI", () => {
 
       const projects = await read("/v1/projects", ProjectListSchema);
       expect(projects.some(({ coverId }) => coverId !== null)).toBe(true);
+
+      const testimonials = await read("/v1/testimonials", TestimonialListSchema);
+      const photographed = testimonials.filter(({ authorPhotoId }) => authorPhotoId !== null);
+      expect(photographed.length).toBeGreaterThanOrEqual(1);
+      expect(photographed.length).toBeLessThan(testimonials.length);
       const caseStudies = await Promise.all(
         projects.map(async ({ slug }) =>
           backend.api().app.request(`/v1/projects/${slug}/case-study`, {}, connection()),

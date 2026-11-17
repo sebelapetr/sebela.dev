@@ -80,13 +80,20 @@ async function expectAccessible(page: Page) {
   ).toEqual([]);
 }
 
-/** Brings every organization logo into view, so lazy ones load, and checks that none is broken. */
-async function expectLogosLoaded(page: Page) {
-  const logos = page.locator('[data-slot="organization-logo"]');
-  for (const logo of await logos.all()) {
-    await logo.scrollIntoViewIfNeeded();
+/**
+ * Brings every visible organization logo and author photo into view, so lazy ones load, and checks
+ * that none is broken.
+ */
+async function expectImagesLoaded(page: Page) {
+  const images = page
+    .locator('[data-slot="organization-logo"], [data-slot="author-photo"]')
+    .filter({ visible: true });
+  for (const image of await images.all()) {
+    await image.scrollIntoViewIfNeeded();
     await expect
-      .poll(() => logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth))
+      .poll(() =>
+        image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth),
+      )
       .toBeGreaterThan(0);
   }
   await page.evaluate(() => {
@@ -159,7 +166,7 @@ test.describe("experience page read from the API", () => {
         await expect(logo).toHaveAttribute("alt", entry.logo);
       }
     }
-    await expectLogosLoaded(page);
+    await expectImagesLoaded(page);
 
     // A row without a logo starts its text where a row with one does.
     const left = (anchor: string) =>
@@ -241,6 +248,42 @@ test.describe("experience page read from the API", () => {
     }
   });
 
+  test("shows a testimonial author's photo beside the quote, and nothing in its place without one", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience`);
+    const withPhoto = item(page, "experience-fernway-lead-engineer").locator("figure");
+    const photo = withPhoto.locator('[data-slot="author-photo"]');
+    await expect(photo).toBeVisible();
+    await expect(photo).toHaveAttribute(
+      "alt",
+      "An illustrated placeholder avatar of the fictional Riley Sample.",
+    );
+    await expect
+      .poll(() => photo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth))
+      .toBeGreaterThan(0);
+    // Beside the quote: on its line, after it.
+    const quoteBox = await withPhoto.getByRole("blockquote").boundingBox();
+    const photoBox = await photo.boundingBox();
+    expect(photoBox && quoteBox && photoBox.x).toBeGreaterThan(
+      (quoteBox?.x ?? 0) + (quoteBox?.width ?? 0) - 1,
+    );
+    expect(photoBox && quoteBox && Math.round(photoBox.y)).toBe(Math.round(quoteBox?.y ?? 0));
+
+    const row = item(page, "experience-pinecrest-senior-developer");
+    await row.getByRole("button").click();
+    const withoutPhoto = row.locator("figure");
+    await expect(withoutPhoto).toBeVisible();
+    await expect(withoutPhoto.locator("img")).toHaveCount(0);
+
+    // A quote without a photo starts where one with a photo does.
+    const left = (figure: typeof withPhoto) =>
+      figure
+        .getByRole("blockquote")
+        .evaluate((element) => Math.round(element.getBoundingClientRect().left));
+    expect(await left(withoutPhoto)).toBe(await left(withPhoto));
+  });
+
   test("links to an experience by its stable anchor", async ({ page }) => {
     await page.goto(`${website.url}/experience#experience-pinecrest-developer`);
     await expect(item(page, "experience-pinecrest-developer")).toBeInViewport();
@@ -259,7 +302,7 @@ test.describe("experience page read from the API", () => {
         await expect(
           item(page, "experience-pinecrest-senior-developer").getByRole("region"),
         ).toBeVisible();
-        await expectLogosLoaded(page);
+        await expectImagesLoaded(page);
         // No hover state in the picture.
         await page.mouse.move(0, 0);
         await expectNoHorizontalScroll(page);

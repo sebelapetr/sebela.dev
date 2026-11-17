@@ -22,11 +22,24 @@ const kindWords = {
   authorName: "Dana Placeholder",
   authorRole: "Head of Operations",
   position: 1,
+  authorPhotoId: "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b",
 };
 
 describe("TestimonialCreateSchema", () => {
   it("accepts a testimonial with every field", () => {
     expect(TestimonialCreateSchema.parse(kindWords)).toEqual(kindWords);
+  });
+
+  it("leaves the author photo empty when none is sent", () => {
+    const withoutPhoto = { ...kindWords, authorPhotoId: undefined };
+    expect(TestimonialCreateSchema.parse(withoutPhoto)).toEqual({
+      ...withoutPhoto,
+      authorPhotoId: null,
+    });
+    expect(TestimonialCreateSchema.parse({ ...kindWords, authorPhotoId: null })).toEqual({
+      ...kindWords,
+      authorPhotoId: null,
+    });
   });
 
   it("trims the quote, the author's name and the author's role", () => {
@@ -75,7 +88,8 @@ describe("TestimonialCreateSchema", () => {
     ["a missing position", { ...kindWords, position: undefined }],
     ["a negative position", { ...kindWords, position: -1 }],
     ["a fractional position", { ...kindWords, position: 1.5 }],
-    ["an author photo before media exists", { ...kindWords, authorPhoto: "dana" }],
+    ["an author photo that is a file name", { ...kindWords, authorPhotoId: "dana.png" }],
+    ["an embedded author photo", { ...kindWords, authorPhoto: { id: kindWords.authorPhotoId } }],
     ["a visibility flag", { ...kindWords, visible: true }],
   ])("rejects %s", (_, input) => {
     expect(TestimonialCreateSchema.safeParse(input).success).toBe(false);
@@ -100,7 +114,15 @@ describe("TestimonialUpdateSchema", () => {
     });
   });
 
+  it("attaches and clears the author photo", () => {
+    expect(TestimonialUpdateSchema.parse({ authorPhotoId: kindWords.authorPhotoId })).toEqual({
+      authorPhotoId: kindWords.authorPhotoId,
+    });
+    expect(TestimonialUpdateSchema.parse({ authorPhotoId: null })).toEqual({ authorPhotoId: null });
+  });
+
   it.each([
+    ["an author photo that is a path", { authorPhotoId: "../dana.png" }],
     ["an empty change", {}],
     ["a change of the slug", { slug: "renamed" }],
     ["detaching the testimonial from its experience", { experience: null }],
@@ -120,6 +142,14 @@ describe("TestimonialSchema and TestimonialListSchema", () => {
     expect(TestimonialSchema.parse(testimonial)).toEqual(testimonial);
     expect(TestimonialListSchema.parse([testimonial])).toEqual([testimonial]);
     expect(TestimonialListSchema.parse([])).toEqual([]);
+  });
+
+  it("describe a testimonial without an author photo", () => {
+    const withoutPhoto = { ...testimonial, authorPhotoId: null };
+    expect(TestimonialSchema.parse(withoutPhoto)).toEqual(withoutPhoto);
+    expect(TestimonialSchema.safeParse({ ...testimonial, authorPhotoId: undefined }).success).toBe(
+      false,
+    );
   });
 
   it("rejects a testimonial without an experience", () => {

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { createApiClient, type Experience, type Media, type Person } from "@sebela/api-client";
+import {
+  createApiClient,
+  type Experience,
+  type Media,
+  type Person,
+  type Testimonial,
+} from "@sebela/api-client";
 
 import { loadExperience } from "./load-experience";
 
@@ -124,6 +130,7 @@ describe("loadExperience", () => {
         careerStartedOn: "2015-09-01",
         experiences: twoExperiences,
         logos: new Map(),
+        authorPhotos: new Map(),
       },
     });
   });
@@ -326,5 +333,133 @@ describe("loadExperience", () => {
 
       expect(result.status === "ready" && result.content.logos).toEqual(new Map());
     });
+  });
+
+  describe("testimonial author photos", () => {
+    const PHOTO_ID = "5c4b3a29-1807-4f6e-9d5c-4b3a29180716";
+    const OTHER_PHOTO_ID = "2f3e4d5c-6b7a-4891-a0b1-c2d3e4f5a6b7";
+    const photoUrl = (id: string) => `/v1/media/${id}`;
+
+    function quote(slug: string, authorPhotoId: string | null): Testimonial {
+      return {
+        id: "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c50",
+        slug,
+        experience: "current",
+        quote: "A fictional quote.",
+        authorName: "Mira Example",
+        authorRole: "Editor (fictional)",
+        position: 0,
+        authorPhotoId,
+        createdAt: STAMP,
+        updatedAt: STAMP,
+      };
+    }
+
+    function withQuotes(...testimonials: Testimonial[]): Experience {
+      return { ...experience("current", null), testimonials };
+    }
+
+    const photo = (overrides: Partial<Media> = {}) =>
+      media({
+        id: PHOTO_ID,
+        key: "test/mira.png",
+        width: 160,
+        height: 160,
+        altText: "An illustrated portrait of Mira Example.",
+        url: "https://media.example.test/files/test/mira.png",
+        ...overrides,
+      });
+
+    it("reads each author photo once and keeps it by its media id, apart from the logos", async () => {
+      const { client, requests } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () =>
+          json([
+            withQuotes(quote("first", PHOTO_ID), quote("second", OTHER_PHOTO_ID)),
+            { ...experience("older", "2019-12-31"), testimonials: [quote("third", PHOTO_ID)] },
+          ]),
+        [photoUrl(PHOTO_ID)]: () => json(photo()),
+        [photoUrl(OTHER_PHOTO_ID)]: () =>
+          json(
+            photo({ id: OTHER_PHOTO_ID, altText: null, url: "https://media.example.test/b.webp" }),
+          ),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result.status === "ready" && result.content.authorPhotos).toEqual(
+        new Map([
+          [
+            PHOTO_ID,
+            {
+              url: "https://media.example.test/files/test/mira.png",
+              altText: "An illustrated portrait of Mira Example.",
+              width: 160,
+              height: 160,
+            },
+          ],
+          [
+            OTHER_PHOTO_ID,
+            { url: "https://media.example.test/b.webp", altText: "", width: 160, height: 160 },
+          ],
+        ]),
+      );
+      expect(result.status === "ready" && result.content.logos).toEqual(new Map());
+      const mediaReads = requests.filter((request) =>
+        new URL(request.url).pathname.startsWith("/v1/media/"),
+      );
+      expect(mediaReads).toHaveLength(2);
+      for (const request of mediaReads) {
+        expect(request.headers.get("Authorization")).toBeNull();
+        expect(request.cache).toBe("no-store");
+      }
+    });
+
+    it("reads no media for testimonials without a photo", async () => {
+      const { client, requests } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () => json([withQuotes(quote("first", null))]),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());
+      expect(requests).toHaveLength(2);
+    });
+
+    it.each<[string, Partial<Media>]>([
+      ["is not an image", { mediaType: "application/pdf" }],
+      ["has no address", { url: null }],
+      ["has an address that is not a web address", { url: "javascript:alert(1)" }],
+      ["has no width", { width: null }],
+      ["has no height", { height: null }],
+    ])("leaves out an author photo that %s", async (_label, overrides) => {
+      const { client } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () => json([withQuotes(quote("first", PHOTO_ID))]),
+        [photoUrl(PHOTO_ID)]: () => json(photo(overrides)),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result).toMatchObject({ status: "ready" });
+      expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());
+    });
+
+    it.each([...failures, ["does not exist", () => apiError("not_found", 404)] as [string, Route]])(
+      "leaves out an author photo, and keeps the page, when its read %s",
+      async (_label, route) => {
+        const { client } = clientWith({
+          "/v1/person": () => json(person()),
+          "/v1/experiences": () => json([withQuotes(quote("first", PHOTO_ID))]),
+          [photoUrl(PHOTO_ID)]: route,
+        });
+
+        const result = await loadExperience(client);
+
+        expect(result.status === "ready" && result.content.experiences).toHaveLength(1);
+        expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());
+      },
+    );
   });
 });

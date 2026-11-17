@@ -18,6 +18,8 @@ export interface TimelineTestimonial {
   readonly quote: string;
   readonly authorName: string;
   readonly authorRole: string;
+  /** The author's photo; null without one or when it cannot be shown. */
+  readonly authorPhoto: ImageMedia | null;
 }
 
 /** One experience as the timeline shows it. */
@@ -50,11 +52,13 @@ export interface TimelineEntry {
  * The timeline's entries from the API's experiences, in the API's order (current first, then the
  * latest start). Every experience stays its own entry with its own kind: nothing is grouped under
  * an employer and nothing is inferred from names. `logos` holds the logos that can be shown, by
- * media id; an organization whose logo is not there has none.
+ * media id; an organization whose logo is not there has none. `authorPhotos` holds the testimonial
+ * authors' photos the same way; a testimonial whose photo is not there has none.
  */
 export function toTimelineEntries(
   experiences: readonly Experience[],
   logos: ReadonlyMap<string, ImageMedia> = new Map(),
+  authorPhotos: ReadonlyMap<string, ImageMedia> = new Map(),
 ): TimelineEntry[] {
   return experiences.map((experience) => ({
     slug: experience.slug,
@@ -78,7 +82,13 @@ export function toTimelineEntries(
     testimonials: experience.testimonials
       .filter((testimonial) => testimonial.experience === experience.slug)
       .toSorted((a, b) => a.position - b.position)
-      .map(({ slug, quote, authorName, authorRole }) => ({ slug, quote, authorName, authorRole })),
+      .map(({ slug, quote, authorName, authorRole, authorPhotoId }) => ({
+        slug,
+        quote,
+        authorName,
+        authorRole,
+        authorPhoto: authorPhotoId === null ? null : (authorPhotos.get(authorPhotoId) ?? null),
+      })),
   }));
 }
 

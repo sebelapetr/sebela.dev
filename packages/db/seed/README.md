@@ -15,7 +15,9 @@ but no running HTTP server and no API key. It prints counts only, never content 
 folder's path. The exit code is 0 for a load or a skipped `--if-empty` load, 1 for a refused or unreadable seed and 2 for bad usage.
 
 The repository contains only the fictional demo seed in `demo/`. Its records double as an example
-of every file below.
+of every file below. Its attached files are generated placeholders: logos, covers and illustrated
+avatars for testimonial authors, never a photo of a real person. The owner's real content,
+testimonial photos included, stays in the owner's private seed folder.
 
 ## Data files
 
@@ -40,8 +42,8 @@ Each record has exactly the fields of the API's create request for its kind (the
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
 
 - **Media are declared as files, not identifiers.** Instead of `photoId` and `cvPdfId` (person),
-  `logoId` (organization) and `coverId` (project), a record declares `photo`, `cvPdf`, `logo` or
-  `cover` as `{ "file": "files/portrait.jpg", "altText": "…" }` or `null`. `altText` is optional. An absent key behaves exactly like `null`: the record has no such attachment, so loading it clears one that is set (see superseded media below).
+  `logoId` (organization), `coverId` (project) and `authorPhotoId` (testimonial), a record declares
+  `photo`, `cvPdf`, `logo`, `cover` or `authorPhoto` as `{ "file": "files/portrait.jpg", "altText": "…" }` or `null`. `altText` is optional. An absent key behaves exactly like `null`: the record has no such attachment, so loading it clears one that is set (see superseded media below).
   A media identifier in a seed record is refused.
 - **A project may carry its case study** as `caseStudy: { "role": "…", "body": "…" }`.
 - **References are slugs**, as in the API: an experience names its `organization` and
@@ -55,8 +57,8 @@ A slug is unique within its file.
 - A `file` path is relative to the seed folder, uses `/`, and contains no `..`. After symbolic
   links are resolved it must still lie inside the folder.
 - Each file passes the same checks as an upload through the API: its content must be PNG, JPEG,
-  WebP or PDF, within the configured size limit, and match its field (an image for `photo`, `logo`
-  and `cover`, a PDF for `cvPdf`).
+  WebP or PDF, within the configured size limit, and match its field (an image for `photo`, `logo`,
+  `cover` and `authorPhoto`, a PDF for `cvPdf`).
 - Files are recognised by content (SHA-256). A file already stored with identical content is
   reused instead of stored again, so a rerun uploads nothing. Two declarations of the same content
   must give the same alt text.
@@ -72,8 +74,8 @@ A slug is unique within its file.
 - **Superseded media are removed.** When a seed record stops referring to a file (it declares
   another one, `null` or omits the key), the media it referred to before are deleted after the
   load, together with their stored files, unless anything still refers to them. This also applies
-  to media attached by hand to a record the seed names: a rerun clears a photo, CV PDF, logo or
-  cover the seed does not declare and deletes that media if nothing else uses it.
+  to media attached by hand to a record the seed names: a rerun clears a photo, CV PDF, logo,
+  cover or author photo the seed does not declare and deletes that media if nothing else uses it.
 - **Reuse ignores the storage prefix.** A file is reused when any media record has identical
   content, even one stored under another environment or worktree prefix; such a record keeps its
   key, so its public address stays `null` in this environment.
