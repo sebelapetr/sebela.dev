@@ -3,8 +3,8 @@ import { ArrowRight } from "lucide-react";
 
 import { buttonVariants } from "@sebela/ui/components/button";
 
-import type { HomepageProfile } from "../profile";
-import { routes } from "../site";
+import type { HomepageProfile } from "../../profile";
+import { routes } from "../../_shared";
 import { InlineMarkdown } from "./markdown";
 import { Portrait } from "./portrait";
 

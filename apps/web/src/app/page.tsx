@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
-import { Footer } from "../footer";
-import { Homepage } from "../homepage";
-import { getHomepage } from "../profile";
+import { HomepageTemplate } from "../modules/homepage";
+import { getHomepage } from "../modules/profile";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty profile. */
 class ContentUnavailableError extends Error {
@@ -30,10 +29,5 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HomePage() {
   const profile = await readProfile();
-  return (
-    <>
-      <Homepage profile={profile} />
-      <Footer name={profile.name} />
-    </>
-  );
+  return <HomepageTemplate profile={profile} />;
 }

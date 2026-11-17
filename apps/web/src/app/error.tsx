@@ -4,7 +4,7 @@ import { RotateCw } from "lucide-react";
 
 import { Button } from "@sebela/ui/components/button";
 
-import { Footer } from "../footer";
+import { Footer } from "../modules/_shared";
 
 /**
  * Shown when a page's content cannot be read (the API failed, was unreachable or too slow). Says

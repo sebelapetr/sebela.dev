@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import type { HomepagePhoto } from "../profile";
+import type { HomepagePhoto } from "../../profile";
 
 /** Up to two initials of a name, for the placeholder shown without a photo. */
 function initials(name: string): string {

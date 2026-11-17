@@ -2,7 +2,7 @@ import { Mail } from "lucide-react";
 
 import { buttonVariants } from "@sebela/ui/components/button";
 
-import type { HomepageProfile } from "../profile";
+import type { HomepageProfile } from "../../profile";
 
 /**
  * The closing contact block, the target of `/#contact`: the email address and web links from the

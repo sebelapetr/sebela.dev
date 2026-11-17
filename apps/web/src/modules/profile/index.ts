@@ -5,10 +5,10 @@ import { cache } from "react";
 
 import { createApiClient, type ApiClient } from "@sebela/api-client";
 
-import { readWebConfig } from "../config";
-import { loadHomepage, type HomepageResult } from "./load-homepage";
+import { readWebConfig } from "../../config";
+import { loadHomepage, type HomepageResult } from "./data/load-homepage";
 
-export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./load-homepage";
+export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./data/load-homepage";
 
 let client: ApiClient | undefined;
 

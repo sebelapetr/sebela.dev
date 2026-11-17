@@ -2,8 +2,7 @@ import Link from "next/link";
 
 import { buttonVariants } from "@sebela/ui/components/button";
 
-import { Footer } from "../footer";
-import { routes } from "../site";
+import { Footer, routes } from "../modules/_shared";
 
 export default function NotFound() {
   return (

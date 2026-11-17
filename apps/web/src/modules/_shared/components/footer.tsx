@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { repositoryUrl, routes } from "./site";
+import { repositoryUrl, routes } from "../site";
 
 const linkClass =
   "inline-flex min-h-11 items-center gap-1.5 underline-offset-4 hover:text-foreground hover:underline focus-visible:underline";
