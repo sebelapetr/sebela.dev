@@ -76,3 +76,42 @@ export function CaseStudyDisclosure({
     </Collapsible>
   );
 }
+
+/**
+ * The secondary technologies: a heading whose button ("+ N other technologies & tools ↓") shows and
+ * hides their plain-text list, collapsed at first. Its chevron points down while closed and up
+ * while open; the closed list stays findable by page search (`hidden="until-found"`).
+ */
+export function SecondaryTechnologiesDisclosure({
+  anchor,
+  label,
+  children,
+}: {
+  readonly anchor: string;
+  /** The button's text, for example `+ 5 other technologies & tools`. */
+  readonly label: string;
+  readonly children: ReactNode;
+}) {
+  const [open, setOpen] = useDisclosure(anchor);
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      render={<div id={anchor} tabIndex={-1} />}
+      className="anchor-target flex flex-col"
+    >
+      <h3>
+        <CollapsibleTrigger className="group/secondary inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline">
+          {label}
+          <ChevronDown
+            aria-hidden="true"
+            className="size-4 group-data-[panel-open]/secondary:rotate-180"
+          />
+        </CollapsibleTrigger>
+      </h3>
+      <CollapsibleContent hiddenUntilFound>
+        <div className="pt-2">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

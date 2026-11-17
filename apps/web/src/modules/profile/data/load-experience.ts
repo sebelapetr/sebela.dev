@@ -17,8 +17,11 @@ export interface ExperienceContent {
   readonly careerStartedOn: string | null;
   /** The published experiences in the API's order: current first, then the latest start. */
   readonly experiences: readonly Experience[];
+  /** The explorations (independent R&D) in the API's order: by position, then slug. */
   readonly explorations: readonly Exploration[];
+  /** The technologies in the API's order: by tier, group, position, then slug. */
   readonly technologies: readonly Technology[];
+  /** The education records in the API's order: by position, then slug. */
   readonly education: readonly Education[];
   /**
    * The organizations' logos that can be shown, by media id (`organization.logoId`). A logo that
@@ -68,11 +71,12 @@ async function readImages(
 }
 
 /**
- * Reads the experience page's content from the API's public routes: the person and the
- * experiences, then each organization's logo and each testimonial author's photo once, uncached
- * and limited in time. A person that does not exist makes the page missing; a failed read of the
- * person or the experiences makes the whole content unavailable, while a logo or photo that cannot
- * be read or shown is only left out.
+ * Reads the experience page's content from the API's public routes: the person, the experiences,
+ * the explorations, the technologies and the education, then each organization's logo and each
+ * testimonial author's photo once, uncached and limited in time. A person that does not exist
+ * makes the page missing; a failed read of any of the five lists or of the person makes the whole
+ * content unavailable (never a page with a section silently left out), while a logo or photo that
+ * cannot be read or shown is only left out.
  */
 export async function loadExperience(
   client: ApiClient,
@@ -83,17 +87,34 @@ export async function loadExperience(
 
   let person: Person;
   let experiences: readonly Experience[];
+  let explorations: readonly Exploration[];
+  let technologies: readonly Technology[];
+  let education: readonly Education[];
   try {
-    const [personRead, experiencesRead] = await Promise.all([
-      client.GET("/v1/person", init()),
-      client.GET("/v1/experiences", init()),
-    ]);
+    const [personRead, experiencesRead, explorationsRead, technologiesRead, educationRead] =
+      await Promise.all([
+        client.GET("/v1/person", init()),
+        client.GET("/v1/experiences", init()),
+        client.GET("/v1/explorations", init()),
+        client.GET("/v1/technologies", init()),
+        client.GET("/v1/education", init()),
+      ]);
     if (personRead.data === undefined) {
       return personRead.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
     }
-    if (experiencesRead.data === undefined) return { status: "unavailable" };
+    if (
+      experiencesRead.data === undefined ||
+      explorationsRead.data === undefined ||
+      technologiesRead.data === undefined ||
+      educationRead.data === undefined
+    ) {
+      return { status: "unavailable" };
+    }
     person = personRead.data;
     experiences = experiencesRead.data;
+    explorations = explorationsRead.data;
+    technologies = technologiesRead.data;
+    education = educationRead.data;
   } catch {
     return { status: "unavailable" };
   }
@@ -116,9 +137,9 @@ export async function loadExperience(
       headline: person.headline,
       careerStartedOn: person.careerStartedOn,
       experiences,
-      explorations: [],
-      technologies: [],
-      education: [],
+      explorations,
+      technologies,
+      education,
       logos,
       authorPhotos,
     },
