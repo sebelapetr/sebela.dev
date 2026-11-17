@@ -15,7 +15,7 @@ For example, updating an experience with its technology relations is one profile
 
 ## Place and verify it
 
-- Handwritten backend modules live at `src/modules/<name>/index.ts`. Cross-module callers use that entry; cross-package callers use declared exports. Private helpers/drivers stay private and module dependencies stay acyclic.
+- Handwritten backend modules and the website's modules (`apps/web`, beside its `src/app/` routes) live at `src/modules/<name>/index.ts`. Cross-module callers use that entry; cross-package callers use declared exports. Private helpers/drivers stay private and module dependencies stay acyclic.
 - Keep HTTP/security in the API, domain coordination in services and SQL in db. Contracts remain independent. Hide query builders, transactions and provider SDK objects. Compose validated configuration/resources once; do not create hidden runtime clients.
 - Retain required HTTP, security and package adapters even with one implementation. Add replaceable-driver abstractions for actual variation such as local/Bunny storage. If removing a wrapper only removes forwarding code, simplify it; do not remove the trust boundary.
 - Exercise operations through their observable contract with [tdd](../tdd/SKILL.md). Meaningful internal pure helpers may have focused tests without becoming public exports. A persistence mutation performs its documented side effect; return its result/errors rather than pretending all operations are pure.

@@ -198,9 +198,37 @@ A module is the folder `src/modules/<name>/` of an app or package; every file be
 
 Do not import another module's private file by a relative path or alias, reach into another package's source tree, or use an undeclared package subpath. Do not create cycles between modules. An entry exports selected operations and types, never an automatic `export *` of all internals. Package entry files re-export module entries deliberately. Shared transport contracts belong in contracts; a private backend helper type does not become a client contract merely to expose it.
 
-Apply the information-hiding principles to all code, but do not force this TypeScript backend layout onto Next.js framework routes, UI primitives, generated clients, the plain Node harness or the future Python service. Their native placement stays intact; their relevant app/package maps describe their interfaces.
+Apply the information-hiding principles to all code, but do not force this TypeScript backend layout onto Next.js framework routes (`apps/web/src/app/`), UI primitives (`packages/ui`), generated clients, the plain Node harness or the future Python service. Their native placement stays intact; their relevant app/package maps describe their interfaces. The website's own code beside its routes follows the [web module layout](#web-module-layout).
 
 Each backend app/package `AGENTS.md` must map actual module paths to public entries, responsibilities, dependencies and relevant tests. See [code standards](code-standards.md#deep-modules) for the rationale and [architecture](architecture.md#module-responsibilities-and-composition) for ownership. The package dependency table below remains binding: a module entry never grants a client access to a forbidden package.
+
+## Web module layout
+
+The website (`apps/web`) keeps Next's file-based routing in `src/app/` and puts everything else into modules, with the same entry convention and the same lint rule as the backend ([decision 0016](decisions/0016-web-module-layout.md)):
+
+```text
+apps/web/src/
+  app/                            # App Router routes only: page, layout, error, not-found, route files
+    experience/page.tsx           # thin: metadata, notFound(), the request; renders a module's template
+  config.ts                       # validated runtime configuration
+  modules/
+    <name>/index.ts               # the module's entry: selected exports only
+    <name>/templates/             # the composition of a whole page
+    <name>/components/            # the parts a template is built from
+    <name>/data/                  # reading the API through @sebela/api-client; server-only
+    <name>/types/                 # types several files of the module share
+    <name>/hooks/                 # client hooks
+    <name>/stores/                # client state
+    _shared/index.ts              # what at least two modules or routes use
+```
+
+- **Routes stay thin.** A file in `src/app/` holds only what Next requires there: the route's metadata, `notFound()`, reading the request, and rendering a module's page template. It imports modules through their entries only. Page content, data reading and state live in modules.
+- **Modules.** A module is `src/modules/<name>/`, named after the page or capability it serves (`homepage`, `experience`, `services`, `cv`, `chat`). Its entry is `index.ts` or `index.tsx` directly in that folder; a deeper `index` file, such as `templates/index.tsx`, is private. Everything in [Backend module layout](#backend-module-layout) about entries, private files, selected exports and cycles applies, and the `sebela/import-boundaries` rule enforces it here exactly as there.
+- **Folders inside a module.** The names above are the vocabulary: `templates/`, `components/`, `data/`, `types/`, `hooks/`, `stores/`. A folder is created when it has content, never scaffolded empty, and a module with nothing but a template and two components has only those two folders. Tests stay beside the behaviour they exercise.
+- **`data/`, not `services/`.** Code that reads the API lives in `data/`. "Service" is a domain term ([`GLOSSARY.md`](../GLOSSARY.md)) with its own page and module, and `@sebela/services` is a package the website may not import.
+- **`_shared`.** An ordinary module with one entry, for what is specific to this website and used by at least two modules or routes, such as the footer and the site's own addresses. It imports no other module. Code moves there when a second user appears, not before. Tokens, fonts and UI primitives stay in `packages/ui`.
+- **Server and client.** An entry from which client components import values must not import server-only code, directly or through what it re-exports; client components may always import its types. `_shared`'s entry stays importable from client components. Reading that several pages share can live in a module of its own whose entry is server-only (today `profile`).
+- **Module map.** `apps/web/AGENTS.md` maps every module to its entry, responsibility, dependencies and tests.
 
 ## Dependency rules
 
@@ -232,7 +260,7 @@ The API is the trust boundary: content writes and content authentication are enf
 - **Paths.** A relative, absolute or `file:` path may not leave its member, reach into another member or go through `node_modules/@sebela/*`. A root file may not reach into a member by path.
 - **Aliases.** A `#` subpath import is checked where the `imports` map of the importer's `package.json` sends it. In TypeScript files, any other bare specifier that the TypeScript program resolves to a workspace file (for example a `paths` alias) is checked as the path it resolves to. JavaScript files are linted without type information, so their aliases are not resolved.
 - **Forms.** Static imports and re-exports (type-only ones too), dynamic `import()`, `require()`, TypeScript `import x = require()` and `typeof import()`. Specifiers that are not string literals cannot be checked. Third-party packages and Node.js built-ins are outside the rule.
-- **Private module files.** Once the checks above pass, the [backend module layout](#backend-module-layout) is checked inside the member. A file outside a module, whether another module, composition code, a CLI adapter, the package entry or a test, imports only the module's entry. Files of the module import each other freely. The tooling configurations described there are the only exception, and only for their own package; any other file that imports one of them, including through a declared package export, is rejected. Relative paths, `#` subpath imports and `paths` aliases are resolved first. A declared package export that leads to a private module file is rejected wherever it is imported, root files included, because it would turn a private file into a public entry.
+- **Private module files.** Once the checks above pass, the [backend module layout](#backend-module-layout) is checked inside the member; the website's modules ([web module layout](#web-module-layout)) are checked the same way. A file outside a module, whether another module, composition code, a CLI adapter, the package entry or a test, imports only the module's entry. Files of the module import each other freely. The tooling configurations described there are the only exception, and only for their own package; any other file that imports one of them, including through a declared package export, is rejected. Relative paths, `#` subpath imports and `paths` aliases are resolved first. A declared package export that leads to a private module file is rejected wherever it is imported, root files included, because it would turn a private file into a public entry.
 - **Module cycles.** No import may close a cycle between the modules of a member. The rule reads the member's source files from disk and treats each module as one unit, including its private files and tests, and every other file as a unit of its own. The cycle may pass through files outside the modules, such as the package entry or the package's own name. The same forms and aliases count, type-only imports and `typeof import()` included. Every import of the cycle is reported where it is written, with the cycle as module folders, for example `src/modules/media -> src/modules/storage -> src/modules/media`. Cycles between members cannot arise, because the dependency table is acyclic. Cycles that pass through no module, for example between two startup files, are not checked.
 
 **Limits.** The rule checks import syntax, not design. Information hiding, a cohesive interface, documented guarantees, and selected exports instead of a barrel of every internal file are left to the reviewer (see [code standards](code-standards.md#enforcement-and-review)). JavaScript files have no type information, so their `paths` aliases are resolved neither for their own imports nor in the cycle search. Specifiers computed at run time are invisible.

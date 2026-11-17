@@ -322,6 +322,12 @@ Keyboard operation, sufficient contrast in both themes, alt text from the media 
 - `docs/design.md` is binding and is completed in this phase: spacing and type scale, the components, the print layout of the CV, motion.
 - Shared components and tokens live in the shared UI package; the website has no colours or fonts of its own.
 
+### Code layout
+
+- Routes live in `apps/web/src/app/` and stay thin: metadata, `notFound()`, the request, and rendering a page template.
+- Everything else lives in `apps/web/src/modules/<name>/`, entered only through its `index`, with the folders `templates/`, `components/`, `data/`, `types/`, `hooks/` and `stores/` created as they are needed, and `_shared` for what at least two modules or routes use.
+- The binding description is `docs/repository-structure.md` (Web module layout); the reason is decision 0016.
+
 ### Environments
 
 - The website gets a Dockerfile and a Compose service.
