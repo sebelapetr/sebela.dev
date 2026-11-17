@@ -24,7 +24,7 @@ export function UnavailableTemplate({ retry }: { readonly retry: () => void }) {
           </Button>
         }
       >
-        <p className="max-w-prose text-lg text-muted-foreground">
+        <p className="type-intro max-w-prose">
           Its content is temporarily unavailable. Please try again in a moment.
         </p>
       </StatePage>

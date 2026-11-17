@@ -19,11 +19,9 @@ export function StatePage({
 }) {
   return (
     <>
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-start justify-center gap-6 px-5 py-20 sm:px-8">
-        <p className="font-mono text-sm text-muted-foreground">{label}</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-          {heading}
-        </h1>
+      <main className="layout-page flex flex-1 flex-col items-start justify-center gap-6 py-20">
+        <p className="type-label">{label}</p>
+        <h1 className="type-title">{heading}</h1>
         {children}
         {action}
       </main>

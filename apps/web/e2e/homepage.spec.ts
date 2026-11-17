@@ -117,12 +117,49 @@ test.describe("homepage read from the API", () => {
       "Built in public with an agentic engineering workflow",
       "CV",
     ]);
-    // Focus is visible on the primary call to action.
+    // Focus is visible: the primary call to action shows its ring, a text link the outline.
     await page.getByRole("link", { name: "Work with me" }).focus();
-    const outline = await page
+    const ring = await page
       .getByRole("link", { name: "Work with me" })
       .evaluate((element) => getComputedStyle(element).boxShadow);
-    expect(outline).not.toBe("none");
+    expect(ring).not.toBe("none");
+    await page.keyboard.press("Tab");
+    const outline = await page
+      .getByRole("link", { name: "View my experience" })
+      .evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { style: style.outlineStyle, width: style.outlineWidth };
+      });
+    expect(outline).toEqual({ style: "solid", width: "2px" });
+  });
+
+  test("ends transitions at once when reduced motion is requested", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    const duration = await page
+      .getByRole("link", { name: "Work with me" })
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).transitionDuration));
+    expect(duration).toBeLessThan(0.001);
+  });
+
+  test("reserves the chat entry's place between the bio and the calls to action", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const slot = page.getByTestId("hero-chat-slot");
+    // Empty space until the chat entry arrives (#51): no control and nothing to read.
+    await expect(slot).toBeEmpty();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      const bio = await page.getByText("person from the website").boundingBox();
+      const box = await slot.boundingBox();
+      const action = await page.getByRole("link", { name: "Work with me" }).boundingBox();
+      if (bio === null || box === null || action === null) throw new Error("hero not laid out");
+      // One input line (48 px), one row of suggestions (44 px) and the gap between them (12 px).
+      expect(box.height).toBeGreaterThanOrEqual(104);
+      expect(box.y).toBeGreaterThanOrEqual(bio.y + bio.height);
+      expect(action.y).toBeGreaterThanOrEqual(box.y + box.height);
+    }
   });
 
   for (const scheme of schemes) {
