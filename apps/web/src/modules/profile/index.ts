@@ -12,6 +12,8 @@ import { loadHomepage, type HomepageResult } from "./data/load-homepage";
 
 export type { ExperienceContent, ExperienceResult } from "./data/load-experience";
 
+export type { ImageMedia } from "./data/image";
+
 export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./data/load-homepage";
 
 let client: ApiClient | undefined;

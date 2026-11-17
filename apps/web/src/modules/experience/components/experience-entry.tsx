@@ -2,10 +2,11 @@ import { TimelineContent, TimelineItem, TimelineTrigger } from "@sebela/ui/compo
 
 import type { TimelineEntry } from "../data/timeline";
 import { SummaryMarkdown } from "./markdown";
+import { OrganizationLogo } from "./organization-logo";
 
 /**
  * One experience on the timeline. Its row names the period, the kind of work, the role and the
- * organization; opening it shows the summary, the responsibilities, the technologies and the
+ * organization, with the organization's logo above them when it has one; opening it shows the summary, the responsibilities, the technologies and the
  * testimonials that belong to this experience. Current experiences are open at first.
  */
 export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
@@ -13,6 +14,11 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
     <TimelineItem id={entry.anchor} defaultOpen={entry.current} className="scroll-mt-8">
       <h2>
         <TimelineTrigger>
+          {entry.organization.logo === null ? null : (
+            <span className="mb-1 flex">
+              <OrganizationLogo logo={entry.organization.logo} />
+            </span>
+          )}
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
             <span className="type-label text-balance">{entry.period}</span>
             <span className="type-tag rounded-sm border border-border px-1.5">

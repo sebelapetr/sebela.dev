@@ -1,11 +1,13 @@
 import type { Experience } from "@sebela/api-client";
 
+import type { ImageMedia } from "../../profile";
+
 import { formatPeriod } from "./period";
 
 export type ExperienceKind = Experience["kind"];
 
 const KIND_LABELS: Record<ExperienceKind, string> = {
-  main_job: "Main job",
+  main_job: "Full-time job",
   own_business: "Own business",
   side_project: "Side project",
 };
@@ -24,7 +26,12 @@ export interface TimelineEntry {
   /** The stable anchor of the experience on the page, `experience-<slug>`. */
   readonly anchor: string;
   readonly title: string;
-  readonly organization: { readonly name: string; readonly website: string | null };
+  readonly organization: {
+    readonly name: string;
+    readonly website: string | null;
+    /** The organization's logo; null without one or when it cannot be shown. */
+    readonly logo: ImageMedia | null;
+  };
   readonly kind: ExperienceKind;
   /** The small label that tells concurrent experiences apart, for example `Side project`. */
   readonly kindLabel: string;
@@ -42,9 +49,13 @@ export interface TimelineEntry {
 /**
  * The timeline's entries from the API's experiences, in the API's order (current first, then the
  * latest start). Every experience stays its own entry with its own kind: nothing is grouped under
- * an employer and nothing is inferred from names.
+ * an employer and nothing is inferred from names. `logos` holds the logos that can be shown, by
+ * media id; an organization whose logo is not there has none.
  */
-export function toTimelineEntries(experiences: readonly Experience[]): TimelineEntry[] {
+export function toTimelineEntries(
+  experiences: readonly Experience[],
+  logos: ReadonlyMap<string, ImageMedia> = new Map(),
+): TimelineEntry[] {
   return experiences.map((experience) => ({
     slug: experience.slug,
     anchor: `experience-${experience.slug}`,
@@ -52,6 +63,10 @@ export function toTimelineEntries(experiences: readonly Experience[]): TimelineE
     organization: {
       name: experience.organization.name,
       website: experience.organization.website,
+      logo:
+        experience.organization.logoId === null
+          ? null
+          : (logos.get(experience.organization.logoId) ?? null),
     },
     kind: experience.kind,
     kindLabel: KIND_LABELS[experience.kind],

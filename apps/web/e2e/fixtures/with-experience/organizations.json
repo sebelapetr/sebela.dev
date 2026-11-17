@@ -2,18 +2,38 @@
   {
     "slug": "fernway-logistics",
     "name": "Fernway Logistics",
-    "website": "https://fernway.example.test/"
+    "website": "https://fernway.example.test/",
+    "logo": {
+      "file": "files/fernway-logistics.png",
+      "altText": "The Fernway Logistics logo: an arrow of three grey lines."
+    }
   },
-  { "slug": "morrow-studio", "name": "Morrow Studio", "website": null },
+  {
+    "slug": "morrow-studio",
+    "name": "Morrow Studio",
+    "website": null
+  },
   {
     "slug": "open-ledger-kit",
     "name": "Open Ledger Kit",
-    "website": "https://ledger-kit.example.test/"
+    "website": "https://ledger-kit.example.test/",
+    "logo": {
+      "file": "files/open-ledger-kit.png",
+      "altText": "The Open Ledger Kit logo: a grey ring around a dot."
+    }
   },
-  { "slug": "harbor-clinic", "name": "Harbor Clinic", "website": null },
+  {
+    "slug": "harbor-clinic",
+    "name": "Harbor Clinic",
+    "website": null
+  },
   {
     "slug": "pinecrest-health",
     "name": "Pinecrest Health",
-    "website": "https://pinecrest.example.test/"
+    "website": "https://pinecrest.example.test/",
+    "logo": {
+      "file": "files/pinecrest-health.png",
+      "altText": "The Pinecrest Health logo: two grey peaks."
+    }
   }
 ]

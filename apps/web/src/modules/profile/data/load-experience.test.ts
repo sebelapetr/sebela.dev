@@ -231,8 +231,8 @@ describe("loadExperience", () => {
             media({
               id: OTHER_LOGO_ID,
               altText: null,
-              url: "https://media.example.test/b.svg",
-              mediaType: "image/svg+xml",
+              url: "https://media.example.test/b.webp",
+              mediaType: "image/webp",
               width: 64,
               height: 64,
             }),
@@ -254,7 +254,7 @@ describe("loadExperience", () => {
           ],
           [
             OTHER_LOGO_ID,
-            { url: "https://media.example.test/b.svg", altText: "", width: 64, height: 64 },
+            { url: "https://media.example.test/b.webp", altText: "", width: 64, height: 64 },
           ],
         ]),
       );

@@ -1,13 +1,9 @@
-import type { ApiClient, Media, Person } from "@sebela/api-client";
+import type { ApiClient, Person } from "@sebela/api-client";
+
+import { isWebUrl, readImage, type ImageMedia } from "./image";
 
 /** The person's photo, ready for an image element. */
-export interface HomepagePhoto {
-  readonly url: string;
-  /** The media's alternative text; empty when the media has none. */
-  readonly altText: string;
-  readonly width: number;
-  readonly height: number;
-}
+export type HomepagePhoto = ImageMedia;
 
 /** The content of the homepage, all of it from the API. */
 export interface HomepageProfile {
@@ -62,7 +58,7 @@ export async function loadHomepage(
     return { status: "unavailable" };
   }
 
-  const photo = person.photoId === null ? null : await readPhoto(client, person.photoId, init());
+  const photo = person.photoId === null ? null : await readImage(client, person.photoId, init());
   return {
     status: "ready",
     profile: {
@@ -81,42 +77,8 @@ export async function loadHomepage(
   };
 }
 
-async function readPhoto(
-  client: ApiClient,
-  id: string,
-  init: { readonly cache: "no-store"; readonly signal: AbortSignal },
-): Promise<HomepagePhoto | null> {
-  try {
-    const { data } = await client.GET("/v1/media/{id}", { params: { path: { id } }, ...init });
-    return data === undefined ? null : toPhoto(data);
-  } catch {
-    return null;
-  }
-}
-
-function toPhoto(media: Media): HomepagePhoto | null {
-  if (!media.mediaType.startsWith("image/")) return null;
-  if (media.url === null || !isWebUrl(media.url)) return null;
-  if (media.width === null || media.height === null) return null;
-  return {
-    url: media.url,
-    altText: media.altText ?? "",
-    width: media.width,
-    height: media.height,
-  };
-}
-
 /** Encodes the local part of an address for a mailto link; `@` and the domain stay readable. */
 function encodeEmail(address: string): string {
   const at = address.lastIndexOf("@");
   return `${encodeURIComponent(address.slice(0, at))}@${address.slice(at + 1)}`;
-}
-
-function isWebUrl(value: string): boolean {
-  try {
-    const { protocol } = new URL(value);
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
 }

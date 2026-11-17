@@ -4,20 +4,23 @@ import { expect, test, type Page } from "@playwright/test";
 import { startApi, startWebsite, type Started } from "./stack";
 
 // Fixture values (e2e/fixtures/with-experience/): a fictional career that exists only for these
-// tests. In the API's order: current roles first, then the latest start.
+// tests. In the API's order: current roles first, then the latest start. Morrow Studio and Harbor
+// Clinic have no logo.
 const career = [
   {
     anchor: "experience-fernway-lead-engineer",
     title: "Lead engineer",
     organization: "Fernway Logistics",
+    logo: "The Fernway Logistics logo: an arrow of three grey lines.",
     period: "October 1st, 2023 – present",
-    kind: "Main job",
+    kind: "Full-time job",
     current: true,
   },
   {
     anchor: "experience-morrow-studio-consultant",
     title: "Independent consultant",
     organization: "Morrow Studio",
+    logo: null,
     period: "July 12th, 2021 – present",
     kind: "Own business",
     current: true,
@@ -26,6 +29,7 @@ const career = [
     anchor: "experience-open-ledger-kit-maintainer",
     title: "Maintainer",
     organization: "Open Ledger Kit",
+    logo: "The Open Ledger Kit logo: a grey ring around a dot.",
     period: "January 3rd, 2022 – November 22nd, 2022",
     kind: "Side project",
     current: false,
@@ -34,6 +38,7 @@ const career = [
     anchor: "experience-harbor-clinic-booking",
     title: "Booking system for a clinic",
     organization: "Harbor Clinic",
+    logo: null,
     period: "August 2nd, 2021 – February 21st, 2022",
     kind: "Own business",
     current: false,
@@ -42,16 +47,18 @@ const career = [
     anchor: "experience-pinecrest-senior-developer",
     title: "Senior developer",
     organization: "Pinecrest Health",
+    logo: "The Pinecrest Health logo: two grey peaks.",
     period: "May 11th, 2020 – September 30th, 2023",
-    kind: "Main job",
+    kind: "Full-time job",
     current: false,
   },
   {
     anchor: "experience-pinecrest-developer",
     title: "Developer",
     organization: "Pinecrest Health",
+    logo: "The Pinecrest Health logo: two grey peaks.",
     period: "March 1st, 2018 – May 10th, 2020",
-    kind: "Main job",
+    kind: "Full-time job",
     current: false,
   },
 ] as const;
@@ -71,6 +78,20 @@ async function expectAccessible(page: Page) {
   expect(
     violations.map(({ id, nodes }) => ({ id, nodes: nodes.map((node) => node.target) })),
   ).toEqual([]);
+}
+
+/** Brings every organization logo into view, so lazy ones load, and checks that none is broken. */
+async function expectLogosLoaded(page: Page) {
+  const logos = page.locator('[data-slot="organization-logo"]');
+  for (const logo of await logos.all()) {
+    await logo.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth))
+      .toBeGreaterThan(0);
+  }
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
 }
 
 function item(page: Page, anchor: string) {
@@ -122,6 +143,34 @@ test.describe("experience page read from the API", () => {
       await expect(trigger).toContainText(entry.kind);
       await expect(trigger).toContainText(entry.organization);
     }
+  });
+
+  test("shows each organization's logo in its row, and nothing in its place without one", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience`);
+    for (const entry of career) {
+      const logo = item(page, entry.anchor).locator('[data-slot="organization-logo"]');
+      if (entry.logo === null) {
+        await expect(logo).toHaveCount(0);
+      } else {
+        // In the heading row, so a closed row shows it too.
+        await expect(logo).toBeVisible();
+        await expect(logo).toHaveAttribute("alt", entry.logo);
+      }
+    }
+    await expectLogosLoaded(page);
+
+    // A row without a logo starts its text where a row with one does.
+    const left = (anchor: string) =>
+      item(page, anchor)
+        // The title: the trigger's last direct child.
+        .locator("h2 > button > span")
+        .last()
+        .evaluate((element) => Math.round(element.getBoundingClientRect().left));
+    expect(await left("experience-morrow-studio-consultant")).toBe(
+      await left("experience-fernway-lead-engineer"),
+    );
   });
 
   test("opens only the current experiences at first; older ones are compact rows", async ({
@@ -210,6 +259,7 @@ test.describe("experience page read from the API", () => {
         await expect(
           item(page, "experience-pinecrest-senior-developer").getByRole("region"),
         ).toBeVisible();
+        await expectLogosLoaded(page);
         // No hover state in the picture.
         await page.mouse.move(0, 0);
         await expectNoHorizontalScroll(page);
