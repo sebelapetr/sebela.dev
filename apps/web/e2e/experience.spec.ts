@@ -144,7 +144,7 @@ test.describe("experience page read from the API", () => {
     for (const [index, entry] of career.entries()) {
       const row = rows.nth(index);
       await expect(row).toHaveAttribute("id", entry.anchor);
-      const trigger = row.getByRole("button");
+      const trigger = row.locator('[data-slot="timeline-trigger"]');
       await expect(row.getByRole("heading", { level: 2 })).toContainText(entry.title);
       await expect(trigger).toContainText(entry.period);
       await expect(trigger).toContainText(entry.kind);
@@ -186,7 +186,10 @@ test.describe("experience page read from the API", () => {
     await page.goto(`${website.url}/experience`);
     for (const entry of career) {
       const row = item(page, entry.anchor);
-      await expect(row.getByRole("button")).toHaveAttribute("aria-expanded", String(entry.current));
+      await expect(row.locator('[data-slot="timeline-trigger"]')).toHaveAttribute(
+        "aria-expanded",
+        String(entry.current),
+      );
       const content = row.getByRole("region");
       if (entry.current) {
         await expect(content).toBeVisible();
@@ -200,13 +203,15 @@ test.describe("experience page read from the API", () => {
     }
     const lead = item(page, "experience-fernway-lead-engineer");
     await expect(lead.getByRole("region")).toContainText("routing platform");
-    await expect(lead.getByRole("list", { name: "Technologies" })).toContainText("TypeScript");
+    await expect(lead.getByRole("list", { name: "Technologies", exact: true })).toContainText(
+      "TypeScript",
+    );
   });
 
   test("opens and closes an experience by keyboard", async ({ page }) => {
     await page.goto(`${website.url}/experience`);
     const row = item(page, "experience-pinecrest-senior-developer");
-    const trigger = row.getByRole("button");
+    const trigger = row.locator('[data-slot="timeline-trigger"]');
     await trigger.focus();
     await page.keyboard.press("Enter");
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -271,7 +276,7 @@ test.describe("experience page read from the API", () => {
     expect(photoBox && quoteBox && Math.round(photoBox.y)).toBe(Math.round(quoteBox?.y ?? 0));
 
     const row = item(page, "experience-pinecrest-senior-developer");
-    await row.getByRole("button").click();
+    await row.locator('[data-slot="timeline-trigger"]').click();
     const withoutPhoto = row.locator("figure");
     await expect(withoutPhoto).toBeVisible();
     await expect(withoutPhoto.locator("img")).toHaveCount(0);
@@ -298,10 +303,15 @@ test.describe("experience page read from the API", () => {
         await page.setViewportSize({ width, height: 900 });
         await page.goto(`${website.url}/experience`);
         // One older experience opened, beside the current ones.
-        await item(page, "experience-pinecrest-senior-developer").getByRole("button").click();
+        await item(page, "experience-pinecrest-senior-developer")
+          .locator('[data-slot="timeline-trigger"]')
+          .click();
         await expect(
           item(page, "experience-pinecrest-senior-developer").getByRole("region"),
         ).toBeVisible();
+        // And one case study inside it.
+        await page.getByRole("button", { name: "Case study: Clinic scheduling" }).click();
+        await expect(item(page, "case-study-clinic-scheduling")).toContainText("My role");
         await expectImagesLoaded(page);
         // No hover state in the picture.
         await page.mouse.move(0, 0);

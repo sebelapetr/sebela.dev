@@ -1,5 +1,7 @@
 import type { Project } from "@sebela/api-client";
 
+import { anchorHref, formatPeriod } from "../../_shared";
+
 /** One project of the homepage's Selected work: a teaser of its case study. */
 export interface SelectedWorkItem {
   readonly slug: string;
@@ -23,6 +25,21 @@ export interface SelectedWorkItem {
  * The projects selected for the homepage, in the API's order (by experience, then position), as
  * numbered teasers. Projects that are not selected are left out; without any, the list is empty.
  */
-export function toSelectedWork(_projects: readonly Project[]): SelectedWorkItem[] {
-  throw new Error(`not implemented: ${JSON.stringify([_projects])}`);
+export function toSelectedWork(projects: readonly Project[]): SelectedWorkItem[] {
+  return projects
+    .filter((project) => project.selectedForHomepage)
+    .map((project, position) => ({
+      slug: project.slug,
+      number: String(position + 1).padStart(2, "0"),
+      name: project.name,
+      period: formatPeriod(project.startedOn, project.endedOn),
+      technologies: project.technologies.map(({ slug, name }) => ({ slug, name })),
+      problem: project.problem,
+      role: project.caseStudy?.role ?? null,
+      result: project.result,
+      href:
+        project.caseStudy === null
+          ? anchorHref({ kind: "project", slug: project.slug })
+          : anchorHref({ kind: "case-study", project: project.slug }),
+    }));
 }

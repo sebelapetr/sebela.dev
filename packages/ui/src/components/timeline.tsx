@@ -35,6 +35,8 @@ function Timeline({ className, ...props }: ComponentProps<"ol">) {
 interface TimelineItemProps {
   /** The item's anchor on the page. */
   readonly id?: string;
+  /** `-1` lets a link to the item move focus to it without adding it to the tab order. */
+  readonly tabIndex?: number;
   readonly className?: string;
   /** Whether the item is open, to control it from outside (with `onOpenChange`). */
   readonly open?: boolean;
@@ -51,6 +53,7 @@ function TimelineItem({
   defaultOpen,
   onOpenChange,
   id,
+  tabIndex,
   className,
   children,
 }: TimelineItemProps) {
@@ -66,7 +69,7 @@ function TimelineItem({
               onOpenChange(next);
             }
       }
-      render={<li id={id} />}
+      render={<li id={id} tabIndex={tabIndex} />}
       data-slot="timeline-item"
       className={cn("relative pl-12", className)}
     >

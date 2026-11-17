@@ -38,9 +38,10 @@ export interface LoadHomepageOptions {
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
- * Reads the homepage's content from the API's public routes: the person and, if it has one, its
- * photo. Every request is uncached and limited in time. A photo that cannot be shown leaves the
- * profile without one; a person that cannot be read makes the whole content unavailable.
+ * Reads the homepage's content from the API's public routes: the person, the projects and, if the
+ * person has one, its photo. Every request is uncached and limited in time. A photo that cannot be
+ * shown leaves the profile without one; a person or projects that cannot be read make the whole
+ * content unavailable, so a failed read never looks like having no selected work.
  */
 export async function loadHomepage(
   client: ApiClient,
@@ -60,6 +61,15 @@ export async function loadHomepage(
     return { status: "unavailable" };
   }
 
+  let projects: readonly Project[];
+  try {
+    const { data } = await client.GET("/v1/projects", init());
+    if (data === undefined) return { status: "unavailable" };
+    projects = data;
+  } catch {
+    return { status: "unavailable" };
+  }
+
   const photo = person.photoId === null ? null : await readImage(client, person.photoId, init());
   return {
     status: "ready",
@@ -75,7 +85,7 @@ export async function loadHomepage(
             : { address: person.email, href: `mailto:${encodeEmail(person.email)}` },
         links: person.links.filter((link) => isWebUrl(link.url)),
       },
-      projects: [],
+      projects,
     },
   };
 }

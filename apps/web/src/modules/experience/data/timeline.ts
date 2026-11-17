@@ -1,8 +1,8 @@
-import type { Experience } from "@sebela/api-client";
+import type { Experience, Project } from "@sebela/api-client";
 
 import type { ImageMedia } from "../../profile";
 
-import { formatPeriod } from "../../_shared";
+import { anchorId, formatPeriod } from "../../_shared";
 
 export type ExperienceKind = Experience["kind"];
 
@@ -95,7 +95,7 @@ export function toTimelineEntries(
 ): TimelineEntry[] {
   return experiences.map((experience) => ({
     slug: experience.slug,
-    anchor: `experience-${experience.slug}`,
+    anchor: anchorId({ kind: "experience", slug: experience.slug }),
     title: experience.title,
     organization: {
       name: experience.organization.name,
@@ -112,7 +112,10 @@ export function toTimelineEntries(
     summary: experience.summary,
     responsibilities: experience.responsibilities,
     technologies: experience.technologies.map(({ slug, name }) => ({ slug, name })),
-    projects: [],
+    projects: experience.projects
+      .filter((project) => project.experience === experience.slug)
+      .toSorted((a, b) => a.position - b.position || compareText(a.slug, b.slug))
+      .map(toTimelineProject),
     testimonials: experience.testimonials
       .filter((testimonial) => testimonial.experience === experience.slug)
       .toSorted((a, b) => a.position - b.position)
@@ -124,6 +127,33 @@ export function toTimelineEntries(
         authorPhoto: authorPhotoId === null ? null : (authorPhotos.get(authorPhotoId) ?? null),
       })),
   }));
+}
+
+function toTimelineProject(project: Project): TimelineProject {
+  return {
+    slug: project.slug,
+    anchor: anchorId({ kind: "project", slug: project.slug }),
+    name: project.name,
+    period: formatPeriod(project.startedOn, project.endedOn),
+    summary: project.summary,
+    problem: project.problem,
+    workDone: project.workDone,
+    result: project.result,
+    technologies: project.technologies.map(({ slug, name }) => ({ slug, name })),
+    caseStudy:
+      project.caseStudy === null
+        ? null
+        : {
+            anchor: anchorId({ kind: "case-study", project: project.slug }),
+            role: project.caseStudy.role,
+            body: project.caseStudy.body,
+          },
+  };
+}
+
+/** Code-point order, the same in every locale, so the server and the browser agree. */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**

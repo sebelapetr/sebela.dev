@@ -15,14 +15,35 @@ export interface DeepLink {
   readonly open: readonly string[];
 }
 
-export function deepLinkIndex(_entries: readonly TimelineEntry[]): DeepLinkIndex {
-  throw new Error(`not implemented: ${JSON.stringify([_entries])}`);
+export function deepLinkIndex(entries: readonly TimelineEntry[]): DeepLinkIndex {
+  const index: Record<string, readonly string[]> = {};
+  for (const entry of entries) {
+    index[entry.anchor] = [entry.anchor];
+    for (const project of entry.projects) {
+      index[project.anchor] = [entry.anchor];
+      if (project.caseStudy !== null) {
+        index[project.caseStudy.anchor] = [entry.anchor, project.caseStudy.anchor];
+      }
+    }
+  }
+  return index;
 }
 
 /**
  * The item a hash (`#project-…`, with or without `#`, percent-encoded or not) names, or null when
  * the page has no such item: an empty, malformed, unknown or removed anchor opens nothing.
  */
-export function resolveDeepLink(_hash: string, _index: DeepLinkIndex): DeepLink | null {
-  throw new Error(`not implemented: ${JSON.stringify([_hash, _index])}`);
+export function resolveDeepLink(hash: string, index: DeepLinkIndex): DeepLink | null {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (raw === "") return null;
+  let anchor: string;
+  try {
+    anchor = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  // Own keys only: a hash such as `#constructor` must not reach the object's prototype.
+  if (!Object.hasOwn(index, anchor)) return null;
+  const open = index[anchor];
+  return open === undefined ? null : { anchor, open };
 }

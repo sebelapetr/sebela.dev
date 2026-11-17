@@ -7,10 +7,14 @@ import { Footer, routes } from "../../_shared";
 import type { ExperienceContent } from "../../profile";
 import { ExperienceEntry } from "../components/experience-entry";
 import { careerYears, toTimelineEntries } from "../data/timeline";
+import { deepLinkIndex } from "../stores/deep-link";
+import { DisclosuresProvider } from "../stores/disclosures";
 
 /**
  * The experience page: the person's headline and length of career, a link to the CV, and every
- * published experience on one timeline in the API's order. Without experiences the page says so.
+ * published experience on one timeline in the API's order, with its projects and case studies. A
+ * link to an experience, a project or a case study opens what encloses it. Without experiences the
+ * page says so.
  */
 export function ExperienceTemplate({ content }: { readonly content: ExperienceContent }) {
   const entries = toTimelineEntries(content.experiences, content.logos, content.authorPhotos);
@@ -44,11 +48,16 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
         {entries.length === 0 ? (
           <p className="text-muted-foreground">No experience is published yet.</p>
         ) : (
-          <Timeline aria-label="Career timeline" className="max-w-3xl">
-            {entries.map((entry) => (
-              <ExperienceEntry key={entry.slug} entry={entry} />
-            ))}
-          </Timeline>
+          <DisclosuresProvider
+            index={deepLinkIndex(entries)}
+            initiallyOpen={entries.filter((entry) => entry.current).map((entry) => entry.anchor)}
+          >
+            <Timeline aria-label="Career timeline" className="max-w-3xl">
+              {entries.map((entry) => (
+                <ExperienceEntry key={entry.slug} entry={entry} />
+              ))}
+            </Timeline>
+          </DisclosuresProvider>
         )}
       </main>
       <Footer name={content.name} />

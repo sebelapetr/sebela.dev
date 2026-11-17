@@ -1,5 +1,6 @@
 // The one anchor convention of the site (docs/design.md, Anchors): an item on a page is addressed by
 // its kind and its stable slug, never by its position on the page.
+import { routes } from "./site";
 
 /**
  * An item a link can point at. A case study is addressed by the slug of the project it explains,
@@ -11,11 +12,18 @@ export type AnchorTarget =
   | { readonly kind: "case-study"; readonly project: string };
 
 /** The item's id on its page: `experience-<slug>`, `project-<slug>` or `case-study-<project>`. */
-export function anchorId(_target: AnchorTarget): string {
-  throw new Error(`not implemented: ${JSON.stringify([_target])}`);
+export function anchorId(target: AnchorTarget): string {
+  switch (target.kind) {
+    case "experience":
+      return `experience-${target.slug}`;
+    case "project":
+      return `project-${target.slug}`;
+    case "case-study":
+      return `case-study-${target.project}`;
+  }
 }
 
 /** The address of the item on the page that shows it, for example `/experience#project-<slug>`. */
-export function anchorHref(_target: AnchorTarget): string {
-  throw new Error(`not implemented: ${JSON.stringify([_target])}`);
+export function anchorHref(target: AnchorTarget): string {
+  return `${routes.experience}#${anchorId(target)}`;
 }
