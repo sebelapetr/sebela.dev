@@ -6789,6 +6789,43 @@
             ],
             "description": "The date the career started."
           },
+          "servicesIntro": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown: the introduction of the services page, before the services."
+          },
+          "collaborationSteps": {
+            "default": [],
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollaborationStep"
+            },
+            "description": "How the person works with a client, as steps in their intended order."
+          },
+          "servicesNote": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown: the note before the services page's closing action, for example what is long-standing practice and what is a newer focus."
+          },
           "photoId": {
             "default": null,
             "anyOf": [
@@ -6845,6 +6882,28 @@
         ],
         "additionalProperties": false,
         "description": "A link of the person, in its intended order."
+      },
+      "CollaborationStep": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "Markdown."
+          }
+        },
+        "required": [
+          "title",
+          "description"
+        ],
+        "additionalProperties": false,
+        "description": "One step of how the person works with a client, in its intended order."
       },
       "PersonUpdate": {
         "type": "object",
@@ -6934,6 +6993,40 @@
               }
             ],
             "description": "The date the career started."
+          },
+          "servicesIntro": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown: the introduction of the services page, before the services."
+          },
+          "collaborationSteps": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollaborationStep"
+            },
+            "description": "How the person works with a client, as steps in their intended order."
+          },
+          "servicesNote": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown: the note before the services page's closing action, for example what is long-standing practice and what is a newer focus."
           },
           "photoId": {
             "anyOf": [
@@ -8740,6 +8833,40 @@
             ],
             "description": "The date the career started."
           },
+          "servicesIntro": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown: the introduction of the services page, before the services."
+          },
+          "collaborationSteps": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollaborationStep"
+            },
+            "description": "How the person works with a client, as steps in their intended order."
+          },
+          "servicesNote": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown: the note before the services page's closing action, for example what is long-standing practice and what is a newer focus."
+          },
           "photoId": {
             "anyOf": [
               {
@@ -8788,6 +8915,9 @@
           "links",
           "availability",
           "careerStartedOn",
+          "servicesIntro",
+          "collaborationSteps",
+          "servicesNote",
           "photoId",
           "cvPdfId",
           "createdAt",

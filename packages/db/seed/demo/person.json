@@ -12,6 +12,26 @@
   ],
   "availability": "Open to one consulting engagement from the next quarter.",
   "careerStartedOn": "2015-09-01",
+  "servicesIntro": "Alex helps **fictional** firms review their platforms and add AI where it measurably helps.",
+  "collaborationSteps": [
+    {
+      "title": "Talk it through",
+      "description": "A short call about the problem, the systems involved and what a good outcome looks like."
+    },
+    {
+      "title": "Agree on the scope",
+      "description": "A written scope with the approach, the assumptions and an estimate."
+    },
+    {
+      "title": "Build in small steps",
+      "description": "Work delivered in increments, checked early and adjusted when needed."
+    },
+    {
+      "title": "Hand it over",
+      "description": "Documentation, deployment or hand-over, and support as agreed."
+    }
+  ],
+  "servicesNote": "Web platforms are Alex's long-standing practice. The AI work is newer and builds on ten years of production software.",
   "photo": {
     "file": "files/portrait.jpg",
     "altText": "A placeholder portrait of the fictional Alex Novara."

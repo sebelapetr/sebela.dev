@@ -720,6 +720,21 @@ export interface components {
              */
             careerStartedOn?: string | null;
             /**
+             * @description Markdown: the introduction of the services page, before the services.
+             * @default null
+             */
+            servicesIntro?: string | null;
+            /**
+             * @description How the person works with a client, as steps in their intended order.
+             * @default []
+             */
+            collaborationSteps?: components["schemas"]["CollaborationStep"][];
+            /**
+             * @description Markdown: the note before the services page's closing action, for example what is long-standing practice and what is a newer focus.
+             * @default null
+             */
+            servicesNote?: string | null;
+            /**
              * @description The identifier of the person's photo, an uploaded image.
              * @default null
              */
@@ -736,6 +751,12 @@ export interface components {
             /** Format: uri */
             url: string;
         };
+        /** @description One step of how the person works with a client, in its intended order. */
+        CollaborationStep: {
+            title: string;
+            /** @description Markdown. */
+            description: string;
+        };
         PersonUpdate: {
             name?: string;
             headline?: string;
@@ -749,6 +770,12 @@ export interface components {
             availability?: string | null;
             /** @description The date the career started. */
             careerStartedOn?: string | null;
+            /** @description Markdown: the introduction of the services page, before the services. */
+            servicesIntro?: string | null;
+            /** @description How the person works with a client, as steps in their intended order. */
+            collaborationSteps?: components["schemas"]["CollaborationStep"][];
+            /** @description Markdown: the note before the services page's closing action, for example what is long-standing practice and what is a newer focus. */
+            servicesNote?: string | null;
             /** @description The identifier of the person's photo, an uploaded image. */
             photoId?: string | null;
             /** @description The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated. */
@@ -1278,6 +1305,12 @@ export interface components {
             availability: string | null;
             /** @description The date the career started. */
             careerStartedOn: string | null;
+            /** @description Markdown: the introduction of the services page, before the services. */
+            servicesIntro: string | null;
+            /** @description How the person works with a client, as steps in their intended order. */
+            collaborationSteps: components["schemas"]["CollaborationStep"][];
+            /** @description Markdown: the note before the services page's closing action, for example what is long-standing practice and what is a newer focus. */
+            servicesNote: string | null;
             /** @description The identifier of the person's photo, an uploaded image. */
             photoId: string | null;
             /** @description The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated. */

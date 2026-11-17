@@ -200,4 +200,7 @@ const emptyOptional = {
   links: [],
   availability: null,
   careerStartedOn: null,
+  servicesIntro: null,
+  collaborationSteps: [],
+  servicesNote: null,
 };
