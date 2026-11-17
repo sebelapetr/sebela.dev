@@ -4,8 +4,8 @@ import { readWebConfig } from "./config";
 
 describe("readWebConfig", () => {
   it("reads the API's base address", () => {
-    expect(readWebConfig({ WEB_API_BASE_URL: "http://api.example.test:4100" })).toEqual({
-      apiBaseUrl: "http://api.example.test:4100",
+    expect(readWebConfig({ WEB_API_BASE_URL: "http://api.example.test" })).toEqual({
+      apiBaseUrl: "http://api.example.test",
     });
   });
 
