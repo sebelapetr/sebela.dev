@@ -108,7 +108,11 @@ test.describe("asking from the hero", () => {
     await hydrated(page);
     const suggestions = page.getByRole("list", { name: "Suggested questions" });
     await expect(suggestions.getByRole("button").filter({ visible: true })).toHaveCount(3);
-    await suggestions.getByRole("button", { name: "AI role fit?" }).click();
+    const suggestion = suggestions.getByRole("button", { name: "AI role fit?" });
+    await expect(suggestion).toHaveAccessibleDescription(
+      `Would ${name} fit an AI engineering role?`,
+    );
+    await suggestion.click();
 
     await expect(page).toHaveURL(conversationAddress);
     await expect(turns(page).first()).toContainText(`Would ${name} fit an AI engineering role?`);
@@ -191,7 +195,7 @@ test.describe("the Ask page", () => {
     await expectLoaded(page);
     await expect(page).toHaveTitle("Ask AI");
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/u);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Ask AI");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Ask my AI");
     // An assistant over the public profile, never the person.
     await expect(page.getByText(`It is not ${name}.`)).toBeVisible();
     const suggestions = page.getByRole("region", { name: "Suggested questions" });

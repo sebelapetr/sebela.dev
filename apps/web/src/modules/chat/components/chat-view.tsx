@@ -135,7 +135,7 @@ export function ChatView({ name }: { readonly name: string }) {
         <div className="flex flex-col gap-4">
           <h1 className="flex flex-col gap-3">
             <span className="type-label">{name}</span>
-            <span className="type-title">Ask AI</span>
+            <span className="type-title">Ask my AI</span>
           </h1>
           <p className="type-intro max-w-prose">
             An AI assistant that answers questions about {name}&apos;s experience, projects,
@@ -228,7 +228,7 @@ export function ChatView({ name }: { readonly name: string }) {
           </Button>
         </form>
         <p className="text-sm text-muted-foreground">
-          Answers come from {name}&apos;s public profile and may be incomplete.
+          Answers are generated from {name}&apos;s public profile and may be incomplete.
         </p>
       </div>
     </div>

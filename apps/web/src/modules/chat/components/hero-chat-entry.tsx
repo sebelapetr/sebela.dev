@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type SubmitEvent } from "react";
+import { useId, useRef, useState, type SubmitEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
 
@@ -18,10 +18,12 @@ import { handOff } from "../hooks/use-conversation";
  * The hero's way into the chat: one input line with its submit and a row of suggested questions
  * below it (two on mobile, three from `sm`). A question, typed or suggested, starts a conversation
  * with a random address and goes to it on the Ask page, carried there in this tab — never in the
- * address. Sends once however often it is pressed.
+ * address. Sends once however often it is pressed. A suggestion's short label is its accessible
+ * name; the full question it sends is its visually hidden description.
  */
 export function HeroChatEntry({ name }: { readonly name: string }) {
   const router = useRouter();
+  const describedBy = useId();
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const sent = useRef(false);
@@ -72,9 +74,13 @@ export function HeroChatEntry({ name }: { readonly name: string }) {
       <ul aria-label="Suggested questions" className="flex min-w-0 gap-2">
         {heroSuggestions(name).map((suggestion, index) => (
           <li key={suggestion.audience} className={cn("min-w-0", index > 1 && "hidden sm:block")}>
+            <span id={`${describedBy}-${suggestion.audience}`} className="sr-only">
+              {suggestion.question}
+            </span>
             <Button
               type="button"
               variant="ghost"
+              aria-describedby={`${describedBy}-${suggestion.audience}`}
               className="max-w-full bg-muted/60 px-3 text-muted-foreground hover:text-foreground dark:bg-muted/60"
               disabled={sending}
               onClick={() => {
