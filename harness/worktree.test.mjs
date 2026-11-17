@@ -463,6 +463,23 @@ test("a generated environment file gives the worktree its own storage folder and
   assert.equal(address.pathname, "/v1/media/files");
 });
 
+test("a generated environment file points the website at the worktree's own API", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.WEB_API_BASE_URL);
+  assert.equal(address.hostname, example.API_HOST);
+  assert.equal(Number(address.port), Number(settings.API_PORT));
+  assert.equal(address.pathname, "/");
+  assert.equal(
+    Number(new URL(otherSettings.WEB_API_BASE_URL).port),
+    Number(otherSettings.API_PORT),
+  );
+  assert.notEqual(otherSettings.WEB_API_BASE_URL, settings.WEB_API_BASE_URL);
+});
+
 test("setup runs the backend stages in the worktree once its database and settings exist", (t) => {
   const { backend, worktree } = fixture(t);
 
