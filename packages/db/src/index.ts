@@ -72,6 +72,7 @@ export type {
   OrganizationMedia,
   OrganizationPersistence,
   OrganizationRecord,
+  CollaborationStepRecord,
   PersonFields,
   PersonLinkRecord,
   PersonMedia,

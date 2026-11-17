@@ -1,10 +1,17 @@
 export {
+  CollaborationStepSchema,
   PersonCreateSchema,
   PersonLinkSchema,
   PersonSchema,
   PersonUpdateSchema,
 } from "./person.js";
-export type { Person, PersonCreate, PersonLink, PersonUpdate } from "./person.js";
+export type {
+  CollaborationStep,
+  Person,
+  PersonCreate,
+  PersonLink,
+  PersonUpdate,
+} from "./person.js";
 export {
   SlugParamsSchema,
   TechnologyCreateSchema,

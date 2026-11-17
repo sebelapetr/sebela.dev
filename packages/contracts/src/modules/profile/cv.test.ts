@@ -20,6 +20,9 @@ const person = {
   links: [{ label: "Website", url: "https://alex.example.test/" }],
   availability: null,
   careerStartedOn: "2012-09-01",
+  servicesIntro: null,
+  collaborationSteps: [],
+  servicesNote: null,
   photoId: null,
   cvPdfId: "1b7a2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d",
 };

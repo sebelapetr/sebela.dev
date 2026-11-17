@@ -15,7 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { PersonLinkRecord } from "./index.js";
+import type { CollaborationStepRecord, PersonLinkRecord } from "./index.js";
 import type { ProjectLinkRecord } from "./types.js";
 
 export const profileSchema = pgSchema("profile");
@@ -78,6 +78,12 @@ export const persons = profileSchema.table(
     links: jsonb("links").$type<PersonLinkRecord[]>().notNull().default([]),
     availability: text("availability"),
     careerStartedOn: date("career_started_on", { mode: "string" }),
+    servicesIntro: text("services_intro"),
+    collaborationSteps: jsonb("collaboration_steps")
+      .$type<CollaborationStepRecord[]>()
+      .notNull()
+      .default([]),
+    servicesNote: text("services_note"),
     photoId: uuid("photo_id").references(() => media.id),
     cvPdfId: uuid("cv_pdf_id").references(() => media.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

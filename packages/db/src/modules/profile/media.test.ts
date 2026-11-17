@@ -45,6 +45,9 @@ const person: PersonFields = {
   links: [],
   availability: null,
   careerStartedOn: null,
+  servicesIntro: null,
+  collaborationSteps: [],
+  servicesNote: null,
 };
 
 describe("media persistence", () => {

@@ -10,6 +10,13 @@ export interface PersonLinkRecord {
   url: string;
 }
 
+/** One step of how the person works with a client, in its intended order. */
+export interface CollaborationStepRecord {
+  title: string;
+  /** Markdown. */
+  description: string;
+}
+
 /** Writable fields of the person as they are stored. */
 export interface PersonFields {
   name: string;
@@ -22,6 +29,11 @@ export interface PersonFields {
   availability: string | null;
   /** Calendar date, `YYYY-MM-DD`. */
   careerStartedOn: string | null;
+  /** Markdown: the introduction of the services page. */
+  servicesIntro: string | null;
+  collaborationSteps: CollaborationStepRecord[];
+  /** Markdown: the note before the services page's closing action. */
+  servicesNote: string | null;
 }
 
 /** Media attached to the person, by media id; `null` while none is attached. */
@@ -71,6 +83,9 @@ export const personColumns = {
   links: persons.links,
   availability: persons.availability,
   careerStartedOn: persons.careerStartedOn,
+  servicesIntro: persons.servicesIntro,
+  collaborationSteps: persons.collaborationSteps,
+  servicesNote: persons.servicesNote,
   photoId: persons.photoId,
   cvPdfId: persons.cvPdfId,
   createdAt: persons.createdAt,

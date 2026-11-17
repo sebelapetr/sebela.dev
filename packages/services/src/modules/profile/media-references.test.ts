@@ -44,6 +44,9 @@ const person: PersonCreate = {
   links: [],
   availability: null,
   careerStartedOn: null,
+  servicesIntro: null,
+  collaborationSteps: [],
+  servicesNote: null,
   photoId: null,
   cvPdfId: null,
 };
