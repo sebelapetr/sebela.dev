@@ -44,6 +44,13 @@ Prerequisite: phase 2 must be complete and owner-merged into `master` before imp
 - Every slice handles its own empty/error states, security, visual evidence, CI and documentation. [#58](https://github.com/sebelapetr/sebela.dev/issues/58)/[#61](https://github.com/sebelapetr/sebela.dev/issues/61) provide assembled-site verification, not permission to postpone those checks. [#59](https://github.com/sebelapetr/sebela.dev/issues/59) delivers the runnable container/isolation workflow, not a production deployment. [#60](https://github.com/sebelapetr/sebela.dev/issues/60) verifies the chosen analytics integration with a local stub and redacts chat identifiers/text; production account setup stays in phase 8.
 - Owner-specific copy approval and private seed preparation stay with the owner outside unattended work. No issue may read `.context/`, load real data or copy personal facts into tracked fixtures. An unavailable old app/reference is not permission to bypass that boundary.
 
+## Web module layout (added 2026-11-17)
+
+The owner stopped the first run during [#42](https://github.com/sebelapetr/sebela.dev/issues/42): its modules sat directly under `apps/web/src/`, outside what the import-boundaries rule checks. The layout is now decided ([decision 0016](../../docs/decisions/0016-web-module-layout.md)) and described in [repository structure](../../docs/repository-structure.md#web-module-layout) and the PRD (Code layout): thin routes in `src/app/`, everything else in `src/modules/<name>/` behind one entry, `_shared` for what several modules use.
+
+- All twenty issues, #42–#61, received one more acceptance criterion requiring that layout. Nothing else in them changed.
+- #42 is reopened in effect: its pull request is not merged, and a comment on the issue lists the remaining move of `profile`, `homepage` and the shared footer and addresses into `src/modules/`.
+
 ## Running the phase
 
 After phase 2 is owner-merged and the main checkout is up to date, the owner starts:
@@ -51,6 +58,8 @@ After phase 2 is owner-merged and the main checkout is up to date, the owner sta
 ```bash
 harness/run-phase.sh 03-web
 ```
+
+To tell the orchestrator why a run was stopped or what an unfinished issue still needs, add `--note "<text>"` (`docs/agents.md`, The phase loop).
 
 The first unattended segment can complete [#42](https://github.com/sebelapetr/sebela.dev/issues/42). It cannot advance through the HITL gates [#43](https://github.com/sebelapetr/sebela.dev/issues/43)/[#44](https://github.com/sebelapetr/sebela.dev/issues/44); it may report that no eligible issues remain. Inspect and complete those gates interactively, then run the same command again to resume eligible AFK issues. A phase-done report alone is not evidence of completion: check all blocked, skipped or failed issues and both owner approvals.
 
