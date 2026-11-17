@@ -61,20 +61,20 @@ flowchart TB
 
     web -->|Public HTTP routes| api["api · Hono<br/>Authentication + validation + OpenAPI"]
     ai -->|Public HTTP routes| api
-    admin -->|Private HTTP routes + caller's API key| api
+    admin -->|Internal/tunnel HTTP + authentication| api
     api -->|Chat generation| ai
 
     api --> services["services · Domain logic"]
     services --> db["db · Drizzle repositories"]
-    services --> memory["memory · Indexing + hybrid search"]
+    services --> memory["memory · Knowledge + retrieval"]
     db --> postgres[("PostgreSQL + pgvector")]
-    memory --> postgres
+    memory -->|Backend persistence operations| db
 ```
 
-- **One contract across languages.** OpenAPI drives generated clients; Zod provides API validation and shared TypeScript schemas. The TypeScript client is generated and drift-checked in CI today; the Python client of phase 7 is generated from the same committed `openapi.json` ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-7-not-scaffolded)).
-- **Authenticated content writes.** Private API routes verify API keys. Keys stay server-side; the public assistant has no content-write credentials or tools.
+- **One contract across languages.** OpenAPI drives generated clients; Zod provides API validation and shared TypeScript schemas. The TypeScript client is generated and drift-checked in CI today; the Python client of phase 6 is generated from the same committed `openapi.json` ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-6-not-scaffolded)).
+- **Authenticated content writes.** Admin MCP and private content writes are internal/SSH-tunnel only. Private API routes still verify API keys. Keys stay server-side; the public assistant has no content-write credentials or tools.
 - **A bounded chat exception.** Public chat routes may create, continue and delete the caller's own conversation. The API checks ownership, limits and budget.
-- **Rebuildable retrieval.** The search index is derived from canonical content in PostgreSQL.
+- **Rebuildable retrieval.** The index is derived from authoritative API content and approved supplemental documents whose originals stay in private storage.
 - **Content outside git.** Development uses a fictional demo seed. Real profile content is loaded privately and maintained through the API; media lives in object storage.
 
 Read the [architecture](docs/architecture.md), [package boundaries](docs/repository-structure.md) and [decision records](docs/decisions/README.md) for the reasoning and tradeoffs.
@@ -85,8 +85,8 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 | ---------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                              |
 | Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Planned (phase 3)                                                                      |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Delivered; the TypeScript client is generated, the Python client follows in phase 7    |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 6)            |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Delivered; the TypeScript client is generated, the Python client follows in phase 6    |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 9)            |
 | AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                                      |
 | Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Vitest for the backend and Node's test runner for tooling delivered; the rest planned  |
 | Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                                |
@@ -97,7 +97,7 @@ The visual direction is editorial and monochrome: strong typography, generous wh
 ## AI & MCP
 
 > [!NOTE]
-> **Planned.** Nothing in this section is implemented yet. The admin MCP server arrives in phase 5, retrieval in phase 6, and the assistant and public MCP server in phase 7.
+> **Planned.** Nothing in this section is implemented yet. Admin MCP arrives in phase 5, the reusable agent in 6, FastAPI and live chat in 7, public MCP in 8, and RAG in 9. Phase 10 launches the site; graph, ontology and external MCP UI are later independent improvements.
 
 ### How an answer is produced
 
@@ -105,8 +105,8 @@ The browser reaches the assistant through the website and API. The API owns conv
 
 1. **Check access and cost.** The API verifies conversation ownership, applies rate limits and bot checks, and checks the available budget before a model call.
 2. **Guard the input.** A small model checks for off-topic requests, manipulation and abuse.
-3. **Find evidence.** The generating model chooses structured tools for exact facts and hybrid search for open questions. Both read public data through the API.
-4. **Validate and stream.** Deterministic checks validate the output structure, sources, links and exploration status before the answer is streamed through the API to the website.
+3. **Find evidence.** Structured tools answer exact questions from the API first. Phase 9 adds measured retrieval for open questions and approved extra documents; API facts retain priority.
+4. **Validate and deliver.** Progress may be sent immediately; the draft is buffered until deterministic structure/source/link/status checks pass, then approved content is delivered through the API to the website.
 
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
@@ -118,7 +118,7 @@ Langfuse receives redacted traces; stored conversations are scored afterwards an
 | ------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | **App**            | `apps/mcp-public`                                                                 | `apps/mcp-admin`                                          |
 | **Audience**       | External AI agents                                                                | The owner's agents                                        |
-| **Access**         | Public, read-only, rate limited                                                   | Secured; caller's API key forwarded to the API            |
+| **Access**         | Public, read-only, rate limited                                                   | Internal/SSH tunnel; authenticated API operations         |
 | **Purpose**        | Read profile, experience, services and learning activity; search public knowledge | Add and update content through private API routes         |
 | **Implementation** | Python; calls FastAPI read capabilities backed by the shared agent package        | TypeScript; reuses contracts and the generated API client |
 
@@ -126,11 +126,11 @@ Connection URLs and client configuration will be added when the servers are impl
 
 ### Retrieval without a separate vector service
 
-Public content is split into chunks, embedded and indexed with pgvector in the same PostgreSQL instance. Search combines vector similarity and full-text matching. Relevance is measured with questions that have known sources, and the index can be rebuilt from the original content.
+Portfolio API content and owner-approved extra documents are chunked, embedded and indexed in a separate schema of the existing PostgreSQL/pgvector. Terminal ingest accepts Markdown, TXT and text-layer PDF, with local sensitivity checks and owner approval before external embedding calls/public indexing. Originals stay in private Bunny Storage or a private local root through the existing drivers. Measure full-text/vector/hybrid variants with known-source questions; rebuild from API data and retained approved originals. Graph and ontology extend this knowledge base after launch; visitor history stays a separate API responsibility.
 
 ## Roadmap
 
-The phases organise implementation; they are not separate public releases. Specifications are drafts until approved. The harness (phase 00), the foundation (phase 01) and the API and database (phase 02) are delivered; phases 03 to 08 are planned.
+The first public release follows phase 10; graph, ontology and interactive external MCP UI follow later. Specifications are drafts until approved. The harness (phase 00), foundation (phase 01) and API/database (phase 02) are delivered; later phases are planned.
 
 | Phase                       | Deliverable                                                                       | Specification                                                                      |
 | --------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -141,9 +141,14 @@ The phases organise implementation; they are not separate public releases. Speci
 | **03 · Website**            | Presentation pages, CV, design system and a chat UI backed by prepared answers    | [Website](.plan/03-web/prd.md)                                                     |
 | **04 · AI Roadmap**         | Learning domain, diary, books, events and roadmap pages                           | [AI Roadmap](.plan/04-ai-roadmap/prd.md)                                           |
 | **05 · Admin MCP**          | Secured content-management tools and content skills                               | [Admin MCP](.plan/05-mcp-admin/prd.md)                                             |
-| **06 · Retrieval**          | Chunking, embeddings and measured hybrid search                                   | [Retrieval](.plan/06-rag-memory/prd.md)                                            |
-| **07 · LLM agent**          | Grounded chatbot, public MCP and conversation controls                            | [LLM agent](.plan/07-llm-agent/prd.md)                                             |
-| **08 · Delivery**           | Verified image builds, VPS deployment, backups, rollback and launch               | [Delivery](.plan/08-delivery/prd.md)                                               |
+| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                        | [LLM agent](.plan/06-llm-agent/prd.md)                                             |
+| **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                        | [AI service](.plan/07-ai-service/prd.md)                                           |
+| **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                       | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
+| **09 · RAG**                | Approved-source ingest, private originals, embeddings and retrieval               | [RAG](.plan/09-rag/prd.md)                                                         |
+| **10 · First launch**       | Verified VPS deployment, private admin networking, backups and rollback           | [Delivery](.plan/10-delivery/prd.md)                                               |
+| **11 · Knowledge graph**    | Source-backed relationships and measured graph-assisted retrieval                 | [Knowledge graph](.plan/11-knowledge-graph/prd.md)                                 |
+| **12 · Ontology**           | Semantic constraints and a bounded Auto Ontology experiment                       | [Ontology](.plan/12-ontology/prd.md)                                               |
+| **13 · External MCP UI**    | Verified interactive views with structured/text fallbacks                         | [MCP Apps](.plan/13-mcp-apps/prd.md)                                               |
 
 ## Working on the project
 
@@ -258,7 +263,7 @@ pnpm --silent --filter @sebela/api api-keys list             # metadata only; `r
 The interactive reference is served at `/reference`, the document at `/openapi.json`; every route, its access and its errors are listed in [`apps/api/AGENTS.md`](apps/api/AGENTS.md#http-behaviour).
 
 - **Two kinds of CV.** `GET /v1/cv` is CV _data_, assembled from the stored profile on every request; the website will render the CV page from it. The CV _PDF_ is a separate file you prepare yourself, upload with `POST /v1/media` and attach as the person's `cvPdfId`. The API never generates or updates the PDF, so it can differ from the data until you upload a new one.
-- **Generated clients.** `pnpm generate:api-client` exports the OpenAPI document into `packages/api-client/src/generated/` and regenerates the typed TypeScript client; `pnpm check:api-client`, run by CI on every change, fails when the committed files differ. A Python client (phase 7) is generated from the same committed `openapi.json`, without the TypeScript toolchain ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-7-not-scaffolded)).
+- **Generated clients.** `pnpm generate:api-client` exports the OpenAPI document into `packages/api-client/src/generated/` and regenerates the typed TypeScript client; `pnpm check:api-client`, run by CI on every change, fails when the committed files differ. A Python client (phase 6) is generated from the same committed `openapi.json`, without the TypeScript toolchain ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-6-not-scaffolded)).
 - **Storage without cloud credentials.** The default `STORAGE_DRIVER=local` keeps uploads on local disk and is served by the API itself; tests, CI and every command above need no Bunny credentials. The `STORAGE_BUNNY_*` settings are optional and only needed with `STORAGE_DRIVER=bunny-s3` ([Bunny Storage](docs/architecture.md#bunny-storage)).
 - **Cleanup is for development only.** `node harness/worktree.mjs remove` drops one worktree's databases, role and storage folder, and `pnpm --silent --filter @sebela/api storage remove <worktree>` removes only that storage folder. `pnpm stack:down` removes the API containers and keeps every database, while `docker compose --profile api down --volumes` deletes the shared Postgres volume, with every checkout's and worktree's database, and the media volume. `storage` refuses `STORAGE_ENVIRONMENT=production` and folders it does not own, and no command resets or deletes production content; production safety comes from backups ([release workflow](docs/release-workflow.md)).
 

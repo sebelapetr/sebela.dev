@@ -3,7 +3,7 @@
 |            |                                                                                                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status     | Draft, awaiting approval                                                                                                                                          |
-| Date       | 2026-11-15                                                                                                                                                        |
+| Date       | 2026-11-17                                                                                                                                                        |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                                                        |
 | Depends on | Phases 2 and 4                                                                                                                                                    |
 | Result     | The owner manages all content by talking to an agent: a secured MCP server over the API's private routes, the skills that use it, and evals that prove it behaves |
@@ -12,14 +12,14 @@
 
 There is no admin UI, by decision. After phase 4 the only ways to change content are the seed command and raw API calls. Logging a study session, adding an event or correcting a sentence in an experience must be as easy as saying it — otherwise the content goes stale, and stale content is the failure this whole project is meant to prevent.
 
-The capability is also dangerous: whatever can write the profile can also wreck it. It has to be reachable from anywhere the owner works and still be safe.
+The capability is also dangerous: whatever can write the profile can also wreck it. The owner reaches it inside the server network or through an authenticated SSH tunnel; it is not an internet-facing administration service.
 
 ## Solution
 
 `mcp-admin`: an MCP server, deployed next to the API, that turns the API's private routes into a small set of tools an agent can use well.
 
 - A few task tools for what is done every day, a few general tools for everything else.
-- It holds no secret. The caller's API key is passed on to the API, which decides.
+- It holds no database credentials or shared privileged content key. The API verifies the caller's dedicated administrative credential for every operation.
 - Every write is recorded.
 - Project skills describe the routine jobs, so that any agent session does them the same way.
 - It is developed evals-first: the cases that define good behaviour are written and agreed before the tools.
@@ -68,17 +68,24 @@ The capability is also dangerous: whatever can write the profile can also wreck 
 
 ### Deployment and transport
 
-- A separate app, TypeScript, deployed as an HTTP service in the same Compose stack, on its own subdomain behind the reverse proxy with TLS.
-- It reaches data only through the TypeScript content API over HTTP, using the generated client and shared schemas. It does not call FastAPI or the Python chat pipeline; the external agent supplies its own model. The separate Python `mcp-public` adapter is delivered in phase 7.
+- A separate TypeScript HTTP app in the Compose stack. Bind it to the internal server network or loopback; remote owner access uses an authenticated SSH tunnel. No public admin subdomain or unauthenticated tunnel endpoint is created.
+- Private content-write routes receive the same network restriction. A public API hostname must not provide a second route around the private MCP boundary. Public content reads and the narrowly scoped visitor-conversation routes remain public.
+- API authentication is required even on the internal network and through a tunnel. Service addresses, trusted proxies and tunnel targets are configuration; do not hard-code them.
+- It reaches data only through the TypeScript content API over HTTP, using the generated client and shared schemas. It does not call FastAPI or the Python chat pipeline; the external agent supplies its own model. The separate Python `mcp-public` adapter is delivered in phase 8.
 
 ### Security
 
-- **No stored secret.** The caller sends its API key as a bearer token; the server passes it on to the API's private routes. The API verifies it, as for every other caller. Compromising the server yields no key, and without a valid key from a caller it can write nothing.
+- **Credential boundary.** Use this system's revocable, named administrative API credentials, explicitly provisioned for this first-party gateway. The API remains the key-verification authority; refuse the MCP connection before discovery and recheck authorization for every operation. Document the private authentication-check operation needed for discovery, without exposing key hashes or creating a second key store.
+- This private API-key mechanism is not an OAuth proxy. Do not accept arbitrary third-party access tokens or forward OAuth tokens between different resource audiences; any future OAuth integration needs its own reviewed audience/token-exchange design. Confirm SDK/specification compatibility before implementation.
+- No raw key in model context, tool arguments/results, URLs, logs, traces or audit payloads. Credentials stay in the request authentication layer and are forwarded only to the configured first-party API, never to caller-selected hosts or across redirects. The process necessarily handles credentials in memory: compromising it can expose active credentials. There is no claim that holding no persistent key makes compromise harmless.
 - **Refused at the door.** A request without a valid key is rejected before it reaches the tools; the list of tools is not disclosed.
-- **Narrow tools.** No tool executes an arbitrary query or calls an arbitrary address. General tools work only over a fixed list of entities, and every input is validated with the same schemas as the API.
-- **Deletion apart.** Destructive tools are marked as destructive so that clients ask before using them, and the delete tool takes exactly one record.
-- **Network:** rate limiting; the Origin check the MCP specification requires; the server is not listed anywhere public; an optional restriction to the owner's addresses.
-- **OAuth is not part of this phase.** It is needed only for clients that cannot send a header (the claude.ai apps) and can be added later as a second way to obtain a key, without changing how the key is passed on.
+- **Narrow tools.** No SQL, shell, filesystem browsing, arbitrary URL fetching, caller-selected API paths or database administration. General tools use a fixed entity-to-operation registry, with the same strict schemas as the API. Reject unknown entities, properties, operators and attempts to mutate IDs or protected relationships. Use parameterized persistence queries.
+- **Database boundary.** The MCP container has no database credentials, database client dependency or network access to Postgres. Only the API backend accesses persistence. The production API runtime role has only its required data privileges; migration/owner credentials stay out of the MCP and application runtime. Enforce this in deployment configuration and negative tests.
+- **Deletion apart.** Deletion targets exactly one explicitly identified record; no bulk/delete-by-filter tool. Destructive annotations inform clients but are not authorization or proof of human consent. The supported owner-client setup requires approval for destructive calls; clients that cannot enforce it use the owner's explicit maintenance path instead. Test the client configuration and the API boundary, not just annotation values.
+- **Transport controls:** bounded payloads, execution time and concurrency; rate limits before authentication and per authenticated caller; validate any supplied Origin against the configured allowlist and reject an invalid one. Check every MCP HTTP method, discovery path and session reuse. Network privacy, Origin and CORS never replace authentication. Missing/revoked credentials fail without tool disclosure or side effects.
+- **OAuth is not part of this phase.** The initial clients run on the owner's machine or inside the server network and support the documented private authentication flow. Hosted clients without tunnel/private-network access are not supported. Revisit OAuth and resource audiences explicitly if that use case appears.
+
+Confirm implementation against the [MCP transport requirements](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) and [security guidance](https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices), including credential audiences and redirects; a private network does not waive those checks.
 
 ### Record of writes
 
@@ -90,7 +97,7 @@ The capability is also dangerous: whatever can write the profile can also wreck 
 
 ### Tools
 
-Two layers, about a dozen tools in total. More would make selection worse and cost context.
+Cover the complete content API from phases 2 and 4: profile, experiences, projects, services, explorations, education, media, roadmap, diary, books and events. No admin UI is introduced. Two layers, about a dozen tools in total. More would make selection worse and cost context.
 
 **Task tools** — one tool per intent; each may perform several steps:
 
@@ -134,7 +141,7 @@ A skill describes the conversation — what to ask when information is missing, 
 
 ### Evals
 
-- **Runner:** promptfoo — the most widely used CI-native eval tool, with built-in red-teaming tests; one eval tool for the whole repository. A case's task and its check of the resulting data are custom code plugged into it. Its current capabilities are checked against its documentation at the start of the phase.
+- **Runner:** promptfoo, with red-teaming support; one eval tool for the whole repository. A case's task and its check of the resulting data are custom code plugged into it. Its current capabilities are checked against its documentation at the start of the phase.
 - **What a case is:** an instruction as the owner would phrase it, a starting state of the data, and the expected state afterwards.
 - **The task:** an agent with the model and this MCP server, connected to a test API with its own database, carries out the instruction.
 - **Scoring is deterministic wherever possible:** the resulting state of the database and the tools that were called — not the wording of the reply.
@@ -153,7 +160,8 @@ A skill describes the conversation — what to ask when information is missing, 
 
 ### Other
 
-- The app gets a Dockerfile, a Compose service and its own `AGENTS.md`.
+- The app gets a Dockerfile, an internal-only Compose service and its own `AGENTS.md`.
+- Knowledge-document ingest is a terminal workflow in phase 9, not part of this phase's general content tools. Do not expose knowledge staging, raw originals, credentials, audit storage or conversation tables as generic content entities.
 - `docs/testing.md` is extended with how evals are written and run here; later phases follow it.
 
 ## Testing Decisions
@@ -164,7 +172,12 @@ A skill describes the conversation — what to ask when information is missing, 
   - a request without a key or with a revoked key is refused and discloses no tools;
   - the key is passed on unchanged and never stored or logged;
   - validation errors are translated into the agreed form;
-  - the record of writes — every write route produces an entry with before and after; the walking test from phase 2 is extended so a new write route cannot be left unrecorded.
+  - the record of writes — every content-write route produces an entry with before and after; the walking test from phase 2 is extended so a new route cannot be left unrecorded;
+  - unknown entities/fields, SQL injection, path traversal, arbitrary-host/redirect credential exfiltration and oversized inputs are refused without side effects;
+  - all MCP methods authenticate, revocation applies to existing connections on their next operation, and credentials never enter captured outputs/logs;
+  - public edge access cannot reach either MCP Admin or private content-write routes, even with a valid key; the documented internal/tunnel path works;
+  - deployment grants MCP no Postgres access and keeps migration credentials out of the API runtime.
+- Security regressions are ordinary deterministic CI tests. Real-model restraint evals supplement these boundaries; they cannot replace them.
 - **Skills** are checked by running each once end to end against the demo data; this is a HITL step.
 - **Prior art:** the owner's EveBit MCP server; the API tests of phase 2.
 
@@ -173,7 +186,8 @@ A skill describes the conversation — what to ask when information is missing, 
 - OAuth and connecting from the claude.ai apps.
 - Automated undo.
 - Bulk operations and imports through MCP; the seed command covers those.
-- Any read tool for the public — that is the assistant in phase 7.
+- Any read tool for the public — the agent is phase 6, the AI service phase 7 and public MCP phase 8.
+- RAG ingest, knowledge graph, ontology and external MCP UI.
 - A private flag on any content.
 - Running evals on every pull request.
 

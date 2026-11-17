@@ -83,7 +83,7 @@ The conceptual references are [Ousterhout's modular design](https://web.stanford
 
 ## Python
 
-`apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python. pytest is the deterministic test runner; formatter, linter and type checker are chosen in phase 7 and recorded here. Use `src/llm_agent` as the library import root, responsibility folders and documented public entries; keep runtime/HTTP lifecycle in apps. The same principles apply: validate at the edges, thin handlers, no environment access scattered through the code, no hard-coded endpoints.
+`apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python. pytest is the deterministic test runner; formatter, linter and type checker are chosen in phase 6 and recorded here. Use `src/llm_agent` as the library import root, responsibility folders and documented public entries; keep runtime/HTTP lifecycle in apps. The same principles apply: validate at the edges, thin handlers, no environment access scattered through the code, no hard-coded endpoints.
 
 ## Dependencies
 

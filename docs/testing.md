@@ -50,14 +50,23 @@ MCP tools and AI features are developed evals-first.
 - They are written with promptfoo. They call real models, so they run on demand and for changes to the AI parts (`mcp-admin`, `ai-service`, `mcp-public`, the `llm-agent` package and `memory`), not on every pull request.
 - Safety suites must pass completely. Other suites have a threshold set from the first baseline; it is never lowered to pass a run.
 - They cover desired and forbidden behaviour: choosing the right tool, factual grounding, saying "I don't know", direct and indirect prompt injection, unsupported claims, source correctness, restraint with destructive tools.
-- Evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Agent-package evals include FastAPI/MCP integration and all three stages.
+- Evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Phase 6 gates the package stages/structured reads before a server exists; phases 7 and 8 add HTTP/web/MCP integration; phase 9 adds retrieval/ingest, with graph and ontology evals after launch. Do not make a package-only phase depend on a future transport or real RAG.
 - Code graders check deterministic properties; model graders use versioned rubrics calibrated against human labels. Human review covers ambiguous cases, grader disagreements and a sample of automatically passed answers. Record human scores and release decisions.
 - Measure attack success from outcomes and executed tool calls, plus legitimate-question false positives, latency and cost. Passing a finite safety suite is a release gate, not proof of absolute security.
 - Use fictional adversarial fixtures. Real visitor/owner data never enters committed regression datasets.
 
+## Knowledge publication and source privacy
+
+- Phase 9 tests the terminal ingest boundary before implementation: supported formats/extraction limits, local sensitivity checks, approval tied to content/version, no external embedding call before approval and no public access to pending/rejected material.
+- Test API fact precedence, source/version labels, atomic replacement, withdrawal/deletion, index rebuild and embedding-model migration with real Postgres/pgvector plus fake embeddings.
+- Approved extra passages may be public; raw originals, staging metadata and storage credentials are not. Test attempted downloads through public media/API/CDN routes and private-local-root path traversal. Optional Bunny tests use development-only credentials; ordinary CI needs none.
+- Later graph/ontology assertions retain provenance and source withdrawal rules. Compare measured quality against the prior deployed baseline; passing a test suite never proves every secret or contradiction can be recognized.
+
 ## Authentication as a property
 
 There is one test that walks every route of the API and asserts: each write route and each private route returns 401 without a valid API key. A new route is covered automatically, so a write can never be left open by mistake. The chat conversation routes are the one named exception, with their own tests that they can touch only the caller's own conversation.
+
+Admin MCP adds deterministic tests for authentication before discovery, every HTTP method/session operation, next-request revocation, strict entity/field allowlists, injection/path/SSRF attempts, credential redaction and bounded work. Deployment verification proves that both MCP Admin and private content-write API routes are unreachable through the public edge, with the authenticated internal/SSH-tunnel path working. MCP destructive annotations and model restraint evals are not substitutes for enforced authorization or supported-client approval configuration.
 
 ## Kinds of tests
 

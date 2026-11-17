@@ -171,7 +171,7 @@ Carry over the rules from the old application's `components/roadmap/Area.tsx`, `
 
 - The conversion from the old database to the new shape is a **one-off mapper kept outside the repository**. It turns a dump of the old database into a seed folder in the repository's seed format.
 - The repository's seed command is extended to the roadmap domain and loads that folder. So the repository contains the format and the loader, not the owner's data and not the mapper.
-- This is a **one-time migration at launch in phase 8** from a fresh snapshot; the owner keeps using the old application until then. No incremental synchronization, merge/conflict handling or deletion reconciliation is required. Any rehearsal uses a disposable database rather than merging a newer export into live roadmap content. The normal seed loader still retains its phase-2 repeatability guarantee for the same seed input.
+- This is a **one-time migration at launch in phase 10** from a fresh snapshot; the owner keeps using the old application until then. No incremental synchronization, merge/conflict handling or deletion reconciliation is required. Any rehearsal uses a disposable database rather than merging a newer export into live roadmap content. The normal seed loader still retains its phase-2 repeatability guarantee for the same seed input.
 - Check source and target entity counts, resource/book/diary relationships and total elapsed time before accepting the import. Midnight splitting can change time-entry counts and Prague day grouping can move daily totals; account for those transformations explicitly and compare preserved elapsed time rather than assuming the old cached totals are authoritative. Report discrepancies for correction before launch. No separate migration framework or reporting service is needed.
 - The demo seed gets a fictional roadmap of realistic size, a few weeks of diary, a few books and events.
 
@@ -210,7 +210,7 @@ The owner's existing `diary-entry` skill writes straight into the old applicatio
 ## Out of Scope
 
 - Redirects from roadtoai.dev and anything else about that domain.
-- The mapper itself (kept outside the repository) and the final import (phase 8).
+- The mapper itself (kept outside the repository) and the final import (phase 10).
 - Incremental migration, continuous synchronization and an import reconciliation framework.
 - A private flag on diary entries or notes; everything imported is public, as it is today.
 - New features beyond Events: no redesign of the roadmap, diary or bookshelf.

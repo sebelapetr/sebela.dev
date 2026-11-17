@@ -1,16 +1,16 @@
-# Phase 8 — Continuous delivery and launch
+# Phase 10 — Continuous delivery and launch
 
 |            |                                                                                                                |
 | ---------- | -------------------------------------------------------------------------------------------------------------- |
 | Status     | Draft, awaiting approval                                                                                       |
-| Date       | 2026-11-15                                                                                                     |
+| Date       | 2026-11-17                                                                                                     |
 | Parent     | `.plan/00-overview/prd.md`                                                                                     |
-| Depends on | All previous phases                                                                                            |
+| Depends on | Phases 1–9; phases 11–13 do not block launch                                                                   |
 | Result     | Tagging a release deploys it to the owner's server; the real data is loaded; sebelapetr.cz serves the new site |
 
 ## Problem Statement
 
-Everything is built and nothing is live. The site runs on developers' machines with fictional data; the current sebelapetr.cz still presents Petr as he was in 2024. Putting the new system on a server by hand would work once, but every later fix would be a manual, error-prone operation — and how software is released is part of what this repository is meant to demonstrate.
+The first-release website, admin tools, structured-data chatbot, public MCP and RAG are built, but nothing is live. Knowledge graph, ontology and external MCP UI are later releases. The site runs on developers' machines with fictional data; the current sebelapetr.cz still presents Petr as he was in 2024. Putting the new system on a server by hand would work once, but every later fix would be a manual, error-prone operation — and how software is released is part of what this repository is meant to demonstrate.
 
 ## Solution
 
@@ -26,7 +26,7 @@ There is no staging environment. Its job — catching a broken release before vi
 1. As the owner, I want to release by pushing a version tag, so that deploying is one deliberate act.
 2. As the owner, I want a release verified as a whole running system before it reaches the server, so that the absence of staging does not mean testing in production.
 3. As the owner, I want a failed deployment to roll back to the previous version by itself, so that a bad release does not leave the site down.
-4. As the owner, I want to roll back to any earlier version with one command.
+4. As the owner, I want to roll back to the previous verified, schema-compatible release with one command. Restoring an older historical version requires an explicit schema/data compatibility and restore plan; it is not promised as an automatic one-command rollback.
 5. As the owner, I want database migrations to run once, before the new version starts, so that the app never runs against a half-migrated schema.
 6. As the owner, I want a backup taken before every deployment and every night, stored away from the server.
 7. As the owner, I want a restore to have been rehearsed, so that I know the backups work.
@@ -65,24 +65,24 @@ There is no staging environment. Its job — catching a broken release before vi
 
 - One Compose stack on the owner's VPS, defined in the repository as production overrides of the base Compose file: reverse proxy, website, API, `mcp-admin`, `mcp-public`, `ai-service`, Postgres with pgvector, and a one-off migration service.
 - **Reverse proxy** with automatic TLS certificates, security headers, compression and rate limits at the edge.
-- **Addresses:** the website on the main domain; the API, the public MCP server and `mcp-admin` each on their own subdomain. Only the reverse proxy is exposed; Postgres and the generation endpoint of `ai-service` are reachable only inside the stack.
+- **Addresses:** the website on the main domain; public API reads/chat and public MCP have configured public addresses behind the reverse proxy. MCP Admin and all private content-write routes are reachable only inside the server network or through an authenticated SSH tunnel; neither has a public administration route. Postgres, storage originals and AI generation stay internal. Apply the network policy to the API as well as MCP so a public API address cannot bypass it. Authentication remains mandatory on internal/tunnel paths.
 - **Migrations** run as the one-off service and must finish before the new API starts.
 - **Deployment** recreates the services with the new images; an interruption of a few seconds is accepted. Zero-downtime deployment is not a goal of this phase.
 - **Health checks** on every service decide whether a deployment succeeded.
-- **Rollback:** the previous version's images are redeployed automatically when health checks fail, and by one command at any time. Migrations are forward-only, so a release that changes the schema must keep the previous version working — the rule is written into `docs/release-workflow.md`.
+- **Rollback:** the previous version's images are redeployed automatically when health checks fail, and by one command to that previous verified compatible release. Arbitrary historical images are not automatically compatible with the current schema; older restores require a reviewed data/schema recovery plan. Migrations are forward-only, so a release that changes the schema must keep the previous version working — the rule is written into `docs/release-workflow.md`.
 
 ### Configuration and secrets
 
 - Production configuration is an environment file on the server, outside git. The repository documents every variable in the example file.
 - The pipeline's credentials (server access, registry) are repository secrets.
 - Production holds: the database password, the production storage zone key, the model provider keys, the embeddings key, the monitoring keys. API keys for agents are created on the server with the command from phase 2.
-- The production storage zone and its key exist only here; development keys cannot reach it.
+- Public media and private knowledge originals use separate production storage zones/credentials; the private zone has no public CDN mapping. Local-storage deployments use a private root outside static serving. Development credentials cannot reach production zones. Storage driver selection is explicit; provider failure never silently falls back to local disk.
 
 ### Backups
 
 - A database dump before every deployment and every night, encrypted and uploaded to object storage in a zone separate from the site's files.
 - Retention: daily for two weeks, weekly for three months.
-- Files in object storage are the provider's responsibility; the database references them by key.
+- Back up approved knowledge originals independently of storage-provider replication, together with source/version/approval metadata. Public media follow the documented object-storage backup policy. Rehearse rebuilding retrieval from restored API data and private originals without publishing pending/rejected sources.
 - **A restore is rehearsed** before launch and documented step by step. A backup that has never been restored is not counted as a backup.
 - The retrieval index is not backed up; it is rebuilt.
 
@@ -91,7 +91,7 @@ There is no staging environment. Its job — catching a broken release before vi
 - An external uptime check on the website, the API health route and the public MCP endpoint, alerting the owner.
 - Container logs kept on the server with rotation.
 - Analytics: Umami Cloud, set up here; the limits of its free plan are checked at this point.
-- LLM monitoring (Langfuse) was decided in phase 7 and is deployed or connected here.
+- LLM runtime monitoring (Langfuse) was connected in phase 7 and is deployed or connected here.
 - The model budget: the hard limit at the provider is set here, and the backend's daily budget is configured.
 
 ### Launch
@@ -102,15 +102,15 @@ Done once, by the owner with an agent, following a checklist kept in the reposit
 2. Deploy the first release with an empty database.
 3. Load the owner's private profile seed; upload the photo, logos and the CV file.
 4. Take a fresh dump of the old Road to AI database, run the external mapper and load the roadmap once. Verify entity counts, relationships and elapsed-time totals as specified in phase 4, accounting for Prague date grouping and midnight splits; resolve discrepancies before proceeding. No incremental synchronization is required. From this cutover the old application is read-only.
-5. Rebuild the retrieval index.
-6. Create the API key for `mcp-admin` and connect the owner's agent.
+5. Ingest any extra knowledge files through terminal checks and owner approval; store originals privately and rebuild retrieval. Verify source counts, approved versions, API precedence and the absence of raw-file public URLs.
+6. Create the owner's named admin credential, verify internal/SSH-tunnel access, and prove public edge access to MCP Admin and private content-write routes is refused. Connect the owner's agent with destructive-tool approval enabled.
 7. Check every page with real data at the three widths and in both themes; run the chat by hand with real models, including a few adversarial questions.
 8. Set the model budget and confirm the limits.
 9. Switch the domain.
 10. Verify redirects, the sitemap, `llms.txt`, structured data and analytics.
 
 - **Redirects:** the addresses of the current sebelapetr.cz are mapped to the new ones. What to do with roadtoai.dev is the owner's decision and outside this phase; if he redirects it, the address table of phase 4 is the mapping.
-- **The README** gets its final form: what the project is, architecture, how the assistant, MCP and retrieval work, how development is orchestrated, the measurements from phases 5–7, how it is released.
+- **The README** gets its final form: what the project is, architecture, how the assistant, MCP and retrieval work, how development is orchestrated, the measurements from phases 5–9, how it is released.
 
 ### Documentation
 
@@ -122,9 +122,12 @@ Done once, by the owner with an agent, following a checklist kept in the reposit
 - **Rollback is tested deliberately:** a release with a failing health check must end with the previous version running.
 - **The restore rehearsal** is a required step, with the restored database checked against the original.
 - **The full-stack check** in the pipeline reuses the end-to-end tests of phases 3, 4 and 7; no new test framework.
-- **After launch:** a scripted smoke check against production — pages respond, the API is healthy, a write without an API key is refused, the MCP endpoints answer.
+- **After launch:** a scripted smoke check against production — pages respond, the API is healthy, public content writes/admin access are refused even with a valid key at the public edge, public MCP answers, the owner's tunneled admin path authenticates, and no private original is downloadable.
 
 ## Out of Scope
+
+- Knowledge graph (11), ontology (12) and external MCP UI (13); they ship after this first public release.
+- A public admin endpoint; VPN installation is not required for the initial internal/SSH-tunnel arrangement.
 
 - A staging environment.
 - Zero-downtime or blue-green deployment.

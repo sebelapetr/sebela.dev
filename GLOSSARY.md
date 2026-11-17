@@ -24,6 +24,14 @@ Canonical domain terms for this repository. Use these names in code, schemas, AP
 | **Public route**           | A read-only API route that requires no API key, except the explicitly scoped public chat conversation routes.                          | “Unauthenticated write”                                            |
 | **Private route**          | An API route that requires server-side API-key authentication; all content writes use private routes.                                  | “Admin route” unless it specifically means an admin-only operation |
 | **API key**                | A revocable credential issued for a server-side caller and stored in the database as a hash; the raw value is shown only when created. | “JWT” for the API key itself                                       |
+| **Knowledge base**         | Facts and approved explanatory evidence about Petr, from the portfolio API and supplemental sources.                                   | Visitor conversation history                                       |
+| **Supplemental source**    | Owner-supplied material approved for public answers, with a privately stored original and versioned provenance.                        | Confidential knowledge that a public agent may disclose            |
+| **Ingest**                 | Controlled import, extraction, checks and publication of a source version into the knowledge base.                                     | Automatically publishing any uploaded file                         |
+| **Retrieval**              | Selecting relevant current evidence for a question.                                                                                    | The whole answer-generating pipeline                               |
+| **RAG**                    | Retrieval-augmented generation: answering using evidence retrieved from the knowledge base.                                            | A separate product called conversation memory                      |
+| **Knowledge graph**        | Concrete entities and source-backed relationships in the knowledge base.                                                               | The definitions of all permitted relationships                     |
+| **Ontology**               | Versioned definitions of concepts, relationships and semantic constraints.                                                             | The concrete graph assertions themselves                           |
+| **Conversation context**   | Bounded prior turns supplied to the agent from the visitor's stored conversation.                                                      | Knowledge about Petr or identity across browsers                   |
 
 ## Relationships
 

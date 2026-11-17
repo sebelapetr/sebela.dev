@@ -9,7 +9,9 @@ browser -> web -> api -> ai-service -> packages/llm-agent (chat pipeline)
 external agent -> mcp-public -> ai-service (read capabilities) -> api
 owner's agent -> mcp-admin -> api (authenticated content writes)
 api -> packages/services -> packages/db -> PostgreSQL
-                        -> packages/memory -> pgvector (same Postgres)
+                        -> packages/memory (knowledge ingest/retrieval orchestration)
+
+Retrieval persistence is owned by packages/db in the same pgvector-enabled Postgres.
 
 AI-service tools read public content/search through api over HTTP.
 ```
@@ -62,9 +64,9 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
 
 ## Data
 
-- **PostgreSQL is the single canonical source.** Nothing in the repository mirrors live content.
-- One database, separate Postgres schemas per domain: `profile`, `auth` (API keys), `ai_roadmap`, later schemas for chat and retrieval state. Migrations are applied by the db package's own command (`pnpm --filter @sebela/db db:migrate`); starting the API never migrates. Domains are linked through shared topics and technologies.
-- Content is written through the API — by agents using `mcp-admin` — and appears on the website without a redeploy.
+- **The API/database is authoritative for structured facts.** Approved supplemental documents add explanations and context without overriding API facts. Nothing in the repository mirrors real content or original documents.
+- One database, separate Postgres schemas per domain: `profile`, `auth` (API keys), `ai_roadmap`, later schemas for chat, retrieval and private ingest state. Migrations are applied by the db package's own command (`pnpm --filter @sebela/db db:migrate`); starting the API never migrates. Domains are linked through shared topics and technologies.
+- Content is written through the API — by agents using `mcp-admin` — and appears on the website without a redeploy. Backend maintenance CLIs (seed/key commands and phase-9 knowledge ingest) reuse services and their persistence operations in-process; these are not client/Python database-access exceptions.
 - The repository ships a fictional demo seed. The owner's real data is loaded once from a private seed outside the repository; afterwards safety comes from database backups.
 
 ## Files
@@ -90,6 +92,9 @@ The `bunny-s3` driver talks to a Bunny storage zone through Bunny's S3-compatibl
 - **Minimum configuration.** `STORAGE_DRIVER=bunny-s3`, `STORAGE_BUNNY_ENDPOINT`, `STORAGE_BUNNY_REGION`, `STORAGE_BUNNY_ZONE`, `STORAGE_BUNNY_PASSWORD`, `STORAGE_ENVIRONMENT`, `STORAGE_PUBLIC_BASE_URL` and, in `development`, `STORAGE_WORKTREE`.
 - **Zones and keys per environment.** Production has its own zone and password, held only by the production deployment. Development has a separate zone that every development worktree shares; each worktree writes below `development/<worktree>/` and its driver refuses any key outside that prefix, so it cannot touch another worktree's or production's files. A development worktree never needs the production password, and the local driver needs no key at all.
 - Logos of technologies are static assets of the website, not uploads.
+- From phase 9, knowledge originals use a separate private Bunny Storage Zone/credentials without a public Pull Zone/CDN mapping, or a separate private local root outside static serving. Reuse the configured `bunny-s3`/`local` drivers, but private operations do not yield public URLs. An unavailable provider fails explicitly rather than silently switching stores.
+- Public query embeddings/reranking require API-owned retrieval and overall-AI budget admission, including anonymous MCP searches; public read-only status does not make hosted search free. Exhaustion/provider failure is distinct from finding no evidence.
+- Back up originals and source/version/approval metadata; embedding indexes are derived and rebuildable. Only the backend/maintenance path reads originals; neither MCP nor Python receives storage credentials.
 
 ## Access
 
@@ -100,7 +105,8 @@ The `bunny-s3` driver talks to a Bunny storage zone through Bunny's S3-compatibl
 - API keys are created with a command, shown once and stored only as a hash. Each has a name and can be revoked on its own. A key is used only by server-side callers and never reaches a browser: the website calls public routes only.
 - Every request passes the same checks in order, before any handler: a per-client rate budget (health has its own), refusal of credentials in the query string, then on private routes the bearer key and a per-key budget, then on routes with path parameters their schema, then on routes with a body its content type, size and schema. Rate limits are bounded, in memory and per process; `X-Forwarded-For` counts only from configured trusted proxies. Every failure uses the common error shape of `@sebela/contracts`; CORS is not enabled. Details: `apps/api/AGENTS.md`.
 - A successful write passes through one notification attachment point in the API, a no-op until a consumer exists (for example web invalidation or reindexing).
-- There is no visibility model: everything in the database is public content. A private flag is introduced only when a real use case needs it. See `docs/domain-context.md`.
+- Profile/roadmap content has no per-record private flag. Auth, audit, conversations and pending/rejected ingest records are private operational state. Only approved knowledge passage projections are exposed; raw originals and staging data are not public. See `docs/domain-context.md`.
+- Admin MCP and private content-write routes are internal/SSH-tunnel only, with authentication still required. Apply this to the public API proxy too, so it cannot provide a route around MCP's network boundary. The visitor-owned conversation exception remains public.
 
 ## Website
 
@@ -112,29 +118,36 @@ From phase 3, committed API content writes notify a private website invalidation
 
 | App/package          | Language         | Responsibility                                                                        |
 | -------------------- | ---------------- | ------------------------------------------------------------------------------------- |
-| `apps/mcp-admin`     | TypeScript       | Authenticated management tools -> private content API; forwards caller key            |
+| `apps/mcp-admin`     | TypeScript       | Authenticated management tools -> private content API; internal/SSH-tunnel access     |
 | `apps/mcp-public`    | Python           | Public read tools -> FastAPI capability routes; external agents bring their model     |
 | `apps/ai-service`    | Python / FastAPI | Separate AI HTTP routes, chat generation, read capabilities and runtime lifecycle     |
 | `packages/llm-agent` | Python           | Library: pipelines, shared read-tool implementations, providers, guardrails and evals |
 
-Apps are separate deployables; the package is installed in Python app images and has no server lifecycle. Read capability implementations are shared through the package: chat invokes them internally and MCP calls them through FastAPI. The public MCP server exposes no chat tool. `mcp-admin` calls the content API directly and does not depend on the AI runtime.
+Delivery is incremental: phase 6 builds the package and local runner; phase 7 wraps it in FastAPI and replaces the web mock using structured reads; phase 8 adds public MCP. RAG arrives in phase 9. Apps are separate deployables; the package is installed in Python app images and has no server lifecycle. Read capability implementations are shared through the package: chat invokes them internally and MCP calls them through FastAPI. The public MCP server exposes no chat tool. `mcp-admin` calls the content API directly and does not depend on the AI runtime.
 
 `apps/api` and `apps/ai-service` have separate routes and OpenAPI contracts. Content/event schemas are generated from the content API; FastAPI validates AI-specific contracts with Pydantic. Content authentication and its hashed-key store stay in TypeScript. Internal chat generation uses a separate service credential unavailable to the model, granting no content-write authority. Public AI read routes cannot call generation or private content routes.
 
-## Retrieval
+## Knowledge and retrieval
 
-- Retrieval is the project's own implementation on pgvector in the same Postgres: documents are split into chunks, embedded through a hosted embeddings API, and searched with vector similarity and full-text search combined. No separate vector database and no knowledge-graph service.
-- It lives in the backend (`packages/memory`) and is exposed as a public search route. It is derived from Postgres and can be rebuilt from it at any time.
+- Phase 9 adds RAG over the owner's portfolio API content and extra owner-supplied Markdown/TXT/text-layer PDF documents. There is no duplicate crawl of rendered pages, external-source crawl or live web search.
+- `packages/memory` retains its planned TypeScript knowledge/index boundary, called only by the API backend. It does not store visitor conversation memory. SQL/persistence remain behind the backend's db operations; Python reads bounded API capabilities only.
+- Chunks, vectors, sources and versions live in a separate schema in the same PostgreSQL/pgvector. Hosted embeddings, full-text/vector/hybrid search and optional reranking are selected with evals; no second vector database is required.
+- Terminal ingest stages extra files privately, extracts text under limits, runs local sensitivity checks and obtains explicit owner approval of that exact version before external embedding calls or public indexing. Rejected/pending content never reaches search or an agent. Automated checking is not proof of confidentiality.
+- API facts take precedence over supplemental text. Known contradictory claims are held for owner resolution; extra material explains facts and context. Approved information can be disclosed publicly even though its original file has no public download.
+- Public results contain current approved passages, safe source labels and canonical site links when a page exists. Extra sources without a public page have a label/identifier, never a fabricated URL or private storage link.
+- Incremental indexing follows content writes with recoverable pending state; provider failure does not undo a committed content write. Delete/withdraw superseded evidence promptly. Rebuild from current API data and retained approved originals while preserving approval state.
+- After the phase-10 launch, phase 11 adds a source-backed graph using a small initial schema; phase 12 develops the ontology and evaluates NVIDIA Auto Ontology separately. Neither introduces direct Python database access or an enterprise platform by default. Phase 13 handles external MCP UI independently.
 
 ## Chat
 
 - The browser never talks to the assistant. It talks to the website, which talks to the API.
-- **The API owns the conversation:** the anonymous visitor cookie, ownership of a conversation, rate limits, bot detection, the daily budget, and storage of every conversation.
+- **The API owns the conversation:** the anonymous visitor cookie, ownership of one conversation per browser identity, rate limits, bot detection, the daily budget, and storage of every conversation.
+- Direct `/ask` navigation restores that identity's conversation; no session picker or cross-device identification. Losing the cookie loses the anonymous identity, and a URL alone grants no access.
 - **The assistant produces the answer:** an input guard (a small model), generation by a model with read tools and search, deterministic output checks. It is stateless; the API sends it the conversation so far.
 - Model-visible tools are allowlisted public reads; provider/service credentials stay outside model context. No content-write key or write tool enters the pipeline. Injection can still corrupt answers; direct/indirect attack evals measure the residual risk.
 - `packages/llm-agent` runs exactly three LangGraph stages: Security Gateway (rules + cheap classifier, allow/block/uncertain), Main Agent (bounded tools loop) and Output Guard (deterministic schema/evidence/link checks, no LLM). Generation is buffered until validation; progress events may precede approved content.
 - LangChain provides configured OpenAI/Anthropic model integrations. API reservations enforce global cost ceilings; runtime limits bound each call/attempt. Cancellation, deadlines, concurrency and idempotency are explicit contracts, described in the phase-7 PRD.
-- Answers carry typed blocks (contact, experience, service, exploration, roadmap, sources) that the website renders with its own components.
+- Answers carry typed blocks (contact, experience, service, exploration, roadmap, sources) that the website renders with its own components. Public MCP initially returns structured data/text; external interactive UI is phase 13.
 - Phase 3 defines the validated application event/block contract in `packages/contracts` and a browser-local mock adapter. Components depend on that contract rather than transport framing. Phase 7 implements the real API transport/adapter, including idempotent request identifiers and recoverable failures. The mock introduces no live conversation API or server-side storage.
 - Langfuse receives redacted traces; scoring runs off the visitor path under its own budget. Promptfoo covers component/end-to-end evals, pytest deterministic failures, and human review covers ambiguous and sampled automatically passed answers. Telemetry failure never bypasses budgets or blocks valid answers.
 
