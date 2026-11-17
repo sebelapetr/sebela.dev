@@ -19,21 +19,21 @@ Premium technical, editorial, engineering-lab. Strong typography, generous white
 
 Black, white and neutral greys only. Colour is reserved for status. There is no brand accent colour.
 
-| Token | Light | Dark |
-|---|---|---|
-| background | `#ffffff` | `#000000` |
-| foreground | `#0a0a0a` | `#ededed` |
-| card | `#f5f5f5` | `#0a0a0a` |
-| primary | `#0a0a0a` | `#ffffff` |
+| Token              | Light     | Dark      |
+| ------------------ | --------- | --------- |
+| background         | `#ffffff` | `#000000` |
+| foreground         | `#0a0a0a` | `#ededed` |
+| card               | `#f5f5f5` | `#0a0a0a` |
+| primary            | `#0a0a0a` | `#ffffff` |
 | primary-foreground | `#ffffff` | `#000000` |
-| secondary / muted | `#e5e5e5` | `#1a1a1a` |
-| muted-foreground | `#525252` | `#a3a3a3` |
-| border / input | `#d4d4d4` | `#262626` |
-| success | `#10b981` | `#10b981` |
-| warning | `#f59e0b` | `#f59e0b` |
-| destructive | `#ef4444` | `#ef4444` |
+| secondary / muted  | `#e5e5e5` | `#1a1a1a` |
+| muted-foreground   | `#525252` | `#a3a3a3` |
+| border / input     | `#d4d4d4` | `#262626` |
+| success            | `#10b981` | `#10b981` |
+| warning            | `#f59e0b` | `#f59e0b` |
+| destructive        | `#ef4444` | `#ef4444` |
 
-Only these two sets exist. Tokens are defined once in the shared UI package and consumed through Tailwind; components never use raw colour values.
+Only these two sets exist. Tokens are defined once in the shared UI package (`packages/ui/src/styles/globals.css`, exported as `@sebela/ui/globals.css`) and consumed through Tailwind; components never use raw colour values. Until the toggle exists, dark follows `prefers-color-scheme`.
 
 ## Themes
 
