@@ -1,0 +1,27 @@
+[
+  {
+    "slug": "example-university-informatics",
+    "kind": "school",
+    "title": "Informatics, master's degree",
+    "institution": "Example University",
+    "startedOn": "2010-09-01",
+    "endedOn": "2015-06-30",
+    "description": "A **fictional** programme.",
+    "position": 0
+  },
+  {
+    "slug": "example-architect-certification",
+    "kind": "certification",
+    "title": "Example solutions architect",
+    "institution": "Example Academy",
+    "endedOn": "2021-05-14",
+    "position": 1
+  },
+  {
+    "slug": "first-agent-shipped",
+    "kind": "milestone",
+    "title": "First agent shipped",
+    "startedOn": "2025-02-01",
+    "position": 2
+  }
+]
