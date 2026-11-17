@@ -168,8 +168,8 @@ describe("import boundaries: the dependency table", () => {
   });
 
   it("rejects every import of a workspace package from a member without a row", async () => {
-    await assertRejected("packages/ui/src/button.tsx", `import "@sebela/contracts";\n`, {
-      mentions: ["'@sebela/contracts'", "packages/ui", /no row in the dependency table/],
+    await assertRejected("packages/memory/src/chunks.ts", `import "@sebela/contracts";\n`, {
+      mentions: ["'@sebela/contracts'", "packages/memory", /no row in the dependency table/],
     });
   });
 
