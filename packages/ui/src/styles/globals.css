@@ -53,6 +53,11 @@
   color-scheme: light;
 }
 
+/*
+ * The dark tokens are written twice — once for a dark system, once for an explicit choice — because
+ * plain CSS cannot share one declaration block between a media query and a selector. Change both
+ * together; the website's navigation e2e test fails when their computed tokens differ.
+ */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --background: #000000;

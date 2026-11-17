@@ -27,9 +27,9 @@ export function HomeLink({
       prefetch={false}
       aria-current={currentFor(routes.home, current)}
       onClick={() => onNavigate?.()}
-      className="inline-flex min-h-11 min-w-11 items-center truncate font-semibold tracking-tight"
+      className="inline-flex min-h-11 min-w-11 items-center font-semibold tracking-tight"
     >
-      {name ?? "Home"}
+      <span className="truncate">{name ?? "Home"}</span>
     </Link>
   );
 }
@@ -80,7 +80,7 @@ export function NavigationList({
             className={cn(
               "inline-flex min-h-11 items-center text-muted-foreground underline-offset-8 decoration-2 hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:underline",
               // Stacked, the items line up with the name above them.
-              stacked ? "w-full text-2xl font-semibold tracking-tight" : "px-3 text-sm font-medium",
+              stacked ? "type-heading w-full" : "px-3 text-sm font-medium",
             )}
           >
             {item.label}

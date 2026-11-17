@@ -92,7 +92,7 @@ The 4 px scale of Tailwind (`--spacing`), used in these steps only: 2, 4, 6, 8, 
 ## Navigation
 
 - **Header.** Every page starts with a sticky header (`--header-height`, 64 px, a bottom border, the page background): the name in semibold that leads home ("Home" on pages that read no profile: placeholders and not found), the navigation (Experience, Services, AI Roadmap, Contact) in `text-sm` muted, "Ask AI" as the one solid button (`/ask`), and the theme toggle. The current page's entry is `foreground` and underlined, with `aria-current="page"`; Contact leads to the homepage's contact block and is never current. The header is not printed.
-- **Mobile menu.** Below `md` (768 px) the header shows the name, "Ask AI" and a "Menu" button. The menu opens full screen as a modal dialog: the same top row with "Close menu", then the items stacked in `text-2xl`, lined up with the name, and the toggle with its label. Escape and "Close menu" close it and return focus to "Menu"; Tab stays inside it; the page behind does not scroll; following a link or reaching the desktop width closes it.
+- **Mobile menu.** Below `md` (768 px) the header shows the name, "Ask AI" and a "Menu" button. The menu opens full screen as a modal dialog: the same top row with "Close menu", then the items stacked in `type-heading`, lined up with the name, and the toggle with its label. Escape and "Close menu" close it and return focus to "Menu"; Tab stays inside it; the page behind does not scroll; following a link or reaching the desktop width closes it.
 - **Skip link.** "Skip to content" is the first focusable element of every page; it shows at the top left when focused and moves focus to `<main id="main-content">`.
 
 ## Focus

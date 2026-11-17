@@ -37,7 +37,7 @@ export function ThemeToggle({
       }}
       className={cn(
         buttonVariants({ variant: "ghost", size: withLabel ? "default" : "icon" }),
-        withLabel && "justify-start px-3 text-base",
+        withLabel && "justify-start px-3",
         className,
       )}
     >
