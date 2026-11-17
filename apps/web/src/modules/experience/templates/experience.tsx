@@ -1,9 +1,6 @@
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-
 import { Timeline } from "@sebela/ui/components/timeline";
 
-import { Footer, routes, toEducationRows } from "../../_shared";
+import { CvActions, Footer, toEducationRows } from "../../_shared";
 import type { ExperienceContent } from "../../profile";
 import { EducationList } from "../components/education";
 import { ExperienceEntry } from "../components/experience-entry";
@@ -17,10 +14,10 @@ import { deepLinkIndex } from "../stores/deep-link";
 import { DisclosuresProvider } from "../stores/disclosures";
 
 /**
- * The experience page: the person's headline and length of career, a link to the CV, every
- * published experience on one timeline in the API's order with its projects and case studies, then
- * the independent R&D, the technologies and the education, each left out when there is nothing to
- * show. A link to an experience, a project, a case study, an exploration or a technology group
+ * The experience page: the person's headline and length of career, the CV's actions (the PDF's
+ * download and its date when there is one, and the live CV), every published experience on one
+ * timeline in the API's order with its projects and case studies, then the independent R&D, the
+ * technologies and the education, each left out when there is nothing to show. A link to an experience, a project, a case study, an exploration or a technology group
  * opens what encloses it. Without experiences the page says so.
  */
 export function ExperienceTemplate({ content }: { readonly content: ExperienceContent }) {
@@ -45,15 +42,7 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
               </p>
             )}
           </div>
-          <p>
-            <Link
-              href={routes.cv}
-              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline"
-            >
-              Read the CV
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Link>
-          </p>
+          <CvActions pdf={content.cvPdf} />
         </header>
         <DisclosuresProvider
           index={deepLinkIndex({ timeline: entries, explorations, technologies })}

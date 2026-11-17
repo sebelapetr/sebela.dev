@@ -60,6 +60,32 @@
   }
 }
 
+/*
+ * Print is always dark on white, whatever the theme: the light tokens again, after the dark ones so
+ * they win while both apply. Pages hide what only works on screen with `print:hidden`.
+ */
+@media print {
+  :root {
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --card: #ffffff;
+    --card-foreground: #0a0a0a;
+    --primary: #0a0a0a;
+    --primary-foreground: #ffffff;
+    --secondary: #e5e5e5;
+    --secondary-foreground: #0a0a0a;
+    --muted: #e5e5e5;
+    --muted-foreground: #525252;
+    --accent: #e5e5e5;
+    --accent-foreground: #0a0a0a;
+    --border: #d4d4d4;
+    --input: #d4d4d4;
+    --ring: #0a0a0a;
+
+    color-scheme: light;
+  }
+}
+
 @theme inline {
   /* Geist and Geist Mono; the variables are set by the fonts export on the root element. */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
