@@ -1,12 +1,12 @@
 # Phase 1 — Foundation
 
-| | |
-|---|---|
-| Status | Approved |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md` |
-| Depends on | The harness (`.plan/00-overview/harness-prd.md`) and a passed trial (`.plan/00-trial/prd.md`) |
-| Result | A monorepo with its toolchain, guard rails and CI. The first phase processed by the loop. No application behaviour yet. |
+|            |                                                                                                                         |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Status     | Approved                                                                                                                |
+| Date       | 2026-11-15                                                                                                              |
+| Parent     | `.plan/00-overview/prd.md`                                                                                              |
+| Depends on | The harness (`.plan/00-overview/harness-prd.md`) and a passed trial (`.plan/00-trial/prd.md`)                           |
+| Result     | A monorepo with its toolchain, guard rails and CI. The first phase processed by the loop. No application behaviour yet. |
 
 ## Problem Statement
 
@@ -44,7 +44,7 @@ After this phase, an issue from phase 2 can be handed to the loop.
 
 ### Infrastructure
 
-- A Compose file in the repository root with one service: Postgres on host port 5440, with a named volume and a health check. The image includes the pgvector extension from the start, so the database does not have to be changed when retrieval arrives in phase 6.
+- A Compose file in the repository root with one service: Postgres on host port 5440, with a named volume and a health check. The image includes the pgvector extension from the start, so the database does not have to be changed when retrieval arrives in phase 9.
 - An example environment file lists every variable with a comment. Real environment files are never committed.
 
 ### Per-worktree databases
@@ -94,7 +94,7 @@ What the project is, the architecture in one diagram, how to run it, how develop
 - Any app or package with behaviour, including empty placeholders for them.
 - Database schema, migrations and seeds (phase 2).
 - Design system and UI tooling (phase 3).
-- Production deployment, release pipelines, reverse proxy (phase 8).
+- Production deployment, release pipelines, reverse proxy (phase 10).
 
 ## Further Notes
 

@@ -2,8 +2,8 @@
 
 |        |                                                                                                                                                                                                          |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status | Approved                                                                                                                                                                                                 |
-| Date   | 2026-11-15                                                                                                                                                                                               |
+| Status | Draft revision; architecture decisions confirmed, revised documents awaiting owner review                                                                                                                |
+| Date   | 2026-11-17                                                                                                                                                                                               |
 | Owner  | Petr Šebela                                                                                                                                                                                              |
 | Scope  | Overview of the whole project. Each phase gets its own PRD in `.plan/NN-<phase>/prd.md`; those PRDs hold the detail (exact schema, endpoints, pages, tools) and must stay consistent with this document. |
 
@@ -29,7 +29,7 @@ A new sebelapetr.cz: a hybrid personal professional site built on one structured
 - Visitors and AI agents can ask about Petr: a chatbot on the homepage and a public MCP server, both answering only from his public data.
 - The repository is open source and is itself part of the portfolio: it shows how he engineers and how he works with coding agents.
 
-The site launches publicly once all phases are done and replaces the current sebelapetr.cz. The phases below organise the work; they are not public release milestones.
+The site launches publicly after phase 10 and replaces the current sebelapetr.cz. Phases 11–13 are separate post-launch improvements: knowledge graph, ontology and interactive UI for external MCP clients. They do not delay the first release.
 
 ## Audiences
 
@@ -124,20 +124,25 @@ The site launches publicly once all phases are done and replaces the current seb
 
 Folder names below are the `.plan/` folders. Each phase has its own PRD — all of them are written before implementation starts — and gets its own set of GitHub issues when its turn comes.
 
-Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1 to 8, each processed by the loop and merged by the owner.
+Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1–10 to the first public release, then phases 11–13 as separate improvements. Each phase is processed by the loop and merged by the owner.
 
-| #   | Folder          | Phase                             | Result                                                                                                                                                                        |
-| --- | --------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | `00-overview`   | Overview and harness              | This document, the docs and agent rules, and the harness that lets later phases run unattended (`harness-prd.md`). Done by hand                                               |
-| 0   | `00-trial`      | Trial                             | A dry run of the harness on practice issues. Ends with a pull request that is closed, not merged                                                                              |
-| 1   | `01-foundation` | Foundation                        | Turborepo, shared configuration, guard-rail checks, Docker Compose skeleton, full CI. The first phase processed by the loop. No application code                              |
-| 2   | `02-api-db`     | API and database                  | `apps/api`, `packages/db`, `packages/services`, `packages/contracts`, `profile` schema, seed                                                                                  |
-| 3   | `03-web`        | Website                           | `apps/web` with all presentation pages, CV, and a chat UI running on mock data                                                                                                |
-| 4   | `04-ai-roadmap` | AI Roadmap                        | `ai_roadmap` schema, API, pages, import of the existing data                                                                                                                  |
-| 5   | `05-mcp-admin`  | MCP for content management        | Secured MCP server that writes content through the API, plus agent skills that use it                                                                                         |
-| 6   | `06-rag-memory` | Retrieval                         | The project's own retrieval over public data: pgvector, hybrid search, measured with evals                                                                                    |
-| 7   | `07-llm-agent`  | LLM agent: chatbot and public MCP | A FastAPI AI runtime, separate Python public MCP and shared agent package, plus the real chatbot and a `/mcp` page with setup instructions for connecting external AI clients |
-| 8   | `08-delivery`   | Continuous delivery and launch    | A version tag builds, verifies and deploys to the VPS; production Compose, reverse proxy, TLS, backups; loading the real data and switching the domain                        |
+| #   | Folder               | Phase                                | Result                                                                                          |
+| --- | -------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| 0   | `00-overview`        | Overview and harness                 | Planning, binding docs and the unattended development harness                                   |
+| 0   | `00-trial`           | Trial                                | Disposable harness verification, closed without merging                                         |
+| 1   | `01-foundation`      | Foundation                           | Workspace, tooling, checks, Compose/Postgres and CI                                             |
+| 2   | `02-api-db`          | API and database                     | Profile domain, authenticated writes, generated contracts and demo seed                         |
+| 3   | `03-web`             | Website                              | Presentation pages and chat UI behind a mock adapter                                            |
+| 4   | `04-ai-roadmap`      | AI Roadmap                           | Learning domain, API, pages and the one-time launch import contract                             |
+| 5   | `05-mcp-admin`       | Complete content administration      | TypeScript MCP over the private API, internal/SSH-tunnel access, skills and security gates      |
+| 6   | `06-llm-agent`       | Reusable LLM agent                   | Three-stage Python package and structured API tools, tested without an HTTP server              |
+| 7   | `07-ai-service`      | AI service and real web chat         | FastAPI, conversation/identity/spend controls and live chat over structured API data            |
+| 8   | `08-mcp-public`      | Public MCP                           | Python read-only adapter, structured/text results and `/mcp` setup page                         |
+| 9   | `09-rag`             | RAG                                  | Portfolio + approved extra documents, private originals, embeddings, retrieval and search tools |
+| 10  | `10-delivery`        | Continuous delivery and first launch | Verified deployment, backups/restore, private admin networking and public release               |
+| 11  | `11-knowledge-graph` | Knowledge graph                      | Evidence-backed entities/relations and measured graph-assisted retrieval after launch           |
+| 12  | `12-ontology`        | Ontology                             | Reviewed semantic definitions and a bounded Auto Ontology suitability experiment                |
+| 13  | `13-mcp-apps`        | External MCP UI                      | Optional interactive views in verified clients, with structured/text fallback                   |
 
 ### Phase boundaries
 
@@ -153,13 +158,23 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 
 **4 — AI Roadmap.** Everything the current Road to AI application shows — roadmap, learning diary with statistics, bookshelf, FAQ, glossary, followed sources, project ideas, reading guide — carried over one to one in look and behaviour, under `/ai-roadmap` with its own sub-navigation, on a newly designed `ai_roadmap` schema. One addition: Events (attended conferences, meetups, workshops, lectures), including multi-day events, with their time counted in the diary and statistics. Phase 4 specifies the inherited progress rules, corrects diary days and statistics to Europe/Prague, and extends website invalidation. The existing data is converted once at launch by a mapper kept outside the repository, with counts, relationships and elapsed-time totals checked; the owner keeps using the old application until then. The homepage's Exploring column switches to live roadmap data.
 
-**5 — MCP for content management.** `mcp-admin`: a TypeScript MCP server deployed as an HTTP service, turning the API's private routes into about a dozen tools — task tools for daily jobs, general tools over a fixed list of entities. It holds no key; the caller's API key is passed on. The API gains a record of every write. Skills for routine content work (diary entry, event, profile update, CV reminder). The first phase developed evals-first.
+**5 — MCP for content management.** Complete TypeScript content administration through the API. A small fixed registry supports task tools and general entity operations, not arbitrary SQL/HTTP. Admin MCP and private content writes are internal or reached through an authenticated SSH tunnel; authentication still applies. API-owned audit and deterministic security gates precede acceptance. No AI-service dependency or knowledge ingest yet.
 
-**6 — Retrieval.** The project's own retrieval implementation — no Cognee, no separate vector database. Public content is split into chunks, embedded through a hosted embeddings API and stored with pgvector in the same Postgres; search combines vector similarity with full-text search. Developed evals-first: a set of questions with known sources decides between the variants, and the measurements are published. Indexing follows writes directly; no worker unless that stops being enough.
+**6 — Reusable LLM agent.** `packages/llm-agent`, a Python library with responsibility folders and exactly three stages: Security Gateway (cheap classifier), Main Agent (bounded tool loop) and Output Guard (no LLM). Structured API read tools and component/full-pipeline evals work through a runner before any server is built. Context, token/call/cost limits and cancellation are part of the package contract from the start.
 
-**7 — LLM agent.** `apps/ai-service` (FastAPI), `apps/mcp-public` (Python MCP adapter) and `packages/llm-agent` (shared Python logic). Chat has three stages: Security Gateway (cheap classifier), Main Agent (tools loop) and Output Guard (deterministic). Chat and public MCP share read capabilities, with the latter exposed through FastAPI. The API gains conversations: visitor cookie, ownership, limits, bot detection, budget, storage. The website's mock is replaced, with a public `/mcp` setup page offering copyable connection instructions for Claude, Codex, Gemini and OpenCode, linked from the main navigation, `/ask` and the homepage chat entry point. Evals for desired and forbidden behaviour; monitoring of real conversations.
+**7 — AI service and real web chat.** FastAPI wraps the package; the API owns one conversation per anonymous browser identity, ownership, durable idempotency, limits and spend reservations. Replace the website mock and restore the same conversation on direct `/ask` visits. The chatbot is useful over structured data before RAG. No public MCP or retrieval prerequisite.
 
-**8 — Continuous delivery and launch.** Done last. A version tag builds the images, verifies the complete stack in the pipeline, deploys to the owner's server and rolls back on failure. Production only — no staging; the full-stack check and the rollback take its place. Production Compose stack behind a reverse proxy with TLS, backups with a rehearsed restore, monitoring. Then the launch: the owner's real data and the final roadmap import are loaded, and sebelapetr.cz is switched to the new site.
+**8 — Public MCP.** A separate Python adapter calls FastAPI read capabilities backed by the same tools. External agents bring their model: no generation, admin or raw-file tool. Add `/mcp` with verified remote setup examples and discovery links. Return structured results and text, without interactive UI.
+
+**9 — RAG.** Ingest -> extraction/chunking -> approval -> embeddings/index -> retrieval -> chat/MCP integration. Read the portfolio's API source rather than crawling duplicate pages. Extra Markdown/TXT/text-PDF documents enter through a terminal, local sensitivity checks and owner approval of the exact version. Their approved information may be disclosed publicly, but originals remain in private Bunny/local storage. API facts take precedence over extra explanations. Keep vectors/chunks/provenance in a separate schema of the same pgvector-enabled PostgreSQL; measure retrieval before launch. Paid public query embeddings/reranking use API-owned retrieval and overall-AI budget admission, including anonymous MCP calls.
+
+**10 — Continuous delivery and first launch.** Build and verify the complete first-release stack, deploy to the VPS with backups/restore and rollback, load real profile data and the fresh roadmap import, approve extra sources and rebuild search. Only public web/read/chat/MCP surfaces are exposed. Graph, ontology and MCP Apps do not block this release.
+
+**11 — Knowledge graph.** After launch, add concrete source-backed entities/relationships and bounded relationship reads. Start with a small explicit schema; measure against launched RAG and preserve source withdrawal and API authority.
+
+**12 — Ontology.** Version/review concept meanings, relation constraints and mappings. Evaluate NVIDIA Auto Ontology on a bounded fictional export/snapshot before selecting an integration; its current relational-metadata focus is not assumed to solve unstructured-document ingest. No automatic approval of a full enterprise stack or Python database access.
+
+**13 — External MCP UI.** Separate post-launch MCP Apps compatibility/security work over existing reads. Website cards are already delivered in phase 7; public MCP retains structured/text fallback. This phase depends on 8 and 10, not on graph or ontology, and can be scheduled independently.
 
 ## Implementation Decisions
 
@@ -170,7 +185,9 @@ browser -> web -> api -> ai-service -> packages/llm-agent (chat pipeline)
 external agent -> mcp-public -> ai-service (read capabilities) -> api
 owner's agent -> mcp-admin -> api (authenticated content writes)
 api -> packages/services -> packages/db -> PostgreSQL
-                        -> packages/memory -> pgvector (same Postgres)
+                        -> packages/memory (knowledge/retrieval orchestration)
+
+Retrieval persistence is owned by packages/db in the same pgvector-enabled Postgres.
 
 AI-service tools read public content/search through api over HTTP.
 ```
@@ -178,23 +195,23 @@ AI-service tools read public content/search through api over HTTP.
 - The API is the only gateway to data. The website, `mcp-admin` and `ai-service` use the content API over HTTP; `mcp-public` uses FastAPI read capabilities.
 - The reason is security, not tidiness: the API is the trust boundary. The system has two MCP servers, write access for agents and a public chatbot. Content authentication is enforced at that boundary; internal AI generation has separate service authentication and admission. This supersedes the earlier idea of MCP calling shared services directly.
 - Only `apps/api` (and a future worker) may import `packages/db` and `packages/services`. A lint rule enforces this.
-- Postgres is the source of truth. The retrieval layer is derived and can be rebuilt from Postgres at any time.
+- The API/database is authoritative for structured facts; approved extra documents provide context. Retrieval is derived and rebuildable from current API data and retained approved originals, preserving approval state.
 
 ### Monorepo
 
 - Turborepo with pnpm workspaces on the current Node LTS. TypeScript throughout, except `apps/ai-service`, `apps/mcp-public` and `packages/llm-agent`, which use their own Python toolchain and take part in the same task pipeline and CI.
 - Apps: `web` (Next.js), `api` (Hono, content/web/conversations), `mcp-admin` (TypeScript, private API tools), `mcp-public` (Python, public MCP) and `ai-service` (Python/FastAPI, AI routes/runtime). The MCP apps are separate deployables with different trust models.
-- No `worker` by default. It is added only for a concrete background job; the first likely one is phase 6 (a change in Postgres triggers an asynchronous reindex).
-- Packages: `db` (Drizzle schema, migrations, repositories, seed), `services` (domain logic, storage), `contracts` (Zod schemas and types shared by API, web and MCP), `api-client` (typed client generated from the OpenAPI document), `ui` (shared React components and design tokens), `config` (shared lint and TypeScript configuration); later `memory` (retrieval) and `llm-agent` (Python pipelines, tools, guardrails, models and evals).
-- `packages/memory` is the retrieval layer: chunking, embedding, indexing and hybrid search on pgvector. The rest of the code calls index, search and delete operations only.
+- No `worker` by default. It is added only for a concrete background job; the first likely one is phase 9 (incremental reindexing); no worker is required without measured need.
+- Packages: `db` (Drizzle schema, migrations, repositories, seed), `services` (domain logic, storage), `contracts` (Zod schemas and types shared by API, web and MCP), `api-client` (typed client generated from the OpenAPI document), `ui` (shared React components and design tokens), `config` (shared lint and TypeScript configuration); later `memory` (knowledge ingest and retrieval) and `llm-agent` (Python pipelines, tools, guardrails, models and evals).
+- `packages/memory` is the knowledge/retrieval layer, not chat-history storage: ingest, chunking, embeddings and measured search on pgvector. Only the API backend calls it; database persistence stays behind backend operations. Graph and ontology extend this boundary later without creating another agent platform.
 
 ### Repository structure
 
 The maintained reference is `docs/repository-structure.md`; it holds the full tree, the dependency table and the port scheme. In short:
 
 ```
-apps/        web [3], api [2], mcp-admin [5], mcp-public [7], ai-service [7]
-packages/    config [1], db [2], services [2], contracts [2], api-client [2], ui [3], memory [6], llm-agent [7]
+apps/        web [3], api [2], mcp-admin [5], mcp-public [8], ai-service [7]
+packages/    config [1], db [2], services [2], contracts [2], api-client [2], ui [3], memory [9], llm-agent [6]
 scripts/     worktree setup and cleanup, the phase loop, database helpers
 docs/        architecture, design, workflow, decisions
 .plan/       PRDs and issue overviews per phase
@@ -228,17 +245,19 @@ compose.yaml in the root; a Dockerfile inside each app
 - Uploads go through a private API route. The database stores the file's key; the public base address is configuration.
 - Logos of technologies are static assets of the website.
 
+- Phase-9 knowledge originals use a separate private Bunny Storage Zone without a public CDN mapping, or a private local root through the existing drivers. Retain/back up originals and source/version/approval metadata. Driver selection is explicit; storage failure never silently changes location.
+
 ### Access
 
 - No user accounts and no login UI.
-- The API has two groups of routes. **Public** routes need no authentication and are read-only — with one named exception from phase 7: a visitor may create, continue and delete their own chat conversation. The website and AI read tools use them. **Private** routes are protected by an API key checked in middleware; every write is a private route.
+- The API has public and private route groups. Private content writes are internal/SSH-tunnel only. **Public** routes need no authentication and are read-only — with one named exception from phase 7: a visitor may create, continue and delete their own chat conversation. The website and AI read tools use them. **Private** routes are protected by an API key checked in middleware; every write is a private route.
 - API keys are created with a command, shown once and stored only as a hash. Each has a name and can be revoked on its own; keys do not expire by themselves. A key is used by server-side callers only and never reaches a browser.
-- There is no visibility model and API keys carry no scopes. Everything in the database is public content. A private flag is added only when a real use case needs it, and only where it is needed.
+- Profile and roadmap records remain public content without per-record visibility flags; API keys carry no scopes. Authentication, audit, conversations and knowledge-ingest state are separate private operational data. Only approved knowledge passage projections are public; originals and pending/rejected imports are not. Admin access and private content-write routes are internal/SSH-tunnel only, with authentication still required.
 - Built / tested / designed status is a data field on explorations — a fact about the record, not an access rule — so that neither the site nor the chatbot overstates it.
 
 ### Content
 
-- The database is the single canonical source of content. Nothing in the repository mirrors it.
+- The API/database is authoritative for structured portfolio facts. Approved supplemental documents add explanations and context without overriding those facts; their originals live in private storage. Nothing in the repository mirrors real content or original documents.
 - The repository contains none of Petr's data. It ships a **demo seed**: a fictional person with the same shape and volume of data, used by development agents, tests, CI and anyone who clones the repository.
 - Petr's real data is loaded once from a private seed kept locally, outside the repository. That seed is a bootstrap only and is not maintained afterwards; from then on content changes go through the API and safety comes from database backups.
 - Tests use small fictional fixtures, so content edits never break them.
@@ -251,7 +270,7 @@ compose.yaml in the root; a Dockerfile inside each app
 - Site map (detail in the phase 3 PRD): `/` (hero with photo, headline, two paths and the chat line → what I do → selected work → experience snapshot → now → services → contact), `/experience` (career timeline with projects and inline case studies), `/services`, `/cv`, `/ask`, and from phase 4 `/ai-roadmap` with its sub-pages. There is no separate projects listing and no contact page; "Contact" in the navigation leads to the contact block on the homepage.
 - Technologies have no page of their own. Core ones are shown with logos, the AI engineering focus as text, and the rest in a collapsed "other" list.
 - Contact is email and links, no form.
-- The chat starts from an input line in the hero and continues on `/ask`. A conversation is identified by a random identifier in the address and belongs to an anonymous visitor cookie; someone else with the link does not see it.
+- The chat starts from an input line in the hero and continues on `/ask`. One conversation belongs to an anonymous browser cookie and is restored on direct `/ask` navigation, without a session picker. Its random URL identifier is not authorization; someone else with the link cannot see it. There is no cross-device identity or restoration after losing the cookie.
 - CV: a print-friendly `/cv` page generated from the same data. The PDF is not generated: the owner prepares it by hand, uploads it to object storage and updates it when the data changes, because a CV needs manual control over page breaks and fit.
 - Side work is one "independent R&D" block, not separate project pages and not part of the CV timeline.
 - SEO, structured data and `llms.txt` carry over as requirements from Road to AI.
@@ -273,19 +292,19 @@ compose.yaml in the root; a Dockerfile inside each app
 - The pipeline of one question: limits and bot detection → an input guard (a small model: injection, off-topic, abuse) → generation by a model with read tools and search → deterministic output checks (structure, sources, links) → buffered, validated answer delivery (progress can stream earlier). Stored conversations are scored afterwards, off the visitor's path.
 - No separate router: the generating model chooses between exact lookups and semantic search by calling tools.
 - The model has only public read tools and no content-write credential. Provider/service credentials remain outside model context. This bounds capabilities; adversarial evals still measure answer manipulation.
-- Answers carry typed blocks — contact, experience, service, exploration, roadmap, sources — rendered by the website's own components. Where a client supports it, the public MCP server returns UI through the MCP Apps extension.
+- Answers carry typed blocks — contact, experience, service, exploration, roadmap, sources — rendered by the website's own components. Public MCP initially returns structured data/text. Interactive external-client UI is a separate post-launch phase 13.
 - Conversations are kept without a time limit, for analysis. The visitor's address is not stored with them.
-- Models come from Anthropic or OpenAI, chosen at the start of phase 7 and confirmed by evals. The API atomically reserves and reconciles spend against daily/monthly ceilings; runtime limits cover every call, retry and fallback. Provider limits add protection where available.
+- Models come from Anthropic or OpenAI, chosen for the package in phase 6 and confirmed by evals. The API atomically reserves and reconciles spend against daily/monthly ceilings; runtime limits cover every call, retry and fallback. Provider limits add protection where available.
 - **Evals:** Promptfoo for component and end-to-end behaviour; pytest for deterministic Python contracts and failures. Code/model graders are supplemented by human review of ambiguous and sampled successful cases. **Monitoring:** redacted Langfuse traces, usage, costs and offline scores.
 - Two MCP deployables: TypeScript `mcp-admin` forwards caller keys to private content API routes; Python `mcp-public` calls public read capability routes on FastAPI and never runs the chat pipeline. External MCP agents bring their own model.
 - FastAPI is a separate AI runtime with internal authenticated generation and public bounded read capabilities. `packages/llm-agent` owns shared tools, three-stage LangGraph pipelines, LangChain OpenAI/Anthropic integrations, guardrails, context/cost controls and evals. Python never accesses Postgres directly.
-- Start with bounded single-process concurrency, cancellation/deadlines and durable idempotency in the API. No new worker, distributed AI platform or standalone provider proxy. Detailed contracts, failure behaviour and delivery slices are in phase 7.
+- Start with bounded single-process concurrency, cancellation/deadlines and durable idempotency in the API. No new worker, distributed AI platform or standalone provider proxy. Package contracts and evals are in phase 6; HTTP, conversation, durable spend and failure contracts are in phase 7.
 
 ### Deployment
 
 - Docker everywhere: a Dockerfile per app and one Compose stack (website, API, Postgres with pgvector, later `mcp-admin`, `mcp-public` and `ai-service`). Local and production use the same composition.
 - Target: Petr's own VPS.
-- Reverse proxy, TLS, production Compose overrides, backups, deployment pipelines and the domain switch belong to phase 8, not phase 1.
+- Reverse proxy, TLS, production Compose overrides, backups, deployment pipelines and the domain switch belong to phase 10, not phase 1.
 - Releases are version tags on the main branch; there is no staging environment. A release is verified as a complete running stack in the pipeline before it is deployed, and a failed deployment rolls back.
 
 ### Licence
@@ -336,7 +355,7 @@ compose.yaml in the root; a Dockerfile inside each app
 - Advanced ML research or autonomous multi-agent products as offered services.
 - Background workers until a concrete need appears.
 - The future of the roadtoai.dev domain; a redirect may be added by Petr later.
-- Production infrastructure before phase 8.
+- Production infrastructure before phase 10.
 - Migrating the code of `road-to-matrix`. Its backend is rewritten on the new stack; its UI ideas and its data carry over.
 
 ## Open Questions
@@ -348,9 +367,9 @@ Deferred to the phase named in brackets.
 3. Final headline wording checks and the Paldock role title. [03]
 4. Whether Bunny's S3 compatibility must be chosen when a storage zone is created. [02]
 5. How a usage limit is recognised from an unattended run. [harness]
-6. Embeddings provider and model. [06]
-7. The two models (guard and generation), where Langfuse runs, the bot-detection mechanism, the outcome of the MCP Apps spike. [07]
-8. For the owner before launch: the server (existing or new), the production domain (the repository is named `sebela.dev`, the plan says sebelapetr.cz), the reverse proxy product, the monthly model budget, and the legal side of storing conversations. [08]
+6. Embeddings provider/model, measured retrieval settings and extraction limits. [09]
+7. Security/main models and Python tooling [06]; Langfuse hosting and bot checks [07]; graph extraction/storage details [11]; Auto Ontology suitability [12]; verified MCP Apps/client support [13].
+8. For the owner before launch: the server (existing or new), the production domain (the repository is named `sebela.dev`, the plan says sebelapetr.cz), the reverse proxy product, the monthly model budget, and the legal side of storing conversations. [10]
 
 ## Further Notes
 

@@ -245,7 +245,7 @@ The chat is the whole page. No sidebar, no dashboard.
 - Validate payloads for all named block types, source references and related links. Explorations retain their status; sources include the record and exact site path/anchor. Reserve and validate `RoadmapCard` in this phase; real roadmap content and navigation arrive in phase 4. Render text and blocks safely without executable HTML or unsafe link schemes.
 - Validate incoming events, preserve order and ignore duplicate event identifiers. Invalid or unsupported payloads produce a recoverable failure. Render a typed block only after its complete payload validates. Late events from cancelled requests cannot change the current conversation.
 - Show pending, streaming, complete, insufficient-evidence and failed states. On timeout/interruption, preserve the question and partial answer, mark the answer incomplete and offer retry. Retry reuses the logical request and replaces its failed answer attempt without duplicating the question. Do not retry automatically after an ambiguous failure; phase 7 enforces request idempotency at the API boundary.
-- Prevent duplicate pending submissions. New chat cancels the active request and clears visible state. Carry the hero question into `/ask` exactly once, including browser back/forward. Mock state is scoped to the current tab; an unknown conversation address starts empty without automatic submission. Server-side history restoration remains phase 7 work.
+- Prevent duplicate pending submissions. Resetting the mock chat cancels the active request and clears visible state; no session picker or create-many flow is introduced. Carry the hero question into `/ask` exactly once, including browser back/forward. Mock state is scoped to the current tab; an unknown conversation address starts empty without automatic submission. Server-side history restoration remains phase 7 work: direct `/ask` visits recover the anonymous browser identity's single conversation.
 - Deterministic mock scenarios cover every available block, insufficient evidence, refusal, unavailability, failure before the first event, interrupted streaming, duplicate events, invalid payloads and retry. These verify UI behaviour and the contract; model evals remain phase 7 work.
 
 ### Contact block
@@ -300,7 +300,7 @@ Until phase 4 the AI Roadmap item in the navigation and its links are present bu
 ### Images
 
 - Originals live in object storage. The website's framework produces the sizes and formats it needs.
-- A CDN-side optimiser is reconsidered in phase 8 only if this is not enough.
+- A CDN-side optimiser is reconsidered in phase 10 only if this is not enough.
 - Logos of core technologies are static assets of the website.
 
 ### SEO and AI agents
@@ -310,7 +310,7 @@ Until phase 4 the AI Roadmap item in the navigation and its links are present bu
 
 ### Analytics
 
-- Umami Cloud: cookieless and GDPR-friendly, so no consent banner. The limits of its free plan are checked when it is set up in phase 8.
+- Umami Cloud: cookieless and GDPR-friendly, so no consent banner. The limits of its free plan are checked when it is set up in phase 10.
 - The Smartlook and Google Analytics scripts of the current site are not carried over.
 
 ### Accessibility
@@ -350,7 +350,7 @@ Keyboard operation, sufficient contrast in both themes, alt text from the media 
 - Generating the CV PDF.
 - A history of conversations.
 - A second language.
-- Production analytics set-up and deployment (phase 8).
+- Production analytics set-up and deployment (phase 10).
 
 ## Further Notes
 
