@@ -1,7 +1,5 @@
 import type { ApiClient, Media } from "@sebela/api-client";
 
-import { isWebUrl } from "./image";
-
 /**
  * The current CV PDF's file: its bytes and whose CV it is, no PDF at all (none is attached or no
  * profile is published), or a PDF that cannot be delivered now.
@@ -16,6 +14,11 @@ export type CvPdfFile =
   | { readonly status: "unavailable" };
 
 export interface ReadCvPdfFileOptions {
+  /**
+   * The API's base address. Besides any https address, the file is read over plain http only from
+   * this origin, where the API serves the files of its local storage.
+   */
+  readonly apiBaseUrl: string;
   /** How long the whole read may take, the CV and the file together; 15 seconds by default. */
   readonly timeoutMs?: number;
   /** How the file is fetched from its address; the global `fetch` by default. */
@@ -29,14 +32,16 @@ const PDF_SIGNATURE = "%PDF-";
 
 /**
  * Reads the file of the CV PDF the API's public CV route currently names, from the address its
- * media gives, uncached and limited in time. It is the manually uploaded file exactly as stored:
+ * media gives, uncached and limited in time. That address is the API's file route with local storage
+ * or the storage's CDN; the read goes only to an https address or the API's own origin, never
+ * follows a redirect and sends no credentials. It is the manually uploaded file exactly as stored:
  * nothing is generated. The file counts as delivered only when it arrives whole, is served as a
  * PDF and starts like one; anything else — a missing file, an error page, a failed or slow read —
  * is unavailable, never a download.
  */
 export async function readCvPdfFile(
   client: ApiClient,
-  options: ReadCvPdfFileOptions = {},
+  options: ReadCvPdfFileOptions,
 ): Promise<CvPdfFile> {
   const signal = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const fetchFile = options.fetch ?? fetch;
@@ -54,10 +59,17 @@ export async function readCvPdfFile(
     return { status: "unavailable" };
   }
   if (pdf === null) return { status: "none" };
-  if (pdf.url === null || !isWebUrl(pdf.url)) return { status: "unavailable" };
+  if (pdf.url === null || !isReadableFileUrl(pdf.url, options.apiBaseUrl)) {
+    return { status: "unavailable" };
+  }
 
   try {
-    const response = await fetchFile(pdf.url, { cache: "no-store", signal });
+    const response = await fetchFile(pdf.url, {
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "manual",
+      signal,
+    });
     if (!response.ok || !isPdfType(response.headers.get("Content-Type"))) {
       await response.body?.cancel();
       return { status: "unavailable" };
@@ -68,6 +80,19 @@ export async function readCvPdfFile(
   } catch {
     return { status: "unavailable" };
   }
+}
+
+/** Whether the file may be read from an address: any https address, or http on the API's origin. */
+function isReadableFileUrl(value: string, apiBaseUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.username !== "" || url.password !== "") return false;
+  if (url.protocol === "https:") return true;
+  return url.protocol === "http:" && url.origin === new URL(apiBaseUrl).origin;
 }
 
 function isPdfType(contentType: string | null): boolean {

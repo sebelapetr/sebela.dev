@@ -29,9 +29,14 @@ export type { ServicesContent, ServicesResult } from "./data/load-services";
 
 let client: ApiClient | undefined;
 
+/** The API's base address, from the environment validated on every call. */
+function apiBaseUrl(): string {
+  return readWebConfig(process.env).apiBaseUrl;
+}
+
 /** The API client, created on first use after the environment is validated once per process. */
 function apiClient(): ApiClient {
-  client ??= createApiClient({ baseUrl: readWebConfig(process.env).apiBaseUrl });
+  client ??= createApiClient({ baseUrl: apiBaseUrl() });
   return client;
 }
 
@@ -64,5 +69,5 @@ export const getCv = cache((): Promise<CvResult> => loadCv(apiClient()));
  * Delivered only whole and as a PDF; otherwise no PDF or an unavailable one.
  */
 export function getCvPdfFile(): Promise<CvPdfFile> {
-  return readCvPdfFile(apiClient());
+  return readCvPdfFile(apiClient(), { apiBaseUrl: apiBaseUrl() });
 }
