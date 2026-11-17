@@ -108,7 +108,37 @@ async function waitForHealth() {
 
 const step = (name) => process.stdout.write(`- ${name}\n`);
 
+// Compose interpolates every service, also those of an inactive profile. The Postgres-only
+// commands of a checkout whose `.env` has the Postgres settings only must still work.
+function postgresOnlyConfig() {
+  const scratch = path.join(CHECKOUT_ROOT, ".tmp");
+  fs.mkdirSync(scratch, { recursive: true });
+  const envFile = path.join(scratch, `api-stack-postgres-only-${String(process.pid)}.env`);
+  const postgresSettings = Object.entries(example).filter(([name]) => name.startsWith("POSTGRES_"));
+  fs.writeFileSync(envFile, postgresSettings.map(([name, value]) => `${name}=${value}\n`).join(""));
+  const apiSettings = /^(?:API_|STORAGE_|MEDIA_|DATABASE_)/;
+  try {
+    execFileSync(
+      "docker",
+      ["compose", "--project-directory", CHECKOUT_ROOT, "--env-file", envFile, "config", "--quiet"],
+      {
+        env: Object.fromEntries(Object.entries(env).filter(([name]) => !apiSettings.test(name))),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+  } catch (error) {
+    const stderr = typeof error?.stderr === "string" ? error.stderr.trim() : String(error);
+    throw new Error(`Compose without the API settings failed: ${stderr}`, { cause: error });
+  } finally {
+    fs.rmSync(envFile, { force: true });
+  }
+}
+
 try {
+  step("Postgres-only commands need none of the API settings");
+  postgresOnlyConfig();
+
   step("a failed migration keeps the API from starting");
   assert.throws(
     () =>
