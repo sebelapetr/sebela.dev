@@ -1,6 +1,6 @@
 import type { ApiClient, Experience, Person } from "@sebela/api-client";
 
-import { readImage, type ImageMedia } from "./image";
+import { readImage, type ImageMedia, type ReadInit } from "./image";
 
 /** The content of the experience page, all of it from the API. */
 export interface ExperienceContent {
@@ -39,10 +39,30 @@ export interface LoadExperienceOptions {
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
+ * Reads each distinct media id once and keeps the images that can be shown, by id; the rest are
+ * left out.
+ */
+async function readImages(
+  client: ApiClient,
+  ids: readonly string[],
+  init: () => ReadInit,
+): Promise<ReadonlyMap<string, ImageMedia>> {
+  const distinct = [...new Set(ids)];
+  const images = await Promise.all(distinct.map((id) => readImage(client, id, init())));
+  const usable = new Map<string, ImageMedia>();
+  distinct.forEach((id, index) => {
+    const image = images[index];
+    if (image) usable.set(id, image);
+  });
+  return usable;
+}
+
+/**
  * Reads the experience page's content from the API's public routes: the person and the
- * experiences, then each organization's logo once, uncached and limited in time. A person that
- * does not exist makes the page missing; a failed read of the person or the experiences makes the
- * whole content unavailable, while a logo that cannot be read or shown is only left out.
+ * experiences, then each organization's logo and each testimonial author's photo once, uncached
+ * and limited in time. A person that does not exist makes the page missing; a failed read of the
+ * person or the experiences makes the whole content unavailable, while a logo or photo that cannot
+ * be read or shown is only left out.
  */
 export async function loadExperience(
   client: ApiClient,
@@ -68,19 +88,16 @@ export async function loadExperience(
     return { status: "unavailable" };
   }
 
-  const logoIds = [
-    ...new Set(
-      experiences.flatMap(({ organization }) =>
-        organization.logoId === null ? [] : [organization.logoId],
-      ),
-    ),
-  ];
-  const images = await Promise.all(logoIds.map((id) => readImage(client, id, init())));
-  const logos = new Map<string, ImageMedia>();
-  logoIds.forEach((id, index) => {
-    const image = images[index];
-    if (image) logos.set(id, image);
-  });
+  const logoIds = experiences.flatMap(({ organization }) =>
+    organization.logoId === null ? [] : [organization.logoId],
+  );
+  const authorPhotoIds = experiences.flatMap(({ testimonials }) =>
+    testimonials.flatMap(({ authorPhotoId }) => (authorPhotoId === null ? [] : [authorPhotoId])),
+  );
+  const [logos, authorPhotos] = await Promise.all([
+    readImages(client, logoIds, init),
+    readImages(client, authorPhotoIds, init),
+  ]);
 
   return {
     status: "ready",
@@ -90,7 +107,7 @@ export async function loadExperience(
       careerStartedOn: person.careerStartedOn,
       experiences,
       logos,
-      authorPhotos: new Map(),
+      authorPhotos,
     },
   };
 }

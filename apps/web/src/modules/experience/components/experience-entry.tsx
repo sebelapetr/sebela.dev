@@ -1,13 +1,16 @@
 import { TimelineContent, TimelineItem, TimelineTrigger } from "@sebela/ui/components/timeline";
 
 import type { TimelineEntry } from "../data/timeline";
+import { AuthorPhoto } from "./author-photo";
 import { SummaryMarkdown } from "./markdown";
 import { OrganizationLogo } from "./organization-logo";
 
 /**
  * One experience on the timeline. Its row names the period, the kind of work, the role and the
- * organization, with the organization's logo above them when it has one; opening it shows the summary, the responsibilities, the technologies and the
- * testimonials that belong to this experience. Current experiences are open at first.
+ * organization, with the organization's logo above them when it has one; opening it shows the
+ * summary, the responsibilities, the technologies and the testimonials that belong to this
+ * experience, each with its author's photo beside the quote when it has one. Current experiences
+ * are open at first.
  */
 export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
   return (
@@ -65,9 +68,14 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
               key={testimonial.slug}
               className="flex flex-col gap-2 border-l-2 border-foreground pl-4"
             >
-              <blockquote className="text-foreground italic">
-                <p>“{testimonial.quote}”</p>
-              </blockquote>
+              <div className="flex items-start gap-4">
+                <blockquote className="min-w-0 flex-1 text-foreground italic">
+                  <p>“{testimonial.quote}”</p>
+                </blockquote>
+                {testimonial.authorPhoto === null ? null : (
+                  <AuthorPhoto photo={testimonial.authorPhoto} />
+                )}
+              </div>
               <figcaption className="text-sm text-muted-foreground">
                 {testimonial.authorName}, {testimonial.authorRole}
               </figcaption>
