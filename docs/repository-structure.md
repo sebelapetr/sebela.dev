@@ -39,7 +39,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check — plain Node, no dependencies [1]
+│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API stack smoke check — plain Node, no dependencies [1, 2]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
@@ -48,7 +48,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI [1]
-├── compose.yaml             base stack: postgres, later api, web, mcp [1]
+├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; later web, mcp
 ├── compose.prod.yaml        production overrides [8]
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
@@ -58,6 +58,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
+├── .dockerignore            allowlist of the image build context: manifests, apps/api, packages [2]
 ├── .env.example             every environment variable with a comment and an example value; placeholders only [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
 ├── GLOSSARY.md              canonical domain terms
@@ -81,7 +82,7 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 - **Dockerfiles** live in the app they build. Compose files live in the repository root.
 - **Tests** sit next to the code they test. End-to-end tests live in `apps/web/e2e/`; evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Python uses package-local `tests/unit/` and `tests/integration/`.
 - **Two languages:** `apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python with their own dependency toolchain and participate in monorepo tasks/CI. Other apps/packages use TypeScript.
-- **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command: `pnpm --filter @sebela/api seed [folder]` (the demo without a folder). Format, identity and rerun rules: [`packages/db/seed/README.md`](../packages/db/seed/README.md).
+- **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command: `pnpm --filter @sebela/api seed [folder]` (the demo without a folder), or in the container stack `docker compose --profile api run --rm --volume <absolute folder>:/seed:ro api node dist/cli/seed.js /seed`, which mounts the folder read-only (`pnpm stack:seed` loads the demo seed only; `apps/api/AGENTS.md`, "Container stack"). Images never contain personal content. Format, identity and rerun rules: [`packages/db/seed/README.md`](../packages/db/seed/README.md).
 - **Language:** code, docs, `AGENTS.md`, README and PRDs are in English.
 - **Agent instructions:** the root `AGENTS.md` holds repository-wide rules; every app and package has its own `AGENTS.md` with what is specific to it. There are no `CLAUDE.md` files: Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read it too.
 
@@ -116,6 +117,12 @@ Run from the repository root. Turborepo runs a task in every package that define
 | `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`                                            |
 | `pnpm generate:api-client`       | Exports the API's OpenAPI document from its source (`openapi:export` of `@sebela/api`, no database, configuration or secrets) into `packages/api-client/src/generated/openapi.json` and regenerates the client types beside it; see `packages/api-client/AGENTS.md` |
 | `pnpm check:api-client`          | The [generated-code drift check](#the-generated-api-client-drift-check): runs `generate:api-client` and fails when the committed `packages/api-client/src/generated/` differs from the result. CI runs it on every change                                           |
+| `pnpm stack:up`                  | The [container API stack](#the-container-api-stack) of the main checkout: refuses to start without `API_HOST` and `API_PORT`, builds the API image, runs the migration service, starts the API and waits until it is healthy                                        |
+| `pnpm stack:seed`                | The seed command in a one-off API container (the demo seed without a folder); never part of a start                                                                                                                                                                 |
+| `pnpm stack:api-keys`            | The API key command in a one-off API container, for example `pnpm --silent stack:api-keys create <name>`                                                                                                                                                            |
+| `pnpm stack:logs`                | Logs of the stack's services                                                                                                                                                                                                                                        |
+| `pnpm stack:down`                | Stops and removes the API and migration containers; the shared Postgres keeps running                                                                                                                                                                               |
+| `pnpm test:api-stack`            | The [API stack smoke check](testing.md#ci), `node scripts/checks/api-stack.e2e.mjs`; needs Docker and is not part of `pnpm test`                                                                                                                                    |
 | `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                                                             |
 
 The harness (`harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
@@ -251,14 +258,18 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 
 ### The shared Postgres
 
-`compose.yaml` in the repository root defines one service, `postgres`: PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag and the digest of its multi-architecture index, so a re-pushed tag cannot change what runs; tag and digest are upgraded together), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
+`compose.yaml` in the repository root defines three services: `postgres`, started by default, and `migrate` and `api` in the profile `api` ([The container API stack](#the-container-api-stack)). `postgres` is PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag and the digest of its multi-architecture index, so a re-pushed tag cannot change what runs; tag and digest are upgraded together), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
 
 ```bash
 cp .env.example .env               # once; set your own POSTGRES_PASSWORD before the first start
 docker compose up --detach --wait  # returns when the service is healthy
 ```
 
-Compose takes every setting from the process environment or from the `.env` file next to `compose.yaml`; a missing one stops it with a message naming the variable. The published address and port are `POSTGRES_HOST` and `POSTGRES_PORT`. `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` (the main checkout's database) take effect when the volume is first initialised. `docker compose down` stops the service and keeps the data; `docker compose down --volumes` deletes it.
+Compose takes every setting from the process environment or from the `.env` file next to `compose.yaml`; a missing Postgres setting stops it with a message naming the variable. Compose interpolates every service, also those of an inactive profile, so the API services require none of their settings: Postgres-only commands (`up`, `down`, `exec postgres`) need the Postgres settings only. The published address and port are `POSTGRES_HOST` and `POSTGRES_PORT`. `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` (the main checkout's database) take effect when the volume is first initialised. `docker compose down` stops the service and keeps the data; `docker compose down --volumes` deletes it.
+
+### The container API stack
+
+The profile `api` of `compose.yaml` adds two services built from `apps/api/Dockerfile`; a plain `docker compose up` (CI, the harness) still starts Postgres only. `migrate` applies the committed migrations once Postgres is healthy and exits; `api` starts only when `migrate` has exited successfully, publishes `API_PORT` on `API_HOST` and keeps local media in the named volume `api-media`. The containers reach Postgres by its service name on the container port, and the API listens on its own container port, both declared in `compose.yaml`; every other setting comes from the same environment as the host API, and the database settings are the checkout's own `DATABASE_*`. A missing one reaches the containers empty and the API's or the migration's own validation stops them with its name; `pnpm stack:up` checks the host-side `API_HOST` and `API_PORT` before it starts, because empty ones would publish the API on every interface on a random port. The stack belongs to the main checkout (`pnpm stack:up`, see [Root commands](#root-commands)); worktrees run the API on the host on their own ports. Behaviour, commands and shutdown: `apps/api/AGENTS.md`, "Container stack".
 
 ### Worktree databases
 

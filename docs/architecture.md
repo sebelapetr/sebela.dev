@@ -145,3 +145,5 @@ There is no worker by default. One is added only for a concrete job; the first l
 ## Deployment
 
 Docker throughout: a Dockerfile per app and one Compose stack, the same composition locally and in production. The target is the owner's VPS. Production specifics are in `docs/release-workflow.md`.
+
+Locally the API already runs this way (profile `api` of `compose.yaml`, `apps/api/AGENTS.md`, "Container stack"): a one-off migration service runs before the API, which never migrates itself, and the seed and API keys are explicit commands, so a start or restart never changes content. The image carries code and the fictional demo seed only; the owner's content stays outside the repository and the image and is loaded at run time. No production Compose file, reverse proxy, TLS or deployment exists yet.
