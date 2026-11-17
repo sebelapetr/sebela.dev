@@ -7,7 +7,7 @@ import type {
   Technology,
 } from "@sebela/api-client";
 
-import type { CvPdf } from "./cv-pdf";
+import { readCvPdf, type CvPdf } from "./cv-pdf";
 import { readImage, type ImageMedia, type ReadInit } from "./image";
 
 /** The content of the experience page, all of it from the API. */
@@ -75,11 +75,11 @@ async function readImages(
 
 /**
  * Reads the experience page's content from the API's public routes: the person, the experiences,
- * the explorations, the technologies and the education, then each organization's logo and each
- * testimonial author's photo once, uncached and limited in time. A person that does not exist
+ * the explorations, the technologies and the education, then each organization's logo, each
+ * testimonial author's photo and the CV PDF once, uncached and limited in time. A person that does not exist
  * makes the page missing; a failed read of any of the five lists or of the person makes the whole
- * content unavailable (never a page with a section silently left out), while a logo or photo that
- * cannot be read or shown is only left out.
+ * content unavailable (never a page with a section silently left out), while a logo, photo or PDF
+ * that cannot be read, shown or offered is only left out.
  */
 export async function loadExperience(
   client: ApiClient,
@@ -128,9 +128,10 @@ export async function loadExperience(
   const authorPhotoIds = experiences.flatMap(({ testimonials }) =>
     testimonials.flatMap(({ authorPhotoId }) => (authorPhotoId === null ? [] : [authorPhotoId])),
   );
-  const [logos, authorPhotos] = await Promise.all([
+  const [logos, authorPhotos, cvPdf] = await Promise.all([
     readImages(client, logoIds, init),
     readImages(client, authorPhotoIds, init),
+    person.cvPdfId === null ? null : readCvPdf(client, person.cvPdfId, init()),
   ]);
 
   return {
@@ -145,7 +146,7 @@ export async function loadExperience(
       education,
       logos,
       authorPhotos,
-      cvPdf: null,
+      cvPdf,
     },
   };
 }

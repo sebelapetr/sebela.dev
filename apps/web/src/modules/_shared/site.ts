@@ -10,5 +10,9 @@ export const routes = {
   services: "/services",
   experience: "/experience",
   cv: "/cv",
+  /** The current CV PDF as a download (`/cv/pdf`); without one, a redirect to the CV page. */
+  cvPdf: "/cv/pdf",
+  /** Where a CV PDF download that failed ends up. */
+  cvPdfUnavailable: "/cv/pdf/unavailable",
   contact: "/#contact",
 } as const;

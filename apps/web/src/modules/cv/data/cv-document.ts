@@ -1,6 +1,12 @@
 import type { ExplorationStatus } from "@sebela/api-client";
 
-import type { EducationRow } from "../../_shared";
+import {
+  experienceKindLabel,
+  explorationStatusText,
+  formatPeriod,
+  toEducationRows,
+  type EducationRow,
+} from "../../_shared";
 import type { CvContent, CvPdf } from "../../profile";
 
 /** One experience as the CV lists it. */
@@ -59,6 +65,63 @@ export interface CvDocument {
   readonly pdf: CvPdf | null;
 }
 
-export const toCvDocument: (content: CvContent) => CvDocument = () => {
-  throw new Error("Not implemented.");
-};
+/**
+ * The CV document from the content the profile module read. It keeps the API's selection and
+ * order as they are: every experience the API selected for the CV, nothing else; the explorations
+ * as independent R&D of their own with their stored status, never as experiences; the skill groups
+ * as core, AI engineering focus and other, an empty group left out.
+ */
+export function toCvDocument(content: CvContent): CvDocument {
+  const { primary, secondary } = content.technologies;
+  const skills: CvSkillGroup[] = [
+    { key: "core" as const, label: "Core", technologies: primary.core },
+    {
+      key: "ai-engineering-focus" as const,
+      label: "AI engineering focus",
+      technologies: primary.aiEngineeringFocus,
+    },
+    { key: "secondary" as const, label: "Other technologies & tools", technologies: secondary },
+  ]
+    .filter(({ technologies }) => technologies.length > 0)
+    .map(({ key, label, technologies }) => ({
+      key,
+      label,
+      technologies: technologies.map(({ name }) => name),
+    }));
+
+  return {
+    header: {
+      name: content.name,
+      headline: content.headline,
+      location: content.location,
+      email: content.contact.email,
+      links: content.contact.links,
+    },
+    summary: content.shortBio,
+    experiences: content.experiences.map((experience) => ({
+      slug: experience.slug,
+      title: experience.title,
+      organization: experience.organization.name,
+      kindLabel: experienceKindLabel(experience.kind),
+      period: formatPeriod(experience.startedOn, experience.endedOn),
+      summary: experience.summary,
+      responsibilities: experience.responsibilities,
+      technologies: experience.technologies.map(({ name }) => name),
+    })),
+    explorations: content.explorations.map((exploration) => {
+      const status = explorationStatusText(exploration.status);
+      return {
+        slug: exploration.slug,
+        name: exploration.name,
+        status: exploration.status,
+        statusLabel: status.label,
+        statusMeaning: status.meaning,
+        period: formatPeriod(exploration.startedOn, exploration.endedOn),
+        summary: exploration.summary,
+      };
+    }),
+    skills,
+    education: toEducationRows(content.education),
+    pdf: content.cvPdf,
+  };
+}
