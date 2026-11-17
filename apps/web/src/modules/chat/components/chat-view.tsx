@@ -11,9 +11,11 @@ import { Input } from "@sebela/ui/components/input";
 import { chatQuestionMaxLength } from "@sebela/contracts";
 
 import { conversationHref, conversationIdFromParam } from "../data/address";
+import type { AskEvidence } from "../data/evidence";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
 import { askSuggestions } from "../data/prepared-answers";
 import { useConversation } from "../hooks/use-conversation";
+import { AnswerBlock, AnswerSources } from "./answer-blocks";
 
 const textLinkClass =
   "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline";
@@ -49,6 +51,17 @@ function Answer({ turn }: { readonly turn: ChatTurn }) {
       {turn.status === "interrupted" ? (
         <p className="text-sm text-muted-foreground">The answer was interrupted.</p>
       ) : null}
+      {turn.blocks.length === 0 ? null : (
+        <ul aria-label="Cards" className="flex flex-col gap-3 pt-2">
+          {turn.blocks.map((block, index) => (
+            // A turn's blocks only grow while it streams, so their order is their identity.
+            <li key={index}>
+              <AnswerBlock block={block} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <AnswerSources sources={turn.sources} />
       {turn.related.length === 0 ? null : (
         <ul aria-label="Related pages" className="flex flex-wrap gap-x-6">
           {turn.related.map((link) => (
@@ -67,15 +80,16 @@ function Answer({ turn }: { readonly turn: ChatTurn }) {
 
 /**
  * The chat on the Ask page: the conversation named by the address (`?c=`) or a new one, its
- * questions and streamed answers, the four suggested questions of an empty chat, "New chat" and
+ * questions and streamed answers with their cards, sources and related pages, the four suggested questions of an empty chat, "New chat" and
  * the composer. It is an assistant answering about the person from the public profile and says
  * so; it never speaks as the person. Opening the address again — a rerender, back or forward —
  * never resends a question.
  */
-export function ChatView({ name }: { readonly name: string }) {
+export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
+  const { name } = evidence;
   const searchParams = useSearchParams();
   const addressId = conversationIdFromParam(searchParams.get("c"));
-  const { snapshot, open, submit, newChat } = useConversation(name);
+  const { snapshot, open, submit, newChat } = useConversation(evidence);
   const [question, setQuestion] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const lastTurnRef = useRef<HTMLLIElement>(null);

@@ -179,3 +179,109 @@ describe("endChatStream", () => {
     expect(endChatStream(complete)).toBe(complete);
   });
 });
+
+describe("receiveChatEvent with unsafe payloads", () => {
+  const experienceCard = {
+    type: "ExperienceCard",
+    title: "Lead engineer",
+    organization: "Fictional Freight",
+    startedOn: "2022-03-01",
+    endedOn: null,
+    summary: "Leads a fictional team.",
+    technologies: [],
+    href: "/experience#experience-lead-engineer",
+  };
+  const source = {
+    record: { kind: "experience", id: "lead-engineer" },
+    title: "Lead engineer",
+    href: "/experience#experience-lead-engineer",
+  };
+  const unsafeHrefs = [
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "//evil.example.test/experience",
+    "/\\evil.example.test",
+    "https://evil.example.test/experience",
+    "/experience#a b",
+  ];
+
+  function afterStart(fields: Record<string, unknown>): ChatTurn {
+    return receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      event(1, { type: "text_delta", text: "Kept." }),
+      event(2, fields),
+    ]);
+  }
+
+  function expectRejected(turn: ChatTurn): void {
+    expect(turn).toMatchObject({
+      status: "failed",
+      text: "Kept.",
+      blocks: [],
+      sources: [],
+      related: [],
+      error: { code: "invalid_stream" },
+    });
+  }
+
+  it.each(unsafeHrefs)("rejects a block that leads to %s", (href) => {
+    expectRejected(afterStart({ type: "block", block: { ...experienceCard, href } }));
+  });
+
+  it.each(unsafeHrefs)("rejects a source that leads to %s", (href) => {
+    expectRejected(afterStart({ type: "sources", sources: [{ ...source, href }] }));
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,x", "//evil.example.test"])(
+    "rejects a related link to %s",
+    (href) => {
+      expectRejected(afterStart({ type: "related", links: [{ label: "Go", href }] }));
+    },
+  );
+
+  it.each(["javascript:alert(1)", "mailto:casey@morrow.example.test", "/relative"])(
+    "rejects a contact link to %s",
+    (url) => {
+      expectRejected(
+        afterStart({
+          type: "block",
+          block: { type: "ContactCard", email: null, links: [{ label: "Odd", url }] },
+        }),
+      );
+    },
+  );
+
+  it.each([
+    ["an unknown block type", { ...experienceCard, type: "HtmlCard" }],
+    ["a block without its title", { ...experienceCard, title: undefined }],
+    [
+      "an exploration with a status stronger than stored",
+      {
+        type: "ExplorationCard",
+        title: "Tool scopes",
+        summary: null,
+        status: "delivered",
+        href: "/experience#exploration-tool-scopes",
+      },
+    ],
+    ["a block of raw HTML", { type: "ExperienceCard", html: "<img src=x onerror=alert(1)>" }],
+  ])("rejects %s, rendering none of it", (_label, block) => {
+    expectRejected(afterStart({ type: "block", block }));
+  });
+
+  it("rejects more than two related links", () => {
+    const links = ["/experience", "/services", "/cv"].map((href) => ({ label: "Go", href }));
+    expectRejected(afterStart({ type: "related", links }));
+  });
+
+  it("rejects an empty list of sources rather than showing an empty Sources block", () => {
+    expectRejected(afterStart({ type: "sources", sources: [] }));
+  });
+
+  it("keeps markup in a block's text as plain text for the renderer to escape", () => {
+    const title = "<script>alert(1)</script>";
+    const turn = afterStart({ type: "block", block: { ...experienceCard, title } });
+    expect(turn.blocks).toEqual([{ ...experienceCard, title }]);
+  });
+});

@@ -4,11 +4,12 @@
 import type { ChatStreamEvent, ChatSubmission } from "@sebela/contracts";
 
 import type { ChatAdapter } from "../types/adapter";
+import type { AskEvidence } from "./evidence";
 import { preparedAnswer } from "./prepared-answers";
 
 export interface MockChatAdapterOptions {
-  /** The person the answers are about, by name from the API. */
-  readonly subjectName: string;
+  /** The public profile the answers rest on, reduced for the browser. */
+  readonly evidence: AskEvidence;
   /** The pause before each streamed piece; 40 ms by default. */
   readonly chunkDelayMs?: number;
   /** Waits the given time unless the signal aborts first; a timer by default. */
@@ -50,7 +51,8 @@ function chunks(text: string): string[] {
 
 /**
  * A chat adapter that answers from the prepared answers: start, the text in deltas of a few words
- * with a pause before each, the related links, then the completion with the answer's outcome. Every
+ * with a pause before each, each block, the sources (none for an answer that rests on none), the
+ * related links, then the completion with the answer's outcome. Every
  * stream satisfies the chat contract (`validateChatStream`). Aborting stops it between events.
  */
 export function createMockChatAdapter(options: MockChatAdapterOptions): ChatAdapter {
@@ -60,7 +62,7 @@ export function createMockChatAdapter(options: MockChatAdapterOptions): ChatAdap
 
   return {
     async *send(submission: ChatSubmission, { signal }: { readonly signal: AbortSignal }) {
-      const answer = preparedAnswer(options.subjectName, submission.question);
+      const answer = preparedAnswer(options.evidence, submission.question);
       const messageId = createId();
       let eventId = 0;
       const base = () => ({ requestId: submission.requestId, messageId, eventId: eventId++ });
@@ -72,6 +74,14 @@ export function createMockChatAdapter(options: MockChatAdapterOptions): ChatAdap
           type: "text_delta",
           text,
         })),
+        ...answer.blocks.map((block) => (): ChatStreamEvent => ({
+          ...base(),
+          type: "block",
+          block,
+        })),
+        ...(answer.sources.length > 0
+          ? [(): ChatStreamEvent => ({ ...base(), type: "sources", sources: [...answer.sources] })]
+          : []),
         () => ({ ...base(), type: "related", links: [...answer.related] }),
         () => ({ ...base(), type: "complete", outcome: answer.outcome }),
       ];

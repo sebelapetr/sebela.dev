@@ -3,8 +3,9 @@
 // The chat's store for this tab, shared by the hero and the Ask page: one store per page load,
 // created on first use in the browser, so a conversation keeps streaming across client navigation
 // and opening it again never resends. The server renders an empty chat.
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
+import type { AskEvidence } from "../data/evidence";
 import { createMockChatAdapter } from "../data/mock-adapter";
 import {
   createConversationStore,
@@ -20,7 +21,7 @@ const emptySnapshot: ConversationSnapshot = { conversationId: null, turns: [], b
 const createId = () => crypto.randomUUID();
 
 let storage: ChatStorage | undefined;
-let current: { readonly subjectName: string; readonly store: ConversationStore } | undefined;
+let current: { readonly key: string; readonly store: ConversationStore } | undefined;
 
 /** The tab's session storage when it can be written; otherwise one that lasts as long as the page. */
 function chatStorage(): ChatStorage {
@@ -36,12 +37,13 @@ function chatStorage(): ChatStorage {
   return storage;
 }
 
-function conversationStore(subjectName: string): ConversationStore {
-  if (current?.subjectName !== subjectName) {
+/** The tab's store for answers from this evidence, kept while the evidence (by `key`) stays. */
+function conversationStore(key: string, evidence: AskEvidence): ConversationStore {
+  if (current?.key !== key) {
     current = {
-      subjectName,
+      key,
       store: createConversationStore({
-        adapter: createMockChatAdapter({ subjectName }),
+        adapter: createMockChatAdapter({ evidence }),
         storage: chatStorage(),
         createId,
       }),
@@ -50,33 +52,35 @@ function conversationStore(subjectName: string): ConversationStore {
   return current.store;
 }
 
-/** The open conversation and what can be done with it, for answers about the named person. */
-export function useConversation(subjectName: string) {
-  const subscribe = useCallback(
-    (listener: () => void) => conversationStore(subjectName).subscribe(listener),
-    [subjectName],
-  );
+/** The open conversation and what can be done with it, answered from the person's evidence. */
+export function useConversation(evidence: AskEvidence) {
+  const key = useMemo(() => JSON.stringify(evidence), [evidence]);
+  const store = useCallback(() => conversationStore(key, evidence), [key, evidence]);
+  const subscribe = useCallback((listener: () => void) => store().subscribe(listener), [store]);
   const snapshot = useSyncExternalStore(
     subscribe,
-    () => conversationStore(subjectName).getSnapshot(),
+    () => store().getSnapshot(),
     () => emptySnapshot,
   );
   const open = useCallback(
     (conversationId: string | null) => {
-      conversationStore(subjectName).open(conversationId);
+      store().open(conversationId);
     },
-    [subjectName],
+    [store],
   );
   const submit = useCallback(
     (question: string) => {
-      const store = conversationStore(subjectName);
-      return { result: store.submit(question), conversationId: store.getSnapshot().conversationId };
+      const current = store();
+      return {
+        result: current.submit(question),
+        conversationId: current.getSnapshot().conversationId,
+      };
     },
-    [subjectName],
+    [store],
   );
   const newChat = useCallback(() => {
-    conversationStore(subjectName).newChat();
-  }, [subjectName]);
+    store().newChat();
+  }, [store]);
   return { snapshot, open, submit, newChat };
 }
 

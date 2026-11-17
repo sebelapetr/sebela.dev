@@ -303,6 +303,171 @@ test.describe("the Ask page", () => {
   });
 });
 
+/** The element of the page with this anchor. */
+function item(page: Page, anchor: string) {
+  return page.locator(`[id="${anchor}"]`);
+}
+
+const cards = (page: Page) => turns(page).last().getByRole("list", { name: "Cards" });
+const sources = (page: Page) =>
+  turns(page).last().getByRole("list", { name: "Sources", exact: true });
+
+/** Asks a question on an empty Ask page and waits for its whole answer. */
+async function ask(page: Page, url: string, question: string) {
+  await page.goto(`${url}/ask`);
+  await hydrated(page);
+  await page.getByRole("button", { name: question }).click();
+  await answered(page);
+}
+
+/**
+ * Follows a source of the latest answer and expects its exact item in view. The experience page
+ * also opens the disclosures around it and moves focus to it; the services page only scrolls.
+ */
+async function followSource(page: Page, title: string, path: string, anchor: string) {
+  await sources(page).getByRole("link", { name: title, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`${path}#${anchor}$`, "u"));
+  await expect(item(page, anchor)).toBeVisible();
+  await expect(item(page, anchor)).toBeInViewport();
+  if (path === "/experience") await expect(item(page, anchor)).toBeFocused();
+}
+
+test.describe("the answers' cards and sources", () => {
+  const site = serveFixture();
+
+  test("an answer about a role shows the latest experience and opens a cited case study inside its closed experience", async ({
+    page,
+  }) => {
+    await ask(page, site.url(), `Would ${name} fit an AI engineering role?`);
+    const card = cards(page).locator(":scope > li");
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText("Experience");
+    await expect(card).toContainText("Fernway Logistics");
+    await expect(card.getByRole("link", { name: "Lead engineer" })).toHaveAttribute(
+      "href",
+      "/experience#experience-fernway-lead-engineer",
+    );
+    await expect(sources(page).getByRole("link")).toHaveText([
+      "Lead engineer, Fernway Logistics",
+      "Independent consultant, Morrow Studio",
+      "Route planner: technical case study",
+      "Clinic scheduling: technical case study",
+      "AI engineering focus",
+    ]);
+    // Sources and related pages mean different things and stay apart.
+    const related = turns(page).last().getByRole("list", { name: "Related pages" });
+    await expect(related.getByRole("link")).toHaveCount(2);
+
+    // The older position is collapsed on the experience page; its case study opens inside it.
+    await followSource(
+      page,
+      "Clinic scheduling: technical case study",
+      "/experience",
+      "case-study-clinic-scheduling",
+    );
+    await expect(item(page, "case-study-clinic-scheduling")).toContainText("My role");
+  });
+
+  test("a cited technology group is reached on the experience page", async ({ page }) => {
+    await ask(page, site.url(), `Would ${name} fit an AI engineering role?`);
+    await followSource(
+      page,
+      "AI engineering focus",
+      "/experience",
+      "technology-group-ai-engineering-focus",
+    );
+  });
+
+  test("an answer for clients shows services and cites them on the services page", async ({
+    page,
+  }) => {
+    await ask(page, site.url(), `What could ${name} automate for my company?`);
+    const card = cards(page).locator(":scope > li");
+    await expect(card).toHaveCount(2);
+    await expect(card.first()).toContainText("Service");
+    await expect(card.first().getByRole("link", { name: "Process automation" })).toHaveAttribute(
+      "href",
+      "/services#service-process-automation",
+    );
+    await expect(sources(page).getByRole("link")).toHaveText([
+      "Process automation",
+      "Custom software",
+      "AI integration",
+    ]);
+    await followSource(page, "AI integration", "/services", "service-ai-integration");
+  });
+
+  test("an answer about current work keeps each exploration's status and never cites a designed one", async ({
+    page,
+  }) => {
+    await ask(page, site.url(), `What is ${name} working on now?`);
+    const card = cards(page).locator(":scope > li");
+    await expect(card).toHaveCount(3);
+    await expect(card.nth(0)).toContainText("BuiltImplemented and working");
+    await expect(card.nth(1)).toContainText("TestedTried hands-on");
+    await expect(card.nth(2)).toContainText(
+      "DesignedUnimplemented design, planned or architected only",
+    );
+    await expect(sources(page).getByRole("link")).toHaveText([
+      "Answer checker",
+      "Chunk comparison",
+    ]);
+    await followSource(page, "Chunk comparison", "/experience", "exploration-chunk-comparison");
+  });
+
+  test("too little evidence says so with the contact and cites nothing", async ({ page }) => {
+    await ask(page, site.url(), `What are ${name}'s strongest engineering skills?`);
+    const answer = turns(page).last();
+    await expect(answer).toContainText("I don't have enough evidence");
+    await expect(sources(page)).toHaveCount(0);
+    await expect(answer.getByText("Sources", { exact: true })).toHaveCount(0);
+    const card = cards(page).locator(":scope > li");
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText("Contact");
+    await expect(card.getByRole("link", { name: "casey@morrow.example.test" })).toHaveAttribute(
+      "href",
+      "mailto:casey@morrow.example.test",
+    );
+    await expect(card.getByRole("link", { name: "GitHub" })).toHaveAttribute(
+      "href",
+      "https://github.example.test/casey-morrow",
+    );
+  });
+
+  test("an unanswered question shows no cards and no sources", async ({ page }) => {
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    await composer(page).fill(unknownQuestion);
+    await composer(page).press("Enter");
+    await answered(page);
+    await expect(turns(page).last()).toContainText(notConnected);
+    await expect(cards(page)).toHaveCount(0);
+    await expect(sources(page)).toHaveCount(0);
+  });
+
+  test("reaches the cards and the sources with the keyboard", async ({ page }) => {
+    await ask(page, site.url(), `What could ${name} automate for my company?`);
+    const titles = cards(page).getByRole("link");
+    const cited = sources(page).getByRole("link");
+    const expected = [
+      ...(await titles.evaluateAll((links) => links.map((link) => link.getAttribute("href")))),
+      ...(await cited.evaluateAll((links) => links.map((link) => link.getAttribute("href")))),
+    ];
+    await titles.first().focus();
+    const reached: (string | null)[] = [];
+    while (reached.length < expected.length) {
+      reached.push(await page.evaluate(() => document.activeElement?.getAttribute("href") ?? null));
+      await page.keyboard.press("Tab");
+    }
+    expect(reached).toEqual(expected);
+    // Enter on a focused source follows it.
+    await cited.first().focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/services#service-process-automation$/u);
+    await expect(item(page, "service-process-automation")).toBeInViewport();
+  });
+});
+
 test.describe("the chat's layout", () => {
   const site = serveFixture();
 
@@ -351,6 +516,42 @@ test.describe("the chat's layout", () => {
         await page.screenshot({
           path: testInfo.outputPath(`ask-answered-${String(width)}-${scheme}.png`),
         });
+
+        // Every kind of card and the sources, in one conversation: the services, the
+        // explorations and the contact of an answer without evidence.
+        const followUps = [
+          ["services", `What could ${name} automate for my company?`],
+          ["explorations", `What is ${name} working on now?`],
+          ["contact", `What are ${name}'s strongest engineering skills?`],
+        ] as const;
+        for (const [, question] of followUps) {
+          await composer(page).fill(question);
+          await composer(page).press("Enter");
+          await answered(page);
+        }
+        await expect(turns(page)).toHaveCount(4);
+        await page.mouse.move(0, 0);
+        await expectNoHorizontalScroll(page);
+        await expectAccessible(page);
+        const answerHeights = await conversation(page)
+          .locator("a")
+          .evaluateAll((elements) =>
+            elements
+              .filter((element) => element.checkVisibility())
+              .map((element) => element.getBoundingClientRect().height),
+          );
+        for (const height of answerHeights) expect(height).toBeGreaterThanOrEqual(44);
+        // A viewport tall enough for the whole conversation, so the sticky header and composer
+        // stay in their places instead of covering the answers in the pictures.
+        await page.setViewportSize({ width, height: 5000 });
+        const shots = [["role", ""], ...followUps] as const;
+        for (const [index, [answer]] of shots.entries()) {
+          await turns(page)
+            .nth(index)
+            .screenshot({
+              path: testInfo.outputPath(`answer-${answer}-${String(width)}-${scheme}.png`),
+            });
+        }
       });
     }
   }

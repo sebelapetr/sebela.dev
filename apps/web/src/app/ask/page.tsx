@@ -30,5 +30,5 @@ export default async function AskPage() {
   const result = await getAsk();
   if (result.status === "missing") notFound();
   if (result.status === "unavailable") throw new ContentUnavailableError();
-  return <AskTemplate name={result.content.name} />;
+  return <AskTemplate content={result.content} />;
 }

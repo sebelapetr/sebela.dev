@@ -1,8 +1,12 @@
 import type { Technology } from "@sebela/api-client";
 
-import { anchorId } from "../../_shared";
-
-export type TechnologyGroupKey = "core" | "ai-engineering-focus" | "secondary";
+import {
+  anchorId,
+  TECHNOLOGY_GROUP_KEYS,
+  technologyGroupLabel,
+  technologyGroupOf,
+  type TechnologyGroupKey,
+} from "../../_shared";
 
 /** One group of technologies as the technologies section shows it. */
 export interface TechnologyGroup {
@@ -20,20 +24,6 @@ export interface TechnologyGroup {
   }[];
 }
 
-const GROUPS: readonly {
-  key: TechnologyGroupKey;
-  label: string;
-  holds: (t: Technology) => boolean;
-}[] = [
-  { key: "core", label: "Core", holds: (t) => t.tier === "primary" && t.group === "core" },
-  {
-    key: "ai-engineering-focus",
-    label: "AI engineering focus",
-    holds: (t) => t.tier === "primary" && t.group === "ai_engineering_focus",
-  },
-  { key: "secondary", label: "Other technologies & tools", holds: (t) => t.tier === "secondary" },
-];
-
 /**
  * The technologies in their groups, in this order: core, AI engineering focus, secondary; each
  * group in the API's order, and a group without technologies left out. Only a core technology
@@ -45,14 +35,14 @@ export function toTechnologyGroups(
   technologies: readonly Technology[],
   logos: ReadonlySet<string>,
 ): TechnologyGroup[] {
-  return GROUPS.flatMap(({ key, label, holds }) => {
-    const members = technologies.filter(holds);
+  return TECHNOLOGY_GROUP_KEYS.flatMap((key) => {
+    const members = technologies.filter((technology) => technologyGroupOf(technology) === key);
     if (members.length === 0) return [];
     return [
       {
         key,
         anchor: anchorId({ kind: "technology-group", group: key }),
-        label,
+        label: technologyGroupLabel(key),
         technologies: members.map(({ slug, name, logoKey }) => ({
           slug,
           name,
