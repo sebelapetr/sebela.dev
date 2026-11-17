@@ -118,7 +118,7 @@ test.describe("the homepage's narrative read from the API", () => {
     await page.goto(website.url);
     const section = region(page, "Experience");
     await expect(section).toContainText(/\d+ years of professional software development\./u);
-    await expect(section).toContainText("Lead engineer, Fernway Logistics");
+    await expect(section).toContainText("Currently: Lead engineer, Fernway Logistics");
     await expect(section).toContainText("Independent consultant");
     // Finished roles stay on the experience page.
     await expect(section).not.toContainText("Booking system for a clinic");

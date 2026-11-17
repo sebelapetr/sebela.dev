@@ -142,8 +142,8 @@ test.describe("selected work and deep links into the experience page", () => {
       "href",
       "/experience",
     );
-    // Selected work is the first evidence after the hero and What I do (homepage.spec.ts has the
-    // whole order).
+    // Selected work is the first evidence after the hero and What I do (homepage-narrative.spec.ts
+    // has the whole order).
     const order = await page
       .locator("main > section")
       .evaluateAll((sections) =>

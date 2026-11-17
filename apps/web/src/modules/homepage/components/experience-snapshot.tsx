@@ -34,7 +34,7 @@ export function ExperienceSnapshot({
             : `${String(snapshot.years)} years of professional software development. `}
           {snapshot.current.length === 0 ? null : (
             <>
-              Now:{" "}
+              Currently:{" "}
               {snapshot.current.map((role, index) => (
                 <span key={role.slug}>
                   {index === 0 ? null : "; "}

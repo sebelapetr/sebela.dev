@@ -12,16 +12,13 @@ export const textLinkClass =
  */
 export function TextLink({
   href,
-  label,
   children,
 }: {
   readonly href: string;
-  /** The accessible name when the visible text alone is not unique on the page. */
-  readonly label?: string;
   readonly children: ReactNode;
 }) {
   return (
-    <Link href={href} prefetch={false} aria-label={label} className={textLinkClass}>
+    <Link href={href} prefetch={false} className={textLinkClass}>
       {children}
       <ArrowRight aria-hidden="true" className="size-4" />
     </Link>
