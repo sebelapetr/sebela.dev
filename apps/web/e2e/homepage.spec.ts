@@ -101,17 +101,24 @@ test.describe("homepage read from the API", () => {
     await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
     await page.keyboard.press("Enter");
     const order: string[] = [];
-    for (let step = 0; step < 11; step += 1) {
+    for (let step = 0; step < 15; step += 1) {
       await page.keyboard.press("Tab");
       order.push(
         await page.evaluate(() => {
           const element = document.activeElement;
+          if (element instanceof HTMLInputElement)
+            return `input: ${element.labels?.[0]?.innerText ?? ""}`;
           return element instanceof HTMLElement ? element.innerText.trim() : "";
         }),
       );
     }
+    // The chat entry's submit is disabled while the input is empty, so it is not reached.
     expect(order).toEqual([
       "the example blog",
+      "input: Ask anything about my work, experience or skills",
+      "AI role fit?",
+      "What to automate?",
+      "Working on now?",
       "Work with me",
       "View my experience",
       "Full experience",
@@ -148,21 +155,17 @@ test.describe("homepage read from the API", () => {
     expect(duration).toBeLessThan(0.001);
   });
 
-  test("reserves the chat entry's place between the bio and the calls to action", async ({
-    page,
-  }) => {
+  test("places the chat entry between the bio and the calls to action", async ({ page }) => {
     await page.goto("/");
-    const slot = page.getByTestId("hero-chat-slot");
-    // Empty space until the chat entry arrives (#51): no control and nothing to read.
-    await expect(slot).toBeEmpty();
+    const entry = page.getByTestId("hero-chat-entry");
     for (const width of widths) {
       await page.setViewportSize({ width, height: 900 });
       const bio = await page.getByText("person from the website").boundingBox();
-      const box = await slot.boundingBox();
+      const box = await entry.boundingBox();
       const action = await page.getByRole("link", { name: "Work with me" }).boundingBox();
       if (bio === null || box === null || action === null) throw new Error("hero not laid out");
       // One input line (48 px), one row of suggestions (44 px) and the gap between them (12 px).
-      expect(box.height).toBeGreaterThanOrEqual(104);
+      expect(Math.round(box.height)).toBe(104);
       expect(box.y).toBeGreaterThanOrEqual(bio.y + bio.height);
       expect(action.y).toBeGreaterThanOrEqual(box.y + box.height);
     }
@@ -178,11 +181,13 @@ test.describe("homepage read from the API", () => {
         await page.goto("/");
         await expectNoHorizontalScroll(page);
         await expectAccessible(page);
-        // Touch targets: every link and button is at least 44 px tall.
+        // Touch targets: every visible link, button and input is at least 44 px tall.
         const heights = await page
-          .locator("main a:not(p a), main button, footer a")
+          .locator("main a:not(p a), main button, main input, footer a")
           .evaluateAll((elements) =>
-            elements.map((element) => element.getBoundingClientRect().height),
+            elements
+              .filter((element) => element.checkVisibility())
+              .map((element) => element.getBoundingClientRect().height),
           );
         for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
         await page.screenshot({

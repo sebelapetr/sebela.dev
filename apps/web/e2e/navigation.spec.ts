@@ -19,7 +19,7 @@ const pages = [
   { path: "/services", current: "Services", home: name },
   { path: "/cv", current: null, home: name },
   { path: "/ai-roadmap", current: "AI Roadmap", home: "Home" },
-  { path: "/ask", current: "Ask AI", home: "Home" },
+  { path: "/ask", current: "Ask AI", home: name },
   { path: "/missing-page", current: null, home: "Home" },
 ] as const;
 
