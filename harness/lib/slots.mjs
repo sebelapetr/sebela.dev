@@ -135,3 +135,8 @@ export function existingIssueBranch(branch, branches) {
     .find(sameIssue);
   return remote ?? null;
 }
+
+// Not implemented yet.
+export function storageWorktreeName() {
+  throw new Error("not implemented yet");
+}

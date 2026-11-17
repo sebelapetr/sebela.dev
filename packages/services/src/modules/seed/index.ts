@@ -64,6 +64,7 @@ export interface SeedReport {
  */
 export interface SeedService {
   loadSeed(folder: string | URL): Promise<SeedReport>;
+  loadSeedIntoEmpty(folder: string | URL): Promise<SeedReport | null>;
 }
 
 export interface SeedServiceOptions {
@@ -188,6 +189,10 @@ export function createSeedService(
     options.mediaAddress === undefined ? {} : { mediaAddress: options.mediaAddress };
 
   return {
+    loadSeedIntoEmpty() {
+      return Promise.reject(new Error("Not implemented yet."));
+    },
+
     async loadSeed(folder) {
       const data = await readSeedFolder(folder, options.limits);
       const counts = emptyCounts();

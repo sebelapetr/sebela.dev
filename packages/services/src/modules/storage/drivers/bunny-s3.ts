@@ -104,6 +104,13 @@ export function createBunnyS3Driver(
   };
 }
 
+/** Not implemented yet. */
+export function createBunnyS3NamespaceStore(
+  ...args: [BunnyS3StorageConfig, S3Transport?]
+): unknown {
+  throw new Error(`Not implemented yet (${String(args.length)} arguments).`);
+}
+
 /** A plain error for a failed request, without the SDK object, the request or any credential. */
 function storageError(operation: "store" | "delete", error: unknown): Error {
   if (!(error instanceof S3ServiceException)) {

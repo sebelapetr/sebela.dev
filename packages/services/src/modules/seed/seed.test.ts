@@ -533,6 +533,100 @@ describe("seed service", () => {
     });
   });
 
+  describe("only into an empty profile", () => {
+    const loadIntoEmpty = async (files: SeedFiles) => {
+      const folder = await mkdtemp(join(seedFolder, "empty-"));
+      return seed().loadSeedIntoEmpty(await writeSeed(folder, files));
+    };
+
+    it("loads the seed when the profile holds nothing", async () => {
+      await expect(loadIntoEmpty(fixture())).resolves.toMatchObject({
+        records: allCreated,
+        media: { uploaded: 4, reused: 0, removed: 0 },
+      });
+      expect(await profile.getPerson()).toMatchObject({ name: "Robin Example" });
+    });
+
+    it("loads nothing and keeps every edit once the profile holds anything", async () => {
+      await loadIntoEmpty(fixture());
+      await profile.updatePerson({ headline: "Edited by hand" });
+      const before = await snapshot();
+      const files = await filesBelow(storageFolder);
+
+      await expect(loadIntoEmpty(fixture())).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
+      expect(await filesBelow(storageFolder)).toEqual(files);
+      expect((await profile.getPerson()).headline).toBe("Edited by hand");
+    });
+
+    it.each([
+      [
+        "a topic",
+        (p: ProfileService) => p.createTopic({ slug: "evals", name: "Evals", position: 0 }),
+      ],
+      [
+        "a technology",
+        (p: ProfileService) =>
+          p.createTechnology({
+            slug: "go",
+            name: "Go",
+            tier: "secondary",
+            group: null,
+            logoKey: null,
+            position: 0,
+          }),
+      ],
+      [
+        "an education record",
+        (p: ProfileService) =>
+          p.createEducation({
+            slug: "school",
+            kind: "school",
+            title: "Fictional studies",
+            institution: "Fictional School",
+            startedOn: "2008-09-01",
+            endedOn: null,
+            description: null,
+            position: 0,
+          }),
+      ],
+    ])("treats a profile with only %s as not empty", async (_name, create) => {
+      await create(profile);
+      const before = await snapshot();
+
+      await expect(loadIntoEmpty(fixture())).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
+      expect(await filesBelow(storageFolder)).toEqual([]);
+    });
+
+    it("treats a media library with a file as not empty", async () => {
+      await media().uploadMedia({
+        bytes: samplePng({ width: 8, height: 8 }),
+        filename: "dot.png",
+        declaredType: "image/png",
+        altText: "A fictional dot.",
+      });
+      const files = await filesBelow(storageFolder);
+
+      await expect(loadIntoEmpty(fixture())).resolves.toBeNull();
+
+      expect(await profile.getPerson().catch(() => null)).toBeNull();
+      expect(await filesBelow(storageFolder)).toEqual(files);
+    });
+
+    it("still refuses an invalid seed", async () => {
+      const folder = await mkdtemp(join(seedFolder, "empty-malformed-"));
+      await writeFile(join(folder, "topics.json"), "[{ not json");
+
+      const error = await refusal(seed().loadSeedIntoEmpty(folder));
+
+      expect(error.code).toBe("validation_failed");
+      await expectEmpty();
+    });
+  });
+
   describe("an invalid seed", () => {
     it("is refused as a whole, naming every problem by file and field, before any write", async () => {
       const files = fixture();

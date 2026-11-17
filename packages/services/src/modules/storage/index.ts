@@ -171,3 +171,13 @@ export function openStorage(config: StorageConfig): OpenedStorage {
     files: { read: (key) => local.read(key) },
   };
 }
+
+/** The storage folder of one development worktree. Not implemented yet. */
+export interface StorageNamespace {
+  prepare(): Promise<"created" | "reused">;
+  remove(): Promise<"removed" | "absent">;
+}
+
+export function openStorageNamespace(...args: [StorageConfig, string]): StorageNamespace {
+  throw new Error(`Not implemented yet (${String(args.length)} arguments).`);
+}
