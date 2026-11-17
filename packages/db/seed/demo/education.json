@@ -1,0 +1,49 @@
+[
+  {
+    "slug": "harbour-university-informatics",
+    "kind": "school",
+    "title": "Informatics, master's degree",
+    "institution": "Harbour City University",
+    "startedOn": "2013-09-01",
+    "endedOn": "2015-06-30",
+    "description": "A **fictional** programme; thesis on scheduling freight routes.",
+    "position": 0
+  },
+  {
+    "slug": "harbour-university-bachelor",
+    "kind": "school",
+    "title": "Applied informatics, bachelor's degree",
+    "institution": "Harbour City University",
+    "startedOn": "2010-09-01",
+    "endedOn": "2013-06-30",
+    "position": 1
+  },
+  {
+    "slug": "cloud-architect-certification",
+    "kind": "certification",
+    "title": "Cloud solutions architect",
+    "institution": "Example Cloud Academy",
+    "startedOn": null,
+    "endedOn": "2021-05-14",
+    "position": 2
+  },
+  {
+    "slug": "llm-evaluation-course",
+    "kind": "course",
+    "title": "Evaluating language-model applications",
+    "institution": "Example Online School",
+    "startedOn": "2024-01-08",
+    "endedOn": "2024-03-01",
+    "position": 3
+  },
+  {
+    "slug": "first-agent-in-production",
+    "kind": "milestone",
+    "title": "First agent in production",
+    "institution": null,
+    "startedOn": null,
+    "endedOn": "2025-02-01",
+    "description": "The **fictional** reading assistant reached its first test group.",
+    "position": 4
+  }
+]

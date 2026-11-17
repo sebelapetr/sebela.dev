@@ -15,6 +15,7 @@ import {
   portsForSlot,
   existingIssueBranch,
   slotOf,
+  storageWorktreeName,
   worktreeDirName,
 } from "./slots.mjs";
 
@@ -175,6 +176,32 @@ test("unusual branch names give valid database names", () => {
 test("a database name needs a branch with usable characters", () => {
   assert.throws(() => databaseName("///"), /cannot derive/);
   assert.throws(() => databaseName(""), /cannot derive/);
+});
+
+// The folder rule of the storage key prefix (packages/services, storage keys).
+const STORAGE_SEGMENT = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+test("a storage folder name is a readable key segment derived from the branch", () => {
+  const name = storageWorktreeName("feat/12-Profile_Experience.API");
+  assert.match(name, STORAGE_SEGMENT);
+  assert.ok(name.startsWith("feat-12-profile-experience-api-"), name);
+  assert.equal(storageWorktreeName(worktreeDirName("feat/12-Profile_Experience.API")), name);
+});
+
+test("worktrees whose names normalise alike still get different storage folders", () => {
+  const branches = ["feat/a.b", "feat/a-b", "feat/a_b", "feat/A-B", "Feat/a-b"];
+  const names = branches.map((branch) => storageWorktreeName(branch));
+  for (const name of names) assert.match(name, STORAGE_SEGMENT);
+  assert.equal(new Set(names).size, branches.length, names.join(", "));
+});
+
+test("unusual and long branch names give valid storage folders", () => {
+  const long = `feat/${"very-long-branch-name-".repeat(10)}`;
+  for (const branch of ["_x_", "fix/čeština", "a", `${long}one`, `${long}two`, "-.-x"]) {
+    assert.match(storageWorktreeName(branch), STORAGE_SEGMENT, branch);
+  }
+  assert.notEqual(storageWorktreeName(`${long}one`), storageWorktreeName(`${long}two`));
+  assert.throws(() => storageWorktreeName("///"), /cannot derive/);
 });
 
 test("the environment file carries the slot and its ports", () => {

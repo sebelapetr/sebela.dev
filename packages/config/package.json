@@ -12,7 +12,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "test": "node --test",
+    "test": "node --test \"*.test.js\"",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

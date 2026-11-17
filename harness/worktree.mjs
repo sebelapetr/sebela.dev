@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import { backendMaintenance } from "./lib/backend.mjs";
 import { randomPassword } from "./lib/credentials.mjs";
 import { composeDatabases } from "./lib/databases.mjs";
 import {
@@ -23,6 +24,8 @@ import {
   envFileContent,
   freeSlot,
   existingIssueBranch,
+  portsForSlot,
+  storageWorktreeName,
   worktreeDirName,
 } from "./lib/slots.mjs";
 
@@ -129,7 +132,11 @@ function allBranches(mainRoot) {
 }
 
 // Creates the worktree of `branch` (or reuses it), gives it a slot, its own database and its own
-// role, and only then writes its environment file with the role's credentials. An existing
+// role, and only then writes its environment file with the role's credentials and its own storage
+// folder. Then the backend stages run in the worktree (lib/backend.mjs): install, migrations,
+// storage and the seed of an empty profile, also for an existing worktree. A failing stage is
+// thrown and keeps the worktree, its environment file, its database and its slot, so running create
+// again retries it. An existing
 // environment file (or a symbolic link in its place) is never touched and the role keeps its
 // password; a missing one is generated with a new password. When the database or role cannot be
 // ensured, whatever this call added is undone (a new worktree and branch, a new slot) and the
@@ -141,9 +148,14 @@ export function createWorktree({
   mainRoot = mainRootFrom(),
   env = process.env,
   databases = defaultDatabases(env),
+  backend = backendMaintenance({ env }),
 }) {
   // Configuration is validated before anything is created.
-  const basePorts = loadBasePorts(env);
+  const settings = loadSettings(env);
+  const basePorts = basePortsFrom(settings);
+  if (!settings.API_HOST) {
+    throw new Error("API_HOST is not set; set it in the environment (documented in .env.example)");
+  }
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
   const resumed = branchExistsIn(mainRoot, requested)
@@ -204,7 +216,12 @@ export function createWorktree({
     try {
       fs.writeFileSync(
         envPath,
-        envFileContent(slot, basePorts, { DATABASE_NAME: database, ...credentials }),
+        envFileContent(slot, basePorts, {
+          DATABASE_NAME: database,
+          ...credentials,
+          STORAGE_WORKTREE: storageWorktreeName(name),
+          STORAGE_PUBLIC_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}/v1/media/files`,
+        }),
         { flag: "wx", mode: 0o600 },
       );
     } catch (error) {
@@ -216,6 +233,8 @@ export function createWorktree({
       );
     }
   }
+
+  backend.setup({ root: worktreePath, owner: name });
   return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
 }
 
@@ -241,9 +260,9 @@ function undoAdd({ mainRoot, worktreePath, branch, deleteBranch, error }) {
   }
 }
 
-// Drops the worktree's databases and its role first, then removes the worktree and frees its slot.
-// Uncommitted work or a database or role that cannot be dropped stops the removal before anything
-// else is changed.
+// Removes the worktree's storage folder and drops its databases and its role first, then removes the
+// worktree and frees its slot. Uncommitted work, storage that cannot be removed or a database or role
+// that cannot be dropped stops the removal before anything else is changed.
 export function removeWorktree({
   target,
   force = false,
@@ -251,6 +270,7 @@ export function removeWorktree({
   mainRoot = mainRootFrom(),
   env = process.env,
   databases = defaultDatabases(env),
+  backend = backendMaintenance({ env }),
 }) {
   const p = paths(mainRoot);
   const name = path.isAbsolute(target) ? path.basename(target) : worktreeDirName(target);
@@ -270,6 +290,10 @@ export function removeWorktree({
       );
     }
   }
+
+  // The storage folder is found through the worktree's own settings and tools, so it goes first.
+  if (exists) backend.teardown({ root: worktreePath, owner: name, force });
+  else backend.teardownMissing({ owner: name });
 
   // Also when the folder is already gone, so a database or role left behind by an earlier attempt
   // goes too.

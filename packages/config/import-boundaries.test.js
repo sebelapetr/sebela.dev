@@ -1,112 +1,26 @@
 // @ts-check
 
-// Behaviour of the import-boundaries rule, observed through the shared configuration: every case
-// lints a file of a fictional workspace with `createConfig` and checks what ESLint reports.
-//
-// The committed fixture workspace in `fixtures/import-boundaries/` holds no real packages: only the
-// files the rule reads (the workspace marker and `package.json` files declaring exports and
-// imports), a tsconfig with `paths` aliases, and an allowed and a forbidden source file. The tests
-// copy it to a disposable directory and write each case there as a real file, because the
-// TypeScript project service lints only files that exist.
+// Behaviour of the import-boundaries rule for the dependency table and the API trust boundary,
+// observed through the shared configuration: every case lints a file of the fictional workspace in
+// `fixtures/import-boundaries/` with `createConfig` and checks what ESLint reports. The fixture
+// holds only the workspace marker, `package.json` files declaring exports and imports, a tsconfig
+// with `paths` aliases, and an allowed and a forbidden source file. The module checks are tested in
+// `module-boundaries.test.js`.
 
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { after, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { ESLint } from "eslint";
+import { useFixtureWorkspace } from "./fixture-workspace.js";
 
-import { createConfig } from "./eslint.js";
-
-const RULE_ID = "sebela/import-boundaries";
-const FIXTURE = path.join(import.meta.dirname, "fixtures", "import-boundaries");
-
-const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-import-boundaries-"));
-fs.cpSync(FIXTURE, ROOT, { recursive: true });
-after(() => {
-  fs.rmSync(ROOT, { recursive: true, force: true });
-});
-
-const eslint = new ESLint({
-  cwd: ROOT,
-  overrideConfigFile: true,
-  overrideConfig: createConfig({ tsconfigRootDir: ROOT }),
-});
-
-/**
- * Lints the fixture file `file` (relative to the workspace root), first replacing its content with
- * `code` when given. Fails the test on a parsing or configuration error, so that a broken fixture
- * never counts as a rejected import.
- *
- * @param {string} file
- * @param {string} [code]
- */
-async function lint(file, code) {
-  const filePath = path.join(ROOT, file);
-  if (code !== undefined) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, code);
-  }
-  const [result] = await eslint.lintFiles([filePath]);
-  assert.ok(result, `ESLint returned no result for ${file}`);
-  const fatal = result.messages.filter((message) => message.fatal === true);
-  assert.deepEqual(fatal, [], `${file} did not lint cleanly`);
-  return result;
-}
-
-/**
- * The boundary violations reported for `code` linted as `file`.
- *
- * @param {string} file
- * @param {string} [code]
- */
-async function violations(file, code) {
-  const result = await lint(file, code);
-  return result.messages.filter((message) => message.ruleId === RULE_ID);
-}
-
-/**
- * Asserts that `code` in `file` is accepted by the rule.
- *
- * @param {string} file
- * @param {string} code
- */
-async function assertAllowed(file, code) {
-  assert.deepEqual(
-    (await violations(file, code)).map((message) => message.message),
-    [],
-    `expected ${file} to be allowed:\n${code}`,
-  );
-}
-
-/**
- * Asserts that `code` in `file` produces exactly one violation, on `line`, whose message contains
- * every fragment in `mentions`.
- *
- * @param {string} file
- * @param {string} code
- * @param {{ line?: number, mentions: (string | RegExp)[] }} expected
- */
-async function assertRejected(file, code, { line = 1, mentions }) {
-  const found = await violations(file, code);
-  assert.equal(found.length, 1, `expected one violation in ${file}:\n${code}\ngot ${found.length}`);
-  const [violation] = found;
-  assert.ok(violation);
-  assert.equal(violation.line, line, `violation on the wrong line in ${file}`);
-  assert.equal(violation.severity, 2, "a boundary violation is an error");
-  for (const fragment of mentions) {
-    if (typeof fragment === "string") {
-      assert.ok(
-        violation.message.includes(fragment),
-        `message does not mention ${fragment}: ${violation.message}`,
-      );
-    } else {
-      assert.match(violation.message, fragment);
-    }
-  }
-}
+const {
+  root: ROOT,
+  lint,
+  violations,
+  assertAllowed,
+  assertRejected,
+} = useFixtureWorkspace("import-boundaries");
 
 describe("import boundaries: fixture files on disk", () => {
   it("passes the allowed fixture with no lint errors at all", async () => {
@@ -148,7 +62,12 @@ describe("import boundaries: the dependency table", () => {
     [
       "apps/api/src/app.ts",
       ["@sebela/services", "@sebela/contracts"],
-      ["@sebela/db", "@sebela/memory", "@sebela/api-client", "@sebela/ui"],
+      ["@sebela/db", "@sebela/memory", "@sebela/ui", "@sebela/api-client"],
+    ],
+    [
+      "packages/api-client/src/index.ts",
+      [],
+      ["@sebela/contracts", "@sebela/services", "@sebela/db", "@sebela/ui"],
     ],
     [
       "packages/services/src/index.ts",
@@ -182,6 +101,28 @@ describe("import boundaries: the dependency table", () => {
     }
   }
 
+  it("allows apps/api to import @sebela/api-client in its tests only", async () => {
+    for (const test of ["apps/api/src/client.test.ts", "apps/api/src/modules/profile/x.test.mjs"]) {
+      await assertAllowed(test, `import { createApiClient } from "@sebela/api-client";\n`);
+    }
+    for (const production of ["apps/api/src/server.ts", "apps/api/src/test-support.ts"]) {
+      await assertRejected(production, `import "@sebela/api-client";\n`, {
+        mentions: [
+          "'@sebela/api-client'",
+          "apps/api",
+          "only in its tests",
+          "docs/repository-structure.md",
+        ],
+      });
+    }
+  });
+
+  it("allows test-only packages in no other member's tests", async () => {
+    await assertRejected("packages/services/src/x.test.ts", `import "@sebela/api-client";\n`, {
+      mentions: ["'@sebela/api-client'", "packages/services"],
+    });
+  });
+
   it("names what the importer may import instead", async () => {
     await assertRejected("apps/web/src/page.ts", `import "@sebela/db";\n`, {
       mentions: ["@sebela/api-client", "@sebela/contracts", "@sebela/ui", "@sebela/config"],
@@ -196,6 +137,7 @@ describe("import boundaries: the dependency table", () => {
       "packages/services/eslint.config.js",
       "packages/db/eslint.config.js",
       "packages/contracts/eslint.config.js",
+      "packages/api-client/eslint.config.js",
     ]) {
       await assertAllowed(importer, `export { createConfig } from "@sebela/config/eslint";\n`);
     }

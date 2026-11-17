@@ -39,7 +39,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check — plain Node, no dependencies [1]
+│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API stack smoke check — plain Node, no dependencies [1, 2]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
@@ -48,7 +48,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI [1]
-├── compose.yaml             base stack: postgres, later api, web, mcp [1]
+├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; later web, mcp
 ├── compose.prod.yaml        production overrides [10]
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
@@ -58,6 +58,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
+├── .dockerignore            allowlist of the image build context: manifests, apps/api, packages [2]
 ├── .env.example             every environment variable with a comment and an example value; placeholders only [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
 ├── GLOSSARY.md              canonical domain terms
@@ -81,7 +82,7 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 - **Dockerfiles** live in the app they build. Compose files live in the repository root.
 - **Tests** sit next to the code they test. End-to-end tests live in `apps/web/e2e/`; evals live in `apps/mcp-admin/evals/`, `packages/llm-agent/evals/` and `packages/memory/evals/`. Python uses package-local `tests/unit/` and `tests/integration/`.
 - **Two languages:** `apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python with their own dependency toolchain and participate in monorepo tasks/CI. Other apps/packages use TypeScript.
-- **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command.
+- **Seeds:** the repository contains only the fictional demo seed. The owner's real data is loaded once from a private seed outside the repository, in the same format, through the same command: `pnpm --filter @sebela/api seed [folder]` (the demo without a folder), or in the container stack `docker compose --profile api run --rm --volume <absolute folder>:/seed:ro api node dist/cli/seed.js /seed`, which mounts the folder read-only (`pnpm stack:seed` loads the demo seed only; `apps/api/AGENTS.md`, "Container stack"). Images never contain personal content. Format, identity and rerun rules: [`packages/db/seed/README.md`](../packages/db/seed/README.md).
 - **Language:** code, docs, `AGENTS.md`, README and PRDs are in English.
 - **Agent instructions:** the root `AGENTS.md` holds repository-wide rules; every app and package has its own `AGENTS.md` with what is specific to it. There are no `CLAUDE.md` files: Claude Code reads `AGENTS.md` directly when no `CLAUDE.md` exists, and other coding agents read it too.
 
@@ -102,23 +103,35 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 
 Run from the repository root. Turborepo runs a task in every package that defines it, after the `build` of the packages it depends on, and caches the result.
 
-| Command                          | What it runs                                                                                                                                                                                                                     |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | The locked installation, as in CI; its `prepare` script enables the [Git hooks](git-workflow.md#local-hooks)                                                                                                                     |
-| `pnpm lint`                      | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`) |
-| `pnpm typecheck`                 | `typecheck` of every package                                                                                                                                                                                                     |
-| `pnpm test`                      | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`)                                                                                                          |
-| `pnpm build`                     | `build` of every package                                                                                                                                                                                                         |
-| `pnpm test:harness`              | Only the harness tests, through `node --test harness/`                                                                                                                                                                           |
-| `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                     |
-| `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                   |
-| `pnpm ci:root`                   | The root tasks as CI runs them on every change: `lint:root`, `check:config`, `test:harness` and `test:checks`                                                                                                                    |
-| `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`         |
-| `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                          |
+| Command                          | What it runs                                                                                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | The locked installation, as in CI; its `prepare` script enables the [Git hooks](git-workflow.md#local-hooks)                                                                                                                                                        |
+| `pnpm lint`                      | `lint` of every package, plus ESLint over the root files (`lint:root`: the harness, the repository checks and root configuration) and the [hard-coded configuration check](#the-hard-coded-configuration-check) (`check:config`)                                    |
+| `pnpm typecheck`                 | `typecheck` of every package                                                                                                                                                                                                                                        |
+| `pnpm test`                      | `test` of every package, plus the harness tests (`test:harness`) and the tests of the repository checks (`test:checks`)                                                                                                                                             |
+| `pnpm build`                     | `build` of every package                                                                                                                                                                                                                                            |
+| `pnpm test:harness`              | Only the harness tests, through `node --test harness/`                                                                                                                                                                                                              |
+| `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                                                        |
+| `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                                                      |
+| `pnpm ci:root`                   | The root tasks as CI runs them on every change: `lint:root`, `check:config`, `test:harness` and `test:checks`                                                                                                                                                       |
+| `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`                                            |
+| `pnpm generate:api-client`       | Exports the API's OpenAPI document from its source (`openapi:export` of `@sebela/api`, no database, configuration or secrets) into `packages/api-client/src/generated/openapi.json` and regenerates the client types beside it; see `packages/api-client/AGENTS.md` |
+| `pnpm check:api-client`          | The [generated-code drift check](#the-generated-api-client-drift-check): runs `generate:api-client` and fails when the committed `packages/api-client/src/generated/` differs from the result. CI runs it on every change                                           |
+| `pnpm stack:up`                  | The [container API stack](#the-container-api-stack) of the main checkout: refuses to start without `API_HOST` and `API_PORT`, builds the API image, runs the migration service, starts the API and waits until it is healthy                                        |
+| `pnpm stack:seed`                | The seed command in a one-off API container (the demo seed without a folder); never part of a start                                                                                                                                                                 |
+| `pnpm stack:api-keys`            | The API key command in a one-off API container, for example `pnpm --silent stack:api-keys create <name>`                                                                                                                                                            |
+| `pnpm stack:logs`                | Logs of the stack's services                                                                                                                                                                                                                                        |
+| `pnpm stack:down`                | Stops and removes the API and migration containers; the shared Postgres keeps running                                                                                                                                                                               |
+| `pnpm test:api-stack`            | The [API stack smoke check](testing.md#ci), `node scripts/checks/api-stack.e2e.mjs`; needs Docker and is not part of `pnpm test`                                                                                                                                    |
+| `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                                                             |
 
 The harness (`harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
+
+### The generated API client drift check
+
+`scripts/checks/generated-drift.mjs <folder>... -- <command>` runs a generator and fails when the listed folders then differ from what is committed: a changed, added (untracked) or removed file, reported with `git status` and a diff summary, and a hint naming the command to regenerate with. A failing generator fails the check. Plain Node with no dependencies, like the other repository checks; its tests (`generated-drift.test.mjs`) use a disposable Git repository and a fake generator. `pnpm check:api-client` applies it to the API client, and the quality job of CI runs that on every change, not only when the API is affected. The decision and the alternatives: [0014](decisions/0014-generated-api-client.md).
 
 ### Affected packages
 
@@ -133,27 +146,32 @@ Root files that belong to no package (the harness, the repository checks, docs) 
 
 ## Backend module layout
 
-Handwritten TypeScript backend modules use `src/modules/<name>/index.ts`. One module owns a cohesive responsibility, not necessarily a table or a database schema. Keep private helpers, drivers and colocated tests inside it. The agreed phase 2 placement is:
+Handwritten TypeScript backend modules use `src/modules/<name>/index.ts`. One module owns a cohesive responsibility, not necessarily a table or a database schema. Keep private helpers, drivers and colocated tests inside it. The delivered phase 2 placement is:
 
 ```text
 apps/api/src/
   app.ts, server.ts                 # composition/startup adapters
-  middleware/                      # HTTP authentication, limits, errors
-  cli/api-keys.ts                   # maintenance adapter using services
+  config.ts                         # validated runtime configuration
+  routing.ts, openapi.ts            # route descriptions and the generated OpenAPI document
+  middleware/                       # HTTP authentication, limits, errors
+  cli/                              # maintenance adapters using services: api-keys, seed, storage, openapi
   modules/profile/index.ts          # profile HTTP entry
   modules/media/index.ts            # media HTTP entry
 packages/services/src/
   index.ts                          # explicit package exports
+  services.ts                       # composition of the backend services from validated configuration
   modules/profile/index.ts          # profile/CV/domain operations
   modules/media/index.ts            # upload/attachment lifecycle
   modules/storage/index.ts          # driver-independent file operations
   modules/storage/drivers/          # private local and Bunny implementations
-  modules/api-keys/index.ts          # generation, verification, revocation
+  modules/api-keys/index.ts         # generation, verification, revocation
+  modules/seed/index.ts             # loading a seed folder through profile and media
 packages/db/src/
   index.ts                          # explicit persistence exports
+  testing.ts                        # test support: temporary databases (`@sebela/db/testing`)
+  cli/migrate.ts                    # the migration command
   modules/profile/index.ts          # persistence operations
-  modules/profile/schema.ts         # private schema/repositories
-  modules/profile/repositories/
+  modules/profile/schema.ts         # private schema; private files, mostly one per entity, hold its SQL
   modules/api-keys/index.ts
   modules/api-keys/schema.ts
 packages/contracts/src/
@@ -162,8 +180,8 @@ packages/contracts/src/
   modules/profile/index.ts
   modules/media/index.ts
 packages/api-client/src/
-  index.ts
-  generated/                        # generated code, not handwritten modules
+  index.ts                          # createApiClient and the contract's DTO types
+  generated/                        # committed generated code: openapi.json and schema.ts
 ```
 
 SQL migrations stay in `packages/db/migrations/`, fictional seed data in `packages/db/seed/demo/`, and tests beside the behaviour they exercise. App startup/configuration, middleware and CLI adapters stay outside domain modules. The source entry convention is fixed; internal filenames evolve as real functionality arrives. No folders above need to be scaffolded before their phase.
@@ -175,6 +193,8 @@ SQL migrations stay in `packages/db/migrations/`, fictional seed data in `packag
 | Another package                                  | Declared package exports, initially the package-root entry                              |
 | Framework/tooling running within its own package | A narrowly documented internal access needed by the tool; never a runtime client bypass |
 
+A module is the folder `src/modules/<name>/` of an app or package; every file below it, at any depth and including its tests, belongs to it. Its entry is `index.<ext>` directly in that folder; a deeper `index` file, such as `drivers/index.ts`, is private. Tooling access means a configuration file `*.config.<ext>` directly in the package folder, such as `packages/db/drizzle.config.ts` reading the private schema for migrations. No other file imports such a configuration, by path or through a declared package export, so it cannot forward the access to runtime code; another tooling configuration of the same package is the only exception.
+
 Do not import another module's private file by a relative path or alias, reach into another package's source tree, or use an undeclared package subpath. Do not create cycles between modules. An entry exports selected operations and types, never an automatic `export *` of all internals. Package entry files re-export module entries deliberately. Shared transport contracts belong in contracts; a private backend helper type does not become a client contract merely to expose it.
 
 Apply the information-hiding principles to all code, but do not force this TypeScript backend layout onto Next.js framework routes, UI primitives, generated clients, the plain Node harness or the future Python service. Their native placement stays intact; their relevant app/package maps describe their interfaces.
@@ -185,32 +205,37 @@ Each backend app/package `AGENTS.md` must map actual module paths to public entr
 
 The API is the trust boundary: content writes and content authentication are enforced there. FastAPI separately authenticates internal generation and limits AI execution. The import rules exist to keep it that way.
 
-| Package or app                | May import                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP    |
-| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client |
-| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app       |
-| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers      |
-| `apps/api`                    | `services`, `contracts`, `config`                                                                            |
-| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                        |
-| `packages/db`                 | nothing from this repository except `config`                                                                 |
-| `packages/contracts`          | nothing from this repository except `config`                                                                 |
-| `packages/config`             | nothing from this repository                                                                                 |
+| Package or app                | May import                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP            |
+| `apps/ai-service` (Python)    | `packages/llm-agent`; reaches content only through public API routes using generated Python contracts/client         |
+| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app               |
+| `packages/llm-agent` (Python) | Python integrations and generated content API client/models; no TypeScript packages or database drivers              |
+| `apps/api`                    | `services`, `contracts`, `config`; `api-client` only in test files (`*.test.<ext>`), for its consumer contract tests |
+| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                                |
+| `packages/db`                 | nothing from this repository except `config`                                                                         |
+| `packages/contracts`          | nothing from this repository except `config`                                                                         |
+| `packages/api-client`         | nothing from this repository except `config`; generated from the API's OpenAPI document, never its source            |
+| `packages/config`             | nothing from this repository                                                                                         |
 
 `packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and both Python apps and `packages/llm-agent` have no database access at all. A lint rule enforces this; do not disable it.
 
 ### The `sebela/import-boundaries` lint rule
 
-`createConfig` from `@sebela/config/eslint` enables the rule as an error on every JavaScript and TypeScript file, so every package that lints itself with the shared configuration is checked by its normal `lint` task, and `pnpm lint` fails on a forbidden import. The rule lives in `packages/config/import-boundaries.js`; its behaviour tests and fixture workspace are described in `packages/config/AGENTS.md`.
+`createConfig` from `@sebela/config/eslint` enables the rule as an error on every JavaScript and TypeScript file, so every package that lints itself with the shared configuration is checked by its normal `lint` task, and `pnpm lint` and CI fail on a forbidden import. The rule lives in `packages/config/import-boundaries.js` with private helpers beside it; its behaviour tests and fixture workspaces are described in `packages/config/AGENTS.md`. It needs no dependency beyond ESLint and TypeScript, which the shared configuration already uses.
 
 - **Who imports.** The workspace root is the nearest folder above the file that contains `pnpm-workspace.yaml`. A file under `apps/<name>/` or `packages/<name>/` belongs to that member; other files (the harness, root configuration) are root files. A member's package name is `@sebela/<folder name>`.
-- **The table.** A member imports another member only by package name and only if its row above allows it; importing itself is always allowed. Nothing imports an app. A member without a row (for example `api-client`, `ui` or `memory` before their phases) may import no workspace package: its row is added here and in the rule when the package is created. Root files are not in the table, but follow the entry-point and path rules.
+- **The table.** A member imports another member only by package name and only if its row above allows it; importing itself is always allowed. Nothing imports an app. A member without a row (for example `ui` or `memory` before their phases) may import no workspace package: its row is added here and in the rule when the package is created. Root files are not in the table, but follow the entry-point, path and private-module-file rules.
 - **Entry points.** An `@sebela/*` specifier must name a declared entry point: a subpath in the target's `exports`, or only the package root when the target has no `exports` or does not exist yet. Subpath patterns and `null` exclusions are honoured, so `@sebela/<name>/src/...` cannot bypass a package's public entry.
 - **Paths.** A relative, absolute or `file:` path may not leave its member, reach into another member or go through `node_modules/@sebela/*`. A root file may not reach into a member by path.
 - **Aliases.** A `#` subpath import is checked where the `imports` map of the importer's `package.json` sends it. In TypeScript files, any other bare specifier that the TypeScript program resolves to a workspace file (for example a `paths` alias) is checked as the path it resolves to. JavaScript files are linted without type information, so their aliases are not resolved.
 - **Forms.** Static imports and re-exports (type-only ones too), dynamic `import()`, `require()`, TypeScript `import x = require()` and `typeof import()`. Specifiers that are not string literals cannot be checked. Third-party packages and Node.js built-ins are outside the rule.
+- **Private module files.** Once the checks above pass, the [backend module layout](#backend-module-layout) is checked inside the member. A file outside a module, whether another module, composition code, a CLI adapter, the package entry or a test, imports only the module's entry. Files of the module import each other freely. The tooling configurations described there are the only exception, and only for their own package; any other file that imports one of them, including through a declared package export, is rejected. Relative paths, `#` subpath imports and `paths` aliases are resolved first. A declared package export that leads to a private module file is rejected wherever it is imported, root files included, because it would turn a private file into a public entry.
+- **Module cycles.** No import may close a cycle between the modules of a member. The rule reads the member's source files from disk and treats each module as one unit, including its private files and tests, and every other file as a unit of its own. The cycle may pass through files outside the modules, such as the package entry or the package's own name. The same forms and aliases count, type-only imports and `typeof import()` included. Every import of the cycle is reported where it is written, with the cycle as module folders, for example `src/modules/media -> src/modules/storage -> src/modules/media`. Cycles between members cannot arise, because the dependency table is acyclic. Cycles that pass through no module, for example between two startup files, are not checked.
 
-The diagnostic names the specifier, the importing member and what it may import instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A change to the table above changes the `DEPENDENCIES` map in the rule and its tests in the same pull request.
+**Limits.** The rule checks import syntax, not design. Information hiding, a cohesive interface, documented guarantees, and selected exports instead of a barrel of every internal file are left to the reviewer (see [code standards](code-standards.md#enforcement-and-review)). JavaScript files have no type information, so their `paths` aliases are resolved neither for their own imports nor in the cycle search. Specifiers computed at run time are invisible.
+
+Each diagnostic names the specifier and what is allowed instead, for example: `'@sebela/db' imports @sebela/db, which apps/web may not import. apps/web may import @sebela/api-client, @sebela/contracts, @sebela/ui, @sebela/config (dependency table in docs/repository-structure.md)`. A package allowed only in test files is listed in the rule's `TEST_DEPENDENCIES` map; elsewhere in the member it is rejected with a message saying so. A change to the table above changes the `DEPENDENCIES` and `TEST_DEPENDENCIES` maps in the rule and its tests in the same pull request.
 
 ## Ports and worktree isolation
 
@@ -227,24 +252,28 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 
 - The AI-service port is a phase-7 target; the public-MCP port is phase 8. Each owning phase updates worktree environment generation, task wrappers and Compose before its app runs. Phase 6 introduces the Python library/toolchain only. MCP Admin and private content writes are internal/SSH-tunnel only; these development port assignments do not authorize public exposure.
 - Knowledge originals use a separately configured private Bunny zone or local root from phase 9, with development/worktree isolation and no public-URL mapping. Do not reuse the public media handler or treat a `private/` prefix as access control.
-- The worktree setup script (`node harness/worktree.mjs create`, also run by the `WorktreeCreate` hook) takes the lowest free slot, creates the worktree's own database and database role in the shared Postgres, or reuses them, and then writes the ports, the database name and the role's credentials to the worktree's `.env.local`. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment). Migrations and the demo seed are added to setup in phase 2, when they exist. If the requested issue branch `<type>/<n>-<slug>` does not exist but another branch of the same issue `n` does, locally or on `origin`, the script continues that branch and its worktree instead of starting a second one, and says so; an interrupted issue keeps its work.
+- The worktree setup script (`node harness/worktree.mjs create`, also run by the `WorktreeCreate` hook) takes the lowest free slot, creates the worktree's own database and database role in the shared Postgres, or reuses them, and then writes the ports, the database name, the role's credentials and the worktree's storage folder to the worktree's `.env.local`. Then it runs the [backend setup](#worktree-backend-setup) in the worktree: dependencies, pending migrations, the storage folder and the demo seed of an empty profile. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment). If the requested issue branch `<type>/<n>-<slug>` does not exist but another branch of the same issue `n` does, locally or on `origin`, the script continues that branch and its worktree instead of starting a second one, and says so; an interrupted issue keeps its work.
 - Running setup again for an existing worktree keeps its slot, its database and its role's password and preserves its `.env.local`, including local edits. A missing environment file is generated, and the role gets a new password that only the new file holds, so regenerating the file restores working credentials. An existing file or symbolic link is never overwritten, so a worktree whose `.env.local` predates its database or role gets `DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD` only after that file is deleted and setup runs again.
-- The cleanup script (`node harness/worktree.mjs remove`, also run by the `WorktreeRemove` hook) drops the worktree's database, every other database its role owns and then the role, removes the worktree and frees the slot.
-- From phase 2, in development each worktree also has its own folder in object storage, created and removed by the same scripts.
+- The cleanup script (`node harness/worktree.mjs remove`, also run by the `WorktreeRemove` hook) removes the worktree's storage folder, drops the worktree's database, every other database its role owns and then the role, removes the worktree and frees the slot.
+- In development each worktree also has its own storage folder, `<STORAGE_ENVIRONMENT>/<STORAGE_WORKTREE>/`, on local disk or in the development Bunny zone, created and removed by the same scripts ([Worktree backend setup](#worktree-backend-setup)).
 - Tests use their own temporary database, so they never touch the data an agent is looking at in the browser.
 - **No port, host or database name is hard-coded** in application code, tests or scripts. Everything reads them from the environment. [The hard-coded configuration check](#the-hard-coded-configuration-check) enforces this locally and in CI.
 - Postgres uses host port 5440 to stay clear of other local Postgres instances.
 
 ### The shared Postgres
 
-`compose.yaml` in the repository root defines one service, `postgres`: PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag and the digest of its multi-architecture index, so a re-pushed tag cannot change what runs; tag and digest are upgraded together), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
+`compose.yaml` in the repository root defines three services: `postgres`, started by default, and `migrate` and `api` in the profile `api` ([The container API stack](#the-container-api-stack)). `postgres` is PostgreSQL 18 with the pgvector extension available from the start (image `pgvector/pgvector`, pinned to an exact tag and the digest of its multi-architecture index, so a re-pushed tag cannot change what runs; tag and digest are upgraded together), data in the named volume `postgres-data`, and a health check that reports healthy once the server answers a query over TCP on its initial database and pgvector can be created. Its top-level `name: sebela` makes every checkout address the same stack and volume, so the owner starts it once, from the main checkout:
 
 ```bash
 cp .env.example .env               # once; set your own POSTGRES_PASSWORD before the first start
 docker compose up --detach --wait  # returns when the service is healthy
 ```
 
-Compose takes every setting from the process environment or from the `.env` file next to `compose.yaml`; a missing one stops it with a message naming the variable. The published address and port are `POSTGRES_HOST` and `POSTGRES_PORT`. `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` (the main checkout's database) take effect when the volume is first initialised. `docker compose down` stops the service and keeps the data; `docker compose down --volumes` deletes it.
+Compose takes every setting from the process environment or from the `.env` file next to `compose.yaml`; a missing Postgres setting stops it with a message naming the variable. Compose interpolates every service, also those of an inactive profile, so the API services require none of their settings: Postgres-only commands (`up`, `down`, `exec postgres`) need the Postgres settings only. The published address and port are `POSTGRES_HOST` and `POSTGRES_PORT`. `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` (the main checkout's database) take effect when the volume is first initialised. `docker compose down` stops the service and keeps the data; `docker compose down --volumes` deletes it.
+
+### The container API stack
+
+The profile `api` of `compose.yaml` adds two services built from `apps/api/Dockerfile`; a plain `docker compose up` (CI, the harness) still starts Postgres only. `migrate` applies the committed migrations once Postgres is healthy and exits; `api` starts only when `migrate` has exited successfully, publishes `API_PORT` on `API_HOST` and keeps local media in the named volume `api-media`. The containers reach Postgres by its service name on the container port, and the API listens on its own container port, both declared in `compose.yaml`; every other setting comes from the same environment as the host API, and the database settings are the checkout's own `DATABASE_*`. A missing one reaches the containers empty and the API's or the migration's own validation stops them with its name; `pnpm stack:up` checks the host-side `API_HOST` and `API_PORT` before it starts, because empty ones would publish the API on every interface on a random port. The stack belongs to the main checkout (`pnpm stack:up`, see [Root commands](#root-commands)); worktrees run the API on the host on their own ports. Behaviour, commands and shutdown: `apps/api/AGENTS.md`, "Container stack".
 
 ### Worktree databases
 
@@ -256,12 +285,22 @@ Compose takes every setting from the process environment or from the `.env` file
 - **Manual cleanup.** Removal needs the running service, because dropping the databases and the role comes first; start it, then repeat `remove`. A database or role the scripts refuse, one whose comment names no or another worktree, is never dropped by them: the owner checks it and drops it by hand with `psql`.
 - **End-to-end run.** `node harness/worktree-databases.e2e.mjs` checks the whole lifecycle against real Postgres: healthy startup; two worktrees whose roles have the documented attributes, each connecting over the network with its own credentials to its own database and refused on the other's, or with a wrong password; creating and dropping a temporary database; reuse with unchanged credentials; a new working password when `.env.local` is regenerated; no password in the script's output or the server log; refusal of a foreign role, a foreign database and a database another worktree's role planted with a forged comment; failure without a running service; removal of one worktree, including a temporary database its role left behind, without losing the other; and cleanup that leaves no worktree role or database. It needs Docker, starts its own disposable Compose project from `compose.yaml` on a free host port, works with worktrees of a temporary repository and removes all of it at the end. It is not part of `pnpm test`: run it on demand, and CI runs it on every pull request and push in the job `Worktree database lifecycle`. Each run uses its own Compose project name and a free port, so it can be repeated, also next to the shared stack.
 
+### Worktree backend setup
+
+- **Stages.** After the database, the role and `.env.local` exist, `create` runs four stages in the worktree, each a package script of the worktree's own checkout started through `pnpm` (`harness/lib/backend.mjs`), so the harness imports no application code: `pnpm install --frozen-lockfile --prefer-offline`; `pnpm --filter @sebela/db db:migrate`; `pnpm --silent --filter @sebela/api storage prepare <worktree>`; `pnpm --silent --filter @sebela/api seed --if-empty`. A stage whose script the checkout does not have yet is skipped with a notice. The stages get the caller's environment without the worktree's own settings (every variable `.env.example` names and the `WORKTREE_`, `WEB_`, `API_`, `MCP_`, `LLM_AGENT_`, `POSTGRES_`, `DATABASE_`, `STORAGE_` and `MEDIA_` prefixes), so they read the worktree's `.env.local`; only `POSTGRES_HOST` and `POSTGRES_PORT`, where the shared Postgres listens, pass through. Their output goes to standard error, so the last line of `create` stays the worktree path.
+- **Rerun.** Setup runs again for an existing worktree: install and migrations apply only what is missing or pending, the storage folder the worktree holds is reused, and the seed is skipped when the profile already holds any content — a person, any profile record or any media — so content an agent edited is never overwritten. The owner refreshes a worktree's content explicitly with `pnpm --silent --filter @sebela/api seed`, which loads the demo seed over the existing records ([`packages/db/seed/README.md`](../packages/db/seed/README.md)).
+- **Storage folder.** `storageWorktreeName` in `harness/lib/slots.mjs` derives `STORAGE_WORKTREE` from the folder name like `databaseName`: the folder name in lower case with every run of other characters turned into `-`, shortened to fit 63 characters, then `-` and ten hexadecimal characters of the same hash, so no two worktrees share a folder. A generated `.env.local` also sets `STORAGE_PUBLIC_BASE_URL` to the worktree's own API (`http://<API_HOST>:<its API_PORT>/v1/media/files`). Local storage stays below the worktree's own `STORAGE_LOCAL_ROOT`; with `STORAGE_DRIVER=bunny-s3` the development zone is shared and the folder keeps worktrees apart. `storage prepare` writes an owner marker, `.owner`, naming the worktree into the folder, or reuses a folder whose marker names it; `storage remove` deletes the folder's files, the marker last, only when the marker names the worktree. Both refuse, without touching storage, a configuration without `STORAGE_WORKTREE`, `STORAGE_ENVIRONMENT=production`, a folder another worktree's marker claims, files without a marker and, on local disk, a folder or marker that is a symbolic link.
+- **Failures.** A failing stage stops setup with its name; the worktree, its `.env.local`, its database and its slot are kept, and running `create` again retries. An existing `.env.local` without `STORAGE_WORKTREE` (from before this setup) is never changed: setup stops before the storage stage and says to delete the file and run `create` again, which generates it with a new password. `remove` removes the storage folder after the uncommitted-work check and before the databases; when that fails, nothing else is removed and the removal can be repeated. It needs the worktree's installed tools; without them it refuses unless `--force`, which leaves the storage folder behind with a notice. A worktree folder that is already gone, or one without its `.env.local`, has no settings to find its storage folder by: `remove` goes on and prints a notice naming the folder. With the default `STORAGE_LOCAL_ROOT` inside the worktree its files went with the worktree; with `STORAGE_DRIVER=bunny-s3` or a root outside the worktree the folder is left behind and has to be removed by hand. Each stage has a 30-minute limit, so a hanging stage fails setup instead of blocking it.
+- **End-to-end run.** `node harness/worktree-backend.e2e.mjs` clones this checkout's committed `HEAD` into a temporary folder and, against a disposable Compose project as above, creates two worktrees, checks that each is migrated and seeded, has its own marked storage folder, serves its profile through its own API on a free port and accepts an upload with a key from its own `api-keys` command, that setup again keeps an edit and skips the seed, and that removing one keeps the other's data and files and leaves the clone unchanged. It needs Docker and pnpm, no cloud keys. CI runs it in the job `Worktree backend setup`.
+
 ### Configuration and environment
 
 - Code reads ports, hosts and database names from the process environment and validates them where it starts. It carries no copy of them, not even as a fallback for an unset variable: a missing setting is an error that names the variable.
 - `.env.example` lists every variable with a comment. Its values are the documented examples — the port scheme of the main checkout above, the Postgres address and port, user and database names — and placeholders such as the Postgres password and `DATABASE_PASSWORD`; it never holds credentials or real data. A fixed value that must exist is declared there, or in a declaration such as `compose.yaml`, not in executable code. Installation needs no settings.
-- The main checkout uses the values of `.env.example`; its `.env`, created from that file with the owner's own passwords, is where Compose reads them. The main checkout sets its own `DATABASE_USER` and `DATABASE_PASSWORD` there. Each worktree gets its own generated `.env.local` with `WORKTREE_SLOT`, the ports of its slot, `DATABASE_NAME`, its own database, and `DATABASE_USER` and `DATABASE_PASSWORD`, its own role (see [Worktree databases](#worktree-databases)). The Postgres address and port are shared by every worktree; the superuser and its password are not given to them.
+- The main checkout uses the values of `.env.example`; its `.env`, created from that file with the owner's own passwords, is where Compose reads them. The main checkout sets its own `DATABASE_USER` and `DATABASE_PASSWORD` there. Each worktree gets its own generated `.env.local` with `WORKTREE_SLOT`, the ports of its slot, `DATABASE_NAME`, its own database, and `DATABASE_USER` and `DATABASE_PASSWORD`, its own role (see [Worktree databases](#worktree-databases)), and `STORAGE_WORKTREE` and `STORAGE_PUBLIC_BASE_URL`, its own storage folder and media address (see [Worktree backend setup](#worktree-backend-setup)). The Postgres address and port are shared by every worktree; the superuser and its password are not given to them.
 - `node harness/worktree.mjs create` (and the `WorktreeCreate` hook, which uses it) takes the base ports `WEB_PORT`, `API_PORT`, `MCP_ADMIN_PORT` and `LLM_AGENT_PORT` from the process environment and, for each one that is not set there, from the `.env.example` of the checkout the script belongs to. Each must be a whole number that leaves room for slot 9. A missing or invalid base port stops the script before it creates a worktree, allocates a slot or writes a file. The Compose settings it needs to reach the database service come from the same two places.
+- The backend commands (`dev`, `start`, `api-keys`, `seed` and `storage` of `apps/api`, `db:migrate` of `packages/db`) and the backend tests read the process environment first, then the checkout's `.env.local`, `.env` and `.env.example`; a variable already set wins. The API's own settings (`API_HOST`, `API_PORT`, `API_BODY_LIMIT_BYTES`, `API_TRUSTED_PROXIES` and the `API_RATE_LIMIT_*` budgets) are documented in `.env.example` and `apps/api/AGENTS.md`; the documented body limit (`196608` bytes) fits the longest case study written in multi-byte characters.
+- Turborepo runs tasks in strict environment mode: a task sees only the variables `turbo.json` declares. The `test` task passes the database settings through (`passThroughEnv`); a new variable a task needs is declared there in the same change.
 - Tests take expected ports from `.env.example` too, so the documented example stays the only place the base ports are written down.
 
 ### The hard-coded configuration check

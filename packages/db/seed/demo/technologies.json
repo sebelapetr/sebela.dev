@@ -1,0 +1,43 @@
+[
+  { "slug": "typescript", "name": "TypeScript", "tier": "primary", "group": "core", "position": 0 },
+  { "slug": "nodejs", "name": "Node.js", "tier": "primary", "group": "core", "position": 1 },
+  { "slug": "react", "name": "React", "tier": "primary", "group": "core", "position": 2 },
+  { "slug": "nextjs", "name": "Next.js", "tier": "primary", "group": "core", "position": 3 },
+  { "slug": "postgresql", "name": "PostgreSQL", "tier": "primary", "group": "core", "position": 4 },
+  { "slug": "php", "name": "PHP", "tier": "primary", "group": "core", "position": 5 },
+  {
+    "slug": "python",
+    "name": "Python",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "position": 0
+  },
+  {
+    "slug": "langgraph",
+    "name": "LangGraph",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "position": 1
+  },
+  {
+    "slug": "pgvector",
+    "name": "pgvector",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "position": 2
+  },
+  {
+    "slug": "mcp",
+    "name": "Model Context Protocol",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "position": 3
+  },
+  { "slug": "docker", "name": "Docker", "tier": "secondary", "position": 0 },
+  { "slug": "redis", "name": "Redis", "tier": "secondary", "position": 1 },
+  { "slug": "symfony", "name": "Symfony", "tier": "secondary", "position": 2 },
+  { "slug": "terraform", "name": "Terraform", "tier": "secondary", "position": 3 },
+  { "slug": "playwright", "name": "Playwright", "tier": "secondary", "position": 4 },
+  { "slug": "graphql", "name": "GraphQL", "tier": "secondary", "position": 5 },
+  { "slug": "bash", "name": "Bash", "tier": "secondary", "position": 6 }
+]

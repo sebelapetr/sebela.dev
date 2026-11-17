@@ -362,7 +362,7 @@ compose.yaml in the root; a Dockerfile inside each app
 
 Deferred to the phase named in brackets.
 
-1. The tool that generates typed clients from the OpenAPI document. [02]
+1. Python generated-client placement and drift-check integration, using the committed content OpenAPI document and the generator guidance already delivered in phase 2. [06]
 2. Final table and field names of the `profile` and `ai_roadmap` schemas, within the entities already defined. [02, 04]
 3. Final headline wording checks and the Paldock role title. [03]
 4. Whether Bunny's S3 compatibility must be chosen when a storage zone is created. [02]

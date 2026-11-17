@@ -1,4 +1,4 @@
-# 0014 — Incremental AI delivery and approved knowledge sources
+# 0016 — Incremental AI delivery and approved knowledge sources
 
 Status: accepted
 Date: 2026-11-17

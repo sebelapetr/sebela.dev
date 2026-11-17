@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// WorktreeRemove hook: drops the worktree's database, removes the worktree and frees its slot.
+// WorktreeRemove hook: removes the worktree's storage folder, drops its databases and role, removes
+// the worktree and frees its slot.
 
 import { mainRootFrom, removeWorktree } from "../worktree.mjs";
 import { readHookInput } from "./read-input.mjs";

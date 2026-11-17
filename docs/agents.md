@@ -76,7 +76,7 @@ An interrupted run can leave an issue's branch and worktree behind. The orchestr
 For each issue of a phase:
 
 1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed.
-2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role and ports.
+2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role, ports and storage folder, is installed and migrated, and an empty profile is loaded with the demo seed.
 3. It dispatches the developer agent that matches the area of the issue.
 4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
 5. The orchestrator dispatches the reviewer.
@@ -110,12 +110,13 @@ harness/run-phase.sh <phase-folder>
   - every run writes a log outside git.
 - **Sequential.** One issue at a time. Parallel runs are a later improvement.
 - **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed, interrupted or phase done). Interrupted means the usage limit stopped the work on an issue: the loop waits as for any limit and continues the same issue, without a label or a failure counted. The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
-- **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off), `--no-notify`. Logs are in `.worktrees/logs/<phase>/`.
+- **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off), `--no-notify`, `--note "<text>"` (below). Logs are in `.worktrees/logs/<phase>/`.
+- **A note from the owner.** `harness/run-phase.sh <phase-folder> --note "<text>"` hands the orchestrator a note written when the loop is started, for example why the last run was stopped and what an unfinished issue still needs. It adds to the orchestrator's instructions and never replaces a rule or the guard. The loop keeps no state, so the orchestrator first records a note about an issue on that issue as a comment starting with `Owner note:`, where later runs find it. The note stays while the loop only waits for the usage limit and ends with the first run that finished, merged or failed, so it is not repeated to the issues that follow (`ownerNoteSection` and `noteAfter` in `harness/lib/loop.mjs`). A comment on the issue does the same without the option; the option saves the owner that step.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
 - **MCP servers:** the loop loads only `harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
 - **Settings:** the loop loads only the repository's settings (`--setting-sources project,local`). The owner's `~/.claude` — plugins, global rules, personal agents and skills — does not reach an unattended run, so it behaves the same on any machine.
 - **Agent memory:** developers and the reviewer have `memory: local`. Their memory lives in the main checkout under `.claude/agent-memory-local/<agent>/` (ignored by git), shared by all worktrees and runs, and is the one place in the main checkout's `.claude/` an unattended run may write. It holds verified, practical findings; `docs/` and `AGENTS.md` win over it. The orchestrator, as the main session, uses Claude Code's auto memory for the repository; subagents do not see that.
-- **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide.
+- **Temporary files:** agents put scratch files in `.tmp/` inside their worktree (ignored by git), never in `/tmp`, so parallel runs cannot collide. The local storage driver of a development API keeps its uploads there too (`.tmp/storage/` by default, see `apps/api/AGENTS.md`).
 - **Foreground subagents:** the loop sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, so the orchestrator waits for each developer and reviewer instead of ending its run while they still work.
 
 ### The steward

@@ -32,4 +32,6 @@ Date: YYYY-MM-DD
 | 0011 | One Python service for the AI layer; promptfoo and Langfuse (superseded by 0012)                               |
 | 0012 | [Separate AI runtime, public MCP and shared Python agent package](0012-ai-runtime-and-shared-agent-package.md) |
 | 0013 | [The harness lives in a top-level `harness/` folder](0013-harness-at-the-top-level.md)                         |
-| 0014 | [Incremental AI delivery and approved knowledge sources](0014-incremental-ai-and-knowledge-delivery.md)        |
+| 0014 | [The API client is generated with openapi-typescript and openapi-fetch](0014-generated-api-client.md)          |
+| 0015 | [A caller-scoped unit of work for loading a seed](0015-caller-scoped-unit-of-work-for-the-seed.md)             |
+| 0016 | [Incremental AI delivery and approved knowledge sources](0016-incremental-ai-and-knowledge-delivery.md)        |

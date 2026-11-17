@@ -1,0 +1,25 @@
+[
+  {
+    "slug": "assistant-to-production",
+    "title": "Taking the reading assistant to every reader",
+    "description": "Moving the fictional reading assistant from a test group to all readers, with the evaluation suite as the release gate.",
+    "position": 0,
+    "project": "reading-assistant",
+    "topics": ["retrieval", "evaluation"]
+  },
+  {
+    "slug": "agent-permissions",
+    "title": "Permissions for tool-using agents",
+    "description": "Turning the designed tool permission model into a small library.",
+    "link": "https://novara.example.test/notes/agent-permissions",
+    "position": 1,
+    "topics": ["agents", "tool-use", "guardrails"]
+  },
+  {
+    "slug": "learning-evaluation-statistics",
+    "title": "Statistics for evaluations",
+    "description": "Learning how many evaluation questions are enough to trust a difference between two versions.",
+    "position": 2,
+    "topics": ["evaluation"]
+  }
+]
