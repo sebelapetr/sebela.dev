@@ -15,7 +15,9 @@ for (const name of [".env.local", ".env", ".env.example"]) {
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
-    testTimeout: 30_000,
+    // Two minutes: the test that sends a request to every private route takes about 28 s on a slow
+    // host and timed out under load at the former 30 s (owner's decision, 2026-11-17).
+    testTimeout: 120_000,
     hookTimeout: 60_000,
   },
 });
