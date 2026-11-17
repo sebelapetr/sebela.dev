@@ -1,0 +1,65 @@
+[
+  {
+    "slug": "route-planner",
+    "experience": "fernway-lead-engineer",
+    "name": "Route planner",
+    "summary": "Plans the daily routes of a **fictional** freight company's trucks.",
+    "problem": "Dispatchers planned every route by hand from a shared spreadsheet.",
+    "workDone": "Built a planner service over PostgreSQL with a small review screen for dispatchers.",
+    "result": "The team plans a whole day of routes in minutes instead of a morning.",
+    "startedOn": "2024-02-01",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["typescript", "postgresql"],
+    "caseStudy": {
+      "role": "Lead engineer",
+      "body": "## Context\n\nA **fictional** dispatch team with one spreadsheet.\n\n## Approach\n\nWe replayed a month of old routes against every planner change before it shipped.\n\n## Outcome\n\nThe replay suite now guards every change to the planner."
+    }
+  },
+  {
+    "slug": "clinic-scheduling",
+    "experience": "pinecrest-senior-developer",
+    "name": "Clinic scheduling",
+    "summary": "Books appointments across the clinics of a **fictional** health network.",
+    "problem": "Patients waited on the phone to book and clinics double-booked rooms.",
+    "workDone": "Rebuilt the booking flow in React over one PostgreSQL schedule.",
+    "result": "Online bookings replaced most phone calls and double bookings stopped.",
+    "startedOn": "2021-03-01",
+    "endedOn": "2022-06-30",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["react", "postgresql", "php"],
+    "caseStudy": {
+      "role": "Senior developer responsible for the booking flow",
+      "body": "## Context\n\nThree **fictional** clinics shared one calendar.\n\n## Approach\n\nWe moved one clinic at a time and kept the old calendar readable until the last one moved.\n\n## Outcome\n\nEvery clinic books online."
+    }
+  },
+  {
+    "slug": "records-export",
+    "experience": "pinecrest-senior-developer",
+    "name": "Records export",
+    "summary": "Exports a patient's **fictional** records on request.",
+    "problem": "Exports were assembled by hand and took a week.",
+    "workDone": "Wrote an export job that collects the records into one archive.",
+    "result": "An export is ready the same day.",
+    "startedOn": "2022-07-01",
+    "endedOn": "2023-03-31",
+    "selectedForHomepage": false,
+    "position": 1,
+    "technologies": ["php"]
+  },
+  {
+    "slug": "ledger-importer",
+    "experience": "open-ledger-kit-maintainer",
+    "name": "Ledger importer",
+    "summary": "Imports bank statements into a **fictional** open-source ledger.",
+    "problem": "Every bank's statement format needed its own script.",
+    "workDone": "Designed one importer with a small adapter per format.",
+    "result": "Contributors add a bank format in an afternoon.",
+    "startedOn": "2022-01-10",
+    "endedOn": "2022-11-22",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["python"]
+  }
+]

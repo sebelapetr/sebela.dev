@@ -177,6 +177,14 @@
   font-weight: var(--font-weight-medium);
 }
 
+/*
+ * An item a link can point at (docs/design.md, Anchors): scrolled into view below the sticky header
+ * with room above it. `--header-height` is the header's height; 0 until the header (#50) sets it.
+ */
+@utility anchor-target {
+  scroll-margin-top: calc(var(--header-height, 0px) + --spacing(8));
+}
+
 /* The page frame of docs/design.md (Spacing): one width and one side gutter for every page. */
 @utility layout-page {
   margin-inline: auto;

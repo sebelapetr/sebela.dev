@@ -1,20 +1,23 @@
-import { TimelineContent, TimelineItem, TimelineTrigger } from "@sebela/ui/components/timeline";
+import { TimelineContent, TimelineTrigger } from "@sebela/ui/components/timeline";
 
+import { ProseMarkdown } from "../../_shared";
 import type { TimelineEntry } from "../data/timeline";
 import { AuthorPhoto } from "./author-photo";
-import { SummaryMarkdown } from "./markdown";
+import { ExperienceItem } from "./disclosures";
 import { OrganizationLogo } from "./organization-logo";
+import { ProjectList } from "./project-list";
 
 /**
  * One experience on the timeline. Its row names the period, the kind of work, the role and the
  * organization, with the organization's logo above them when it has one; opening it shows the
- * summary, the responsibilities, the technologies and the testimonials that belong to this
- * experience, each with its author's photo beside the quote when it has one. Current experiences
- * are open at first.
+ * summary, the responsibilities, the technologies, the projects delivered within it with their
+ * case studies, and the testimonials that belong to this experience, each with its author's photo
+ * beside the quote when it has one. Current experiences are open at first; a link to the experience
+ * or anything inside it opens it.
  */
 export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
   return (
-    <TimelineItem id={entry.anchor} defaultOpen={entry.current} className="scroll-mt-8">
+    <ExperienceItem anchor={entry.anchor}>
       <h2>
         <TimelineTrigger>
           {entry.organization.logo === null ? null : (
@@ -37,7 +40,7 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
       <TimelineContent>
         <div className="flex max-w-prose flex-col gap-6 text-pretty">
           <div className="text-muted-foreground [&>*+*]:mt-3">
-            <SummaryMarkdown>{entry.summary}</SummaryMarkdown>
+            <ProseMarkdown>{entry.summary}</ProseMarkdown>
           </div>
           {entry.responsibilities.length === 0 ? null : (
             <ul aria-label="Responsibilities" className="list-disc space-y-2 pl-6">
@@ -53,6 +56,7 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
               ))}
             </ul>
           )}
+          {entry.projects.length === 0 ? null : <ProjectList projects={entry.projects} />}
           {entry.organization.website === null ? null : (
             <p>
               <a
@@ -83,6 +87,6 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
           ))}
         </div>
       </TimelineContent>
-    </TimelineItem>
+    </ExperienceItem>
   );
 }

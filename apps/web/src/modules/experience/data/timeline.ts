@@ -1,8 +1,8 @@
-import type { Experience } from "@sebela/api-client";
+import type { Experience, Project } from "@sebela/api-client";
 
 import type { ImageMedia } from "../../profile";
 
-import { formatPeriod } from "./period";
+import { anchorId, formatPeriod } from "../../_shared";
 
 export type ExperienceKind = Experience["kind"];
 
@@ -20,6 +20,37 @@ export interface TimelineTestimonial {
   readonly authorRole: string;
   /** The author's photo; null without one or when it cannot be shown. */
   readonly authorPhoto: ImageMedia | null;
+}
+
+/** A project's case study: the person's own role and the long-form account. */
+export interface TimelineCaseStudy {
+  /** The stable anchor of the case study, `case-study-<project slug>`. */
+  readonly anchor: string;
+  /** Plain text: the person's own contribution, for example `Lead engineer`. */
+  readonly role: string;
+  /** Markdown: the long-form account. */
+  readonly body: string;
+}
+
+/** One project inside its experience. */
+export interface TimelineProject {
+  readonly slug: string;
+  /** The stable anchor of the project, `project-<slug>`. */
+  readonly anchor: string;
+  readonly name: string;
+  /** For example `March 1st, 2022 – present`. */
+  readonly period: string;
+  /** Markdown: the context, what the project is. */
+  readonly summary: string;
+  /** Markdown: the problem the project solved. */
+  readonly problem: string;
+  /** Markdown: the work done, the solution. */
+  readonly workDone: string;
+  /** Markdown: the project's outcome, which may be the team's rather than the person's own. */
+  readonly result: string;
+  readonly technologies: readonly { readonly slug: string; readonly name: string }[];
+  /** Null when the project has none: nothing is shown in its place. */
+  readonly caseStudy: TimelineCaseStudy | null;
 }
 
 /** One experience as the timeline shows it. */
@@ -45,6 +76,8 @@ export interface TimelineEntry {
   readonly summary: string;
   readonly responsibilities: readonly string[];
   readonly technologies: readonly { readonly slug: string; readonly name: string }[];
+  /** The projects delivered within this experience, by their position, then slug. */
+  readonly projects: readonly TimelineProject[];
   readonly testimonials: readonly TimelineTestimonial[];
 }
 
@@ -62,7 +95,7 @@ export function toTimelineEntries(
 ): TimelineEntry[] {
   return experiences.map((experience) => ({
     slug: experience.slug,
-    anchor: `experience-${experience.slug}`,
+    anchor: anchorId({ kind: "experience", slug: experience.slug }),
     title: experience.title,
     organization: {
       name: experience.organization.name,
@@ -79,6 +112,10 @@ export function toTimelineEntries(
     summary: experience.summary,
     responsibilities: experience.responsibilities,
     technologies: experience.technologies.map(({ slug, name }) => ({ slug, name })),
+    projects: experience.projects
+      .filter((project) => project.experience === experience.slug)
+      .toSorted((a, b) => a.position - b.position || compareText(a.slug, b.slug))
+      .map(toTimelineProject),
     testimonials: experience.testimonials
       .filter((testimonial) => testimonial.experience === experience.slug)
       .toSorted((a, b) => a.position - b.position)
@@ -90,6 +127,33 @@ export function toTimelineEntries(
         authorPhoto: authorPhotoId === null ? null : (authorPhotos.get(authorPhotoId) ?? null),
       })),
   }));
+}
+
+function toTimelineProject(project: Project): TimelineProject {
+  return {
+    slug: project.slug,
+    anchor: anchorId({ kind: "project", slug: project.slug }),
+    name: project.name,
+    period: formatPeriod(project.startedOn, project.endedOn),
+    summary: project.summary,
+    problem: project.problem,
+    workDone: project.workDone,
+    result: project.result,
+    technologies: project.technologies.map(({ slug, name }) => ({ slug, name })),
+    caseStudy:
+      project.caseStudy === null
+        ? null
+        : {
+            anchor: anchorId({ kind: "case-study", project: project.slug }),
+            role: project.caseStudy.role,
+            body: project.caseStudy.body,
+          },
+  };
+}
+
+/** Code-point order, the same in every locale, so the server and the browser agree. */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
