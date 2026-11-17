@@ -113,7 +113,7 @@ The owner kept the hero's direction (#43): simple and sharp. Typography, photo t
 
 - **Order (mobile):** photo, name label, headline (`type-display`), short bio (`type-lead`), the chat entry, then the actions. **From `md`:** the text column on the left, the photo on the right, vertically centred.
 - **Actions:** "Work with me" as the primary button, "View my experience →" as a text link beside it (stacked below it on mobile).
-- **Chat entry:** between the short bio and the actions — one input line with its submit and one row of two or three suggested questions below it (`.plan/03-web/prd.md`, Chat flow). Its place is reserved in the layout (`ChatSlot` in the homepage module): 104 px tall at every width, that is a 48 px input line, 12 px of space and a 44 px row of suggestions, with the hero's 24 px above and below. The chat entry (#51) fills that place without moving anything else. Until then the place is empty space; no inert or fake control is shown.
+- **Chat entry:** between the short bio and the actions — one input line with its submit and one row of suggested questions below it (`.plan/03-web/prd.md`, Chat flow), 104 px tall at every width: a 48 px input line, 12 px of space and a 44 px row of suggestions, with the hero's 24 px above and below. The input (`@sebela/ui` `Input`, 16 px text so phones do not zoom) has an `sr-only` label, "Ask anything about my work, experience or skills", and a shorter placeholder that fits a phone. Its submit is an outline 48 px icon button ("Ask"), so "Work with me" stays the one primary button. The suggestions are ghost buttons on `muted` at 60 %, short labels of at most 20 characters (the full question is sent): two below `sm`, three from it, never wrapping to a second row. Submitting goes to the conversation on the Ask page; nothing else happens in the hero.
 
 ## Rhythm
 
@@ -184,10 +184,20 @@ Below the timeline on `/experience`, in this order: Independent R&D, Technologie
 - **PDF unavailable.** When the PDF exists but cannot be delivered, the visitor lands on a state page (as Not found): "PDF unavailable" in `type-label`, "The CV PDF could not be downloaded." and the plain fact that nothing was downloaded, then "Read the CV" as the primary button and "Try the download again →" as a text link.
 - **Print.** Printing `/cv` gives the same document, dark on white whatever the theme (the light colour tokens in print, `packages/ui` `globals.css`), full width without page padding, sections 32 px apart and rows kept whole across pages where they fit. The footer and the CV actions are hidden in print on every page; each web link's address is printed after its label. Print is checked separately from the responsive screenshots, by Playwright with print media in both schemes.
 
+## Ask page
+
+`/ask` is the chat: an assistant answering questions about the person from the public profile. It uses the page frame and page padding (Spacing) in one column within 672 px (`max-w-2xl`), centred, and fills the screen's height so the composer sits at the bottom. No model selector, settings or debug controls.
+
+- **Header.** The name in `type-label`, "Ask AI" in `type-title`, then one `type-intro` sentence saying it is an AI assistant over the public profile and is not the person. It never speaks as the person. With a conversation, "New chat" (a ghost button with a plus) sits beside the heading from `sm` and below the introduction on mobile, discreet and never primary.
+- **Empty chat.** "Suggested questions" in `type-label`, then four outline buttons with the full questions, one per kind of visitor (hiring, clients, technical, general): one column on mobile, two from `sm`.
+- **Conversation.** Turns 40 px apart. The question on the right in a `muted` bubble (radius `xl`, at most 85 % wide); the answer below it full width: "Assistant" in `type-label`, the text within `max-w-prose`, then the related pages as text links with an arrow, 44 px tall. Block cards and sources come later in phase 3 (#52). A new question scrolls into view; a finished answer scrolls up so its links clear the composer.
+- **Composer.** Sticky at the bottom on the page background: one input line ("Ask a question", `sr-only` label "Your question") and a solid 48 px send button, disabled while an answer is open or the input is empty, then one muted note that answers come from the public profile and may be incomplete. The on-screen keyboard resizes the page (`interactive-widget=resizes-content`), so the composer stays above it.
+- **Announcements.** One polite live region: "Answering…" when an answer starts, then the answer (or that it failed or was interrupted) once when it ends; never each streamed piece. The open answer is `aria-busy`.
+
 ## Process
 
 Implementation → browser screenshot → visual review → iteration. Screenshots are attached to the pull request.
 
 ## To be defined in phase 3
 
-Page layouts, the chat component.
+The chat's block cards and sources (#52), and its retry and interruption states (#53).
