@@ -9,7 +9,13 @@ import { routes } from "./site";
 export type AnchorTarget =
   | { readonly kind: "experience"; readonly slug: string }
   | { readonly kind: "project"; readonly slug: string }
-  | { readonly kind: "case-study"; readonly project: string };
+  | { readonly kind: "case-study"; readonly project: string }
+  | { readonly kind: "exploration"; readonly slug: string }
+  | {
+      readonly kind: "technology-group";
+      readonly group: "core" | "ai-engineering-focus" | "secondary";
+    }
+  | { readonly kind: "independent-rd" };
 
 /** The item's id on its page: `experience-<slug>`, `project-<slug>` or `case-study-<project>`. */
 export function anchorId(target: AnchorTarget): string {
@@ -20,6 +26,8 @@ export function anchorId(target: AnchorTarget): string {
       return `project-${target.slug}`;
     case "case-study":
       return `case-study-${target.project}`;
+    default:
+      throw new Error("not implemented");
   }
 }
 

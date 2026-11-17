@@ -49,7 +49,7 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
           <p className="text-muted-foreground">No experience is published yet.</p>
         ) : (
           <DisclosuresProvider
-            index={deepLinkIndex(entries)}
+            index={deepLinkIndex({ timeline: entries, explorations: [], technologies: [] })}
             initiallyOpen={entries.filter((entry) => entry.current).map((entry) => entry.anchor)}
           >
             <Timeline aria-label="Career timeline" className="max-w-3xl">

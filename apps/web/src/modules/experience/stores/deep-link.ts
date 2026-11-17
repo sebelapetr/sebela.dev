@@ -1,5 +1,7 @@
 // Which disclosures a link to an item on the experience page must open. Pure, so the server builds
 // the index once and the client resolves the address's hash against it.
+import type { ExplorationRow } from "../data/explorations";
+import type { TechnologyGroup } from "../data/technologies";
 import type { TimelineEntry } from "../data/timeline";
 
 /**
@@ -15,7 +17,14 @@ export interface DeepLink {
   readonly open: readonly string[];
 }
 
-export function deepLinkIndex(entries: readonly TimelineEntry[]): DeepLinkIndex {
+/** Everything on the experience page a link can point at. */
+export interface ExperiencePageItems {
+  readonly timeline: readonly TimelineEntry[];
+  readonly explorations: readonly ExplorationRow[];
+  readonly technologies: readonly TechnologyGroup[];
+}
+
+export function deepLinkIndex({ timeline: entries }: ExperiencePageItems): DeepLinkIndex {
   const index: Record<string, readonly string[]> = {};
   for (const entry of entries) {
     index[entry.anchor] = [entry.anchor];

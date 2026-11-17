@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   createApiClient,
+  type Education,
   type Experience,
+  type Exploration,
   type Media,
   type Person,
+  type Technology,
   type Testimonial,
 } from "@sebela/api-client";
 
@@ -96,9 +99,67 @@ function apiError(code: string, status: number): Response {
   return json({ error: { code, message: "A fictional failure." } }, status);
 }
 
+function technology(slug: string): Technology {
+  return {
+    id: "4a5b6c7d-8e9f-4a0b-9c1d-2e3f4a5b6c7d",
+    slug,
+    name: "Fictional technology",
+    tier: "primary",
+    group: "core",
+    logoKey: null,
+    position: 0,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+  };
+}
+
+function exploration(slug: string): Exploration {
+  return {
+    id: "8b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
+    slug,
+    name: "Fictional exploration",
+    summary: "Made up.",
+    status: "designed",
+    concepts: ["a concept"],
+    startedOn: "2025-02-01",
+    endedOn: null,
+    position: 0,
+    technologies: [],
+    topics: [],
+    createdAt: STAMP,
+    updatedAt: STAMP,
+  };
+}
+
+function education(slug: string): Education {
+  return {
+    id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+    slug,
+    kind: "course",
+    title: "Fictional course",
+    institution: null,
+    startedOn: null,
+    endedOn: "2020-06-30",
+    description: null,
+    position: 0,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+  };
+}
+
 type Route = (request: Request) => Response | Promise<Response>;
 
-function clientWith(routes: Record<string, Route>) {
+/** Routes most tests do not care about: no explorations, technologies or education. */
+const QUIET_ROUTES: Record<string, Route> = {
+  "/v1/explorations": () => json([]),
+  "/v1/technologies": () => json([]),
+  "/v1/education": () => json([]),
+};
+
+const isMediaRead = (request: Request) => new URL(request.url).pathname.startsWith("/v1/media/");
+
+function clientWith(overrides: Record<string, Route>) {
+  const routes = { ...QUIET_ROUTES, ...overrides };
   const requests: Request[] = [];
   const client = createApiClient({
     baseUrl: BASE,
@@ -116,10 +177,16 @@ function clientWith(routes: Record<string, Route>) {
 const twoExperiences = [experience("current", null), experience("older", "2019-12-31")];
 
 describe("loadExperience", () => {
-  it("returns the person's header facts and the experiences in the API's order", async () => {
+  it("returns the header facts and every section's records in the API's order", async () => {
+    const explorations = [exploration("local-agent"), exploration("memory-graph")];
+    const technologies = [technology("typescript"), technology("react")];
+    const educations = [education("workshop"), education("degree")];
     const { client } = clientWith({
       "/v1/person": () => json(person()),
       "/v1/experiences": () => json(twoExperiences),
+      "/v1/explorations": () => json(explorations),
+      "/v1/technologies": () => json(technologies),
+      "/v1/education": () => json(educations),
     });
 
     expect(await loadExperience(client)).toEqual({
@@ -129,6 +196,9 @@ describe("loadExperience", () => {
         headline: "Fictional engineer for tests",
         careerStartedOn: "2015-09-01",
         experiences: twoExperiences,
+        explorations,
+        technologies,
+        education: educations,
         logos: new Map(),
         authorPhotos: new Map(),
       },
@@ -147,6 +217,18 @@ describe("loadExperience", () => {
     expect(result.status === "ready" && result.content.careerStartedOn).toBeNull();
   });
 
+  it("is ready without explorations, technologies or education", async () => {
+    const { client } = clientWith({
+      "/v1/person": () => json(person()),
+      "/v1/experiences": () => json(twoExperiences),
+    });
+
+    expect(await loadExperience(client)).toMatchObject({
+      status: "ready",
+      content: { explorations: [], technologies: [], education: [] },
+    });
+  });
+
   it("reads only public routes, without credentials and without a cache", async () => {
     const { client, requests } = clientWith({
       "/v1/person": () => json(person()),
@@ -158,8 +240,11 @@ describe("loadExperience", () => {
     expect(
       requests.map((request) => [request.method, new URL(request.url).pathname]).sort(),
     ).toEqual([
+      ["GET", "/v1/education"],
       ["GET", "/v1/experiences"],
+      ["GET", "/v1/explorations"],
       ["GET", "/v1/person"],
+      ["GET", "/v1/technologies"],
     ]);
     for (const request of requests) {
       expect(request.headers.get("Authorization")).toBeNull();
@@ -209,6 +294,24 @@ describe("loadExperience", () => {
     },
   );
 
+  describe.each(["/v1/explorations", "/v1/technologies", "/v1/education"])(
+    "when %s cannot be read",
+    (path) => {
+      it.each(failures)(
+        "is unavailable, never a page with a section left out, when it %s",
+        async (_label, route) => {
+          const { client } = clientWith({
+            "/v1/person": () => json(person()),
+            "/v1/experiences": () => json(twoExperiences),
+            [path]: route,
+          });
+
+          expect(await loadExperience(client)).toEqual({ status: "unavailable" });
+        },
+      );
+    },
+  );
+
   it("gives up on an API that does not answer in time", async () => {
     const hang: Route = (request) =>
       new Promise<Response>((_resolve, reject) => {
@@ -216,7 +319,13 @@ describe("loadExperience", () => {
           reject(request.signal.reason as Error);
         });
       });
-    const { client } = clientWith({ "/v1/person": hang, "/v1/experiences": hang });
+    const { client } = clientWith({
+      "/v1/person": hang,
+      "/v1/experiences": hang,
+      "/v1/explorations": hang,
+      "/v1/technologies": hang,
+      "/v1/education": hang,
+    });
 
     expect(await loadExperience(client, { timeoutMs: 20 })).toEqual({ status: "unavailable" });
   });
@@ -284,7 +393,7 @@ describe("loadExperience", () => {
       const result = await loadExperience(client);
 
       expect(result.status === "ready" && result.content.logos).toEqual(new Map());
-      expect(requests).toHaveLength(2);
+      expect(requests.filter(isMediaRead)).toEqual([]);
     });
 
     it.each<[string, Partial<Media>]>([
@@ -424,7 +533,7 @@ describe("loadExperience", () => {
       const result = await loadExperience(client);
 
       expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());
-      expect(requests).toHaveLength(2);
+      expect(requests.filter(isMediaRead)).toEqual([]);
     });
 
     it.each<[string, Partial<Media>]>([

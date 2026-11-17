@@ -1,4 +1,11 @@
-import type { ApiClient, Experience, Person } from "@sebela/api-client";
+import type {
+  ApiClient,
+  Education,
+  Experience,
+  Exploration,
+  Person,
+  Technology,
+} from "@sebela/api-client";
 
 import { readImage, type ImageMedia, type ReadInit } from "./image";
 
@@ -10,6 +17,9 @@ export interface ExperienceContent {
   readonly careerStartedOn: string | null;
   /** The published experiences in the API's order: current first, then the latest start. */
   readonly experiences: readonly Experience[];
+  readonly explorations: readonly Exploration[];
+  readonly technologies: readonly Technology[];
+  readonly education: readonly Education[];
   /**
    * The organizations' logos that can be shown, by media id (`organization.logoId`). A logo that
    * is absent, unusable or could not be read is simply not here.
@@ -106,6 +116,9 @@ export async function loadExperience(
       headline: person.headline,
       careerStartedOn: person.careerStartedOn,
       experiences,
+      explorations: [],
+      technologies: [],
+      education: [],
       logos,
       authorPhotos,
     },
