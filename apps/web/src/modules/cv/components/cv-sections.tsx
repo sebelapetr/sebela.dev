@@ -89,9 +89,9 @@ export function CvExperiences({ experiences }: { readonly experiences: readonly 
 }
 
 /**
- * The independent R&D, apart from the experiences: one short row each with the name, the stored
- * status as visible text with what it means (a designed one reads as an unimplemented design, on
- * screen and in print), the period and the one-sentence summary.
+ * The independent R&D, apart from the experiences: one line each, wrapping only where the width
+ * ends — the name, the stored status as visible text with what it means (a designed one reads as an
+ * unimplemented design, on screen and in print), the period and the one-sentence summary.
  */
 export function CvIndependentRd({
   explorations,
@@ -99,19 +99,18 @@ export function CvIndependentRd({
   readonly explorations: readonly CvExplorationLine[];
 }) {
   return (
-    <ol aria-label="Explorations" className="flex flex-col gap-6 print:gap-3">
+    <ol aria-label="Explorations" className="flex flex-col gap-3 print:gap-2">
       {explorations.map((exploration) => (
         <li
           key={exploration.slug}
-          className="flex break-inside-avoid flex-col gap-1.5 border-l border-border pl-4"
+          className="max-w-prose break-inside-avoid border-l border-border pl-4 text-pretty"
         >
-          <h3 className="font-semibold text-pretty">{exploration.name}</h3>
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className={tagClass}>{exploration.statusLabel}</span>
-            <span className="type-label text-balance">{exploration.statusMeaning}</span>
-            <span className="type-label text-balance">{exploration.period}</span>
-          </p>
-          <div className="max-w-prose text-pretty text-muted-foreground [&>*+*]:mt-3">
+          <h3 className="inline font-semibold">{exploration.name}</h3>{" "}
+          <span className={`${tagClass} ml-1 whitespace-nowrap`}>{exploration.statusLabel}</span>{" "}
+          <span className="type-label">
+            {exploration.statusMeaning} · {exploration.period}.
+          </span>{" "}
+          <div className="inline text-muted-foreground [&_p]:inline">
             <ProseMarkdown>{exploration.summary}</ProseMarkdown>
           </div>
         </li>
