@@ -347,7 +347,18 @@ describe("preparedAnswer", () => {
       expect(text).toMatch(/not (yet )?implemented|unimplemented/i);
     });
 
-    it("cites nothing when every exploration is only designed", () => {
+    it("says it lacks evidence, with the contact, when the profile has no explorations", () => {
+      const answer = preparedAnswer(evidence({ explorations: [] }), GENERAL);
+      expect(answer.outcome).toBe("insufficient_evidence");
+      expect(answer.text).toContain(`I don't have enough evidence in ${NAME}'s public profile`);
+      expect(answer.text).not.toMatch(/lists the current explorations/i);
+      expect(answer.sources).toEqual([]);
+      expect(answer.blocks.map((block) => block.type)).toEqual(["ContactCard"]);
+      // The experience page has no independent R&D block without explorations.
+      expect(answer.related.map((link) => link.href)).toEqual(["/#contact"]);
+    });
+
+    it("says it lacks evidence when every exploration is only designed, never citing a design", () => {
       const answer = preparedAnswer(
         evidence({
           explorations: [
@@ -356,8 +367,11 @@ describe("preparedAnswer", () => {
         }),
         GENERAL,
       );
+      expect(answer.outcome).toBe("insufficient_evidence");
       expect(answer.sources).toEqual([]);
-      expect(blocksOf(answer.blocks, "ExplorationCard")).toHaveLength(1);
+      expect(answer.text).toMatch(/not (yet )?implemented|unimplemented/i);
+      expect(answer.blocks.map((block) => block.type)).toEqual(["ContactCard"]);
+      expect(answer.related.map((link) => link.href)).toEqual(["/experience#independent-rd"]);
     });
   });
 
