@@ -19,7 +19,10 @@ export const mediaColumns = {
   updatedAt: media.updatedAt,
 };
 
-/** What a reference may point at: an image (photo, logo, cover) or a PDF (the CV PDF). */
+/**
+ * What a reference may point at: an image (photo, logo, cover, author photo) or a PDF (the CV
+ * PDF).
+ */
 export type MediaKind = "image" | "pdf";
 
 /** One media reference a write sets: the written field, the media id and the required kind. */
@@ -77,8 +80,8 @@ function isMediaReferenceFailure(failure: unknown): failure is MediaReferenceFai
 /**
  * The metadata of uploaded files in `profile.media`. Keys are unique; the check constraints
  * refuse an empty file, an image without positive dimensions and a PDF with dimensions. Persons,
- * organizations and projects refer to media through foreign keys without a cascade, so a
- * referenced delete is refused by the database and returned as `referenced`.
+ * organizations, projects and testimonials refer to media through foreign keys without a cascade,
+ * so a referenced delete is refused by the database and returned as `referenced`.
  */
 export function createMediaPersistence(db: Database): MediaPersistence {
   return {

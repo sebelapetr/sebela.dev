@@ -3040,7 +3040,7 @@
       "post": {
         "operationId": "createTestimonial",
         "summary": "Create a testimonial",
-        "description": "The testimonial belongs to the existing experience named by `experience`; an unknown experience is refused with that field. The slug is unique and stable; a taken slug is a conflict.",
+        "description": "The testimonial belongs to the existing experience named by `experience`; an unknown experience is refused with that field. The slug is unique and stable; a taken slug is a conflict. `authorPhotoId` attaches uploaded image media as the author photo; a PDF or unknown media is refused.",
         "security": [
           {
             "bearerAuth": []
@@ -3248,7 +3248,7 @@
       "patch": {
         "operationId": "updateTestimonial",
         "summary": "Update a testimonial",
-        "description": "Changes only the fields sent; the slug cannot change. A sent `experience` moves the testimonial to that existing experience; an unknown one is refused and changes nothing.",
+        "description": "Changes only the fields sent; `null` clears the author photo; the slug cannot change. A sent `experience` moves the testimonial to that existing experience; an unknown one is refused and changes nothing.",
         "security": [
           {
             "bearerAuth": []
@@ -3381,7 +3381,7 @@
       "delete": {
         "operationId": "deleteTestimonial",
         "summary": "Delete a testimonial",
-        "description": "Removes the testimonial; its experience stays.",
+        "description": "Removes the testimonial; its experience and its author photo stay.",
         "security": [
           {
             "bearerAuth": []
@@ -6384,7 +6384,7 @@
       "delete": {
         "operationId": "deleteMedia",
         "summary": "Delete media",
-        "description": "Deletes the record and its file. Media attached to the person, an organization or a project is not deleted; clear the reference first.",
+        "description": "Deletes the record and its file. Media attached to the person, an organization, a project or a testimonial is not deleted; clear the reference first.",
         "security": [
           {
             "bearerAuth": []
@@ -7714,6 +7714,20 @@
             "minimum": 0,
             "maximum": 1000000,
             "description": "Ascending order within the experience; ties are ordered by slug."
+          },
+          "authorPhotoId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifier of the author's photo, an uploaded image; `null` without one."
           }
         },
         "required": [
@@ -7759,6 +7773,19 @@
             "minimum": 0,
             "maximum": 1000000,
             "description": "Ascending order within the experience; ties are ordered by slug."
+          },
+          "authorPhotoId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifier of the author's photo, an uploaded image; `null` without one."
           }
         },
         "additionalProperties": false
@@ -9380,6 +9407,19 @@
             "maximum": 1000000,
             "description": "Ascending order within the experience; ties are ordered by slug."
           },
+          "authorPhotoId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifier of the author's photo, an uploaded image; `null` without one."
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -9399,6 +9439,7 @@
           "authorName",
           "authorRole",
           "position",
+          "authorPhotoId",
           "createdAt",
           "updatedAt"
         ],

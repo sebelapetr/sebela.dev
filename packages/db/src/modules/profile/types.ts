@@ -667,8 +667,15 @@ export interface TestimonialRelations {
   experience: string;
 }
 
-/** A testimonial with the experience it belongs to (by slug). */
-export interface TestimonialRecord extends TestimonialFields, TestimonialRelations {
+/** Media attached to a testimonial, by media id; `null` while none is attached. */
+export interface TestimonialMedia {
+  /** An image of the author. */
+  authorPhotoId: string | null;
+}
+
+/** A testimonial with the experience it belongs to (by slug) and its author photo. */
+export interface TestimonialRecord
+  extends TestimonialFields, TestimonialMedia, TestimonialRelations {
   id: string;
   slug: string;
   createdAt: Date;
@@ -679,11 +686,10 @@ export interface TestimonialRecord extends TestimonialFields, TestimonialRelatio
  * Why a create or an update of a testimonial wrote nothing, besides `conflict` and `not_found`:
  *
  * - `unknown_experience`: no experience has the given slug.
+ * - `unknown_media`, `unsuitable_media`: see `MediaReferenceFailure`.
  */
-export interface TestimonialWriteFailure {
-  ok: false;
-  reason: "unknown_experience";
-}
+export type TestimonialWriteFailure =
+  MediaReferenceFailure | { ok: false; reason: "unknown_experience" };
 
 export type CreateTestimonialResult =
   | { ok: true; testimonial: TestimonialRecord }
@@ -708,15 +714,16 @@ export interface TestimonialPersistence {
   findTestimonial(slug: string): Promise<TestimonialRecord | null>;
   /** `conflict` when the slug is taken, also for a racing create; see `TestimonialWriteFailure`. */
   createTestimonial(
-    fields: TestimonialFields & TestimonialRelations & { slug: string },
+    fields: TestimonialFields & Partial<TestimonialMedia> & TestimonialRelations & { slug: string },
   ): Promise<CreateTestimonialResult>;
   /**
-   * Changes only the given fields. A given `experience` moves the testimonial to that experience.
-   * `not_found` when there is no such testimonial; see `TestimonialWriteFailure`.
+   * Changes only the given fields. A given `experience` moves the testimonial to that experience;
+   * `authorPhotoId: null` clears the photo. `not_found` when there is no such testimonial; see
+   * `TestimonialWriteFailure`.
    */
   updateTestimonial(
     slug: string,
-    changes: Partial<TestimonialFields & TestimonialRelations>,
+    changes: Partial<TestimonialFields & TestimonialMedia & TestimonialRelations>,
   ): Promise<UpdateTestimonialResult>;
   /** Deletes the testimonial, never its experience; `not_found` when there is none. */
   deleteTestimonial(slug: string): Promise<DeleteTestimonialResult>;
@@ -858,8 +865,8 @@ export interface MediaReferenceFailure {
 
 /**
  * Persistence operations of media metadata. The files themselves are not stored here. Person,
- * organization and project rows refer to media through foreign keys without a cascade, so
- * referenced media is never deleted.
+ * organization, project and testimonial rows refer to media through foreign keys without a
+ * cascade, so referenced media is never deleted.
  */
 export interface MediaPersistence {
   /** Every media record, newest first, then by id. */
@@ -876,7 +883,8 @@ export interface MediaPersistence {
   updateMedia(id: string, changes: { altText: string | null }): Promise<MediaRecord | null>;
   /**
    * Deletes the record and returns it, so its file can be removed; `not_found` when there is none,
-   * `referenced` (and nothing deleted) while a person, organization or project refers to it.
+   * `referenced` (and nothing deleted) while a person, organization, project or testimonial refers
+   * to it.
    */
   deleteMedia(id: string): Promise<DeleteMediaResult>;
 }

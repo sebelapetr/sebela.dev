@@ -261,8 +261,12 @@ export interface EducationService {
  *   `not_found` for an unknown slug.
  * - Create and update refuse an unknown `experience` as `validation_failed` naming `experience`
  *   and write nothing.
- * - `deleteTestimonial`: removes the testimonial, never its experience; `not_found` for an
- *   unknown slug. Nothing refers to a testimonial, so a delete never conflicts.
+ * - `authorPhotoId` is an optional uploaded image: create defaults it to `null`, update keeps it
+ *   unless given and clears it with `null`. Create and update refuse an unknown media item or one
+ *   that is not an image as `validation_failed` naming `authorPhotoId` and write nothing.
+ * - `deleteTestimonial`: removes the testimonial, never its experience or its author photo;
+ *   `not_found` for an unknown slug. Nothing refers to a testimonial, so a delete never
+ *   conflicts.
  */
 export interface TestimonialService {
   listTestimonials(): Promise<Testimonial[]>;

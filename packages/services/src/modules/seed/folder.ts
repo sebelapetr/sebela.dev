@@ -85,7 +85,7 @@ export interface SeedData {
   readonly explorations: readonly Located<ExplorationCreate>[];
   readonly services: readonly Located<ServiceCreate>[];
   readonly education: readonly Located<EducationCreate>[];
-  readonly testimonials: readonly Located<TestimonialCreate>[];
+  readonly testimonials: readonly Located<TestimonialCreate, "authorPhotoId">[];
   readonly currentFocus: readonly Located<CurrentFocusCreate>[];
   /** The attached files by the SHA-256 digest of their content, each once. */
   readonly files: ReadonlyMap<string, SeedFile>;
@@ -328,7 +328,11 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
   const explorations = located(await parseList(dataFiles.explorations, ExplorationCreateSchema));
   const services = located(await parseList(dataFiles.services, ServiceCreateSchema));
   const education = located(await parseList(dataFiles.education, EducationCreateSchema));
-  const testimonials = located(await parseList(dataFiles.testimonials, TestimonialCreateSchema));
+  const testimonials = located(
+    await parseList(dataFiles.testimonials, TestimonialCreateSchema, [
+      { key: "authorPhoto", field: "authorPhotoId", expects: "image" },
+    ]),
+  );
   const currentFocus = located(await parseList(dataFiles.currentFocus, CurrentFocusCreateSchema));
 
   const files = await readDeclaredFiles(root, declarations, limits, issues);

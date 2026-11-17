@@ -118,8 +118,8 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
       access: "private",
       summary: "Delete media",
       description:
-        "Deletes the record and its file. Media attached to the person, an organization or a " +
-        "project is not deleted; clear the reference first.",
+        "Deletes the record and its file. Media attached to the person, an organization, a " +
+        "project or a testimonial is not deleted; clear the reference first.",
       params: MediaIdParamsSchema,
       response: { status: 204, description: "The media was deleted." },
       errors: ["not_found", "conflict"],

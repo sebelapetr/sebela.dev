@@ -58,6 +58,7 @@ function testimonial(overrides: Partial<Testimonial> = {}): Testimonial {
     authorName: "Mira Example",
     authorRole: "Editor (fictional)",
     position: 0,
+    authorPhotoId: null,
     createdAt: STAMP,
     updatedAt: STAMP,
     ...overrides,

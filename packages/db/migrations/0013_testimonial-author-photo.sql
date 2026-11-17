@@ -1,0 +1,2 @@
+ALTER TABLE "profile"."testimonials" ADD COLUMN "author_photo_id" uuid;--> statement-breakpoint
+ALTER TABLE "profile"."testimonials" ADD CONSTRAINT "testimonials_author_photo_id_media_id_fk" FOREIGN KEY ("author_photo_id") REFERENCES "profile"."media"("id") ON DELETE no action ON UPDATE no action;
