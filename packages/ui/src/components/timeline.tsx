@@ -109,7 +109,7 @@ function TimelineTrigger({ className, children, ...props }: Collapsible.Trigger.
  * content stays in the page (`hidden="until-found"`), so the browser's page search finds it and
  * opens the item.
  */
-function TimelineContent({ className, ...props }: Collapsible.Panel.Props) {
+function TimelineContent({ className, children, ...props }: Collapsible.Panel.Props) {
   const triggerId = use(TriggerIdContext);
   return (
     <Collapsible.Panel
@@ -117,9 +117,12 @@ function TimelineContent({ className, ...props }: Collapsible.Panel.Props) {
       role="region"
       aria-labelledby={triggerId}
       data-slot="timeline-content"
-      className={cn("pt-3 pb-6", className)}
+      className={className}
       {...props}
-    />
+    >
+      {/* The spacing sits inside, so a closed item takes no space at all. */}
+      <div className="pt-3 pb-6">{children}</div>
+    </Collapsible.Panel>
   );
 }
 
