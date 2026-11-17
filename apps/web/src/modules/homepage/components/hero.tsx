@@ -4,15 +4,15 @@ import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@sebela/ui/components/button";
 import { cn } from "@sebela/ui/lib/utils";
 
+import { HeroChatEntry } from "../../chat";
 import type { HomepageProfile } from "../../profile";
 import { routes } from "../../_shared";
 import { InlineMarkdown } from "./markdown";
-import { ChatSlot } from "./chat-slot";
 import { Portrait } from "./portrait";
 
 /**
  * The opening of the homepage: who the person is (name, headline and short bio from the API), the
- * photo, the reserved place of the chat entry and the two calls to action — clients to services,
+ * photo, the chat entry (a question goes to the Ask page) and the two calls to action — clients to services,
  * employers to experience.
  */
 export function Hero({ profile }: { readonly profile: HomepageProfile }) {
@@ -32,7 +32,7 @@ export function Hero({ profile }: { readonly profile: HomepageProfile }) {
         <div className="type-lead [&_p+p]:mt-4">
           <InlineMarkdown>{profile.shortBio}</InlineMarkdown>
         </div>
-        <ChatSlot />
+        <HeroChatEntry name={profile.name} />
         {/* The pages are rendered on request; prefetching them on every homepage view would read
             all their content at once (see TextLink). */}
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-6">
