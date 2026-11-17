@@ -1,5 +1,7 @@
 import type { Experience, Technology } from "@sebela/api-client";
 
+import { careerYears, experienceKindLabel } from "../../_shared";
+
 /** A role held now. */
 export interface CurrentRole {
   readonly slug: string;
@@ -27,9 +29,31 @@ export interface ExperienceSnapshotSource {
   readonly technologies: readonly Technology[];
 }
 
+/**
+ * The homepage's compact Experience block: the career's whole years (software development overall),
+ * the roles held now, and the primary technologies as two lines — core and AI engineering focus.
+ * Secondary technologies stay on the experience page.
+ */
 export function toExperienceSnapshot(
   source: ExperienceSnapshotSource,
   today: Date,
 ): ExperienceSnapshot {
-  throw new Error(`not implemented: ${String(source.experiences.length)} ${today.toISOString()}`);
+  const primary = source.technologies.filter((technology) => technology.tier === "primary");
+  return {
+    years: careerYears(source.careerStartedOn, today),
+    current: source.experiences
+      .filter((experience) => experience.endedOn === null)
+      .map((experience) => ({
+        slug: experience.slug,
+        title: experience.title,
+        organization: experience.organization.name,
+        kind: experienceKindLabel(experience.kind),
+      })),
+    core: primary
+      .filter((technology) => technology.group === "core")
+      .map((technology) => technology.name),
+    aiFocus: primary
+      .filter((technology) => technology.group === "ai_engineering_focus")
+      .map((technology) => technology.name),
+  };
 }

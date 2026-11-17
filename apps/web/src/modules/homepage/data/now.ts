@@ -1,6 +1,11 @@
 import type { CurrentFocus, Exploration } from "@sebela/api-client";
 
-import type { ExplorationStatusText } from "../../_shared";
+import {
+  anchorHref,
+  explorationStatusText,
+  routes,
+  type ExplorationStatusText,
+} from "../../_shared";
 
 /** Where an item of Working on leads: its project on the experience page, or its own web link. */
 export interface WorkingOnLink {
@@ -42,9 +47,64 @@ export interface NowContent {
   readonly roadmapHref: string;
 }
 
+/**
+ * The homepage's Now from the current focus and the explorations, in the API's order. Working on is
+ * every current focus; Exploring is only the ongoing explorations, each with its stored status, so
+ * learning never reads as delivered work. Null when nothing is being built or learned now, and the
+ * section is left out.
+ */
 export function toNow(
   currentFocus: readonly CurrentFocus[],
   explorations: readonly Exploration[],
 ): NowContent | null {
-  throw new Error(`not implemented: ${String(currentFocus.length + explorations.length)}`);
+  const workingOn = currentFocus.map(toWorkingOn);
+  const exploring = explorations
+    .filter((exploration) => exploration.endedOn === null)
+    .map((exploration) => ({
+      slug: exploration.slug,
+      name: exploration.name,
+      status: explorationStatusText(exploration.status),
+      href: anchorHref({ kind: "exploration", slug: exploration.slug }),
+    }));
+  if (workingOn.length === 0 && exploring.length === 0) return null;
+  return {
+    workingOn,
+    exploring,
+    independentRdHref: explorations.length === 0 ? null : anchorHref({ kind: "independent-rd" }),
+    roadmapHref: routes.aiRoadmap,
+  };
+}
+
+function toWorkingOn(focus: CurrentFocus): WorkingOnItem {
+  return {
+    slug: focus.slug,
+    title: focus.title,
+    description: focus.description,
+    topics: focus.topics.map((topic) => topic.name),
+    link: focusLink(focus),
+  };
+}
+
+/** The focus's project on the site first; else its own link, only when it is a web address. */
+function focusLink(focus: CurrentFocus): WorkingOnLink | null {
+  if (focus.project !== null) {
+    return {
+      href: anchorHref({ kind: "project", slug: focus.project.slug }),
+      label: "View the project",
+      external: false,
+    };
+  }
+  if (focus.link !== null && isWebAddress(focus.link)) {
+    return { href: focus.link, label: "Read more", external: true };
+  }
+  return null;
+}
+
+function isWebAddress(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }

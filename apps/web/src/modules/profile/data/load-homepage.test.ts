@@ -195,6 +195,9 @@ function apiError(code: string, status: number): Response {
 
 type Route = (request: Request) => Response | Promise<Response>;
 
+/** Requests a test leaves unanswered on purpose, held for as long as the file runs. */
+const hanging: Request[] = [];
+
 /** The public list routes the homepage reads besides the person, each empty by default. */
 const LISTS = [
   "/v1/experiences",
@@ -547,6 +550,10 @@ describe("loadHomepage", () => {
     const { client } = clientWith({
       "/v1/person": (request) =>
         new Promise<Response>((_resolve, reject) => {
+          // A real fetch holds its request until it settles. This fake one never settles, so it is
+          // held here; otherwise the request, and with it the timeout's signal, which Node holds
+          // only weakly, could be collected before the timeout fires.
+          hanging.push(request);
           request.signal.addEventListener("abort", () => {
             reject(request.signal.reason as Error);
           });
