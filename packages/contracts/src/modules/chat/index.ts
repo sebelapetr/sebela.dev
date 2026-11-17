@@ -76,11 +76,15 @@ export type ChatSourceKind = (typeof chatSourceKinds)[number];
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
-/** A path on this site, with an optional query and anchor; never another host or a scheme. */
+/**
+ * A path on this site, with an optional query and anchor: it starts with a single `/` and has no
+ * whitespace, control characters or backslashes (the services contract's rule), so it can carry
+ * neither a scheme nor another host.
+ */
 const SitePathSchema = z
   .string()
   .max(2048)
-  .regex(/^\/(?![/\\])[^\s\\]*$/, "Must be a path on this site, such as /experience#anchor.")
+  .regex(/^\/(?!\/)[^\s\\\p{Cc}]*$/u, "Must be a path on this site, such as /experience#anchor.")
   .meta({ description: "A path on this site with an optional anchor, such as `/experience#…`." });
 
 const HttpUrlSchema = z.url({ protocol: /^https?$/, hostname: z.regexes.domain }).max(2048);
