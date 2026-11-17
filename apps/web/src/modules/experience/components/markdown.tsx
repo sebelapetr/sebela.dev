@@ -23,8 +23,8 @@ export function SummaryMarkdown({ children }: { readonly children: string }) {
         strong: ({ children: text }) => (
           <strong className="font-semibold text-foreground">{text}</strong>
         ),
-        ul: ({ children: items }) => <ul className="list-disc space-y-1 pl-5">{items}</ul>,
-        ol: ({ children: items }) => <ol className="list-decimal space-y-1 pl-5">{items}</ol>,
+        ul: ({ children: items }) => <ul className="list-disc space-y-1 pl-6">{items}</ul>,
+        ol: ({ children: items }) => <ol className="list-decimal space-y-1 pl-6">{items}</ol>,
       }}
     >
       {children}

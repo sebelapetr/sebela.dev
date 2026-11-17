@@ -13,35 +13,32 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
     <TimelineItem id={entry.anchor} defaultOpen={entry.current} className="scroll-mt-8">
       <h2>
         <TimelineTrigger>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="font-mono tracking-tight text-balance">{entry.period}</span>
-            <span className="rounded-sm border border-border px-1.5 py-px text-xs font-medium">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+            <span className="type-label text-balance">{entry.period}</span>
+            <span className="type-tag rounded-sm border border-border px-1.5">
               {entry.kindLabel}
             </span>
           </span>
-          <span className="text-lg leading-snug font-semibold tracking-tight text-pretty sm:text-xl">
+          <span className="type-item">
             {entry.title}
             <span className="font-normal text-muted-foreground"> · {entry.organization.name}</span>
           </span>
         </TimelineTrigger>
       </h2>
       <TimelineContent>
-        <div className="flex max-w-prose flex-col gap-5 text-base leading-relaxed text-pretty">
+        <div className="flex max-w-prose flex-col gap-6 text-pretty">
           <div className="text-muted-foreground [&>*+*]:mt-3">
             <SummaryMarkdown>{entry.summary}</SummaryMarkdown>
           </div>
           {entry.responsibilities.length === 0 ? null : (
-            <ul aria-label="Responsibilities" className="list-disc space-y-1.5 pl-5">
+            <ul aria-label="Responsibilities" className="list-disc space-y-2 pl-6">
               {entry.responsibilities.map((responsibility) => (
                 <li key={responsibility}>{responsibility}</li>
               ))}
             </ul>
           )}
           {entry.technologies.length === 0 ? null : (
-            <ul
-              aria-label="Technologies"
-              className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-sm text-muted-foreground"
-            >
+            <ul aria-label="Technologies" className="type-label flex flex-wrap gap-x-3 gap-y-1">
               {entry.technologies.map((technology) => (
                 <li key={technology.slug}>{technology.name}</li>
               ))}

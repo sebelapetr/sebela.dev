@@ -17,16 +17,14 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
   const years = careerYears(content.careerStartedOn, new Date());
   return (
     <>
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-12 px-5 py-12 sm:px-8 sm:py-20 md:gap-16">
-        <header className="flex flex-col gap-5">
+      <main className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32">
+        <header className="flex max-w-3xl flex-col gap-6">
           <h1 className="flex flex-col gap-3">
-            <span className="font-mono text-sm tracking-tight text-muted-foreground">
-              {content.name}
-            </span>
-            <span className="text-4xl font-semibold tracking-tight sm:text-5xl">Experience</span>
+            <span className="type-label">{content.name}</span>
+            <span className="type-title">Experience</span>
           </h1>
-          <div className="flex max-w-prose flex-col gap-2 text-lg leading-relaxed text-pretty">
-            <p className="text-muted-foreground">{content.headline}</p>
+          <div className="type-lead flex flex-col gap-2">
+            <p>{content.headline}</p>
             {years === null ? null : (
               <p>
                 {String(years)} {years === 1 ? "year" : "years"} of professional experience
@@ -46,7 +44,7 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
         {entries.length === 0 ? (
           <p className="text-muted-foreground">No experience is published yet.</p>
         ) : (
-          <Timeline aria-label="Career timeline">
+          <Timeline aria-label="Career timeline" className="max-w-3xl">
             {entries.map((entry) => (
               <ExperienceEntry key={entry.slug} entry={entry} />
             ))}

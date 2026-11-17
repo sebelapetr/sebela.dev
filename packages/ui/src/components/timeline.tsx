@@ -68,7 +68,7 @@ function TimelineItem({
       }
       render={<li id={id} />}
       data-slot="timeline-item"
-      className={cn("relative pl-11 sm:pl-12", className)}
+      className={cn("relative pl-12", className)}
     >
       <TriggerIdContext value={triggerId}>{children}</TriggerIdContext>
     </Collapsible.Root>
@@ -95,9 +95,9 @@ function TimelineTrigger({ className, children, ...props }: Collapsible.Trigger.
       <span
         aria-hidden="true"
         data-slot="timeline-marker"
-        className="absolute top-1.5 left-0 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-[transform,color,border-color] group-hover/timeline-trigger:scale-110 group-hover/timeline-trigger:border-foreground group-hover/timeline-trigger:text-foreground group-data-[panel-open]/timeline-trigger:border-foreground group-data-[panel-open]/timeline-trigger:text-foreground motion-reduce:transition-none"
+        className="absolute top-1.5 left-0 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors group-hover/timeline-trigger:border-foreground group-hover/timeline-trigger:text-foreground group-data-[panel-open]/timeline-trigger:border-foreground group-data-[panel-open]/timeline-trigger:text-foreground"
       >
-        <ChevronRight className="size-4 transition-transform group-data-[panel-open]/timeline-trigger:rotate-90 motion-reduce:transition-none" />
+        <ChevronRight className="size-4 group-data-[panel-open]/timeline-trigger:rotate-90" />
       </span>
       {children}
     </Collapsible.Trigger>
