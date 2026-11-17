@@ -1,6 +1,6 @@
 import type { Exploration, ExplorationStatus } from "@sebela/api-client";
 
-import { anchorId } from "../../_shared";
+import { anchorId, explorationStatusText } from "../../_shared";
 
 /** One exploration as the independent R&D block shows it. */
 export interface ExplorationRow {
@@ -20,21 +20,13 @@ export interface ExplorationRow {
   readonly concepts: readonly string[];
 }
 
-// Designed work is planned or architected only: its wording says so and never claims that it
-// works, was tried or was delivered (docs/domain-context.md, Exploration status).
-const STATUSES: Record<ExplorationStatus, { label: string; meaning: string }> = {
-  built: { label: "Built", meaning: "Implemented and working" },
-  tested: { label: "Tested", meaning: "Tried hands-on" },
-  designed: { label: "Designed", meaning: "Unimplemented design, planned or architected only" },
-};
-
 /**
  * The explorations as the independent R&D block shows them, in the API's order (by position, then
  * slug), each with its stored status as visible text. Kept apart from the career timeline.
  */
 export function toExplorationRows(explorations: readonly Exploration[]): ExplorationRow[] {
   return explorations.map((exploration) => {
-    const status = STATUSES[exploration.status];
+    const status = explorationStatusText(exploration.status);
     return {
       slug: exploration.slug,
       anchor: anchorId({ kind: "exploration", slug: exploration.slug }),
