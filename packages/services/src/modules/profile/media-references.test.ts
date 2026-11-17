@@ -70,7 +70,7 @@ const testimonial: TestimonialCreate = {
   experience: "northwind-lead",
   quote: "A fictional quote.",
   authorName: "Dana Placeholder",
-  authorRole: null,
+  authorRole: "Head of Operations",
   position: 0,
   authorPhotoId: null,
 };

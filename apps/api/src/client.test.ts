@@ -1099,7 +1099,7 @@ describe("the generated API client", () => {
         experience: "avatar-lead",
         quote: "A fictional compliment.",
         authorName: "Ava Placeholder",
-        authorRole: null,
+        authorRole: "Site Manager",
         position: 0,
         authorPhotoId: photoId,
       },

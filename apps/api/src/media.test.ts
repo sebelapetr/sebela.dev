@@ -594,7 +594,7 @@ describe("the media API", () => {
         experience: "fabrikam-engineer",
         quote: "A fictional compliment.",
         authorName: "Dana Placeholder",
-        authorRole: null,
+        authorRole: "Site Manager",
         position: 0,
       };
 
