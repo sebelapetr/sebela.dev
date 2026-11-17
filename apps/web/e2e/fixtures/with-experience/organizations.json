@@ -1,0 +1,19 @@
+[
+  {
+    "slug": "fernway-logistics",
+    "name": "Fernway Logistics",
+    "website": "https://fernway.example.test/"
+  },
+  { "slug": "morrow-studio", "name": "Morrow Studio", "website": null },
+  {
+    "slug": "open-ledger-kit",
+    "name": "Open Ledger Kit",
+    "website": "https://ledger-kit.example.test/"
+  },
+  { "slug": "harbor-clinic", "name": "Harbor Clinic", "website": null },
+  {
+    "slug": "pinecrest-health",
+    "name": "Pinecrest Health",
+    "website": "https://pinecrest.example.test/"
+  }
+]

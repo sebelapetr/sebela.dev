@@ -1,0 +1,79 @@
+[
+  {
+    "slug": "fernway-lead-engineer",
+    "title": "Lead engineer",
+    "kind": "main_job",
+    "organization": "fernway-logistics",
+    "startedOn": "2023-10-01",
+    "summary": "Leads the routing platform of a **fictional** freight company: planning, tracking and the tools dispatchers use every day.",
+    "responsibilities": [
+      "Own the architecture of the routing and tracking services",
+      "Run the weekly design review"
+    ],
+    "inCv": true,
+    "technologies": ["typescript", "postgresql", "python"]
+  },
+  {
+    "slug": "morrow-studio-consultant",
+    "title": "Independent consultant",
+    "kind": "own_business",
+    "organization": "morrow-studio",
+    "startedOn": "2021-07-12",
+    "summary": "A few days a month of architecture reviews for small, **fictional** product teams.",
+    "responsibilities": [],
+    "inCv": true,
+    "technologies": ["typescript"]
+  },
+  {
+    "slug": "harbor-clinic-booking",
+    "title": "Booking system for a clinic",
+    "kind": "own_business",
+    "organization": "harbor-clinic",
+    "startedOn": "2021-08-02",
+    "endedOn": "2022-02-21",
+    "summary": "Client work: an appointment booking system for a **fictional** clinic, delivered as its own engagement.",
+    "responsibilities": ["Design and build the booking flow and its reminders"],
+    "inCv": true,
+    "technologies": ["php", "postgresql"]
+  },
+  {
+    "slug": "open-ledger-kit-maintainer",
+    "title": "Maintainer",
+    "kind": "side_project",
+    "organization": "open-ledger-kit",
+    "startedOn": "2022-01-03",
+    "endedOn": "2022-11-22",
+    "summary": "Kept a small, **fictional** open-source accounting library alive on weekends.",
+    "responsibilities": [],
+    "inCv": false,
+    "technologies": ["typescript"]
+  },
+  {
+    "slug": "pinecrest-senior-developer",
+    "title": "Senior developer",
+    "kind": "main_job",
+    "organization": "pinecrest-health",
+    "startedOn": "2020-05-11",
+    "endedOn": "2023-09-30",
+    "summary": "Rebuilt the patient portal of a **fictional** network of health centres, from a slow server-rendered application to a typed API with a fast, accessible front end that patients in all twelve centres used every day.\n\nAlong the way the team moved its deployments from a monthly release night to several small releases a week, with `PostgreSQL` migrations reviewed like code and a rollback plan for each one.\n\n- Patients book, move and cancel appointments themselves\n- Results arrive in the portal instead of by post",
+    "responsibilities": [
+      "Lead the rebuild of the patient portal and its appointment booking, from the first prototype to the last migrated health centre",
+      "Introduce typed API contracts shared by the front end and the back end",
+      "Mentor two developers"
+    ],
+    "inCv": true,
+    "technologies": ["typescript", "react", "postgresql", "python"]
+  },
+  {
+    "slug": "pinecrest-developer",
+    "title": "Developer",
+    "kind": "main_job",
+    "organization": "pinecrest-health",
+    "startedOn": "2018-03-01",
+    "endedOn": "2020-05-10",
+    "summary": "Maintained the old patient portal of the same **fictional** health network and its reporting jobs.",
+    "responsibilities": ["Fix and extend the reporting jobs"],
+    "inCv": true,
+    "technologies": ["php", "postgresql"]
+  }
+]
