@@ -263,6 +263,20 @@ function generalAnswer(evidence: AskEvidence): PreparedAnswer {
       }),
     )
     .filter(present);
+  if (evidence.explorations.length === 0) {
+    return insufficientEvidence(
+      evidence,
+      `I don't have enough evidence in ${name}'s public profile to say what ${name} is working on now. The site lists no current explorations; to hear about current work, ask ${name} directly.`,
+      [contactLink],
+    );
+  }
+  if (sources.length === 0) {
+    return insufficientEvidence(
+      evidence,
+      `I don't have enough evidence in ${name}'s public profile to say what ${name} is working on now. The current explorations on the experience page are designed only and not yet implemented, so they show plans rather than work done; to hear more, ask ${name} directly.`,
+      [{ label: "Independent R&D", href: anchorHref({ kind: "independent-rd" }) }],
+    );
+  }
   return {
     text: `The site keeps what ${name} is building apart from what is being learned. The independent R&D section of the experience page lists the current explorations with their status: built ones work, tested ones were tried hands-on, and designed ones are planned only and not yet implemented. The AI Roadmap will show the learning plan.`,
     outcome: "answered",
