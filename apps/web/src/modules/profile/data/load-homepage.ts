@@ -1,5 +1,6 @@
 import type { ApiClient, Person, Project } from "@sebela/api-client";
 
+import type { CvPdf } from "./cv-pdf";
 import { isWebUrl, readImage, type ImageMedia } from "./image";
 
 /** The person's photo, ready for an image element. */
@@ -19,6 +20,8 @@ export interface HomepageProfile {
   };
   /** Every published project in the API's order; the homepage shows the selected ones. */
   readonly projects: readonly Project[];
+  /** The current CV PDF; null without one or when it cannot be offered. */
+  readonly cvPdf: CvPdf | null;
 }
 
 /**
@@ -86,6 +89,7 @@ export async function loadHomepage(
         links: person.links.filter((link) => isWebUrl(link.url)),
       },
       projects,
+      cvPdf: null,
     },
   };
 }

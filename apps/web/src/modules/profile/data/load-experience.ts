@@ -7,6 +7,7 @@ import type {
   Technology,
 } from "@sebela/api-client";
 
+import type { CvPdf } from "./cv-pdf";
 import { readImage, type ImageMedia, type ReadInit } from "./image";
 
 /** The content of the experience page, all of it from the API. */
@@ -33,6 +34,8 @@ export interface ExperienceContent {
    * A photo that is absent, unusable or could not be read is simply not here.
    */
   readonly authorPhotos: ReadonlyMap<string, ImageMedia>;
+  /** The current CV PDF; null without one or when it cannot be offered. */
+  readonly cvPdf: CvPdf | null;
 }
 
 /**
@@ -142,6 +145,7 @@ export async function loadExperience(
       education,
       logos,
       authorPhotos,
+      cvPdf: null,
     },
   };
 }

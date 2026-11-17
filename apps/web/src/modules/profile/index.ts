@@ -11,6 +11,12 @@ import { loadExperience, type ExperienceResult } from "./data/load-experience";
 import { loadHomepage, type HomepageResult } from "./data/load-homepage";
 import { loadServices, type ServicesResult } from "./data/load-services";
 
+export type { CvPdf } from "./data/cv-pdf";
+
+export type { CvContent, CvResult } from "./data/load-cv";
+
+export type { CvPdfFile } from "./data/read-cv-pdf-file";
+
 export type { ExperienceContent, ExperienceResult } from "./data/load-experience";
 
 export type { ImageMedia } from "./data/image";
