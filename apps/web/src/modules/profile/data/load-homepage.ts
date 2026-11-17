@@ -1,6 +1,8 @@
 import type { ApiClient, Person, Project } from "@sebela/api-client";
 
-import { isWebUrl, readImage, type ImageMedia } from "./image";
+import { toContact, type Contact } from "./contact";
+import { readCvPdf, type CvPdf } from "./cv-pdf";
+import { readImage, type ImageMedia } from "./image";
 
 /** The person's photo, ready for an image element. */
 export type HomepagePhoto = ImageMedia;
@@ -12,13 +14,11 @@ export interface HomepageProfile {
   /** Markdown. */
   readonly shortBio: string;
   readonly photo: HomepagePhoto | null;
-  readonly contact: {
-    readonly email: { readonly address: string; readonly href: string } | null;
-    /** The person's web links, in their order. */
-    readonly links: readonly { readonly label: string; readonly url: string }[];
-  };
+  readonly contact: Contact;
   /** Every published project in the API's order; the homepage shows the selected ones. */
   readonly projects: readonly Project[];
+  /** The current CV PDF; null without one or when it cannot be offered. */
+  readonly cvPdf: CvPdf | null;
 }
 
 /**
@@ -39,8 +39,8 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
  * Reads the homepage's content from the API's public routes: the person, the projects and, if the
- * person has one, its photo. Every request is uncached and limited in time. A photo that cannot be
- * shown leaves the profile without one; a person or projects that cannot be read make the whole
+ * person has them, its photo and its CV PDF. Every request is uncached and limited in time. A photo
+ * or PDF that cannot be shown or offered leaves the profile without one; a person or projects that cannot be read make the whole
  * content unavailable, so a failed read never looks like having no selected work.
  */
 export async function loadHomepage(
@@ -70,7 +70,10 @@ export async function loadHomepage(
     return { status: "unavailable" };
   }
 
-  const photo = person.photoId === null ? null : await readImage(client, person.photoId, init());
+  const [photo, cvPdf] = await Promise.all([
+    person.photoId === null ? null : readImage(client, person.photoId, init()),
+    person.cvPdfId === null ? null : readCvPdf(client, person.cvPdfId, init()),
+  ]);
   return {
     status: "ready",
     profile: {
@@ -78,20 +81,9 @@ export async function loadHomepage(
       headline: person.headline,
       shortBio: person.shortBio,
       photo,
-      contact: {
-        email:
-          person.email === null
-            ? null
-            : { address: person.email, href: `mailto:${encodeEmail(person.email)}` },
-        links: person.links.filter((link) => isWebUrl(link.url)),
-      },
+      contact: toContact(person),
       projects,
+      cvPdf,
     },
   };
-}
-
-/** Encodes the local part of an address for a mailto link; `@` and the domain stay readable. */
-function encodeEmail(address: string): string {
-  const at = address.lastIndexOf("@");
-  return `${encodeURIComponent(address.slice(0, at))}@${address.slice(at + 1)}`;
 }

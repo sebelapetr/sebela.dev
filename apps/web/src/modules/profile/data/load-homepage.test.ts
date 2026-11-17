@@ -135,6 +135,7 @@ describe("loadHomepage", () => {
           ],
         },
         projects: [],
+        cvPdf: null,
       },
     });
   });
@@ -254,6 +255,57 @@ describe("loadHomepage", () => {
         { label: "Plain", url: "http://plain.example.test/" },
         { label: "Secure", url: "https://secure.example.test/" },
       ]);
+    });
+  });
+
+  describe("the CV PDF", () => {
+    const PDF_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+    const pdf = () =>
+      media({
+        id: PDF_ID,
+        key: "test/cv.pdf",
+        mediaType: "application/pdf",
+        width: null,
+        height: null,
+        altText: null,
+        url: "https://media.example.test/files/test/cv.pdf",
+        createdAt: "2026-03-14T09:30:00.000Z",
+        updatedAt: "2026-10-01T09:30:00.000Z",
+      });
+
+    it("is dated by the day the current file was uploaded", async () => {
+      const { client } = clientWith({
+        "/v1/person": () => json(person({ photoId: null, cvPdfId: PDF_ID })),
+        [`/v1/media/${PDF_ID}`]: () => json(pdf()),
+      });
+
+      const result = await loadHomepage(client);
+      expect(result.status === "ready" && result.profile.cvPdf).toEqual({
+        updatedOn: "2026-03-14",
+      });
+    });
+
+    it("is absent without one, and the media route is not asked", async () => {
+      const { client, requests } = clientWith({
+        "/v1/person": () => json(person({ photoId: null, cvPdfId: null })),
+      });
+
+      const result = await loadHomepage(client);
+      expect(result.status === "ready" && result.profile.cvPdf).toBeNull();
+      expect(
+        requests.some((request) => new URL(request.url).pathname.startsWith("/v1/media/")),
+      ).toBe(false);
+    });
+
+    it("is absent, and the homepage still ready, when its media cannot be read", async () => {
+      const { client } = clientWith({
+        "/v1/person": () => json(person({ photoId: null, cvPdfId: PDF_ID })),
+        [`/v1/media/${PDF_ID}`]: () => apiError("internal_error", 500),
+      });
+
+      const result = await loadHomepage(client);
+      expect(result.status).toBe("ready");
+      expect(result.status === "ready" && result.profile.cvPdf).toBeNull();
     });
   });
 

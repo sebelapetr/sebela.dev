@@ -1,5 +1,4 @@
-import { ProseMarkdown } from "../../_shared";
-import type { EducationRow } from "../data/education";
+import { ProseMarkdown, type EducationRow } from "../../_shared";
 
 /**
  * The education section, low on the page: compact editorial rows in their order, each with the

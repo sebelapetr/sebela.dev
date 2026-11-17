@@ -2,15 +2,9 @@ import type { Experience, Project } from "@sebela/api-client";
 
 import type { ImageMedia } from "../../profile";
 
-import { anchorId, formatPeriod } from "../../_shared";
+import { anchorId, experienceKindLabel, formatPeriod } from "../../_shared";
 
 export type ExperienceKind = Experience["kind"];
-
-const KIND_LABELS: Record<ExperienceKind, string> = {
-  main_job: "Full-time job",
-  own_business: "Own business",
-  side_project: "Side project",
-};
 
 /** One testimonial, shown only beside the experience it belongs to. */
 export interface TimelineTestimonial {
@@ -106,7 +100,7 @@ export function toTimelineEntries(
           : (logos.get(experience.organization.logoId) ?? null),
     },
     kind: experience.kind,
-    kindLabel: KIND_LABELS[experience.kind],
+    kindLabel: experienceKindLabel(experience.kind),
     period: formatPeriod(experience.startedOn, experience.endedOn),
     current: experience.endedOn === null,
     summary: experience.summary,

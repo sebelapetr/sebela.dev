@@ -37,5 +37,8 @@
     }
   ],
   "servicesNote": "Software delivery is Casey's long-standing practice; the AI work is a newer focus, shown as independent R&D.",
-  "photo": null
+  "photo": null,
+  "cvPdf": {
+    "file": "files/cv.pdf"
+  }
 }

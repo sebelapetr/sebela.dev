@@ -38,6 +38,7 @@ Layout, typography and responsive polish are accepted on:
 - the acceptance criteria of the issue,
 - Playwright checks for behaviour (navigation, interaction, no horizontal scroll),
 - screenshots at **360, 768 and 1280 px**, in **light and dark** mode,
+- for a page meant to be printed (the CV), a separate check with print media in both schemes: its colours, what it hides and a screenshot,
 - a visual review by the reviewer and the owner.
 
 A test written before the markup is not required here.

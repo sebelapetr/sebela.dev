@@ -140,6 +140,18 @@ describe("toServiceRows", () => {
     expect(row?.evidence.map((item) => item.key)).toEqual(["project:p"]);
   });
 
+  it("counts the CV page as a page but not its PDF download or the download's failure page", () => {
+    const [row] = toServiceRows([
+      service("a", [
+        link("CV", "/cv"),
+        link("CV PDF", "/cv/pdf"),
+        link("Failed download", "/cv/pdf/unavailable"),
+      ]),
+    ]);
+
+    expect(row?.evidence.map((item) => item.key)).toEqual(["link:/cv"]);
+  });
+
   it("has no evidence and nothing planned for a service without evidence", () => {
     const [row] = toServiceRows([service("a")]);
 

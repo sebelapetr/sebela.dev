@@ -16,7 +16,7 @@ export function HomepageTemplate({ profile }: { readonly profile: HomepageProfil
       <main className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32">
         <Hero profile={profile} />
         {selectedWork.length === 0 ? null : <SelectedWork items={selectedWork} />}
-        <Contact contact={profile.contact} />
+        <Contact contact={profile.contact} cvPdf={profile.cvPdf} />
       </main>
       <Footer name={profile.name} />
     </>

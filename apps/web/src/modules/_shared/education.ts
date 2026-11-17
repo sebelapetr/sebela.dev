@@ -1,6 +1,6 @@
 import type { Education, EducationKind } from "@sebela/api-client";
 
-import { formatDate, formatPeriod } from "../../_shared";
+import { formatDate, formatPeriod } from "./period";
 
 /** One education record as the education section shows it. */
 export interface EducationRow {

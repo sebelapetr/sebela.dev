@@ -204,7 +204,50 @@ describe("loadExperience", () => {
         education: educations,
         logos: new Map(),
         authorPhotos: new Map(),
+        cvPdf: null,
       },
+    });
+  });
+
+  describe("the CV PDF", () => {
+    const PDF_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+    const pdf = () =>
+      media({
+        id: PDF_ID,
+        key: "test/cv.pdf",
+        mediaType: "application/pdf",
+        width: null,
+        height: null,
+        altText: null,
+        url: "https://media.example.test/files/test/cv.pdf",
+        createdAt: "2026-03-14T09:30:00.000Z",
+        updatedAt: "2026-10-01T09:30:00.000Z",
+      });
+
+    it("is dated by the day the current file was uploaded, not by a profile edit", async () => {
+      const { client } = clientWith({
+        "/v1/person": () =>
+          json(person({ cvPdfId: PDF_ID, updatedAt: "2026-11-16T12:00:00.000Z" })),
+        "/v1/experiences": () => json([]),
+        [`/v1/media/${PDF_ID}`]: () => json(pdf()),
+      });
+
+      const result = await loadExperience(client);
+      expect(result.status === "ready" && result.content.cvPdf).toEqual({
+        updatedOn: "2026-03-14",
+      });
+    });
+
+    it("is absent, and the page still ready, when its media cannot be read", async () => {
+      const { client } = clientWith({
+        "/v1/person": () => json(person({ cvPdfId: PDF_ID })),
+        "/v1/experiences": () => json([]),
+        [`/v1/media/${PDF_ID}`]: () => new Response("Bad gateway", { status: 502 }),
+      });
+
+      const result = await loadExperience(client);
+      expect(result.status).toBe("ready");
+      expect(result.status === "ready" && result.content.cvPdf).toBeNull();
     });
   });
 

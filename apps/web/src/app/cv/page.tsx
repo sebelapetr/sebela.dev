@@ -1,0 +1,33 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { connection } from "next/server";
+
+import { CvTemplate } from "../../modules/cv";
+import { getCv } from "../../modules/profile";
+
+/** Content cannot be read now; `error.tsx` shows it, never an empty CV. */
+class ContentUnavailableError extends Error {
+  constructor() {
+    super("The CV page's content could not be read from the API.");
+    this.name = "ContentUnavailableError";
+  }
+}
+
+async function readContent() {
+  // Rendered on every request: content is read at runtime, never at build time (caching is #56).
+  await connection();
+  const result = await getCv();
+  if (result.status === "missing") notFound();
+  if (result.status === "unavailable") throw new ContentUnavailableError();
+  return result.content;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const content = await readContent();
+  return { title: `CV — ${content.name}`, description: content.headline };
+}
+
+export default async function CvPage() {
+  const content = await readContent();
+  return <CvTemplate content={content} />;
+}

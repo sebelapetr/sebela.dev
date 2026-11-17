@@ -6,11 +6,11 @@ import { repositoryUrl, routes } from "../site";
 const linkClass =
   "inline-flex min-h-11 items-center gap-1.5 underline-offset-4 hover:text-foreground hover:underline focus-visible:underline";
 
-/** The site footer: the copyright line, the public repository and the CV. */
+/** The site footer: the copyright line, the public repository and the CV. Not printed. */
 export function Footer({ name }: { readonly name: string | null }) {
   const year = String(new Date().getFullYear());
   return (
-    <footer>
+    <footer className="print:hidden">
       <div className="layout-page flex flex-col gap-2 py-8 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
         <p>{name === null ? `© ${year}` : `© ${year} ${name}`}</p>
         <ul className="flex flex-col md:flex-row md:gap-6">
@@ -23,7 +23,7 @@ export function Footer({ name }: { readonly name: string | null }) {
             </a>
           </li>
           <li>
-            <Link href={routes.cv} className={linkClass}>
+            <Link href={routes.cv} prefetch={false} className={linkClass}>
               CV
             </Link>
           </li>
