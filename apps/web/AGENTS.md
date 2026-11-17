@@ -31,7 +31,7 @@ The public website: a Next.js app (App Router) that renders its content from the
 | `WEB_PORT`         | Port the website listens on; the port scheme of `docs/repository-structure.md`.                                                                                                                                                                                                                                                                                                                          |
 | `WEB_API_BASE_URL` | Base address of the API whose public routes the website reads: its origin, or an origin with a path prefix in front of `/v1`. Validated once per process by `readWebConfig` on the first content request: an `http` or `https` address without credentials, query or fragment; the error names the variable, never its value. Worktree setup writes the worktree's own API origin into its `.env.local`. |
 
-The build reads none of them. A missing or invalid `WEB_API_BASE_URL` fails the first request that needs content, not the build.
+The build reads none of them. A missing or invalid `WEB_API_BASE_URL` fails the first request that needs content, not the build. A worktree created before the harness wrote `WEB_API_BASE_URL` (commit `e2db9b4`) has no value for it: add `WEB_API_BASE_URL=http://<its API_HOST>:<its API_PORT>` to its `.env.local`, or recreate the worktree.
 
 ## Content states
 
@@ -72,7 +72,7 @@ Not a backend module layout: an App Router app keeps its native placement (`src/
 | `src/site.ts`                 | The site's own addresses: the public repository and its routes. No personal facts.                                                                                                                                                                                                              | through the pages                           |
 | `src/app/`                    | Next routes: the root layout (fonts, global styles), the homepage with its metadata, the unavailable state (`error.tsx`) and the missing state (`not-found.tsx`).                                                                                                                               | `e2e/homepage.spec.ts`                      |
 | `scripts/next.mjs`            | Starts `next dev` or `next start` on `WEB_HOST` and `WEB_PORT`.                                                                                                                                                                                                                                 | through `test:e2e`                          |
-| `e2e/`                        | Browser tests, their process helpers (`stack.ts`) and fictional seed fixtures (`fixtures/with-photo`, `fixtures/without-photo`).                                                                                                                                                                | —                                           |
+| `e2e/`                        | Browser tests, their process helpers (`stack.ts`, which starts the API's `src/cli/e2e-server.ts` by its file path, the documented interface in `apps/api/AGENTS.md`) and fictional seed fixtures (`fixtures/with-photo`, `fixtures/without-photo`).                                             | —                                           |
 
 ## Tests
 

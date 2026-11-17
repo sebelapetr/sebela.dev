@@ -30,7 +30,11 @@ export function fixtureFolder(fixture: Fixture): string {
   return fileURLToPath(new URL(`fixtures/${fixture}`, import.meta.url));
 }
 
-/** The command that serves the API on its own temporary database seeded from the fixture. */
+/**
+ * The command that serves the API on its own temporary database seeded from the fixture. It starts
+ * the file `apps/api` documents as this interface, not `serve:e2e`, whose build step would run
+ * again for every server the tests start at the same time (`apps/api/AGENTS.md`).
+ */
 export function apiCommand(fixture: Fixture) {
   return {
     command: `node --import tsx src/cli/e2e-server.ts ${JSON.stringify(fixtureFolder(fixture))}`,

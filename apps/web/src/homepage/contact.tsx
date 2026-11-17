@@ -13,7 +13,7 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
     <section
       id="contact"
       aria-labelledby="contact-heading"
-      className="flex scroll-mt-8 flex-col gap-6 border-t pt-12"
+      className="flex scroll-mt-8 flex-col gap-6"
     >
       <h2 id="contact-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
         Have a project or a role in mind?
