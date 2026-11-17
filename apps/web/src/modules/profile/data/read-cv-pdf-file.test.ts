@@ -205,9 +205,9 @@ describe("readCvPdfFile", () => {
     const api = "http://localhost:4100";
     const url = `${api}/v1/media/files/test/cv.pdf`;
     const requests: string[] = [];
-    const answer = (request: Request): Response => {
+    const answer = (request: Request): Promise<Response> => {
       requests.push(request.url);
-      return request.url === url ? pdfFile() : json(cv({ cvPdf: pdf({ url }) }));
+      return Promise.resolve(request.url === url ? pdfFile() : json(cv({ cvPdf: pdf({ url }) })));
     };
     const client = createApiClient({ baseUrl: api, fetch: answer });
     const fetchFile = (input: string, init?: RequestInit) => answer(new Request(input, init));
