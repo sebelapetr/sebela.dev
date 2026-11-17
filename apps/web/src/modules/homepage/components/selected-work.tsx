@@ -21,9 +21,9 @@ export function SelectedWork({ items }: { readonly items: readonly SelectedWorkI
         {items.map((item) => (
           <li
             key={item.slug}
-            className="grid gap-4 border-t border-border pt-6 md:grid-cols-[5rem_minmax(0,1fr)] md:gap-8"
+            className="grid gap-4 border-t border-border pt-6 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-8"
           >
-            <span aria-hidden="true" className="type-label text-foreground md:text-base">
+            <span aria-hidden="true" className="type-label text-foreground">
               {item.number}
             </span>
             <div className="flex min-w-0 flex-col gap-5">

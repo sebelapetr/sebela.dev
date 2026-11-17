@@ -310,7 +310,9 @@ test.describe("experience page read from the API", () => {
           item(page, "experience-pinecrest-senior-developer").getByRole("region"),
         ).toBeVisible();
         // And one case study inside it.
-        await page.getByRole("button", { name: "Case study: Clinic scheduling" }).click();
+        await page
+          .getByRole("button", { name: "View technical case study: Clinic scheduling" })
+          .click();
         await expect(item(page, "case-study-clinic-scheduling")).toContainText("My role");
         await expectImagesLoaded(page);
         // No hover state in the picture.

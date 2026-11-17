@@ -24,7 +24,7 @@ export function ProjectList({ projects }: { readonly projects: readonly Timeline
           className="anchor-target flex flex-col gap-3 border-l border-border pl-4"
         >
           <div className="flex flex-col gap-1">
-            <h3 className="text-lg font-semibold tracking-tight text-pretty">{project.name}</h3>
+            <h3 className="type-item">{project.name}</h3>
             <p className="type-label text-balance">{project.period}</p>
           </div>
           <div className="text-muted-foreground [&>*+*]:mt-3">
@@ -78,7 +78,13 @@ function Evidence({
       )}
       <Part label="Solution">
         <ProseMarkdown>{project.workDone}</ProseMarkdown>
-        {children}
+        {children === undefined ? null : (
+          // The case study's own account belongs to the solution: one level in, behind its own rule,
+          // so its section headings read as parts of the solution, not as parts beside it.
+          <div data-slot="case-study-account" className="border-l border-border pl-4 [&>*+*]:mt-3">
+            {children}
+          </div>
+        )}
       </Part>
       <Part label="Result">
         <ProseMarkdown>{project.result}</ProseMarkdown>

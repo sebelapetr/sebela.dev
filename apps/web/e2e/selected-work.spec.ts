@@ -162,7 +162,7 @@ test.describe("selected work and deep links into the experience page", () => {
     );
 
     // The case study is closed at first, and its content stays findable by page search.
-    const button = page.getByRole("button", { name: "Case study: Route planner" });
+    const button = page.getByRole("button", { name: "View technical case study: Route planner" });
     await expect(button).toHaveAttribute("aria-expanded", "false");
     await expect(
       item(page, "case-study-route-planner").locator('[data-slot="collapsible-content"]'),
@@ -177,6 +177,20 @@ test.describe("selected work and deep links into the experience page", () => {
     await expect(caseStudy.getByRole("heading", { level: 5, name: "Approach" })).toBeVisible();
     const labels = await caseStudy.locator("dt").allTextContents();
     expect(labels).toEqual(["Problem", "My role", "Solution", "Result"]);
+    // The case study's own account, with its sections, is part of the solution, set one level in.
+    const solution = caseStudy.locator("dt", { hasText: "Solution" }).locator("xpath=..");
+    const account = solution.locator('[data-slot="case-study-account"]');
+    await expect(account.getByRole("heading", { level: 5 })).toHaveText([
+      "Context",
+      "Approach",
+      "Outcome",
+    ]);
+    // Its headings start further in than the solution's own label.
+    const [labelBox, headingBox] = await Promise.all([
+      solution.locator("dt").boundingBox(),
+      account.getByRole("heading", { name: "Context" }).boundingBox(),
+    ]);
+    expect(headingBox?.x).toBeGreaterThan(labelBox?.x ?? Number.POSITIVE_INFINITY);
     await page.keyboard.press("Space");
     await expect(button).toHaveAttribute("aria-expanded", "false");
 
@@ -202,7 +216,7 @@ test.describe("selected work and deep links into the experience page", () => {
       "true",
     );
     await expect(
-      page.getByRole("button", { name: "Case study: Clinic scheduling" }),
+      page.getByRole("button", { name: "View technical case study: Clinic scheduling" }),
     ).toHaveAttribute("aria-expanded", "true");
     await expectOpenedAt(page, "case-study-clinic-scheduling");
     // Nothing unrelated opened.
@@ -210,17 +224,18 @@ test.describe("selected work and deep links into the experience page", () => {
       "aria-expanded",
       "false",
     );
-    await expect(page.getByRole("button", { name: "Case study: Route planner" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+    await expect(
+      page.getByRole("button", { name: "View technical case study: Route planner" }),
+    ).toHaveAttribute("aria-expanded", "false");
     // Hydration kept it open and in place.
     await hydrated(page);
     await expectOpenedAt(page, "case-study-clinic-scheduling");
 
     // The target is in the tab order's flow: the next Tab reaches its own disclosure button.
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: "Case study: Clinic scheduling" })).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "View technical case study: Clinic scheduling" }),
+    ).toBeFocused();
   });
 
   test("opens a project inside a closed experience on a direct load", async ({ page }) => {
@@ -296,7 +311,7 @@ test.describe("selected work and deep links into the experience page", () => {
     ]) {
       await expect(experienceTrigger(page, anchor)).toHaveAttribute("aria-expanded", "false");
     }
-    await expect(page.getByRole("button", { name: /^Case study/u })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /^View technical case study/u })).toHaveCount(1);
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
     // Still usable: an experience opens on click.

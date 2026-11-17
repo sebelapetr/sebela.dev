@@ -2,7 +2,7 @@
 
 // Following a link to an item of the experience page: open every disclosure that encloses it, then
 // bring it into view and move focus to it, so the next Tab continues from there.
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { resolveDeepLink, type DeepLinkIndex } from "../stores/deep-link";
 
@@ -21,21 +21,28 @@ export function useDeepLinkTarget(
   // Bumped for every followed link, so the same anchor twice still scrolls twice.
   const [target, setTarget] = useState<{ readonly anchor: string } | null>(null);
 
+  // An effect event reads the latest `index` and `open` without being a dependency: a new index
+  // (for example after the server re-renders the page) must not follow the current hash again and
+  // pull the reader back to it; only a load, a hash change or back and forward do.
+  const follow = useEffectEvent(() => {
+    const link = resolveDeepLink(window.location.hash, index);
+    if (link === null) return;
+    open(link.open);
+    setTarget({ anchor: link.anchor });
+  });
+
   useEffect(() => {
-    const follow = () => {
-      const link = resolveDeepLink(window.location.hash, index);
-      if (link === null) return;
-      open(link.open);
-      setTarget({ anchor: link.anchor });
+    const onNavigate = () => {
+      follow();
     };
-    follow();
-    window.addEventListener("hashchange", follow);
-    window.addEventListener("popstate", follow);
+    onNavigate();
+    window.addEventListener("hashchange", onNavigate);
+    window.addEventListener("popstate", onNavigate);
     return () => {
-      window.removeEventListener("hashchange", follow);
-      window.removeEventListener("popstate", follow);
+      window.removeEventListener("hashchange", onNavigate);
+      window.removeEventListener("popstate", onNavigate);
     };
-  }, [index, open]);
+  }, []);
 
   useEffect(() => {
     if (target === null) return;

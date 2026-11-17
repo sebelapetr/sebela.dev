@@ -2,7 +2,7 @@
 
 // The experience page's disclosures, bound to the page's one open state (stores/disclosures.tsx),
 // so a link can open them. Their content is rendered on the server and passed in as children.
-import { ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
@@ -37,8 +37,9 @@ export function ExperienceItem({
 }
 
 /**
- * A project's case study: a heading whose button shows and hides the account. Closed content stays
- * in the page (`hidden="until-found"`), so the browser's page search finds and opens it.
+ * A project's case study: a heading whose button ("View technical case study ↓") shows and hides
+ * the account; its chevron points down while closed and up while open. Closed content stays in the
+ * page (`hidden="until-found"`), so the browser's page search finds and opens it.
  */
 export function CaseStudyDisclosure({
   anchor,
@@ -59,14 +60,14 @@ export function CaseStudyDisclosure({
     >
       <h4>
         <CollapsibleTrigger
-          aria-label={`Case study: ${projectName}`}
+          aria-label={`View technical case study: ${projectName}`}
           className="group/case-study inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline"
         >
-          <ChevronRight
+          View technical case study
+          <ChevronDown
             aria-hidden="true"
-            className="size-4 group-data-[panel-open]/case-study:rotate-90"
+            className="size-4 group-data-[panel-open]/case-study:rotate-180"
           />
-          Case study
         </CollapsibleTrigger>
       </h4>
       <CollapsibleContent hiddenUntilFound>
