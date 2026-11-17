@@ -7,7 +7,7 @@
 // It takes the usual API settings from the environment (`.env.example`), except the database
 // name, the storage folder and the storage environment, which are its own. On SIGTERM or SIGINT it
 // stops, drops the database and removes the folder.
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { serve } from "@hono/node-server";
@@ -34,7 +34,10 @@ async function main() {
   const config = readApiConfig(process.env);
   const host = config.host.includes(":") ? `[${config.host}]` : config.host;
   const database = await createTemporaryDatabase(readDatabaseConfig(process.env));
-  const storageRoot = await mkdtemp(join(resolve("../../.tmp"), "e2e-storage-"));
+  // A clean checkout has no `.tmp/` yet (it is git-ignored), so create it before the temporary folder.
+  const scratch = resolve("../../.tmp");
+  await mkdir(scratch, { recursive: true });
+  const storageRoot = await mkdtemp(join(scratch, "e2e-storage-"));
   const cleanUp = async () => {
     await database.drop();
     await rm(storageRoot, { recursive: true, force: true });
