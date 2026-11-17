@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { createApiClient, type Media, type Person, type Project } from "@sebela/api-client";
+import {
+  createApiClient,
+  type CurrentFocus,
+  type Experience,
+  type Exploration,
+  type Media,
+  type Person,
+  type Project,
+  type Service,
+  type Technology,
+} from "@sebela/api-client";
 
 import { loadHomepage } from "./load-homepage";
 
@@ -75,6 +85,103 @@ function project(overrides: Partial<Project> = {}): Project {
   };
 }
 
+/** A fictional experience as the public list returns it, with its projects. */
+function experience(overrides: Partial<Experience> = {}): Experience {
+  return {
+    id: "6c1d3e5f-7a9b-4c2d-8e0f-1a3b5c7d9e21",
+    slug: "fictional-staff-engineer",
+    title: "Staff engineer",
+    kind: "main_job",
+    startedOn: "2022-01-03",
+    endedOn: null,
+    summary: "Fictional work for tests.",
+    responsibilities: [],
+    inCv: true,
+    organization: {
+      id: "7d2e4f6a-8b0c-4d3e-9f1a-2b4c6d8e0f32",
+      slug: "fictional-company",
+      name: "Fictional Company",
+      website: null,
+      description: null,
+      logoId: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    technologies: [],
+    projects: [],
+    testimonials: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function technology(overrides: Partial<Technology> = {}): Technology {
+  return {
+    id: "8e3f5a7b-9c1d-4e4f-8a2b-3c5d7e9f1a43",
+    slug: "fictional-language",
+    name: "Fictional Language",
+    tier: "primary",
+    group: "core",
+    logoKey: null,
+    position: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function focus(overrides: Partial<CurrentFocus> = {}): CurrentFocus {
+  return {
+    id: "9f4a6b8c-0d2e-4f5a-9b3c-4d6e8f0a2b54",
+    slug: "fictional-focus",
+    title: "A fictional focus",
+    description: "Something **made up** for tests.",
+    link: null,
+    position: 0,
+    project: null,
+    topics: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function exploration(overrides: Partial<Exploration> = {}): Exploration {
+  return {
+    id: "0a5b7c9d-1e3f-4a6b-8c4d-5e7f9a1b3c65",
+    slug: "fictional-exploration",
+    name: "Fictional exploration",
+    summary: "A made-up experiment.",
+    status: "tested",
+    concepts: [],
+    startedOn: "2026-02-01",
+    endedOn: null,
+    position: 0,
+    technologies: [],
+    topics: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function service(overrides: Partial<Service> = {}): Service {
+  return {
+    id: "1b6c8d0e-2f4a-4b7c-9d5e-6f8a0b2c4d76",
+    slug: "fictional-service",
+    name: "Fictional service",
+    summary: "A made-up service.",
+    audience: "Fictional teams.",
+    deliverable: "A fictional tool.",
+    position: 0,
+    evidence: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -88,12 +195,24 @@ function apiError(code: string, status: number): Response {
 
 type Route = (request: Request) => Response | Promise<Response>;
 
+/** The public list routes the homepage reads besides the person, each empty by default. */
+const LISTS = [
+  "/v1/experiences",
+  "/v1/technologies",
+  "/v1/current-focus",
+  "/v1/explorations",
+  "/v1/services",
+] as const;
+
 /**
- * A client whose requests go to `routes` by path; an unknown path fails the test. The projects
- * route answers with no projects unless `routes` says otherwise.
+ * A client whose requests go to `routes` by path; an unknown path fails the test. The list routes
+ * answer with empty lists unless `routes` says otherwise.
  */
 function clientWith(given: Record<string, Route>) {
-  const routes: Record<string, Route> = { "/v1/projects": () => json([]), ...given };
+  const routes: Record<string, Route> = {
+    ...Object.fromEntries(LISTS.map((path) => [path, () => json([])])),
+    ...given,
+  };
   const requests: Request[] = [];
   const client = createApiClient({
     baseUrl: BASE,
@@ -134,7 +253,13 @@ describe("loadHomepage", () => {
             { label: "Notes", url: "https://notes.example.test/" },
           ],
         },
+        careerStartedOn: null,
+        experiences: [],
         projects: [],
+        technologies: [],
+        currentFocus: [],
+        explorations: [],
+        services: [],
         cvPdf: null,
       },
     });
@@ -148,11 +273,11 @@ describe("loadHomepage", () => {
 
     await loadHomepage(client);
 
-    expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
-      ["GET", "/v1/person"],
-      ["GET", "/v1/projects"],
-      ["GET", `/v1/media/${PHOTO_ID}`],
-    ]);
+    expect(
+      requests.map((request) => `${request.method} ${new URL(request.url).pathname}`).sort(),
+    ).toEqual(
+      ["/v1/person", ...LISTS, `/v1/media/${PHOTO_ID}`].map((path) => `GET ${path}`).sort(),
+    );
     for (const request of requests) {
       expect(request.headers.get("Authorization")).toBeNull();
       expect(request.cache).toBe("no-store");
@@ -309,43 +434,85 @@ describe("loadHomepage", () => {
     });
   });
 
-  describe("the projects", () => {
-    it("keeps every project in the API's order, for the homepage to select from", async () => {
-      const projects = [
-        project({ slug: "first" }),
-        project({ slug: "not-selected", selectedForHomepage: false }),
-        project({ slug: "second" }),
+  describe("the profile's records", () => {
+    it("keeps every published record in the API's order", async () => {
+      const technologies = [
+        technology({ slug: "core-one" }),
+        technology({ slug: "ai-one", group: "ai_engineering_focus" }),
       ];
+      const currentFocus = [focus({ slug: "first" }), focus({ slug: "second", position: 1 })];
+      const explorations = [
+        exploration({ slug: "ongoing" }),
+        exploration({ slug: "ended", endedOn: "2026-03-01" }),
+      ];
+      const services = [service({ slug: "one" }), service({ slug: "two", position: 1 })];
       const { client } = clientWith({
-        "/v1/person": () => json(person({ photoId: null })),
-        "/v1/projects": () => json(projects),
+        "/v1/person": () => json(person({ photoId: null, careerStartedOn: "2018-03-01" })),
+        "/v1/technologies": () => json(technologies),
+        "/v1/current-focus": () => json(currentFocus),
+        "/v1/explorations": () => json(explorations),
+        "/v1/services": () => json(services),
       });
 
       const result = await loadHomepage(client);
+      if (result.status !== "ready") throw new Error("not ready");
 
-      expect(result.status === "ready" && result.profile.projects).toEqual(projects);
+      expect(result.profile.careerStartedOn).toBe("2018-03-01");
+      expect(result.profile.technologies).toEqual(technologies);
+      expect(result.profile.currentFocus).toEqual(currentFocus);
+      expect(result.profile.explorations).toEqual(explorations);
+      expect(result.profile.services).toEqual(services);
     });
 
-    it.each([
-      ["the projects read fails", () => apiError("internal_error", 500)],
-      ["the projects read is rate limited", () => apiError("rate_limited", 429)],
-      [
-        "the projects request fails on the network",
-        () => {
-          throw new TypeError("fetch failed");
-        },
-      ],
-    ])(
-      "reports the content as unavailable when %s, never as no selected work",
-      async (_label, projectsRoute) => {
-        const { client } = clientWith({
-          "/v1/person": () => json(person({ photoId: null })),
-          "/v1/projects": projectsRoute,
-        });
+    it("keeps every project of the experiences in their order, for the homepage to select from", async () => {
+      const first = [
+        project({ slug: "first" }),
+        project({ slug: "not-selected", selectedForHomepage: false }),
+      ];
+      const second = [project({ slug: "second", experience: "fictional-older-role" })];
+      const experiences = [
+        experience({ projects: first }),
+        experience({ slug: "fictional-without-projects" }),
+        experience({ slug: "fictional-older-role", endedOn: "2021-12-31", projects: second }),
+      ];
+      const { client, requests } = clientWith({
+        "/v1/person": () => json(person({ photoId: null })),
+        "/v1/experiences": () => json(experiences),
+      });
 
-        expect(await loadHomepage(client)).toEqual({ status: "unavailable" });
-      },
-    );
+      const result = await loadHomepage(client);
+      if (result.status !== "ready") throw new Error("not ready");
+
+      expect(result.profile.experiences).toEqual(experiences);
+      expect(result.profile.projects).toEqual([...first, ...second]);
+      // The experiences carry their projects: the projects route is not asked as well.
+      expect(requests.map((request) => new URL(request.url).pathname)).not.toContain(
+        "/v1/projects",
+      );
+    });
+
+    describe.each(LISTS)("when %s cannot be read", (path) => {
+      it.each([
+        ["the read fails", () => apiError("internal_error", 500)],
+        ["the read is rate limited", () => apiError("rate_limited", 429)],
+        [
+          "the request fails on the network",
+          () => {
+            throw new TypeError("fetch failed");
+          },
+        ],
+      ])(
+        "reports the content as unavailable when %s, never as content left out",
+        async (_label, route) => {
+          const { client } = clientWith({
+            "/v1/person": () => json(person({ photoId: null })),
+            [path]: route,
+          });
+
+          expect(await loadHomepage(client)).toEqual({ status: "unavailable" });
+        },
+      );
+    });
   });
 
   it("reports a profile that does not exist yet as missing", async () => {
