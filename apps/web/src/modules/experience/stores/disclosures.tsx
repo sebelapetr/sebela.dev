@@ -1,7 +1,7 @@
 "use client";
 
-// Which disclosures of the experience page are open: the experiences and the case studies, by their
-// anchors. One state for the page, so a link to an item can open everything that encloses it before
+// Which disclosures of the experience page are open: the experiences, the case studies and the
+// secondary technologies, by their anchors. One state for the page, so a link to an item can open everything that encloses it before
 // the page scrolls to it. The disclosures themselves stay where they are rendered and read it here.
 import { createContext, use, useCallback, useMemo, useState, type ReactNode } from "react";
 

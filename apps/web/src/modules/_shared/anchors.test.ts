@@ -13,6 +13,21 @@ describe("anchorId", () => {
     );
   });
 
+  it("names an exploration by its slug and a technology group by its group", () => {
+    expect(anchorId({ kind: "exploration", slug: "local-agent" })).toBe("exploration-local-agent");
+    expect(anchorId({ kind: "technology-group", group: "core" })).toBe("technology-group-core");
+    expect(anchorId({ kind: "technology-group", group: "ai-engineering-focus" })).toBe(
+      "technology-group-ai-engineering-focus",
+    );
+    expect(anchorId({ kind: "technology-group", group: "secondary" })).toBe(
+      "technology-group-secondary",
+    );
+  });
+
+  it("names the independent R&D block", () => {
+    expect(anchorId({ kind: "independent-rd" })).toBe("independent-rd");
+  });
+
   it("gives a project and its case study different anchors", () => {
     expect(anchorId({ kind: "project", slug: "route-planner" })).not.toBe(
       anchorId({ kind: "case-study", project: "route-planner" }),
@@ -31,5 +46,12 @@ describe("anchorHref", () => {
     expect(anchorHref({ kind: "case-study", project: "route-planner" })).toBe(
       "/experience#case-study-route-planner",
     );
+    expect(anchorHref({ kind: "exploration", slug: "local-agent" })).toBe(
+      "/experience#exploration-local-agent",
+    );
+    expect(anchorHref({ kind: "technology-group", group: "secondary" })).toBe(
+      "/experience#technology-group-secondary",
+    );
+    expect(anchorHref({ kind: "independent-rd" })).toBe("/experience#independent-rd");
   });
 });

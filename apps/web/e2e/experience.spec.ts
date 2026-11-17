@@ -63,6 +63,62 @@ const career = [
   },
 ] as const;
 
+// Below the timeline, in this order (the same fixture): the explorations with their stored
+// statuses, the technology groups and the education records.
+const explorations = [
+  {
+    anchor: "exploration-answer-checker",
+    name: "Answer checker",
+    status: "Built",
+    meaning: "Implemented and working",
+    concepts: ["Grounded answers", "Refusal on missing evidence"],
+  },
+  {
+    anchor: "exploration-chunk-comparison",
+    name: "Chunk comparison",
+    status: "Tested",
+    meaning: "Tried hands-on",
+    concepts: ["Chunk size", "Retrieval recall"],
+  },
+  {
+    anchor: "exploration-tool-scopes",
+    name: "Tool scopes",
+    status: "Designed",
+    meaning: "Unimplemented design, planned or architected only",
+    concepts: ["Least privilege", "Human approval", "Audit trail"],
+  },
+] as const;
+
+// Core technologies with a logo of the website's set; Domain modelling names a key the website has
+// no logo for, and the AI engineering focus and secondary technologies never show one.
+const coreTechnologies = [
+  { name: "TypeScript", logo: "typescript" },
+  { name: "PostgreSQL", logo: "postgresql" },
+  { name: "React", logo: "react" },
+  { name: "Domain modelling", logo: null },
+] as const;
+
+const education = [
+  {
+    title: "Informatics, master's degree",
+    institution: "Example University",
+    period: "September 1st, 2010 – June 30th, 2015",
+    kind: "School",
+  },
+  {
+    title: "Example solutions architect",
+    institution: "Example Academy",
+    period: "May 14th, 2021",
+    kind: "Certification",
+  },
+  {
+    title: "First agent shipped",
+    institution: null,
+    period: "February 1st, 2025 – present",
+    kind: "Milestone",
+  },
+] as const;
+
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
 
@@ -294,6 +350,149 @@ test.describe("experience page read from the API", () => {
     await expect(item(page, "experience-pinecrest-developer")).toBeInViewport();
   });
 
+  test("shows the timeline, independent R&D, technologies and education in this order", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience`);
+    // The career timeline, then the page's sections by their headings, in document order.
+    const order = await page
+      .locator('main [data-slot="timeline"], main section > h2, main section > div > h2')
+      .evaluateAll((elements) =>
+        elements.map((element) =>
+          element.matches('[data-slot="timeline"]') ? "timeline" : element.textContent,
+        ),
+      );
+    expect(order).toEqual(["timeline", "Independent R&D", "Technologies", "Education"]);
+  });
+
+  test("shows each exploration's stored status as text, apart from the career timeline", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience`);
+    const block = page.getByRole("region", { name: "Independent R&D" });
+    await expect(block).toBeVisible();
+    const rows = block.getByRole("list", { name: "Explorations" }).locator(":scope > li");
+    await expect(rows).toHaveCount(explorations.length);
+    for (const [index, exploration] of explorations.entries()) {
+      const row = rows.nth(index);
+      await expect(row).toHaveAttribute("id", exploration.anchor);
+      await expect(row.getByRole("heading", { level: 3 })).toHaveText(exploration.name);
+      await expect(row).toContainText(exploration.status);
+      await expect(row).toContainText(exploration.meaning);
+      await expect(
+        row.getByRole("list", { name: `${exploration.name} concepts` }).getByRole("listitem"),
+      ).toHaveText([...exploration.concepts]);
+    }
+    // A designed exploration never reads as working or tried.
+    const designed = item(page, "exploration-tool-scopes");
+    await expect(designed).not.toContainText("Implemented and working");
+    await expect(designed).not.toContainText("Tried hands-on");
+    // Explorations are not career entries.
+    await expect(page.locator('[data-slot="timeline"]')).not.toContainText("Answer checker");
+  });
+
+  test("shows core logos where the website has them, the AI focus as text and the rest collapsed", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience`);
+    const core = item(page, "technology-group-core");
+    const coreItems = core.getByRole("list", { name: "Core technologies" }).getByRole("listitem");
+    await expect(coreItems).toHaveText(coreTechnologies.map(({ name }) => name));
+    for (const [index, technology] of coreTechnologies.entries()) {
+      const logo = coreItems.nth(index).locator("svg");
+      if (technology.logo === null) {
+        await expect(logo).toHaveCount(0);
+      } else {
+        await expect(logo).toBeVisible();
+        await expect(logo).toHaveAttribute("data-logo", technology.logo);
+      }
+    }
+
+    const focus = item(page, "technology-group-ai-engineering-focus");
+    await expect(focus).toContainText("A current specialisation");
+    await expect(
+      focus.getByRole("list", { name: "AI engineering focus technologies" }).getByRole("listitem"),
+    ).toHaveText(["Retrieval-augmented generation", "Evaluations"]);
+    // Even with a key of the logo set, the AI focus shows no logo.
+    await expect(focus.locator("svg")).toHaveCount(0);
+
+    const secondary = item(page, "technology-group-secondary");
+    const trigger = secondary.getByRole("button", { name: "+ 3 other technologies & tools" });
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    const list = secondary.getByRole("list", {
+      name: "Other technologies & tools",
+      includeHidden: true,
+    });
+    await expect(list).toBeHidden();
+    await expect(list.locator("xpath=ancestor::*[@hidden][1]")).toHaveAttribute(
+      "hidden",
+      "until-found",
+    );
+    await expect(list.locator("svg")).toHaveCount(0);
+  });
+
+  test("opens and closes the other technologies by keyboard", async ({ page }) => {
+    await page.goto(`${website.url}/experience`);
+    const secondary = item(page, "technology-group-secondary");
+    const trigger = secondary.getByRole("button", { name: "+ 3 other technologies & tools" });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const list = secondary.getByRole("list", { name: "Other technologies & tools" });
+    await expect(list.getByRole("listitem")).toHaveText(["Python", "PHP", "Make"]);
+    await page.keyboard.press("Space");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(list).toBeHidden();
+  });
+
+  test("shows the education records as compact rows in order", async ({ page }) => {
+    await page.goto(`${website.url}/experience`);
+    const rows = page
+      .getByRole("region", { name: "Education" })
+      .getByRole("list", { name: "Education" })
+      .locator(":scope > li");
+    await expect(rows).toHaveCount(education.length);
+    for (const [index, record] of education.entries()) {
+      const row = rows.nth(index);
+      await expect(row.getByRole("heading", { level: 3 })).toHaveText(record.title);
+      await expect(row).toContainText(record.period);
+      await expect(row).toContainText(record.kind);
+      if (record.institution !== null) await expect(row).toContainText(record.institution);
+    }
+  });
+
+  test("links to an exploration and to a technology group by their stable anchors", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience#exploration-tool-scopes`);
+    await expect(item(page, "exploration-tool-scopes")).toBeInViewport();
+    await expect(item(page, "exploration-tool-scopes")).toBeFocused();
+
+    // The independent R&D block as a whole, the target of the homepage's Now link.
+    await page.goto("about:blank");
+    await page.goto(`${website.url}/experience#independent-rd`);
+    await expect(item(page, "independent-rd")).toBeInViewport();
+    await expect(item(page, "independent-rd")).toBeFocused();
+
+    // A link to the collapsed group opens it.
+    await page.goto(`${website.url}/experience#technology-group-secondary`);
+    const secondary = item(page, "technology-group-secondary");
+    await expect(secondary.getByRole("button", { name: /other technologies/u })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect(secondary.getByRole("list", { name: "Other technologies & tools" })).toBeVisible();
+    await expect(secondary).toBeInViewport();
+    await expect(secondary).toBeFocused();
+
+    // An unknown anchor opens nothing (a fresh load: a change of only the hash keeps the page).
+    await page.goto("about:blank");
+    await page.goto(`${website.url}/experience#exploration-unknown`);
+    await expect(
+      item(page, "technology-group-secondary").getByRole("button", { name: /other technologies/u }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
   for (const scheme of schemes) {
     for (const width of widths) {
       test(`fits ${String(width)} px in ${scheme} mode without violations`, async ({
@@ -314,6 +513,9 @@ test.describe("experience page read from the API", () => {
           .getByRole("button", { name: "View technical case study: Clinic scheduling" })
           .click();
         await expect(item(page, "case-study-clinic-scheduling")).toContainText("My role");
+        // And the other technologies.
+        await page.getByRole("button", { name: /other technologies/u }).click();
+        await expect(page.getByRole("list", { name: "Other technologies & tools" })).toBeVisible();
         await expectImagesLoaded(page);
         // No hover state in the picture.
         await page.mouse.move(0, 0);
@@ -333,6 +535,16 @@ test.describe("experience page read from the API", () => {
           path: testInfo.outputPath(`experience-${String(width)}-${scheme}.png`),
           fullPage: true,
         });
+        // The sections below the timeline at their real size, for review.
+        for (const [name, section] of [
+          ["independent-rd", page.locator("#independent-rd")],
+          ["technologies", page.getByRole("region", { name: "Technologies" })],
+          ["education", page.getByRole("region", { name: "Education" })],
+        ] as const) {
+          await section.screenshot({
+            path: testInfo.outputPath(`experience-${name}-${String(width)}-${scheme}.png`),
+          });
+        }
       });
     }
   }
@@ -345,6 +557,11 @@ test.describe("experience page without experiences", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Experience");
     await expect(page.locator("main")).toContainText("No experience is published yet.");
     await expect(page.locator('[data-slot="timeline"]')).toHaveCount(0);
+    // Nor is there an empty section or a placeholder for what is not published.
+    for (const name of ["Independent R&D", "Technologies", "Education"]) {
+      await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(0);
+    }
+    await expect(page.locator("main section")).toHaveCount(0);
     await expectAccessible(page);
   });
 });

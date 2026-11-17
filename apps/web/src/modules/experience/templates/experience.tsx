@@ -5,19 +5,30 @@ import { Timeline } from "@sebela/ui/components/timeline";
 
 import { Footer, routes } from "../../_shared";
 import type { ExperienceContent } from "../../profile";
+import { EducationList } from "../components/education";
 import { ExperienceEntry } from "../components/experience-entry";
+import { IndependentRd } from "../components/independent-rd";
+import { Technologies } from "../components/technologies";
+import { toEducationRows } from "../data/education";
+import { toExplorationRows } from "../data/explorations";
+import { toTechnologyGroups } from "../data/technologies";
+import { TECHNOLOGY_LOGO_KEYS } from "../data/technology-logos";
 import { careerYears, toTimelineEntries } from "../data/timeline";
 import { deepLinkIndex } from "../stores/deep-link";
 import { DisclosuresProvider } from "../stores/disclosures";
 
 /**
- * The experience page: the person's headline and length of career, a link to the CV, and every
- * published experience on one timeline in the API's order, with its projects and case studies. A
- * link to an experience, a project or a case study opens what encloses it. Without experiences the
- * page says so.
+ * The experience page: the person's headline and length of career, a link to the CV, every
+ * published experience on one timeline in the API's order with its projects and case studies, then
+ * the independent R&D, the technologies and the education, each left out when there is nothing to
+ * show. A link to an experience, a project, a case study, an exploration or a technology group
+ * opens what encloses it. Without experiences the page says so.
  */
 export function ExperienceTemplate({ content }: { readonly content: ExperienceContent }) {
   const entries = toTimelineEntries(content.experiences, content.logos, content.authorPhotos);
+  const explorations = toExplorationRows(content.explorations);
+  const technologies = toTechnologyGroups(content.technologies, TECHNOLOGY_LOGO_KEYS);
+  const education = toEducationRows(content.education);
   const years = careerYears(content.careerStartedOn, new Date());
   return (
     <>
@@ -45,20 +56,23 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
             </Link>
           </p>
         </header>
-        {entries.length === 0 ? (
-          <p className="text-muted-foreground">No experience is published yet.</p>
-        ) : (
-          <DisclosuresProvider
-            index={deepLinkIndex(entries)}
-            initiallyOpen={entries.filter((entry) => entry.current).map((entry) => entry.anchor)}
-          >
+        <DisclosuresProvider
+          index={deepLinkIndex({ timeline: entries, explorations, technologies })}
+          initiallyOpen={entries.filter((entry) => entry.current).map((entry) => entry.anchor)}
+        >
+          {entries.length === 0 ? (
+            <p className="text-muted-foreground">No experience is published yet.</p>
+          ) : (
             <Timeline aria-label="Career timeline" className="max-w-3xl">
               {entries.map((entry) => (
                 <ExperienceEntry key={entry.slug} entry={entry} />
               ))}
             </Timeline>
-          </DisclosuresProvider>
-        )}
+          )}
+          {explorations.length === 0 ? null : <IndependentRd explorations={explorations} />}
+          {technologies.length === 0 ? null : <Technologies groups={technologies} />}
+        </DisclosuresProvider>
+        {education.length === 0 ? null : <EducationList rows={education} />}
       </main>
       <Footer name={content.name} />
     </>

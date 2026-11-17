@@ -1,7 +1,59 @@
 [
-  { "slug": "typescript", "name": "TypeScript", "tier": "primary", "group": "core", "position": 0 },
-  { "slug": "postgresql", "name": "PostgreSQL", "tier": "primary", "group": "core", "position": 1 },
-  { "slug": "react", "name": "React", "tier": "primary", "group": "core", "position": 2 },
-  { "slug": "python", "name": "Python", "tier": "secondary", "group": null, "position": 3 },
-  { "slug": "php", "name": "PHP", "tier": "secondary", "group": null, "position": 4 }
+  {
+    "slug": "typescript",
+    "name": "TypeScript",
+    "tier": "primary",
+    "group": "core",
+    "logoKey": "typescript",
+    "position": 0
+  },
+  {
+    "slug": "postgresql",
+    "name": "PostgreSQL",
+    "tier": "primary",
+    "group": "core",
+    "logoKey": "postgresql",
+    "position": 1
+  },
+  {
+    "slug": "react",
+    "name": "React",
+    "tier": "primary",
+    "group": "core",
+    "logoKey": "react",
+    "position": 2
+  },
+  {
+    "slug": "domain-modelling",
+    "name": "Domain modelling",
+    "tier": "primary",
+    "group": "core",
+    "logoKey": "not-a-website-logo",
+    "position": 3
+  },
+  {
+    "slug": "retrieval",
+    "name": "Retrieval-augmented generation",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "logoKey": "python",
+    "position": 4
+  },
+  {
+    "slug": "evals",
+    "name": "Evaluations",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "position": 5
+  },
+  {
+    "slug": "python",
+    "name": "Python",
+    "tier": "secondary",
+    "group": null,
+    "logoKey": "python",
+    "position": 6
+  },
+  { "slug": "php", "name": "PHP", "tier": "secondary", "group": null, "position": 7 },
+  { "slug": "make", "name": "Make", "tier": "secondary", "group": null, "position": 8 }
 ]
