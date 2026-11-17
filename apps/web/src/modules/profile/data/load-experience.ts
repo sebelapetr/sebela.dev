@@ -15,6 +15,11 @@ export interface ExperienceContent {
    * is absent, unusable or could not be read is simply not here.
    */
   readonly logos: ReadonlyMap<string, ImageMedia>;
+  /**
+   * The testimonial authors' photos that can be shown, by media id (`testimonial.authorPhotoId`).
+   * A photo that is absent, unusable or could not be read is simply not here.
+   */
+  readonly authorPhotos: ReadonlyMap<string, ImageMedia>;
 }
 
 /**
@@ -85,6 +90,7 @@ export async function loadExperience(
       careerStartedOn: person.careerStartedOn,
       experiences,
       logos,
+      authorPhotos: new Map(),
     },
   };
 }

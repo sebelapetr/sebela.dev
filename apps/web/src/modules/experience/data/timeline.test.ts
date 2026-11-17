@@ -183,6 +183,50 @@ describe("toTimelineEntries", () => {
     expect(entries[0]?.testimonials.map((quote) => quote.slug)).toEqual(["first", "second"]);
     expect(entries[1]?.testimonials).toEqual([]);
   });
+
+  describe("testimonial author photos", () => {
+    const PHOTO_ID = "5c4b3a29-1807-4f6e-9d5c-4b3a29180716";
+    const photo = {
+      url: "https://media.example.test/mira.png",
+      altText: "An illustrated portrait of Mira Example.",
+      width: 160,
+      height: 160,
+    };
+    const withQuote = (authorPhotoId: string | null) =>
+      experience({ testimonials: [testimonial({ authorPhotoId })] });
+
+    it("maps a testimonial to its quote, author and author photo", () => {
+      const [entry] = toTimelineEntries(
+        [withQuote(PHOTO_ID)],
+        new Map(),
+        new Map([[PHOTO_ID, photo]]),
+      );
+      expect(entry?.testimonials).toEqual([
+        {
+          slug: "fictional-editor",
+          quote: "A fictional quote.",
+          authorName: "Mira Example",
+          authorRole: "Editor (fictional)",
+          authorPhoto: photo,
+        },
+      ]);
+    });
+
+    it("has no author photo when the testimonial has none", () => {
+      const [entry] = toTimelineEntries([withQuote(null)], new Map(), new Map([[PHOTO_ID, photo]]));
+      expect(entry?.testimonials[0]?.authorPhoto).toBeNull();
+    });
+
+    it("has no author photo when it could not be read or shown", () => {
+      const [entry] = toTimelineEntries([withQuote(PHOTO_ID)], new Map(), new Map());
+      expect(entry?.testimonials[0]?.authorPhoto).toBeNull();
+    });
+
+    it("never takes an organization's logo as an author photo", () => {
+      const [entry] = toTimelineEntries([withQuote(PHOTO_ID)], new Map([[PHOTO_ID, photo]]));
+      expect(entry?.testimonials[0]?.authorPhoto).toBeNull();
+    });
+  });
 });
 
 describe("careerYears", () => {
