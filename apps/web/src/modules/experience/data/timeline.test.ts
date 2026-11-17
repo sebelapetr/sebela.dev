@@ -71,9 +71,13 @@ describe("toTimelineEntries", () => {
         slug: "fictional-staff-engineer",
         anchor: "experience-fictional-staff-engineer",
         title: "Staff engineer",
-        organization: { name: "Fictional Press", website: "https://press.example.test/" },
+        organization: {
+          name: "Fictional Press",
+          website: "https://press.example.test/",
+          logo: null,
+        },
         kind: "main_job",
-        kindLabel: "Main job",
+        kindLabel: "Full-time job",
         period: "April 1st, 2022 – July 10th, 2024",
         current: false,
         summary: "Leads a **fictional** platform team.",
@@ -82,6 +86,33 @@ describe("toTimelineEntries", () => {
         testimonials: [],
       },
     ]);
+  });
+
+  describe("organization logos", () => {
+    const LOGO_ID = "7d2c4e6f-8a1b-4c3d-9e5f-0a1b2c3d4e5f";
+    const logo = {
+      url: "https://media.example.test/press.png",
+      altText: "The fictional Press logo.",
+      width: 96,
+      height: 48,
+    };
+    const withLogo = (logoId: string | null) =>
+      experience({ organization: { ...experience().organization, logoId } });
+
+    it("gives the entry its organization's logo", () => {
+      const [entry] = toTimelineEntries([withLogo(LOGO_ID)], new Map([[LOGO_ID, logo]]));
+      expect(entry?.organization.logo).toEqual(logo);
+    });
+
+    it("has no logo when the organization has none", () => {
+      const [entry] = toTimelineEntries([withLogo(null)], new Map([[LOGO_ID, logo]]));
+      expect(entry?.organization.logo).toBeNull();
+    });
+
+    it("has no logo when the organization's logo could not be read or shown", () => {
+      const [entry] = toTimelineEntries([withLogo(LOGO_ID)], new Map());
+      expect(entry?.organization.logo).toBeNull();
+    });
   });
 
   it("is empty without experiences", () => {
@@ -109,7 +140,7 @@ describe("toTimelineEntries", () => {
       ]);
 
       expect(entries.map((entry) => [entry.slug, entry.kindLabel, entry.current])).toEqual([
-        ["job", "Main job", true],
+        ["job", "Full-time job", true],
         ["studio", "Own business", true],
         ["library", "Side project", true],
       ]);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createApiClient, type Experience, type Person } from "@sebela/api-client";
+import { createApiClient, type Experience, type Media, type Person } from "@sebela/api-client";
 
 import { loadExperience } from "./load-experience";
 
@@ -27,7 +27,11 @@ function person(overrides: Partial<Person> = {}): Person {
   };
 }
 
-function experience(slug: string, endedOn: string | null): Experience {
+function experience(
+  slug: string,
+  endedOn: string | null,
+  logoId: string | null = null,
+): Experience {
   return {
     id: "6a1f3c2e-0b4d-4e7a-9c11-2f8d5b6e7a01",
     slug,
@@ -44,7 +48,7 @@ function experience(slug: string, endedOn: string | null): Experience {
       name: "Fictional Org",
       website: null,
       description: null,
-      logoId: null,
+      logoId,
       createdAt: STAMP,
       updatedAt: STAMP,
     },
@@ -53,6 +57,25 @@ function experience(slug: string, endedOn: string | null): Experience {
     testimonials: [],
     createdAt: STAMP,
     updatedAt: STAMP,
+  };
+}
+
+const LOGO_ID = "7d2c4e6f-8a1b-4c3d-9e5f-0a1b2c3d4e5f";
+const OTHER_LOGO_ID = "1e2d3c4b-5a69-4788-8a9b-0c1d2e3f4a5b";
+
+function media(overrides: Partial<Media> = {}): Media {
+  return {
+    id: LOGO_ID,
+    key: "test/logo.png",
+    mediaType: "image/png",
+    byteSize: 321,
+    width: 96,
+    height: 48,
+    altText: "The fictional logo of Fictional Org.",
+    url: "https://media.example.test/files/test/logo.png",
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
   };
 }
 
@@ -100,6 +123,7 @@ describe("loadExperience", () => {
         headline: "Fictional engineer for tests",
         careerStartedOn: "2015-09-01",
         experiences: twoExperiences,
+        logos: new Map(),
       },
     });
   });
@@ -188,5 +212,119 @@ describe("loadExperience", () => {
     const { client } = clientWith({ "/v1/person": hang, "/v1/experiences": hang });
 
     expect(await loadExperience(client, { timeoutMs: 20 })).toEqual({ status: "unavailable" });
+  });
+  describe("organization logos", () => {
+    const logoUrl = (id: string) => `/v1/media/${id}`;
+
+    it("reads each organization's logo once and keeps it by its media id", async () => {
+      const { client, requests } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () =>
+          json([
+            experience("current", null, LOGO_ID),
+            experience("older", "2019-12-31", LOGO_ID),
+            experience("side", null, OTHER_LOGO_ID),
+          ]),
+        [logoUrl(LOGO_ID)]: () => json(media()),
+        [logoUrl(OTHER_LOGO_ID)]: () =>
+          json(
+            media({
+              id: OTHER_LOGO_ID,
+              altText: null,
+              url: "https://media.example.test/b.svg",
+              mediaType: "image/svg+xml",
+              width: 64,
+              height: 64,
+            }),
+          ),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result.status === "ready" && result.content.logos).toEqual(
+        new Map([
+          [
+            LOGO_ID,
+            {
+              url: "https://media.example.test/files/test/logo.png",
+              altText: "The fictional logo of Fictional Org.",
+              width: 96,
+              height: 48,
+            },
+          ],
+          [
+            OTHER_LOGO_ID,
+            { url: "https://media.example.test/b.svg", altText: "", width: 64, height: 64 },
+          ],
+        ]),
+      );
+      const mediaReads = requests.filter((request) =>
+        new URL(request.url).pathname.startsWith("/v1/media/"),
+      );
+      expect(mediaReads).toHaveLength(2);
+      for (const request of mediaReads) {
+        expect(request.headers.get("Authorization")).toBeNull();
+        expect(request.cache).toBe("no-store");
+      }
+    });
+
+    it("reads no media for organizations without a logo", async () => {
+      const { client, requests } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () => json(twoExperiences),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result.status === "ready" && result.content.logos).toEqual(new Map());
+      expect(requests).toHaveLength(2);
+    });
+
+    it.each<[string, Partial<Media>]>([
+      ["is not an image", { mediaType: "application/pdf" }],
+      ["has no address", { url: null }],
+      ["has an address that is not a web address", { url: "javascript:alert(1)" }],
+      ["has no width", { width: null }],
+      ["has no height", { height: null }],
+    ])("leaves out a logo that %s", async (_label, overrides) => {
+      const { client } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () => json([experience("current", null, LOGO_ID)]),
+        [logoUrl(LOGO_ID)]: () => json(media(overrides)),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result).toMatchObject({ status: "ready" });
+      expect(result.status === "ready" && result.content.logos).toEqual(new Map());
+    });
+
+    it.each(failures)(
+      "leaves out a logo, and keeps the page, when its read %s",
+      async (_label, route) => {
+        const { client } = clientWith({
+          "/v1/person": () => json(person()),
+          "/v1/experiences": () => json([experience("current", null, LOGO_ID)]),
+          [logoUrl(LOGO_ID)]: route,
+        });
+
+        const result = await loadExperience(client);
+
+        expect(result.status === "ready" && result.content.experiences).toHaveLength(1);
+        expect(result.status === "ready" && result.content.logos).toEqual(new Map());
+      },
+    );
+
+    it("leaves out a logo that does not exist", async () => {
+      const { client } = clientWith({
+        "/v1/person": () => json(person()),
+        "/v1/experiences": () => json([experience("current", null, LOGO_ID)]),
+        [logoUrl(LOGO_ID)]: () => apiError("not_found", 404),
+      });
+
+      const result = await loadExperience(client);
+
+      expect(result.status === "ready" && result.content.logos).toEqual(new Map());
+    });
   });
 });
