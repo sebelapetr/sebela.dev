@@ -3,13 +3,12 @@ import { ArrowRight } from "lucide-react";
 
 import { Timeline } from "@sebela/ui/components/timeline";
 
-import { Footer, routes } from "../../_shared";
+import { Footer, routes, toEducationRows } from "../../_shared";
 import type { ExperienceContent } from "../../profile";
 import { EducationList } from "../components/education";
 import { ExperienceEntry } from "../components/experience-entry";
 import { IndependentRd } from "../components/independent-rd";
 import { Technologies } from "../components/technologies";
-import { toEducationRows } from "../data/education";
 import { toExplorationRows } from "../data/explorations";
 import { toTechnologyGroups } from "../data/technologies";
 import { TECHNOLOGY_LOGO_KEYS } from "../data/technology-logos";
