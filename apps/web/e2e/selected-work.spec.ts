@@ -52,9 +52,11 @@ async function expectAccessible(page: Page) {
   ).toEqual([]);
 }
 
+// Every link and button outside running text is at least 44 px tall (docs/design.md, Components);
+// the contact block's email address is a link in its sentence.
 async function expectTouchTargets(page: Page) {
   const heights = await page
-    .locator("main a, main button, footer a")
+    .locator("main a:not(p a), main button, footer a")
     .evaluateAll((elements) =>
       elements
         .filter((element) => element.checkVisibility())
