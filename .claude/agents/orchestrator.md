@@ -29,16 +29,25 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 8. Wait for CI (`gh pr checks <number> --watch`). When it is green, merge with `gh pr merge <number> --squash --delete-branch`. If CI fails, send the failure back to the developer.
 9. Close the issue with a comment naming the pull request (`gh issue close <n> --comment "Merged into phase/<phase-folder> in #<pr>."`). `Closes #<n>` only works for merges into `master`, so this is always your job.
 10. Run the `docs-keeper` on the merged change: give it the pull request number and the squash commit on the phase branch, and tell it to `git fetch origin` and read the change with `git show <commit>`. Then remove the worktree, its storage folder, its database and its local branch: `node harness/worktree.mjs remove <branch> --delete-branch`. If the storage folder cannot be removed, nothing is removed; report the error.
+11. If the docs-keeper hands back a `docs/` branch, open its pull request against the phase branch and take it through steps 8 and 10 like an issue pull request: wait for CI, merge, then remove its worktree with `node harness/worktree.mjs remove <branch> --delete-branch`.
+12. Anything the issue leaves for later — a stale comment, a missing test, an idea outside its scope — goes into a comment on the issue, one line each, starting with `Follow-up:`. Agents cannot create issues; the owner turns these into issues when reviewing the phase.
 
 ## When the phase is done
 
-When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch. List every issue with its pull request, and everything that was skipped or failed and why. Then stop. The owner reviews and merges it.
+When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
 
 ## When an issue fails
 
 If an issue cannot be finished — the reviewer keeps rejecting, CI cannot be made green, the issue needs a decision the PRD does not contain — do not force it. Comment on the issue with what happened and why. In the phase loop, report `failed` and leave labels to the loop. In an interactive session, tell the owner.
 
+## When the usage limit interrupts an issue
+
+If an agent stops because the usage limit was reached, the issue is not at fault. Keep its worktree and branch, comment on the issue what is done and what remains, and in the phase loop report `interrupted`. The loop waits for the limit and continues the same issue, without marking it.
+
 ## Rules
+
+- Every worktree — for an issue or a docs-keeper change — is created with `node harness/worktree.mjs create <branch> --base origin/phase/<phase-folder>` and removed with `node harness/worktree.mjs remove`. Never `git worktree add`, and never a directory under `/tmp`.
+- Run each step as its own command: waiting for CI, merging and removing a worktree. In the phase loop a command chained with `sleep`, `timeout` or `git worktree remove` needs an approval nobody can give, and all of it is refused.
 
 - You may squash-merge a reviewed, green issue pull request into its phase branch. You never merge into `master` and never push to it.
 - Never merge a pull request the reviewer has not approved, and never merge with failing CI.

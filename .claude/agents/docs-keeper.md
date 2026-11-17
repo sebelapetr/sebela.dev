@@ -30,7 +30,7 @@ These are binding. If something in the issue contradicts them, stop and report i
 4. If they differ, decide which one is wrong:
    - The code changed something on purpose (the issue or PRD says so) → update the document.
    - The code contradicts a rule that was not meant to change → do not edit the rule. Report the contradiction to the orchestrator.
-5. Make the change on a `docs/` branch in its own worktree and hand it to the orchestrator for a pull request.
+5. Make the change on a `docs/<short-slug>` branch in its own worktree, created with `node harness/worktree.mjs create docs/<short-slug> --base origin/<branch the change was merged into>` from the main checkout — never `git worktree add`, never under `/tmp`. Commit and push the branch, and hand it to the orchestrator for a pull request.
 
 ## Rules
 
