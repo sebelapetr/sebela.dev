@@ -16,6 +16,24 @@ export interface LoadAskOptions {
   readonly timeoutMs?: number;
 }
 
-export const loadAsk: (client: ApiClient, options?: LoadAskOptions) => Promise<AskResult> = () => {
-  throw new Error("not implemented");
-};
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+/**
+ * Reads the person's name from the API's public person route, uncached and limited in time. A
+ * person that does not exist makes the page missing; a failed read makes it unavailable.
+ */
+export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): Promise<AskResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  try {
+    const read = await client.GET("/v1/person", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (read.data === undefined) {
+      return read.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
+    }
+    return { status: "ready", content: { name: read.data.name } };
+  } catch {
+    return { status: "unavailable" };
+  }
+}

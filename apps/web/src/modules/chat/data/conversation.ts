@@ -1,10 +1,16 @@
-import type {
-  ChatAttempt,
-  ChatBlock,
-  ChatErrorCode,
-  ChatOutcome,
-  ChatRelatedLink,
-  ChatSource,
+// One question's answer as the chat holds it, built event by event from the stream. Every raw event
+// is checked against the chat contract here, so no transport can put an unchecked payload on the
+// page.
+import {
+  advanceChatAttempt,
+  ChatStreamEventSchema,
+  startChatAttempt,
+  type ChatAttempt,
+  type ChatBlock,
+  type ChatErrorCode,
+  type ChatOutcome,
+  type ChatRelatedLink,
+  type ChatSource,
 } from "@sebela/contracts";
 
 /**
@@ -27,14 +33,67 @@ export interface ChatTurn {
   readonly error: { readonly code: ChatErrorCode; readonly retryable: boolean } | null;
 }
 
-export const startChatTurn: (requestId: string, question: string) => ChatTurn = () => {
-  throw new Error("not implemented");
-};
+/** A question just sent: pending, with no answer yet. */
+export function startChatTurn(requestId: string, question: string): ChatTurn {
+  return {
+    requestId,
+    question,
+    status: "pending",
+    attempt: startChatAttempt(requestId),
+    text: "",
+    blocks: [],
+    sources: [],
+    related: [],
+    outcome: null,
+    error: null,
+  };
+}
 
-export const receiveChatEvent: (turn: ChatTurn, raw: unknown) => ChatTurn = () => {
-  throw new Error("not implemented");
-};
+/** Whether the turn is still waiting for its answer to end: pending or streaming. */
+export function isChatTurnOpen(turn: ChatTurn): boolean {
+  return turn.status === "pending" || turn.status === "streaming";
+}
 
-export const endChatStream: (turn: ChatTurn) => ChatTurn = () => {
-  throw new Error("not implemented");
-};
+/**
+ * Applies one raw event to the turn. An ended turn, a duplicate and an event for another request
+ * (a late event of a cancelled one) change nothing and return the same turn. A malformed or
+ * misplaced event fails the turn as an invalid stream, keeping what was received. Pure.
+ */
+export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
+  if (!isChatTurnOpen(turn)) return turn;
+  const parsed = ChatStreamEventSchema.safeParse(raw);
+  if (!parsed.success) return fail(turn, "invalid_stream");
+  const event = parsed.data;
+  if (event.requestId !== turn.requestId) return turn;
+
+  const step = advanceChatAttempt(turn.attempt, event);
+  if (step.status === "duplicate") return turn;
+  if (step.status === "invalid") return fail(turn, "invalid_stream");
+
+  const next: ChatTurn = { ...turn, attempt: step.attempt, status: "streaming" };
+  switch (event.type) {
+    case "start":
+      return next;
+    case "text_delta":
+      return { ...next, text: turn.text + event.text };
+    case "block":
+      return { ...next, blocks: [...turn.blocks, event.block] };
+    case "sources":
+      return { ...next, sources: event.sources };
+    case "related":
+      return { ...next, related: event.links };
+    case "complete":
+      return { ...next, status: "complete", outcome: event.outcome };
+    case "error":
+      return { ...next, status: "failed", error: { code: event.code, retryable: event.retryable } };
+  }
+}
+
+/** The stream is over: a turn still waiting for its terminal event is interrupted. */
+export function endChatStream(turn: ChatTurn): ChatTurn {
+  return isChatTurnOpen(turn) ? { ...turn, status: "interrupted" } : turn;
+}
+
+function fail(turn: ChatTurn, code: ChatErrorCode): ChatTurn {
+  return { ...turn, status: "failed", error: { code, retryable: true } };
+}

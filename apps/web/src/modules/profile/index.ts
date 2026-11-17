@@ -1,5 +1,5 @@
 // The profile module: the website's read of the API's public profile, experience, services and CV
-// routes, and of the current CV PDF's file. Server-only.
+// routes (and the person's name for the Ask page), and of the current CV PDF's file. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -7,11 +7,14 @@ import { cache } from "react";
 import { createApiClient, type ApiClient } from "@sebela/api-client";
 
 import { readWebConfig } from "../../config";
+import { loadAsk, type AskResult } from "./data/load-ask";
 import { loadCv, type CvResult } from "./data/load-cv";
 import { loadExperience, type ExperienceResult } from "./data/load-experience";
 import { loadHomepage, type HomepageResult } from "./data/load-homepage";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
+
+export type { AskContent, AskResult } from "./data/load-ask";
 
 export type { CvPdf } from "./data/cv-pdf";
 
@@ -57,6 +60,12 @@ export const getExperience = cache((): Promise<ExperienceResult> => loadExperien
  * prose and the services, read once per request (React `cache`). Never cached across requests.
  */
 export const getServices = cache((): Promise<ServicesResult> => loadServices(apiClient()));
+
+/**
+ * The Ask page's content for the current request: the person's name the assistant speaks about,
+ * read once per request (React `cache`). Never cached across requests.
+ */
+export const getAsk = cache((): Promise<AskResult> => loadAsk(apiClient()));
 
 /**
  * The CV page's content for the current request: the API's assembled CV and the PDF's upload day,
