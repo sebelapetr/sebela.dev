@@ -2,7 +2,7 @@ import type { Experience } from "@sebela/api-client";
 
 import type { ImageMedia } from "../../profile";
 
-import { formatPeriod } from "./period";
+import { formatPeriod } from "../../_shared";
 
 export type ExperienceKind = Experience["kind"];
 

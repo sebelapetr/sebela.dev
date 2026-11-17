@@ -1,8 +1,8 @@
 import { TimelineContent, TimelineItem, TimelineTrigger } from "@sebela/ui/components/timeline";
 
+import { ProseMarkdown } from "../../_shared";
 import type { TimelineEntry } from "../data/timeline";
 import { AuthorPhoto } from "./author-photo";
-import { SummaryMarkdown } from "./markdown";
 import { OrganizationLogo } from "./organization-logo";
 
 /**
@@ -37,7 +37,7 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
       <TimelineContent>
         <div className="flex max-w-prose flex-col gap-6 text-pretty">
           <div className="text-muted-foreground [&>*+*]:mt-3">
-            <SummaryMarkdown>{entry.summary}</SummaryMarkdown>
+            <ProseMarkdown>{entry.summary}</ProseMarkdown>
           </div>
           {entry.responsibilities.length === 0 ? null : (
             <ul aria-label="Responsibilities" className="list-disc space-y-2 pl-6">

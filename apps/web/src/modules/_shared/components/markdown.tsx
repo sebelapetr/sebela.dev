@@ -1,12 +1,12 @@
 import Markdown from "react-markdown";
 
-// Experience summaries are Markdown from the API. Paragraphs, lists, emphasis, code and links
-// render; anything else (headings, images, tables, raw HTML) is unwrapped to its text, so a summary
-// never adds headings to the page's outline. react-markdown never renders raw HTML and drops unsafe
-// link protocols.
+// Prose from the API (an experience's summary, a project's problem, work and result) is Markdown.
+// Paragraphs, lists, emphasis, code and links render; anything else (headings, images, tables, raw
+// HTML) is unwrapped to its text, so the prose never adds headings to the page's outline.
+// react-markdown never renders raw HTML and drops unsafe link protocols (`javascript:`, `data:`).
 const allowedElements = ["p", "ul", "ol", "li", "strong", "em", "code", "a"];
 
-export function SummaryMarkdown({ children }: { readonly children: string }) {
+export function ProseMarkdown({ children }: { readonly children: string }) {
   return (
     <Markdown
       allowedElements={allowedElements}
