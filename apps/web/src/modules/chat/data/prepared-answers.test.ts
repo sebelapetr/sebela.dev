@@ -19,7 +19,7 @@ describe("askSuggestions", () => {
   it("gives every suggestion a short label for the hero", () => {
     for (const suggestion of askSuggestions(NAME)) {
       expect(suggestion.label.length).toBeGreaterThan(0);
-      expect(suggestion.label.length).toBeLessThanOrEqual(32);
+      expect(suggestion.label.length).toBeLessThanOrEqual(20);
     }
   });
 });

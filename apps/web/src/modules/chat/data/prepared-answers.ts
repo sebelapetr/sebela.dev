@@ -31,17 +31,17 @@ export function askSuggestions(name: string): readonly AskSuggestion[] {
   return [
     {
       audience: "hiring",
-      label: "Fit for an AI engineering role?",
+      label: "AI role fit?",
       question: `Would ${name} fit an AI engineering role?`,
     },
     {
       audience: "clients",
-      label: "What could be automated?",
+      label: "What to automate?",
       question: `What could ${name} automate for my company?`,
     },
     {
       audience: "technical",
-      label: "Strongest engineering skills?",
+      label: "Strongest skills?",
       question: `What are ${name}'s strongest engineering skills?`,
     },
     {
