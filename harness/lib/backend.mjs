@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { parseEnv } from "node:util";
+import { storageWorktreeName } from "./slots.mjs";
 
 const ENV_FILE = ".env.local";
 
@@ -26,8 +27,17 @@ const WORKTREE_PREFIXES = [
 ];
 const SHARED_SERVER = ["POSTGRES_HOST", "POSTGRES_PORT"];
 
+// Long enough for a cold install; a stage that hangs beyond it fails instead of blocking create.
+const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
+
 function defaultRun({ cwd, args, env }) {
-  const result = spawnSync("pnpm", args, { cwd, env, stdio: ["ignore", 2, 2] });
+  const result = spawnSync("pnpm", args, {
+    cwd,
+    env,
+    stdio: ["ignore", 2, 2],
+    timeout: STAGE_TIMEOUT_MS,
+    killSignal: "SIGTERM",
+  });
   if (result.error) return 1;
   return result.status ?? 1;
 }
@@ -72,6 +82,20 @@ export function worktreeEnv(env, root) {
         (!(key in example) && !WORKTREE_PREFIXES.some((prefix) => key.startsWith(prefix))),
     ),
   );
+}
+
+// The storage folder cannot be located without the worktree's settings. With the default local root
+// inside the worktree it went with the worktree's files; anywhere else it is left behind.
+function folderOf(owner) {
+  try {
+    return storageWorktreeName(owner);
+  } catch {
+    return `${owner}-<hash>`;
+  }
+}
+
+function unchecked(owner, reason) {
+  return `storage folder of ${owner} not removed: ${reason}, so its storage settings are unknown. With the default STORAGE_LOCAL_ROOT inside the worktree its files went with it; with STORAGE_DRIVER=bunny-s3 or a root outside the worktree, remove the folder <environment>/${folderOf(owner)}/ by hand\n`;
 }
 
 // `run` starts `pnpm <args>` in `cwd` and returns its exit code; `log` receives notices. Both are
@@ -123,12 +147,23 @@ export function backendMaintenance({
       }
     },
 
+    // A worktree folder that is already gone: its settings are gone too, so its storage folder
+    // cannot be found. Says so instead of claiming it was removed.
+    teardownMissing({ owner }) {
+      log(unchecked(owner, "the worktree folder is already gone"));
+    },
+
     // Removes the worktree's storage folder. A worktree without a storage folder or without the
     // storage command needs nothing. Without its installed tools the folder cannot be removed:
     // refused unless `force`, which leaves the folder behind with a notice.
     teardown({ root, owner, force = false }) {
       if (!hasScript(root, "apps/api", "storage")) return;
-      if (!worktreeSettings(root)?.STORAGE_WORKTREE) {
+      const settings = worktreeSettings(root);
+      if (settings === null) {
+        log(unchecked(owner, `the worktree has no ${ENV_FILE}`));
+        return;
+      }
+      if (!settings.STORAGE_WORKTREE) {
         log("storage teardown skipped: the worktree has no storage folder\n");
         return;
       }

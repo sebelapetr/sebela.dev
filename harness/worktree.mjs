@@ -293,6 +293,7 @@ export function removeWorktree({
 
   // The storage folder is found through the worktree's own settings and tools, so it goes first.
   if (exists) backend.teardown({ root: worktreePath, owner: name, force });
+  else backend.teardownMissing({ owner: name });
 
   // Also when the folder is already gone, so a database or role left behind by an earlier attempt
   // goes too.

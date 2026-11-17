@@ -206,7 +206,7 @@ pnpm test       # package tests, harness tests and check tests
 pnpm build
 ```
 
-CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus an end-to-end run of the worktree databases against a disposable Postgres and a smoke check of the containerised API stack. You can run both yourself with Docker: `node harness/worktree-databases.e2e.mjs` and `pnpm test:api-stack`; each removes its containers, volumes and images at the end. Details: [testing](docs/testing.md).
+CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus end-to-end runs of the worktree databases and of the worktree backend setup against a disposable Postgres (jobs `Worktree database lifecycle` and `Worktree backend setup`) and a smoke check of the containerised API stack. You can run them yourself with Docker: `node harness/worktree-databases.e2e.mjs`, `node harness/worktree-backend.e2e.mjs` and `pnpm test:api-stack`; each removes its containers, volumes and images at the end. Details: [testing](docs/testing.md).
 
 ### 5. Work in an isolated worktree
 
@@ -215,11 +215,12 @@ Code changes happen in a worktree per branch, never in the main checkout. With t
 ```sh
 node harness/worktree.mjs create feat/12-profile-api --base master   # prints the worktree path
 node harness/worktree.mjs list                                       # slots in use
-cd .worktrees/feat-12-profile-api && pnpm install --frozen-lockfile
 ```
 
 - **Isolation.** The worktree takes the lowest free slot (1 to 9) and gets its own database in the shared Postgres, named after its folder (`wt_feat_12_profile_api_<hash>`), and its own database role of the same name. The role owns that database, may create temporary databases for tests and cannot connect to another worktree's database. Its ports are the main checkout's ports plus ten times the slot, so its ports, its database and its credentials are its own; the Postgres container is shared.
-- **Generated configuration.** `create` writes the worktree's `.env.local` itself: `WORKTREE_SLOT`, the ports of its slot, `DATABASE_NAME`, and `DATABASE_USER` and `DATABASE_PASSWORD` with a random password it never prints. The base ports come from your process environment and otherwise from `.env.example`. Running `create` again reuses the slot, the database and the password and never overwrites an existing `.env.local`; delete the file and run `create` again to regenerate it, with a new password for the role. The Postgres superuser password stays in the main checkout's `.env`.
+- **Generated configuration.** `create` writes the worktree's `.env.local` itself: `WORKTREE_SLOT`, the ports of its slot, `DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD` with a random password it never prints, `STORAGE_WORKTREE` (its own storage folder) and `STORAGE_PUBLIC_BASE_URL` (its own API's file route). The base ports come from your process environment and otherwise from `.env.example`. Running `create` again reuses the slot, the database and the password and never overwrites an existing `.env.local`; delete the file and run `create` again to regenerate it, with a new password for the role. The Postgres superuser password stays in the main checkout's `.env`.
+- **Ready to work.** `create` then installs the worktree's dependencies, applies its migrations, prepares its storage folder and loads the fictional demo seed into its empty profile, so its API serves content right away. A failing stage stops `create` with the stage's name and keeps the worktree; run `create` again to retry. An older `.env.local` without `STORAGE_WORKTREE` is never changed: delete it and run `create` again.
+- **Running setup again.** `create` on an existing worktree applies pending migrations and reuses its storage folder, but does not seed a profile that already holds content, so edits are kept. To refresh the content from the seed on purpose, run `pnpm --silent --filter @sebela/api seed` in the worktree; it overwrites the records the seed names. Details: [worktree backend setup](docs/repository-structure.md#worktree-backend-setup).
 - **Reading configuration.** Code reads ports, hosts and database names from the process environment and fails when one is missing. Load `.env.local` into the process (for example `node --env-file=.env.local …`) instead of copying values out of it. Coding agents never open or print real environment files; they may edit only the `.env.local` of the worktree they work in ([permissions](docs/permissions.md)).
 
 Remove the worktree when its branch is done:
@@ -228,7 +229,7 @@ Remove the worktree when its branch is done:
 node harness/worktree.mjs remove feat/12-profile-api --delete-branch
 ```
 
-Removal first drops the worktree's database, every temporary database its role still owns and the role, then removes the worktree and frees its slot. It refuses uncommitted work unless you pass `--force`, needs the running Postgres, and only ever drops a database or role it created for that worktree. Slots, ports and databases in detail: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
+Removal first removes the worktree's storage folder, then drops its database, every temporary database its role still owns and the role, then removes the worktree and frees its slot. When the storage folder cannot be removed, nothing else is removed. It refuses uncommitted work unless you pass `--force`, needs the running Postgres, and only ever drops a database or role it created for that worktree. Slots, ports and databases in detail: [ports and worktree isolation](docs/repository-structure.md#ports-and-worktree-isolation).
 
 Application commands will be documented as the application phases land. Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
 
