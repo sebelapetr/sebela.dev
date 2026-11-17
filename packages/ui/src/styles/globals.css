@@ -132,6 +132,19 @@
   }
 }
 
+@utility type-item {
+  /* The title of one item in a list of items, such as a role on the timeline. */
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: pretty;
+  @variant sm {
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
+  }
+}
+
 @utility type-lead {
   /* Introductory prose under a display or title line, kept to a readable measure. */
   max-width: 65ch;
@@ -155,6 +168,13 @@
   line-height: var(--text-sm--line-height);
   letter-spacing: var(--tracking-tight);
   color: var(--muted-foreground);
+}
+
+@utility type-tag {
+  /* A small bordered tag beside a label, such as the kind of an experience. */
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  font-weight: var(--font-weight-medium);
 }
 
 /* The page frame of docs/design.md (Spacing): one width and one side gutter for every page. */

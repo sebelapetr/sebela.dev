@@ -45,16 +45,18 @@ Light and dark, following the system preference by default, with a toggle in the
 - Hierarchy comes from size and weight, not from colour. Secondary text uses `muted-foreground`; that is the only colour step.
 - The scale is recorded with #43. Each step is one utility in `@sebela/ui/globals.css`; pages use the utility, not a hand-picked size. Sizes are mobile → from `sm` (640 px).
 
-| Step    | Utility        | Size (line height)               | Weight, tracking         | Use                                                                 |
-| ------- | -------------- | -------------------------------- | ------------------------ | ------------------------------------------------------------------- |
-| Display | `type-display` | 36 px (40) → 48 px (48)          | semibold, tight, balance | The hero headline; one per page at most.                            |
-| Title   | `type-title`   | 30 px (36) → 36 px (40)          | semibold, tight, balance | The heading of a page without a hero (content states, inner pages). |
-| Heading | `type-heading` | 24 px (32) → 30 px (36)          | semibold, tight          | Section headings (h2).                                              |
-| Lead    | `type-lead`    | 18 px, relaxed (1.625), max 65ch | regular, muted           | Introductory prose under a display or title line.                   |
-| Intro   | `type-intro`   | 18 px (28)                       | regular, muted           | One short sentence that opens a block: contact, content states.     |
-| Body    | (default)      | 16 px (24)                       | regular                  | Running text.                                                       |
-| Small   | `text-sm`      | 14 px (20)                       | medium for links         | Text links in action rows and lists, the footer.                    |
-| Label   | `type-label`   | 14 px (20), Geist Mono           | regular, tight, muted    | A short label above a heading, such as the name in the hero.        |
+| Step    | Utility        | Size (line height)               | Weight, tracking         | Use                                                                                                           |
+| ------- | -------------- | -------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Display | `type-display` | 36 px (40) → 48 px (48)          | semibold, tight, balance | The hero headline; one per page at most.                                                                      |
+| Title   | `type-title`   | 30 px (36) → 36 px (40)          | semibold, tight, balance | The heading of a page without a hero (content states, inner pages).                                           |
+| Heading | `type-heading` | 24 px (32) → 30 px (36)          | semibold, tight          | Section headings (h2).                                                                                        |
+| Item    | `type-item`    | 18 px (28) → 20 px (28)          | semibold, tight, pretty  | The title of one item in a list, such as a role on the timeline (h2).                                         |
+| Lead    | `type-lead`    | 18 px, relaxed (1.625), max 65ch | regular, muted           | Introductory prose under a display or title line.                                                             |
+| Intro   | `type-intro`   | 18 px (28)                       | regular, muted           | One short sentence that opens a block: contact, content states.                                               |
+| Body    | (default)      | 16 px (24)                       | regular                  | Running text.                                                                                                 |
+| Small   | `text-sm`      | 14 px (20)                       | medium for links         | Text links in action rows and lists, the footer, a quote's caption.                                           |
+| Label   | `type-label`   | 14 px (20), Geist Mono           | regular, tight, muted    | A short label above a heading, such as the name in the hero; a timeline period; a plain list of technologies. |
+| Tag     | `type-tag`     | 12 px (16)                       | medium                   | A small bordered tag beside a label, such as an experience's kind.                                            |
 
 - Readable line length: prose is kept to at most 65 characters (`type-lead` or `max-w-prose`); headings wrap balanced.
 
@@ -110,6 +112,22 @@ On the homepage: the hero gets a lot of space, Selected work is the most promine
 ## Responsive
 
 Mobile-first from the first component. Every UI change is checked at **360, 768 and 1280 px** in both themes. No horizontal scrolling at any width; touch targets at least 44 px.
+
+## Timeline
+
+One shared timeline (`@sebela/ui/components/timeline`) tells the career on `/experience` and will carry the AI Engineering Roadmap. It is monochrome and editorial: no cards, shadows or accent colour.
+
+- **Page.** `/experience` uses the page frame and page padding (Spacing). Its heading block (name in `type-label`, "Experience" in `type-title`, the headline and length of career in `type-lead`, then the CV as a text link with an arrow) and the timeline are its two sections, 96/128 px apart. The page has no primary button: the CV is a destination, not the block's action. Heading block and timeline stay within 768 px (`max-w-3xl`), left-aligned in the frame, so long entries keep a readable measure.
+- **Rail and markers.** A dashed vertical rail on the left connects one round 32 px marker per item; the item's text starts 48 px from the timeline's left edge, 32 px right of the rail. The marker is a chevron that points right while the item is closed and down while it is open, switching at once (Motion: only colour moves); an open or hovered item draws its marker border and chevron in the foreground colour. A hovered heading row also gets a fill of `muted` at 60 % with radius `lg` and 8 px of side padding, reaching 8 px past the text on each side so the text does not move.
+- **Item heading.** The whole heading row is one button that opens and closes the item. The period and the kind label sit above the title (`type-item`, the organization after it in regular weight, muted), never in a separate column. Like a button, the trigger draws its own 3 px focus ring instead of the outline (Focus).
+- **Logo.** When the organization has a usable logo (an image from the API's media with a web address and dimensions), it sits on its own line at the top of the heading row, above the period, so closed rows can be scanned by it too. It keeps its own aspect ratio: 24 px tall on mobile and 32 px from `sm`, at most 128 / 160 px wide, aligned to the start of the line, with 8 px below it (the heading row's 4 px gap plus 4 px of its own). Its alt text is the media's alternative text. Without a logo, or when it cannot be shown or read, nothing takes its place (no placeholder, no broken image) and the text starts at the same position as in every other row. Images are served unoptimised until the media slice (#55), like the homepage photo.
+- **Spacing.** 4 px between the period row and the title, 8 px between items, 12 px above an open item's content and 24 px below it, 24 px between its parts; the same steps as Spacing.
+- **Period.** `type-label`: `October 1st, 2023 – July 10th, 2024` with correct ordinals and an en dash, `October 1st, 2023 – present` while ongoing, and a single date when an experience started and ended on the same day. Dates are calendar dates, never shifted by a time zone.
+- **Kind label.** A small bordered label (`type-tag`) beside the period: `Full-time job`, `Own business`, `Side project` (the displayed labels of the kinds `main_job`, `own_business` and `side_project`). It exists so that concurrent experiences do not read as several full-time jobs. Client and side work keeps its own row and is never nested under an employer.
+- **Expand policy.** Only current items (no end date) are open when the page loads; older ones are compact rows that open on click, Enter or Space. Closed content stays in the page (`hidden="until-found"`), so the browser's page search finds and opens it, and a closed item takes no extra space.
+- **Content.** Summary (muted body text; its links follow Links in running text), responsibilities, technologies as plain text in `type-label`, the organization's website as a text link without an arrow (it leaves the site), and a testimonial as a quote with a left rule and a `text-sm` caption, only beside its own experience. Long content stays within `max-w-prose`.
+- **Narrow screens.** The rail and markers stay; on narrow screens the kind label wraps below the period and the period balances its lines rather than breaking a date apart.
+- **Anchors.** Each item has a stable id (`experience-<slug>`) and scrolls into view with room above it.
 
 ## Process
 
