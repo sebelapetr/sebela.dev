@@ -268,6 +268,9 @@ export function startChatAttempt(requestId: string): ChatAttempt {
 /**
  * Applies one validated event to an attempt: accepted with the new attempt, a duplicate to ignore
  * (its identifier is not above the last accepted one) or invalid with the order rule it breaks.
+ * Identifiers rise strictly within an attempt, so an event with a lower identifier that was never
+ * seen is still a duplicate: it is ignored, not reported as an order violation, because a replayed
+ * or reordered delivery must not fail an answer that already moved past it.
  * Pure; never throws.
  */
 export function advanceChatAttempt(attempt: ChatAttempt, event: ChatStreamEvent): ChatEventStep {
