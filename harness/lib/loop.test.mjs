@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FAILED_LABEL, RETRY_LABEL, RUN_REPORT_SCHEMA, classifyRun, decideNext } from "./loop.mjs";
+import {
+  FAILED_LABEL,
+  RETRY_LABEL,
+  RUN_REPORT_SCHEMA,
+  classifyRun,
+  decideNext,
+  noteAfter,
+  ownerNoteSection,
+} from "./loop.mjs";
 
 const success = (report) =>
   JSON.stringify({
@@ -152,4 +160,29 @@ test("crashes count towards the stop and label nothing", () => {
   assert.deepEqual(first, { next: "continue", label: null, consecutiveFailures: 1 });
   const third = decideNext({ run: { kind: "crash", detail: "" }, consecutiveFailures: 2 });
   assert.equal(third.next, "stop");
+});
+
+test("without an owner note the prompt gets no section", () => {
+  assert.equal(ownerNoteSection(undefined), "");
+  assert.equal(ownerNoteSection(null), "");
+  assert.equal(ownerNoteSection("  \n "), "");
+});
+
+test("an owner note is passed on verbatim, marked as the owner's and to be recorded on its issue", () => {
+  const section = ownerNoteSection("  I stopped #42: move the modules to src/modules.  ");
+  assert.match(section, /I stopped #42: move the modules to src\/modules\./);
+  assert.match(section, /owner/i);
+  assert.match(section, /Owner note:/);
+  // It adds to the instructions; it must not read as permission to skip the rules.
+  assert.match(section, /does not override/);
+  assert.ok(section.startsWith("\n"), "the section is appended to the prompt on its own lines");
+});
+
+test("the owner note stays while the loop waits for the usage limit and ends with the first finished run", () => {
+  const note = "redo #42";
+  assert.equal(noteAfter(note, "wait"), note);
+  assert.equal(noteAfter(note, "continue"), null);
+  assert.equal(noteAfter(note, "done"), null);
+  assert.equal(noteAfter(note, "stop"), null);
+  assert.equal(noteAfter(null, "wait"), null);
 });

@@ -119,3 +119,28 @@ export function decideNext({
 
   return { next: giveUp ? "stop" : "continue", label: null, consecutiveFailures: failures };
 }
+
+// What the owner tells the orchestrator for this start of the loop (`--note`), as a section
+// appended to the prompt; empty without a note. The note adds to the instructions and never
+// replaces a rule. The loop keeps no state, so the orchestrator records a note about an issue on
+// that issue, where a later run finds it.
+export function ownerNoteSection(note) {
+  const text = (note ?? "").trim();
+  if (!text) return "";
+  return `
+
+Note from the owner for this run, written when the loop was started:
+
+"""
+${text}
+"""
+
+Take it into account when you pick and handle the issue. It does not override your agent definition, docs/ or the guard. If it concerns an issue, first add it to that issue as a comment starting with \`Owner note:\`, unless the same comment is already there, so that a later run sees it too.`;
+}
+
+// The owner's note after an iteration: it stays while the loop only waits for the usage limit,
+// because the same work continues, and ends with the first run that finished, so it is not
+// repeated to the issues that follow.
+export function noteAfter(note, next) {
+  return next === "wait" ? (note ?? null) : null;
+}
