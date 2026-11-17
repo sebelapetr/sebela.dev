@@ -15,7 +15,7 @@ export function EducationList({ rows }: { readonly rows: readonly EducationRow[]
       <ol aria-label="Education" className="flex flex-col gap-6">
         {rows.map((row) => (
           <li key={row.slug} className="flex flex-col gap-1.5 border-l border-border pl-4">
-            <h3 className="font-semibold tracking-tight text-pretty">{row.title}</h3>
+            <h3 className="type-item">{row.title}</h3>
             {row.institution === null ? null : (
               <p className="text-muted-foreground">{row.institution}</p>
             )}

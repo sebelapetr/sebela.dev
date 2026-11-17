@@ -32,10 +32,7 @@ function Group({ group }: { readonly group: TechnologyGroup }) {
           <h3 className="type-label">{group.label}</h3>
           <ul aria-label={`${group.label} technologies`} className="flex flex-wrap gap-x-8 gap-y-4">
             {group.technologies.map((technology) => (
-              <li
-                key={technology.slug}
-                className="flex min-h-8 items-center gap-3 text-lg font-semibold tracking-tight"
-              >
+              <li key={technology.slug} className="type-item flex min-h-8 items-center gap-3">
                 {technology.logoKey === null ? null : (
                   <TechnologyLogo logoKey={technology.logoKey} />
                 )}

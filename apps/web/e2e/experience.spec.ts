@@ -466,6 +466,13 @@ test.describe("experience page read from the API", () => {
   }) => {
     await page.goto(`${website.url}/experience#exploration-tool-scopes`);
     await expect(item(page, "exploration-tool-scopes")).toBeInViewport();
+    await expect(item(page, "exploration-tool-scopes")).toBeFocused();
+
+    // The independent R&D block as a whole, the target of the homepage's Now link.
+    await page.goto("about:blank");
+    await page.goto(`${website.url}/experience#independent-rd`);
+    await expect(item(page, "independent-rd")).toBeInViewport();
+    await expect(item(page, "independent-rd")).toBeFocused();
 
     // A link to the collapsed group opens it.
     await page.goto(`${website.url}/experience#technology-group-secondary`);
@@ -476,6 +483,7 @@ test.describe("experience page read from the API", () => {
     );
     await expect(secondary.getByRole("list", { name: "Other technologies & tools" })).toBeVisible();
     await expect(secondary).toBeInViewport();
+    await expect(secondary).toBeFocused();
 
     // An unknown anchor opens nothing (a fresh load: a change of only the hash keeps the page).
     await page.goto("about:blank");

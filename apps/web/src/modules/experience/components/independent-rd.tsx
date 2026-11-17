@@ -24,8 +24,8 @@ export function IndependentRd({
           Independent R&amp;D
         </h2>
         <p className="max-w-prose text-pretty text-muted-foreground">
-          Side work and experiments of my own, outside employment and client work. Each says how far
-          it went.
+          Unreleased research and experiments, apart from the career above. Each says how far it
+          went.
         </p>
       </div>
       <ol aria-label="Explorations" className="flex flex-col gap-8">
