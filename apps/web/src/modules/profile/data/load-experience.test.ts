@@ -90,7 +90,7 @@ describe("loadExperience", () => {
   it("returns the person's header facts and the experiences in the API's order", async () => {
     const { client } = clientWith({
       "/v1/person": () => json(person()),
-      "/v1/experiences": () => json({ items: twoExperiences }),
+      "/v1/experiences": () => json(twoExperiences),
     });
 
     expect(await loadExperience(client)).toEqual({
@@ -107,7 +107,7 @@ describe("loadExperience", () => {
   it("is ready without experiences", async () => {
     const { client } = clientWith({
       "/v1/person": () => json(person({ careerStartedOn: null })),
-      "/v1/experiences": () => json({ items: [] }),
+      "/v1/experiences": () => json([]),
     });
 
     const result = await loadExperience(client);
@@ -119,7 +119,7 @@ describe("loadExperience", () => {
   it("reads only public routes, without credentials and without a cache", async () => {
     const { client, requests } = clientWith({
       "/v1/person": () => json(person()),
-      "/v1/experiences": () => json({ items: [] }),
+      "/v1/experiences": () => json([]),
     });
 
     await loadExperience(client);
@@ -139,7 +139,7 @@ describe("loadExperience", () => {
   it("reports a profile that does not exist yet as missing", async () => {
     const { client } = clientWith({
       "/v1/person": () => apiError("not_found", 404),
-      "/v1/experiences": () => json({ items: [] }),
+      "/v1/experiences": () => json([]),
     });
 
     expect(await loadExperience(client)).toEqual({ status: "missing" });
@@ -160,7 +160,7 @@ describe("loadExperience", () => {
   it.each(failures)("is unavailable when the person route %s", async (_label, route) => {
     const { client } = clientWith({
       "/v1/person": route,
-      "/v1/experiences": () => json({ items: twoExperiences }),
+      "/v1/experiences": () => json(twoExperiences),
     });
 
     expect(await loadExperience(client)).toEqual({ status: "unavailable" });

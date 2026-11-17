@@ -1,4 +1,4 @@
-import type { ApiClient, Experience } from "@sebela/api-client";
+import type { ApiClient, Experience, Person } from "@sebela/api-client";
 
 /** The content of the experience page, all of it from the API. */
 export interface ExperienceContent {
@@ -24,16 +24,44 @@ export interface LoadExperienceOptions {
   readonly timeoutMs?: number;
 }
 
+const DEFAULT_TIMEOUT_MS = 5_000;
+
 /**
  * Reads the experience page's content from the API's public routes: the person and the
  * experiences, uncached and limited in time. A person that does not exist makes the page missing;
  * any failed read makes the whole content unavailable.
  */
-export function loadExperience(
+export async function loadExperience(
   client: ApiClient,
   options: LoadExperienceOptions = {},
 ): Promise<ExperienceResult> {
-  return Promise.reject(
-    new Error(`not implemented: ${typeof client} ${String(options.timeoutMs)}`),
-  );
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
+
+  let person: Person;
+  let experiences: readonly Experience[];
+  try {
+    const [personRead, experiencesRead] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/experiences", init()),
+    ]);
+    if (personRead.data === undefined) {
+      return personRead.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
+    }
+    if (experiencesRead.data === undefined) return { status: "unavailable" };
+    person = personRead.data;
+    experiences = experiencesRead.data;
+  } catch {
+    return { status: "unavailable" };
+  }
+
+  return {
+    status: "ready",
+    content: {
+      name: person.name,
+      headline: person.headline,
+      careerStartedOn: person.careerStartedOn,
+      experiences,
+    },
+  };
 }

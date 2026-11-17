@@ -1,6 +1,14 @@
 import type { Experience } from "@sebela/api-client";
 
+import { formatPeriod } from "./period";
+
 export type ExperienceKind = Experience["kind"];
+
+const KIND_LABELS: Record<ExperienceKind, string> = {
+  main_job: "Main job",
+  own_business: "Own business",
+  side_project: "Side project",
+};
 
 /** One testimonial, shown only beside the experience it belongs to. */
 export interface TimelineTestimonial {
@@ -37,7 +45,26 @@ export interface TimelineEntry {
  * an employer and nothing is inferred from names.
  */
 export function toTimelineEntries(experiences: readonly Experience[]): TimelineEntry[] {
-  throw new Error(`not implemented: ${String(experiences.length)}`);
+  return experiences.map((experience) => ({
+    slug: experience.slug,
+    anchor: `experience-${experience.slug}`,
+    title: experience.title,
+    organization: {
+      name: experience.organization.name,
+      website: experience.organization.website,
+    },
+    kind: experience.kind,
+    kindLabel: KIND_LABELS[experience.kind],
+    period: formatPeriod(experience.startedOn, experience.endedOn),
+    current: experience.endedOn === null,
+    summary: experience.summary,
+    responsibilities: experience.responsibilities,
+    technologies: experience.technologies.map(({ slug, name }) => ({ slug, name })),
+    testimonials: experience.testimonials
+      .filter((testimonial) => testimonial.experience === experience.slug)
+      .toSorted((a, b) => a.position - b.position)
+      .map(({ slug, quote, authorName, authorRole }) => ({ slug, quote, authorName, authorRole })),
+  }));
 }
 
 /**
@@ -45,5 +72,11 @@ export function toTimelineEntries(experiences: readonly Experience[]): TimelineE
  * year.
  */
 export function careerYears(careerStartedOn: string | null, today: Date): number | null {
-  throw new Error(`not implemented: ${String(careerStartedOn)} ${today.toISOString()}`);
+  if (careerStartedOn === null) return null;
+  const [year = 0, month = 1, day = 1] = careerStartedOn.split("-").map(Number);
+  const beforeAnniversary =
+    today.getUTCMonth() + 1 < month ||
+    (today.getUTCMonth() + 1 === month && today.getUTCDate() < day);
+  const years = today.getUTCFullYear() - year - (beforeAnniversary ? 1 : 0);
+  return years >= 1 ? years : null;
 }
