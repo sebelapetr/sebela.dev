@@ -22,6 +22,37 @@ export interface TimelineTestimonial {
   readonly authorPhoto: ImageMedia | null;
 }
 
+/** A project's case study: the person's own role and the long-form account. */
+export interface TimelineCaseStudy {
+  /** The stable anchor of the case study, `case-study-<project slug>`. */
+  readonly anchor: string;
+  /** Plain text: the person's own contribution, for example `Lead engineer`. */
+  readonly role: string;
+  /** Markdown: the long-form account. */
+  readonly body: string;
+}
+
+/** One project inside its experience. */
+export interface TimelineProject {
+  readonly slug: string;
+  /** The stable anchor of the project, `project-<slug>`. */
+  readonly anchor: string;
+  readonly name: string;
+  /** For example `March 1st, 2022 – present`. */
+  readonly period: string;
+  /** Markdown: the context, what the project is. */
+  readonly summary: string;
+  /** Markdown: the problem the project solved. */
+  readonly problem: string;
+  /** Markdown: the work done, the solution. */
+  readonly workDone: string;
+  /** Markdown: the project's outcome, which may be the team's rather than the person's own. */
+  readonly result: string;
+  readonly technologies: readonly { readonly slug: string; readonly name: string }[];
+  /** Null when the project has none: nothing is shown in its place. */
+  readonly caseStudy: TimelineCaseStudy | null;
+}
+
 /** One experience as the timeline shows it. */
 export interface TimelineEntry {
   readonly slug: string;
@@ -45,6 +76,8 @@ export interface TimelineEntry {
   readonly summary: string;
   readonly responsibilities: readonly string[];
   readonly technologies: readonly { readonly slug: string; readonly name: string }[];
+  /** The projects delivered within this experience, by their position, then slug. */
+  readonly projects: readonly TimelineProject[];
   readonly testimonials: readonly TimelineTestimonial[];
 }
 
@@ -79,6 +112,7 @@ export function toTimelineEntries(
     summary: experience.summary,
     responsibilities: experience.responsibilities,
     technologies: experience.technologies.map(({ slug, name }) => ({ slug, name })),
+    projects: [],
     testimonials: experience.testimonials
       .filter((testimonial) => testimonial.experience === experience.slug)
       .toSorted((a, b) => a.position - b.position)

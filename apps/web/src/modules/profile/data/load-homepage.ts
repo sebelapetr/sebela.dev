@@ -1,4 +1,4 @@
-import type { ApiClient, Person } from "@sebela/api-client";
+import type { ApiClient, Person, Project } from "@sebela/api-client";
 
 import { isWebUrl, readImage, type ImageMedia } from "./image";
 
@@ -17,6 +17,8 @@ export interface HomepageProfile {
     /** The person's web links, in their order. */
     readonly links: readonly { readonly label: string; readonly url: string }[];
   };
+  /** Every published project in the API's order; the homepage shows the selected ones. */
+  readonly projects: readonly Project[];
 }
 
 /**
@@ -73,6 +75,7 @@ export async function loadHomepage(
             : { address: person.email, href: `mailto:${encodeEmail(person.email)}` },
         links: person.links.filter((link) => isWebUrl(link.url)),
       },
+      projects: [],
     },
   };
 }

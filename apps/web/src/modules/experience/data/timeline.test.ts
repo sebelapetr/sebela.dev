@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Experience, Testimonial } from "@sebela/api-client";
+import type { CaseStudy, Experience, Project, Testimonial } from "@sebela/api-client";
 
 import { careerYears, toTimelineEntries } from "./timeline";
 
@@ -65,6 +65,55 @@ function testimonial(overrides: Partial<Testimonial> = {}): Testimonial {
   };
 }
 
+/** A fictional project of the fictional experience, as the public route returns it. */
+function project(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "2e4f6a8c-0b1d-4e3f-8a5c-7e9b1d3f5a70",
+    slug: "fictional-route-planner",
+    experience: "fictional-staff-engineer",
+    name: "Route planner",
+    summary: "Plans **fictional** delivery routes.",
+    problem: "Drivers planned routes by hand.",
+    workDone: "Built a planner over PostgreSQL.",
+    result: "The team plans a day in minutes.",
+    startedOn: "2022-05-02",
+    endedOn: "2023-01-31",
+    links: [],
+    selectedForHomepage: false,
+    position: 0,
+    coverId: null,
+    technologies: [
+      {
+        id: "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e70",
+        slug: "postgresql",
+        name: "PostgreSQL",
+        tier: "primary",
+        group: "core",
+        logoKey: null,
+        position: 1,
+        createdAt: STAMP,
+        updatedAt: STAMP,
+      },
+    ],
+    caseStudy: null,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  };
+}
+
+function caseStudy(overrides: Partial<CaseStudy> = {}): CaseStudy {
+  return {
+    id: "8f9e0d1c-2b3a-4c5d-8e6f-7a8b9c0d1e20",
+    project: "fictional-route-planner",
+    role: "Lead engineer",
+    body: "## Approach\n\nA **fictional** account.",
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  };
+}
+
 describe("toTimelineEntries", () => {
   it("maps an experience to an entry with its period, kind label and anchor", () => {
     expect(toTimelineEntries([experience({ endedOn: "2024-07-10" })])).toEqual([
@@ -84,6 +133,7 @@ describe("toTimelineEntries", () => {
         summary: "Leads a **fictional** platform team.",
         responsibilities: ["Own the architecture", "Mentor the team"],
         technologies: [{ slug: "typescript", name: "TypeScript" }],
+        projects: [],
         testimonials: [],
       },
     ]);
@@ -225,6 +275,76 @@ describe("toTimelineEntries", () => {
     it("never takes an organization's logo as an author photo", () => {
       const [entry] = toTimelineEntries([withQuote(PHOTO_ID)], new Map([[PHOTO_ID, photo]]));
       expect(entry?.testimonials[0]?.authorPhoto).toBeNull();
+    });
+  });
+
+  describe("projects", () => {
+    it("maps a project with its anchor, period, evidence and technologies", () => {
+      const [entry] = toTimelineEntries([experience({ projects: [project()] })]);
+
+      expect(entry?.projects).toEqual([
+        {
+          slug: "fictional-route-planner",
+          anchor: "project-fictional-route-planner",
+          name: "Route planner",
+          period: "May 2nd, 2022 – January 31st, 2023",
+          summary: "Plans **fictional** delivery routes.",
+          problem: "Drivers planned routes by hand.",
+          workDone: "Built a planner over PostgreSQL.",
+          result: "The team plans a day in minutes.",
+          technologies: [{ slug: "postgresql", name: "PostgreSQL" }],
+          caseStudy: null,
+        },
+      ]);
+    });
+
+    it("reads an ongoing project's period as present", () => {
+      const [entry] = toTimelineEntries([experience({ projects: [project({ endedOn: null })] })]);
+      expect(entry?.projects[0]?.period).toBe("May 2nd, 2022 – present");
+    });
+
+    it("gives a project with a case study the case study's own anchor, role and account", () => {
+      const [entry] = toTimelineEntries([
+        experience({ projects: [project({ caseStudy: caseStudy() })] }),
+      ]);
+
+      expect(entry?.projects[0]?.caseStudy).toEqual({
+        anchor: "case-study-fictional-route-planner",
+        role: "Lead engineer",
+        body: "## Approach\n\nA **fictional** account.",
+      });
+    });
+
+    it("has no case study when the project has none, rather than an empty one", () => {
+      const [entry] = toTimelineEntries([experience({ projects: [project({ caseStudy: null })] })]);
+      expect(entry?.projects[0]?.caseStudy).toBeNull();
+    });
+
+    it("orders the projects by their position, then slug, whatever the selection", () => {
+      const [entry] = toTimelineEntries([
+        experience({
+          projects: [
+            project({ slug: "c-late", position: 2 }),
+            project({ slug: "b-second", position: 0, selectedForHomepage: true }),
+            project({ slug: "a-first", position: 0 }),
+          ],
+        }),
+      ]);
+
+      expect(entry?.projects.map((item) => item.slug)).toEqual(["a-first", "b-second", "c-late"]);
+    });
+
+    it("keeps each project only inside the experience it belongs to", () => {
+      const [entry] = toTimelineEntries([
+        experience({ projects: [project(), project({ slug: "elsewhere", experience: "other" })] }),
+      ]);
+
+      expect(entry?.projects.map((item) => item.slug)).toEqual(["fictional-route-planner"]);
+    });
+
+    it("has no projects without any", () => {
+      const [entry] = toTimelineEntries([experience({ projects: [] })]);
+      expect(entry?.projects).toEqual([]);
     });
   });
 });

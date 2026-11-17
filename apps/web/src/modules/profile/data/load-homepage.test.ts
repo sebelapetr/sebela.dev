@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createApiClient, type Media, type Person } from "@sebela/api-client";
+import { createApiClient, type Media, type Person, type Project } from "@sebela/api-client";
 
 import { loadHomepage } from "./load-homepage";
 
@@ -47,6 +47,31 @@ function media(overrides: Partial<Media> = {}): Media {
   };
 }
 
+/** A fictional project as the public route returns it. */
+function project(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "2e4f6a8c-0b1d-4e3f-8a5c-7e9b1d3f5a70",
+    slug: "fictional-route-planner",
+    experience: "fictional-staff-engineer",
+    name: "Route planner",
+    summary: "Plans fictional delivery routes.",
+    problem: "Drivers planned routes by hand.",
+    workDone: "Built a planner.",
+    result: "The team plans a day in minutes.",
+    startedOn: "2022-05-02",
+    endedOn: null,
+    links: [],
+    selectedForHomepage: true,
+    position: 0,
+    coverId: null,
+    technologies: [],
+    caseStudy: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -60,8 +85,12 @@ function apiError(code: string, status: number): Response {
 
 type Route = (request: Request) => Response | Promise<Response>;
 
-/** A client whose requests go to `routes` by path; an unknown path fails the test. */
-function clientWith(routes: Record<string, Route>) {
+/**
+ * A client whose requests go to `routes` by path; an unknown path fails the test. The projects
+ * route answers with no projects unless `routes` says otherwise.
+ */
+function clientWith(given: Record<string, Route>) {
+  const routes: Record<string, Route> = { "/v1/projects": () => json([]), ...given };
   const requests: Request[] = [];
   const client = createApiClient({
     baseUrl: BASE,
@@ -102,6 +131,7 @@ describe("loadHomepage", () => {
             { label: "Notes", url: "https://notes.example.test/" },
           ],
         },
+        projects: [],
       },
     });
   });
@@ -116,6 +146,7 @@ describe("loadHomepage", () => {
 
     expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
       ["GET", "/v1/person"],
+      ["GET", "/v1/projects"],
       ["GET", `/v1/media/${PHOTO_ID}`],
     ]);
     for (const request of requests) {
@@ -133,7 +164,9 @@ describe("loadHomepage", () => {
       const result = await loadHomepage(client);
 
       expect(result.status === "ready" && result.profile.photo).toBeNull();
-      expect(requests).toHaveLength(1);
+      expect(requests.map((request) => new URL(request.url).pathname)).not.toContain(
+        `/v1/media/${PHOTO_ID}`,
+      );
     });
 
     it.each([
@@ -219,6 +252,45 @@ describe("loadHomepage", () => {
         { label: "Secure", url: "https://secure.example.test/" },
       ]);
     });
+  });
+
+  describe("the projects", () => {
+    it("keeps every project in the API's order, for the homepage to select from", async () => {
+      const projects = [
+        project({ slug: "first" }),
+        project({ slug: "not-selected", selectedForHomepage: false }),
+        project({ slug: "second" }),
+      ];
+      const { client } = clientWith({
+        "/v1/person": () => json(person({ photoId: null })),
+        "/v1/projects": () => json(projects),
+      });
+
+      const result = await loadHomepage(client);
+
+      expect(result.status === "ready" && result.profile.projects).toEqual(projects);
+    });
+
+    it.each([
+      ["the projects read fails", () => apiError("internal_error", 500)],
+      ["the projects read is rate limited", () => apiError("rate_limited", 429)],
+      [
+        "the projects request fails on the network",
+        () => {
+          throw new TypeError("fetch failed");
+        },
+      ],
+    ])(
+      "reports the content as unavailable when %s, never as no selected work",
+      async (_label, projectsRoute) => {
+        const { client } = clientWith({
+          "/v1/person": () => json(person({ photoId: null })),
+          "/v1/projects": projectsRoute,
+        });
+
+        expect(await loadHomepage(client)).toEqual({ status: "unavailable" });
+      },
+    );
   });
 
   it("reports a profile that does not exist yet as missing", async () => {
