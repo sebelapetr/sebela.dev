@@ -28,6 +28,12 @@ describe("anchorId", () => {
     expect(anchorId({ kind: "independent-rd" })).toBe("independent-rd");
   });
 
+  it("names a service by its slug", () => {
+    expect(anchorId({ kind: "service", slug: "process-automation" })).toBe(
+      "service-process-automation",
+    );
+  });
+
   it("gives a project and its case study different anchors", () => {
     expect(anchorId({ kind: "project", slug: "route-planner" })).not.toBe(
       anchorId({ kind: "case-study", project: "route-planner" }),
@@ -53,5 +59,11 @@ describe("anchorHref", () => {
       "/experience#technology-group-secondary",
     );
     expect(anchorHref({ kind: "independent-rd" })).toBe("/experience#independent-rd");
+  });
+
+  it("points at a service on the services page", () => {
+    expect(anchorHref({ kind: "service", slug: "process-automation" })).toBe(
+      "/services#service-process-automation",
+    );
   });
 });

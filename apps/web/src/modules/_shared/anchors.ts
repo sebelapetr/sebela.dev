@@ -16,7 +16,8 @@ export type AnchorTarget =
       readonly kind: "technology-group";
       readonly group: "core" | "ai-engineering-focus" | "secondary";
     }
-  | { readonly kind: "independent-rd" };
+  | { readonly kind: "independent-rd" }
+  | { readonly kind: "service"; readonly slug: string };
 
 /**
  * The item's id on its page: `experience-<slug>`, `project-<slug>`, `case-study-<project>`,
@@ -36,6 +37,8 @@ export function anchorId(target: AnchorTarget): string {
       return `technology-group-${target.group}`;
     case "independent-rd":
       return "independent-rd";
+    case "service":
+      throw new Error("not implemented");
   }
 }
 
