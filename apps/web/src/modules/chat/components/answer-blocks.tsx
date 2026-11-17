@@ -50,9 +50,7 @@ function TitleLink({ href, title }: { readonly href: string; readonly title: str
 }
 
 function Summary({ text }: { readonly text: string | null }) {
-  return text === null ? null : (
-    <p className="text-base text-pretty text-muted-foreground">{text}</p>
-  );
+  return text === null ? null : <p className="text-pretty text-muted-foreground">{text}</p>;
 }
 
 function BlockCard({ block }: { readonly block: ChatBlock }) {
@@ -172,9 +170,10 @@ export function AnswerSources({ sources }: { readonly sources: readonly ChatSour
             <Link
               href={source.href}
               prefetch={false}
-              className="inline-flex min-h-11 items-center font-medium underline-offset-4 hover:underline focus-visible:underline"
+              className="inline-flex min-h-11 items-center gap-1.5 font-medium underline-offset-4 hover:underline focus-visible:underline"
             >
-              {source.title}
+              <span className="min-w-0 break-words">{source.title}</span>
+              <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
             </Link>
           </li>
         ))}
