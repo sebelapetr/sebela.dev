@@ -6,12 +6,13 @@ into a migrated database:
 ```sh
 pnpm --filter @sebela/api seed            # the fictional demo seed in packages/db/seed/demo/
 pnpm --filter @sebela/api seed <folder>   # any other seed folder, for example a private one
+pnpm --filter @sebela/api seed --if-empty # load only into an empty profile, otherwise skip
 ```
 
 The command runs the backend services in-process (`SeedService.loadSeed` in `@sebela/services`). It
 needs the database settings and the media settings of the environment (see `apps/api/AGENTS.md`),
 but no running HTTP server and no API key. It prints counts only, never content and never the
-folder's path. The exit code is 0 for a load, 1 for a refused or unreadable seed and 2 for bad usage.
+folder's path. The exit code is 0 for a load or a skipped `--if-empty` load, 1 for a refused or unreadable seed and 2 for bad usage.
 
 The repository contains only the fictional demo seed in `demo/`. Its records double as an example
 of every file below.
@@ -76,6 +77,18 @@ A slug is unique within its file.
 - **Reuse ignores the storage prefix.** A file is reused when any media record has identical
   content, even one stored under another environment or worktree prefix; such a record keeps its
   key, so its public address stays `null` in this environment.
+
+## Worktree setup and the owner refresh
+
+- **Worktree setup seeds only an empty profile.** `node harness/worktree.mjs create` runs
+  `seed --if-empty` (`SeedService.loadSeedIntoEmpty`): it loads the demo seed only when the
+  worktree's database holds no person, no record of any kind and no media, and otherwise prints that
+  the seed was skipped and writes nothing. Running setup again on an existing worktree therefore
+  applies pending migrations but never overwrites content an agent has edited. The folder is still
+  read and validated, so an invalid seed fails setup either way.
+- **Refreshing a worktree from the seed is explicit.** The owner runs
+  `pnpm --silent --filter @sebela/api seed` in the worktree. It loads the seed with the rerun rules
+  above, so it overwrites the records the seed names, including edits made to them.
 
 ## Errors
 

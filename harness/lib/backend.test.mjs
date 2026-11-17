@@ -80,30 +80,25 @@ test("setup installs, migrates, prepares storage and seeds an empty profile, in 
 test("the stages read the worktree's own settings, not the caller's", (t) => {
   const root = worktree(t);
   const runner = fakeRunner();
+  // Settings of the caller (the main checkout or another worktree); only their names matter.
+  const callerSettings = [
+    "DATABASE_NAME",
+    "DATABASE_PASSWORD",
+    "POSTGRES_PASSWORD",
+    "STORAGE_WORKTREE",
+    "STORAGE_LOCAL_ROOT",
+    "API_PORT",
+    "MEDIA_MAX_BYTES",
+  ];
 
-  maintenance(runner, {
-    DATABASE_NAME: "fixture_main",
-    DATABASE_PASSWORD: "fixture-main-secret",
-    POSTGRES_PASSWORD: "fixture-superuser-secret",
-    STORAGE_WORKTREE: "",
-    STORAGE_LOCAL_ROOT: "/fixture/shared",
-    API_PORT: "1",
-    MEDIA_MAX_BYTES: "1",
-  }).backend.setup({ root, owner: OWNER });
+  maintenance(
+    runner,
+    Object.fromEntries(callerSettings.map((name) => [name, `caller-${name.toLowerCase()}`])),
+  ).backend.setup({ root, owner: OWNER });
 
   for (const { env } of runner.calls) {
     assert.equal(env.PATH, "/fixture/bin");
-    for (const name of [
-      "DATABASE_NAME",
-      "DATABASE_PASSWORD",
-      "POSTGRES_PASSWORD",
-      "STORAGE_WORKTREE",
-      "STORAGE_LOCAL_ROOT",
-      "API_PORT",
-      "MEDIA_MAX_BYTES",
-    ]) {
-      assert.equal(name in env, false, name);
-    }
+    for (const name of callerSettings) assert.equal(name in env, false, name);
   }
 });
 
