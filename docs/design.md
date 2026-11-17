@@ -61,6 +61,19 @@ On the homepage: the hero gets a lot of space, Selected work is the most promine
 
 Mobile-first from the first component. Every UI change is checked at **360, 768 and 1280 px** in both themes. No horizontal scrolling at any width; touch targets at least 44 px.
 
+## Timeline
+
+One shared timeline (`@sebela/ui/components/timeline`) tells the career on `/experience` and will carry the AI Engineering Roadmap. It is monochrome and editorial: no cards, shadows or accent colour.
+
+- **Rail and markers.** A dashed vertical rail on the left connects one round marker per item. The marker is a chevron that points right while the item is closed and down while it is open; an open or hovered item draws its marker in the foreground colour.
+- **Item heading.** The whole heading row is one button that opens and closes the item. The period and the kind label sit above the content's title, never in a separate column.
+- **Period.** Geist Mono, muted: `October 1st, 2023 – July 10th, 2024` with correct ordinals and an en dash, `October 1st, 2023 – present` while ongoing, and a single date when an experience started and ended on the same day. Dates are calendar dates, never shifted by a time zone.
+- **Kind label.** A small bordered label beside the period: `Main job`, `Own business`, `Side project`. It exists so that concurrent experiences do not read as several full-time jobs. Client and side work keeps its own row and is never nested under an employer.
+- **Expand policy.** Only current items (no end date) are open when the page loads; older ones are compact rows that open on click, Enter or Space. Closed content stays in the page (`hidden="until-found"`), so the browser's page search finds and opens it, and a closed item takes no extra space.
+- **Content.** Summary, responsibilities, technologies as plain mono text, and a testimonial as a quote with a left rule, only beside its own experience. Long content stays within a readable measure.
+- **Narrow screens.** The rail and markers stay; on narrow screens the kind label wraps below the period and the period balances its lines rather than breaking a date apart.
+- **Anchors.** Each item has a stable id (`experience-<slug>`) and scrolls into view with room above it.
+
 ## Process
 
 Implementation → browser screenshot → visual review → iteration. Screenshots are attached to the pull request.
