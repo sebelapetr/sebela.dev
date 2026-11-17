@@ -4,6 +4,7 @@
 //
 //   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10] [--steward-minutes 15]
 //                                       [--max-failures 3] [--max-iterations 50] [--no-notify]
+//                                       [--note "<text for the orchestrator>"]
 //
 // It holds no state of its own: what is done is read from GitHub by the orchestrator each time,
 // so the loop can be stopped (Ctrl+C) and started again at any point.
@@ -18,6 +19,8 @@ import {
   RUN_REPORT_SCHEMA,
   classifyRun,
   decideNext,
+  noteAfter,
+  ownerNoteSection,
 } from "./lib/loop.mjs";
 import { newProblem, notify } from "./lib/notify.mjs";
 import { currentWork, workChange } from "./lib/progress.mjs";
@@ -36,6 +39,7 @@ function parseArgs(argv) {
     maxIterations: 50,
     stewardMinutes: 15,
     notify: true,
+    note: null,
     _: [],
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -46,6 +50,7 @@ function parseArgs(argv) {
     else if (arg === "--max-iterations") options.maxIterations = Number(argv[++i]);
     else if (arg === "--steward-minutes") options.stewardMinutes = Number(argv[++i]);
     else if (arg === "--no-notify") options.notify = false;
+    else if (arg === "--note") options.note = argv[++i] ?? "";
     else options._.push(arg);
   }
   options.phase = options._[0];
@@ -65,7 +70,7 @@ function alert(options, lines) {
   if (options.notify) notify({ title: `sebela.dev · ${options.phase}`, lines });
 }
 
-function prompt({ phase, base }) {
+function prompt({ phase, base, note }) {
   return `You are running unattended in the phase loop.
 
 Phase: ${phase}
@@ -84,13 +89,13 @@ Write the report summary in English; it goes to the loop's log.
 6. If the usage limit stops the work on the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted. The loop waits and continues the same issue.
 
 Nobody can answer questions in this run. Never wait for input; when something needs the owner, record it on the issue.
-Finish with the structured report.`;
+Finish with the structured report.${ownerNoteSection(note)}`;
 }
 
-function runOrchestrator({ mainRoot, phase, base, iteration, sessionId }) {
+function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId }) {
   const args = [
     "-p",
-    prompt({ phase, base }),
+    prompt({ phase, base, note }),
     "--agent",
     "orchestrator",
     "--output-format",
@@ -223,9 +228,9 @@ function startWatcher({ mainRoot, sessionId, iteration }) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  if (!options.phase) {
+  if (!options.phase || (options.note !== null && !options.note.trim())) {
     console.error(
-      "usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N] [--no-notify]",
+      'usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N] [--no-notify] [--note "<text>"]',
     );
     process.exit(64);
   }
@@ -243,6 +248,9 @@ async function main() {
   const stewardState = { failedAtStart: failedIssues(options.phase) };
   let consecutiveFailures = 0;
   let waiting = false;
+  // The owner's note goes to the orchestrator until the first run that finished.
+  let note = options.note;
+  if (note) log(`owner note for the first run: ${note.trim()}`);
   for (let iteration = 1; iteration <= options.maxIterations && !interrupted; iteration += 1) {
     // Without Docker, Postgres or gh every agent would fail or improvise; stop and say what to do.
     const readiness = checkReadiness({ mainRoot, base: options.base });
@@ -273,6 +281,7 @@ async function main() {
       mainRoot,
       phase: options.phase,
       base: options.base,
+      note,
       iteration,
       sessionId,
     });
@@ -289,6 +298,7 @@ async function main() {
       maxConsecutiveFailures: options.maxFailures,
     });
     consecutiveFailures = decision.consecutiveFailures;
+    note = noteAfter(note, decision.next);
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     fs.writeFileSync(
