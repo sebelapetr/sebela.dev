@@ -82,6 +82,43 @@ jobs:
       - name: Generated API client matches the API
         run: pnpm check:api-client
 
+  # The website in a browser: Playwright runs the built website against the API's end-to-end server,
+  # a real API on a temporary database of the job's Postgres seeded from small fictional fixtures,
+  # and checks content, the missing-photo and unavailable states, keyboard order, accessibility and
+  # no horizontal scroll at 360, 768 and 1280 px in light and dark mode. On every run, not only when
+  # the website is affected, because a change to the API can break what the website reads. The
+  # screenshots are kept as an artifact.
+  web-e2e:
+    name: Website end to end
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      POSTGRES_PASSWORD: ci-only-disposable-password
+      DATABASE_PASSWORD: ci-only-disposable-password
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Chromium for Playwright
+        run: pnpm --filter @sebela/web exec playwright install --with-deps chromium
+      - name: Postgres for the API's end-to-end server
+        run: docker compose --env-file .env.example up --detach --wait
+      - name: Browser tests (builds the website and the API first)
+        run: pnpm test:e2e
+      - name: Screenshots and reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-e2e
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+          if-no-files-found: ignore
+
   # Real-Postgres lifecycle of the worktree databases: a disposable Compose project from
   # compose.yaml on a free port. Plain Node and Docker, no installed dependencies.
   worktree-databases:
