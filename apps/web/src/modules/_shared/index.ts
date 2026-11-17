@@ -2,7 +2,7 @@
 // navigation, its mobile menu, the skip link and the theme toggle) and the id of the `<main>` it
 // skips to, the theme's pre-paint script, the footer, the CV's
 // actions (the PDF's download and date, the live CV), the site's own addresses, the anchors of
-// items on its pages, the career's length in years, an exploration's status and an experience's kind in words, the education
+// items on its pages, the career's length in years, an exploration's status and an experience's kind in words, the technology groups, the education
 // records as rows, dates and periods in words, and safe Markdown prose. Importable from client
 // components; imports no other module.
 export { CvActions } from "./components/cv-actions";
@@ -17,4 +17,9 @@ export { explorationStatusText, type ExplorationStatusText } from "./exploration
 export { formatDate, formatPeriod } from "./period";
 export { mainContentId } from "./navigation";
 export { cvPdfRoutes, routes } from "./site";
+export {
+  technologyGroupLabel,
+  technologyGroupOf,
+  type TechnologyGroupKey,
+} from "./technology-group";
 export { themeScript } from "./theme";

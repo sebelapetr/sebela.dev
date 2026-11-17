@@ -81,6 +81,13 @@ function setup(storage: ChatStorage = createMemoryStorage()) {
   return { store, sent, storage };
 }
 
+/** A new store over the storage, with the conversation opened, as a reload sees it. */
+function setupAndOpen(storage: ChatStorage, id: string) {
+  const { store } = setup(storage);
+  store.open(id);
+  return store.getSnapshot();
+}
+
 /** The item at the index, which the test expects to exist. */
 function at<T>(items: readonly T[], index: number): T {
   const item = items[index];
@@ -344,6 +351,32 @@ describe("the hero's hand-off", () => {
       busy: false,
       turns: [{ status: "interrupted", text: "Half" }],
     });
+  });
+
+  it("opens a conversation whose stored block was tampered with as empty, showing none of it", async () => {
+    const storage = createMemoryStorage();
+    const first = setup(storage);
+    first.store.submit("Q?");
+    const sent = at(first.sent, 0);
+    const block = {
+      type: "ServiceCard",
+      title: "Fictional automation",
+      summary: "Made up.",
+      href: "/services#service-automation",
+    };
+    sent.stream.push(event(sent, 0, { type: "start" }));
+    sent.stream.push(event(sent, 1, { type: "block", block }));
+    sent.stream.push(event(sent, 2, { type: "complete", outcome: "answered" }));
+    sent.stream.end();
+    await flush();
+    const id = present(first.store.getSnapshot().conversationId);
+    const key = `sebela-chat:${id}`;
+    const stored = present(storage.getItem(key));
+    expect(setupAndOpen(storage, id).turns).toMatchObject([{ blocks: [block] }]);
+
+    storage.setItem(key, stored.replace("/services#service-automation", "javascript:alert(1)"));
+
+    expect(setupAndOpen(storage, id)).toEqual({ conversationId: id, turns: [], busy: false });
   });
 
   it("opens a conversation whose stored state is unreadable as empty", () => {

@@ -2,10 +2,36 @@ import { describe, expect, it } from "vitest";
 
 import { validateChatStream, type ChatStreamEvent, type ChatSubmission } from "@sebela/contracts";
 
+import type { AskEvidence } from "./evidence";
 import { createMockChatAdapter } from "./mock-adapter";
 import { askSuggestions, preparedAnswer } from "./prepared-answers";
 
 const NAME = "Casey Morrow";
+
+const EVIDENCE: AskEvidence = {
+  name: NAME,
+  contact: { email: "casey@morrow.example.test", links: [] },
+  experiences: [
+    {
+      slug: "lead-engineer",
+      title: "Lead engineer",
+      organization: "Fictional Freight",
+      startedOn: "2022-03-01",
+      endedOn: null,
+      summary: "Leads a fictional team.",
+      technologies: ["TypeScript"],
+      projects: [{ slug: "route-planner", name: "Route planner", caseStudy: true }],
+    },
+  ],
+  services: [{ slug: "process-automation", name: "Process automation", summary: "Automates." }],
+  explorations: [
+    { slug: "answer-checker", name: "Answer checker", summary: "Checks.", status: "built" },
+    { slug: "tool-scopes", name: "Tool scopes", summary: "Plans.", status: "designed" },
+  ],
+  technologyGroups: ["core", "ai-engineering-focus"],
+};
+
+const QUESTIONS = [...askSuggestions(NAME).map((suggestion) => suggestion.question), "Unknown?"];
 
 function submission(question: string): ChatSubmission {
   return {
@@ -29,7 +55,7 @@ async function collect(iterable: AsyncIterable<unknown>): Promise<unknown[]> {
 }
 
 function adapter() {
-  return createMockChatAdapter({ subjectName: NAME, wait: noWait, createId: sequentialIds() });
+  return createMockChatAdapter({ evidence: EVIDENCE, wait: noWait, createId: sequentialIds() });
 }
 
 describe("createMockChatAdapter", () => {
@@ -49,7 +75,7 @@ describe("createMockChatAdapter", () => {
     const events = (await collect(
       adapter().send(sent, { signal: new AbortController().signal }),
     )) as ChatStreamEvent[];
-    const expected = preparedAnswer(NAME, question);
+    const expected = preparedAnswer(EVIDENCE, question);
 
     expect(events[0]?.type).toBe("start");
     const deltas = events.filter((event) => event.type === "text_delta");
@@ -59,6 +85,52 @@ describe("createMockChatAdapter", () => {
       links: expected.related,
     });
     expect(events.at(-1)).toMatchObject({ type: "complete", outcome: expected.outcome });
+  });
+
+  it.each(QUESTIONS)("streams a complete, valid attempt for %s", async (question) => {
+    const sent = submission(question);
+    const events = await collect(adapter().send(sent, { signal: new AbortController().signal }));
+
+    expect(validateChatStream(sent.requestId, events).status).toBe("complete");
+  });
+
+  it("streams the text, then each block, the sources and the related links, in that order", async () => {
+    const question = `What is ${NAME} working on now?`;
+    const sent = submission(question);
+    const events = (await collect(
+      adapter().send(sent, { signal: new AbortController().signal }),
+    )) as ChatStreamEvent[];
+    const expected = preparedAnswer(EVIDENCE, question);
+
+    const order = events.map((event) => event.type).filter((type) => type !== "text_delta");
+    expect(order).toEqual([
+      "start",
+      ...expected.blocks.map(() => "block"),
+      "sources",
+      "related",
+      "complete",
+    ]);
+    const lastDelta = events.findLastIndex((event) => event.type === "text_delta");
+    expect(lastDelta).toBeLessThan(events.findIndex((event) => event.type === "block"));
+    expect(events.flatMap((event) => (event.type === "block" ? [event.block] : []))).toEqual(
+      expected.blocks,
+    );
+    expect(events.find((event) => event.type === "sources")).toMatchObject({
+      sources: expected.sources,
+    });
+  });
+
+  it("sends no sources at all for an answer that rests on none", async () => {
+    const sent = submission(`What are ${NAME}'s strongest engineering skills?`);
+    const events = (await collect(
+      adapter().send(sent, { signal: new AbortController().signal }),
+    )) as ChatStreamEvent[];
+
+    expect(events.map((event) => event.type)).not.toContain("sources");
+    expect(events.filter((event) => event.type === "block")).toMatchObject([
+      { block: { type: "ContactCard", email: "casey@morrow.example.test" } },
+    ]);
+    expect(events.at(-1)).toMatchObject({ type: "complete", outcome: "insufficient_evidence" });
   });
 
   it("answers an unknown question with the not-connected reply as an unavailable outcome", async () => {
@@ -84,7 +156,7 @@ describe("createMockChatAdapter", () => {
   it("waits between deltas so the answer streams", async () => {
     const waits: number[] = [];
     const mock = createMockChatAdapter({
-      subjectName: NAME,
+      evidence: EVIDENCE,
       chunkDelayMs: 30,
       wait: (ms) => {
         waits.push(ms);

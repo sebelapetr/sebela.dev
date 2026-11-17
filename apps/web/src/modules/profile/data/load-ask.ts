@@ -1,8 +1,18 @@
-import type { ApiClient } from "@sebela/api-client";
+import type { ApiClient, Experience, Exploration, Service, Technology } from "@sebela/api-client";
 
-/** What the Ask page needs from the profile: the name its assistant speaks about. */
+/**
+ * What the Ask page needs from the profile: the name its assistant speaks about and the public
+ * records its answers rest on, each list in the API's order.
+ */
 export interface AskContent {
   readonly name: string;
+  readonly email: string | null;
+  /** The person's web links, in their order; any other address is left out. */
+  readonly links: readonly { readonly label: string; readonly url: string }[];
+  readonly experiences: readonly Experience[];
+  readonly services: readonly Service[];
+  readonly explorations: readonly Exploration[];
+  readonly technologies: readonly Technology[];
 }
 
 /** The Ask page's content, a profile that is not published yet, or one that cannot be read now. */
@@ -32,7 +42,7 @@ export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): 
     if (read.data === undefined) {
       return read.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
     }
-    return { status: "ready", content: { name: read.data.name } };
+    throw new Error(`not implemented for ${read.data.name}`);
   } catch {
     return { status: "unavailable" };
   }
