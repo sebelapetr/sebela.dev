@@ -33,10 +33,10 @@ function failed(code: string, retryable: boolean, withText = true): ChatTurn {
 }
 
 describe("describeChatTurn", () => {
-  it("shows a pending answer as answering, with nothing to retry", () => {
+  it("shows a pending answer without a tag (its placeholder says it is answering)", () => {
     expect(describeChatTurn(startChatTurn(REQUEST, "Q?"))).toEqual({
       state: "pending",
-      tag: "Answering",
+      tag: null,
       note: null,
       retry: false,
       announcement: "Answering…",

@@ -326,3 +326,17 @@ export function preparedAnswer(evidence: AskEvidence, question: string): Prepare
     related: [experienceLink, servicesLink],
   };
 }
+
+/**
+ * The reply to a question the assistant declines: one outside the public profile. Only the mock's
+ * refusal scenario streams it in phase 3; phase 7's assistant decides refusals itself.
+ */
+export function declinedAnswer(evidence: AskEvidence): PreparedAnswer {
+  return {
+    text: `The assistant only answers questions about ${evidence.name}'s public profile, so it won't answer that one.`,
+    outcome: "refused",
+    blocks: [],
+    sources: [],
+    related: [experienceLink, servicesLink],
+  };
+}

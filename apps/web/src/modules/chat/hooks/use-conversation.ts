@@ -6,7 +6,11 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import type { AskEvidence } from "../data/evidence";
-import { createMockChatAdapter } from "../data/mock-adapter";
+import {
+  createMockChatAdapter,
+  parseMockChatScenarios,
+  type MockChatScenario,
+} from "../data/mock-adapter";
 import {
   createConversationStore,
   createMemoryStorage,
@@ -19,6 +23,25 @@ import {
 const emptySnapshot: ConversationSnapshot = { conversationId: null, turns: [], busy: false };
 
 const createId = () => crypto.randomUUID();
+
+declare global {
+  interface Window {
+    /**
+     * Phase 3 only: failure scenarios the mock plays, one per question or retry, before answering
+     * normally again. The browser tests set it to exercise recovery; the page never does. It goes
+     * with the mock when phase 7 connects the assistant.
+     */
+    __sebelaMockChatScenarios?: unknown;
+  }
+}
+
+/** Takes the next scenario the browser tests queued for the mock; none by default. */
+function nextMockScenario(): MockChatScenario | null {
+  const [next, ...rest] = parseMockChatScenarios(window.__sebelaMockChatScenarios);
+  if (next === undefined) return null;
+  window.__sebelaMockChatScenarios = rest;
+  return next;
+}
 
 let storage: ChatStorage | undefined;
 let current: { readonly key: string; readonly store: ConversationStore } | undefined;
@@ -43,7 +66,7 @@ function conversationStore(key: string, evidence: AskEvidence): ConversationStor
     current = {
       key,
       store: createConversationStore({
-        adapter: createMockChatAdapter({ evidence }),
+        adapter: createMockChatAdapter({ evidence, nextScenario: nextMockScenario }),
         storage: chatStorage(),
         createId,
       }),
@@ -78,10 +101,11 @@ export function useConversation(evidence: AskEvidence) {
     },
     [store],
   );
+  const retry = useCallback((requestId: string) => store().retry(requestId), [store]);
   const newChat = useCallback(() => {
     store().newChat();
   }, [store]);
-  return { snapshot, open, submit, newChat };
+  return { snapshot, open, submit, retry, newChat };
 }
 
 /**

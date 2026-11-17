@@ -94,18 +94,30 @@ export function endChatStream(turn: ChatTurn): ChatTurn {
   return isChatTurnOpen(turn) ? { ...turn, status: "interrupted" } : turn;
 }
 
+/** A failure found by the client (invalid stream, timeout); a new attempt may succeed. */
 function fail(turn: ChatTurn, code: ChatErrorCode): ChatTurn {
   return { ...turn, status: "failed", error: { code, retryable: true } };
 }
 
+/**
+ * Whether the visitor may ask for the answer again: after an interruption (an ambiguous failure,
+ * so the choice is theirs) or an error the contract marks as retryable. Never for a final answer
+ * or one still open.
+ */
 export function canRetryChatTurn(turn: ChatTurn): boolean {
-  throw new Error("not implemented: " + turn.requestId);
+  if (turn.status === "interrupted") return true;
+  return turn.status === "failed" && turn.error?.retryable === true;
 }
 
+/**
+ * A new attempt at the same logical request: the question and request stay, the failed answer
+ * attempt is replaced and the new attempt's events are accepted from the beginning.
+ */
 export function restartChatTurn(turn: ChatTurn): ChatTurn {
-  throw new Error("not implemented: " + turn.requestId);
+  return startChatTurn(turn.requestId, turn.question);
 }
 
+/** No event came for too long: an open turn fails as timed out, keeping its partial answer. */
 export function timeOutChatTurn(turn: ChatTurn): ChatTurn {
-  throw new Error("not implemented: " + turn.requestId);
+  return isChatTurnOpen(turn) ? fail(turn, "timeout") : turn;
 }

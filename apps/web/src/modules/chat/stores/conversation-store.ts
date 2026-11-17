@@ -15,10 +15,13 @@ import {
 
 import type { ChatAdapter } from "../types/adapter";
 import {
+  canRetryChatTurn,
   endChatStream,
   isChatTurnOpen,
   receiveChatEvent,
+  restartChatTurn,
   startChatTurn,
+  timeOutChatTurn,
   type ChatTurn,
 } from "../data/conversation";
 
@@ -62,6 +65,12 @@ export interface ConversationStore {
    * creating its random address for a new chat. Refused while another question is answering.
    */
   submit(question: string): SubmitResult;
+  /**
+   * Asks the latest question again when its answer was interrupted or failed with a retryable
+   * error: the same conversation, request and question, its failed answer replaced in place and no
+   * new question added. Refused while an answer is open and for any other turn. Never called by
+   * the store itself: a failure waits for the visitor.
+   */
   retry(requestId: string): RetryResult;
   /** Cancels the request in flight and forgets the open conversation in this tab. */
   newChat(): void;
@@ -72,7 +81,55 @@ export interface ConversationStoreOptions {
   readonly storage: ChatStorage;
   /** Creates random identifiers (UUID) of conversations and requests. */
   readonly createId: () => string;
+  /**
+   * How long an answer may go without an event before it fails as timed out and its transport is
+   * stopped; 20 s by default.
+   */
   readonly idleTimeoutMs?: number;
+}
+
+const DEFAULT_IDLE_TIMEOUT_MS = 20_000;
+
+/** The iterator's next result, or "timeout" after the given time, or "aborted" with the signal. */
+function nextWithin(
+  iterator: AsyncIterator<unknown>,
+  ms: number,
+  signal: AbortSignal,
+): Promise<IteratorResult<unknown> | "timeout" | "aborted"> {
+  return new Promise((resolve, reject) => {
+    const settle = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", aborted);
+    };
+    const aborted = () => {
+      settle();
+      resolve("aborted");
+    };
+    const timer = setTimeout(() => {
+      settle();
+      resolve("timeout");
+    }, ms);
+    signal.addEventListener("abort", aborted);
+    iterator.next().then(
+      (result) => {
+        settle();
+        resolve(result);
+      },
+      (error: unknown) => {
+        settle();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
+/** Asks the transport to stop without waiting for it; a transport that cannot is ignored anyway. */
+function close(iterator: AsyncIterator<unknown> | undefined): void {
+  try {
+    iterator?.return?.().catch(() => undefined);
+  } catch {
+    // Nothing more to stop.
+  }
 }
 
 const conversationKey = (id: string) => `sebela-chat:${id}`;
@@ -179,6 +236,7 @@ export function createConversationStore({
   adapter,
   storage,
   createId,
+  idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
 }: ConversationStoreOptions): ConversationStore {
   let state = snapshot(null, []);
   let opened = false;
@@ -215,21 +273,48 @@ export function createConversationStore({
     set(snapshot(state.conversationId, state.turns.with(index, changed)));
   }
 
+  /**
+   * Feeds the attempt's events into its turn until the turn ends, the stream ends, nothing comes
+   * for the idle time or the attempt is no longer the active one. Only the active attempt changes
+   * anything: whatever a cancelled, replaced or timed-out attempt still yields is ignored, though
+   * it names the same request.
+   */
   async function stream(submission: ChatSubmission, controller: AbortController): Promise<void> {
     const { requestId } = submission;
+    const current = () => active === controller && !controller.signal.aborted;
+    let iterator: AsyncIterator<unknown> | undefined;
+    let ending: (turn: ChatTurn) => ChatTurn = endChatStream;
     try {
-      for await (const raw of adapter.send(submission, { signal: controller.signal })) {
-        if (controller.signal.aborted) return;
-        update(requestId, (turn) => receiveChatEvent(turn, raw));
+      iterator = adapter.send(submission, { signal: controller.signal })[Symbol.asyncIterator]();
+      for (;;) {
+        const step = await nextWithin(iterator, idleTimeoutMs, controller.signal);
+        if (!current()) return;
+        if (step === "timeout") {
+          ending = timeOutChatTurn;
+          break;
+        }
+        if (step === "aborted" || step.done === true) break;
+        update(requestId, (turn) => receiveChatEvent(turn, step.value));
         const turn = state.turns.find((candidate) => candidate.requestId === requestId);
         if (turn === undefined || !isChatTurnOpen(turn)) break;
       }
     } catch {
       // A transport that fails ends the stream; the answer is then interrupted.
+      if (!current()) return;
+    } finally {
+      close(iterator);
     }
-    if (controller.signal.aborted) return;
-    if (active === controller) active = null;
-    update(requestId, endChatStream);
+    active = null;
+    controller.abort();
+    update(requestId, ending);
+  }
+
+  /** Makes the submission the active attempt, shows the turns and streams its answer. */
+  function send(submission: ChatSubmission, turns: readonly ChatTurn[]): void {
+    const controller = new AbortController();
+    active = controller;
+    set(snapshot(submission.conversationId, turns));
+    void stream(submission, controller);
   }
 
   function submit(question: string): SubmitResult {
@@ -241,15 +326,19 @@ export function createConversationStore({
       requestId: createId(),
       question: trimmed,
     };
-    const controller = new AbortController();
-    active = controller;
-    set(
-      snapshot(submission.conversationId, [
-        ...state.turns,
-        startChatTurn(submission.requestId, trimmed),
-      ]),
+    send(submission, [...state.turns, startChatTurn(submission.requestId, trimmed)]);
+    return "sent";
+  }
+
+  function retry(requestId: string): RetryResult {
+    const latest = state.turns.at(-1);
+    if (latest?.requestId !== requestId || state.conversationId === null) return "not_retryable";
+    if (state.busy) return "busy";
+    if (!canRetryChatTurn(latest)) return "not_retryable";
+    send(
+      { conversationId: state.conversationId, requestId, question: latest.question },
+      state.turns.with(-1, restartChatTurn(latest)),
     );
-    void stream(submission, controller);
     return "sent";
   }
 
@@ -275,9 +364,7 @@ export function createConversationStore({
       if (handedOff !== null && turns.length === 0) submit(handedOff);
     },
     submit,
-    retry(requestId) {
-      throw new Error("not implemented: " + requestId);
-    },
+    retry,
     newChat() {
       cancel();
       if (state.conversationId !== null) {
