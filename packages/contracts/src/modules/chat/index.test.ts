@@ -199,6 +199,7 @@ describe("ChatSourceSchema and ChatSourcesSchema", () => {
     ["an address on another site", { ...experienceSource, href: "https://x.example.test/a" }],
     ["a protocol-relative address", { ...experienceSource, href: "//x.example.test/a" }],
     ["a relative address", { ...experienceSource, href: "experience" }],
+    ["a control character in the path", { ...experienceSource, href: "/experience\u0007" }],
     ["a script address", { ...experienceSource, href: "javascript:alert(1)" }],
     ["an unknown record kind", { ...experienceSource, record: { kind: "blog", id: "a" } }],
   ])("rejects %s", (_, source) => {
@@ -228,8 +229,11 @@ describe("ChatRelatedLinkSchema", () => {
     "mailto:casey@morrow.example.test",
     "//x.example.test",
     "/\\x.example.test",
+    "/experience\u0000",
+    "/experience\u007f#a",
+    "/exp\u0085erience",
     "",
-  ])("rejects the unsafe address %s", (href) => {
+  ])("rejects the unsafe address %j", (href) => {
     expect(ChatRelatedLinkSchema.safeParse({ label: "Read more", href }).success).toBe(false);
   });
 });
