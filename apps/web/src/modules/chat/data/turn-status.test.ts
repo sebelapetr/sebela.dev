@@ -39,6 +39,7 @@ describe("describeChatTurn", () => {
       tag: null,
       note: null,
       retry: false,
+      showsEvidence: true,
       announcement: "Answering…",
     });
   });
@@ -49,6 +50,7 @@ describe("describeChatTurn", () => {
       tag: "Answering",
       note: null,
       retry: false,
+      showsEvidence: true,
     });
   });
 
@@ -58,6 +60,7 @@ describe("describeChatTurn", () => {
       tag: null,
       note: null,
       retry: false,
+      showsEvidence: true,
       announcement: "Partial",
     });
   });
@@ -72,6 +75,7 @@ describe("describeChatTurn", () => {
       tag,
       note: null,
       retry: false,
+      showsEvidence: true,
       announcement: "Partial",
     });
   });
@@ -82,6 +86,7 @@ describe("describeChatTurn", () => {
       tag: "Incomplete",
       note: "The answer stopped before it finished.",
       retry: true,
+      showsEvidence: false,
       announcement: "The answer stopped before it finished. You can try again.",
     });
   });
@@ -106,6 +111,7 @@ describe("describeChatTurn", () => {
       tag: "Incomplete",
       note,
       retry: true,
+      showsEvidence: false,
       announcement: `${note} You can try again.`,
     });
   });
@@ -116,7 +122,44 @@ describe("describeChatTurn", () => {
       tag: "Not answered",
       note: "This question could not be sent. Try asking something else.",
       retry: false,
+      showsEvidence: false,
       announcement: "This question could not be sent. Try asking something else.",
     });
+  });
+
+  it("hides the cards, sources and related pages that arrived before a failure or an interruption", () => {
+    const block = event(2, {
+      type: "block",
+      block: {
+        type: "ServiceCard",
+        title: "Fictional automation",
+        summary: "Made up.",
+        href: "/services#service-automation",
+      },
+    });
+    const sources = event(3, {
+      type: "sources",
+      sources: [
+        {
+          record: { kind: "experience", id: "harbor-logistics" },
+          title: "Harbor Logistics",
+          href: "/experience#experience-harbor-logistics",
+        },
+      ],
+    });
+    const related = event(4, { type: "related", links: [{ label: "CV", href: "/cv" }] });
+    const streamed = turnFrom([start, partial, block, sources, related]);
+    expect(streamed.blocks).toHaveLength(1);
+    expect(streamed.sources).toHaveLength(1);
+    expect(describeChatTurn(streamed).showsEvidence).toBe(true);
+    expect(describeChatTurn(endChatStream(streamed))).toMatchObject({
+      state: "interrupted",
+      showsEvidence: false,
+    });
+    const failed = receiveChatEvent(
+      streamed,
+      event(5, { type: "error", code: "internal", retryable: true }),
+    );
+    expect(describeChatTurn(failed)).toMatchObject({ state: "failed", showsEvidence: false });
   });
 });
