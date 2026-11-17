@@ -296,6 +296,9 @@ importers:
       '@sebela/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@sebela/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@sebela/ui':
         specifier: workspace:*
         version: link:../../packages/ui

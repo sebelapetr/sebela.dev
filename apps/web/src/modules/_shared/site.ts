@@ -13,7 +13,7 @@ export const routes = {
   /** A short placeholder until the AI Roadmap arrives in phase 4. */
   aiRoadmap: "/ai-roadmap",
   contact: "/#contact",
-  /** The chat; a short placeholder until the shared mock-chat slice delivers it. */
+  /** The chat; a conversation is `/ask?c=<id>` (the chat module builds it). */
   ask: "/ask",
 } as const;
 

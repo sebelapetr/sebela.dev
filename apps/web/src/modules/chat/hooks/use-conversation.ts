@@ -1,0 +1,89 @@
+"use client";
+
+// The chat's store for this tab, shared by the hero and the Ask page: one store per page load,
+// created on first use in the browser, so a conversation keeps streaming across client navigation
+// and opening it again never resends. The server renders an empty chat.
+import { useCallback, useSyncExternalStore } from "react";
+
+import { createMockChatAdapter } from "../data/mock-adapter";
+import {
+  createConversationStore,
+  createMemoryStorage,
+  handOffQuestion,
+  type ChatStorage,
+  type ConversationSnapshot,
+  type ConversationStore,
+} from "../stores/conversation-store";
+
+const emptySnapshot: ConversationSnapshot = { conversationId: null, turns: [], busy: false };
+
+const createId = () => crypto.randomUUID();
+
+let storage: ChatStorage | undefined;
+let current: { readonly subjectName: string; readonly store: ConversationStore } | undefined;
+
+/** The tab's session storage when it can be written; otherwise one that lasts as long as the page. */
+function chatStorage(): ChatStorage {
+  if (storage !== undefined) return storage;
+  try {
+    const probe = "sebela-chat-probe";
+    window.sessionStorage.setItem(probe, probe);
+    window.sessionStorage.removeItem(probe);
+    storage = window.sessionStorage;
+  } catch {
+    storage = createMemoryStorage();
+  }
+  return storage;
+}
+
+function conversationStore(subjectName: string): ConversationStore {
+  if (current?.subjectName !== subjectName) {
+    current = {
+      subjectName,
+      store: createConversationStore({
+        adapter: createMockChatAdapter({ subjectName }),
+        storage: chatStorage(),
+        createId,
+      }),
+    };
+  }
+  return current.store;
+}
+
+/** The open conversation and what can be done with it, for answers about the named person. */
+export function useConversation(subjectName: string) {
+  const subscribe = useCallback(
+    (listener: () => void) => conversationStore(subjectName).subscribe(listener),
+    [subjectName],
+  );
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    () => conversationStore(subjectName).getSnapshot(),
+    () => emptySnapshot,
+  );
+  const open = useCallback(
+    (conversationId: string | null) => {
+      conversationStore(subjectName).open(conversationId);
+    },
+    [subjectName],
+  );
+  const submit = useCallback(
+    (question: string) => {
+      const store = conversationStore(subjectName);
+      return { result: store.submit(question), conversationId: store.getSnapshot().conversationId };
+    },
+    [subjectName],
+  );
+  const newChat = useCallback(() => {
+    conversationStore(subjectName).newChat();
+  }, [subjectName]);
+  return { snapshot, open, submit, newChat };
+}
+
+/**
+ * Leaves the hero's question for the conversation it starts and returns that conversation's random
+ * address (null for an empty or too long question). The question never goes into the address.
+ */
+export function handOff(question: string): string | null {
+  return handOffQuestion(chatStorage(), question, createId);
+}
