@@ -91,6 +91,41 @@ function bodyBackground(page: Page) {
   return page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 }
 
+function colorScheme(page: Page) {
+  return page.evaluate(() => getComputedStyle(document.documentElement).colorScheme);
+}
+
+/** The colour tokens of the root element, by name. */
+function themeTokens(page: Page) {
+  return page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    const names = [
+      "--background",
+      "--foreground",
+      "--card",
+      "--card-foreground",
+      "--primary",
+      "--primary-foreground",
+      "--secondary",
+      "--secondary-foreground",
+      "--muted",
+      "--muted-foreground",
+      "--accent",
+      "--accent-foreground",
+      "--border",
+      "--input",
+      "--ring",
+      "--success",
+      "--warning",
+      "--destructive",
+    ];
+    return {
+      ...Object.fromEntries(names.map((name) => [name, style.getPropertyValue(name).trim()])),
+      colorScheme: style.colorScheme,
+    };
+  });
+}
+
 function themeAttribute(page: Page) {
   return page.evaluate(() => document.documentElement.getAttribute("data-theme"));
 }
@@ -184,7 +219,15 @@ test.describe("navigation and theme", () => {
       });
     }
 
-    for (const path of ["/experience", "/services", "/cv", "/ask"]) {
+    for (const path of [
+      "/experience",
+      "/services",
+      "/cv",
+      "/ask",
+      "/ai-roadmap",
+      "/missing-page",
+      "/cv/pdf/unavailable",
+    ]) {
       test(`Contact on ${path} leads to the homepage's contact block below the header`, async ({
         page,
       }) => {
@@ -262,17 +305,24 @@ test.describe("navigation and theme", () => {
         "Dark theme",
       ]);
     });
+  });
+
+  // The theme checks get their own API: with the route checks above they exceed the public rate
+  // limit of one API.
+  test.describe("theme on a wide screen", () => {
+    serveFixture();
+    test.use({ viewport: { width: 1280, height: 800 } });
 
     test("follows the system theme until the visitor chooses", async ({ page }) => {
       await page.emulateMedia({ colorScheme: "dark" });
       await page.goto(`${website.url}/`);
       await hydrated(page);
       expect(await themeAttribute(page)).toBeNull();
-      expect(await bodyBackground(page)).toBe(background.dark);
+      await expect.poll(() => bodyBackground(page)).toBe(background.dark);
       await expect(themeToggle(page)).toHaveAttribute("aria-pressed", "true");
 
       await page.emulateMedia({ colorScheme: "light" });
-      expect(await bodyBackground(page)).toBe(background.light);
+      await expect.poll(() => bodyBackground(page)).toBe(background.light);
       await expect(themeToggle(page)).toHaveAttribute("aria-pressed", "false");
     });
 
@@ -286,14 +336,16 @@ test.describe("navigation and theme", () => {
         await page.goto(`${website.url}/`);
         await hydrated(page);
         await themeToggle(page).click();
-        expect(await themeAttribute(page)).toBe(chosen);
-        expect(await bodyBackground(page)).toBe(background[chosen]);
+        await expect.poll(() => themeAttribute(page)).toBe(chosen);
+        await expect.poll(() => bodyBackground(page)).toBe(background[chosen]);
+        // Native controls and scrollbars follow the choice, not the system.
+        await expect.poll(() => colorScheme(page)).toBe(chosen);
         await expect(themeToggle(page)).toHaveAttribute("aria-pressed", String(chosen === "dark"));
 
         // Client navigation keeps it.
         await header(page).getByRole("link", { name: "Services" }).click();
         await expect(page).toHaveURL(`${website.url}/services`);
-        expect(await bodyBackground(page)).toBe(background[chosen]);
+        await expect.poll(() => bodyBackground(page)).toBe(background[chosen]);
 
         // A reload applies it before anything of the page is parsed, so nothing flashes.
         await page.addInitScript(() => {
@@ -311,17 +363,45 @@ test.describe("navigation and theme", () => {
             () => (window as unknown as { themeBeforeBody?: string | null }).themeBeforeBody,
           ),
         ).toBe(chosen);
-        expect(await bodyBackground(page)).toBe(background[chosen]);
+        await expect.poll(() => bodyBackground(page)).toBe(background[chosen]);
         await expect(themeToggle(page)).toHaveAttribute("aria-pressed", String(chosen === "dark"));
 
         // Switching back stores the other choice.
         await themeToggle(page).click();
-        expect(await themeAttribute(page)).toBe(system);
+        await expect.poll(() => themeAttribute(page)).toBe(system);
         await page.reload();
-        expect(await bodyBackground(page)).toBe(background[system]);
+        await expect.poll(() => bodyBackground(page)).toBe(background[system]);
         expect(errors).toEqual([]);
       });
     }
+
+    test("an explicit dark choice gives the same tokens as a dark system", async ({ page }) => {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await page.goto(`${website.url}/`);
+      await hydrated(page);
+      await expect.poll(() => bodyBackground(page)).toBe(background.dark);
+      const system = await themeTokens(page);
+
+      await page.emulateMedia({ colorScheme: "light" });
+      await themeToggle(page).click();
+      await expect.poll(() => themeAttribute(page)).toBe("dark");
+      expect(await themeTokens(page)).toEqual(system);
+    });
+
+    test("nothing moves when reduced motion is requested", async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`${website.url}/`);
+      await hydrated(page);
+      const durations = await page
+        .locator("header a, header button")
+        .evaluateAll((elements) =>
+          elements.map((element) => getComputedStyle(element).transitionDuration),
+        );
+      expect(durations.length).toBeGreaterThan(0);
+      for (const duration of durations) {
+        for (const part of duration.split(",")) expect(parseFloat(part)).toBeLessThanOrEqual(1e-5);
+      }
+    });
 
     test("still switches the theme when the browser refuses its storage", async ({ page }) => {
       const errors = collectErrors(page);
@@ -337,7 +417,7 @@ test.describe("navigation and theme", () => {
       await hydrated(page);
       expect(await themeAttribute(page)).toBeNull();
       await themeToggle(page).click();
-      expect(await bodyBackground(page)).toBe(background.dark);
+      await expect.poll(() => bodyBackground(page)).toBe(background.dark);
       await expect(themeToggle(page)).toHaveAttribute("aria-pressed", "true");
       expect(errors).toEqual([]);
     });
@@ -346,9 +426,9 @@ test.describe("navigation and theme", () => {
       await page.goto(`${website.url}/cv`);
       await hydrated(page);
       await themeToggle(page).click();
-      expect(await bodyBackground(page)).toBe(background.dark);
+      await expect.poll(() => bodyBackground(page)).toBe(background.dark);
       await page.emulateMedia({ media: "print" });
-      expect(await bodyBackground(page)).toBe(background.light);
+      await expect.poll(() => bodyBackground(page)).toBe(background.light);
       await expect(header(page)).toBeHidden();
     });
   });
@@ -462,7 +542,7 @@ test.describe("navigation and theme", () => {
       await expect(toggle).toHaveAttribute("aria-pressed", "false");
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-pressed", "true");
-      expect(await bodyBackground(page)).toBe(background.dark);
+      await expect.poll(() => bodyBackground(page)).toBe(background.dark);
     });
 
     test("closes the menu when the screen becomes wide enough for the navigation", async ({
