@@ -3,21 +3,14 @@ import { Mail } from "lucide-react";
 import { buttonVariants } from "@sebela/ui/components/button";
 import { cn } from "@sebela/ui/lib/utils";
 
-import { CvActions } from "../../_shared";
 import type { HomepageProfile } from "../../profile";
 
 /**
  * The closing contact block, the target of `/#contact`: the email address and web links from the
- * API, one button that opens an email, then the CV's actions (the PDF's download and date when
- * there is one, and the live CV). Without an email address only the links and the CV remain.
+ * API and one button that opens an email. Without an email address only the links remain; the CV's
+ * actions live in the experience snapshot.
  */
-export function Contact({
-  contact,
-  cvPdf,
-}: {
-  readonly contact: HomepageProfile["contact"];
-  readonly cvPdf: HomepageProfile["cvPdf"];
-}) {
+export function Contact({ contact }: { readonly contact: HomepageProfile["contact"] }) {
   return (
     <section
       id="contact"
@@ -61,7 +54,6 @@ export function Contact({
           </a>
         </div>
       )}
-      <CvActions pdf={cvPdf} />
     </section>
   );
 }

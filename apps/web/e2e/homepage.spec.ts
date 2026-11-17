@@ -97,7 +97,7 @@ test.describe("homepage read from the API", () => {
   test("is operable by keyboard in reading order", async ({ page }) => {
     await page.goto("/");
     const order: string[] = [];
-    for (let step = 0; step < 10; step += 1) {
+    for (let step = 0; step < 11; step += 1) {
       await page.keyboard.press("Tab");
       order.push(
         await page.evaluate(() => {
@@ -110,11 +110,12 @@ test.describe("homepage read from the API", () => {
       "the example blog",
       "Work with me",
       "View my experience",
+      "Full experience",
+      "Read the CV",
       withPhoto.email,
       "Website",
       "Code",
       "Send an email",
-      "Read the CV",
       "Built in public with an agentic engineering workflow",
       "CV",
     ]);
