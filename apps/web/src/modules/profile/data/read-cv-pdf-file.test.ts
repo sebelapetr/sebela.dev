@@ -78,11 +78,14 @@ function pdfFile(
 type Route = (request: Request) => Response | Promise<Response>;
 
 /** One fake network: the API's CV route and the PDF file's own address. */
-function network(routes: { cv: Route; file?: Route }) {
+function network(routes: { cv: Route; file?: Route; fileUrl?: string }) {
   const requests: Request[] = [];
   const answer = async (request: Request): Promise<Response> => {
     requests.push(request);
-    if (request.url === FILE_URL) {
+    if (
+      request.url === FILE_URL ||
+      (routes.fileUrl !== undefined && request.url === routes.fileUrl)
+    ) {
       if (!routes.file) throw new Error("unexpected request for the file");
       return routes.file(request);
     }
@@ -98,7 +101,7 @@ describe("readCvPdfFile", () => {
   it("reads the current PDF's bytes from the file the CV names", async () => {
     const { client, fetchFile } = network({ cv: () => json(cv()), file: () => pdfFile() });
 
-    expect(await readCvPdfFile(client, { fetch: fetchFile })).toEqual({
+    expect(await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile })).toEqual({
       status: "ready",
       bytes: PDF_BYTES,
       personName: "Robin Example",
@@ -111,7 +114,7 @@ describe("readCvPdfFile", () => {
       file: () => pdfFile(),
     });
 
-    await readCvPdfFile(client, { fetch: fetchFile });
+    await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile });
 
     expect(requests.map((request) => request.url)).toEqual([`${BASE}/v1/cv`, FILE_URL]);
     for (const request of requests) {
@@ -125,7 +128,9 @@ describe("readCvPdfFile", () => {
       cv: () => json(cv({ person: person({ cvPdfId: null }), cvPdf: null })),
     });
 
-    expect(await readCvPdfFile(client, { fetch: fetchFile })).toEqual({ status: "none" });
+    expect(await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile })).toEqual({
+      status: "none",
+    });
     expect(requests).toHaveLength(1);
   });
 
@@ -134,7 +139,9 @@ describe("readCvPdfFile", () => {
       cv: () => json({ error: { code: "not_found", message: "A fictional failure." } }, 404),
     });
 
-    expect(await readCvPdfFile(client, { fetch: fetchFile })).toEqual({ status: "none" });
+    expect(await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile })).toEqual({
+      status: "none",
+    });
   });
 
   it.each<[string, Partial<{ cv: Route; file: Route }>]>([
@@ -173,7 +180,57 @@ describe("readCvPdfFile", () => {
       file: given.file ?? (() => pdfFile()),
     });
 
-    expect(await readCvPdfFile(client, { fetch: fetchFile })).toEqual({ status: "unavailable" });
+    expect(await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile })).toEqual({
+      status: "unavailable",
+    });
+  });
+
+  it.each([
+    ["a plain http address outside the API", "http://files.example.test/cv.pdf"],
+    ["an address that is not on the web", "ftp://files.example.test/cv.pdf"],
+  ])("never fetches the file from %s", async (_label, url) => {
+    const { client, fetchFile, requests } = network({
+      cv: () => json(cv({ cvPdf: pdf({ url }) })),
+      file: () => pdfFile(),
+      fileUrl: url,
+    });
+
+    expect(await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile })).toEqual({
+      status: "unavailable",
+    });
+    expect(requests.map((request) => request.url)).toEqual([`${BASE}/v1/cv`]);
+  });
+
+  it("reads a plain http file only from the API's own origin, where local storage is served", async () => {
+    const api = "http://localhost:4100";
+    const url = `${api}/v1/media/files/test/cv.pdf`;
+    const requests: string[] = [];
+    const answer = (request: Request): Response => {
+      requests.push(request.url);
+      return request.url === url ? pdfFile() : json(cv({ cvPdf: pdf({ url }) }));
+    };
+    const client = createApiClient({ baseUrl: api, fetch: answer });
+    const fetchFile = (input: string, init?: RequestInit) => answer(new Request(input, init));
+
+    expect(await readCvPdfFile(client, { apiBaseUrl: api, fetch: fetchFile })).toMatchObject({
+      status: "ready",
+    });
+    expect(requests).toEqual([`${api}/v1/cv`, url]);
+  });
+
+  it("does not follow a redirect from the file's address", async () => {
+    const { client, fetchFile, requests } = network({
+      cv: () => json(cv()),
+      file: (request) =>
+        request.redirect === "manual"
+          ? new Response(null, { status: 302, headers: { Location: "http://elsewhere.test/" } })
+          : pdfFile(),
+    });
+
+    expect(await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile })).toEqual({
+      status: "unavailable",
+    });
+    expect(requests.at(-1)?.redirect).toBe("manual");
   });
 
   it("gives up on a file that does not arrive in time", async () => {
@@ -187,7 +244,9 @@ describe("readCvPdfFile", () => {
         }),
     });
 
-    expect(await readCvPdfFile(client, { fetch: fetchFile, timeoutMs: 20 })).toEqual({
+    expect(
+      await readCvPdfFile(client, { apiBaseUrl: BASE, fetch: fetchFile, timeoutMs: 20 }),
+    ).toEqual({
       status: "unavailable",
     });
   });
