@@ -244,6 +244,10 @@ test.describe("CV and its PDF read from the API", () => {
 
   test("is operable by keyboard in reading order", async ({ page }) => {
     await page.goto(`${website.url}/cv`);
+    // The skip link comes first; following it starts the content's reading order.
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Enter");
     const names: string[] = [];
     for (let step = 0; step < 6; step += 1) {
       await page.keyboard.press("Tab");

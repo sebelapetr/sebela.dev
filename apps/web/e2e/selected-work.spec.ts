@@ -83,16 +83,21 @@ function experienceTrigger(page: Page, anchor: string) {
   return item(page, anchor).locator('[data-slot="timeline-trigger"]');
 }
 
-/** The target is open, below the top of the viewport by the scroll margin, and has focus. */
+/**
+ * The target is open, below the sticky header by the scroll margin, and has focus.
+ */
 async function expectOpenedAt(page: Page, anchor: string) {
   const target = item(page, anchor);
   await expect(target).toBeVisible();
   await expect(target).toBeInViewport();
   await expect(target).toBeFocused();
-  // Scrolled to its own top with room above it, not to the top of the experience around it.
+  const headerBottom = await page
+    .getByRole("banner")
+    .evaluate((element) => Math.round(element.getBoundingClientRect().bottom));
+  // Scrolled to its own top with room below the header, not to the top of the experience around it.
   await expect
     .poll(() => target.evaluate((element) => Math.round(element.getBoundingClientRect().top)))
-    .toBe(32);
+    .toBe(headerBottom + 32);
 }
 
 test.describe("selected work and deep links into the experience page", () => {

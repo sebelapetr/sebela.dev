@@ -1,4 +1,4 @@
-import { Footer } from "../../_shared";
+import { Footer, mainContentId, SiteHeader } from "../../_shared";
 import type { HomepageProfile } from "../../profile";
 import { Contact } from "../components/contact";
 import { ExperienceSnapshot } from "../components/experience-snapshot";
@@ -25,7 +25,11 @@ export function HomepageTemplate({ profile }: { readonly profile: HomepageProfil
   const services = toServicesSummary(profile.services);
   return (
     <>
-      <main className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32">
+      <SiteHeader name={profile.name} />
+      <main
+        id={mainContentId}
+        className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32"
+      >
         <Hero profile={profile} />
         <WhatIDo />
         {selectedWork.length === 0 ? null : <SelectedWork items={selectedWork} />}

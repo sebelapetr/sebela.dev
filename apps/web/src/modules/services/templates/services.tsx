@@ -3,7 +3,7 @@ import Link from "next/link";
 import { buttonVariants } from "@sebela/ui/components/button";
 import { cn } from "@sebela/ui/lib/utils";
 
-import { Footer, ProseMarkdown, routes } from "../../_shared";
+import { Footer, ProseMarkdown, routes, mainContentId, SiteHeader } from "../../_shared";
 import type { ServicesContent } from "../../profile";
 import { Collaboration } from "../components/collaboration";
 import { ServiceList } from "../components/service-list";
@@ -20,7 +20,11 @@ export function ServicesTemplate({ content }: { readonly content: ServicesConten
   const steps = toCollaborationSteps(content.collaborationSteps);
   return (
     <>
-      <main className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32">
+      <SiteHeader name={content.name} />
+      <main
+        id={mainContentId}
+        className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32"
+      >
         <header className="flex max-w-3xl flex-col gap-6">
           <h1 className="flex flex-col gap-3">
             <span className="type-label">{content.name}</span>

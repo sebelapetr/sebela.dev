@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Footer } from "../../_shared";
+import { Footer, mainContentId, SiteHeader } from "../../_shared";
 
 /**
  * The frame of a page that has no content to show: a short label, a heading, optional text, one
@@ -19,7 +19,11 @@ export function StatePage({
 }) {
   return (
     <>
-      <main className="layout-page flex flex-1 flex-col items-start justify-center gap-6 py-20">
+      <SiteHeader name={null} />
+      <main
+        id={mainContentId}
+        className="layout-page flex flex-1 flex-col items-start justify-center gap-6 py-20"
+      >
         <p className="type-label">{label}</p>
         <h1 className="type-title">{heading}</h1>
         {children}

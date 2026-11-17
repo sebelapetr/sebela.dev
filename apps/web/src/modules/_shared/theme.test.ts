@@ -43,7 +43,6 @@ function fakeRoot() {
   const attributes = new Map<string, string>();
   return {
     attributes,
-    style: { colorScheme: "" },
     setAttribute: (name: string, value: string) => attributes.set(name, value),
     getAttribute: (name: string) => attributes.get(name) ?? null,
   };
@@ -115,14 +114,12 @@ describe("toggledTheme", () => {
 });
 
 describe("applyThemeChoice", () => {
-  it("marks the root with the choice and its colour scheme", () => {
+  it("marks the root with the choice", () => {
     const root = fakeRoot();
     applyThemeChoice(root, "dark");
     expect(root.getAttribute(themeAttribute)).toBe("dark");
-    expect(root.style.colorScheme).toBe("dark");
     applyThemeChoice(root, "light");
     expect(root.getAttribute(themeAttribute)).toBe("light");
-    expect(root.style.colorScheme).toBe("light");
   });
 });
 
@@ -143,13 +140,11 @@ describe("themeScript", () => {
   it("applies a stored choice before the page is shown", () => {
     const root = run(memoryStorage({ [themeStorageKey]: "dark" }));
     expect(root.getAttribute(themeAttribute)).toBe("dark");
-    expect(root.style.colorScheme).toBe("dark");
   });
 
   it("leaves the root alone without a choice, so the system's preference applies", () => {
     const root = run(memoryStorage());
     expect(root.getAttribute(themeAttribute)).toBeNull();
-    expect(root.style.colorScheme).toBe("");
   });
 
   it("leaves the root alone for a value it did not write", () => {

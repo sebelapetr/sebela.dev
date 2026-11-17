@@ -13,7 +13,6 @@ export interface ThemeStorage {
 /** The root element's part the theme marks. */
 export interface ThemeRoot {
   setAttribute(name: string, value: string): void;
-  readonly style: { colorScheme: string };
 }
 
 /** The storage key of the visitor's explicit choice. */
@@ -22,33 +21,56 @@ export const themeStorageKey = "sebela-theme";
 /** The root element's attribute that carries an explicit choice; absent, the system decides. */
 export const themeAttribute = "data-theme";
 
+function isTheme(value: unknown): value is Theme {
+  return value === "light" || value === "dark";
+}
+
 /** The visitor's explicit choice, or null when there is none or the storage cannot be read. */
-export const readThemeChoice: (storage: () => ThemeStorage | null) => Theme | null = () => {
-  throw new Error("not implemented");
-};
+export function readThemeChoice(storage: () => ThemeStorage | null): Theme | null {
+  try {
+    const value = storage()?.getItem(themeStorageKey);
+    return isTheme(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Stores the visitor's choice; false when the storage refuses it. */
-export const storeThemeChoice: (
-  storage: () => ThemeStorage | null,
-  theme: Theme,
-) => boolean = () => {
-  throw new Error("not implemented");
-};
+export function storeThemeChoice(storage: () => ThemeStorage | null, theme: Theme): boolean {
+  try {
+    const target = storage();
+    if (target === null) return false;
+    target.setItem(themeStorageKey, theme);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** The theme shown: the explicit choice, otherwise the system's preference. */
-export const resolveTheme: (choice: Theme | null, systemDark: boolean) => Theme = () => {
-  throw new Error("not implemented");
-};
+export function resolveTheme(choice: Theme | null, systemDark: boolean): Theme {
+  return choice ?? (systemDark ? "dark" : "light");
+}
 
 /** The other theme. */
-export const toggledTheme: (theme: Theme) => Theme = () => {
-  throw new Error("not implemented");
-};
+export function toggledTheme(theme: Theme): Theme {
+  return theme === "dark" ? "light" : "dark";
+}
 
-/** Marks the root with an explicit choice, so the tokens and the browser's controls follow it. */
-export const applyThemeChoice: (root: ThemeRoot, theme: Theme) => void = () => {
-  throw new Error("not implemented");
-};
+/**
+ * Marks the root with an explicit choice. The stylesheet sets the tokens and `color-scheme` from
+ * the attribute, so print can still force the light ones.
+ */
+export function applyThemeChoice(root: ThemeRoot, theme: Theme): void {
+  root.setAttribute(themeAttribute, theme);
+}
 
-/** The inline script that applies a stored choice before the first paint. */
-export const themeScript = "";
+/**
+ * The inline script that applies a stored choice before the first paint. It repeats
+ * `readThemeChoice` and `applyThemeChoice` in plain script, because it runs before any bundle.
+ */
+export const themeScript = `(function(){try{var t=window.localStorage.getItem(${JSON.stringify(
+  themeStorageKey,
+)});if(t==="light"||t==="dark"){document.documentElement.setAttribute(${JSON.stringify(
+  themeAttribute,
+)},t);}}catch(e){}})();`;

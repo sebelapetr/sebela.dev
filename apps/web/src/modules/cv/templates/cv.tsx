@@ -1,4 +1,4 @@
-import { CvActions, Footer } from "../../_shared";
+import { CvActions, Footer, mainContentId, SiteHeader } from "../../_shared";
 import type { CvContent } from "../../profile";
 import { CvHeader } from "../components/cv-header";
 import {
@@ -21,7 +21,11 @@ export function CvTemplate({ content }: { readonly content: CvContent }) {
   const cv = toCvDocument(content);
   return (
     <>
-      <main className="layout-page flex flex-1 flex-col gap-16 py-12 sm:py-20 print:max-w-none print:gap-8 print:px-0 print:py-0">
+      <SiteHeader name={cv.header.name} />
+      <main
+        id={mainContentId}
+        className="layout-page flex flex-1 flex-col gap-16 py-12 sm:py-20 print:max-w-none print:gap-8 print:px-0 print:py-0"
+      >
         <div className="flex max-w-3xl flex-col gap-6">
           <CvHeader header={cv.header} />
           <CvActions pdf={cv.pdf} withCvLink={false} />
