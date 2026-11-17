@@ -133,6 +133,19 @@ test.describe("homepage read from the API", () => {
     expect(outline).toEqual({ style: "solid", width: "2px" });
   });
 
+  test("keeps the button's focus outline in forced-colours mode", async ({ page }) => {
+    // Forced colours drop the ring (a box shadow); the button's transparent outline remains.
+    await page.emulateMedia({ forcedColors: "active" });
+    await page.goto("/");
+    const button = page.getByRole("link", { name: "Work with me" });
+    await button.focus();
+    const outline = await button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { style: style.outlineStyle, width: style.outlineWidth };
+    });
+    expect(outline).toEqual({ style: "solid", width: "2px" });
+  });
+
   test("ends transitions at once when reduced motion is requested", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");

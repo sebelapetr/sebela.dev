@@ -51,6 +51,7 @@ Light and dark, following the system preference by default, with a toggle in the
 | Title   | `type-title`   | 30 px (36) → 36 px (40)          | semibold, tight, balance | The heading of a page without a hero (content states, inner pages). |
 | Heading | `type-heading` | 24 px (32) → 30 px (36)          | semibold, tight          | Section headings (h2).                                              |
 | Lead    | `type-lead`    | 18 px, relaxed (1.625), max 65ch | regular, muted           | Introductory prose under a display or title line.                   |
+| Intro   | `type-intro`   | 18 px (28)                       | regular, muted           | One short sentence that opens a block: contact, content states.     |
 | Body    | (default)      | 16 px (24)                       | regular                  | Running text.                                                       |
 | Small   | `text-sm`      | 14 px (20)                       | medium for links         | Text links in action rows and lists, the footer.                    |
 | Label   | `type-label`   | 14 px (20), Geist Mono           | regular, tight, muted    | A short label above a heading, such as the name in the hero.        |
@@ -59,12 +60,13 @@ Light and dark, following the system preference by default, with a toggle in the
 
 ## Spacing
 
-The 4 px scale of Tailwind (`--spacing`), used in these steps only: 4, 6, 8, 12, 16, 24, 32, 40, 48, 64, 80, 96 and 128 px.
+The 4 px scale of Tailwind (`--spacing`), used in these steps only: 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96 and 128 px. 2 px is only the vertical padding of inline code; 20 px is only the mobile page gutter and the side padding of a large button.
 
 - **Page frame:** `layout-page` in `@sebela/ui/globals.css` — centred, at most 1024 px wide (`max-w-5xl`), side gutter 20 px on mobile and 32 px from `sm`. Every page, the footer and the content states use it, so their edges line up.
 - **Page padding:** 48 px above and below on mobile, 80 px from `sm`.
 - **Between page sections:** 96 px on mobile, 128 px from `md`. Sections are separated by space, never by rules (Rhythm).
 - **Inside a block:** 24 px between its parts (heading, text, actions); 12 px between a label and the heading it belongs to; 12 px between stacked actions on mobile, 24 px beside each other.
+- **Content states** (not found, content unavailable) are the one exception: a single centred block with 80 px above and below at every width, and 24 px between the label and the heading, like every other part of that block.
 - **Hero columns:** 40 px between photo and text on mobile, 48 px from `md`, 64 px from `lg`.
 
 ## Components
@@ -73,8 +75,8 @@ The 4 px scale of Tailwind (`--spacing`), used in these steps only: 4, 6, 8, 12,
 - Icons from Lucide, 16 px beside text, hidden from assistive technology when the text says the same.
 - Corner radius base `0.625rem`.
 - Technologies: four to six core ones are shown prominently with logos (no large cards); the AI engineering focus and all secondary ones are plain text.
-- **Actions are asymmetric.** One primary action per block, a solid `Button` (`buttonVariants`, size `lg`, 48 px). Every other action is a text link: `text-sm`, medium weight, underlined on hover and focus, with a trailing arrow when it leads to another page. Two solid buttons never stand side by side.
-- **Links in running text** are underlined at all times, in the text's own colour.
+- **Actions are asymmetric.** One primary action per block, a solid `Button` (`buttonVariants`, size `lg`, 48 px). Every other action is a text link: `text-sm`, medium weight, underlined on hover and focus, with a trailing arrow when it leads to another page. Two solid buttons never stand side by side. The `outline` variant is used only for the single action of a content state that leads away rather than fixing anything (not found: "Back to the homepage"), where a solid button would overstate it.
+- **Links in running text** are underlined at all times, in the text's own colour. The one exception is a contact address inside muted text, set in `foreground` so it stands out (the email in the contact block).
 - **Touch targets:** every link and button outside running text is at least 44 px tall (`min-h-11`); text links get the height from padding, not from a larger font.
 - **Photo:** the person's photo at its own aspect ratio with radius `xl` on a `muted` background; without a photo a placeholder of the same 4:5 shape with the initials in Geist Mono. Widths 160, 192, 224 and 320 px (mobile, `sm`, `md`, `lg`).
 - **Cards** are not the default container. Content sits on the page background; `card` is for the rare block that must stand apart (Rhythm).
@@ -83,7 +85,7 @@ The 4 px scale of Tailwind (`--spacing`), used in these steps only: 4, 6, 8, 12,
 
 - Every focusable element shows focus when reached by keyboard (`:focus-visible`), never on mouse click.
 - Default treatment, set once in `@sebela/ui/globals.css`: a solid 2 px outline in the `ring` colour (the foreground colour of the theme), offset by 2 px. Text links also underline.
-- Buttons and inputs from `@sebela/ui` draw their own 3 px ring in `ring` at 50 % instead, with the border in `ring`, and turn the outline off.
+- Buttons and inputs from `@sebela/ui` draw their own 3 px ring in `ring` at 50 % instead, with the border in `ring`, and hide the outline (`outline-hidden`): it is transparent, so forced-colours mode, which drops the ring, still draws it.
 - Focus is never removed without a replacement; the order of focus follows the reading order.
 
 ## Motion

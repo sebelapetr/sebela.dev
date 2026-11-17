@@ -20,7 +20,7 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
         Have a project or a role in mind?
       </h2>
       {contact.email === null ? null : (
-        <p className="text-lg text-muted-foreground">
+        <p className="type-intro">
           Write to{" "}
           <a
             href={contact.email.href}

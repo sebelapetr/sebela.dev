@@ -141,6 +141,13 @@
   color: var(--muted-foreground);
 }
 
+@utility type-intro {
+  /* A short muted sentence that opens a block (contact, content states); no measure of its own. */
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+  color: var(--muted-foreground);
+}
+
 @utility type-label {
   /* A small monospaced label above a heading, such as the name in the hero. */
   font-family: var(--font-mono);
