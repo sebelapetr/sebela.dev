@@ -5,6 +5,16 @@ import { openConnection, type Connection } from "../../connection.js";
 import { createTemporaryDatabase, type TemporaryDatabase } from "../../testing.js";
 import { createProfilePersistence, type PersonFields, type ProfilePersistence } from "./index.js";
 
+/** The prose the services page shows, stored on the person. */
+const servicesProse = {
+  servicesIntro: "Ada connects **fictional** systems.",
+  collaborationSteps: [
+    { title: "Understand", description: "A short call." },
+    { title: "Build", description: "In small steps." },
+  ],
+  servicesNote: "Software is practice; AI is newer.",
+};
+
 const fictional: PersonFields = {
   name: "Ada Example",
   headline: "Fictional engineer",
@@ -15,6 +25,7 @@ const fictional: PersonFields = {
   links: [{ label: "Site", url: "https://example.test" }],
   availability: null,
   careerStartedOn: "2010-09-01",
+  ...servicesProse,
 };
 
 describe("profile persistence", () => {
