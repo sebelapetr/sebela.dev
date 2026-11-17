@@ -146,29 +146,32 @@ Root files that belong to no package (the harness, the repository checks, docs) 
 
 ## Backend module layout
 
-Handwritten TypeScript backend modules use `src/modules/<name>/index.ts`. One module owns a cohesive responsibility, not necessarily a table or a database schema. Keep private helpers, drivers and colocated tests inside it. The agreed phase 2 placement is:
+Handwritten TypeScript backend modules use `src/modules/<name>/index.ts`. One module owns a cohesive responsibility, not necessarily a table or a database schema. Keep private helpers, drivers and colocated tests inside it. The delivered phase 2 placement is:
 
 ```text
 apps/api/src/
   app.ts, server.ts                 # composition/startup adapters
   config.ts                         # validated runtime configuration
   routing.ts, openapi.ts            # route descriptions and the generated OpenAPI document
-  middleware/                      # HTTP authentication, limits, errors
-  cli/api-keys.ts                   # maintenance adapter using services
+  middleware/                       # HTTP authentication, limits, errors
+  cli/                              # maintenance adapters using services: api-keys, seed, storage, openapi
   modules/profile/index.ts          # profile HTTP entry
   modules/media/index.ts            # media HTTP entry
 packages/services/src/
   index.ts                          # explicit package exports
+  services.ts                       # composition of the backend services from validated configuration
   modules/profile/index.ts          # profile/CV/domain operations
   modules/media/index.ts            # upload/attachment lifecycle
   modules/storage/index.ts          # driver-independent file operations
   modules/storage/drivers/          # private local and Bunny implementations
-  modules/api-keys/index.ts          # generation, verification, revocation
+  modules/api-keys/index.ts         # generation, verification, revocation
+  modules/seed/index.ts             # loading a seed folder through profile and media
 packages/db/src/
   index.ts                          # explicit persistence exports
+  testing.ts                        # test support: temporary databases (`@sebela/db/testing`)
+  cli/migrate.ts                    # the migration command
   modules/profile/index.ts          # persistence operations
-  modules/profile/schema.ts         # private schema/repositories
-  modules/profile/repositories/
+  modules/profile/schema.ts         # private schema; private files, mostly one per entity, hold its SQL
   modules/api-keys/index.ts
   modules/api-keys/schema.ts
 packages/contracts/src/

@@ -1,6 +1,6 @@
 # Code standards
 
-Initial conventions. They are refined in phase 2, when the first real code exists; change this document in the same pull request that changes a convention.
+Conventions in force since the phase 2 backend; change this document in the same pull request that changes a convention.
 
 ## TypeScript
 
