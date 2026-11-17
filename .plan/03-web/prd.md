@@ -153,7 +153,7 @@ Order: **header → career timeline → independent R&D → technologies → edu
 
 - **Header:** title; summary "8 years building production software — from backend development and team leadership to a growing focus on AI engineering."; "Download CV ↓". The wording must not suggest eight years of AI engineering.
 - **Career timeline:** a dashed vertical rail on the left with a marker per experience; the period (`October 1st, 2023 – present`) and the kind label sit above the content. Only current experiences are expanded; older ones are compact rows that expand (`docs/design.md`, Timeline).
-  - Current experiences are written out: organization, title, kind as a small label (main job, own business, side project), the product and the role's progression, selected technical work, technologies.
+  - Current experiences are written out: organization, title, kind as a small label (Full-time job, Own business, Side project), the product and the role's progression, selected technical work, technologies.
   - The kind labels exist so that concurrent experiences do not read as three full-time jobs at once.
   - A project is shown inside an experience **only when it proves something** — a concrete problem, the role, technical depth. Not everything that was touched is listed.
   - A case study opens **inline**: "View technical case study ↓" expands the detail inside the experience. No separate page in this phase; a strong case can get its own address later.

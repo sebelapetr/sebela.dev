@@ -84,13 +84,14 @@ function TimelineTrigger({ className, children, ...props }: Collapsible.Trigger.
   const id = use(TriggerIdContext);
   return (
     <Collapsible.Trigger
+      {...props}
+      // After the caller's props, so the region stays labelled by this trigger.
       id={id}
       data-slot="timeline-trigger"
       className={cn(
         "group/timeline-trigger -mx-2 flex min-h-11 w-[calc(100%+1rem)] flex-col items-start gap-1 rounded-lg px-2 py-1.5 text-left transition-colors outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50",
         className,
       )}
-      {...props}
     >
       <span
         aria-hidden="true"
