@@ -33,11 +33,16 @@ Black, white and neutral greys only. Colour is reserved for status. There is no 
 | warning            | `#f59e0b` | `#f59e0b` |
 | destructive        | `#ef4444` | `#ef4444` |
 
-Only these two sets exist. Tokens are defined once in the shared UI package (`packages/ui/src/styles/globals.css`, exported as `@sebela/ui/globals.css`) and consumed through Tailwind; components never use raw colour values. Until the toggle exists, dark follows `prefers-color-scheme`.
+Only these two sets exist. Tokens are defined once in the shared UI package (`packages/ui/src/styles/globals.css`, exported as `@sebela/ui/globals.css`) and consumed through Tailwind; components never use raw colour values.
 
 ## Themes
 
 Light and dark, following the system preference by default, with a toggle in the header.
+
+- **Choice.** The toggle is a button named "Dark theme", pressed while dark shows (`aria-pressed`); its icon is a moon in light and a sun in dark. Pressing it stores the visitor's explicit choice in `localStorage` (`sebela-theme`); from then on the choice wins over the system on every page and after a reload. Without a choice the site follows the system, also when it changes while the page is open.
+- **No flash.** An inline script at the top of `<head>` reads the stored choice and sets `data-theme` on `<html>` before anything is painted. The dark tokens apply under `prefers-color-scheme: dark` unless `data-theme="light"`, and always under `data-theme="dark"`; Tailwind's `dark:` variant follows the same rule. The server renders no theme, so nothing mismatches on hydration.
+- **No storage.** When the browser refuses storage, the toggle still switches the page and the choice lasts until the next page load.
+- **Print** is always light.
 
 ## Typography
 
@@ -83,6 +88,12 @@ The 4 px scale of Tailwind (`--spacing`), used in these steps only: 2, 4, 6, 8, 
 - **Touch targets:** every link and button outside running text is at least 44 px tall (`min-h-11`); text links get the height from padding, not from a larger font.
 - **Photo:** the person's photo at its own aspect ratio with radius `xl` on a `muted` background; without a photo a placeholder of the same 4:5 shape with the initials in Geist Mono. Widths 160, 192, 224 and 320 px (mobile, `sm`, `md`, `lg`).
 - **Cards** are not the default container. Content sits on the page background; `card` is for the rare block that must stand apart (Rhythm).
+
+## Navigation
+
+- **Header.** Every page starts with a sticky header (`--header-height`, 64 px, a bottom border, the page background): the name in semibold that leads home ("Home" on pages that read no profile: placeholders and not found), the navigation (Experience, Services, AI Roadmap, Contact) in `text-sm` muted, "Ask AI" as the one solid button (`/ask`), and the theme toggle. The current page's entry is `foreground` and underlined, with `aria-current="page"`; Contact leads to the homepage's contact block and is never current. The header is not printed.
+- **Mobile menu.** Below `md` (768 px) the header shows the name, "Ask AI" and a "Menu" button. The menu opens full screen as a modal dialog: the same top row with "Close menu", then the items stacked in `type-heading`, lined up with the name, and the toggle with its label. Escape and "Close menu" close it and return focus to "Menu"; Tab stays inside it; the page behind does not scroll; following a link or reaching the desktop width closes it.
+- **Skip link.** "Skip to content" is the first focusable element of every page; it shows at the top left when focused and moves focus to `<main id="main-content">`.
 
 ## Focus
 
@@ -179,4 +190,4 @@ Implementation → browser screenshot → visual review → iteration. Screensho
 
 ## To be defined in phase 3
 
-Page layouts, navigation, the chat component.
+Page layouts, the chat component.

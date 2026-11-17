@@ -9,11 +9,26 @@
 @source "../";
 
 /*
- * Light is the default; dark follows the system preference. The header toggle (phase 3, #50)
- * extends this to an explicit choice.
+ * Themes (docs/design.md, Themes): light is the default and dark follows the system preference
+ * until the visitor chooses in the header. An explicit choice is `data-theme="light"` or
+ * `data-theme="dark"` on the root element, set before the first paint, and wins over the system.
+ * Tailwind's `dark:` variant follows the same rule.
  */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
 :root {
   --radius: 0.625rem;
+  /* The sticky site header's height; anchors scroll below it. */
+  --header-height: 4rem;
 
   --background: #ffffff;
   --foreground: #0a0a0a;
@@ -38,8 +53,13 @@
   color-scheme: light;
 }
 
+/*
+ * The dark tokens are written twice — once for a dark system, once for an explicit choice — because
+ * plain CSS cannot share one declaration block between a media query and a selector. Change both
+ * together; the website's navigation e2e test fails when their computed tokens differ.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #000000;
     --foreground: #ededed;
     --card: #0a0a0a;
@@ -60,12 +80,34 @@
   }
 }
 
+:root[data-theme="dark"] {
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a3a3a3;
+  --accent: #1a1a1a;
+  --accent-foreground: #ededed;
+  --border: #262626;
+  --input: #262626;
+  --ring: #ededed;
+
+  color-scheme: dark;
+}
+
 /*
  * Print is always dark on white, whatever the theme: the light tokens again, after the dark ones so
  * they win while both apply. Pages hide what only works on screen with `print:hidden`.
  */
 @media print {
-  :root {
+  :root,
+  :root[data-theme],
+  :root:not([data-theme="light"]) {
     --background: #ffffff;
     --foreground: #0a0a0a;
     --card: #ffffff;
@@ -205,7 +247,7 @@
 
 /*
  * An item a link can point at (docs/design.md, Anchors): scrolled into view below the sticky header
- * with room above it. `--header-height` is the header's height; 0 until the header (#50) sets it.
+ * with room above it. `--header-height` is the header's height, defined with the tokens above.
  */
 @utility anchor-target {
   scroll-margin-top: calc(var(--header-height, 0px) + --spacing(8));

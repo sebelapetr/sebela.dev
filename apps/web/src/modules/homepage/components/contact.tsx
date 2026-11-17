@@ -15,7 +15,7 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
     <section
       id="contact"
       aria-labelledby="contact-heading"
-      className="flex scroll-mt-8 flex-col gap-6"
+      className="anchor-target flex flex-col gap-6"
     >
       <h2 id="contact-heading" className="type-heading">
         Have a project or a role in mind?

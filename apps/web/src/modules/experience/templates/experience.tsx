@@ -1,6 +1,13 @@
 import { Timeline } from "@sebela/ui/components/timeline";
 
-import { careerYears, CvActions, Footer, toEducationRows } from "../../_shared";
+import {
+  careerYears,
+  CvActions,
+  Footer,
+  toEducationRows,
+  mainContentId,
+  SiteHeader,
+} from "../../_shared";
 import type { ExperienceContent } from "../../profile";
 import { EducationList } from "../components/education";
 import { ExperienceEntry } from "../components/experience-entry";
@@ -28,7 +35,11 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
   const years = careerYears(content.careerStartedOn, new Date());
   return (
     <>
-      <main className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32">
+      <SiteHeader name={content.name} />
+      <main
+        id={mainContentId}
+        className="layout-page flex flex-1 flex-col gap-24 py-12 sm:py-20 md:gap-32"
+      >
         <header className="flex max-w-3xl flex-col gap-6">
           <h1 className="flex flex-col gap-3">
             <span className="type-label">{content.name}</span>

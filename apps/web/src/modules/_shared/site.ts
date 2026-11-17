@@ -13,6 +13,8 @@ export const routes = {
   /** A short placeholder until the AI Roadmap arrives in phase 4. */
   aiRoadmap: "/ai-roadmap",
   contact: "/#contact",
+  /** The chat; a short placeholder until the shared mock-chat slice delivers it. */
+  ask: "/ask",
 } as const;
 
 /** The CV PDF's addresses: a download and its failure page, not pages of the site to link to. */

@@ -325,7 +325,8 @@ test.describe("homepage without focus, explorations or services", () => {
       "experience-snapshot-heading",
       "contact-heading",
     ]);
-    await expect(page.getByRole("link", { name: "AI Roadmap" })).toHaveCount(0);
+    // The header's navigation always links the AI Roadmap; the content must not.
+    await expect(page.getByRole("main").getByRole("link", { name: "AI Roadmap" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "All services" })).toHaveCount(0);
     const snapshot = region(page, "Experience");
     await expect(snapshot.getByRole("definition")).toHaveCount(0);

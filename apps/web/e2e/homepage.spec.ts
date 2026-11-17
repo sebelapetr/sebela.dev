@@ -96,6 +96,10 @@ test.describe("homepage read from the API", () => {
 
   test("is operable by keyboard in reading order", async ({ page }) => {
     await page.goto("/");
+    // The skip link comes first; following it starts the content's reading order.
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Enter");
     const order: string[] = [];
     for (let step = 0; step < 11; step += 1) {
       await page.keyboard.press("Tab");
