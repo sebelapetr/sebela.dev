@@ -86,7 +86,7 @@ The 4 px scale of Tailwind (`--spacing`), used in these steps only: 2, 4, 6, 8, 
 - Every focusable element shows focus when reached by keyboard (`:focus-visible`), never on mouse click.
 - Default treatment, set once in `@sebela/ui/globals.css`: a solid 2 px outline in the `ring` colour (the foreground colour of the theme), offset by 2 px. Text links also underline.
 - Buttons and inputs from `@sebela/ui` draw their own 3 px ring in `ring` at 50 % instead, with the border in `ring`, and turn the outline off.
-- Focus is never removed without a replacement; the order of focus follows the reading order.
+- Focus is never removed without a replacement; the order of focus follows the reading order. One known gap: in forced-colours mode a button's own ring is not drawn and its outline is off, so focus on buttons is not visible there. It is tracked as the `Follow-up:` comment on issue #43.
 
 ## Motion
 
