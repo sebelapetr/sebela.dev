@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import { buttonVariants } from "@sebela/ui/components/button";
+import { cn } from "@sebela/ui/lib/utils";
 
 import type { HomepageProfile } from "../../profile";
 import { routes } from "../../_shared";
@@ -34,7 +35,7 @@ export function Hero({ profile }: { readonly profile: HomepageProfile }) {
           <InlineMarkdown>{profile.shortBio}</InlineMarkdown>
         </div>
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-6">
-          <Link href={routes.services} className={buttonVariants({ size: "lg" })}>
+          <Link href={routes.services} className={cn(buttonVariants({ size: "lg" }))}>
             Work with me
           </Link>
           <Link

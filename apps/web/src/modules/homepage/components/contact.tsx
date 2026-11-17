@@ -1,6 +1,7 @@
 import { Mail } from "lucide-react";
 
 import { buttonVariants } from "@sebela/ui/components/button";
+import { cn } from "@sebela/ui/lib/utils";
 
 import type { HomepageProfile } from "../../profile";
 
@@ -46,7 +47,7 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
       )}
       {contact.email === null ? null : (
         <div>
-          <a href={contact.email.href} className={buttonVariants({ size: "lg" })}>
+          <a href={contact.email.href} className={cn(buttonVariants({ size: "lg" }))}>
             <Mail aria-hidden="true" data-icon="inline-start" />
             Send an email
           </a>
