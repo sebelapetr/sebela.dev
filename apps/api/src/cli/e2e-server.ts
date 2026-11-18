@@ -5,9 +5,11 @@
 //   node --import tsx src/cli/e2e-server.ts <seed-folder>
 //
 // It takes the usual API settings from the environment (`.env.example`), except the database
-// name, the storage folder and the storage environment, which are its own. On SIGTERM or SIGINT it
-// stops, drops the database and removes the folder.
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+// name, the storage folder and the storage environment, which are its own. When API_E2E_KEY_FILE
+// names a file, it creates an API key on its temporary database and writes it there (mode 0600)
+// for tests that write content through the private routes. On SIGTERM or SIGINT it stops, drops the
+// database and removes the folder.
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { serve } from "@hono/node-server";
@@ -60,6 +62,11 @@ async function main() {
       },
     });
     await services.seed.loadSeed(seedFolder);
+    const keyFile = process.env["API_E2E_KEY_FILE"];
+    if (keyFile !== undefined && keyFile !== "") {
+      const { key } = await services.apiKeys.createKey("e2e");
+      await writeFile(resolve(keyFile), key, { mode: 0o600 });
+    }
   } catch (error) {
     await cleanUp();
     throw error;

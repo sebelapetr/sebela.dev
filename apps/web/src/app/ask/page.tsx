@@ -25,7 +25,7 @@ export const viewport: Viewport = {
 };
 
 export default async function AskPage() {
-  // Rendered on every request: content is read at runtime, never at build time (caching is #56).
+  // Rendered on every request from the content cache (`modules/profile`), never at build time.
   await connection();
   const result = await getAsk();
   if (result.status === "missing") notFound();

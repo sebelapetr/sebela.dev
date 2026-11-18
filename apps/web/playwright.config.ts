@@ -20,6 +20,8 @@ export default defineConfig({
     {
       ...apiCommand("with-photo"),
       url: `${apiUrl}/health`,
+      // No invalidation notifications here: `e2e/invalidation.spec.ts` starts its own pair.
+      env: { API_WEB_INVALIDATION_URL: "", API_WEB_INVALIDATION_SECRET: "", API_E2E_KEY_FILE: "" },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
       stdout: "pipe",
@@ -31,6 +33,7 @@ export default defineConfig({
         WEB_API_BASE_URL: apiUrl,
         WEB_SITE_ORIGIN: webUrl,
         WEB_MEDIA_BASE_URL: mediaBaseUrl(apiUrl),
+        WEB_INVALIDATION_SECRET: "",
       },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },

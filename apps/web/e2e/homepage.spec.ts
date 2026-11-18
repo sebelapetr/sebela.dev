@@ -293,7 +293,7 @@ test.describe("homepage while the API is unavailable", () => {
   test("shows the content once the API answers and the visitor tries again", async ({ page }) => {
     await page.goto(website.url);
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
-    api = await startApi("with-photo", apiPort);
+    api = await startApi("with-photo", { port: apiPort });
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toContainText(withPhoto.name);
   });

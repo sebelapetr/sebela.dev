@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { invalidationSecretMinLength } from "@sebela/contracts";
+
 import { parseMediaBase } from "./media-source";
 
 /** The website's settings, read once from the environment at request time. */
@@ -105,8 +107,26 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
   };
 }
 
+/** Shortest accepted invalidation signing secret, as `@sebela/contracts` requires. */
+const INVALIDATION_SECRET_MIN_LENGTH = invalidationSecretMinLength;
+
+/**
+ * Reads the server-only secret the API's invalidation notifications are signed with
+ * (`WEB_INVALIDATION_SECRET`, the same value as the API's `API_WEB_INVALIDATION_SECRET`). Separate
+ * from `readWebConfig`, so pages render without it; only the invalidation receiver needs it. Throws
+ * an error naming the variable, never its value, when it is missing or shorter than 32 characters.
+ */
 export function readInvalidationSecret(env: Readonly<Record<string, string | undefined>>): string {
-  throw new Error(
-    `readInvalidationSecret is not implemented (${String(Object.keys(env).length)} variables)`,
-  );
+  const value = env["WEB_INVALIDATION_SECRET"];
+  if (value === undefined || value === "") {
+    throw new Error(
+      "Invalid website configuration (documented in .env.example): WEB_INVALIDATION_SECRET is required",
+    );
+  }
+  if (value.length < INVALIDATION_SECRET_MIN_LENGTH) {
+    throw new Error(
+      `Invalid website configuration (documented in .env.example): WEB_INVALIDATION_SECRET must be at least ${String(INVALIDATION_SECRET_MIN_LENGTH)} characters`,
+    );
+  }
+  return value;
 }
