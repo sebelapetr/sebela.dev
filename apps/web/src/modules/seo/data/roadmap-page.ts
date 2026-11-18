@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 
 import { plainText } from "../../_shared";
+import type { OpenGraphCard } from "./open-graph-card";
 import { pageUrl } from "./page-metadata";
 
 /** One step of the way from the roadmap's overview to the page: its name and site path. */
@@ -16,6 +17,10 @@ export interface RoadmapPageCrumb {
 export interface RoadmapPageFacts {
   /** The person's name. */
   readonly name: string;
+  /** Whether the page is an area's or a module's. */
+  readonly kind: "area" | "module";
+  /** The API's planned effort for the page's content in minutes; 0 when nothing is estimated. */
+  readonly estimatedMinutes: number;
   /** The way from the overview to the page, the page itself last. */
   readonly breadcrumbs: readonly RoadmapPageCrumb[];
   /** Markdown that describes the page; its first paragraph becomes the description. */
@@ -92,4 +97,15 @@ function fallbackDescription(name: string, names: readonly string[]): string {
   const [page, ...parents] = names.slice(0, -1);
   const part = parents.length === 0 ? "" : `, part of ${parents.join(", part of ")}`;
   return `${page ?? "A page"}${part} on ${name}'s AI Engineering Roadmap.`;
+}
+
+export function roadmapOpenGraphImageUrl(origin: string, facts: RoadmapPageFacts): string {
+  throw new Error("not implemented", { cause: { origin, facts } });
+}
+
+export function roadmapOpenGraphCard(
+  origin: string,
+  facts: RoadmapPageFacts | null,
+): OpenGraphCard {
+  throw new Error("not implemented", { cause: { origin, facts } });
 }

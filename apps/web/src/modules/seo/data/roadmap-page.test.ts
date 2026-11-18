@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { serializeJsonLd } from "./structured-data";
-import { roadmapPageMetadata, roadmapStructuredData, type RoadmapPageFacts } from "./roadmap-page";
+import {
+  roadmapOpenGraphCard,
+  roadmapOpenGraphImageUrl,
+  roadmapPageMetadata,
+  roadmapStructuredData,
+  type RoadmapPageFacts,
+} from "./roadmap-page";
 
 const ORIGIN = "https://site.example.test";
 
 const AREA: RoadmapPageFacts = {
   name: "Robin Example",
+  kind: "area",
+  estimatedMinutes: 0,
   breadcrumbs: [
     { name: "AI Engineering Roadmap", href: "/ai-roadmap" },
     { name: "Signal area", href: "/ai-roadmap/signal-area" },
@@ -16,6 +24,8 @@ const AREA: RoadmapPageFacts = {
 
 const MODULE: RoadmapPageFacts = {
   name: "Robin Example",
+  kind: "module",
+  estimatedMinutes: 90,
   breadcrumbs: [
     ...AREA.breadcrumbs,
     { name: "Signal basics", href: "/ai-roadmap/signal-area/signal-basics" },
@@ -48,21 +58,27 @@ describe("roadmapPageMetadata", () => {
     );
   });
 
-  it("gives the page its canonical address on the configured origin and Open Graph basics", () => {
+  it("gives the page its canonical address, Open Graph basics and its own preview image", () => {
     const metadata = roadmapPageMetadata(ORIGIN, MODULE);
     const url = "https://site.example.test/ai-roadmap/signal-area/signal-basics";
+    const image = "https://site.example.test/og/ai-roadmap/signal-area/signal-basics";
+    const title = "Signal basics — Signal area — AI Engineering Roadmap — Robin Example";
+    const description =
+      "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.";
     expect(metadata.alternates?.canonical).toBe(url);
     expect(metadata.openGraph).toEqual({
       type: "website",
       url,
-      title: "Signal basics — Signal area — AI Engineering Roadmap — Robin Example",
-      description: "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.",
+      title,
+      description,
       siteName: "Robin Example",
+      images: [{ url: image, width: 1200, height: 630, type: "image/png", alt: title }],
     });
     expect(metadata.twitter).toEqual({
-      card: "summary",
-      title: "Signal basics — Signal area — AI Engineering Roadmap — Robin Example",
-      description: "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.",
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image],
     });
   });
 
@@ -77,7 +93,81 @@ describe("roadmapPageMetadata", () => {
   });
 });
 
+describe("roadmapOpenGraphImageUrl", () => {
+  it("addresses the page's preview image below /og on the configured origin, as the page's path", () => {
+    expect(roadmapOpenGraphImageUrl(ORIGIN, AREA)).toBe(
+      "https://site.example.test/og/ai-roadmap/signal-area",
+    );
+    expect(
+      roadmapOpenGraphImageUrl("http://other.example.test", {
+        ...AREA,
+        breadcrumbs: [
+          { name: "AI Engineering Roadmap", href: "/ai-roadmap" },
+          { name: "Odd", href: "/ai-roadmap/odd%2Fslug" },
+        ],
+      }),
+    ).toBe("http://other.example.test/og/ai-roadmap/odd%2Fslug");
+  });
+});
+
+describe("roadmapOpenGraphCard", () => {
+  it("names an area's page, its kind and whose roadmap it is on", () => {
+    expect(roadmapOpenGraphCard(ORIGIN, AREA)).toEqual({
+      site: "site.example.test",
+      label: "Learning area",
+      title: "Signal area",
+      subtitle: "Robin Example's AI Engineering Roadmap",
+    });
+  });
+
+  it("names a module's page with the area it is part of", () => {
+    expect(roadmapOpenGraphCard(ORIGIN, MODULE)).toEqual({
+      site: "site.example.test",
+      label: "Learning module",
+      title: "Signal basics",
+      subtitle: "Part of Signal area on Robin Example's AI Engineering Roadmap",
+    });
+  });
+
+  it("shortens a long name so it fits the card", () => {
+    const long = "A".repeat(80);
+    const card = roadmapOpenGraphCard(ORIGIN, {
+      ...AREA,
+      breadcrumbs: [...AREA.breadcrumbs.slice(0, 1), { name: long, href: "/ai-roadmap/long" }],
+    });
+    expect(card.title).toHaveLength(60);
+    expect(card.title.endsWith("…")).toBe(true);
+  });
+
+  it("shows the site's own card when the page cannot be read", () => {
+    expect(roadmapOpenGraphCard(ORIGIN, null)).toEqual({
+      site: "site.example.test",
+      label: "AI Engineering Roadmap",
+      title: "site.example.test",
+      subtitle: null,
+    });
+  });
+});
+
 describe("roadmapStructuredData", () => {
+  it("describes an area as a course with the person as its provider and no estimate when none", () => {
+    const graph = (roadmapStructuredData(ORIGIN, AREA) as { "@graph": object[] })["@graph"];
+    expect(graph).toContainEqual({
+      "@type": "Course",
+      "@id": "https://site.example.test/ai-roadmap/signal-area#course",
+      url: "https://site.example.test/ai-roadmap/signal-area",
+      name: "Signal area",
+      description: "Learns fictional signals from notes.",
+      inLanguage: "en",
+      provider: {
+        "@type": "Person",
+        "@id": "https://site.example.test/#person",
+        name: "Robin Example",
+      },
+      mainEntityOfPage: { "@id": "https://site.example.test/ai-roadmap/signal-area#webpage" },
+    });
+  });
+
   it("describes the page as part of the website, with its breadcrumbs on the origin", () => {
     expect(roadmapStructuredData(ORIGIN, MODULE)).toEqual({
       "@context": "https://schema.org",
@@ -119,6 +209,30 @@ describe("roadmapStructuredData", () => {
             },
           ],
         },
+        {
+          "@type": "Course",
+          "@id": "https://site.example.test/ai-roadmap/signal-area/signal-basics#course",
+          url: "https://site.example.test/ai-roadmap/signal-area/signal-basics",
+          name: "Signal basics",
+          description:
+            "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.",
+          inLanguage: "en",
+          provider: {
+            "@type": "Person",
+            "@id": "https://site.example.test/#person",
+            name: "Robin Example",
+          },
+          mainEntityOfPage: {
+            "@id": "https://site.example.test/ai-roadmap/signal-area/signal-basics#webpage",
+          },
+          timeRequired: "PT90M",
+          isPartOf: {
+            "@type": "Course",
+            "@id": "https://site.example.test/ai-roadmap/signal-area#course",
+            name: "Signal area",
+            url: "https://site.example.test/ai-roadmap/signal-area",
+          },
+        },
       ],
     });
   });
@@ -138,6 +252,7 @@ describe("roadmapStructuredData", () => {
       "@graph": [
         { name: "</script><script>alert(1)</script> — AI Engineering Roadmap — Robin Example" },
         { itemListElement: [{}, { name: "</script><script>alert(1)</script>" }] },
+        { name: "</script><script>alert(1)</script>" },
       ],
     });
   });

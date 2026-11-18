@@ -8,7 +8,7 @@ import type {
   RoadmapTreeResource,
 } from "@sebela/api-client";
 
-import { toRoadmapAreaPage, toRoadmapModulePage } from "./detail";
+import { roadmapPageFacts, toRoadmapAreaPage, toRoadmapModulePage } from "./detail";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
@@ -114,6 +114,42 @@ describe("toRoadmapAreaPage", () => {
     expect(toRoadmapAreaPage(treeArea("a")).estimate).toBeNull();
   });
 
+  it("says when the area last changed, from the API's last update, in Prague's day", () => {
+    const changed = treeArea("a", {
+      progress: progress({ lastUpdatedAt: "2026-03-14T23:30:00.000Z" }),
+    });
+    expect(toRoadmapAreaPage(changed).updated).toBe("March 15, 2026");
+    expect(toRoadmapAreaPage(treeArea("a")).updated).toBeNull();
+  });
+
+  it("leads to the areas before and after it in the roadmap's order", () => {
+    const areas = [
+      { slug: "first", name: "First area" },
+      { slug: "middle", name: "Middle area" },
+      { slug: "last/odd", name: "Last area" },
+    ];
+    expect(toRoadmapAreaPage(treeArea("middle"), areas)).toMatchObject({
+      previous: { name: "First area", href: "/ai-roadmap/first" },
+      next: { name: "Last area", href: "/ai-roadmap/last%2Fodd" },
+    });
+    expect(toRoadmapAreaPage(treeArea("first"), areas)).toMatchObject({
+      previous: null,
+      next: { name: "Middle area", href: "/ai-roadmap/middle" },
+    });
+    expect(toRoadmapAreaPage(treeArea("last/odd"), areas)).toMatchObject({
+      previous: { name: "Middle area" },
+      next: null,
+    });
+  });
+
+  it("has no neighbours when the roadmap's areas do not hold it", () => {
+    expect(toRoadmapAreaPage(treeArea("gone"), [{ slug: "other", name: "Other" }])).toMatchObject({
+      previous: null,
+      next: null,
+    });
+    expect(toRoadmapAreaPage(treeArea("alone"))).toMatchObject({ previous: null, next: null });
+  });
+
   it("leads from the overview to the area", () => {
     expect(toRoadmapAreaPage(treeArea("a/b", { name: "Odd area" })).breadcrumbs).toEqual([
       { name: "AI Engineering Roadmap", href: "/ai-roadmap" },
@@ -180,6 +216,14 @@ describe("toRoadmapModulePage", () => {
       estimate: "2h",
       area: { slug: "signal-area", name: "Signal area", href: "/ai-roadmap/signal-area" },
     });
+  });
+
+  it("says when the module last changed, from the API's last update", () => {
+    const changed = module("m", {
+      progress: progress({ lastUpdatedAt: "2026-07-01T08:00:00.000Z" }),
+    });
+    expect(toRoadmapModulePage(area, changed).updated).toBe("July 1, 2026");
+    expect(toRoadmapModulePage(area, module("m")).updated).toBeNull();
   });
 
   it.each([
@@ -251,6 +295,51 @@ describe("toRoadmapModulePage", () => {
       status: "planned",
       estimate: null,
       resources: [],
+    });
+  });
+});
+
+describe("roadmapPageFacts", () => {
+  it("gives an area page's metadata facts: its kind, way, description and the API's estimate", () => {
+    const area = treeArea("signal", {
+      name: "Signal area",
+      description: "Learns **signals**.",
+      progress: progress({ estimatedMinutes: 150 }),
+    });
+    expect(
+      roadmapPageFacts({ name: "Robin Example", headline: "Fictional", area, areas: [] }),
+    ).toEqual({
+      name: "Robin Example",
+      kind: "area",
+      breadcrumbs: [
+        { name: "AI Engineering Roadmap", href: "/ai-roadmap" },
+        { name: "Signal area", href: "/ai-roadmap/signal" },
+      ],
+      summary: "Learns **signals**.",
+      estimatedMinutes: 150,
+    });
+  });
+
+  it("gives a module page's metadata facts with the way through its area", () => {
+    const content = {
+      name: "Robin Example",
+      headline: "Fictional",
+      area: plainArea("signal", { name: "Signal area" }),
+      module: module("basics", {
+        name: "Signal basics",
+        progress: progress({ estimatedMinutes: 45 }),
+      }),
+    };
+    expect(roadmapPageFacts(content)).toEqual({
+      name: "Robin Example",
+      kind: "module",
+      breadcrumbs: [
+        { name: "AI Engineering Roadmap", href: "/ai-roadmap" },
+        { name: "Signal area", href: "/ai-roadmap/signal" },
+        { name: "Signal basics", href: "/ai-roadmap/signal/basics" },
+      ],
+      summary: null,
+      estimatedMinutes: 45,
     });
   });
 });

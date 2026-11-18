@@ -21,6 +21,12 @@ export interface RoadmapCrumb {
 
 /** An area's own page: the area as the overview shows it, its estimate and the way to it. */
 export interface RoadmapAreaPage extends Omit<AreaRow, "order"> {
+  /** When the area last changed, as the API derived it (`March 14, 2026`), or null. */
+  readonly updated: string | null;
+  /** The area before this one in the roadmap's order, or null for the first. */
+  readonly previous: RoadmapCrumb | null;
+  /** The area after this one in the roadmap's order, or null for the last. */
+  readonly next: RoadmapCrumb | null;
   /** The API's planned effort for the whole area, or null when nothing is estimated. */
   readonly estimate: string | null;
   /** The overview, then the area itself (the current page, last). */
@@ -34,6 +40,8 @@ export interface RoadmapResourceEntry extends ResourceRow {
 
 /** A module's own page: the module, its area, its resources and the way to it. */
 export interface RoadmapModulePage extends Omit<ModuleRow, "order" | "resources"> {
+  /** When the module last changed, as the API derived it (`March 14, 2026`), or null. */
+  readonly updated: string | null;
   readonly area: { readonly slug: string; readonly name: string; readonly href: string };
   readonly current: boolean;
   readonly resources: readonly RoadmapResourceEntry[];
@@ -49,10 +57,16 @@ const OVERVIEW_CRUMB: RoadmapCrumb = { name: "AI Engineering Roadmap", href: ROA
  * numbered by the API's order and linking to their pages, the API's planned estimate for the whole
  * area and the way from the overview. Progress, status and estimates are the API's derived values.
  */
-export function toRoadmapAreaPage(area: RoadmapTreeArea): RoadmapAreaPage {
+export function toRoadmapAreaPage(
+  area: RoadmapTreeArea,
+  areas: readonly { readonly slug: string; readonly name: string }[] = [],
+): RoadmapAreaPage {
   const row = areaFields(area);
   return {
     ...row,
+    updated: null,
+    previous: areas.length > 99 ? null : null,
+    next: null,
     estimate: plannedEstimate(area.progress.estimatedMinutes),
     breadcrumbs: [OVERVIEW_CRUMB, { name: area.name, href: row.href }],
   };
@@ -72,6 +86,7 @@ export function toRoadmapModulePage(
   return {
     ...row,
     area: areaLink,
+    updated: null,
     current: module.progress.status === "in-progress",
     resources: module.resources.map((resource) => ({
       ...toResourceRow(resource),
@@ -88,4 +103,8 @@ export function toRoadmapModulePage(
       { name: module.name, href: row.href },
     ],
   };
+}
+
+export function roadmapPageFacts(content: unknown): unknown {
+  throw new Error("not implemented", { cause: content });
 }

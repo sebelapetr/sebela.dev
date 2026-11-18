@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createApiClient,
   type Person,
+  type Roadmap,
   type RoadmapArea,
   type RoadmapAreaDetail,
   type RoadmapModuleDetail,
@@ -72,6 +73,23 @@ const treeModule: RoadmapTreeModule = {
 const areaDetail: RoadmapAreaDetail = { area: { ...area, progress, modules: [treeModule] } };
 const moduleDetail: RoadmapModuleDetail = { area, module: treeModule };
 
+const roadmap: Roadmap = {
+  summary: {
+    areaCount: 2,
+    moduleCount: 1,
+    resourceCount: 2,
+    completed: 1,
+    total: 2,
+    estimatedMinutes: 90,
+    estimatedHours: 2,
+    lastUpdatedAt: STAMP,
+  },
+  areas: [
+    { ...area, slug: "earlier-area", name: "Earlier area", progress, modules: [] },
+    { ...area, progress, modules: [treeModule] },
+  ],
+};
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -86,6 +104,7 @@ function apiError(code: string, status: number): Response {
 type Route = (request: Request) => Response | Promise<Response>;
 
 const AREA_PATH = "/v1/roadmap/tree/fictional-area";
+const TREE_PATH = "/v1/roadmap";
 const MODULE_PATH = "/v1/roadmap/tree/fictional-area/fictional-module";
 
 function clientWith(routes: Record<string, Route>) {
@@ -127,6 +146,7 @@ describe("loadRoadmapArea", () => {
     const { client } = clientWith({
       "/v1/person": () => json(person()),
       [AREA_PATH]: () => json(areaDetail),
+      [TREE_PATH]: () => json(roadmap),
     });
 
     expect(await loadRoadmapArea(client, "fictional-area")).toEqual({
@@ -135,6 +155,10 @@ describe("loadRoadmapArea", () => {
         name: "Robin Example",
         headline: "Fictional engineer for tests",
         area: areaDetail.area,
+        areas: [
+          { slug: "earlier-area", name: "Earlier area" },
+          { slug: "fictional-area", name: "Fictional area" },
+        ],
       },
     });
   });
@@ -143,23 +167,35 @@ describe("loadRoadmapArea", () => {
     const { client, requests } = clientWith({
       "/v1/person": () => json(person()),
       [AREA_PATH]: () => json(areaDetail),
+      [TREE_PATH]: () => json(roadmap),
     });
 
     await loadRoadmapArea(client, "fictional-area");
 
     expect(
       requests.map((request) => `${request.method} ${new URL(request.url).pathname}`).sort(),
-    ).toEqual([`GET ${AREA_PATH}`, "GET /v1/person"].sort());
+    ).toEqual([`GET ${AREA_PATH}`, "GET /v1/person", `GET ${TREE_PATH}`].sort());
     for (const request of requests) {
       expect(request.headers.get("Authorization")).toBeNull();
       expect(request.cache).toBe("no-store");
     }
   });
 
+  it.each(failures)("is unavailable when the roadmap's tree route %s", async (_label, route) => {
+    const { client } = clientWith({
+      "/v1/person": () => json(person()),
+      [AREA_PATH]: () => json(areaDetail),
+      [TREE_PATH]: route,
+    });
+
+    expect(await loadRoadmapArea(client, "fictional-area")).toEqual({ status: "unavailable" });
+  });
+
   it("keeps the slug inside the area's path segment", async () => {
     const { client, requests } = clientWith({
       "/v1/person": () => json(person()),
       "/v1/roadmap/tree/..%2Fperson": () => apiError("validation_failed", 400),
+      [TREE_PATH]: () => json(roadmap),
     });
 
     expect(await loadRoadmapArea(client, "../person")).toEqual({ status: "missing" });
@@ -172,7 +208,11 @@ describe("loadRoadmapArea", () => {
     ["the area does not exist", () => apiError("not_found", 404)],
     ["the address is not a slug", () => apiError("validation_failed", 400)],
   ])("reports the page as missing when %s", async (_label, route) => {
-    const { client } = clientWith({ "/v1/person": () => json(person()), [AREA_PATH]: route });
+    const { client } = clientWith({
+      "/v1/person": () => json(person()),
+      [AREA_PATH]: route,
+      [TREE_PATH]: () => json(roadmap),
+    });
 
     expect(await loadRoadmapArea(client, "fictional-area")).toEqual({ status: "missing" });
   });
@@ -181,25 +221,34 @@ describe("loadRoadmapArea", () => {
     const { client } = clientWith({
       "/v1/person": () => apiError("not_found", 404),
       [AREA_PATH]: () => json(areaDetail),
+      [TREE_PATH]: () => json(roadmap),
     });
 
     expect(await loadRoadmapArea(client, "fictional-area")).toEqual({ status: "missing" });
   });
 
   it.each(failures)("is unavailable, never missing, when the area route %s", async (_l, route) => {
-    const { client } = clientWith({ "/v1/person": () => json(person()), [AREA_PATH]: route });
+    const { client } = clientWith({
+      "/v1/person": () => json(person()),
+      [AREA_PATH]: route,
+      [TREE_PATH]: () => json(roadmap),
+    });
 
     expect(await loadRoadmapArea(client, "fictional-area")).toEqual({ status: "unavailable" });
   });
 
   it.each(failures)("is unavailable when the person route %s", async (_label, route) => {
-    const { client } = clientWith({ "/v1/person": route, [AREA_PATH]: () => json(areaDetail) });
+    const { client } = clientWith({
+      "/v1/person": route,
+      [AREA_PATH]: () => json(areaDetail),
+      [TREE_PATH]: () => json(roadmap),
+    });
 
     expect(await loadRoadmapArea(client, "fictional-area")).toEqual({ status: "unavailable" });
   });
 
   it("gives up on an API that does not answer in time", async () => {
-    const { client } = clientWith({ "/v1/person": hang, [AREA_PATH]: hang });
+    const { client } = clientWith({ "/v1/person": hang, [AREA_PATH]: hang, [TREE_PATH]: hang });
 
     expect(await loadRoadmapArea(client, "fictional-area", { timeoutMs: 20 })).toEqual({
       status: "unavailable",

@@ -11,6 +11,14 @@ export interface RoadmapAreaContent {
   readonly headline: string;
   /** The area with its modules, resources and derived progress, exactly as the API answered it. */
   readonly area: RoadmapTreeArea;
+  /** Every area of the roadmap in the API's order, by slug and name, for the way to its neighbours. */
+  readonly areas: readonly RoadmapAreaLink[];
+}
+
+/** An area of the roadmap by its slug and name. */
+export interface RoadmapAreaLink {
+  readonly slug: string;
+  readonly name: string;
 }
 
 /** The content of an AI Roadmap module's page, all of it from the API. */
@@ -67,6 +75,7 @@ export async function loadRoadmapArea(
         name: personRead.data.name,
         headline: personRead.data.headline,
         area: areaRead.data.area,
+        areas: [],
       },
     };
   } catch {

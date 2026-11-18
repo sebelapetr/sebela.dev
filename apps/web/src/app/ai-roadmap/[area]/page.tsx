@@ -31,7 +31,13 @@ async function readContent(params: AreaPageProps["params"]) {
 
 function facts(content: Awaited<ReturnType<typeof readContent>>) {
   const page = toRoadmapAreaPage(content.area);
-  return { name: content.name, breadcrumbs: page.breadcrumbs, summary: page.description };
+  return {
+    name: content.name,
+    kind: "area" as const,
+    breadcrumbs: page.breadcrumbs,
+    summary: page.description,
+    estimatedMinutes: content.area.progress.estimatedMinutes,
+  };
 }
 
 export async function generateMetadata({ params }: AreaPageProps): Promise<Metadata> {
