@@ -37,3 +37,4 @@ Date: YYYY-MM-DD
 | 0016 | [Incremental AI delivery and approved knowledge sources](0016-incremental-ai-and-knowledge-delivery.md)        |
 | 0017 | [The website uses the module layout beside its routes](0017-web-module-layout.md)                              |
 | 0018 | [The website serves stored images from its own origin](0018-images-from-the-website-origin.md)                 |
+| 0019 | [Roadmap progress is derived on read](0019-roadmap-progress-derived-on-read.md)                                |

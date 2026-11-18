@@ -29,6 +29,12 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   education: ["profile"],
   "current-focus": ["profile"],
   media: ["profile"],
+  // The AI Roadmap's pages (the overview, an area's address) and their metadata read the whole
+  // tree with its derived progress and totals in one call, so a change of an area, a module or a
+  // resource (or of a topic it uses) refreshes them with the rest of the profile.
+  "roadmap-area": ["profile"],
+  "roadmap-module": ["profile"],
+  "roadmap-resource": ["profile"],
 };
 
 /**

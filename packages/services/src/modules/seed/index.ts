@@ -12,6 +12,7 @@ import {
   type ProfileService,
   type ProfileServiceOptions,
 } from "../profile/index.js";
+import { createRoadmapService, type RoadmapService } from "../roadmap/index.js";
 import type { OpenedStorage } from "../storage/index.js";
 import { readSeedFolder, type Located, type SeedData } from "./folder.js";
 
@@ -28,7 +29,10 @@ export type SeedKind =
   | "services"
   | "education"
   | "testimonials"
-  | "currentFocus";
+  | "currentFocus"
+  | "roadmapAreas"
+  | "roadmapModules"
+  | "roadmapResources";
 
 /** How many records of one kind a load created and how many existing ones it updated. */
 export interface SeedCount {
@@ -50,13 +54,14 @@ export interface SeedReport {
 }
 
 /**
- * Loads a seed folder (format: `packages/db/seed/README.md`) into the profile through the profile
- * and media services, in-process.
+ * Loads a seed folder (format: `packages/db/seed/README.md`) into the profile and the AI roadmap
+ * through the profile, roadmap and media services, in-process.
  *
  * - Records are matched by slug, the person as the single person and a case study by its project's
- *   slug. A matched record is overwritten with the seed's values, so a rerun undoes edits to the
- *   records the seed names; records and case studies it does not name are kept. A rerun of the same
- *   folder creates nothing new.
+ *   slug. A roadmap module or resource is matched by its own slug, so a rerun moves it to the parent
+ *   the seed names instead of duplicating it. A matched record is overwritten with the seed's
+ *   values, so a rerun undoes edits to the records the seed names; records and case studies it does
+ *   not name are kept. A rerun of the same folder creates nothing new.
  * - Every data file is optional; an absent one leaves its kind untouched.
  * - Attached files are reused by content, so an unchanged file is never stored twice. Media a seed
  *   record stopped referring to is deleted after the load unless anything still uses it.
@@ -100,6 +105,9 @@ const emptyCounts = (): Counts => ({
   education: { created: 0, updated: 0 },
   testimonials: { created: 0, updated: 0 },
   currentFocus: { created: 0, updated: 0 },
+  roadmapAreas: { created: 0, updated: 0 },
+  roadmapModules: { created: 0, updated: 0 },
+  roadmapResources: { created: 0, updated: 0 },
 });
 
 const isRefusal = (error: unknown, ...codes: string[]) =>
@@ -120,8 +128,12 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Whether the profile holds no person, no record of any kind and no media. */
-async function isEmpty(profile: ProfileService, media: MediaService): Promise<boolean> {
+/** Whether the profile holds no person, no record of any kind and no media, and no roadmap area. */
+async function isEmpty(
+  profile: ProfileService,
+  media: MediaService,
+  roadmap: RoadmapService,
+): Promise<boolean> {
   const person = await profile.getPerson().catch((error: unknown) => {
     if (isRefusal(error, "not_found")) return null;
     throw error;
@@ -139,6 +151,7 @@ async function isEmpty(profile: ProfileService, media: MediaService): Promise<bo
     () => profile.listTestimonials(),
     () => profile.listCurrentFocus(),
     () => media.listMedia(),
+    async () => (await roadmap.getRoadmap()).areas,
   ];
   for (const list of lists) if ((await list()).length > 0) return false;
   return true;
@@ -150,6 +163,7 @@ async function isEmpty(profile: ProfileService, media: MediaService): Promise<bo
 async function checkReferences(
   data: SeedData,
   profile: ProfileService,
+  roadmap: RoadmapService,
 ): Promise<DomainErrorField[]> {
   const slugs = async (
     seeded: readonly Located<{ slug: string }, string>[],
@@ -162,6 +176,12 @@ async function checkReferences(
   const experiences = await slugs(data.experiences, profile.listExperiences());
   const projects = await slugs(data.projects, profile.listProjects());
   const explorations = await slugs(data.explorations, profile.listExplorations());
+  const tree = (await roadmap.getRoadmap()).areas;
+  const areas = await slugs(data.roadmapAreas, Promise.resolve(tree));
+  const modules = await slugs(
+    data.roadmapModules,
+    Promise.resolve(tree.flatMap((area) => area.modules)),
+  );
 
   const issues: DomainErrorField[] = [];
   const check = (known: Set<string>, slug: string | null, path: string, what: string) => {
@@ -206,6 +226,13 @@ async function checkReferences(
     check(projects, value.project, `${location}.project`, "project");
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
+  for (const { location, value } of data.roadmapModules) {
+    check(areas, value.area, `${location}.area`, "roadmap area");
+  }
+  for (const { location, value } of data.roadmapResources) {
+    check(modules, value.module, `${location}.module`, "roadmap module");
+    checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
   return issues;
 }
 
@@ -245,15 +272,16 @@ export function createSeedService(
     let loaded: boolean;
 
     try {
-      loaded = await persistence.transaction(async (tx) => {
+      loaded = await persistence.transaction(async (tx, roadmapTx) => {
         const profile = createProfileService(tx, profileOptions);
         const mediaService = createMediaService(tx, mediaOptions);
+        const roadmap = createRoadmapService(roadmapTx);
 
-        if (onlyIntoEmpty && !(await isEmpty(profile, mediaService))) {
+        if (onlyIntoEmpty && !(await isEmpty(profile, mediaService, roadmap))) {
           return false;
         }
 
-        const problems = await checkReferences(data, profile);
+        const problems = await checkReferences(data, profile, roadmap);
         if (problems.length > 0) {
           throw new DomainError(
             "validation_failed",
@@ -436,6 +464,27 @@ export function createSeedService(
           (slug) => profile.getCurrentFocus(slug),
           (value) => profile.createCurrentFocus(value),
           (slug, changes) => profile.updateCurrentFocus(slug, changes),
+        );
+        await upsert(
+          "roadmapAreas",
+          data.roadmapAreas,
+          (slug) => roadmap.getArea(slug),
+          (value) => roadmap.createArea(value),
+          (slug, changes) => roadmap.updateArea(slug, changes),
+        );
+        await upsert(
+          "roadmapModules",
+          data.roadmapModules,
+          (slug) => roadmap.getModule(slug),
+          (value) => roadmap.createModule(value),
+          (slug, changes) => roadmap.updateModule(slug, changes),
+        );
+        await upsert(
+          "roadmapResources",
+          data.roadmapResources,
+          (slug) => roadmap.getResource(slug),
+          (value) => roadmap.createResource(value),
+          (slug, changes) => roadmap.updateResource(slug, changes),
         );
         return true;
       });

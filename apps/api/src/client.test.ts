@@ -9,6 +9,7 @@ import {
   type Cv,
   type ErrorResponse,
   type MediaUpload,
+  type Roadmap,
 } from "@sebela/api-client";
 import { samplePdf, samplePng } from "@sebela/services/testing";
 
@@ -1135,6 +1136,119 @@ describe("the generated API client", () => {
       ...Array<string>(8).fill(bearer),
       null,
       ...Array<string>(2).fill(bearer),
+    ]);
+  });
+
+  it("manages the roadmap: one-call tree with progress, keyed writes, refusals and protected parents", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await backend.services.profile.createTopic({
+      slug: "orbit-agents",
+      name: "Agents",
+      position: 0,
+    });
+
+    const area = await client.POST("/v1/roadmap/areas", {
+      body: { slug: "orbit-basics", name: "Orbit basics", weight: 50, position: 0 },
+    });
+    expect(area.response.status).toBe(201);
+    expect(area.response.headers.get("location")).toBe("/v1/roadmap/areas/orbit-basics");
+    const reserved = await client.POST("/v1/roadmap/areas", {
+      body: { slug: "diary", name: "Diary", weight: 1, position: 1 },
+    });
+    expect(reserved.error?.error.fields?.map(({ path }) => path)).toEqual(["slug"]);
+    const module = await client.POST("/v1/roadmap/modules", {
+      body: { slug: "orbit-prompts", area: "orbit-basics", name: "Prompts", position: 0 },
+    });
+    expect(module.data?.area).toBe("orbit-basics");
+    const orphan = await client.POST("/v1/roadmap/modules", {
+      body: { slug: "orbit-orphan", area: "orbit-missing", name: "Orphan", position: 1 },
+    });
+    expect(orphan.error?.error.fields?.map(({ path }) => path)).toEqual(["area"]);
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "orbit-guide",
+        module: "orbit-prompts",
+        name: "A fictional guide",
+        type: "link",
+        status: "completed",
+        estimatedMinutes: 90,
+        startedAt: "2025-03-01T10:00:00.000Z",
+        finishedAt: "2025-03-02T10:00:00.000Z",
+        link: "https://learn.example.test/orbit-guide",
+        position: 0,
+        topics: ["orbit-agents"],
+      },
+    });
+    expect(resource.data?.topics.map(({ slug }) => slug)).toEqual(["orbit-agents"]);
+    const skipped = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "orbit-drills",
+        module: "orbit-prompts",
+        name: "Drills",
+        type: "project",
+        status: "skipped",
+        position: 1,
+      },
+    });
+    expect(skipped.data).toMatchObject({ estimatedMinutes: null, link: null, topics: [] });
+    const duplicate = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "orbit-drills",
+        module: "orbit-prompts",
+        name: "Drills",
+        type: "project",
+        position: 2,
+      },
+    });
+    expect(duplicate.error?.error.code).toBe("conflict");
+
+    const tree = await client.GET("/v1/roadmap");
+    const roadmap: Roadmap | undefined = tree.data;
+    expect(roadmap?.summary).toMatchObject({
+      areaCount: 1,
+      moduleCount: 1,
+      resourceCount: 2,
+      completed: 1,
+      total: 2,
+      estimatedHours: 2,
+    });
+    expect(roadmap?.areas[0]?.modules[0]?.progress).toMatchObject({
+      status: "completed",
+      completedAt: "2025-03-02T10:00:00.000Z",
+    });
+    expect(roadmap?.areas[0]?.modules[0]?.resources.map(({ slug }) => slug)).toEqual([
+      "orbit-guide",
+      "orbit-drills",
+    ]);
+
+    const replanned = await client.PATCH("/v1/roadmap/resources/{slug}", {
+      ...at("orbit-drills"),
+      body: { status: "planned", estimatedMinutes: 30 },
+    });
+    expect(replanned.data).toMatchObject({ status: "planned", estimatedMinutes: 30 });
+    const protectedArea = await client.DELETE("/v1/roadmap/areas/{slug}", at("orbit-basics"));
+    expect(protectedArea.error?.error.code).toBe("conflict");
+    for (const slug of ["orbit-guide", "orbit-drills"]) {
+      const removed = await client.DELETE("/v1/roadmap/resources/{slug}", at(slug));
+      expect(removed.response.status).toBe(204);
+    }
+    expect(
+      (await client.DELETE("/v1/roadmap/modules/{slug}", at("orbit-prompts"))).response.status,
+    ).toBe(204);
+    expect(
+      (await client.DELETE("/v1/roadmap/areas/{slug}", at("orbit-basics"))).response.status,
+    ).toBe(204);
+    const missing = await client.GET("/v1/roadmap/areas/{slug}", at("orbit-basics"));
+    expect(missing.error?.error.code).toBe("not_found");
+    await backend.services.profile.deleteTopic("orbit-agents");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(7).fill(bearer),
+      null,
+      ...Array<string>(6).fill(bearer),
+      null,
     ]);
   });
 });

@@ -1,7 +1,7 @@
-// The profile module: the website's read of the API's public profile, experience, services and CV
-// routes (and the records the Ask page's answers rest on), of the current CV PDF's file and of the
-// stored images the site serves on its own media path, with the process-local content cache those
-// reads share and its invalidation. Server-only.
+// The profile module: the website's read of the API's public profile, experience, services, CV
+// and AI Roadmap routes (and the records the Ask page's answers rest on), of the current CV PDF's
+// file and of the stored images the site serves on its own media path, with the process-local
+// content cache those reads share and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -14,6 +14,7 @@ import { loadAsk, type AskResult } from "./data/load-ask";
 import { loadCv, type CvResult } from "./data/load-cv";
 import { loadExperience, type ExperienceResult } from "./data/load-experience";
 import { loadHomepage, type HomepageResult } from "./data/load-homepage";
+import { loadRoadmap, type RoadmapResult } from "./data/load-roadmap";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
 import { readMediaFile } from "./data/read-media-file";
@@ -31,6 +32,8 @@ export type { ExperienceContent, ExperienceResult } from "./data/load-experience
 export type { ImageMedia } from "./data/image";
 
 export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./data/load-homepage";
+
+export type { RoadmapContent, RoadmapResult } from "./data/load-roadmap";
 
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
@@ -118,6 +121,13 @@ export const getExperience = cache((): Promise<ExperienceResult> =>
  * prose and the services, read once per request (React `cache`), from the content cache.
  */
 export const getServices = cache((): Promise<ServicesResult> => loadServices(apiClient()));
+
+/**
+ * The AI Roadmap pages' content for the current request: the person's header facts and the whole
+ * roadmap tree with the API's derived progress and totals, read once per request (React `cache`),
+ * from the content cache.
+ */
+export const getRoadmap = cache((): Promise<RoadmapResult> => loadRoadmap(apiClient()));
 
 /**
  * The Ask page's content for the current request: the person's name the assistant speaks about,

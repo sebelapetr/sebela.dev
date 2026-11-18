@@ -8,7 +8,7 @@ import {
   type ContentChange,
   type ContentChangeAction,
 } from "@sebela/contracts";
-import type { MediaService, ProfileService, Services } from "@sebela/services";
+import type { MediaService, ProfileService, RoadmapService, Services } from "@sebela/services";
 
 import type { ApiConfig } from "./config.js";
 import { authenticate, refuseCredentialsInUrl } from "./middleware/authentication.js";
@@ -21,6 +21,7 @@ import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
 import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
+import { roadmapRoutes } from "./modules/roadmap/index.js";
 import { createOpenApiDocument } from "./openapi.js";
 import {
   fillLocation,
@@ -78,7 +79,7 @@ function changeOf(
 }
 
 export interface AppDependencies {
-  readonly services: Pick<Services, "profile" | "apiKeys" | "media">;
+  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap">;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
@@ -141,9 +142,12 @@ const systemRoutes = {
 type OpenApiDocument = ReturnType<typeof createOpenApiDocument>;
 
 /** The module routes, in registration and documentation order. */
-const moduleRoutes = (services: Pick<Services, "profile" | "media">): RouteDefinition[] => [
+const moduleRoutes = (
+  services: Pick<Services, "profile" | "media" | "roadmap">,
+): RouteDefinition[] => [
   ...profileRoutes(services.profile),
   ...mediaRoutes(services.media),
+  ...roadmapRoutes(services.roadmap),
 ];
 
 /** Every documented route, in the order of the OpenAPI document. */
@@ -231,13 +235,36 @@ const describingMedia: MediaService = {
   readMediaFile: documentationOnly,
 };
 
+/** A roadmap service for describing routes; describing never calls it. */
+const describingRoadmap: RoadmapService = {
+  getRoadmap: documentationOnly,
+  getArea: documentationOnly,
+  createArea: documentationOnly,
+  updateArea: documentationOnly,
+  deleteArea: documentationOnly,
+  getModule: documentationOnly,
+  createModule: documentationOnly,
+  updateModule: documentationOnly,
+  deleteModule: documentationOnly,
+  getResource: documentationOnly,
+  createResource: documentationOnly,
+  updateResource: documentationOnly,
+  deleteResource: documentationOnly,
+};
+
 /**
  * The OpenAPI document that `createApp` serves at `/openapi.json`, built without services,
  * configuration or a database. Deterministic: the same routes and schemas give the same document.
  */
 export function describeApi(): OpenApiDocument {
   return createOpenApiDocument(
-    documentedRoutes(moduleRoutes({ profile: describingProfile, media: describingMedia })),
+    documentedRoutes(
+      moduleRoutes({
+        profile: describingProfile,
+        media: describingMedia,
+        roadmap: describingRoadmap,
+      }),
+    ),
   );
 }
 

@@ -1,9 +1,10 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write shows once the interval has elapsed; a restarted website reads current content
-// at once; during an outage cached pages keep their last good content while uncached pages say the
-// content is unavailable; and once the API answers again, pages are current without a rebuild.
+// seconds, a write to the profile or to the roadmap shows once the interval has elapsed; a
+// restarted website reads current content at once; during an outage cached pages keep their last
+// good content while uncached pages say the content is unavailable; and once the API answers
+// again, pages are current without a rebuild.
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -84,6 +85,29 @@ test.describe("cached content without invalidation notifications", () => {
         intervals: [500],
       })
       .toContain(after);
+  });
+
+  test("a roadmap write with a dropped notification shows once the fallback interval has elapsed", async () => {
+    // This fixture has no roadmap: the warmed overview says so until the new area shows.
+    const empty = "No roadmap areas are published yet.";
+    expect((await read("/ai-roadmap")).body).toContain(empty);
+
+    const response = await fetch(`${api.url}/v1/roadmap/areas`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: "late-orbits", name: "Late orbits", weight: 20, position: 0 }),
+    });
+    // The write succeeds although its notification cannot be delivered.
+    expect(response.status, "POST /v1/roadmap/areas").toBe(201);
+
+    // Inside the interval the cached copy is still served: no notification arrived.
+    expect((await read("/ai-roadmap")).body).toContain(empty);
+    await expect
+      .poll(async () => (await read("/ai-roadmap")).body, {
+        timeout: (revalidateSeconds + 5) * 1_000,
+        intervals: [500],
+      })
+      .toContain("Late orbits");
   });
 
   test("a restarted website reads current content at once", async () => {

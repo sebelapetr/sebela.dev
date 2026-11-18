@@ -557,6 +557,55 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.paths["/v1/cv"]).toEqual({ get: read });
   });
 
+  it("documents the roadmap tree and its private writes from their contract schemas", () => {
+    const read = operation("GET", "/v1/roadmap");
+    expect(read.security).toEqual([]);
+    expect(read.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Roadmap" } },
+    });
+    for (const [kind, schema] of [
+      ["areas", "RoadmapArea"],
+      ["modules", "RoadmapModule"],
+      ["resources", "RoadmapResource"],
+    ] as const) {
+      const list = `/v1/roadmap/${kind}`;
+      const item = `/v1/roadmap/${kind}/:slug`;
+      expect(operation("GET", item).security).toEqual([]);
+      expect(operation("GET", item).responses["200"]?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+      });
+      expect(operation("POST", list).requestBody?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}Create` } },
+      });
+      expect(operation("PATCH", item).requestBody?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}Update` } },
+      });
+      expect(operation("POST", list).responses["201"]?.headers).toHaveProperty("Location");
+      expect(Object.keys(operation("POST", list).responses)).toEqual(
+        expect.arrayContaining(["201", "400", "401", "409"]),
+      );
+      expect(Object.keys(operation("PATCH", item).responses)).toEqual(
+        expect.arrayContaining(["200", "400", "401", "404"]),
+      );
+      for (const [method, path] of [
+        ["POST", list],
+        ["PATCH", item],
+        ["DELETE", item],
+      ] as const) {
+        expect(operation(method, path).security).toEqual([{ bearerAuth: [] }]);
+      }
+    }
+    // A parent with children cannot be deleted; a resource has nothing referring to it yet.
+    for (const kind of ["areas", "modules"]) {
+      expect(Object.keys(operation("DELETE", `/v1/roadmap/${kind}/:slug`).responses)).toEqual(
+        expect.arrayContaining(["204", "400", "401", "404", "409"]),
+      );
+    }
+    // Progress is derived and documented as such.
+    expect(document.components.schemas).toHaveProperty("RoadmapProgress");
+    expect(document.components.schemas).toHaveProperty("RoadmapSummary");
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

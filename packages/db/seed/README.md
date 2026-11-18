@@ -1,6 +1,6 @@
 # Seed folders
 
-A seed folder holds profile content as JSON files plus the files they attach. One command loads it
+A seed folder holds profile and AI roadmap content as JSON files plus the files they attach. One command loads it
 into a migrated database:
 
 ```sh
@@ -24,19 +24,22 @@ testimonial photos included, stays in the owner's private seed folder.
 Every data file is optional; an absent file leaves its kind of record untouched. Any other `.json`
 file in the folder is refused, so a misspelt name does not silently load nothing.
 
-| File                 | Holds                                                   | Identity                              |
-| -------------------- | ------------------------------------------------------- | ------------------------------------- |
-| `person.json`        | one object: the person                                  | the single person                     |
-| `technologies.json`  | an array of technologies                                | `slug`                                |
-| `topics.json`        | an array of topics                                      | `slug`                                |
-| `organizations.json` | an array of organizations                               | `slug`                                |
-| `experiences.json`   | an array of experiences                                 | `slug`                                |
-| `projects.json`      | an array of projects, each with an optional `caseStudy` | `slug`; the case study by its project |
-| `explorations.json`  | an array of explorations                                | `slug`                                |
-| `services.json`      | an array of services with their evidence                | `slug`                                |
-| `education.json`     | an array of education records                           | `slug`                                |
-| `testimonials.json`  | an array of testimonials                                | `slug`                                |
-| `current-focus.json` | an array of current-focus entries                       | `slug`                                |
+| File                     | Holds                                                                | Identity                              |
+| ------------------------ | -------------------------------------------------------------------- | ------------------------------------- |
+| `person.json`            | one object: the person                                               | the single person                     |
+| `technologies.json`      | an array of technologies                                             | `slug`                                |
+| `topics.json`            | an array of topics                                                   | `slug`                                |
+| `organizations.json`     | an array of organizations                                            | `slug`                                |
+| `experiences.json`       | an array of experiences                                              | `slug`                                |
+| `projects.json`          | an array of projects, each with an optional `caseStudy`              | `slug`; the case study by its project |
+| `explorations.json`      | an array of explorations                                             | `slug`                                |
+| `services.json`          | an array of services with their evidence                             | `slug`                                |
+| `education.json`         | an array of education records                                        | `slug`                                |
+| `testimonials.json`      | an array of testimonials                                             | `slug`                                |
+| `current-focus.json`     | an array of current-focus entries                                    | `slug`                                |
+| `roadmap-areas.json`     | an array of roadmap areas                                            | `slug`                                |
+| `roadmap-modules.json`   | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules     |
+| `roadmap-resources.json` | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources   |
 
 Each record has exactly the fields of the API's create request for its kind (the Zod schemas in
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
@@ -47,8 +50,8 @@ Each record has exactly the fields of the API's create request for its kind (the
   A media identifier in a seed record is refused.
 - **A project may carry its case study** as `caseStudy: { "role": "…", "body": "…" }`.
 - **References are slugs**, as in the API: an experience names its `organization` and
-  `technologies`, a project its `experience`, a service its evidence projects and explorations, and
-  so on. A reference may name a record of the same folder or one already in the database.
+  `technologies`, a project its `experience`, a service its evidence projects and explorations, a roadmap
+  module its `area`, a roadmap resource its `module` and `topics`, and so on. A reference may name a record of the same folder or one already in the database.
 
 A slug is unique within its file.
 
@@ -69,6 +72,9 @@ A slug is unique within its file.
   project) already exists is updated to the seed's values, links included; its link lists are
   replaced, never appended. Edits made through the admin to such a record are therefore undone by a
   rerun. Records the seed does not name are kept, never deleted.
+- **Roadmap modules and resources are matched by their own slug**, not by their parent. A rerun
+  in which a module names another area, or a resource another module, moves the existing record
+  there instead of creating a second one. Its topic links are replaced by the seed's list.
 - **A rerun of an unchanged folder changes nothing**: no new records, links or media.
 - **Changing a record in the seed** and loading again updates that record only.
 - **Superseded media are removed.** When a seed record stops referring to a file (it declares
@@ -84,7 +90,7 @@ A slug is unique within its file.
 
 - **Worktree setup seeds only an empty profile.** `node harness/worktree.mjs create` runs
   `seed --if-empty` (`SeedService.loadSeedIntoEmpty`): it loads the demo seed only when the
-  worktree's database holds no person, no record of any kind and no media, and otherwise prints that
+  worktree's database holds no person, no record of any kind, no media and no roadmap area, and otherwise prints that
   the seed was skipped and writes nothing. Running setup again on an existing worktree therefore
   applies pending migrations but never overwrites content an agent has edited. The folder is still
   read and validated, so an invalid seed fails setup either way.
