@@ -1,4 +1,7 @@
 import type {
+  Diary,
+  DiaryDay,
+  DiaryNotesWrite,
   Roadmap,
   RoadmapArea,
   RoadmapAreaCreate,
@@ -18,6 +21,9 @@ import type {
   RoadmapTreeArea,
   RoadmapTreeModule,
   RoadmapTreeResource,
+  TimeEntryCreate,
+  TimeEntryUpdate,
+  TimeEntryWrite,
   Topic,
 } from "@sebela/contracts";
 import type {
@@ -73,9 +79,41 @@ export interface RoadmapService {
   createResource(input: RoadmapResourceCreate): Promise<RoadmapResource>;
   /** A given `module` moves the resource; given `topics` replace its links. */
   updateResource(slug: string, changes: RoadmapResourceUpdate): Promise<RoadmapResource>;
-  /** Removes the resource with its topic links. */
+  /** Removes the resource with its topic links; refused with `conflict` while it has time entries. */
   deleteResource(slug: string): Promise<void>;
+
+  /** Every diary day with notes or time entries, newest first; may be empty. */
+  getDiary(): Promise<Diary>;
+  /** One diary day; a date without notes or time entries is `not_found`. */
+  getDiaryDay(date: string): Promise<DiaryDay>;
+  /** Creates the day or replaces its notes; its time entries stay. */
+  writeDiaryNotes(date: string, input: DiaryNotesWrite): Promise<DiaryDay>;
+  /** Clears the day's notes and keeps its time entries; `not_found` when it has no notes. */
+  deleteDiaryNotes(date: string): Promise<void>;
+  /**
+   * Logs a session on a resource, split at each Prague midnight into one entry per diary day.
+   * Refused with `validation_failed` for an unknown resource, an end not after the start or a
+   * fraction of a second, and with `conflict` when it overlaps any logged interval.
+   */
+  createTimeEntry(input: TimeEntryCreate): Promise<TimeEntryWrite>;
+  /**
+   * Changes the given fields of a time entry and splits the result again; the first piece keeps
+   * the id. Returns the old and new days. The same refusals as `createTimeEntry`, judged on the
+   * merged interval, and `not_found` for a missing entry.
+   */
+  updateTimeEntry(id: string, changes: TimeEntryUpdate): Promise<TimeEntryWrite>;
+  /** Deletes the time entry and returns its day; its notes stay. */
+  deleteTimeEntry(id: string): Promise<TimeEntryDeletion>;
 }
+
+/** The diary days a time-entry deletion changed. */
+export interface TimeEntryDeletion {
+  readonly dates: string[];
+}
+
+const notYet = (): never => {
+  throw new Error("Not implemented.");
+};
 
 const iso = (instant: Date | null) => (instant === null ? null : instant.toISOString());
 const instant = (value: string | null) => (value === null ? null : new Date(value));
@@ -360,5 +398,13 @@ export function createRoadmapService(persistence: RoadmapPersistence): RoadmapSe
       if (result.reason === "not_found") throw missing("resource", slug);
       throw stillReferenced("resource", slug, "records linking to it");
     },
+
+    getDiary: notYet,
+    getDiaryDay: notYet,
+    writeDiaryNotes: notYet,
+    deleteDiaryNotes: notYet,
+    createTimeEntry: notYet,
+    updateTimeEntry: notYet,
+    deleteTimeEntry: notYet,
   };
 }
