@@ -70,6 +70,7 @@ const resourceColumns = {
   finishedAt: resources.finishedAt,
   link: resources.link,
   position: resources.position,
+  book: sql<string | null>`null`,
   createdAt: resources.createdAt,
   updatedAt: resources.updatedAt,
 };
@@ -226,6 +227,7 @@ function resourceScalars(
   const fields: Partial<RoadmapResourceFields & RoadmapResourceRelations> = { ...changes };
   delete fields.module;
   delete fields.topics;
+  delete fields.book;
   return fields;
 }
 
@@ -327,7 +329,8 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
       const [row] = await loadResources(db, eq(resources.slug, slug));
       return row?.resource ?? null;
     },
-    createRoadmapResource({ module, topics: topicSlugs, ...fields }) {
+    createRoadmapResource({ module, topics: topicSlugs, book, ...fields }) {
+      if (book !== null) return Promise.reject(new Error("Not implemented."));
       return refusable(() =>
         db.transaction(async (tx) => {
           const [row] = await tx
@@ -367,6 +370,22 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
     },
     deleteRoadmapResource(slug) {
       return deleteBySlug(db, resources, slug);
+    },
+
+    listRoadmapBooks() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+    findRoadmapBook() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+    createRoadmapBook() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+    updateRoadmapBook() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+    deleteRoadmapBook() {
+      return Promise.reject(new Error("Not implemented."));
     },
   };
 }
