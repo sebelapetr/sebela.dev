@@ -8234,7 +8234,7 @@
       "get": {
         "operationId": "getRoadmapDiary",
         "summary": "Read the learning diary",
-        "description": "Every Europe/Prague calendar day with notes or time entries, newest first, each with its entries in time order and their resources. Durations and day totals are derived from the stored endpoints on every read, in actual elapsed seconds and before any rounding. An empty diary is the valid empty `days` list.",
+        "description": "Every Europe/Prague calendar day with notes, time entries or an event covering it, newest first, each with its entries in time order and their resource or event, and the events whose dates cover it. An event's days add no time. Durations and day totals are derived from the stored endpoints on every read, in actual elapsed seconds and before any rounding. An empty diary is the valid empty `days` list.",
         "security": [],
         "responses": {
           "200": {
@@ -8292,7 +8292,7 @@
       "get": {
         "operationId": "getRoadmapDiaryDay",
         "summary": "Read one day of the learning diary",
-        "description": "The day's notes, its time entries and their derived total, as in the whole diary. A day without notes or time entries is not found.",
+        "description": "The day's notes, its time entries, their derived total and the events covering it, as in the whole diary. A day without notes, time entries or a covering event is not found.",
         "security": [],
         "parameters": [
           {
@@ -8582,7 +8582,7 @@
       "post": {
         "operationId": "createRoadmapTimeEntry",
         "summary": "Log a study session",
-        "description": "Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` is refused naming the field. All of its entries are written or none.",
+        "description": "Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. All of its entries are written or none.",
         "security": [
           {
             "bearerAuth": []
@@ -8702,7 +8702,7 @@
       "patch": {
         "operationId": "updateRoadmapTimeEntry",
         "summary": "Update a time entry",
-        "description": "Changes only the fields sent and judges the merged interval by the same rules. Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` is refused naming the field. The first entry keeps the identifier; the result names the old and the new days, whose notes stay.",
+        "description": "Changes only the fields sent and judges the merged interval by the same rules. Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. The first entry keeps the identifier; the result names the old and the new days, whose notes stay.",
         "security": [
           {
             "bearerAuth": []
@@ -9358,6 +9358,521 @@
         "responses": {
           "204": {
             "description": "The book was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/events": {
+      "get": {
+        "operationId": "listRoadmapEvents",
+        "summary": "Read the attended events",
+        "description": "Every event, newest start first, with its topics and the attendance time logged on it, derived from its time entries alone. No events is the valid empty list.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapEventList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRoadmapEvent",
+        "summary": "Add an attended event",
+        "description": "The slug is unique and stable; a taken slug is a conflict. Omitted optional fields mean none, in person and without topics. The dates are inclusive Europe/Prague calendar days; the end cannot be before the start (`validation_failed` on `endsOn`) and equals it for a single-day event. Every slug in `topics` names an existing topic, each once (`validation_failed` on `topics`). The event shows on every diary day of its range without adding time.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapEventCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created event.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/events/{slug}": {
+      "get": {
+        "operationId": "getRoadmapEvent",
+        "summary": "Read an event",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRoadmapEvent",
+        "summary": "Update an event",
+        "description": "Changes only the fields sent; `null` clears an optional field, given `topics` replace every link and the slug cannot change. The dates are inclusive Europe/Prague calendar days; the end cannot be before the start (`validation_failed` on `endsOn`) and equals it for a single-day event. Every slug in `topics` names an existing topic, each once (`validation_failed` on `topics`). The event shows on every diary day of its range without adding time. The period is judged with the stored dates. New dates that would leave logged attendance outside the event are refused (`409`, naming those days) and nothing changes.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapEventUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRoadmapEvent",
+        "summary": "Delete an event",
+        "description": "An event with logged attendance is not deleted (`409`), so its history is never erased silently; move or delete that time first. Its diary days without notes or time go with it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The event was deleted."
           },
           "400": {
             "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
@@ -12018,7 +12533,14 @@
             "minLength": 1,
             "maxLength": 100,
             "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-            "description": "The slug of the resource that was studied."
+            "description": "The slug of the resource that was studied; not sent with `event`."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event."
           },
           "startedAt": {
             "type": "string",
@@ -12034,7 +12556,6 @@
           }
         },
         "required": [
-          "resource",
           "startedAt",
           "endedAt"
         ],
@@ -12048,7 +12569,14 @@
             "minLength": 1,
             "maxLength": 100,
             "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-            "description": "The slug of the resource that was studied."
+            "description": "The slug of the resource that was studied; not sent with `event`."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event."
           },
           "startedAt": {
             "type": "string",
@@ -12348,6 +12876,226 @@
               }
             ],
             "description": "The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoadmapEventCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "conference",
+              "meetup",
+              "workshop",
+              "lecture"
+            ]
+          },
+          "organizer": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who organised it; `null` when unknown."
+          },
+          "startsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive."
+          },
+          "endsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event."
+          },
+          "place": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where it took place; `null` for an online event or when unknown."
+          },
+          "online": {
+            "default": false,
+            "type": "boolean",
+            "description": "Whether it was attended online."
+          },
+          "link": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An absolute `http` or `https` address; `null` when there is none."
+          },
+          "takeaways": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What was taken away, in Markdown; `null` when there is nothing yet."
+          },
+          "topics": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "kind",
+          "startsOn",
+          "endsOn"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapEventUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "conference",
+              "meetup",
+              "workshop",
+              "lecture"
+            ]
+          },
+          "organizer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who organised it; `null` when unknown."
+          },
+          "startsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive."
+          },
+          "endsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event."
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where it took place; `null` for an online event or when unknown."
+          },
+          "online": {
+            "type": "boolean",
+            "description": "Whether it was attended online."
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An absolute `http` or `https` address; `null` when there is none."
+          },
+          "takeaways": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What was taken away, in Markdown; `null` when there is nothing yet."
+          },
+          "topics": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged."
           }
         },
         "additionalProperties": false
@@ -15264,6 +16012,13 @@
               "$ref": "#/components/schemas/TimeEntry"
             }
           },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiaryEvent"
+            },
+            "description": "The events whose inclusive date range covers the day, by start date, then slug; they add no time."
+          },
           "totalSeconds": {
             "type": "integer",
             "minimum": 0,
@@ -15275,6 +16030,7 @@
           "date",
           "notes",
           "entries",
+          "events",
           "totalSeconds"
         ],
         "additionalProperties": false
@@ -15291,7 +16047,26 @@
             "$ref": "#/components/schemas/DiaryDate"
           },
           "resource": {
-            "$ref": "#/components/schemas/DiaryResource"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiaryResource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The resource studied; `null` for attendance at an event."
+          },
+          "event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiaryEvent"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The event attended; `null` for a study session on a resource."
           },
           "startedAt": {
             "type": "string",
@@ -15314,6 +16089,7 @@
           "id",
           "date",
           "resource",
+          "event",
           "startedAt",
           "endedAt",
           "durationSeconds"
@@ -15375,6 +16151,58 @@
           "link",
           "module",
           "area"
+        ],
+        "additionalProperties": false
+      },
+      "DiaryEvent": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "conference",
+              "meetup",
+              "workshop",
+              "lecture"
+            ]
+          },
+          "startsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive."
+          },
+          "endsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event."
+          },
+          "link": {
+            "description": "`null` when the event has no link.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "kind",
+          "startsOn",
+          "endsOn",
+          "link"
         ],
         "additionalProperties": false
       },
@@ -15654,6 +16482,153 @@
           "name",
           "module",
           "area"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapEventList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoadmapEvent"
+        },
+        "description": "Ordered by start date, newest first, then by end date (newest first) and slug."
+      },
+      "RoadmapEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "conference",
+              "meetup",
+              "workshop",
+              "lecture"
+            ]
+          },
+          "organizer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who organised it; `null` when unknown."
+          },
+          "startsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive."
+          },
+          "endsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event."
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where it took place; `null` for an online event or when unknown."
+          },
+          "online": {
+            "type": "boolean",
+            "description": "Whether it was attended online."
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An absolute `http` or `https` address; `null` when there is none."
+          },
+          "takeaways": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What was taken away, in Markdown; `null` when there is nothing yet."
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            },
+            "description": "The linked topics, in their order."
+          },
+          "attendanceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The elapsed seconds of the time entries logged on the event, derived on read. The date range alone contributes nothing."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "kind",
+          "organizer",
+          "startsOn",
+          "endsOn",
+          "place",
+          "online",
+          "link",
+          "takeaways",
+          "topics",
+          "attendanceSeconds",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       }

@@ -9,6 +9,7 @@ import {
   type Cv,
   type Diary,
   type DiaryDay,
+  type DiaryEvent,
   type ErrorResponse,
   type MediaUpload,
   type Roadmap,
@@ -17,6 +18,9 @@ import {
   type RoadmapBookList,
   type RoadmapBookStatus,
   type RoadmapCurrent,
+  type RoadmapEvent,
+  type RoadmapEventKind,
+  type RoadmapEventList,
   type RoadmapModuleDetail,
   type TimeEntryWrite,
 } from "@sebela/api-client";
@@ -1455,6 +1459,83 @@ describe("the generated API client", () => {
     expect(missing.error?.error.code).toBe("not_found");
     await backend.services.roadmap.deleteModule("shelf-module");
     await backend.services.roadmap.deleteArea("shelf-basics");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+  it("keeps the events: public reads, keyed writes, attendance and its refusals", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const at = (slug: string) => ({ params: { path: { slug } } });
+
+    const created = await client.POST("/v1/roadmap/events", {
+      body: {
+        slug: "calendar-summit",
+        name: "Fictional calendar summit",
+        kind: "conference",
+        startsOn: "2026-12-31",
+        endsOn: "2027-01-01",
+      },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe("/v1/roadmap/events/calendar-summit");
+    const kind: RoadmapEventKind | undefined = created.data?.kind;
+    expect(kind).toBe("conference");
+    const reversed = await client.POST("/v1/roadmap/events", {
+      body: {
+        slug: "calendar-reversed",
+        name: "Reversed",
+        kind: "meetup",
+        startsOn: "2026-05-02",
+        endsOn: "2026-05-01",
+      },
+    });
+    expect(reversed.error?.error.fields?.map(({ path }) => path)).toContain("endsOn");
+    const anonymous = await visitor.DELETE("/v1/roadmap/events/{slug}", at("calendar-summit"));
+    expect(anonymous.response.status).toBe(401);
+
+    const day = await visitor.GET("/v1/roadmap/diary/{date}", {
+      params: { path: { date: "2027-01-01" } },
+    });
+    const shown: DiaryEvent[] | undefined = day.data?.events;
+    expect(shown?.map(({ slug }) => slug)).toEqual(["calendar-summit"]);
+    expect(day.data?.totalSeconds).toBe(0);
+
+    const attended = await client.POST("/v1/roadmap/time-entries", {
+      body: {
+        event: "calendar-summit",
+        startedAt: "2026-12-31T10:00:00+01:00",
+        endedAt: "2026-12-31T11:00:00+01:00",
+      },
+    });
+    expect(attended.data?.entries[0]?.event?.slug).toBe("calendar-summit");
+    const stranding = await client.PATCH("/v1/roadmap/events/{slug}", {
+      ...at("calendar-summit"),
+      body: { startsOn: "2027-01-01" },
+    });
+    expect(stranding.error?.error.code).toBe("conflict");
+    const list = await visitor.GET("/v1/roadmap/events");
+    const events: RoadmapEventList | undefined = list.data;
+    expect(events?.map(({ slug, attendanceSeconds }) => [slug, attendanceSeconds])).toEqual([
+      ["calendar-summit", 3600],
+    ]);
+
+    for (const entry of attended.data?.entries ?? []) {
+      const removed = await client.DELETE("/v1/roadmap/time-entries/{id}", {
+        params: { path: { id: entry.id } },
+      });
+      expect(removed.response.status).toBe(204);
+    }
+    const renamed = await client.PATCH("/v1/roadmap/events/{slug}", {
+      ...at("calendar-summit"),
+      body: { name: "Renamed summit", online: true },
+    });
+    const event: RoadmapEvent | undefined = renamed.data;
+    expect(event).toMatchObject({ name: "Renamed summit", online: true, attendanceSeconds: 0 });
+    expect(
+      (await client.DELETE("/v1/roadmap/events/{slug}", at("calendar-summit"))).response.status,
+    ).toBe(204);
+    const missing = await visitor.GET("/v1/roadmap/events/{slug}", at("calendar-summit"));
+    expect(missing.error?.error.code).toBe("not_found");
 
     expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
   });
