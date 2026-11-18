@@ -15,6 +15,7 @@ const apiFolder = fileURLToPath(new URL("../../api", import.meta.url));
 export type Fixture =
   | "with-bookshelf"
   | "with-diary"
+  | "with-events"
   | "with-experience"
   | "with-long-content"
   | "with-photo"
