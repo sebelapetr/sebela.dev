@@ -27,6 +27,8 @@ export interface ResourceRow {
   readonly status: RoadmapResourceStatus;
   readonly estimate: string | null;
   readonly href: string | null;
+  /** The page of the book the resource reads, on the bookshelf, or null. */
+  readonly bookHref: string | null;
 }
 
 export interface ModuleRow {
@@ -155,6 +157,7 @@ export function toResourceRow(resource: RoadmapTreeResource): ResourceRow {
     status: resource.status,
     estimate: resource.estimatedMinutes === null ? null : estimateLabel(resource.estimatedMinutes),
     href: safeLink(resource.link),
+    bookHref: null,
   };
 }
 

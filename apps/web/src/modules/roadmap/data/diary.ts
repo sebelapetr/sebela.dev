@@ -1,7 +1,7 @@
 import type { Diary, DiaryDay, TimeEntry } from "@sebela/api-client";
 
 import { roadmapHref } from "../../_shared";
-import type { RoadmapDiaryAreaName } from "../../profile";
+import type { RoadmapDiaryAreaName, RoadmapDiaryBookLink } from "../../profile";
 import type { RoadmapCrumb } from "./detail";
 import { resourceTypeLabel, ROADMAP_PATH, safeLink } from "./overview";
 
@@ -38,6 +38,8 @@ export interface DiarySession {
     readonly typeLabel: string;
     /** A safe absolute `http(s)` address, or null. */
     readonly href: string | null;
+    /** The page of the book the resource reads, on the bookshelf, or null. */
+    readonly bookHref: string | null;
   };
 }
 
@@ -160,7 +162,9 @@ export function toDiaryList(diary: Diary): DiaryList {
 export function toDiaryDayPage(
   day: DiaryDay,
   areas: readonly RoadmapDiaryAreaName[],
+  books: readonly RoadmapDiaryBookLink[] = [],
 ): DiaryDayPage {
+  if (books.length > 0) throw new Error("not implemented", { cause: books });
   const title = formatDiaryDate(day.date);
   return {
     date: day.date,
@@ -189,6 +193,7 @@ function toSession(entry: TimeEntry): DiarySession {
       name: entry.resource.name,
       typeLabel: resourceTypeLabel(entry.resource.type),
       href: safeLink(entry.resource.link),
+      bookHref: null,
     },
   };
 }

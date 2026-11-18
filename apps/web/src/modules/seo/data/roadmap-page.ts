@@ -14,25 +14,67 @@ export interface RoadmapPageCrumb {
   readonly href: string;
 }
 
-/** What a roadmap page's metadata rests on, all of it from the page's own API read. */
-export interface RoadmapPageFacts {
+/** What every roadmap page's metadata rests on, all of it from the page's own API read. */
+interface RoadmapPageBase {
   /** The person's name. */
   readonly name: string;
-  /** Whether the page is an area's or a module's. */
-  readonly kind: "area" | "module";
-  /** The API's planned effort for the page's content in minutes; 0 when nothing is estimated. */
-  readonly estimatedMinutes: number;
   /** The way from the overview to the page, the page itself last. */
   readonly breadcrumbs: readonly RoadmapPageCrumb[];
   /** Markdown that describes the page; its first paragraph becomes the description. */
   readonly summary: string | null;
 }
 
+/** An area's or a module's page. */
+export interface RoadmapCoursePageFacts extends RoadmapPageBase {
+  readonly kind: "area" | "module";
+  /** The API's planned effort for the page's content in minutes; 0 when nothing is estimated. */
+  readonly estimatedMinutes: number;
+}
+
+/** A book on the bookshelf, as the bookshelf's structured data lists it. */
+export interface RoadmapShelfBookFacts {
+  readonly title: string;
+  readonly author: string | null;
+  /** The book's site path. */
+  readonly href: string;
+  /** Markdown, or null. */
+  readonly description: string | null;
+}
+
+/** The bookshelf's page: its books in shelf order. */
+export interface RoadmapBookshelfPageFacts extends RoadmapPageBase {
+  readonly kind: "bookshelf";
+  readonly books: readonly RoadmapShelfBookFacts[];
+}
+
+/** A book's page: its own facts; `summary` is the book's description. */
+export interface RoadmapBookPageFacts extends RoadmapPageBase {
+  readonly kind: "book";
+  readonly book: {
+    readonly title: string;
+    readonly author: string | null;
+    readonly isbn: string | null;
+    readonly pages: number | null;
+    readonly year: number | null;
+    /** The cover's site path, or null. */
+    readonly image: string | null;
+  };
+}
+
+/** What a roadmap page's metadata rests on, all of it from the page's own API read. */
+export type RoadmapPageFacts =
+  RoadmapCoursePageFacts | RoadmapBookshelfPageFacts | RoadmapBookPageFacts;
+
 /** The longest description, so a search result shows it whole. */
 const DESCRIPTION_MAX = 160;
 
 /** The label a roadmap page's preview card shows above its name. */
-const CARD_LABELS = { area: "Learning area", module: "Learning module" } as const;
+const CARD_LABELS = {
+  area: "Learning area",
+  module: "Learning module",
+  bookshelf: "Learning area",
+  book: "Learning area",
+} as const;
 
 /** The roadmap's own name, on the site's fallback card and in every page's description. */
 const ROADMAP_NAME = "AI Engineering Roadmap";
@@ -81,7 +123,9 @@ export function roadmapStructuredData(origin: string, facts: RoadmapPageFacts): 
     inLanguage: "en",
     provider: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
     mainEntityOfPage: { "@id": `${url}#webpage` },
-    ...(facts.estimatedMinutes > 0 ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` } : {}),
+    ...("estimatedMinutes" in facts && facts.estimatedMinutes > 0
+      ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` }
+      : {}),
     ...(facts.kind === "module" && parent !== undefined
       ? {
           isPartOf: {

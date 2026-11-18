@@ -256,6 +256,7 @@ describe("toRoadmapModulePage", () => {
             status: "in-progress",
             estimatedMinutes: 600,
             link: "https://example.test/book",
+            book: "signal-book",
             position: 5,
           }),
           resource("unsafe", { link: "javascript:alert(1)", position: 1 }),
@@ -273,6 +274,7 @@ describe("toRoadmapModulePage", () => {
         status: "in-progress",
         estimate: "10h",
         href: "https://example.test/book",
+        bookHref: "/ai-roadmap/bookshelf/signal-book",
         anchor: "resource-signal-book",
       },
       {
@@ -284,6 +286,7 @@ describe("toRoadmapModulePage", () => {
         status: "planned",
         estimate: null,
         href: null,
+        bookHref: null,
         anchor: "resource-unsafe",
       },
     ]);

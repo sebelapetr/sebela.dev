@@ -21,6 +21,12 @@ export interface RoadmapDiaryAreaName {
   readonly modules: readonly RoadmapDiaryModuleName[];
 }
 
+/** A resource of the roadmap that reads a book: both by their slugs. */
+export interface RoadmapDiaryBookLink {
+  readonly resource: string;
+  readonly book: string;
+}
+
 /** The content of one diary day's page, all of it from the API. */
 export interface RoadmapDiaryDayContent {
   readonly name: string;
@@ -29,6 +35,8 @@ export interface RoadmapDiaryDayContent {
   readonly day: DiaryDay;
   /** The roadmap's areas and their modules in the API's order, for the entries' grouping. */
   readonly areas: readonly RoadmapDiaryAreaName[];
+  /** Every resource of the roadmap that reads a book, for its sessions' links to the book. */
+  readonly books: readonly RoadmapDiaryBookLink[];
 }
 
 /** What the diary's list can show: its content, no profile yet, or content not readable now. */
@@ -117,6 +125,7 @@ export async function loadRoadmapDiaryDay(
           name: area.name,
           modules: area.modules.map(({ slug, name }) => ({ slug, name })),
         })),
+        books: [],
       },
     };
   } catch {
