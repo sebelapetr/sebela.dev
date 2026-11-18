@@ -152,8 +152,8 @@ The page answers one question: what did Petr actually do in his career, and whic
 Order: **header → career timeline → independent R&D → technologies → education**. Independent R&D comes before technologies because, for AI engineering roles, things built and tested are stronger evidence than a list of tools.
 
 - **Header:** title; summary "8 years building production software — from backend development and team leadership to a growing focus on AI engineering."; "Download CV ↓". The wording must not suggest eight years of AI engineering.
-- **Career timeline:** years on the left, content on the right.
-  - Current experiences are written out: organization, title, kind as a small label (main job, own business, side project), the product and the role's progression, selected technical work, technologies.
+- **Career timeline:** a dashed vertical rail on the left with a marker per experience; the period (`October 1st, 2023 – present`) and the kind label sit above the content. Only current experiences are expanded; older ones are compact rows that expand (`docs/design.md`, Timeline).
+  - Current experiences are written out: organization, title, kind as a small label (Full-time job, Own business, Side project), the product and the role's progression, selected technical work, technologies.
   - The kind labels exist so that concurrent experiences do not read as three full-time jobs at once.
   - A project is shown inside an experience **only when it proves something** — a concrete problem, the role, technical depth. Not everything that was touched is listed.
   - A case study opens **inline**: "View technical case study ↓" expands the detail inside the experience. No separate page in this phase; a strong case can get its own address later.
@@ -321,6 +321,12 @@ Keyboard operation, sufficient contrast in both themes, alt text from the media 
 
 - `docs/design.md` is binding and is completed in this phase: spacing and type scale, the components, the print layout of the CV, motion.
 - Shared components and tokens live in the shared UI package; the website has no colours or fonts of its own.
+
+### Code layout
+
+- Routes live in `apps/web/src/app/` and stay thin: metadata, `notFound()`, the request, and rendering a page template.
+- Everything else lives in `apps/web/src/modules/<name>/`, entered only through its `index`, with the folders `templates/`, `components/`, `data/`, `types/`, `hooks/` and `stores/` created as they are needed, and `_shared` for what at least two modules or routes use.
+- The binding description is `docs/repository-structure.md` (Web module layout); the reason is decision 0017.
 
 ### Environments
 

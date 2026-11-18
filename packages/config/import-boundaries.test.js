@@ -80,6 +80,11 @@ describe("import boundaries: the dependency table", () => {
       ["@sebela/contracts", "@sebela/services", "@sebela/memory", "@sebela/api-client"],
     ],
     ["packages/contracts/src/index.ts", [], ["@sebela/db", "@sebela/services", "@sebela/ui"]],
+    [
+      "packages/ui/src/fonts.ts",
+      [],
+      ["@sebela/api-client", "@sebela/contracts", "@sebela/services", "@sebela/db"],
+    ],
     ["apps/llm-agent/tools/generate.mjs", [], ["@sebela/contracts", "@sebela/db"]],
   ];
 
@@ -138,6 +143,7 @@ describe("import boundaries: the dependency table", () => {
       "packages/db/eslint.config.js",
       "packages/contracts/eslint.config.js",
       "packages/api-client/eslint.config.js",
+      "packages/ui/eslint.config.js",
     ]) {
       await assertAllowed(importer, `export { createConfig } from "@sebela/config/eslint";\n`);
     }
@@ -162,8 +168,8 @@ describe("import boundaries: the dependency table", () => {
   });
 
   it("rejects every import of a workspace package from a member without a row", async () => {
-    await assertRejected("packages/ui/src/button.tsx", `import "@sebela/contracts";\n`, {
-      mentions: ["'@sebela/contracts'", "packages/ui", /no row in the dependency table/],
+    await assertRejected("packages/memory/src/chunks.ts", `import "@sebela/contracts";\n`, {
+      mentions: ["'@sebela/contracts'", "packages/memory", /no row in the dependency table/],
     });
   });
 

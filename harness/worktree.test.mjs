@@ -463,6 +463,70 @@ test("a generated environment file gives the worktree its own storage folder and
   assert.equal(address.pathname, "/v1/media/files");
 });
 
+test("a generated environment file points the website at the worktree's own API", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.WEB_API_BASE_URL);
+  assert.equal(address.hostname, example.API_HOST);
+  assert.equal(Number(address.port), Number(settings.API_PORT));
+  assert.equal(address.pathname, "/");
+  assert.equal(
+    Number(new URL(otherSettings.WEB_API_BASE_URL).port),
+    Number(otherSettings.API_PORT),
+  );
+  assert.notEqual(otherSettings.WEB_API_BASE_URL, settings.WEB_API_BASE_URL);
+});
+
+test("a generated environment file gives the website its own canonical origin", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.WEB_SITE_ORIGIN);
+  assert.equal(address.hostname, example.WEB_HOST);
+  assert.equal(Number(address.port), Number(settings.WEB_PORT));
+  assert.equal(settings.WEB_SITE_ORIGIN, address.origin);
+  assert.equal(Number(new URL(otherSettings.WEB_SITE_ORIGIN).port), Number(otherSettings.WEB_PORT));
+  assert.notEqual(otherSettings.WEB_SITE_ORIGIN, settings.WEB_SITE_ORIGIN);
+});
+
+test("a generated environment file signs the API's invalidations for the worktree's own website", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.API_WEB_INVALIDATION_URL);
+  assert.equal(address.hostname, example.WEB_HOST);
+  assert.equal(Number(address.port), Number(settings.WEB_PORT));
+  assert.equal(address.pathname, "/internal/invalidation");
+  assert.equal(address.search, "");
+  assert.ok(settings.WEB_INVALIDATION_SECRET.length >= 32, "a secret of at least 32 characters");
+  assert.equal(settings.API_WEB_INVALIDATION_SECRET, settings.WEB_INVALIDATION_SECRET);
+  assert.notEqual(otherSettings.WEB_INVALIDATION_SECRET, settings.WEB_INVALIDATION_SECRET);
+  assert.notEqual(otherSettings.API_WEB_INVALIDATION_URL, settings.API_WEB_INVALIDATION_URL);
+});
+
+test("a generated environment file lets the website optimise only its worktree's media", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.WEB_MEDIA_BASE_URL);
+  assert.equal(
+    address.href,
+    `${settings.STORAGE_PUBLIC_BASE_URL}/${example.STORAGE_ENVIRONMENT}/${settings.STORAGE_WORKTREE}`,
+  );
+  assert.equal(address.hostname, example.API_HOST);
+  assert.equal(Number(address.port), Number(settings.API_PORT));
+  assert.notEqual(otherSettings.WEB_MEDIA_BASE_URL, settings.WEB_MEDIA_BASE_URL);
+});
+
 test("setup runs the backend stages in the worktree once its database and settings exist", (t) => {
   const { backend, worktree } = fixture(t);
 

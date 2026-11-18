@@ -104,6 +104,7 @@ export type {
   TechnologyRecord,
   TechnologyTier,
   TestimonialFields,
+  TestimonialMedia,
   TestimonialPersistence,
   TestimonialRecord,
   TestimonialRelations,
@@ -123,6 +124,7 @@ export type {
 } from "./types.js";
 export type { CvPersistence, CvRecord } from "./cv.js";
 export type {
+  CollaborationStepRecord,
   CreatePersonResult,
   PersonFields,
   PersonLinkRecord,

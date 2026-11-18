@@ -156,6 +156,14 @@ export function createWorktree({
   if (!settings.API_HOST) {
     throw new Error("API_HOST is not set; set it in the environment (documented in .env.example)");
   }
+  if (!settings.WEB_HOST) {
+    throw new Error("WEB_HOST is not set; set it in the environment (documented in .env.example)");
+  }
+  if (!settings.STORAGE_ENVIRONMENT) {
+    throw new Error(
+      "STORAGE_ENVIRONMENT is not set; set it in the environment (documented in .env.example)",
+    );
+  }
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
   const resumed = branchExistsIn(mainRoot, requested)
@@ -221,6 +229,15 @@ export function createWorktree({
           ...credentials,
           STORAGE_WORKTREE: storageWorktreeName(name),
           STORAGE_PUBLIC_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}/v1/media/files`,
+          // The website's image optimizer fetches only this worktree's own media folder.
+          WEB_MEDIA_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}/v1/media/files/${settings.STORAGE_ENVIRONMENT}/${storageWorktreeName(name)}`,
+          // The website reads this worktree's own API, not the main checkout's.
+          WEB_API_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}`,
+          // Its canonical links, sitemap and llms.txt name the worktree's own website.
+          WEB_SITE_ORIGIN: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}`,
+          // The API signs its invalidations for the worktree's own website with a secret of its own.
+          API_WEB_INVALIDATION_URL: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}/internal/invalidation`,
+          ...invalidationSecrets(randomPassword()),
         }),
         { flag: "wx", mode: 0o600 },
       );
@@ -236,6 +253,11 @@ export function createWorktree({
 
   backend.setup({ root: worktreePath, owner: name });
   return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
+}
+
+// The same server-only signing secret for the API's sender and the website's receiver.
+function invalidationSecrets(secret) {
+  return { API_WEB_INVALIDATION_SECRET: secret, WEB_INVALIDATION_SECRET: secret };
 }
 
 // Also true for a symbolic link, whether or not it leads anywhere.

@@ -25,6 +25,9 @@ const alex: PersonCreate = {
   links: [{ label: "Website", url: "https://alex.example.test/" }],
   availability: null,
   careerStartedOn: "2012-09-01",
+  servicesIntro: null,
+  collaborationSteps: [],
+  servicesNote: null,
   photoId: null,
   cvPdfId: null,
 };

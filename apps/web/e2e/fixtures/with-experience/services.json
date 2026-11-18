@@ -1,0 +1,57 @@
+[
+  {
+    "slug": "process-automation",
+    "name": "Process automation",
+    "summary": "Fictional manual steps replaced by small, reliable tools.",
+    "audience": "Fictional clinics and logistics teams.",
+    "deliverable": "A working tool, its documentation and a hand-over.",
+    "position": 0,
+    "evidence": [
+      {
+        "kind": "project",
+        "project": "clinic-scheduling"
+      },
+      {
+        "kind": "project",
+        "project": "ledger-importer"
+      },
+      {
+        "kind": "link",
+        "label": "Projects",
+        "path": "/projects"
+      }
+    ]
+  },
+  {
+    "slug": "custom-software",
+    "name": "Custom software",
+    "summary": "A fictional application built around how the team already works.",
+    "audience": "Fictional firms that outgrew spreadsheets.",
+    "deliverable": "A deployed application with tests.",
+    "position": 1,
+    "evidence": []
+  },
+  {
+    "slug": "ai-integration",
+    "name": "AI integration",
+    "summary": "A fictional assistant connected to the systems a team already uses.",
+    "audience": "Fictional teams with documents nobody can find.",
+    "deliverable": "A prototype with its evaluation results.",
+    "position": 2,
+    "evidence": [
+      {
+        "kind": "exploration",
+        "exploration": "answer-checker"
+      },
+      {
+        "kind": "exploration",
+        "exploration": "tool-scopes"
+      },
+      {
+        "kind": "link",
+        "label": "Independent R&D",
+        "path": "/experience#independent-rd"
+      }
+    ]
+  }
+]

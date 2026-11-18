@@ -48,6 +48,7 @@ export function organizationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createOrganization",
       method: "POST",
+      content: "organization",
       path: LIST,
       access: "private",
       summary: "Create an organization",
@@ -66,6 +67,7 @@ export function organizationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateOrganization",
       method: "PATCH",
+      content: "organization",
       path: ITEM,
       access: "private",
       summary: "Update an organization",
@@ -84,6 +86,7 @@ export function organizationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteOrganization",
       method: "DELETE",
+      content: "organization",
       path: ITEM,
       access: "private",
       summary: "Delete an organization",

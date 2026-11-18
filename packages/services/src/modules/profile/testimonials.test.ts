@@ -21,6 +21,7 @@ const kindWords: TestimonialCreate = {
   authorName: "Dana Placeholder",
   authorRole: "Head of Operations",
   position: 1,
+  authorPhotoId: null,
 };
 
 const praise: TestimonialCreate = {

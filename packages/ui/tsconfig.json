@@ -1,0 +1,14 @@
+{
+  "extends": "@sebela/config/tsconfig.base.json",
+  "compilerOptions": {
+    // The package ships TypeScript source that the website's bundler compiles
+    // (`transpilePackages`), as shadcn's monorepo setup does; it has no build of its own.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src", "*.ts", "*.js"]
+}

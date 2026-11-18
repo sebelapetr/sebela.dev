@@ -5,12 +5,18 @@
 # Compose. Compose interpolates every service, also those of an inactive profile, so the services
 # of the profile `api` require nothing here: Postgres-only commands work with the Postgres settings
 # alone. A missing API setting is empty in the containers, where the API's and the migration's own
-# validation stops them with its name (`API_TRUSTED_PROXIES` and `STORAGE_WORKTREE` may be empty).
-# `pnpm stack:up` checks the two host-side settings, `API_HOST` and `API_PORT`, before it starts.
+# validation stops them with its name (`API_TRUSTED_PROXIES`, `STORAGE_WORKTREE` and the two
+# `API_WEB_INVALIDATION_*` settings may be empty). The website's settings (profile `web`) work the
+# same way: the website's own validation names a missing one on the first request.
+# `pnpm stack:up` checks the four host-side settings, `API_HOST`, `API_PORT`, `WEB_HOST` and
+# `WEB_PORT`, before it starts.
 #
 # `docker compose up` starts Postgres only. The profile `api` adds the containerised API stack of
 # the main checkout (apps/api/AGENTS.md, "Container stack"): the one-off migration service and the
-# API, both from the image of apps/api/Dockerfile. Worktrees run the API on the host instead.
+# API, both from the image of apps/api/Dockerfile. The profile `web` adds the website from the
+# image of apps/web/Dockerfile (apps/web/AGENTS.md, "Container"); `pnpm stack:up` starts both.
+# Worktrees run the API and the website on the host instead; a disposable complete stack of its own
+# (another project name, ports, password and storage folder) is what `pnpm test:web-stack` starts.
 #
 # The fixed project name makes every checkout address the same stack and volume.
 name: sebela
@@ -32,7 +38,7 @@ x-api-build: &api-build
 
 services:
   postgres:
-    # pgvector is part of the image from the start, so retrieval (phase 6) needs no other image.
+    # pgvector is part of the image from the start, so retrieval (phase 9) needs no other image.
     # The tag names the versions (pgvector 0.8.7, PostgreSQL 18, Debian trixie); the digest of its
     # multi-architecture index pins the exact content, so a re-pushed tag cannot change what runs.
     # Upgrade both together: a PostgreSQL major version also needs a data upgrade.
@@ -94,6 +100,11 @@ services:
       API_RATE_LIMIT_KEY: ${API_RATE_LIMIT_KEY:-}
       API_RATE_LIMIT_MAX_TRACKED: ${API_RATE_LIMIT_MAX_TRACKED:-}
       API_RATE_LIMIT_UPLOAD: ${API_RATE_LIMIT_UPLOAD:-}
+      # In the stack the API notifies the website's container by its service name, never the
+      # host's API_WEB_INVALIDATION_URL: with a signing secret, the receiver below; without one,
+      # no notifications. The website's WEB_INVALIDATION_SECRET must be the same value.
+      API_WEB_INVALIDATION_URL: ${API_WEB_INVALIDATION_SECRET:+http://web:8080/internal/invalidation}
+      API_WEB_INVALIDATION_SECRET: ${API_WEB_INVALIDATION_SECRET:-}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       # Local files live on the media volume below, not in the checkout, so they survive a restart
       # or a rebuilt container. The key namespaces (environment, worktree) apply below this folder.
@@ -124,6 +135,54 @@ services:
         - --eval
         - >-
           fetch("http://127.0.0.1:" + process.env.API_PORT + "/health")
+          .then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
+  # The website: Next's self-contained server, built without any setting. Its server reads the API
+  # and the stored files inside the Compose network by the API's service name; visitors see only
+  # the public origins (WEB_SITE_ORIGIN, and images on the site's own `/media/` path). No API key.
+  web:
+    profiles: [web]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      # The container listens on every interface on its own declared port; the host publishes it
+      # on WEB_HOST and WEB_PORT only.
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "8080"
+      WEB_API_BASE_URL: http://api:8080
+      WEB_SITE_ORIGIN: ${WEB_SITE_ORIGIN:-}
+      # The public media folder the API names its files in (STORAGE_PUBLIC_BASE_URL, environment,
+      # worktree), and where this server reads them: the API's file route inside the network for
+      # local storage. With Bunny Storage set WEB_MEDIA_READ_BASE_URL to the media base itself.
+      WEB_MEDIA_BASE_URL: ${WEB_MEDIA_BASE_URL:-}
+      WEB_MEDIA_READ_BASE_URL: ${WEB_MEDIA_READ_BASE_URL:-http://api:8080/v1/media/files/${STORAGE_ENVIRONMENT:-}/${STORAGE_WORKTREE:-}}
+      WEB_INVALIDATION_SECRET: ${WEB_INVALIDATION_SECRET:-}
+      WEB_CONTENT_REVALIDATE_SECONDS: ${WEB_CONTENT_REVALIDATE_SECONDS:-}
+      # Optional analytics (apps/web/AGENTS.md, "Configuration"): both empty means none.
+      WEB_ANALYTICS_SCRIPT_URL: ${WEB_ANALYTICS_SCRIPT_URL:-}
+      WEB_ANALYTICS_WEBSITE_ID: ${WEB_ANALYTICS_WEBSITE_ID:-}
+    ports:
+      - "${WEB_HOST:-}:${WEB_PORT:-}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    # Healthy once the server answers a route that reads no content, so a website whose API is down
+    # still counts as running: its pages then show their unavailable state (readiness of content is
+    # the API's health).
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --eval
+        - >-
+          fetch("http://127.0.0.1:" + process.env.WEB_PORT + "/robots.txt")
           .then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))
       interval: 10s
       timeout: 5s

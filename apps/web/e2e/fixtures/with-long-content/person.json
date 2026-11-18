@@ -1,0 +1,33 @@
+{
+  "name": "Maximiliana Featherstonehaugh-Cholmondeley von Wolkenstein-Trostburg",
+  "headline": "Fictional principal engineer who designs, builds and patiently maintains dependable software for freight forwarding, warehouse operations, cross-border customs paperwork and the small internal tools that hold such long, interconnected processes together",
+  "shortBio": "Maximiliana is a **fictional** person from the website's browser tests, whose every text is as long as the contract allows a real one to be, so that each page shows how it wraps names, addresses and identifiers such as `consolidated_freight_dispatch_reconciliation_job` that cannot break at a space.",
+  "longBio": null,
+  "location": "Fictional Harbour District, Testville upon the Long River, Republic of Examples",
+  "email": "maximiliana.featherstonehaugh-cholmondeley@consulting-engineering.example.test",
+  "links": [
+    {
+      "label": "Personal engineering notebook and long-form technical writing",
+      "url": "https://notebook.featherstonehaugh-cholmondeley.example.test/engineering/long-form-technical-writing"
+    },
+    {
+      "label": "Source code of the fictional open-source routing toolkit",
+      "url": "https://code.example.test/featherstonehaugh-cholmondeley/open-source-routing-and-dispatch-toolkit"
+    }
+  ],
+  "availability": null,
+  "careerStartedOn": "2009-02-01",
+  "servicesIntro": "Maximiliana turns *fictional* manual work in freight forwarding, warehouse operations and customs paperwork into dependable software that small teams can keep running themselves.",
+  "collaborationSteps": [
+    {
+      "title": "Understand the whole process before proposing anything",
+      "description": "A long conversation about the **fictional** process from the first order to the last invoice, including every exception the team handles by hand."
+    },
+    {
+      "title": "Agree on a written scope with assumptions and an estimate",
+      "description": "A written scope that names the approach, every assumption and what is deliberately left out."
+    }
+  ],
+  "servicesNote": "Software delivery for logistics is Maximiliana's long-standing practice; the AI work is a newer focus, shown as independent R&D and never as delivered client work.",
+  "photo": null
+}

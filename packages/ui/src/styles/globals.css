@@ -1,0 +1,300 @@
+/*
+ * The design tokens of docs/design.md, defined once and consumed through Tailwind. A consuming app
+ * imports this file as its global stylesheet; it brings Tailwind itself, so the app adds only its
+ * own sources. Components never use raw colour values.
+ */
+@import "tailwindcss";
+
+/* Scan the shared components for their classes; the consuming app's own sources are detected. */
+@source "../";
+
+/*
+ * Themes (docs/design.md, Themes): light is the default and dark follows the system preference
+ * until the visitor chooses in the header. An explicit choice is `data-theme="light"` or
+ * `data-theme="dark"` on the root element, set before the first paint, and wins over the system.
+ * Tailwind's `dark:` variant follows the same rule.
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+:root {
+  --radius: 0.625rem;
+  /* The sticky site header's height; anchors scroll below it. */
+  --header-height: 4rem;
+
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #f5f5f5;
+  --card-foreground: #0a0a0a;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5e5;
+  --secondary-foreground: #0a0a0a;
+  --muted: #e5e5e5;
+  --muted-foreground: #525252;
+  --accent: #e5e5e5;
+  --accent-foreground: #0a0a0a;
+  --border: #d4d4d4;
+  --input: #d4d4d4;
+  --ring: #0a0a0a;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --destructive: #ef4444;
+
+  color-scheme: light;
+}
+
+/*
+ * The dark tokens are written twice — once for a dark system, once for an explicit choice — because
+ * plain CSS cannot share one declaration block between a media query and a selector. Change both
+ * together; the website's navigation e2e test fails when their computed tokens differ.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #000000;
+    --foreground: #ededed;
+    --card: #0a0a0a;
+    --card-foreground: #ededed;
+    --primary: #ffffff;
+    --primary-foreground: #000000;
+    --secondary: #1a1a1a;
+    --secondary-foreground: #ededed;
+    --muted: #1a1a1a;
+    --muted-foreground: #a3a3a3;
+    --accent: #1a1a1a;
+    --accent-foreground: #ededed;
+    --border: #262626;
+    --input: #262626;
+    --ring: #ededed;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a3a3a3;
+  --accent: #1a1a1a;
+  --accent-foreground: #ededed;
+  --border: #262626;
+  --input: #262626;
+  --ring: #ededed;
+
+  color-scheme: dark;
+}
+
+/*
+ * Print is always dark on white, whatever the theme: the light tokens again, after the dark ones so
+ * they win while both apply. Pages hide what only works on screen with `print:hidden`.
+ */
+@media print {
+  :root,
+  :root[data-theme],
+  :root:not([data-theme="light"]) {
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --card: #ffffff;
+    --card-foreground: #0a0a0a;
+    --primary: #0a0a0a;
+    --primary-foreground: #ffffff;
+    --secondary: #e5e5e5;
+    --secondary-foreground: #0a0a0a;
+    --muted: #e5e5e5;
+    --muted-foreground: #525252;
+    --accent: #e5e5e5;
+    --accent-foreground: #0a0a0a;
+    --border: #d4d4d4;
+    --input: #d4d4d4;
+    --ring: #0a0a0a;
+
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  /* Geist and Geist Mono; the variables are set by the fonts export on the root element. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * The type scale of docs/design.md (Typography). Each step is one utility, so every page sets the
+ * same sizes, weights and line heights; hierarchy comes from size and weight, never from colour.
+ */
+@utility type-display {
+  /* The hero headline: the one largest line on a page. */
+  font-size: var(--text-4xl);
+  line-height: var(--text-4xl--line-height);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+  @variant sm {
+    font-size: var(--text-5xl);
+    line-height: var(--text-5xl--line-height);
+  }
+}
+
+@utility type-title {
+  /* The heading of a page that has no hero, such as the content states. */
+  font-size: var(--text-3xl);
+  line-height: var(--text-3xl--line-height);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+  @variant sm {
+    font-size: var(--text-4xl);
+    line-height: var(--text-4xl--line-height);
+  }
+}
+
+@utility type-heading {
+  /* A section heading (h2). */
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  @variant sm {
+    font-size: var(--text-3xl);
+    line-height: var(--text-3xl--line-height);
+  }
+}
+
+@utility type-item {
+  /* The title of one item in a list of items, such as a role on the timeline. */
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: pretty;
+  @variant sm {
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
+  }
+}
+
+@utility type-lead {
+  /* Introductory prose under a display or title line, kept to a readable measure. */
+  max-width: 65ch;
+  font-size: var(--text-lg);
+  line-height: var(--leading-relaxed);
+  text-wrap: pretty;
+  color: var(--muted-foreground);
+}
+
+@utility type-intro {
+  /* A short muted sentence that opens a block (contact, content states); no measure of its own. */
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+  color: var(--muted-foreground);
+}
+
+@utility type-label {
+  /* A small monospaced label above a heading, such as the name in the hero. */
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  letter-spacing: var(--tracking-tight);
+  color: var(--muted-foreground);
+}
+
+@utility type-tag {
+  /* A small bordered tag beside a label, such as the kind of an experience. */
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  font-weight: var(--font-weight-medium);
+}
+
+/*
+ * An item a link can point at (docs/design.md, Anchors): scrolled into view below the sticky header
+ * with room above it. `--header-height` is the header's height, defined with the tokens above.
+ */
+@utility anchor-target {
+  scroll-margin-top: calc(var(--header-height, 0px) + --spacing(8));
+}
+
+/* The page frame of docs/design.md (Spacing): one width and one side gutter for every page. */
+@utility layout-page {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--container-5xl);
+  padding-inline: --spacing(5);
+  @variant sm {
+    padding-inline: --spacing(8);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  /*
+   * Focus (docs/design.md, Focus): every focusable element shows a solid 2 px outline in the ring
+   * colour, offset from its box. Components that draw their own ring (buttons, inputs) turn the
+   * outline off and show the 3 px ring instead.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Motion (docs/design.md, Motion): with reduced motion requested, nothing moves — transitions and
+ * animations end at once and scrolling jumps.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -24,6 +24,8 @@ const portrait = sampleJpeg({ width: 30, height: 40 });
 const logo = samplePng({ width: 16, height: 16 });
 const cover = samplePng({ width: 60, height: 30 });
 const otherCover = samplePng({ width: 61, height: 30 });
+const avatar = samplePng({ width: 20, height: 20 });
+const otherAvatar = samplePng({ width: 21, height: 21 });
 const cv = samplePdf();
 
 /** A small, complete fictional seed: every kind of record, every relation and some media. */
@@ -170,6 +172,7 @@ const fixture = (): SeedFiles => ({
       authorName: "Sam Example",
       authorRole: "Head of Operations",
       position: 0,
+      authorPhoto: { file: "files/sam.png", altText: "A fictional illustrated avatar." },
     },
   ],
   "current-focus.json": [
@@ -185,6 +188,7 @@ const fixture = (): SeedFiles => ({
   "files/portrait.jpg": portrait,
   "files/northwind.png": logo,
   "files/cover.png": cover,
+  "files/sam.png": avatar,
   "files/cv.pdf": cv,
 });
 
@@ -344,7 +348,7 @@ describe("seed service", () => {
     it("creates every record with its relations and media and reports the counts", async () => {
       await expect(load(fixture())).resolves.toEqual({
         records: allCreated,
-        media: { uploaded: 4, reused: 0, removed: 0 },
+        media: { uploaded: 5, reused: 0, removed: 0 },
       });
 
       const state = await snapshot();
@@ -410,11 +414,16 @@ describe("seed service", () => {
         "link",
       ]);
       expect(state.testimonials[0]).toMatchObject({ experience: "northwind-platform" });
+      const avatarMedia = state.media.find(
+        ({ altText }) => altText === "A fictional illustrated avatar.",
+      );
+      expect(avatarMedia).toMatchObject({ mediaType: "image/png", width: 20, height: 20 });
+      expect(state.testimonials[0]).toMatchObject({ authorPhotoId: avatarMedia?.id });
       expect(state.currentFocus[0]).toMatchObject({
         project: { slug: "dock-planner" },
         topics: [{ slug: "agents" }, { slug: "rag" }],
       });
-      expect(await filesBelow(storageFolder)).toHaveLength(4);
+      expect(await filesBelow(storageFolder)).toHaveLength(5);
     });
 
     it("accepts a folder given as a file URL", async () => {
@@ -434,7 +443,7 @@ describe("seed service", () => {
 
       await expect(load(fixture())).resolves.toEqual({
         records: allUpdated,
-        media: { uploaded: 0, reused: 4, removed: 0 },
+        media: { uploaded: 0, reused: 5, removed: 0 },
       });
 
       expect(withoutUpdatedAt(await snapshot())).toEqual(withoutUpdatedAt(before));
@@ -460,7 +469,7 @@ describe("seed service", () => {
 
       const report = await load(changed);
 
-      expect(report.media).toEqual({ uploaded: 1, reused: 3, removed: 1 });
+      expect(report.media).toEqual({ uploaded: 1, reused: 4, removed: 1 });
       const after = await snapshot();
       const experience = after.experiences.find(({ slug }) => slug === "northwind-platform");
       expect(experience?.title).toBe("Staff platform engineer");
@@ -471,16 +480,43 @@ describe("seed service", () => {
       const oldCover = before.projects.find(({ slug }) => slug === "dock-planner")?.coverId;
       const newCover = after.projects.find(({ slug }) => slug === "dock-planner")?.coverId;
       expect(newCover).not.toBe(oldCover);
-      expect(after.media).toHaveLength(4);
+      expect(after.media).toHaveLength(5);
       expect(after.media.find(({ id }) => id === newCover)).toMatchObject({
         width: 61,
         altText: "A new fictional dock.",
       });
       expect(after.media.some(({ id }) => id === oldCover)).toBe(false);
-      expect(await filesBelow(storageFolder)).toHaveLength(4);
+      expect(await filesBelow(storageFolder)).toHaveLength(5);
       expect(after.projects).toHaveLength(2);
       expect(after.services[0]?.evidence).toHaveLength(3);
       expect(withoutUpdatedAt(after.topics)).toEqual(withoutUpdatedAt(before.topics));
+    });
+
+    it("replaces a changed author photo and clears a removed one", async () => {
+      await load(fixture());
+      const before = await snapshot();
+      const oldPhoto = before.media.find(({ width }) => width === 20)?.id;
+      expect(before.testimonials[0]).toMatchObject({ authorPhotoId: oldPhoto });
+      const changed = fixture();
+      const [words] = changed["testimonials.json"] as Record<string, unknown>[];
+      changed["testimonials.json"] = [{ ...words, authorPhoto: { file: "files/sam-2.png" } }];
+      changed["files/sam-2.png"] = otherAvatar;
+
+      await expect(load(changed)).resolves.toMatchObject({
+        media: { uploaded: 1, reused: 4, removed: 1 },
+      });
+      const after = await snapshot();
+      const newPhoto = after.media.find(({ width }) => width === 21)?.id;
+      expect(newPhoto).toEqual(expect.any(String));
+      expect(after.testimonials[0]).toMatchObject({ authorPhotoId: newPhoto });
+      expect(after.media.some(({ id }) => id === oldPhoto)).toBe(false);
+
+      changed["testimonials.json"] = [{ ...words, authorPhoto: null }];
+      await expect(load(changed)).resolves.toMatchObject({
+        media: { uploaded: 0, reused: 4, removed: 1 },
+      });
+      expect((await snapshot()).testimonials[0]).toMatchObject({ authorPhotoId: null });
+      expect(await filesBelow(storageFolder)).toHaveLength(4);
     });
 
     it("overwrites edited seed records and keeps records and case studies it does not name", async () => {
@@ -542,7 +578,7 @@ describe("seed service", () => {
     it("loads the seed when the profile holds nothing", async () => {
       await expect(loadIntoEmpty(fixture())).resolves.toMatchObject({
         records: allCreated,
-        media: { uploaded: 4, reused: 0, removed: 0 },
+        media: { uploaded: 5, reused: 0, removed: 0 },
       });
       expect(await profile.getPerson()).toMatchObject({ name: "Robin Example" });
     });
@@ -646,6 +682,8 @@ describe("seed service", () => {
       ];
       const [planner, rateSheet] = files["projects.json"] as Record<string, unknown>[];
       files["projects.json"] = [{ ...planner, cover: { file: "files/missing.png" } }, rateSheet];
+      const [words] = files["testimonials.json"] as Record<string, unknown>[];
+      files["testimonials.json"] = [{ ...words, authorPhoto: { file: "files/cv.pdf" } }];
       files["extras.json"] = [];
       await writeFile(join(seedFolder, "outside.png"), logo);
 
@@ -661,6 +699,7 @@ describe("seed service", () => {
           "person.json.photoId",
           "projects.json[0].cover.file",
           "technologies.json[1].group",
+          "testimonials.json[0].authorPhoto.file",
           "topics.json[1].slug",
         ].sort(),
       );
@@ -787,7 +826,7 @@ describe("seed service", () => {
       await expect(seed(failing).loadSeed(folder)).rejects.toThrow("A fictional failure.");
 
       expect(await snapshot()).toEqual(before);
-      expect(await filesBelow(storageFolder)).toHaveLength(4);
+      expect(await filesBelow(storageFolder)).toHaveLength(5);
     });
   });
 });

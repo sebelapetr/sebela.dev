@@ -73,6 +73,7 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
     defineRoute<UploadBody>({
       operationId: "uploadMedia",
       method: "POST",
+      content: "media",
       path: LIST,
       access: "private",
       budget: "upload",
@@ -101,6 +102,7 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
     defineRoute<MediaUpdate, { id: string }>({
       operationId: "updateMedia",
       method: "PATCH",
+      content: "media",
       path: ITEM,
       access: "private",
       summary: "Update the alt text of media",
@@ -114,12 +116,13 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteMedia",
       method: "DELETE",
+      content: "media",
       path: ITEM,
       access: "private",
       summary: "Delete media",
       description:
-        "Deletes the record and its file. Media attached to the person, an organization or a " +
-        "project is not deleted; clear the reference first.",
+        "Deletes the record and its file. Media attached to the person, an organization, a " +
+        "project or a testimonial is not deleted; clear the reference first.",
       params: MediaIdParamsSchema,
       response: { status: 204, description: "The media was deleted." },
       errors: ["not_found", "conflict"],

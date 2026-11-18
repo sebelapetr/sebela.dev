@@ -1,0 +1,18 @@
+[
+  {
+    "slug": "route-planner-rollout",
+    "title": "Taking the route planner to every depot",
+    "description": "Moving the **fictional** route planner from one depot to all of them.",
+    "position": 0,
+    "project": "route-planner",
+    "topics": ["routing"]
+  },
+  {
+    "slug": "answer-checker-library",
+    "title": "An answer checker as a small library",
+    "description": "Packaging the fictional answer checker so other projects can reuse it.",
+    "link": "https://notes.example.test/answer-checker",
+    "position": 1,
+    "topics": ["evaluation"]
+  }
+]

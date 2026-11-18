@@ -9,6 +9,16 @@ export const PersonLinkSchema = z
   })
   .meta({ id: "PersonLink", description: "A link of the person, in its intended order." });
 
+export const CollaborationStepSchema = z
+  .strictObject({
+    title: text(100),
+    description: text(1000).meta({ description: "Markdown." }),
+  })
+  .meta({
+    id: "CollaborationStep",
+    description: "One step of how the person works with a client, in its intended order.",
+  });
+
 /** Required writable fields of the person. */
 const required = {
   name: text(200),
@@ -24,6 +34,19 @@ const optional = {
   links: z.array(PersonLinkSchema).max(20),
   availability: text(500).nullable(),
   careerStartedOn: z.iso.date().nullable().meta({ description: "The date the career started." }),
+  servicesIntro: text(2000)
+    .nullable()
+    .meta({ description: "Markdown: the introduction of the services page, before the services." }),
+  collaborationSteps: z.array(CollaborationStepSchema).max(8).meta({
+    description: "How the person works with a client, as steps in their intended order.",
+  }),
+  servicesNote: text(2000)
+    .nullable()
+    .meta({
+      description:
+        "Markdown: the note before the services page's closing action, for example what is " +
+        "long-standing practice and what is a newer focus.",
+    }),
   photoId: mediaReference("The identifier of the person's photo, an uploaded image."),
   cvPdfId: mediaReference(
     "The identifier of the current CV PDF, an uploaded, manually prepared PDF. It is never generated.",
@@ -51,6 +74,9 @@ export const PersonCreateSchema = z
     links: optional.links.default([]),
     availability: optional.availability.default(null),
     careerStartedOn: optional.careerStartedOn.default(null),
+    servicesIntro: optional.servicesIntro.default(null),
+    collaborationSteps: optional.collaborationSteps.default([]),
+    servicesNote: optional.servicesNote.default(null),
     photoId: optional.photoId.default(null),
     cvPdfId: optional.cvPdfId.default(null),
   })
@@ -64,6 +90,7 @@ export const PersonUpdateSchema = z
   .meta({ id: "PersonUpdate" });
 
 export type PersonLink = z.infer<typeof PersonLinkSchema>;
+export type CollaborationStep = z.infer<typeof CollaborationStepSchema>;
 export type Person = z.infer<typeof PersonSchema>;
 export type PersonCreate = z.output<typeof PersonCreateSchema>;
 export type PersonUpdate = z.output<typeof PersonUpdateSchema>;

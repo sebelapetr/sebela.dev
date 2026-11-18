@@ -56,6 +56,7 @@ export function explorationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createExploration",
       method: "POST",
+      content: "exploration",
       path: LIST,
       access: "private",
       summary: "Create an exploration",
@@ -74,6 +75,7 @@ export function explorationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateExploration",
       method: "PATCH",
+      content: "exploration",
       path: ITEM,
       access: "private",
       summary: "Update an exploration",
@@ -92,6 +94,7 @@ export function explorationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteExploration",
       method: "DELETE",
+      content: "exploration",
       path: ITEM,
       access: "private",
       summary: "Delete an exploration",

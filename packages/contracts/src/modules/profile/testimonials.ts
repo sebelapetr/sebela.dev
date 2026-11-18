@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { PositionSchema } from "./catalogs.js";
-import { SlugSchema, text, timestamps } from "./fields.js";
+import { mediaReference, SlugSchema, text, timestamps } from "./fields.js";
 
 /** Scalar fields of a testimonial, the same when written and when read. */
 const scalarFields = {
@@ -17,6 +17,9 @@ const scalarFields = {
   position: PositionSchema.meta({
     description: "Ascending order within the experience; ties are ordered by slug.",
   }),
+  authorPhotoId: mediaReference(
+    "The identifier of the author's photo, an uploaded image; `null` without one.",
+  ),
 };
 
 const ExperienceSlugSchema = SlugSchema.meta({
@@ -49,14 +52,23 @@ const relationFields = {
   }),
 };
 
-/** Body of creating a testimonial in an existing experience. Every field is required. */
+/**
+ * Body of creating a testimonial in an existing experience. Every field is required except the
+ * author photo, which is `null` when omitted.
+ */
 export const TestimonialCreateSchema = z
-  .strictObject({ slug: SlugSchema, ...relationFields, ...scalarFields })
+  .strictObject({
+    slug: SlugSchema,
+    ...relationFields,
+    ...scalarFields,
+    authorPhotoId: scalarFields.authorPhotoId.default(null),
+  })
   .meta({ id: "TestimonialCreate" });
 
 /**
  * Body of updating a testimonial: at least one field; only the fields sent change and the slug
- * cannot be changed. A sent `experience` moves the testimonial.
+ * cannot be changed. A sent `experience` moves the testimonial; `authorPhotoId: null` clears the
+ * photo.
  */
 export const TestimonialUpdateSchema = z
   .strictObject({ ...relationFields, ...scalarFields })

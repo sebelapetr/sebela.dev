@@ -1,0 +1,44 @@
+{
+  "name": "Casey Morrow",
+  "headline": "Fictional engineer who builds calm software for logistics and health care",
+  "shortBio": "Casey is a **fictional** person from the website's browser tests.",
+  "longBio": null,
+  "location": "Testville",
+  "email": "casey@morrow.example.test",
+  "links": [
+    {
+      "label": "LinkedIn",
+      "url": "https://linkedin.example.test/in/casey-morrow"
+    },
+    {
+      "label": "GitHub",
+      "url": "https://github.example.test/casey-morrow"
+    }
+  ],
+  "availability": null,
+  "careerStartedOn": "2018-03-01",
+  "servicesIntro": "Casey turns *fictional* manual work into calm software for small teams.",
+  "collaborationSteps": [
+    {
+      "title": "Talk it through",
+      "description": "A short call about the problem and what a good outcome looks like."
+    },
+    {
+      "title": "Agree on the scope",
+      "description": "A written scope with the approach, the assumptions and an estimate."
+    },
+    {
+      "title": "Build in small steps",
+      "description": "Work delivered in increments and checked **early**."
+    },
+    {
+      "title": "Hand it over",
+      "description": "Documentation and hand-over, with support as agreed."
+    }
+  ],
+  "servicesNote": "Software delivery is Casey's long-standing practice; the AI work is a newer focus, shown as independent R&D.",
+  "photo": null,
+  "cvPdf": {
+    "file": "files/cv.pdf"
+  }
+}

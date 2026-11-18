@@ -18,6 +18,9 @@ describe("PersonCreateSchema", () => {
       links: [],
       availability: null,
       careerStartedOn: null,
+      servicesIntro: null,
+      collaborationSteps: [],
+      servicesNote: null,
       photoId: null,
       cvPdfId: null,
     });
@@ -32,6 +35,12 @@ describe("PersonCreateSchema", () => {
       links: [{ label: "Website", url: "https://example.com/alex" }],
       availability: "Open to one new client from next quarter.",
       careerStartedOn: "2015-09-01",
+      servicesIntro: "I help **fictional** teams connect their systems.",
+      collaborationSteps: [
+        { title: "Understand the problem", description: "A short call about the process." },
+        { title: "Build in small steps", description: "Deliver *incrementally*." },
+      ],
+      servicesNote: "Software is long-standing practice; the AI offering is newer.",
       photoId: "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b",
       cvPdfId: "1c9f6d3f-2e5b-4a7c-8d4f-3b8e9f0a1b2c",
     };
@@ -60,6 +69,32 @@ describe("PersonCreateSchema", () => {
     ["a CV PDF that is a path", { ...minimal, cvPdfId: "../cv.pdf" }],
     ["an embedded photo", { ...minimal, photo: { url: "https://media.example.test/a.png" } }],
     ["a name that is too long", { ...minimal, name: "x".repeat(201) }],
+    ["a services intro that is too long", { ...minimal, servicesIntro: "x".repeat(2001) }],
+    ["a services note that is too long", { ...minimal, servicesNote: "x".repeat(2001) }],
+    ["an empty services note", { ...minimal, servicesNote: "  " }],
+    [
+      "a collaboration step without a title",
+      { ...minimal, collaborationSteps: [{ title: " ", description: "Something." }] },
+    ],
+    [
+      "a collaboration step without a description",
+      { ...minimal, collaborationSteps: [{ title: "Step" }] },
+    ],
+    [
+      "a collaboration step with an unexpected field",
+      { ...minimal, collaborationSteps: [{ title: "Step", description: "x", order: 1 }] },
+    ],
+    [
+      "a collaboration step title that is too long",
+      { ...minimal, collaborationSteps: [{ title: "x".repeat(101), description: "x" }] },
+    ],
+    [
+      "too many collaboration steps",
+      {
+        ...minimal,
+        collaborationSteps: Array.from({ length: 9 }, () => ({ title: "x", description: "x" })),
+      },
+    ],
     [
       "too many links",
       {
@@ -81,6 +116,18 @@ describe("PersonUpdateSchema", () => {
 
   it("allows clearing an optional field", () => {
     expect(PersonUpdateSchema.parse({ email: null })).toEqual({ email: null });
+  });
+
+  it("replaces or clears the services prose", () => {
+    const change = {
+      servicesIntro: null,
+      collaborationSteps: [{ title: "Define the solution", description: "Written scope." }],
+      servicesNote: "A newer focus.",
+    };
+    expect(PersonUpdateSchema.parse(change)).toEqual(change);
+    expect(PersonUpdateSchema.parse({ collaborationSteps: [] })).toEqual({
+      collaborationSteps: [],
+    });
   });
 
   it("attaches and clears the photo and the CV PDF by media identifier", () => {

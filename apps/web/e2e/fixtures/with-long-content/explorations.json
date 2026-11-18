@@ -1,0 +1,25 @@
+[
+  {
+    "slug": "manifest-question-answering",
+    "name": "Answering dispatchers' questions about consolidated shipment manifests with cited passages",
+    "summary": "Retrieval over a year of **fictional** manifests that answers only with the passages it cites.",
+    "status": "tested",
+    "concepts": [
+      "Retrieval-augmented generation over semi-structured documents",
+      "Refusal when no passage supports the answer"
+    ],
+    "startedOn": "2024-09-01",
+    "endedOn": "2024-12-20",
+    "position": 0,
+    "technologies": ["retrieval"]
+  },
+  {
+    "slug": "declaration-agent-permissions",
+    "name": "A permission model for an agent that prepares customs declarations for human approval",
+    "summary": "Least-privilege tool scopes for an agent that drafts declarations, on paper only.",
+    "status": "designed",
+    "concepts": ["Least privilege", "Human approval before submission"],
+    "startedOn": "2025-02-01",
+    "position": 1
+  }
+]

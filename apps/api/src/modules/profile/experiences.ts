@@ -56,6 +56,7 @@ export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createExperience",
       method: "POST",
+      content: "experience",
       path: LIST,
       access: "private",
       summary: "Create an experience",
@@ -74,6 +75,7 @@ export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateExperience",
       method: "PATCH",
+      content: "experience",
       path: ITEM,
       access: "private",
       summary: "Update an experience",
@@ -92,6 +94,7 @@ export function experienceRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteExperience",
       method: "DELETE",
+      content: "experience",
       path: ITEM,
       access: "private",
       summary: "Delete an experience",

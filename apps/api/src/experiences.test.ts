@@ -310,8 +310,18 @@ describe("the experience API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createExperience", method: "POST", path: "/v1/experiences" },
-      { operationId: "deleteExperience", method: "DELETE", path: "/v1/experiences/northwind-lead" },
+      {
+        operationId: "createExperience",
+        method: "POST",
+        path: "/v1/experiences",
+        change: { domain: "experience", record: "northwind-lead", action: "created" },
+      },
+      {
+        operationId: "deleteExperience",
+        method: "DELETE",
+        path: "/v1/experiences/northwind-lead",
+        change: { domain: "experience", record: "northwind-lead", action: "deleted" },
+      },
     ]);
     expect((await request("/v1/experiences/northwind-lead")).status).toBe(404);
     expect((await request("/v1/organizations/northwind")).status).toBe(200);

@@ -54,6 +54,12 @@ describe("the person API", () => {
       ],
       availability: "Open to projects from 2031.",
       careerStartedOn: "2015-09-01",
+      servicesIntro: "I help **fictional** teams connect their systems.",
+      collaborationSteps: [
+        { title: "Understand the problem", description: "A short call." },
+        { title: "Handover & support", description: "Documentation and deployment." },
+      ],
+      servicesNote: "Software is long-standing practice; the AI offering is newer.",
     };
 
     const created = await request("POST", json(full, auth));
@@ -82,6 +88,9 @@ describe("the person API", () => {
       links: [],
       availability: null,
       careerStartedOn: null,
+      servicesIntro: null,
+      collaborationSteps: [],
+      servicesNote: null,
     });
   });
 
@@ -157,5 +166,12 @@ describe("the person API", () => {
       "PATCH /v1/person",
       "DELETE /v1/person",
     ]);
+    expect(events.map((event) => event.change)).toEqual(
+      ["created", "updated", "deleted"].map((action) => ({
+        domain: "person",
+        record: null,
+        action,
+      })),
+    );
   });
 });

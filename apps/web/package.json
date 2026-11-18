@@ -1,0 +1,45 @@
+{
+  "name": "@sebela/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The public website: a Next.js app that reads its content from the API's public routes.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "pnpm --silent --filter \"@sebela/web^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local scripts/next.mjs dev",
+    "start": "node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local scripts/next.mjs start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local node_modules/@playwright/test/cli.js test",
+    "typecheck": "next typegen && tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@sebela/api-client": "workspace:*",
+    "@sebela/contracts": "workspace:*",
+    "@sebela/ui": "workspace:*",
+    "lucide-react": "catalog:",
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-markdown": "10.1.0",
+    "server-only": "0.0.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@next/eslint-plugin-next": "16.4.6",
+    "@playwright/test": "1.65.1",
+    "@sebela/config": "workspace:*",
+    "@tailwindcss/postcss": "4.3.5",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "postcss": "8.5.33",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

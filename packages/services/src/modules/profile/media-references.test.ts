@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { PersonCreate, ProjectCreate } from "@sebela/contracts";
+import type { PersonCreate, ProjectCreate, TestimonialCreate } from "@sebela/contracts";
 import {
   createPersistence,
   readDatabaseConfig,
@@ -44,6 +44,9 @@ const person: PersonCreate = {
   links: [],
   availability: null,
   careerStartedOn: null,
+  servicesIntro: null,
+  collaborationSteps: [],
+  servicesNote: null,
   photoId: null,
   cvPdfId: null,
 };
@@ -63,6 +66,16 @@ const project: ProjectCreate = {
   position: 0,
   technologies: [],
   coverId: null,
+};
+
+const testimonial: TestimonialCreate = {
+  slug: "dana-on-routing",
+  experience: "northwind-lead",
+  quote: "A fictional quote.",
+  authorName: "Dana Placeholder",
+  authorRole: "Head of Operations",
+  position: 0,
+  authorPhotoId: null,
 };
 
 async function refusal(operation: Promise<unknown>): Promise<DomainError> {
@@ -120,6 +133,9 @@ describe("profile records referring to media", () => {
 
   beforeEach(async () => {
     await persistence.profile.deletePerson();
+    for (const { slug } of await persistence.profile.listTestimonials()) {
+      await persistence.profile.deleteTestimonial(slug);
+    }
     for (const { slug } of await persistence.profile.listProjects()) {
       await persistence.profile.deleteProject(slug);
     }
@@ -200,5 +216,24 @@ describe("profile records referring to media", () => {
     await expect(profile.updateProject("routing", { coverId: null })).resolves.toMatchObject({
       coverId: null,
     });
+  });
+
+  it("attaches, refuses and clears a testimonial author photo", async () => {
+    await expect(
+      field(profile.createTestimonial({ ...testimonial, authorPhotoId: pdfId })),
+    ).resolves.toEqual({ code: "validation_failed", paths: ["authorPhotoId"] });
+    await expect(profile.listTestimonials()).resolves.toEqual([]);
+    await expect(
+      profile.createTestimonial({ ...testimonial, authorPhotoId: photoId }),
+    ).resolves.toMatchObject({ authorPhotoId: photoId });
+    await expect(
+      field(profile.updateTestimonial("dana-on-routing", { authorPhotoId: unknown })),
+    ).resolves.toEqual({ code: "validation_failed", paths: ["authorPhotoId"] });
+    await expect(
+      field(profile.updateTestimonial("missing", { authorPhotoId: photoId })),
+    ).resolves.toMatchObject({ code: "not_found" });
+    await expect(
+      profile.updateTestimonial("dana-on-routing", { authorPhotoId: null }),
+    ).resolves.toMatchObject({ authorPhotoId: null });
   });
 });

@@ -412,8 +412,18 @@ describe("the service API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createService", method: "POST", path: "/v1/services" },
-      { operationId: "deleteService", method: "DELETE", path: "/v1/services/process-automation" },
+      {
+        operationId: "createService",
+        method: "POST",
+        path: "/v1/services",
+        change: { domain: "service", record: "process-automation", action: "created" },
+      },
+      {
+        operationId: "deleteService",
+        method: "DELETE",
+        path: "/v1/services/process-automation",
+        change: { domain: "service", record: "process-automation", action: "deleted" },
+      },
     ]);
     expect((await request("/v1/services/process-automation")).status).toBe(404);
     expect((await request("/v1/projects/routing-engine")).status).toBe(200);

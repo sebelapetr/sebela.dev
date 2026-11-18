@@ -42,6 +42,7 @@ describe("the media API", () => {
   beforeEach(async () => {
     const { profile, media } = backend.services;
     await profile.deletePerson().catch(() => undefined);
+    for (const { slug } of await profile.listTestimonials()) await profile.deleteTestimonial(slug);
     for (const { slug } of await profile.listProjects()) await profile.deleteProject(slug);
     for (const { slug } of await profile.listExperiences()) await profile.deleteExperience(slug);
     for (const { slug } of await profile.listOrganizations()) {
@@ -145,7 +146,15 @@ describe("the media API", () => {
         .app.request("/v1/media", { method: "POST", ...upload(png, {}, auth) }, connection());
 
       expect(response.status).toBe(201);
-      expect(events).toEqual([{ operationId: "uploadMedia", method: "POST", path: "/v1/media" }]);
+      const { id } = MediaSchema.parse(await response.json());
+      expect(events).toEqual([
+        {
+          operationId: "uploadMedia",
+          method: "POST",
+          path: "/v1/media",
+          change: { domain: "media", record: id, action: "created" },
+        },
+      ]);
     });
   });
 
@@ -564,6 +573,80 @@ describe("the media API", () => {
         json({ coverId: null }, auth),
       );
       expect(await cleared.json()).toMatchObject({ coverId: null });
+    });
+
+    it("attaches a testimonial author photo, reads it publicly and refuses deleting it until cleared", async () => {
+      const photo = await uploaded(png, "A fictional illustrated avatar");
+      const document = await uploaded(pdf);
+      await backend.services.profile.createOrganization({
+        slug: "fabrikam",
+        name: "Fabrikam",
+        website: null,
+        description: null,
+        logoId: null,
+      });
+      await backend.services.profile.createExperience({
+        slug: "fabrikam-engineer",
+        organization: "fabrikam",
+        title: "Engineer",
+        kind: "main_job",
+        summary: "A fictional role.",
+        startedOn: "2021-03-01",
+        endedOn: null,
+        responsibilities: [],
+        technologies: [],
+        inCv: true,
+      });
+      const testimonial = {
+        slug: "dana-on-routing",
+        experience: "fabrikam-engineer",
+        quote: "A fictional compliment.",
+        authorName: "Dana Placeholder",
+        authorRole: "Site Manager",
+        position: 0,
+      };
+
+      const refused = await request(
+        "/v1/testimonials",
+        "POST",
+        json({ ...testimonial, authorPhotoId: document.id }, auth),
+      );
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "validation_failed", fields: [{ path: "authorPhotoId" }] },
+      });
+
+      const created = await request(
+        "/v1/testimonials",
+        "POST",
+        json({ ...testimonial, authorPhotoId: photo.id }, auth),
+      );
+      expect(created.status).toBe(201);
+      expect(await created.json()).toMatchObject({ authorPhotoId: photo.id });
+      expect(await (await request("/v1/testimonials/dana-on-routing")).json()).toMatchObject({
+        authorPhotoId: photo.id,
+      });
+      expect(await (await request("/v1/experiences/fabrikam-engineer")).json()).toMatchObject({
+        testimonials: [{ authorPhotoId: photo.id }],
+      });
+      expect(
+        MediaSchema.parse(await (await request(`/v1/media/${photo.id}`)).json()),
+      ).toMatchObject({ altText: "A fictional illustrated avatar" });
+
+      const kept = await request(`/v1/media/${photo.id}`, "DELETE", { headers: auth });
+      expect(kept.status).toBe(409);
+      expect(await kept.json()).toMatchObject({ error: { code: "conflict" } });
+
+      const cleared = await request(
+        "/v1/testimonials/dana-on-routing",
+        "PATCH",
+        json({ authorPhotoId: null }, auth),
+      );
+      expect(cleared.status).toBe(200);
+      expect(await cleared.json()).toMatchObject({ authorPhotoId: null });
+      expect((await request(`/v1/media/${photo.id}`, "DELETE", { headers: auth })).status).toBe(
+        204,
+      );
     });
   });
 

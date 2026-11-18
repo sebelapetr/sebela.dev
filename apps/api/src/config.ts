@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { invalidationSecretMinLength } from "@sebela/contracts";
+
 /** A fixed-window budget: at most `max` requests per `windowMs` for one caller. */
 export interface RatePolicy {
   readonly max: number;
@@ -42,6 +44,18 @@ export interface ApiConfig {
     /** Most callers tracked at once across all budgets; the oldest window is evicted beyond it. */
     readonly maxTrackedCallers: number;
   };
+  /**
+   * Where the website receives signed invalidation notifications after committed content writes,
+   * and the server-only secret they are signed with. `null`: no notifications are sent.
+   */
+  readonly websiteInvalidation: WebsiteInvalidationConfig | null;
+}
+
+export interface WebsiteInvalidationConfig {
+  /** An http or https address without credentials, query or fragment. */
+  readonly url: string;
+  /** At least `invalidationSecretMinLength` characters; never logged. */
+  readonly secret: string;
 }
 
 const positive = z.coerce.number().int().positive();
@@ -69,7 +83,38 @@ const ApiEnvironmentSchema = z.object({
   API_RATE_LIMIT_UPLOAD: ratePolicy,
   MEDIA_MAX_BYTES: positive,
   API_RATE_LIMIT_MAX_TRACKED: positive,
+  // Present and empty switches notifications off; set, both are validated below.
+  API_WEB_INVALIDATION_URL: z.string(),
+  API_WEB_INVALIDATION_SECRET: z.string(),
 });
+
+/** A plain http or https address: no credentials, query or fragment that could carry a secret. */
+function isPlainWebAddress(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.search === "" &&
+    url.hash === "" &&
+    !value.includes("?") &&
+    !value.includes("#")
+  );
+}
+
+/** The names of the invalidation variables that are missing or invalid, given both are present. */
+function invalidInvalidationSettings(url: string, secret: string): string[] {
+  if (url === "" && secret === "") return [];
+  const names: string[] = [];
+  if (!isPlainWebAddress(url)) names.push("API_WEB_INVALIDATION_URL");
+  if (secret.length < invalidationSecretMinLength) names.push("API_WEB_INVALIDATION_SECRET");
+  return names;
+}
+
+/** Names the variables to fix; their values are never included. */
+const configurationError = (names: readonly string[]) =>
+  new Error(`Invalid API configuration: set ${names.join(", ")} (documented in .env.example)`);
 
 /**
  * Reads the API settings from an environment such as `process.env`. Throws an error naming every
@@ -78,12 +123,15 @@ const ApiEnvironmentSchema = z.object({
 export function readApiConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
   const parsed = ApiEnvironmentSchema.safeParse(env);
   if (!parsed.success) {
-    const names = [...new Set(parsed.error.issues.map((issue) => issue.path.join(".")))];
-    throw new Error(
-      `Invalid API configuration: set ${names.join(", ")} (documented in .env.example)`,
-    );
+    throw configurationError([
+      ...new Set(parsed.error.issues.map((issue) => issue.path.join("."))),
+    ]);
   }
   const settings = parsed.data;
+  const url = settings.API_WEB_INVALIDATION_URL;
+  const secret = settings.API_WEB_INVALIDATION_SECRET;
+  const invalid = invalidInvalidationSettings(url, secret);
+  if (invalid.length > 0) throw configurationError(invalid);
   return {
     host: settings.API_HOST,
     port: settings.API_PORT,
@@ -98,5 +146,6 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
       upload: settings.API_RATE_LIMIT_UPLOAD,
       maxTrackedCallers: settings.API_RATE_LIMIT_MAX_TRACKED,
     },
+    websiteInvalidation: url === "" ? null : { url, secret },
   };
 }

@@ -1,14 +1,19 @@
-# The build context of the API image (apps/api/Dockerfile, built from the repository root) is an
-# allowlist: the workspace manifests and the packages the API is built from. Environment files,
-# private notes (.context/), worktrees, scratch files and build output never enter an image.
+# The build context of the API and website images (apps/api/Dockerfile, apps/web/Dockerfile, built
+# from the repository root) is an allowlist: the workspace manifests, the two apps and the packages
+# they are built from. Environment files, private notes (.context/), worktrees, scratch files, test
+# results and build output never enter an image.
 *
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !apps/api/
+!apps/web/
 !packages/
 **/node_modules/
 **/dist/
 **/.turbo/
+**/.next/
+**/test-results/
+**/playwright-report/
 **/.env
 **/.env.*

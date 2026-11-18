@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "fernway-head-of-operations",
+    "experience": "fernway-lead-engineer",
+    "quote": "Casey made the dispatch tools quiet enough that nobody talks about them any more.",
+    "authorName": "Riley Sample",
+    "authorRole": "Head of operations, Fernway Logistics (fictional)",
+    "position": 0,
+    "authorPhoto": {
+      "file": "files/avatar-riley.png",
+      "altText": "An illustrated placeholder avatar of the fictional Riley Sample."
+    }
+  },
+  {
+    "slug": "pinecrest-product-owner",
+    "experience": "pinecrest-senior-developer",
+    "quote": "The new portal shipped centre by centre, and not one of them asked to go back.",
+    "authorName": "Avery Example",
+    "authorRole": "Product owner, Pinecrest Health (fictional)",
+    "position": 0
+  }
+]

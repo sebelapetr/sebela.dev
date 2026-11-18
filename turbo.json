@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "lint": {
       "dependsOn": ["^build"]
@@ -27,6 +27,18 @@
       "cache": false
     },
     "//#test:harness": {},
-    "//#test:checks": {}
+    "//#test:checks": {},
+    "test:e2e": {
+      "dependsOn": ["build", "@sebela/api#build"],
+      "cache": false,
+      "passThroughEnv": [
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD",
+        "CI"
+      ]
+    }
   }
 }
