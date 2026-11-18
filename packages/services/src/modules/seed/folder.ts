@@ -16,6 +16,9 @@ import {
   OrganizationCreateSchema,
   PersonCreateSchema,
   ProjectCreateSchema,
+  RoadmapAreaCreateSchema,
+  RoadmapModuleCreateSchema,
+  RoadmapResourceCreateSchema,
   ServiceCreateSchema,
   TechnologyCreateSchema,
   TestimonialCreateSchema,
@@ -28,6 +31,9 @@ import {
   type OrganizationCreate,
   type PersonCreate,
   type ProjectCreate,
+  type RoadmapAreaCreate,
+  type RoadmapModuleCreate,
+  type RoadmapResourceCreate,
   type ServiceCreate,
   type TechnologyCreate,
   type TestimonialCreate,
@@ -50,6 +56,9 @@ export const dataFiles = {
   education: "education.json",
   testimonials: "testimonials.json",
   currentFocus: "current-focus.json",
+  roadmapAreas: "roadmap-areas.json",
+  roadmapModules: "roadmap-modules.json",
+  roadmapResources: "roadmap-resources.json",
 } as const;
 
 /**
@@ -87,6 +96,9 @@ export interface SeedData {
   readonly education: readonly Located<EducationCreate>[];
   readonly testimonials: readonly Located<TestimonialCreate, "authorPhotoId">[];
   readonly currentFocus: readonly Located<CurrentFocusCreate>[];
+  readonly roadmapAreas: readonly Located<RoadmapAreaCreate>[];
+  readonly roadmapModules: readonly Located<RoadmapModuleCreate>[];
+  readonly roadmapResources: readonly Located<RoadmapResourceCreate>[];
   /** The attached files by the SHA-256 digest of their content, each once. */
   readonly files: ReadonlyMap<string, SeedFile>;
 }
@@ -334,6 +346,13 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     ]),
   );
   const currentFocus = located(await parseList(dataFiles.currentFocus, CurrentFocusCreateSchema));
+  const roadmapAreas = located(await parseList(dataFiles.roadmapAreas, RoadmapAreaCreateSchema));
+  const roadmapModules = located(
+    await parseList(dataFiles.roadmapModules, RoadmapModuleCreateSchema),
+  );
+  const roadmapResources = located(
+    await parseList(dataFiles.roadmapResources, RoadmapResourceCreateSchema),
+  );
 
   const files = await readDeclaredFiles(root, declarations, limits, issues);
 
@@ -350,6 +369,9 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     education,
     testimonials,
     currentFocus,
+    roadmapAreas,
+    roadmapModules,
+    roadmapResources,
     files,
   };
 }

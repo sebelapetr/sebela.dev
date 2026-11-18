@@ -311,13 +311,13 @@ async function refusal(operation: Promise<unknown>): Promise<DomainError> {
   return error;
 }
 
-/** A copy without `updatedAt`, which every load advances. */
+/** A copy without `updatedAt` and the roadmap's `lastUpdatedAt` derived from it, which every load advances. */
 function withoutUpdatedAt(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutUpdatedAt);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([key]) => key !== "updatedAt")
+        .filter(([key]) => key !== "updatedAt" && key !== "lastUpdatedAt")
         .map(([key, nested]) => [key, withoutUpdatedAt(nested)]),
     );
   }

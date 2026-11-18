@@ -38,6 +38,9 @@ const kindLabels: Record<SeedKind, string> = {
   education: "education",
   testimonials: "testimonials",
   currentFocus: "current focus",
+  roadmapAreas: "roadmap areas",
+  roadmapModules: "roadmap modules",
+  roadmapResources: "roadmap resources",
 };
 
 /**
