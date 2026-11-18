@@ -39,7 +39,7 @@ async function signed(body: Uint8Array, at = NOW, secret = SECRET) {
 }
 
 describe("the content change", () => {
-  it("names every profile domain and the three actions", () => {
+  it("names every profile and roadmap domain and the three actions", () => {
     expect(contentDomains).toEqual([
       "person",
       "technology",
@@ -53,6 +53,9 @@ describe("the content change", () => {
       "service",
       "education",
       "current-focus",
+      "roadmap-area",
+      "roadmap-module",
+      "roadmap-resource",
       "media",
     ]);
     expect(contentChangeActions).toEqual(["created", "updated", "deleted"]);
@@ -64,6 +67,7 @@ describe("the content change", () => {
       { domain: "technology", record: "type-script", action: "created" },
       { domain: "case-study", record: "routing-engine", action: "deleted" },
       { domain: "current-focus", record: "agent-evals", action: "updated" },
+      { domain: "roadmap-resource", record: "prompting-notes", action: "deleted" },
       { domain: "media", record: MEDIA, action: "deleted" },
     ]) {
       expect(ContentChangeSchema.parse(change)).toEqual(change);
