@@ -2,8 +2,8 @@
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
 // seconds, a write to the profile or to the roadmap shows once the interval has elapsed, on the
-// overview, an area's page and the homepage's Exploring alike; a
-// restarted website reads current content at once; during an outage cached pages keep their last
+// overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
+// leaves its old address; a restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
 // again, pages are current without a rebuild.
 import { randomBytes } from "node:crypto";
@@ -151,6 +151,38 @@ test.describe("cached content without invalidation notifications", () => {
     await expect
       .poll(async () => (await read("/")).body, fallback)
       .toMatch(/Exploring[\s\S]*Late orbits[\s\S]*Slow drift/u);
+  });
+
+  test("a moved and then deleted module leaves its warmed old address after the interval", async () => {
+    async function write(method: string, path: string, body?: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      expect(response.ok, `${method} ${path}`).toBe(true);
+    }
+    const old = "/ai-roadmap/late-orbits/slow-drift";
+    const moved = "/ai-roadmap/far-orbits/slow-drift";
+    await write("POST", "/v1/roadmap/areas", {
+      slug: "far-orbits",
+      name: "Far orbits",
+      weight: 10,
+      position: 1,
+    });
+    // Warm the old address and the new one, which does not exist yet.
+    expect((await read(old)).status).toBe(200);
+    expect((await read(moved)).status).toBe(404);
+
+    await write("PATCH", "/v1/roadmap/modules/slow-drift", { area: "far-orbits" });
+    const fallback = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect.poll(async () => (await read(old)).status, fallback).toBe(404);
+    await expect.poll(async () => (await read(moved)).status, fallback).toBe(200);
+
+    // A module with resources cannot be deleted: its resource goes first.
+    await write("DELETE", "/v1/roadmap/resources/drift-notes");
+    await write("DELETE", "/v1/roadmap/modules/slow-drift");
+    await expect.poll(async () => (await read(moved)).status, fallback).toBe(404);
   });
 
   test("a restarted website reads current content at once", async () => {

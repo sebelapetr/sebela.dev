@@ -2,8 +2,9 @@
 // areas (one in progress with a long description, one planned, one without modules), a module
 // without resources and five resources of every status, one whose description tries to inject
 // markup and a `javascript:` link. It covers the overview's content and counts, opening areas and
-// modules by pointer and keyboard, the area and module pages with their breadcrumbs, titles and
-// structured data, a module only under its own area, a resource's anchor, the chat's roadmap card
+// modules by pointer and keyboard, the area and module pages with their breadcrumbs, last change,
+// adjacent areas, way back to the full roadmap, titles, structured data and preview images, a
+// module only under its own area, a resource's anchor, the chat's roadmap card
 // and source, the homepage's Exploring, safe rendering, the sub-navigation that only roadmap pages
 // show, the static placeholders, the empty and the unavailable state, and roadmap writes reaching
 // the warmed overview, old and new detail pages and the homepage through the signed invalidation.
@@ -377,7 +378,7 @@ test.describe("the roadmap overview", () => {
     await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
     await expect(page).toHaveTitle(`Orbit foundations — AI Engineering Roadmap — ${name}`);
     expect(await robots(page)).toContain("noindex");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("AreaOrbit foundations");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orbit foundations");
     await expect(breadcrumbs(page).getByRole("link")).toHaveText(["AI Engineering Roadmap"]);
     await expect(breadcrumbs(page).locator('[aria-current="page"]')).toHaveText(
       "Orbit foundations",
@@ -387,20 +388,42 @@ test.describe("the roadmap overview", () => {
     await expect(header).toContainText("Current");
     await expect(header).toContainText("In progress");
     await expect(header).toContainText("1/4");
-    // The modules in the API's order, each a link to its own page with its own status.
-    const modules = page.locator("main section ol > li");
-    await expect(modules.locator("h3")).toHaveText(["Signal basics", "Empty drawer"]);
-    await expect(modules.nth(0)).toContainText("In progress");
-    await expect(modules.nth(0)).toContainText("Reading fictional signals.");
-    await expect(modules.nth(1)).toContainText("Planned");
+    await expect(header).toContainText(/Updated [A-Z][a-z]+ \d{1,2}, \d{4}/u);
+    // The modules in the API's order on the timeline, as on the overview: each opens to its
+    // resources and leads to its own page.
+    const modules = page.getByRole("list", { name: "Modules of Orbit foundations" });
+    await expect(modules.locator(":scope > li h3")).toHaveText([/Signal basics/u, /Empty drawer/u]);
+    await expect(modules.locator(":scope > li").nth(0)).toContainText("Reading fictional signals.");
+    await hydrated(page);
+    await trigger(page, "Signal basics").click();
+    await expect(page.getByRole("list", { name: "Resources of Signal basics" })).toContainText(
+      "A fictional signal explainer",
+    );
+    // The areas around it in the roadmap's order: the first area has only a next one.
+    const adjacent = page.getByRole("navigation", { name: "Adjacent learning areas" });
+    await expect(adjacent.getByRole("link")).toHaveText([/Next area\s*Quiet systems/u]);
+    await expect(adjacent.getByRole("link", { name: "Next area Quiet systems" })).toHaveAttribute(
+      "href",
+      "/ai-roadmap/quiet-systems",
+    );
+    await expect(page.getByRole("link", { name: "Go to full roadmap" })).toHaveAttribute(
+      "href",
+      "/ai-roadmap",
+    );
 
-    await page.getByRole("link", { name: "Signal basics", exact: true }).click();
+    await page.getByRole("link", { name: "Open the module page: Signal basics" }).click();
     await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
     await expect(page).toHaveTitle(
       `Signal basics — Orbit foundations — AI Engineering Roadmap — ${name}`,
     );
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Module of Orbit foundationsSignal basics",
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Signal basics");
+    await expect(page.locator("main header")).toContainText("Module of Orbit foundations");
+    await expect(page.locator("main header")).toContainText(/Updated [A-Z][a-z]+ \d{1,2}, \d{4}/u);
+    // A module's page has no adjacent areas, only the way back to the full roadmap.
+    await expect(page.getByRole("navigation", { name: "Adjacent learning areas" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Go to full roadmap" })).toHaveAttribute(
+      "href",
+      "/ai-roadmap",
     );
     const resources = page.getByRole("list", { name: "Resources of Signal basics" });
     await expect(resources.locator("h3")).toHaveText([
@@ -429,10 +452,28 @@ test.describe("the roadmap overview", () => {
     await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
   });
 
-  test("the keyboard follows the module links and the breadcrumbs", async ({ page }) => {
-    await page.goto(`${website.url}/ai-roadmap/orbit-foundations`);
+  test("the keyboard opens a module, follows its link, the adjacent areas and the breadcrumbs", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/ai-roadmap/quiet-systems`);
     await hydrated(page);
-    const drawer = page.getByRole("link", { name: "Empty drawer", exact: true });
+    // The middle area has both neighbours.
+    const adjacent = page.getByRole("navigation", { name: "Adjacent learning areas" });
+    await expect(adjacent.getByRole("link")).toHaveText([
+      /Previous area\s*Orbit foundations/u,
+      /Next area\s*Later ideas/u,
+    ]);
+    const previous = adjacent.getByRole("link", { name: "Previous area Orbit foundations" });
+    await previous.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
+
+    await hydrated(page);
+    const item = trigger(page, "Empty drawer");
+    await item.focus();
+    await page.keyboard.press("Enter");
+    await expect(item).toHaveAttribute("aria-expanded", "true");
+    const drawer = page.getByRole("link", { name: "Open the module page: Empty drawer" });
     await drawer.focus();
     await expect(drawer).toBeFocused();
     await page.keyboard.press("Enter");
@@ -470,17 +511,20 @@ test.describe("the roadmap overview", () => {
     expect(await page.evaluate(() => "__roadmapInjected" in window)).toBe(false);
   });
 
-  test("each page describes its way from the overview as structured data at its own address", async ({
+  test("each page describes its way from the overview, itself as a course and its preview at its own address", async ({
     page,
+    request,
   }) => {
-    for (const { path, names } of [
+    for (const { path, names, partOf } of [
       {
         path: "/ai-roadmap/orbit-foundations",
         names: ["AI Engineering Roadmap", "Orbit foundations"],
+        partOf: null,
       },
       {
         path: "/ai-roadmap/orbit-foundations/signal-basics",
         names: ["AI Engineering Roadmap", "Orbit foundations", "Signal basics"],
+        partOf: "/ai-roadmap/orbit-foundations",
       },
     ]) {
       await page.goto(`${website.url}${path}`);
@@ -506,6 +550,41 @@ test.describe("the roadmap overview", () => {
         "content",
         new RegExp(`^${names.at(-1) ?? ""} — `, "u"),
       );
+
+      // The page as a course by the person, part of its area for a module.
+      const course = graphs
+        .flatMap((graph) => (graph as { "@graph"?: unknown[] })["@graph"] ?? [])
+        .find(
+          (
+            node,
+          ): node is {
+            name: string;
+            url: string;
+            provider: { name: string };
+            isPartOf?: { url: string };
+          } => (node as { "@type"?: string })["@type"] === "Course",
+        );
+      expect(course?.name, path).toBe(names.at(-1));
+      expect(new URL(course?.url ?? "").pathname, path).toBe(path);
+      expect(course?.provider.name, path).toBe(name);
+      expect(
+        course?.isPartOf === undefined ? null : new URL(course.isPartOf.url).pathname,
+        path,
+      ).toBe(partOf);
+
+      // A large preview card drawn at /og plus the page's address.
+      await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+        "content",
+        "summary_large_image",
+      );
+      const image = await page.locator('meta[property="og:image"]').getAttribute("content");
+      expect(new URL(image ?? "").pathname, path).toBe(`/og${path}`);
+      const preview = await request.get(`${website.url}/og${path}`);
+      expect(preview.status(), path).toBe(200);
+      expect(preview.headers()["content-type"], path).toBe("image/png");
+    }
+    for (const path of ["/og/ai-roadmap/no-such-area", "/og/ai-roadmap/orbit-foundations/nope"]) {
+      expect((await request.get(`${website.url}${path}`)).status(), path).toBe(404);
     }
   });
 
@@ -582,7 +661,7 @@ test.describe("the roadmap overview", () => {
           await page.setViewportSize({ width, height: 900 });
           await expectNoHorizontalScroll(page);
           await expectTouchTargets(page);
-          if (shot === "roadmap-module") await expectMarkersBesideNames(page, "h3");
+          await expectMarkersBesideNames(page, shot === "roadmap-module" ? "h3" : "h4");
           await page.screenshot({
             path: test.info().outputPath(`${shot}-${String(width)}-${scheme}.png`),
             fullPage: true,
@@ -590,9 +669,9 @@ test.describe("the roadmap overview", () => {
           if (width === 360 || width === 1280) await expectAccessible(page);
         }
       }
-      // The homepage's Now with Exploring filled, at the narrowest and the widest layout.
+      // The homepage's Now with Exploring filled, at every width.
       await page.goto(website.url);
-      for (const width of [360, 1280]) {
+      for (const width of widths) {
         await page.setViewportSize({ width, height: 900 });
         const now = page.getByRole("region", { name: "Now", exact: true });
         await now.scrollIntoViewIfNeeded();
