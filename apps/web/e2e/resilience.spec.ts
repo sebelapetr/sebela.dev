@@ -6,13 +6,19 @@
 // API's public rate limit with another.
 import { readdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 import { startProxy, type Proxy } from "./proxy";
-import { fixtureFolder, startApi, startWebsite, type Fixture, type Started } from "./stack";
+import {
+  fixtureFolder,
+  startApi,
+  startWebsite,
+  type Fixture,
+  type Started,
+  type StartedApi,
+} from "./stack";
 
 // Fixture values (e2e/fixtures/with-sparse-content/): the fictional Jordan Vale with one current
 // experience and nothing optional — no photo, email, links, CV PDF, logos, testimonials, projects,
@@ -27,9 +33,8 @@ const unavailable = "This page could not be loaded right now.";
 const notFound = "This page does not exist yet.";
 const contentRoutes = ["/", "/experience", "/services", "/cv", "/ask"] as const;
 
-// The API's end-to-end server keeps its files in the checkout's `.tmp/e2e-storage-*` folders, a
-// documented part of its interface (`apps/api/AGENTS.md`, Commands).
-const scratch = fileURLToPath(new URL("../../../.tmp", import.meta.url));
+// Each API a test starts keeps its files in a storage folder of its own (`StartedApi.storage`,
+// `e2e/stack.ts`), so a test changes only its own server's files while other files run.
 
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
@@ -95,16 +100,6 @@ async function expectKeyboardReachable(page: Page) {
   }
 }
 
-/** The API's end-to-end storage folders that exist now. */
-async function storageFolders(): Promise<Set<string>> {
-  const entries = await readdir(scratch, { withFileTypes: true }).catch(() => []);
-  return new Set(
-    entries
-      .filter((entry) => entry.isDirectory() && entry.name.startsWith("e2e-storage-"))
-      .map((entry) => join(scratch, entry.name)),
-  );
-}
-
 /** The stored copies of the fixture's files in one API's storage folder. */
 async function storedCopies(
   storage: string,
@@ -126,25 +121,22 @@ async function storedCopies(
 
 /**
  * Starts an API for the fixture and a website reading it for the enclosing block. With `gone`, the
- * API's stored copies of those fixture files are moved away once it has started — its own storage
- * folder only, the one that appeared when it started — and brought back before it stops, since
+ * API's stored copies of those fixture files are moved away once it has started — in its own storage
+ * folder only, never another running server's — and brought back before it stops, since
  * the API deletes its folder when it stops. `restore()` brings them back earlier; it runs once.
  */
 function serve(fixture: Fixture, gone: readonly string[] = []) {
-  const started: { api?: Started; website?: Started; moved: string[] } = { moved: [] };
+  const started: { api?: StartedApi; website?: Started; moved: string[] } = { moved: [] };
   const restore = async () => {
     const moved = started.moved;
     started.moved = [];
     for (const path of moved) await rename(`${path}.away`, path);
   };
   test.beforeAll(async () => {
-    const before = await storageFolders();
     started.api = await startApi(fixture);
     started.website = await startWebsite(started.api.url);
     if (gone.length === 0) return;
-    const own = [...(await storageFolders())].filter((folder) => !before.has(folder));
-    expect(own).toHaveLength(1);
-    const stored = await storedCopies(own[0] ?? "", fixture, gone);
+    const stored = await storedCopies(started.api.storage, fixture, gone);
     expect(stored.length).toBeGreaterThanOrEqual(gone.length);
     for (const path of stored) {
       await rename(path, `${path}.away`);

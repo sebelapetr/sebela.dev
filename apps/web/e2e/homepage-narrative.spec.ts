@@ -264,8 +264,11 @@ test.describe("the homepage's narrative read from the API", () => {
       expect(response.status(), path).toBe(200);
     }
     // Every in-page target the links name is shown on a direct load (a closed experience opens).
+    // Leaving the page first makes each one a load: going from one anchor of `/experience` to
+    // another only changes the hash, and before hydration Next restores the previous address.
     for (const href of new Set(hrefs.filter((href) => href.includes("#")))) {
       const id = href.split("#")[1] ?? "";
+      await page.goto("about:blank");
       await page.goto(`${website.url}${href}`);
       await expect(page.locator(`[id="${id}"]`), href).toBeVisible();
     }
