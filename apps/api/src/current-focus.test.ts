@@ -325,11 +325,17 @@ describe("the current-focus API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createCurrentFocus", method: "POST", path: "/v1/current-focus" },
+      {
+        operationId: "createCurrentFocus",
+        method: "POST",
+        path: "/v1/current-focus",
+        change: { domain: "current-focus", record: "eval-harness", action: "created" },
+      },
       {
         operationId: "deleteCurrentFocus",
         method: "DELETE",
         path: "/v1/current-focus/eval-harness",
+        change: { domain: "current-focus", record: "eval-harness", action: "deleted" },
       },
     ]);
     expect((await request("/v1/current-focus/eval-harness")).status).toBe(404);

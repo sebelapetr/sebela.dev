@@ -342,8 +342,18 @@ describe("the exploration API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createExploration", method: "POST", path: "/v1/explorations" },
-      { operationId: "deleteExploration", method: "DELETE", path: "/v1/explorations/agent-lab" },
+      {
+        operationId: "createExploration",
+        method: "POST",
+        path: "/v1/explorations",
+        change: { domain: "exploration", record: "agent-lab", action: "created" },
+      },
+      {
+        operationId: "deleteExploration",
+        method: "DELETE",
+        path: "/v1/explorations/agent-lab",
+        change: { domain: "exploration", record: "agent-lab", action: "deleted" },
+      },
     ]);
     expect((await request("/v1/explorations/agent-lab")).status).toBe(404);
     expect((await request("/v1/technologies/postgres")).status).toBe(200);

@@ -360,11 +360,17 @@ describe("the testimonial API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createTestimonial", method: "POST", path: "/v1/testimonials" },
+      {
+        operationId: "createTestimonial",
+        method: "POST",
+        path: "/v1/testimonials",
+        change: { domain: "testimonial", record: "dana-on-routing", action: "created" },
+      },
       {
         operationId: "deleteTestimonial",
         method: "DELETE",
         path: "/v1/testimonials/dana-on-routing",
+        change: { domain: "testimonial", record: "dana-on-routing", action: "deleted" },
       },
     ]);
     expect((await request("/v1/testimonials/dana-on-routing")).status).toBe(404);

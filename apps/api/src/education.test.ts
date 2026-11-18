@@ -323,9 +323,24 @@ describe("the education API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createEducation", method: "POST", path: "/v1/education" },
-      { operationId: "updateEducation", method: "PATCH", path: "/v1/education/harbour-tech" },
-      { operationId: "deleteEducation", method: "DELETE", path: "/v1/education/harbour-tech" },
+      {
+        operationId: "createEducation",
+        method: "POST",
+        path: "/v1/education",
+        change: { domain: "education", record: "harbour-tech", action: "created" },
+      },
+      {
+        operationId: "updateEducation",
+        method: "PATCH",
+        path: "/v1/education/harbour-tech",
+        change: { domain: "education", record: "harbour-tech", action: "updated" },
+      },
+      {
+        operationId: "deleteEducation",
+        method: "DELETE",
+        path: "/v1/education/harbour-tech",
+        change: { domain: "education", record: "harbour-tech", action: "deleted" },
+      },
     ]);
     expect((await request("/v1/education/harbour-tech")).status).toBe(404);
   });

@@ -3,6 +3,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { every } from "hono/combine";
 import { z } from "zod";
 
+import type { ContentChange } from "@sebela/contracts";
 import type { MediaService, ProfileService, Services } from "@sebela/services";
 
 import type { ApiConfig } from "./config.js";
@@ -31,9 +32,16 @@ export interface WriteEvent {
   readonly operationId: string;
   readonly method: string;
   readonly path: string;
+  /** The content record the write changed. */
+  readonly change: ContentChange;
 }
 
 export type WriteNotifier = (event: WriteEvent) => Promise<void>;
+
+// Declared, not yet implemented: the change a write route made.
+const notImplementedChange = (route: RouteDocumentation): ContentChange => {
+  throw new Error(`Not implemented: ${route.operationId}`);
+};
 
 export interface AppDependencies {
   readonly services: Pick<Services, "profile" | "apiKeys" | "media">;
@@ -252,7 +260,12 @@ export function createApp(dependencies: AppDependencies): Api {
     app.on(route.method, route.path, guard(route), async (c) => {
       const result = await route.handle({ body: c.get("body"), params: c.get("params") });
       if (route.method !== "GET") {
-        await notify({ operationId: route.operationId, method: route.method, path: c.req.path });
+        await notify({
+          operationId: route.operationId,
+          method: route.method,
+          path: c.req.path,
+          change: notImplementedChange(route),
+        });
       }
       if (route.response.location) {
         c.header("Location", fillLocation(route.response.location, result));

@@ -253,8 +253,18 @@ describe("the technology and topic catalog API", () => {
       expect(deleted.status).toBe(204);
       expect(await deleted.text()).toBe("");
       expect(events).toEqual([
-        { operationId: "createTechnology", method: "POST", path: "/v1/technologies" },
-        { operationId: "deleteTechnology", method: "DELETE", path: "/v1/technologies/typescript" },
+        {
+          operationId: "createTechnology",
+          method: "POST",
+          path: "/v1/technologies",
+          change: { domain: "technology", record: "typescript", action: "created" },
+        },
+        {
+          operationId: "deleteTechnology",
+          method: "DELETE",
+          path: "/v1/technologies/typescript",
+          change: { domain: "technology", record: "typescript", action: "deleted" },
+        },
       ]);
       expect((await request("/v1/technologies/typescript")).status).toBe(404);
     });
