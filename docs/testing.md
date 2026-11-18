@@ -72,7 +72,7 @@ There is one test that walks every route of the API and asserts: each write rout
 
 ## Website browser tests
 
-The website's Playwright tests (`apps/web/e2e/`, `pnpm test:e2e`) read a real API, never a mock: the API's end-to-end server (`apps/api/src/cli/e2e-server.ts`) creates a temporary database, migrates it, loads a small fictional seed folder from `apps/web/e2e/fixtures/` with its own temporary local storage, and drops both when it stops. The demo seed and the checkout's database are never used. They cover behaviour (content and links, the missing-photo fallback, the unavailable state and its retry, keyboard order), automated accessibility (axe), touch targets and no horizontal scroll, and take the screenshots at 360, 768 and 1280 px in light and dark mode that the visual review uses. The complete containerised stack has its own browser step against the website container (`pnpm test:web-stack`, CI below), which `pnpm test:e2e` leaves out. Details and prerequisites: `apps/web/AGENTS.md`, Tests.
+> > > > > > > origin/phase/03-web
 
 ## Consumer contract tests
 

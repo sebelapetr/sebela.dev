@@ -1,6 +1,5 @@
 import { readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
@@ -14,6 +13,7 @@ import {
   startApi,
   startWebsite,
   type Started,
+  type StartedApi,
 } from "./stack";
 
 // Fixture values (e2e/fixtures/*): fictional people and placeholder images for these tests only.
@@ -23,9 +23,8 @@ const SITE = "https://site.example.test";
 const portraitAlt = /grey placeholder portrait/u;
 const fernwayAlt = "The Fernway Logistics logo: an arrow of three grey lines.";
 const portraitPath = join(fixtureFolder("with-photo"), "files", "portrait.png");
-// The API's end-to-end server keeps its files in the checkout's `.tmp/e2e-storage-*` folders, a
-// documented part of its interface (`apps/api/AGENTS.md`, Commands).
-const scratch = fileURLToPath(new URL("../../../.tmp", import.meta.url));
+// Each API a test starts keeps its files in a storage folder of its own (`StartedApi.storage`,
+// `e2e/stack.ts`), so a test changes only its own server's files while other files run.
 
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
@@ -75,17 +74,13 @@ function pngSize(body: Buffer): { readonly width: number; readonly height: numbe
 }
 
 /** The stored copies of a fixture file in the API's end-to-end storage folders. */
-async function storedCopies(fixtureFile: string): Promise<string[]> {
+async function storedCopies(storage: string, fixtureFile: string): Promise<string[]> {
   const expected = await readFile(fixtureFile);
   const found: string[] = [];
-  for (const root of await readdir(scratch, { withFileTypes: true })) {
-    if (!root.isDirectory() || !root.name.startsWith("e2e-storage-")) continue;
-    const folder = join(scratch, root.name);
-    for (const entry of await readdir(folder, { withFileTypes: true, recursive: true })) {
-      if (!entry.isFile()) continue;
-      const path = join(entry.parentPath, entry.name);
-      if ((await readFile(path)).equals(expected)) found.push(path);
-    }
+  for (const entry of await readdir(storage, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    if ((await readFile(path)).equals(expected)) found.push(path);
   }
   return found;
 }
@@ -283,7 +278,7 @@ test.describe("organization logos through the optimizer", () => {
 });
 
 test.describe("an original that is gone", () => {
-  let api: Started;
+  let api: StartedApi;
   let website: Started;
   let stored: string[] = [];
 
@@ -291,7 +286,7 @@ test.describe("an original that is gone", () => {
     // A new API stores the portrait under a new key, so no optimized copy of it exists yet.
     api = await startApi("with-photo");
     website = await startWebsite(api.url);
-    stored = await storedCopies(portraitPath);
+    stored = await storedCopies(api.storage, portraitPath);
     expect(stored.length).toBeGreaterThan(0);
     for (const path of stored) await rename(path, `${path}.away`);
   });

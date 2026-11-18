@@ -7,7 +7,9 @@
 // It takes the usual API settings from the environment (`.env.example`), except the database
 // name, the storage folder and the storage environment, which are its own. When API_E2E_KEY_FILE
 // names a file, it creates an API key on its temporary database and writes it there (mode 0600)
-// for tests that write content through the private routes. On SIGTERM or SIGINT it stops, drops the
+// for tests that write content through the private routes. When API_E2E_STORAGE_ROOT names a
+// folder, it stores its files there instead of a new temporary folder below the checkout's `.tmp/`,
+// so the caller knows which folder is this server's. On SIGTERM or SIGINT it stops, drops the
 // database and removes the folder.
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -40,7 +42,12 @@ async function main() {
   // A clean checkout has no `.tmp/` yet (it is git-ignored), so create it before the temporary folder.
   const scratch = resolve("../../.tmp");
   await mkdir(scratch, { recursive: true });
-  const storageRoot = await mkdtemp(join(scratch, "e2e-storage-"));
+  const givenRoot = process.env["API_E2E_STORAGE_ROOT"];
+  const storageRoot =
+    givenRoot === undefined || givenRoot === ""
+      ? await mkdtemp(join(scratch, "e2e-storage-"))
+      : resolve(givenRoot);
+  await mkdir(storageRoot, { recursive: true });
   const cleanUp = async () => {
     await database.drop();
     await rm(storageRoot, { recursive: true, force: true });
