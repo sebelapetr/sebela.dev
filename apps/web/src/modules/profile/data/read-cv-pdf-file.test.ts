@@ -218,6 +218,63 @@ describe("readCvPdfFile", () => {
     expect(requests).toEqual([`${api}/v1/cv`, url]);
   });
 
+  describe("next to the API in a container", () => {
+    // The API names its files on its public address; the website's server reads them internally.
+    const api = "http://api";
+    const media = "http://media.example.test/v1/media/files/development/feat-1";
+    const read = "http://api/v1/media/files/development/feat-1";
+    const name = `${PDF_ID}.pdf`;
+
+    function containerNetwork(url: string) {
+      const requests: string[] = [];
+      const answer = (request: Request): Promise<Response> => {
+        requests.push(request.url);
+        if (request.url === `${read}/${name}`) return Promise.resolve(pdfFile());
+        if (request.url === `${api}/v1/cv`) {
+          return Promise.resolve(json(cv({ cvPdf: pdf({ url }) })));
+        }
+        throw new Error(`unexpected request to ${request.url}`);
+      };
+      const client = createApiClient({ baseUrl: api, fetch: answer });
+      const fetchFile = (input: string, init?: RequestInit) => answer(new Request(input, init));
+      return { client, fetchFile, requests };
+    }
+
+    it("reads a file below the public media base from the internal read address", async () => {
+      const { client, fetchFile, requests } = containerNetwork(`${media}/${name}`);
+
+      expect(
+        await readCvPdfFile(client, {
+          apiBaseUrl: api,
+          mediaRead: { baseUrl: media, readBaseUrl: read },
+          fetch: fetchFile,
+        }),
+      ).toMatchObject({ status: "ready" });
+      expect(requests).toEqual([`${api}/v1/cv`, `${read}/${name}`]);
+    });
+
+    it.each([
+      [
+        "another worktree's folder",
+        `http://media.example.test/v1/media/files/development/x/${name}`,
+      ],
+      ["a nested folder", `${media}/nested/${name}`],
+      ["traversal", `${media}/../x/${name}`],
+      ["another host", `http://other.example.test/v1/media/files/development/feat-1/${name}`],
+    ])("never reads a public plain http address from %s", async (_label, url) => {
+      const { client, fetchFile, requests } = containerNetwork(url);
+
+      expect(
+        await readCvPdfFile(client, {
+          apiBaseUrl: api,
+          mediaRead: { baseUrl: media, readBaseUrl: read },
+          fetch: fetchFile,
+        }),
+      ).toEqual({ status: "unavailable" });
+      expect(requests).toEqual([`${api}/v1/cv`]);
+    });
+  });
+
   it("does not follow a redirect from the file's address", async () => {
     const { client, fetchFile, requests } = network({
       cv: () => json(cv()),

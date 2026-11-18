@@ -114,7 +114,7 @@ function isLocalHost(hostname: string): boolean {
  * `readWebConfig`). Private addresses are allowed only when the base itself is one, as in a local
  * development or test run. One quality, WebP only and the widths the site renders.
  */
-export function imageSettings(env: Readonly<Record<string, string | undefined>>): ImageConfig {
+export function imageSettings(env: Readonly<Record<string, string | undefined>> = {}): ImageConfig {
   const value = env["WEB_MEDIA_BASE_URL"];
   const media = value === undefined ? "missing" : parseMediaBase(value);
   const valid = typeof media !== "string";
@@ -140,4 +140,16 @@ export function imageSettings(env: Readonly<Record<string, string | undefined>>)
     deviceSizes: [360, 480, 640, 750],
     imageSizes: [48, 64, 96, 128, 160, 256, 320],
   };
+}
+
+export function mediaFileName(url: string, base: string): string | null {
+  throw new Error(`not implemented: ${url} ${base}`);
+}
+
+export function isImageFileName(name: string): boolean {
+  throw new Error(`not implemented: ${name}`);
+}
+
+export function mediaPath(name: string): string {
+  throw new Error(`not implemented: ${name}`);
 }

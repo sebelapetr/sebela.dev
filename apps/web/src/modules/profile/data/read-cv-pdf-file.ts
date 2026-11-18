@@ -19,6 +19,7 @@ export interface ReadCvPdfFileOptions {
    * this origin, where the API serves the files of its local storage.
    */
   readonly apiBaseUrl: string;
+  readonly mediaRead?: { readonly baseUrl: string; readonly readBaseUrl: string };
   /** How long the whole read may take, the CV and the file together; 15 seconds by default. */
   readonly timeoutMs?: number;
   /** How the file is fetched from its address; the global `fetch` by default. */

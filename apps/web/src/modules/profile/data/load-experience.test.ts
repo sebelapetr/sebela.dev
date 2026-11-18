@@ -412,7 +412,7 @@ describe("loadExperience", () => {
           [
             LOGO_ID,
             {
-              url: "https://media.example.test/files/test/logo.png",
+              url: "/media/logo.png",
               altText: "The fictional logo of Fictional Org.",
               width: 96,
               height: 48,
@@ -421,7 +421,7 @@ describe("loadExperience", () => {
           [
             OTHER_LOGO_ID,
             {
-              url: "https://media.example.test/files/test/b.webp",
+              url: "/media/b.webp",
               altText: "",
               width: 64,
               height: 64,
@@ -565,7 +565,7 @@ describe("loadExperience", () => {
           [
             PHOTO_ID,
             {
-              url: "https://media.example.test/files/test/mira.png",
+              url: "/media/mira.png",
               altText: "An illustrated portrait of Mira Example.",
               width: 160,
               height: 160,
@@ -574,7 +574,7 @@ describe("loadExperience", () => {
           [
             OTHER_PHOTO_ID,
             {
-              url: "https://media.example.test/files/test/b.webp",
+              url: "/media/b.webp",
               altText: "",
               width: 160,
               height: 160,

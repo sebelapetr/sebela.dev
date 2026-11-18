@@ -16,6 +16,7 @@ export interface WebConfig {
    * files directly below it.
    */
   readonly mediaBaseUrl: string;
+  readonly mediaReadBaseUrl: string;
   /**
    * The content cache's fallback revalidation interval in milliseconds, independent of
    * invalidation notifications: `WEB_CONTENT_REVALIDATE_SECONDS`, 60 seconds when unset or empty.
@@ -132,6 +133,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     apiBaseUrl: result.data.WEB_API_BASE_URL,
     siteOrigin: result.data.WEB_SITE_ORIGIN,
     mediaBaseUrl: result.data.WEB_MEDIA_BASE_URL,
+    mediaReadBaseUrl: "",
     contentRevalidateMs: result.data.WEB_CONTENT_REVALIDATE_SECONDS,
   };
 }
