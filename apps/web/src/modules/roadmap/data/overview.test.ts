@@ -10,6 +10,7 @@ import type {
 
 import {
   estimateLabel,
+  findRoadmapArea,
   formatLastUpdated,
   resourceTypeLabel,
   romanNumeral,
@@ -371,5 +372,22 @@ describe("safeLink", () => {
     "ftp://example.test/file",
   ])("drops %s", (link) => {
     expect(safeLink(link)).toBeNull();
+  });
+});
+
+describe("findRoadmapArea", () => {
+  const tree = roadmap([area("first", { name: "First" }), area("second", { name: "Second" })]);
+
+  it("finds an area by its slug with its name and number in the API's order", () => {
+    expect(findRoadmapArea(tree, "second")).toEqual({
+      slug: "second",
+      name: "Second",
+      order: "2.",
+    });
+  });
+
+  it("finds nothing for a slug no area has", () => {
+    expect(findRoadmapArea(tree, "unknown")).toBeNull();
+    expect(findRoadmapArea(roadmap([]), "first")).toBeNull();
   });
 });

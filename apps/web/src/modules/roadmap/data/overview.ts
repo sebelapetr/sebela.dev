@@ -216,3 +216,15 @@ export function safeLink(link: string | null): string | null {
   const { protocol } = new URL(link);
   return protocol === "https:" || protocol === "http:" ? link : null;
 }
+
+/** An area as its own page names it: slug, name and its number in the API's order. */
+export interface RoadmapAreaHeading {
+  readonly slug: string;
+  readonly name: string;
+  readonly order: string;
+}
+
+/** The area with this slug, or null when no area has it (the page is then not found). */
+export function findRoadmapArea(roadmap: Roadmap, slug: string): RoadmapAreaHeading | null {
+  throw new Error(`not implemented: ${String(roadmap.areas.length)} ${slug}`);
+}
