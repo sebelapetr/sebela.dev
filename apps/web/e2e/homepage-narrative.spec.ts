@@ -173,21 +173,19 @@ test.describe("the homepage's narrative read from the API", () => {
     await expect(page.locator("#independent-rd")).toBeInViewport();
   });
 
-  test("leads from Now to the AI Roadmap's placeholder and back to the site", async ({ page }) => {
+  test("leads from Now to the AI Roadmap and back to the site", async ({ page }) => {
     await page.goto(website.url);
     await hydrated(page);
     await region(page, "Now").getByRole("link", { name: "AI Roadmap" }).click();
     await expect(page).toHaveURL(/\/ai-roadmap$/u);
-    await expect(page).toHaveTitle("AI Roadmap");
+    await expect(page).toHaveTitle("AI Engineering Roadmap — Casey Morrow");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "The AI Roadmap is not published yet.",
+      "AI Engineering Roadmap for Experienced Developers",
     );
+    // The fixture has no roadmap areas: the overview says so instead of an empty tree.
+    await expect(page.getByRole("main")).toContainText("No roadmap areas are published yet.");
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/u);
-    await expect(page.getByRole("link", { name: "View my experience" })).toHaveAttribute(
-      "href",
-      "/experience",
-    );
-    await page.getByRole("link", { name: "Back to the homepage" }).click();
+    await page.getByRole("banner").getByRole("link", { name: "Casey Morrow" }).click();
     await expect(page).toHaveURL(`${website.url}/`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });

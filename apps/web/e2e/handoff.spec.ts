@@ -267,9 +267,7 @@ test.describe("a recruiter", () => {
 test.describe("an evaluator", () => {
   const site = serveFixture("with-experience");
 
-  test("follows the selected work, the independent R&D and the AI Roadmap's placeholder", async ({
-    page,
-  }) => {
+  test("follows the selected work, the independent R&D and the AI Roadmap", async ({ page }) => {
     await page.goto(site.url());
     await hydrated(page);
     await page.getByRole("link", { name: "Read the case study: Clinic scheduling" }).click();
@@ -289,9 +287,11 @@ test.describe("an evaluator", () => {
 
     await page.getByRole("banner").getByRole("link", { name: "AI Roadmap" }).click();
     await expect(page).toHaveURL(/\/ai-roadmap$/u);
+    // The fixture has no roadmap areas: the overview says so instead of an empty tree.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "The AI Roadmap is not published yet.",
+      "AI Engineering Roadmap for Experienced Developers",
     );
+    await expect(page.getByRole("main")).toContainText("No roadmap areas are published yet.");
   });
 });
 
