@@ -34,7 +34,8 @@ Do not change code outside your area unless the issue requires it; if it does, s
    - The website reaches data only through the public API routes. It never imports `@sebela/db` or `@sebela/services` and never holds an API key.
 3. Make small commits in Conventional Commits form. Where test-first is mandatory, commit the failing test before the implementation.
 4. Update the documentation in the same branch when you change behaviour or structure.
-5. Before you finish, run lint, typecheck, tests and build for what you changed. All must be green.
+5. Before you finish, run lint, typecheck, unit tests and build for what you changed. All must be green.
+6. Browser tests: run only the spec files your change adds or touches (`pnpm --filter @sebela/web test:e2e e2e/<name>.spec.ts` after building), and while you fix one failure only that test (`-g "<title>"`). Never run the whole suite; the reviewer runs it once and CI on every push (`docs/testing.md`, Browser tests by role).
 
 ## What you hand back
 
