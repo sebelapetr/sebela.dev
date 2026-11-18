@@ -10,7 +10,7 @@ export const routes = {
   services: "/services",
   experience: "/experience",
   cv: "/cv",
-  /** A short placeholder until the AI Roadmap arrives in phase 4. */
+  /** The AI Engineering Roadmap overview; its areas and sections live below it. */
   aiRoadmap: "/ai-roadmap",
   contact: "/#contact",
   /** The chat; a conversation is `/ask?c=<id>` (the chat module builds it). */
