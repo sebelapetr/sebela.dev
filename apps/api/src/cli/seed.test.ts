@@ -19,6 +19,7 @@ import {
   OrganizationListSchema,
   PersonSchema,
   ProjectListSchema,
+  RoadmapCurrentSchema,
   RoadmapSchema,
   ServiceListSchema,
   TechnologyListSchema,
@@ -144,6 +145,12 @@ describe("the seed CLI", () => {
       expect(resources.some(({ estimatedMinutes }) => estimatedMinutes === null)).toBe(true);
       expect(resources.some(({ topics }) => topics.length > 0)).toBe(true);
       expect(result.out).toMatch(/roadmap resources: \d+ created, 0 updated/);
+      // Detail pages have Markdown to render, and the homepage has current learning to show.
+      expect(modules.some(({ description }) => description !== null)).toBe(true);
+      expect(resources.some(({ description }) => description !== null)).toBe(true);
+      const current = await read("/v1/roadmap/current", RoadmapCurrentSchema);
+      expect(current.areas.length).toBeGreaterThanOrEqual(2);
+      expect(current.areas.every(({ modules: inProgress }) => inProgress.length > 0)).toBe(true);
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();
