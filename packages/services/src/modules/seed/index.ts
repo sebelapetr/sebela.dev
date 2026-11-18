@@ -59,9 +59,9 @@ export interface SeedReport {
  *
  * - Records are matched by slug, the person as the single person and a case study by its project's
  *   slug. A roadmap module or resource is matched by its own slug, so a rerun moves it to the parent
- *   the seed names instead of duplicating it. A matched record is overwritten with the seed's values, so a rerun undoes edits to the
- *   records the seed names; records and case studies it does not name are kept. A rerun of the same
- *   folder creates nothing new.
+ *   the seed names instead of duplicating it. A matched record is overwritten with the seed's
+ *   values, so a rerun undoes edits to the records the seed names; records and case studies it does
+ *   not name are kept. A rerun of the same folder creates nothing new.
  * - Every data file is optional; an absent one leaves its kind untouched.
  * - Attached files are reused by content, so an unchanged file is never stored twice. Media a seed
  *   record stopped referring to is deleted after the load unless anything still uses it.
