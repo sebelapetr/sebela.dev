@@ -12,6 +12,8 @@ Canonical domain terms for this repository. Use these names in code, schemas, AP
 | **Learning diary**         | The public record of what was studied when: diary days with notes and time entries.                                                    | “Journal”, “log” as a page name                                    |
 | **Diary day**              | One Europe/Prague calendar date of the learning diary, with optional notes and its time entries.                                       | A UTC date                                                         |
 | **Time entry**             | One studied interval on a resource within one diary day; its duration is derived from its endpoints.                                   | “Work log”; a stored duration                                      |
+| **Bookshelf**              | The public list of books read for the AI Roadmap, in priority order, each with a status derived from its dates.                        | “Library”, “reading list” as a page name                           |
+| **Book**                   | One bookshelf entry; a resource of type `book` may link it, and its reading time is the time logged on that resource.                  | A resource itself; a separate reading-time log                     |
 | **Profile**                | The structured public content about the person and their professional work, stored under the `profile` schema.                         | “User profile” when referring to this content model                |
 | **Experience**             | A period in a professional role at an organization; it belongs on the career timeline.                                                 | “Job” as the entity name                                           |
 | **Project**                | Work delivered within an experience and described through its problem, contribution and result.                                        | “Exploration” for delivered work                                   |
@@ -45,7 +47,7 @@ Canonical domain terms for this repository. Use these names in code, schemas, AP
 - An **Experience** contains delivered **Projects**; a **Case study** may explain one Project in depth.
 - An **Exploration** is outside the Experience timeline and is never presented as delivered work. It can support a **Service** as evidence while retaining its status.
 - **Topics** connect Profile content to the AI Engineering Roadmap; **Technologies** describe tools and languages.
-- The AI Roadmap is ordered **Areas** → **Modules** → **Resources**; a resource links **Topics**. **Roadmap progress** comes only from resource statuses. **Time entries** log time on **Resources** and are grouped into **Diary days**; logged time is not progress.
+- The AI Roadmap is ordered **Areas** → **Modules** → **Resources**; a resource links **Topics**. **Roadmap progress** comes only from resource statuses. **Time entries** log time on **Resources** and are grouped into **Diary days**; logged time is not progress. A resource of type `book` may link one **Book**, whose reading time is the time logged on that resource.
 - The **CV page** and **CV PDF** are separate outputs with separate maintenance paths.
 
 ## Updating this glossary
