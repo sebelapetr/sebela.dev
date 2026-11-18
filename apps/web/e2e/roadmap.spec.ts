@@ -61,6 +61,31 @@ async function expectTouchTargets(page: Page) {
   for (const { target, height } of heights) expect(height, target).toBeGreaterThanOrEqual(44);
 }
 
+// No marker on the rail covers the text of its row: every visible marker ends left of where its
+// area's, module's or resource's name starts.
+async function expectMarkersBesideNames(page: Page) {
+  const rows = await page.locator('main [data-slot="timeline-marker"]').evaluateAll((markers) =>
+    markers
+      .filter((marker) => marker.checkVisibility())
+      .map((marker) => {
+        const item = marker.closest("li");
+        const name = item?.querySelector(
+          ":scope > div > h4, :scope > div > :is(h2, h3) > button > span:not([data-slot])",
+        );
+        if (name === null || name === undefined) return { row: marker.outerHTML, gap: -1 };
+        const range = document.createRange();
+        range.selectNodeContents(name);
+        const text = range.getClientRects()[0];
+        return {
+          row: name.textContent.slice(0, 60),
+          gap: (text?.left ?? 0) - marker.getBoundingClientRect().right,
+        };
+      }),
+  );
+  expect(rows.length).toBeGreaterThan(0);
+  for (const { row, gap } of rows) expect(gap, row).toBeGreaterThanOrEqual(4);
+}
+
 /** Waits until the page is hydrated, so the timeline's items open and close. */
 async function hydrated(page: Page) {
   await page.waitForFunction(
@@ -249,6 +274,7 @@ test.describe("the roadmap overview", () => {
         await page.setViewportSize({ width, height: 900 });
         await expectNoHorizontalScroll(page);
         await expectTouchTargets(page);
+        await expectMarkersBesideNames(page);
         await page.screenshot({
           path: test.info().outputPath(`roadmap-${String(width)}-${scheme}.png`),
           fullPage: true,
