@@ -51,6 +51,9 @@ export default defineConfig({
         WEB_MEDIA_READ_BASE_URL: "",
         WEB_INVALIDATION_SECRET: "",
         WEB_CONTENT_REVALIDATE_SECONDS: "",
+        // No analytics, whatever the checkout's environment says (e2e/analytics.spec.ts sets it).
+        WEB_ANALYTICS_SCRIPT_URL: "",
+        WEB_ANALYTICS_WEBSITE_ID: "",
       },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },

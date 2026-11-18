@@ -181,3 +181,68 @@ export function readInvalidationSecret(env: Readonly<Record<string, string | und
   }
   return value;
 }
+
+/**
+ * The optional analytics integration's settings: an Umami-compatible tracker script and the
+ * website's identifier on that service. Both come from the server environment at request time.
+ */
+export interface AnalyticsConfig {
+  /** The tracker script's address: https, or plain http only on a plain http site. */
+  readonly scriptUrl: string;
+  /** The website's identifier on the analytics service, a UUID in lower case. */
+  readonly websiteId: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+function analyticsScriptProblem(value: string, siteOrigin: string | undefined): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "must be an https address";
+  }
+  // A plain http tracker would be blocked as mixed content on an https site; local and test sites
+  // run on plain http and use a local stand-in.
+  const sitePlainHttp = siteOrigin?.startsWith("http:") === true;
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && sitePlainHttp)) {
+    return "must be an https address";
+  }
+  if (url.username !== "" || url.password !== "") return "must not contain credentials";
+  if (value.includes("?") || value.includes("#")) return "must not have a query or a fragment";
+  if (url.pathname === "/") return "must name the tracker script, not only a host";
+  return null;
+}
+
+/**
+ * Reads the optional analytics settings (`WEB_ANALYTICS_SCRIPT_URL`, `WEB_ANALYTICS_WEBSITE_ID`)
+ * from an environment such as `process.env`. Null when both are unset or empty: analytics is off.
+ * Separate from `readWebConfig`, so a wrong analytics setting never stops a page. Throws an error
+ * naming every invalid variable and what is wrong with it, never its value, when only one is set
+ * or either is unusable.
+ */
+export function readAnalyticsConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): AnalyticsConfig | null {
+  const scriptUrl = env["WEB_ANALYTICS_SCRIPT_URL"] ?? "";
+  const websiteId = env["WEB_ANALYTICS_WEBSITE_ID"] ?? "";
+  if (scriptUrl === "" && websiteId === "") return null;
+  const problems: string[] = [];
+  if (scriptUrl === "") {
+    problems.push("WEB_ANALYTICS_SCRIPT_URL is required with WEB_ANALYTICS_WEBSITE_ID");
+  } else {
+    const problem = analyticsScriptProblem(scriptUrl, env["WEB_SITE_ORIGIN"]);
+    if (problem !== null) problems.push(`WEB_ANALYTICS_SCRIPT_URL ${problem}`);
+  }
+  if (websiteId === "") {
+    problems.push("WEB_ANALYTICS_WEBSITE_ID is required with WEB_ANALYTICS_SCRIPT_URL");
+  } else if (!UUID.test(websiteId)) {
+    problems.push("WEB_ANALYTICS_WEBSITE_ID must be a UUID");
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `Invalid website configuration (documented in .env.example): ${problems.join("; ")}`,
+    );
+  }
+  return { scriptUrl: new URL(scriptUrl).href, websiteId: websiteId.toLowerCase() };
+}

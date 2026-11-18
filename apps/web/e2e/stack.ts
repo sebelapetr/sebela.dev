@@ -178,6 +178,8 @@ export interface WebsiteOptions {
   readonly invalidationSecret?: string;
   /** The content cache's fallback revalidation interval in seconds; the default (60) otherwise. */
   readonly contentRevalidateSeconds?: number;
+  /** The analytics settings (`WEB_ANALYTICS_*`), such as a local stand-in's; none by default. */
+  readonly analytics?: { readonly scriptUrl: string; readonly websiteId: string };
 }
 
 /** Serves the built website, reading the API at `apiBaseUrl`. */
@@ -188,6 +190,7 @@ export async function startWebsite(
     port: chosenPort,
     invalidationSecret,
     contentRevalidateSeconds,
+    analytics,
   }: WebsiteOptions = {},
 ): Promise<Started> {
   const host = required("WEB_HOST");
@@ -204,6 +207,8 @@ export async function startWebsite(
       WEB_INVALIDATION_SECRET: invalidationSecret ?? "",
       WEB_CONTENT_REVALIDATE_SECONDS:
         contentRevalidateSeconds === undefined ? "" : String(contentRevalidateSeconds),
+      WEB_ANALYTICS_SCRIPT_URL: analytics?.scriptUrl ?? "",
+      WEB_ANALYTICS_WEBSITE_ID: analytics?.websiteId ?? "",
     },
     url,
     "/favicon.ico",

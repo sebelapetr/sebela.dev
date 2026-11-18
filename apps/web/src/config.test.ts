@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readInvalidationSecret, readWebConfig } from "./config";
+import { readAnalyticsConfig, readInvalidationSecret, readWebConfig } from "./config";
 
 const SITE = { WEB_SITE_ORIGIN: "https://site.example.test" };
 const API = { WEB_API_BASE_URL: "http://api.example.test" };
@@ -268,4 +268,104 @@ describe("readInvalidationSecret", () => {
     );
     expect(readInvalidationSecret({ WEB_INVALIDATION_SECRET: "x".repeat(32) })).toHaveLength(32);
   });
+});
+
+describe("readAnalyticsConfig", () => {
+  // A fictional tracker address and website identifier, used by nothing but these tests.
+  const SCRIPT = "https://analytics.example.test/script.js";
+  const WEBSITE = "0b6e1d6c-4f3a-4c8e-9d2b-7a5f3e1c2b4a";
+  const read = (env: Record<string, string | undefined>) =>
+    readAnalyticsConfig({ ...SITE, ...env });
+  const messageOf = (env: Record<string, string | undefined>) => {
+    try {
+      read(env);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    return "";
+  };
+
+  it("reads the tracker's script address and the website identifier", () => {
+    expect(read({ WEB_ANALYTICS_SCRIPT_URL: SCRIPT, WEB_ANALYTICS_WEBSITE_ID: WEBSITE })).toEqual({
+      scriptUrl: SCRIPT,
+      websiteId: WEBSITE,
+    });
+  });
+
+  it("writes the website identifier in lower case", () => {
+    expect(
+      read({ WEB_ANALYTICS_SCRIPT_URL: SCRIPT, WEB_ANALYTICS_WEBSITE_ID: WEBSITE.toUpperCase() })
+        ?.websiteId,
+    ).toBe(WEBSITE);
+  });
+
+  it.each([
+    ["unset", {}],
+    ["empty", { WEB_ANALYTICS_SCRIPT_URL: "", WEB_ANALYTICS_WEBSITE_ID: "" }],
+  ])("turns analytics off when both settings are %s", (_label, env) => {
+    expect(read(env)).toBeNull();
+  });
+
+  it("needs nothing else of the website's configuration", () => {
+    expect(
+      readAnalyticsConfig({ WEB_ANALYTICS_SCRIPT_URL: SCRIPT, WEB_ANALYTICS_WEBSITE_ID: WEBSITE }),
+    ).toEqual({ scriptUrl: SCRIPT, websiteId: WEBSITE });
+  });
+
+  it("refuses a script address without a website identifier, and the other way round", () => {
+    expect(() => read({ WEB_ANALYTICS_SCRIPT_URL: SCRIPT })).toThrow(/WEB_ANALYTICS_WEBSITE_ID/);
+    expect(() => read({ WEB_ANALYTICS_WEBSITE_ID: WEBSITE })).toThrow(/WEB_ANALYTICS_SCRIPT_URL/);
+  });
+
+  it.each([
+    ["not an address", "analytics.example.test/script.js"],
+    ["another scheme", "ftp://analytics.example.test/script.js"],
+    ["a plain http address on an https site", "http://analytics.example.test/script.js"],
+    ["no script path", "https://analytics.example.test/"],
+    ["a query", "https://analytics.example.test/script.js?v=1"],
+    ["a fragment", "https://analytics.example.test/script.js#x"],
+  ])("refuses a script address with %s and names the variable", (_label, value) => {
+    expect(
+      messageOf({ WEB_ANALYTICS_SCRIPT_URL: value, WEB_ANALYTICS_WEBSITE_ID: WEBSITE }),
+    ).toMatch(/WEB_ANALYTICS_SCRIPT_URL/);
+  });
+
+  it("refuses credentials in the script address and does not repeat them", () => {
+    const message = messageOf({
+      WEB_ANALYTICS_SCRIPT_URL: "https://user:s3cret@analytics.example.test/script.js",
+      WEB_ANALYTICS_WEBSITE_ID: WEBSITE,
+    });
+    expect(message).toMatch(/WEB_ANALYTICS_SCRIPT_URL must not contain credentials/);
+    expect(message).not.toContain("s3cret");
+  });
+
+  it("accepts a plain http script address only on a plain http site, as in local tests", () => {
+    const local = "http://analytics.example.test/script.js";
+    expect(
+      readAnalyticsConfig({
+        WEB_SITE_ORIGIN: "http://site.example.test",
+        WEB_ANALYTICS_SCRIPT_URL: local,
+        WEB_ANALYTICS_WEBSITE_ID: WEBSITE,
+      }),
+    ).toEqual({ scriptUrl: local, websiteId: WEBSITE });
+    expect(() =>
+      readAnalyticsConfig({ WEB_ANALYTICS_SCRIPT_URL: local, WEB_ANALYTICS_WEBSITE_ID: WEBSITE }),
+    ).toThrow(/WEB_ANALYTICS_SCRIPT_URL must be an https address/);
+  });
+
+  it.each([
+    ["not an identifier", "my-website"],
+    ["markup", '0b6e1d6c-4f3a-4c8e-9d2b-7a5f3e1c2b4a"><script>'],
+    ["too short", "0b6e1d6c-4f3a-4c8e-9d2b-7a5f3e1c2b4"],
+  ])(
+    "refuses a website identifier that is %s, names the variable and not the value",
+    (_l, value) => {
+      const message = messageOf({
+        WEB_ANALYTICS_SCRIPT_URL: SCRIPT,
+        WEB_ANALYTICS_WEBSITE_ID: value,
+      });
+      expect(message).toMatch(/WEB_ANALYTICS_WEBSITE_ID must be a UUID/);
+      expect(message).not.toContain(value);
+    },
+  );
 });
