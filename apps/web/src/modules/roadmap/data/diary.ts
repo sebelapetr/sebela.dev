@@ -1,8 +1,9 @@
-import type { Diary, DiaryDay, TimeEntry } from "@sebela/api-client";
+import type { Diary, DiaryDay, DiaryEvent, TimeEntry } from "@sebela/api-client";
 
 import { bookshelfHref, roadmapHref } from "../../_shared";
 import type { RoadmapDiaryAreaName, RoadmapDiaryBookLink } from "../../profile";
 import type { RoadmapCrumb } from "./detail";
+import { eventDayOf, eventKindLabel, formatEventPeriod } from "./event-format";
 import { resourceTypeLabel, ROADMAP_PATH, safeLink } from "./overview";
 
 /** One day as the diary's list shows it. */
@@ -170,7 +171,8 @@ function totalLabel(day: DiaryDay): string | null {
 /**
  * The diary's list as the page shows it: every day in the API's order (newest first), its date in
  * words and the way to its page, its study time and sessions (none on a day with notes only) and
- * its Markdown notes. Totals are the API's derived seconds, rounded only for display.
+ * its Markdown notes, and the events covering it (a day may have nothing else). Totals are the API's
+ * derived seconds, rounded only for display; attendance at an event counts in them.
  */
 export function toDiaryList(diary: Diary): DiaryList {
   return {
@@ -181,7 +183,7 @@ export function toDiaryList(diary: Diary): DiaryList {
       total: totalLabel(day),
       sessions: sessionCount(day.entries),
       notes: day.notes,
-      events: [],
+      events: day.events.map((event) => toListEvent(event, day.date)),
     })),
   };
 }
@@ -193,7 +195,10 @@ export function toDiaryList(diary: Diary): DiaryList {
  * resource's link is kept only when it is safe. An area or module the roadmap does not name keeps
  * its slug as its name, has no link and follows the named ones in the order it first appears. A
  * session on a resource that reads a book (`books`) links to the book's page on the bookshelf.
- * Attendance at an event is counted in the day's total and sessions but has no area group.
+ * Attendance at an event counts in the day's total and sessions but has no area group: it is shown
+ * under its event instead. The day's events follow the API's order, each with its period, a link
+ * only when it is safe and its attendance by start; attendance at an event the day does not list
+ * still shows, under that event after the listed ones.
  */
 export function toDiaryDayPage(
   day: DiaryDay,
@@ -209,13 +214,51 @@ export function toDiaryDayPage(
     sessions: sessionCount(day.entries),
     notes: day.notes,
     areas: groupSessions(day.entries, areas, bookOf),
-    events: [],
+    events: groupAttendance(day),
     breadcrumbs: [
       { name: "AI Engineering Roadmap", href: ROADMAP_PATH },
       { name: DIARY_NAME, href: DIARY_PATH },
       { name: title, href: diaryDayHref(day.date) },
     ],
   };
+}
+
+function toListEvent(event: DiaryEvent, date: string): DiaryListEvent {
+  return {
+    slug: event.slug,
+    name: event.name,
+    kindLabel: eventKindLabel(event.kind),
+    dayOf: eventDayOf(date, event.startsOn, event.endsOn),
+  };
+}
+
+function toAttendance(entry: TimeEntry): DiaryAttendance {
+  return {
+    id: entry.id,
+    start: pragueTime(entry.startedAt),
+    end: pragueTime(entry.endedAt),
+    startedAt: entry.startedAt,
+    endedAt: entry.endedAt,
+    duration: formatStudyTime(entry.durationSeconds),
+  };
+}
+
+function groupAttendance(day: DiaryDay): DiaryEventGroup[] {
+  const events = new Map(day.events.map((event) => [event.slug, event]));
+  const byEvent = new Map<string, TimeEntry[]>(day.events.map((event) => [event.slug, []]));
+  for (const entry of day.entries) {
+    if (entry.event === null) continue;
+    if (!events.has(entry.event.slug)) events.set(entry.event.slug, entry.event);
+    byEvent.set(entry.event.slug, [...(byEvent.get(entry.event.slug) ?? []), entry]);
+  }
+  return [...events.values()].map((event) => ({
+    ...toListEvent(event, day.date),
+    period: formatEventPeriod(event.startsOn, event.endsOn),
+    href: safeLink(event.link),
+    sessions: [...(byEvent.get(event.slug) ?? [])]
+      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+      .map(toAttendance),
+  }));
 }
 
 /** A time entry on a resource; attendance at an event has no area or module to group under. */

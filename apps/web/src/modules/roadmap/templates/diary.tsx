@@ -8,8 +8,9 @@ import { DIARY_NAME, toDiaryList } from "../data/diary";
 /**
  * The learning diary's list under the roadmap's sub-navigation: its name and what it is, then
  * every diary day, newest first, as an editorial row — the day in words as the link to its page,
- * its study time and sessions (none on a day with notes only) and a preview of its Markdown notes,
- * rendered safely. An empty diary says so.
+ * its study time and sessions (none on a day without time), the events covering it and a preview of
+ * its Markdown notes, rendered safely. A day covered only by an event is listed like any other.
+ * An empty diary says so.
  */
 export function RoadmapDiaryTemplate({ content }: { readonly content: RoadmapDiaryContent }) {
   const list = toDiaryList(content.diary);
@@ -50,6 +51,21 @@ export function RoadmapDiaryTemplate({ content }: { readonly content: RoadmapDia
                     </p>
                   )}
                 </div>
+                {day.events.length === 0 ? null : (
+                  <ul
+                    aria-label={`Events on ${day.title}`}
+                    className="flex flex-col gap-1 text-sm text-muted-foreground"
+                  >
+                    {day.events.map((event) => (
+                      <li key={event.slug} className="wrap-anywhere">
+                        <span className="font-medium text-foreground">{event.name}</span>
+                        {" · "}
+                        {event.kindLabel}
+                        {event.dayOf === null ? null : ` · ${event.dayOf}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {day.notes === null ? null : (
                   <div className="line-clamp-6 text-base text-muted-foreground [&>*+*]:mt-3">
                     <ProseMarkdown>{day.notes}</ProseMarkdown>

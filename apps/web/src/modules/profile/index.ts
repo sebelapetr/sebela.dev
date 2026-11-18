@@ -1,7 +1,8 @@
 // The profile module: the website's read of the API's public profile, experience, services, CV
-// and AI Roadmap routes, the learning diary and the bookshelf included (and the records the Ask
-// page's answers rest on), of the current CV PDF's file and of the stored images the site serves on
-// its own media path, with the process-local content cache those reads share and its invalidation. Server-only.
+// and AI Roadmap routes, the learning diary, the bookshelf and the events included (and the
+// records the Ask page's answers rest on), of the current CV PDF's file and of the stored images
+// the site serves on its own media path, with the process-local content cache those reads share
+// and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -33,6 +34,7 @@ import {
   type RoadmapDiaryDayResult,
   type RoadmapDiaryResult,
 } from "./data/load-roadmap-diary";
+import { loadRoadmapEvents, type RoadmapEventsResult } from "./data/load-roadmap-events";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
 import { readMediaFile } from "./data/read-media-file";
@@ -77,6 +79,8 @@ export type {
   RoadmapDiaryModuleName,
   RoadmapDiaryResult,
 } from "./data/load-roadmap-diary";
+
+export type { RoadmapEventsContent, RoadmapEventsResult } from "./data/load-roadmap-events";
 
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
@@ -208,6 +212,15 @@ export const getRoadmapDiary = cache((): Promise<RoadmapDiaryResult> =>
  */
 export const getRoadmapDiaryDay = cache((date: string): Promise<RoadmapDiaryDayResult> =>
   loadRoadmapDiaryDay(apiClient(), date),
+);
+
+/**
+ * The roadmap's events for the current request: the person's header facts and every event with its
+ * topics and the API's derived attendance, newest first, read once per request (React `cache`),
+ * from the content cache. No events is ready with none.
+ */
+export const getRoadmapEvents = cache((): Promise<RoadmapEventsResult> =>
+  loadRoadmapEvents(apiClient()),
 );
 
 /**
