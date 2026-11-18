@@ -48,17 +48,88 @@ export interface LoadRoadmapDiaryOptions {
   readonly timeoutMs?: number;
 }
 
-export function loadRoadmapDiary(
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+/**
+ * Reads the learning diary's list from the API's public routes: the person and every diary day,
+ * uncached and limited in time. A person that does not exist makes the page missing; an empty
+ * diary is ready with no days; any other failed read makes it unavailable, never empty. The diary
+ * is returned as the API answered it: its order and totals are the API's, never recounted.
+ */
+export async function loadRoadmapDiary(
   client: ApiClient,
   options: LoadRoadmapDiaryOptions = {},
 ): Promise<RoadmapDiaryResult> {
-  throw new Error("not implemented", { cause: [client, options] });
+  const init = requestInit(options);
+  try {
+    const [personRead, diaryRead] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/roadmap/diary", init()),
+    ]);
+    if (personRead.data === undefined) return failedPersonRead(personRead.response);
+    if (diaryRead.data === undefined) return { status: "unavailable" };
+    return {
+      status: "ready",
+      content: {
+        name: personRead.data.name,
+        headline: personRead.data.headline,
+        diary: diaryRead.data,
+      },
+    };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
 
-export function loadRoadmapDiaryDay(
+/**
+ * Reads a diary day's page from the API's public routes: the person, the day with its notes, time
+ * entries and derived total, and the roadmap's areas and modules in order (slug and name, for the
+ * entries' grouping), uncached and limited in time. A day without a diary record, an address that
+ * is not a calendar day or a person that does not exist makes the page missing; any other failed
+ * read, the roadmap's included, makes it unavailable, never missing.
+ */
+export async function loadRoadmapDiaryDay(
   client: ApiClient,
   date: string,
   options: LoadRoadmapDiaryOptions = {},
 ): Promise<RoadmapDiaryDayResult> {
-  throw new Error("not implemented", { cause: [client, date, options] });
+  const init = requestInit(options);
+  try {
+    const [personRead, dayRead, treeRead] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/roadmap/diary/{date}", { params: { path: { date } }, ...init() }),
+      client.GET("/v1/roadmap", init()),
+    ]);
+    if (personRead.data === undefined) return failedPersonRead(personRead.response);
+    if (dayRead.data === undefined) {
+      const { status } = dayRead.response;
+      return status === 404 || status === 400 ? { status: "missing" } : { status: "unavailable" };
+    }
+    if (treeRead.data === undefined) return { status: "unavailable" };
+    return {
+      status: "ready",
+      content: {
+        name: personRead.data.name,
+        headline: personRead.data.headline,
+        day: dayRead.data,
+        areas: treeRead.data.areas.map((area) => ({
+          slug: area.slug,
+          name: area.name,
+          modules: area.modules.map(({ slug, name }) => ({ slug, name })),
+        })),
+      },
+    };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+function requestInit(options: LoadRoadmapDiaryOptions) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  return () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
+}
+
+/** A profile that does not exist yet is missing; any other failed read is unavailable. */
+function failedPersonRead(response: Response): { readonly status: "missing" | "unavailable" } {
+  return response.status === 404 ? { status: "missing" } : { status: "unavailable" };
 }

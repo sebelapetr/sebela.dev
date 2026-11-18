@@ -1,7 +1,7 @@
 // The profile module: the website's read of the API's public profile, experience, services, CV
-// and AI Roadmap routes (and the records the Ask page's answers rest on), of the current CV PDF's
-// file and of the stored images the site serves on its own media path, with the process-local
-// content cache those reads share and its invalidation. Server-only.
+// and AI Roadmap routes, the learning diary's included (and the records the Ask page's answers
+// rest on), of the current CV PDF's file and of the stored images the site serves on its own media
+// path, with the process-local content cache those reads share and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -21,6 +21,12 @@ import {
   type RoadmapAreaResult,
   type RoadmapModuleResult,
 } from "./data/load-roadmap-detail";
+import {
+  loadRoadmapDiary,
+  loadRoadmapDiaryDay,
+  type RoadmapDiaryDayResult,
+  type RoadmapDiaryResult,
+} from "./data/load-roadmap-diary";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
 import { readMediaFile } from "./data/read-media-file";
@@ -168,6 +174,25 @@ export const getRoadmapArea = cache((area: string): Promise<RoadmapAreaResult> =
 export const getRoadmapModule = cache(
   (area: string, module: string): Promise<RoadmapModuleResult> =>
     loadRoadmapModule(apiClient(), area, module),
+);
+
+/**
+ * The learning diary's list for the current request: the person's header facts and every diary day
+ * with its notes, time entries and the API's derived totals, newest first, read once per request
+ * (React `cache`), from the content cache. An empty diary is ready with no days.
+ */
+export const getRoadmapDiary = cache((): Promise<RoadmapDiaryResult> =>
+  loadRoadmapDiary(apiClient()),
+);
+
+/**
+ * A diary day's page for the current request: the person's header facts, the day with its notes,
+ * time entries and the API's derived total, and the roadmap's areas and modules in order for the
+ * entries' grouping, read once per request and date (React `cache`), from the content cache. A day
+ * without a diary record or an address that is not a calendar day is missing.
+ */
+export const getRoadmapDiaryDay = cache((date: string): Promise<RoadmapDiaryDayResult> =>
+  loadRoadmapDiaryDay(apiClient(), date),
 );
 
 /**
