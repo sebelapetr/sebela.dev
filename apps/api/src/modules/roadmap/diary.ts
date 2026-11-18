@@ -1,7 +1,7 @@
 // The learning diary's HTTP routes, private to the roadmap module and part of its routes: public
 // reads of the diary and of one Prague calendar day, and authenticated writes of a day's notes and
-// of time entries. Each write reports every diary day it changed, so the website refreshes the old
-// and the new day.
+// of time entries on a resource or an event. Each write reports every diary day it changed, so the
+// website refreshes the old and the new day.
 import {
   DiaryDateParamsSchema,
   DiaryDaySchema,
@@ -23,10 +23,12 @@ const TIME_ENTRY = "/v1/roadmap/time-entries/:id";
 
 const SESSION_RULES =
   "Give both endpoints as absolute instants with an offset, in whole seconds, the end after the " +
-  "start; an offset tells a repeated local hour apart. The session is split at each Europe/Prague " +
-  "midnight into one entry per diary day without changing its elapsed time. It must not overlap " +
-  "any logged interval on any resource, also one written at the same time (`409`); adjacent " +
-  "intervals are allowed. An unknown `resource` is refused naming the field.";
+  "start; an offset tells a repeated local hour apart. The target is exactly one `resource` " +
+  "(study time) or `event` (attendance), and attendance must fall on the event's days. The " +
+  "session is split at each Europe/Prague midnight into one entry per diary day without changing " +
+  "its elapsed time. It must not overlap any logged interval on any resource or event, also one " +
+  "written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or " +
+  "`event`, or attendance outside the event, is refused naming the field.";
 
 /** The diary days in a write result. */
 const changedDays = ({ result }: { readonly result: { readonly dates: readonly string[] } }) =>
@@ -42,8 +44,9 @@ export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
       access: "public",
       summary: "Read the learning diary",
       description:
-        "Every Europe/Prague calendar day with notes or time entries, newest first, each with its " +
-        "entries in time order and their resources. Durations and day totals are derived from the " +
+        "Every Europe/Prague calendar day with notes, time entries or an event covering it, newest " +
+        "first, each with its entries in time order and their resource or event, and the events " +
+        "whose dates cover it. An event's days add no time. Durations and day totals are derived from the " +
         "stored endpoints on every read, in actual elapsed seconds and before any rounding. An " +
         "empty diary is the valid empty `days` list.",
       response: { status: 200, description: "The diary days.", schema: DiarySchema },
@@ -57,8 +60,8 @@ export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
       access: "public",
       summary: "Read one day of the learning diary",
       description:
-        "The day's notes, its time entries and their derived total, as in the whole diary. A day " +
-        "without notes or time entries is not found.",
+        "The day's notes, its time entries, their derived total and the events covering it, as in " +
+        "the whole diary. A day without notes, time entries or a covering event is not found.",
       params: DiaryDateParamsSchema,
       response: { status: 200, description: "The diary day.", schema: DiaryDaySchema },
       errors: ["not_found"],

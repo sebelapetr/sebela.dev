@@ -21,6 +21,7 @@ import type { RoadmapService } from "@sebela/services";
 import { defineRoute, type RouteDefinition } from "../../routing.js";
 import { bookRoutes } from "./books.js";
 import { diaryRoutes } from "./diary.js";
+import { eventRoutes } from "./events.js";
 
 const TREE = "/v1/roadmap";
 const AREA_DETAIL = "/v1/roadmap/tree/:area";
@@ -44,7 +45,10 @@ const RESOURCE = "/v1/roadmap/resources/:slug";
  * public reads of the diary and one Prague calendar day and authenticated writes of a day's notes
  * and of time entries, refused with `conflict` on an overlap. The bookshelf adds public reads of
  * every book and of one book, with derived status and reading time, and authenticated writes; a
- * resource of type `book` links a book through its `book` field.
+ * resource of type `book` links a book through its `book` field. The attended events add public
+ * reads of every event and of one event and authenticated writes; attendance is a time entry with
+ * an `event` target, a date edit that would strand it or deleting an event with it is a
+ * `conflict`, and an event shows on every diary day of its range without adding time.
  */
 export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
   return [
@@ -318,5 +322,6 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
     }),
     ...diaryRoutes(roadmap),
     ...bookRoutes(roadmap),
+    ...eventRoutes(roadmap),
   ];
 }

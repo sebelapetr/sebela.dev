@@ -137,8 +137,9 @@ describe("the roadmap events API", () => {
     expect(created.status).toBe(201);
     expect(created.headers.get("location")).toBe("/v1/roadmap/events/fictional-summit");
     const body = RoadmapEventSchema.parse(await created.json());
-    expect(body).toMatchObject({ ...summit, online: false, topics: [], attendanceSeconds: 0 });
-    expect(body.topics).toEqual([]);
+    const { topics, ...fields } = summit;
+    expect(body).toMatchObject({ ...fields, online: false, attendanceSeconds: 0 });
+    expect(body.topics.map(({ slug }) => slug)).toEqual(topics);
 
     const minimal = await post("/v1/roadmap/events", meetup);
     expect(minimal.status).toBe(201);
