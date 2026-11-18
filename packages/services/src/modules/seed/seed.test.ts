@@ -564,7 +564,7 @@ describe("seed service", () => {
         diary.days.map((day) => ({
           date: day.date,
           notes: day.notes,
-          entries: day.entries.map((entry) => [entry.resource.slug, entry.durationSeconds]),
+          entries: day.entries.map((entry) => [entry.resource?.slug, entry.durationSeconds]),
           totalSeconds: day.totalSeconds,
         })),
       ).toEqual([

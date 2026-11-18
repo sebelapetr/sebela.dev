@@ -393,6 +393,6 @@ export function createRoadmapService(
 
     ...createLearningDiary(persistence),
     ...createBookshelf(persistence, options.mediaAddress ?? (() => null)),
-    ...createEventCalendar(),
+    ...createEventCalendar(persistence),
   };
 }

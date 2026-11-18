@@ -257,7 +257,7 @@ async function checkReferences(
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
   for (const { location, value } of data.roadmapTimeEntries) {
-    check(resources, value.resource, `${location}.resource`, "roadmap resource");
+    check(resources, value.resource ?? null, `${location}.resource`, "roadmap resource");
   }
   return issues;
 }
@@ -548,7 +548,9 @@ export function createSeedService(
           const covered = logged
             .filter(
               (entry) =>
-                entry.resource.slug === value.resource &&
+                (value.event === undefined
+                  ? entry.resource?.slug === value.resource
+                  : entry.event?.slug === value.event) &&
                 Date.parse(entry.startedAt) >= start &&
                 Date.parse(entry.endedAt) <= end,
             )
