@@ -1,6 +1,9 @@
 // What a page view may tell the analytics service. Only the canonical path of a page is reported:
 // never a query (the Ask page's conversation identifier lives there), a fragment, a question or an
-// answer. Pure, so the tracker's before-send hook and the page-view hook share one rule.
+// answer. An address that is no page of the site (the not-found page shows whatever was typed) is
+// reported under one fixed path. Pure, so the tracker's before-send hook and the page-view hook share one rule.
+
+import { cvPdfRoutes, routes } from "../../_shared";
 
 /** A page view's fields as they leave the browser. */
 export type PageViewPayload = Readonly<Record<string, string>>;
@@ -8,13 +11,26 @@ export type PageViewPayload = Readonly<Record<string, string>>;
 /** The tracker's page-view fields that may be sent; everything else is left out. */
 const PAGE_VIEW_FIELDS = ["website", "hostname", "screen", "language", "title"] as const;
 
-/** The path of an address or path on the site, without its query and fragment; `/` when unusable. */
+/** The path every address that is no page of the site is reported under. */
+export const NOT_FOUND_PATH = "/404";
+
+/** The site's pages, by their paths (the contact anchor is the homepage): the only paths reported as they are. */
+const PAGE_PATHS: ReadonlySet<string> = new Set(
+  [...Object.values(routes), cvPdfRoutes.unavailable].map((path) => path.split("#")[0] ?? path),
+);
+
+/**
+ * The page an address or path on the site shows, without its query and fragment: one of the site's
+ * pages, `NOT_FOUND_PATH` for any other path, and `/` for something that is not an address.
+ */
 export function canonicalPath(url: string, siteOrigin: string): string {
+  let path: string;
   try {
-    return new URL(url, siteOrigin).pathname;
+    path = new URL(url, siteOrigin).pathname;
   } catch {
     return "/";
   }
+  return PAGE_PATHS.has(path) ? path : NOT_FOUND_PATH;
 }
 
 /**
