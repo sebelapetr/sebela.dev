@@ -1,11 +1,10 @@
 import { readdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { fixtureFolder, startApi, startWebsite, type Started } from "./stack";
+import { fixtureFolder, startApi, startWebsite, type Started, type StartedApi } from "./stack";
 
 // Fixture values (e2e/fixtures/with-experience/): the fictional Casey Morrow with a CV PDF of their
 // own (files/cv.pdf). The CV lists the experiences marked for it in the API's order (Open Ledger
@@ -35,9 +34,8 @@ const skills = [
 ] as const;
 
 const pdfPath = join(fixtureFolder("with-experience"), "files", "cv.pdf");
-// The API's end-to-end server keeps its files in the checkout's `.tmp/e2e-storage-*` folders, a
-// documented part of its interface (`apps/api/AGENTS.md`, Commands).
-const scratch = fileURLToPath(new URL("../../../.tmp", import.meta.url));
+// Each API a test starts keeps its files in a storage folder of its own (`StartedApi.storage`,
+// `e2e/stack.ts`), so a test changes only its own server's files while other files run.
 
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
@@ -80,23 +78,19 @@ function today(): string {
 }
 
 /** The stored copies of the fixture's PDF in the API's end-to-end storage folders. */
-async function storedPdfs(): Promise<string[]> {
+async function storedPdfs(storage: string): Promise<string[]> {
   const expected = await readFile(pdfPath);
   const found: string[] = [];
-  for (const root of await readdir(scratch, { withFileTypes: true })) {
-    if (!root.isDirectory() || !root.name.startsWith("e2e-storage-")) continue;
-    const folder = join(scratch, root.name);
-    for (const entry of await readdir(folder, { withFileTypes: true, recursive: true })) {
-      if (!entry.isFile()) continue;
-      const path = join(entry.parentPath, entry.name);
-      if ((await readFile(path)).equals(expected)) found.push(path);
-    }
+  for (const entry of await readdir(storage, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    if ((await readFile(path)).equals(expected)) found.push(path);
   }
   return found;
 }
 
 test.describe("CV and its PDF read from the API", () => {
-  let api: Started;
+  let api: StartedApi;
   let website: Started;
 
   test.beforeAll(async () => {
@@ -268,7 +262,7 @@ test.describe("CV and its PDF read from the API", () => {
   test("says truthfully when the PDF's file cannot be served and leads back to the CV", async ({
     page,
   }) => {
-    const stored = await storedPdfs();
+    const stored = await storedPdfs(api.storage);
     expect(stored.length).toBeGreaterThan(0);
     try {
       for (const path of stored) await rename(path, `${path}.away`);

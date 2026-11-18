@@ -3,7 +3,9 @@
 // environment (`.env.example`, then the checkout's own files); nothing here carries a port or host.
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { createServer } from "node:net";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const webFolder = fileURLToPath(new URL("..", import.meta.url));
@@ -84,6 +86,14 @@ export interface Started {
   stop(): Promise<void>;
 }
 
+/** A started end-to-end API, with the storage folder that holds its files and no other server's. */
+export interface StartedApi extends Started {
+  readonly storage: string;
+}
+
+/** The checkout's scratch folder, where every end-to-end API keeps its storage folder. */
+const scratch = fileURLToPath(new URL("../../../.tmp", import.meta.url));
+
 async function start(
   { command, cwd }: { command: string; cwd: string },
   env: Record<string, string>,
@@ -138,20 +148,25 @@ export interface ApiOptions {
  * Serves the API's end-to-end server for the fixture. It sends no invalidation notifications
  * unless `invalidation` names a receiver, whatever the checkout's environment says.
  */
-export async function startApi(fixture: Fixture, options: ApiOptions = {}): Promise<Started> {
+export async function startApi(fixture: Fixture, options: ApiOptions = {}): Promise<StartedApi> {
   const host = required("API_HOST");
   const port = options.port ?? (await freePort(host));
-  return start(
+  // Its own folder, chosen here, so a test can find this server's files while others run.
+  await mkdir(scratch, { recursive: true });
+  const storage = await mkdtemp(join(scratch, "e2e-storage-"));
+  const started = await start(
     apiCommand(fixture),
     {
       API_PORT: String(port),
       API_WEB_INVALIDATION_URL: options.invalidation?.url ?? "",
       API_WEB_INVALIDATION_SECRET: options.invalidation?.secret ?? "",
       API_E2E_KEY_FILE: options.keyFile ?? "",
+      API_E2E_STORAGE_ROOT: storage,
     },
     origin(host, port),
     "/health",
   );
+  return { ...started, storage };
 }
 
 export interface WebsiteOptions {
