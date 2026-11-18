@@ -1,11 +1,19 @@
 import { z } from "zod";
 
+import { parseMediaBase } from "./media-source";
+
 /** The website's settings, read once from the environment at request time. */
 export interface WebConfig {
   /** The API's base address, without a trailing slash. */
   readonly apiBaseUrl: string;
   /** The site's canonical public origin, without a trailing slash. */
   readonly siteOrigin: string;
+  /**
+   * The media files' base address, without a trailing slash: the storage's public address with its
+   * environment folder and, in a worktree, its worktree folder. The image optimizer fetches only
+   * files directly below it.
+   */
+  readonly mediaBaseUrl: string;
 }
 
 const apiBaseUrl = z
@@ -56,7 +64,23 @@ const siteOrigin = z
     return url.origin;
   });
 
-const schema = z.object({ WEB_API_BASE_URL: apiBaseUrl, WEB_SITE_ORIGIN: siteOrigin });
+const mediaBaseUrl = z
+  .string({ error: "is required" })
+  .min(1, { error: "is required" })
+  .transform((value, context) => {
+    const base = parseMediaBase(value);
+    if (typeof base === "string") {
+      context.addIssue({ code: "custom", message: base });
+      return z.NEVER;
+    }
+    return base.href;
+  });
+
+const schema = z.object({
+  WEB_API_BASE_URL: apiBaseUrl,
+  WEB_SITE_ORIGIN: siteOrigin,
+  WEB_MEDIA_BASE_URL: mediaBaseUrl,
+});
 
 /**
  * Reads the website's settings from an environment such as `process.env`. Throws an error naming
@@ -66,6 +90,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
   const result = schema.safeParse({
     WEB_API_BASE_URL: env["WEB_API_BASE_URL"],
     WEB_SITE_ORIGIN: env["WEB_SITE_ORIGIN"],
+    WEB_MEDIA_BASE_URL: env["WEB_MEDIA_BASE_URL"],
   });
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`);
@@ -73,5 +98,9 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
       `Invalid website configuration (documented in .env.example): ${problems.join("; ")}`,
     );
   }
-  return { apiBaseUrl: result.data.WEB_API_BASE_URL, siteOrigin: result.data.WEB_SITE_ORIGIN };
+  return {
+    apiBaseUrl: result.data.WEB_API_BASE_URL,
+    siteOrigin: result.data.WEB_SITE_ORIGIN,
+    mediaBaseUrl: result.data.WEB_MEDIA_BASE_URL,
+  };
 }

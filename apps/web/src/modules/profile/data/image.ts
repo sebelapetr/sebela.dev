@@ -1,5 +1,7 @@
 import type { ApiClient, Media } from "@sebela/api-client";
 
+import { isMediaUrl } from "../../../media-source";
+
 /** An image from the API's media, ready for an image element. */
 export interface ImageMedia {
   readonly url: string;
@@ -16,25 +18,28 @@ export interface ReadInit {
 
 /**
  * Reads one media item from the public media route as an image, or null when it cannot be shown:
- * not an image, no web address, no dimensions, or a read that failed, was refused or timed out.
+ * not an image, no address directly below the configured media base `mediaBaseUrl` (the only
+ * files the image optimizer fetches), no dimensions, or a read that failed, was refused or timed
+ * out.
  * Never throws, so a missing image never takes the page down with it.
  */
 export async function readImage(
   client: ApiClient,
   id: string,
   init: ReadInit,
+  mediaBaseUrl: string,
 ): Promise<ImageMedia | null> {
   try {
     const { data } = await client.GET("/v1/media/{id}", { params: { path: { id } }, ...init });
-    return data === undefined ? null : toImage(data);
+    return data === undefined ? null : toImage(data, mediaBaseUrl);
   } catch {
     return null;
   }
 }
 
-function toImage(media: Media): ImageMedia | null {
+function toImage(media: Media, mediaBaseUrl: string): ImageMedia | null {
   if (!media.mediaType.startsWith("image/")) return null;
-  if (media.url === null || !isWebUrl(media.url)) return null;
+  if (media.url === null || !isMediaUrl(media.url, mediaBaseUrl)) return null;
   if (media.width === null || media.height === null) return null;
   return {
     url: media.url,

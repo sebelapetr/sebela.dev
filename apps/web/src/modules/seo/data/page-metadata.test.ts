@@ -67,6 +67,34 @@ describe("pageMetadata", () => {
       title: "Experience — Robin Example",
       description: FACTS.headline,
       siteName: "Robin Example",
+      images: [
+        {
+          url: "https://site.example.test/og/experience",
+          width: 1200,
+          height: 630,
+          type: "image/png",
+          alt: "Experience — Robin Example",
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["home", "https://site.example.test/og/home"],
+    ["experience", "https://site.example.test/og/experience"],
+    ["services", "https://site.example.test/og/services"],
+    ["cv", "https://site.example.test/og/cv"],
+  ] as const)("gives the %s page its own preview image on the configured origin", (page, url) => {
+    const metadata = pageMetadata(ORIGIN, page, FACTS);
+    expect(metadata.openGraph?.images).toEqual([expect.objectContaining({ url })]);
+  });
+
+  it("offers the preview image as a large card to every reader of Twitter cards", () => {
+    expect(pageMetadata(ORIGIN, "cv", FACTS).twitter).toEqual({
+      card: "summary_large_image",
+      title: "CV — Robin Example",
+      description: FACTS.headline,
+      images: ["https://site.example.test/og/cv"],
     });
   });
 

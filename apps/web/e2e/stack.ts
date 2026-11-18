@@ -106,6 +106,14 @@ async function start(
   return { url, stop };
 }
 
+/**
+ * The media folder of the API's end-to-end server at `apiBaseUrl`: it keeps its files in the
+ * `test` environment folder without a worktree folder.
+ */
+export function mediaBaseUrl(apiBaseUrl: string): string {
+  return `${apiBaseUrl}/v1/media/files/test`;
+}
+
 /** Serves the API's end-to-end server for the fixture on the given port, or a free one. */
 export async function startApi(fixture: Fixture, port?: number): Promise<Started> {
   const host = required("API_HOST");
@@ -126,7 +134,12 @@ export async function startWebsite(
   const url = origin(host, port);
   return start(
     webCommand(),
-    { WEB_PORT: String(port), WEB_API_BASE_URL: apiBaseUrl, WEB_SITE_ORIGIN: siteOrigin ?? url },
+    {
+      WEB_PORT: String(port),
+      WEB_API_BASE_URL: apiBaseUrl,
+      WEB_SITE_ORIGIN: siteOrigin ?? url,
+      WEB_MEDIA_BASE_URL: mediaBaseUrl(apiBaseUrl),
+    },
     url,
     "/favicon.ico",
   );

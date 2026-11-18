@@ -7,6 +7,7 @@
 // Markdown prose. Importable from client components; imports no other module.
 export { CvActions } from "./components/cv-actions";
 export { Footer } from "./components/footer";
+export { MediaImage, type MediaImageSource } from "./components/media-image";
 export { SiteHeader } from "./components/site-header";
 export { ProseMarkdown, proseComponents } from "./components/markdown";
 export { careerYears } from "./career";

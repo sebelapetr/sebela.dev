@@ -15,6 +15,8 @@ import {
 import { loadHomepage } from "./load-homepage";
 
 const BASE = "https://api.example.test";
+/** The configured media folder the fixtures' addresses are in. */
+const OPTIONS = { mediaBaseUrl: "https://media.example.test/files/test" };
 const PHOTO_ID = "5f0c6a52-4f7e-4c4a-9d1e-0c2b7d3e8a11";
 
 /** A fictional person as the public route returns it. */
@@ -237,7 +239,7 @@ describe("loadHomepage", () => {
       [`/v1/media/${PHOTO_ID}`]: () => json(media()),
     });
 
-    expect(await loadHomepage(client)).toEqual({
+    expect(await loadHomepage(client, OPTIONS)).toEqual({
       status: "ready",
       profile: {
         name: "Robin Example",
@@ -274,7 +276,7 @@ describe("loadHomepage", () => {
       [`/v1/media/${PHOTO_ID}`]: () => json(media()),
     });
 
-    await loadHomepage(client);
+    await loadHomepage(client, OPTIONS);
 
     expect(
       requests.map((request) => `${request.method} ${new URL(request.url).pathname}`).sort(),
@@ -293,7 +295,7 @@ describe("loadHomepage", () => {
         "/v1/person": () => json(person({ photoId: null })),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
 
       expect(result.status === "ready" && result.profile.photo).toBeNull();
       expect(requests.map((request) => new URL(request.url).pathname)).not.toContain(
@@ -308,6 +310,14 @@ describe("loadHomepage", () => {
       ["the media is not an image", () => json(media({ mediaType: "application/pdf" }))],
       ["the media has no dimensions", () => json(media({ width: null, height: null }))],
       [
+        "the file is outside the configured media folder",
+        () => json(media({ url: "https://media.example.test/files/other/portrait.png" })),
+      ],
+      [
+        "the file is on another host",
+        () => json(media({ url: "https://elsewhere.example.test/files/test/portrait.png" })),
+      ],
+      [
         "the media request fails on the network",
         () => {
           throw new TypeError("fetch failed");
@@ -319,7 +329,7 @@ describe("loadHomepage", () => {
         [`/v1/media/${PHOTO_ID}`]: mediaRoute,
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
 
       expect(result.status).toBe("ready");
       expect(result.status === "ready" && result.profile.photo).toBeNull();
@@ -331,7 +341,7 @@ describe("loadHomepage", () => {
         [`/v1/media/${PHOTO_ID}`]: () => json(media({ altText: null })),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
 
       expect(result.status === "ready" && result.profile.photo?.altText).toBe("");
     });
@@ -343,7 +353,7 @@ describe("loadHomepage", () => {
         "/v1/person": () => json(person({ email: null, photoId: null })),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
 
       expect(result.status === "ready" && result.profile.contact.email).toBeNull();
     });
@@ -353,7 +363,7 @@ describe("loadHomepage", () => {
         "/v1/person": () => json(person({ email: "robin+web@example.test", photoId: null })),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
 
       expect(result.status === "ready" && result.profile.contact.email).toEqual({
         address: "robin+web@example.test",
@@ -377,7 +387,7 @@ describe("loadHomepage", () => {
           ),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
 
       expect(result.status === "ready" && result.profile.contact.links).toEqual([
         { label: "Plain", url: "http://plain.example.test/" },
@@ -407,7 +417,7 @@ describe("loadHomepage", () => {
         [`/v1/media/${PDF_ID}`]: () => json(pdf()),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
       expect(result.status === "ready" && result.profile.cvPdf).toEqual({
         updatedOn: "2026-03-14",
       });
@@ -418,7 +428,7 @@ describe("loadHomepage", () => {
         "/v1/person": () => json(person({ photoId: null, cvPdfId: null })),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
       expect(result.status === "ready" && result.profile.cvPdf).toBeNull();
       expect(
         requests.some((request) => new URL(request.url).pathname.startsWith("/v1/media/")),
@@ -431,7 +441,7 @@ describe("loadHomepage", () => {
         [`/v1/media/${PDF_ID}`]: () => apiError("internal_error", 500),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
       expect(result.status).toBe("ready");
       expect(result.status === "ready" && result.profile.cvPdf).toBeNull();
     });
@@ -457,7 +467,7 @@ describe("loadHomepage", () => {
         "/v1/services": () => json(services),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
       if (result.status !== "ready") throw new Error("not ready");
 
       expect(result.profile.careerStartedOn).toBe("2018-03-01");
@@ -483,7 +493,7 @@ describe("loadHomepage", () => {
         "/v1/experiences": () => json(experiences),
       });
 
-      const result = await loadHomepage(client);
+      const result = await loadHomepage(client, OPTIONS);
       if (result.status !== "ready") throw new Error("not ready");
 
       expect(result.profile.experiences).toEqual(experiences);
@@ -512,7 +522,7 @@ describe("loadHomepage", () => {
             [path]: route,
           });
 
-          expect(await loadHomepage(client)).toEqual({ status: "unavailable" });
+          expect(await loadHomepage(client, OPTIONS)).toEqual({ status: "unavailable" });
         },
       );
     });
@@ -521,7 +531,7 @@ describe("loadHomepage", () => {
   it("reports a profile that does not exist yet as missing", async () => {
     const { client } = clientWith({ "/v1/person": () => apiError("not_found", 404) });
 
-    expect(await loadHomepage(client)).toEqual({ status: "missing" });
+    expect(await loadHomepage(client, OPTIONS)).toEqual({ status: "missing" });
   });
 
   it.each([
@@ -543,7 +553,7 @@ describe("loadHomepage", () => {
   ])("reports the content as unavailable when %s", async (_label, personRoute) => {
     const { client } = clientWith({ "/v1/person": personRoute });
 
-    expect(await loadHomepage(client)).toEqual({ status: "unavailable" });
+    expect(await loadHomepage(client, OPTIONS)).toEqual({ status: "unavailable" });
   });
 
   it("gives up on an API that does not answer in time", async () => {
@@ -560,6 +570,8 @@ describe("loadHomepage", () => {
         }),
     });
 
-    expect(await loadHomepage(client, { timeoutMs: 20 })).toEqual({ status: "unavailable" });
+    expect(await loadHomepage(client, { ...OPTIONS, timeoutMs: 20 })).toEqual({
+      status: "unavailable",
+    });
   });
 });
