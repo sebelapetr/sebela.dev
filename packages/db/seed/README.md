@@ -39,6 +39,7 @@ file in the folder is refused, so a misspelt name does not silently load nothing
 | `current-focus.json`        | an array of current-focus entries                                    | `slug`                                            |
 | `roadmap-areas.json`        | an array of roadmap areas                                            | `slug`                                            |
 | `roadmap-modules.json`      | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules                 |
+| `roadmap-books.json`        | an array of bookshelf books, each with an optional `cover`           | `slug`                                            |
 | `roadmap-resources.json`    | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources               |
 | `roadmap-diary.json`        | an array of learning diary days, each `{ "date", "notes" }`          | `date`                                            |
 | `roadmap-time-entries.json` | an array of study sessions, each naming its `resource`               | `resource`, `startedAt` and `endedAt` as instants |
@@ -47,15 +48,28 @@ Each record has exactly the fields of the API's create request for its kind (the
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
 
 - **Media are declared as files, not identifiers.** Instead of `photoId` and `cvPdfId` (person),
-  `logoId` (organization), `coverId` (project) and `authorPhotoId` (testimonial), a record declares
+  `logoId` (organization), `coverId` (project and book) and `authorPhotoId` (testimonial), a record declares
   `photo`, `cvPdf`, `logo`, `cover` or `authorPhoto` as `{ "file": "files/portrait.jpg", "altText": "…" }` or `null`. `altText` is optional. An absent key behaves exactly like `null`: the record has no such attachment, so loading it clears one that is set (see superseded media below).
   A media identifier in a seed record is refused.
 - **A project may carry its case study** as `caseStudy: { "role": "…", "body": "…" }`.
 - **References are slugs**, as in the API: an experience names its `organization` and
   `technologies`, a project its `experience`, a service its evidence projects and explorations, a roadmap
-  module its `area`, a roadmap resource its `module` and `topics`, and so on. A reference may name a record of the same folder or one already in the database.
+  module its `area`, a roadmap resource its `module`, `topics` and optional `book`, and so on. A reference may name a record of the same folder or one already in the database.
 
 A slug is unique within its file.
+
+### Bookshelf
+
+- **A book** has the fields of the API's book create request: `slug`, `title` and the optional
+  `author`, `description`, `pages`, `year`, `isbn`, `priority` (default `0`), `startedOn`,
+  `endedOn` (calendar dates) and Markdown `summary`. Its status is never written; it follows from the
+  dates. Its cover is a local image file declared as `cover`, like a project cover; covers are never
+  fetched from a publisher at load or render time.
+- **A book never names its resource.** A roadmap resource of type `book` links it with
+  `"book": "<book slug>"`; each book is linked by at most one resource. Books load before resources,
+  so the link may name a book of the same folder or one already in the database.
+- **Reading time is logged on the linking resource** in `roadmap-time-entries.json`; a book has no
+  time entries of its own.
 
 ### Learning diary and time entries
 
@@ -78,7 +92,7 @@ A slug is unique within its file.
   links are resolved it must still lie inside the folder.
 - Each file passes the same checks as an upload through the API: its content must be PNG, JPEG,
   WebP or PDF, within the configured size limit, and match its field (an image for `photo`, `logo`,
-  `cover` and `authorPhoto`, a PDF for `cvPdf`).
+  `cover` (project and book) and `authorPhoto`, a PDF for `cvPdf`).
 - Files are recognised by content (SHA-256). A file already stored with identical content is
   reused instead of stored again, so a rerun uploads nothing. Two declarations of the same content
   must give the same alt text.
@@ -92,6 +106,10 @@ A slug is unique within its file.
 - **Roadmap modules and resources are matched by their own slug**, not by their parent. A rerun
   in which a module names another area, or a resource another module, moves the existing record
   there instead of creating a second one. Its topic links are replaced by the seed's list.
+- **Books are matched by slug.** A rerun overwrites a book with the seed's values. A resource's
+  `book` link is written with the resource, so moving a link from one resource to another within one
+  rerun must list the resource that gives the book up first; otherwise the load is refused because
+  the book is still linked.
 - **Diary days are matched by date.** Their notes are overwritten; their time entries are kept.
 - **Sessions are matched by resource and instants.** A session whose whole interval is already
   logged on its resource, in one or more diary-day pieces, is left as it is and counted as updated;
@@ -104,7 +122,7 @@ A slug is unique within its file.
   another one, `null` or omits the key), the media it referred to before are deleted after the
   load, together with their stored files, unless anything still refers to them. This also applies
   to media attached by hand to a record the seed names: a rerun clears a photo, CV PDF, logo,
-  cover or author photo the seed does not declare and deletes that media if nothing else uses it.
+  cover (project or book) or author photo the seed does not declare and deletes that media if nothing else uses it.
 - **Reuse ignores the storage prefix.** A file is reused when any media record has identical
   content, even one stored under another environment or worktree prefix; such a record keeps its
   key, so its public address stays `null` in this environment.
@@ -113,7 +131,7 @@ A slug is unique within its file.
 
 - **Worktree setup seeds only an empty profile.** `node harness/worktree.mjs create` runs
   `seed --if-empty` (`SeedService.loadSeedIntoEmpty`): it loads the demo seed only when the
-  worktree's database holds no person, no record of any kind, no media, no roadmap area and no diary day, and otherwise prints that
+  worktree's database holds no person, no record of any kind, no media, no roadmap area, no diary day and no book, and otherwise prints that
   the seed was skipped and writes nothing. Running setup again on an existing worktree therefore
   applies pending migrations but never overwrites content an agent has edited. The folder is still
   read and validated, so an invalid seed fails setup either way.
