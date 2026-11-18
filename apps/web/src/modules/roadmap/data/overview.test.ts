@@ -12,6 +12,7 @@ import {
   estimateLabel,
   findRoadmapArea,
   formatLastUpdated,
+  roadmapLead,
   resourceTypeLabel,
   romanNumeral,
   safeLink,
@@ -389,5 +390,33 @@ describe("findRoadmapArea", () => {
   it("finds nothing for a slug no area has", () => {
     expect(findRoadmapArea(tree, "unknown")).toBeNull();
     expect(findRoadmapArea(roadmap([]), "first")).toBeNull();
+  });
+});
+
+describe("roadmapLead", () => {
+  const facts = {
+    areaCount: 6,
+    moduleCount: 14,
+    resourceCount: 40,
+    estimatedHours: 120,
+    lastUpdated: "March 14, 2026",
+  };
+
+  it("says what the roadmap holds, its planned hours and its last update", () => {
+    expect(roadmapLead(facts)).toBe(
+      "A structured, hands-on path from full-stack development to production AI engineering: " +
+        "6 areas, 14 modules, 40 vetted resources, roughly 120 hours of study and implementation. " +
+        "Free, and updated as I actually work through it (last updated March 14, 2026).",
+    );
+  });
+
+  it("leaves the last update out when nothing has been updated", () => {
+    expect(roadmapLead({ ...facts, lastUpdated: null })).toMatch(/work through it\.$/u);
+  });
+
+  it("counts one of each in the singular", () => {
+    expect(
+      roadmapLead({ ...facts, areaCount: 1, moduleCount: 1, resourceCount: 1, estimatedHours: 1 }),
+    ).toContain(": 1 area, 1 module, 1 vetted resource, roughly 1 hour of study");
   });
 });
