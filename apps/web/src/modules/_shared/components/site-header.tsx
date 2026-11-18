@@ -25,7 +25,7 @@ export function SiteHeader({ name }: { readonly name: string | null }) {
       <header className="sticky top-0 z-40 h-(--header-height) border-b bg-background print:hidden">
         <div className="layout-page flex h-full items-center justify-between gap-4">
           <HomeLink name={name} current={current} />
-          <nav aria-label="Main" className="hidden md:block">
+          <nav aria-label="Main" className="hidden shrink-0 md:block">
             <NavigationList current={current} />
           </nav>
           <div className="flex shrink-0 items-center gap-2">

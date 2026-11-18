@@ -60,8 +60,8 @@ async function expectAccessible(page: Page) {
 }
 
 /**
- * Every word of a link's label that fits a line stays whole: only a word longer than the line (an
- * address) may break inside.
+ * Every word of a link's label that fits a line stays whole: it may break after a hyphen, and only a
+ * word longer than the line (an address) may break anywhere inside.
  */
 async function expectWordsWhole(page: Page) {
   const broken = await page.locator("a").evaluateAll((links) =>
@@ -72,7 +72,7 @@ async function expectWordsWhole(page: Page) {
         const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
           const text = node.textContent ?? "";
-          for (const match of text.matchAll(/\S+/gu)) {
+          for (const match of text.matchAll(/[^\s-]+/gu)) {
             if (match[0].length > 20) continue;
             const range = document.createRange();
             range.setStart(node, match.index);

@@ -29,7 +29,7 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
           Write to{" "}
           <a
             href={contact.email.href}
-            className="break-all text-foreground underline underline-offset-4"
+            className="wrap-anywhere text-foreground underline underline-offset-4"
           >
             {contact.email.address}
           </a>
