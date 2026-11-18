@@ -35,9 +35,24 @@ export type { ServicesContent, ServicesResult } from "./data/load-services";
 /** The content cache of this process, shared by every route and page bundle loading this module. */
 const CACHE_KEY = Symbol.for("sebela.web.profile.contentCache");
 
+const cacheHolder = () => globalThis as unknown as Record<symbol, ContentCache | undefined>;
+
+/**
+ * The content cache, created on first use with the fallback revalidation interval of
+ * `WEB_CONTENT_REVALIDATE_SECONDS` (validated with the rest of the configuration). Stale answers
+ * served during an API outage are logged to standard error.
+ */
 function contentCache(): ContentCache {
-  const holder = globalThis as unknown as Record<symbol, ContentCache | undefined>;
-  const cache = holder[CACHE_KEY] ?? createContentCache({ fetch: (request) => fetch(request) });
+  const holder = cacheHolder();
+  const cache =
+    holder[CACHE_KEY] ??
+    createContentCache({
+      fetch: (request) => fetch(request),
+      maxAgeMs: readWebConfig(process.env).contentRevalidateMs,
+      log: (line) => {
+        process.stderr.write(`${line}\n`);
+      },
+    });
   holder[CACHE_KEY] = cache;
   return cache;
 }
@@ -60,8 +75,7 @@ function mediaBaseUrl(): string {
  * after the environment is validated once per process.
  */
 function apiClient(): ApiClient {
-  const cache = contentCache();
-  client ??= createApiClient({ baseUrl: apiBaseUrl(), fetch: cache.fetch });
+  client ??= createApiClient({ baseUrl: apiBaseUrl(), fetch: contentCache().fetch });
   return client;
 }
 
@@ -77,7 +91,8 @@ function freshApiClient(): ApiClient {
  * it is called is not kept. Called by the invalidation module after a verified notification.
  */
 export function invalidateProfileContent(): void {
-  contentCache().invalidate();
+  // No cache yet means nothing was read, so nothing can be stale.
+  cacheHolder()[CACHE_KEY]?.invalidate();
 }
 
 /**

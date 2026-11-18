@@ -16,7 +16,10 @@ export interface WebConfig {
    * files directly below it.
    */
   readonly mediaBaseUrl: string;
-  /** How long the content cache serves a read before it reads it again, in milliseconds. */
+  /**
+   * The content cache's fallback revalidation interval in milliseconds, independent of
+   * invalidation notifications: `WEB_CONTENT_REVALIDATE_SECONDS`, 60 seconds when unset or empty.
+   */
   readonly contentRevalidateMs: number;
 }
 
@@ -80,10 +83,32 @@ const mediaBaseUrl = z
     return base.href;
   });
 
+/** The fallback revalidation interval when `WEB_CONTENT_REVALIDATE_SECONDS` is unset or empty. */
+const DEFAULT_CONTENT_REVALIDATE_SECONDS = 60;
+/** The longest accepted interval: a day. */
+const MAX_CONTENT_REVALIDATE_SECONDS = 86_400;
+
+const contentRevalidateMs = z
+  .string()
+  .optional()
+  .transform((value, context) => {
+    if (value === undefined || value === "") return DEFAULT_CONTENT_REVALIDATE_SECONDS * 1000;
+    const seconds = /^[1-9][0-9]*$/u.test(value) ? Number(value) : Number.NaN;
+    if (!(seconds <= MAX_CONTENT_REVALIDATE_SECONDS)) {
+      context.addIssue({
+        code: "custom",
+        message: `must be a whole number of seconds from 1 to ${String(MAX_CONTENT_REVALIDATE_SECONDS)}`,
+      });
+      return z.NEVER;
+    }
+    return seconds * 1000;
+  });
+
 const schema = z.object({
   WEB_API_BASE_URL: apiBaseUrl,
   WEB_SITE_ORIGIN: siteOrigin,
   WEB_MEDIA_BASE_URL: mediaBaseUrl,
+  WEB_CONTENT_REVALIDATE_SECONDS: contentRevalidateMs,
 });
 
 /**
@@ -95,6 +120,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     WEB_API_BASE_URL: env["WEB_API_BASE_URL"],
     WEB_SITE_ORIGIN: env["WEB_SITE_ORIGIN"],
     WEB_MEDIA_BASE_URL: env["WEB_MEDIA_BASE_URL"],
+    WEB_CONTENT_REVALIDATE_SECONDS: env["WEB_CONTENT_REVALIDATE_SECONDS"],
   });
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`);
@@ -106,7 +132,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     apiBaseUrl: result.data.WEB_API_BASE_URL,
     siteOrigin: result.data.WEB_SITE_ORIGIN,
     mediaBaseUrl: result.data.WEB_MEDIA_BASE_URL,
-    contentRevalidateMs: 60_000,
+    contentRevalidateMs: result.data.WEB_CONTENT_REVALIDATE_SECONDS,
   };
 }
 
