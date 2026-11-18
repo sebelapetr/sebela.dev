@@ -6,7 +6,7 @@ import { cn } from "@sebela/ui/lib/utils";
 import { ProseMarkdown } from "../../_shared";
 import type { ResourceRow } from "../data/overview";
 import { EstimateBadge, TypeBadge } from "./badges";
-import { ROADMAP_ITEM, ROADMAP_MARKER } from "./roadmap-branch";
+import { ROADMAP_ITEM, ROADMAP_MARKER } from "./layout";
 import { ResourceIcon } from "./resource-icon";
 import { resourceMarker, resourceStatusWords } from "./status";
 

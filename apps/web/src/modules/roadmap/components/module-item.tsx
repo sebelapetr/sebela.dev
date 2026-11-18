@@ -3,7 +3,8 @@ import { Timeline } from "@sebela/ui/components/timeline";
 import { ProseMarkdown } from "../../_shared";
 import type { ModuleRow } from "../data/overview";
 import { EstimateBadge, ProgressBadge } from "./badges";
-import { RoadmapBranch, ROADMAP_TIMELINE } from "./roadmap-branch";
+import { ROADMAP_TIMELINE } from "./layout";
+import { RoadmapBranch } from "./roadmap-branch";
 import { ResourceItem } from "./resource-item";
 import { triggerMarker } from "./status";
 

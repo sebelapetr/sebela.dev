@@ -5,12 +5,7 @@ import { useState, type ReactNode } from "react";
 import { TimelineContent, TimelineItem, TimelineTrigger } from "@sebela/ui/components/timeline";
 import { cn } from "@sebela/ui/lib/utils";
 
-/** The roadmap's items on the shared timeline: the rail's place and the items' rhythm. */
-export const ROADMAP_TIMELINE = "gap-0 sm:before:left-5";
-/** One roadmap item on the timeline; its text starts 36 px in on mobile and 56 px from `sm`. */
-export const ROADMAP_ITEM = "pb-3 pl-9 sm:pl-14";
-/** A roadmap item's marker, centred on the rail. */
-export const ROADMAP_MARKER = "top-1 sm:left-1";
+import { ROADMAP_ITEM, ROADMAP_MARKER } from "./layout";
 
 /**
  * An area or a module on the roadmap's timeline: its heading row opens and closes it, its

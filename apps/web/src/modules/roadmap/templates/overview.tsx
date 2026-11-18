@@ -8,7 +8,7 @@ import { routes } from "../../_shared";
 import type { RoadmapContent } from "../../profile";
 import { AreaItem } from "../components/area-item";
 import { LearningApproach } from "../components/learning-approach";
-import { ROADMAP_TIMELINE } from "../components/roadmap-branch";
+import { ROADMAP_TIMELINE } from "../components/layout";
 import { RoadmapFrame } from "../components/roadmap-frame";
 import { roadmapLead, toRoadmapOverview } from "../data/overview";
 

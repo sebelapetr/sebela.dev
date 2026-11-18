@@ -4,7 +4,8 @@ import { ProseMarkdown } from "../../_shared";
 import type { AreaRow } from "../data/overview";
 import { CurrentBadge, ProgressBadge, WeightIndicator } from "./badges";
 import { ModuleItem } from "./module-item";
-import { RoadmapBranch, ROADMAP_TIMELINE } from "./roadmap-branch";
+import { ROADMAP_TIMELINE } from "./layout";
+import { RoadmapBranch } from "./roadmap-branch";
 import { triggerMarker } from "./status";
 
 /** An area's description longer than this is cut to two lines while the area is closed. */
