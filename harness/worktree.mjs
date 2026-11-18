@@ -156,6 +156,9 @@ export function createWorktree({
   if (!settings.API_HOST) {
     throw new Error("API_HOST is not set; set it in the environment (documented in .env.example)");
   }
+  if (!settings.WEB_HOST) {
+    throw new Error("WEB_HOST is not set; set it in the environment (documented in .env.example)");
+  }
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
   const resumed = branchExistsIn(mainRoot, requested)
@@ -223,6 +226,8 @@ export function createWorktree({
           STORAGE_PUBLIC_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}/v1/media/files`,
           // The website reads this worktree's own API, not the main checkout's.
           WEB_API_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}`,
+          // Its canonical links, sitemap and llms.txt name the worktree's own website.
+          WEB_SITE_ORIGIN: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}`,
         }),
         { flag: "wx", mode: 0o600 },
       );

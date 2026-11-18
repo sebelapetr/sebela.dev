@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { CvTemplate } from "../../modules/cv";
 import { getCv } from "../../modules/profile";
+import { pageMetadata } from "../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty CV. */
 class ContentUnavailableError extends Error {
@@ -24,7 +25,11 @@ async function readContent() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await readContent();
-  return { title: `CV — ${content.name}`, description: content.headline };
+  return pageMetadata("cv", {
+    name: content.name,
+    headline: content.headline,
+    summary: content.shortBio,
+  });
 }
 
 export default async function CvPage() {

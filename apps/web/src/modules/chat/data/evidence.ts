@@ -4,7 +4,12 @@
 import type { ExplorationStatus } from "@sebela/api-client";
 
 import type { AskContent } from "../../profile";
-import { TECHNOLOGY_GROUP_KEYS, technologyGroupOf, type TechnologyGroupKey } from "../../_shared";
+import {
+  plainText,
+  TECHNOLOGY_GROUP_KEYS,
+  technologyGroupOf,
+  type TechnologyGroupKey,
+} from "../../_shared";
 
 export interface EvidenceExperience {
   readonly slug: string;
@@ -45,26 +50,6 @@ export interface AskEvidence {
   }[];
   /** The technology groups the experience page shows, in its order. */
   readonly technologyGroups: readonly TechnologyGroupKey[];
-}
-
-/**
- * The first paragraph of a Markdown text as plain words on one line, without marks or link
- * targets, cut at a word with an ellipsis to at most `max` characters; empty without words.
- */
-export function plainText(markdown: string, max = 280): string {
-  const paragraph = markdown.trim().split(/\n\s*\n/, 1)[0] ?? "";
-  const words = paragraph
-    .split("\n")
-    .map((line) => line.replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s?)/, ""))
-    .join(" ")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[*_~`]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (words.length <= max) return words;
-  const cut = words.slice(0, max - 1);
-  const space = words[max - 1] === " " ? cut.length : cut.lastIndexOf(" ");
-  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 function summaryOf(markdown: string | null): string | null {

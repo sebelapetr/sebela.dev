@@ -27,7 +27,7 @@ export default defineConfig({
     {
       ...webCommand(),
       url: webUrl,
-      env: { WEB_API_BASE_URL: apiUrl },
+      env: { WEB_API_BASE_URL: apiUrl, WEB_SITE_ORIGIN: webUrl },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
     },

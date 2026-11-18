@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { HomepageTemplate } from "../modules/homepage";
 import { getHomepage } from "../modules/profile";
+import { pageMetadata } from "../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty profile. */
 class ContentUnavailableError extends Error {
@@ -24,7 +25,11 @@ async function readProfile() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const profile = await readProfile();
-  return { title: `${profile.name} — ${profile.headline}`, description: profile.headline };
+  return pageMetadata("home", {
+    name: profile.name,
+    headline: profile.headline,
+    summary: profile.shortBio,
+  });
 }
 
 export default async function HomePage() {

@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { ExperienceTemplate } from "../../modules/experience";
 import { getExperience } from "../../modules/profile";
+import { pageMetadata } from "../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty timeline. */
 class ContentUnavailableError extends Error {
@@ -24,7 +25,7 @@ async function readContent() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await readContent();
-  return { title: `Experience — ${content.name}`, description: content.headline };
+  return pageMetadata("experience", { name: content.name, headline: content.headline });
 }
 
 export default async function ExperiencePage() {

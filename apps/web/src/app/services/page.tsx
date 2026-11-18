@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getServices } from "../../modules/profile";
+import { pageMetadata } from "../../modules/seo";
 import { ServicesTemplate } from "../../modules/services";
 
 /** Content cannot be read now; `error.tsx` shows it, never a page without its services. */
@@ -24,7 +25,11 @@ async function readContent() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await readContent();
-  return { title: `Services — ${content.name}`, description: content.headline };
+  return pageMetadata("services", {
+    name: content.name,
+    headline: content.headline,
+    summary: content.intro,
+  });
 }
 
 export default async function ServicesPage() {
