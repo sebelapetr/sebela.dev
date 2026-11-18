@@ -63,7 +63,8 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
   const persistence = createPersistence(config);
   const { media } = options;
   const opened = media === undefined ? undefined : openStorage(media.config.storage);
-  // The assembled CV addresses its PDF through the same storage the media service uses.
+  // The assembled CV addresses its PDF, and the bookshelf its covers, through the same storage the
+  // media service uses.
   const profileOptions =
     opened === undefined
       ? {}
@@ -80,7 +81,7 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
         };
   return {
     profile: createProfileService(persistence.profile, profileOptions),
-    roadmap: createRoadmapService(persistence.roadmap),
+    roadmap: createRoadmapService(persistence.roadmap, profileOptions),
     apiKeys: createApiKeyService(persistence.apiKeys, options.apiKeys),
     media:
       mediaOptions === undefined

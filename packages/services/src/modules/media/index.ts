@@ -227,7 +227,7 @@ export function createMediaService(
         if (result.reason === "referenced") {
           throw new DomainError(
             "conflict",
-            "This media is attached to a person, organization, project or testimonial; detach it first.",
+            "This media is attached to a person, organization, project, testimonial or book; detach it first.",
           );
         }
         throw notFound();
