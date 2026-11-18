@@ -287,6 +287,17 @@ describe("toRoadmapOverview", () => {
 
     expect(row?.href).toBe("/ai-roadmap/..%2Fx%3Fy%23z");
   });
+
+  it("links every module to its own page under its area", () => {
+    const [row] = toRoadmapOverview(
+      roadmap([area("first-area", { modules: [module("first-module"), module("a/b")] })]),
+    ).areas;
+
+    expect(row?.modules.map((m) => m.href)).toEqual([
+      "/ai-roadmap/first-area/first-module",
+      "/ai-roadmap/first-area/a%2Fb",
+    ]);
+  });
 });
 
 describe("estimateLabel", () => {

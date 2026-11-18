@@ -72,6 +72,35 @@ function evidence(overrides: Partial<AskEvidence> = {}): AskEvidence {
       { slug: "tool-scopes", name: "Tool scopes", summary: "Plans.", status: "designed" },
     ],
     technologyGroups: ["core", "ai-engineering-focus", "secondary"],
+    learning: [
+      {
+        area: "signal-area",
+        areaName: "Signal area",
+        slug: "signal-basics",
+        name: "Signal basics",
+        summary: "Learns fictional signals.",
+        completed: 1,
+        total: 3,
+      },
+      {
+        area: "signal-area",
+        areaName: "Signal area",
+        slug: "signal-depth",
+        name: "Signal depth",
+        summary: null,
+        completed: 0,
+        total: 2,
+      },
+      {
+        area: "queue-area",
+        areaName: "Queue area",
+        slug: "calm-queues",
+        name: "Calm queues",
+        summary: null,
+        completed: 0,
+        total: 1,
+      },
+    ],
     ...overrides,
   };
 }
@@ -152,8 +181,8 @@ describe("preparedAnswer", () => {
     }
   });
 
-  it("never prepares a roadmap card: the roadmap's records arrive in phase 4", () => {
-    for (const question of ALL_QUESTIONS) {
+  it("prepares roadmap cards only for current work", () => {
+    for (const question of [HIRING, CLIENTS, TECHNICAL, UNKNOWN]) {
       expect(blocksOf(preparedAnswer(evidence(), question).blocks, "RoadmapCard")).toEqual([]);
     }
   });
@@ -325,7 +354,26 @@ describe("preparedAnswer", () => {
       ]);
     });
 
-    it("rests only on built or tested explorations, never on a design", () => {
+    it("shows the first two modules in progress on the roadmap as cards leading to their pages", () => {
+      const cards = blocksOf(preparedAnswer(evidence(), GENERAL).blocks, "RoadmapCard");
+      expect(cards).toEqual([
+        {
+          type: "RoadmapCard",
+          title: "Signal basics",
+          summary:
+            "In progress in Signal area, 1 of 3 resources completed. Learns fictional signals.",
+          href: "/ai-roadmap/signal-area/signal-basics",
+        },
+        {
+          type: "RoadmapCard",
+          title: "Signal depth",
+          summary: "In progress in Signal area, 0 of 2 resources completed.",
+          href: "/ai-roadmap/signal-area/signal-depth",
+        },
+      ]);
+    });
+
+    it("rests on built or tested explorations and the roadmap modules it shows, never on a design", () => {
       const { sources } = preparedAnswer(evidence(), GENERAL);
       expect(sources).toEqual([
         {
@@ -338,7 +386,52 @@ describe("preparedAnswer", () => {
           title: "Chunk comparison",
           href: anchorHref({ kind: "exploration", slug: "chunk-comparison" }),
         },
+        {
+          record: { kind: "roadmap_item", id: "signal-basics" },
+          title: "Signal basics, AI Roadmap",
+          href: "/ai-roadmap/signal-area/signal-basics",
+        },
+        {
+          record: { kind: "roadmap_item", id: "signal-depth" },
+          title: "Signal depth, AI Roadmap",
+          href: "/ai-roadmap/signal-area/signal-depth",
+        },
       ]);
+    });
+
+    it("names what is in progress on the roadmap as learning, not delivered work", () => {
+      const { text, related } = preparedAnswer(evidence(), GENERAL);
+      expect(text).toContain("Signal basics");
+      expect(text).toMatch(/still being learned/i);
+      expect(text).not.toMatch(/will show the learning plan/i);
+      expect(related.map((link) => link.href)).toEqual([
+        "/experience#independent-rd",
+        "/ai-roadmap",
+      ]);
+    });
+
+    it("says nothing on the roadmap is in progress without fabricating any learning", () => {
+      const answer = preparedAnswer(evidence({ learning: [] }), GENERAL);
+      expect(answer.outcome).toBe("answered");
+      expect(blocksOf(answer.blocks, "RoadmapCard")).toEqual([]);
+      expect(answer.sources.map((source) => source.record.kind)).toEqual([
+        "exploration",
+        "exploration",
+      ]);
+      expect(answer.text).toMatch(/nothing on the AI Roadmap is in progress/i);
+    });
+
+    it("answers from the roadmap alone when the profile has no explorations", () => {
+      const answer = preparedAnswer(evidence({ explorations: [] }), GENERAL);
+      expect(answer.outcome).toBe("answered");
+      expect(answer.blocks.map((block) => block.type)).toEqual(["RoadmapCard", "RoadmapCard"]);
+      expect(answer.sources.map((source) => source.record.kind)).toEqual([
+        "roadmap_item",
+        "roadmap_item",
+      ]);
+      expect(answer.text).not.toMatch(/independent R&D/i);
+      // The experience page has no independent R&D block without explorations.
+      expect(answer.related.map((link) => link.href)).toEqual(["/ai-roadmap"]);
     });
 
     it("says what a design is, so a designed exploration never reads as delivered work", () => {
@@ -347,8 +440,8 @@ describe("preparedAnswer", () => {
       expect(text).toMatch(/not (yet )?implemented|unimplemented/i);
     });
 
-    it("says it lacks evidence, with the contact, when the profile has no explorations", () => {
-      const answer = preparedAnswer(evidence({ explorations: [] }), GENERAL);
+    it("says it lacks evidence, with the contact, without explorations or roadmap learning", () => {
+      const answer = preparedAnswer(evidence({ explorations: [], learning: [] }), GENERAL);
       expect(answer.outcome).toBe("insufficient_evidence");
       expect(answer.text).toContain(`I don't have enough evidence in ${NAME}'s public profile`);
       expect(answer.text).not.toMatch(/lists the current explorations/i);
@@ -358,12 +451,13 @@ describe("preparedAnswer", () => {
       expect(answer.related.map((link) => link.href)).toEqual(["/#contact"]);
     });
 
-    it("says it lacks evidence when every exploration is only designed, never citing a design", () => {
+    it("says it lacks evidence when every exploration is only designed and nothing is in progress, never citing a design", () => {
       const answer = preparedAnswer(
         evidence({
           explorations: [
             { slug: "tool-scopes", name: "Tool scopes", summary: null, status: "designed" },
           ],
+          learning: [],
         }),
         GENERAL,
       );

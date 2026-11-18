@@ -89,6 +89,7 @@ function profile(overrides: Partial<HomepageProfile> = {}): HomepageProfile {
     technologies: [],
     currentFocus: [],
     explorations: [exploration()],
+    currentLearning: [],
     services: [service()],
     cvPdf: { updatedOn: "2026-03-01" },
     ...overrides,

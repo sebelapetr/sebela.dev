@@ -1,4 +1,11 @@
-import type { ApiClient, Experience, Exploration, Service, Technology } from "@sebela/api-client";
+import type {
+  ApiClient,
+  Experience,
+  Exploration,
+  RoadmapCurrentArea,
+  Service,
+  Technology,
+} from "@sebela/api-client";
 
 import { isWebUrl } from "./image";
 
@@ -15,6 +22,8 @@ export interface AskContent {
   readonly services: readonly Service[];
   readonly explorations: readonly Exploration[];
   readonly technologies: readonly Technology[];
+  /** The AI Roadmap's current learning as the API answered it: in-progress areas and modules. */
+  readonly currentLearning: readonly RoadmapCurrentArea[];
 }
 
 /** The Ask page's content, a profile that is not published yet, or one that cannot be read now. */
@@ -68,6 +77,7 @@ export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): 
         services: services.data,
         explorations: explorations.data,
         technologies: technologies.data,
+        currentLearning: [],
       },
     };
   } catch {

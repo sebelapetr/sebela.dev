@@ -18,7 +18,13 @@ export type AnchorTarget =
       readonly group: "core" | "ai-engineering-focus" | "secondary";
     }
   | { readonly kind: "independent-rd" }
-  | { readonly kind: "service"; readonly slug: string };
+  | { readonly kind: "service"; readonly slug: string }
+  | {
+      readonly kind: "roadmap-resource";
+      readonly area: string;
+      readonly module: string;
+      readonly slug: string;
+    };
 
 /**
  * The item's id on its page: `experience-<slug>`, `project-<slug>`, `case-study-<project>`,
@@ -40,6 +46,8 @@ export function anchorId(target: AnchorTarget): string {
       return "independent-rd";
     case "service":
       return `service-${target.slug}`;
+    case "roadmap-resource":
+      throw new Error("not implemented");
   }
 }
 
@@ -50,4 +58,15 @@ export function anchorId(target: AnchorTarget): string {
 export function anchorHref(target: AnchorTarget): string {
   const page = target.kind === "service" ? routes.services : routes.experience;
   return `${page}#${anchorId(target)}`;
+}
+
+/** An AI Roadmap container with its own page: an area, or a module within its area. */
+export interface RoadmapPageTarget {
+  readonly area: string;
+  readonly module?: string;
+}
+
+/** The address of an area's or a module's own page. */
+export function roadmapHref(_target: RoadmapPageTarget): string {
+  throw new Error("not implemented", { cause: _target });
 }

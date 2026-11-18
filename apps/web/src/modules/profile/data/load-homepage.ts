@@ -4,6 +4,7 @@ import type {
   Experience,
   Exploration,
   Project,
+  RoadmapCurrentArea,
   Service,
   Technology,
 } from "@sebela/api-client";
@@ -40,6 +41,11 @@ export interface HomepageProfile {
   readonly explorations: readonly Exploration[];
   /** The services in the API's order: by position, then slug. */
   readonly services: readonly Service[];
+  /**
+   * The AI Roadmap's current learning: the areas with in-progress modules and those modules, in
+   * the roadmap's order, exactly as the API answered them. Empty when nothing is in progress.
+   */
+  readonly currentLearning: readonly RoadmapCurrentArea[];
   /** The current CV PDF; null without one or when it cannot be offered. */
   readonly cvPdf: CvPdf | null;
 }
@@ -122,6 +128,7 @@ export async function loadHomepage(
         currentFocus: currentFocus.data,
         explorations: explorations.data,
         services: services.data,
+        currentLearning: [],
         cvPdf,
       },
     };

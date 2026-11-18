@@ -15,6 +15,7 @@ const PROFILE: HomepageProfile = {
   technologies: [],
   currentFocus: [],
   explorations: [],
+  currentLearning: [],
   services: [],
   cvPdf: null,
 };

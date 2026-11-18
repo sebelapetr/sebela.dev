@@ -1,11 +1,6 @@
-import type { CurrentFocus, Exploration } from "@sebela/api-client";
+import type { CurrentFocus, Exploration, RoadmapCurrentArea } from "@sebela/api-client";
 
-import {
-  anchorHref,
-  explorationStatusText,
-  routes,
-  type ExplorationStatusText,
-} from "../../_shared";
+import { anchorHref, routes } from "../../_shared";
 
 /** Where an item of Working on leads: its project on the experience page, or its own web link. */
 export interface WorkingOnLink {
@@ -28,13 +23,25 @@ export interface WorkingOnItem {
   readonly link: WorkingOnLink | null;
 }
 
-/** One thing being learned now: an ongoing exploration, with its status as stored. */
+/** A roadmap module being learned now, under its area. */
+export interface ExploringModule {
+  readonly slug: string;
+  readonly name: string;
+  /** The module's own page. */
+  readonly href: string;
+  /** The API's completed of all resources, for example `1/3`. */
+  readonly progress: string;
+}
+
+/** A roadmap area being learned now, with its modules in progress. */
 export interface ExploringItem {
   readonly slug: string;
   readonly name: string;
-  readonly status: ExplorationStatusText;
-  /** The exploration on the experience page. */
+  /** The area's own page. */
   readonly href: string;
+  /** The API's completed of all resources, for example `2/7`. */
+  readonly progress: string;
+  readonly modules: readonly ExploringModule[];
 }
 
 /** The homepage's Now: what is being built and, apart from it, what is being learned. */
@@ -47,25 +54,13 @@ export interface NowContent {
   readonly roadmapHref: string;
 }
 
-/**
- * The homepage's Now from the current focus and the explorations, in the API's order. Working on is
- * every current focus; Exploring is only the ongoing explorations, each with its stored status, so
- * learning never reads as delivered work. Null when nothing is being built or learned now, and the
- * section is left out.
- */
 export function toNow(
   currentFocus: readonly CurrentFocus[],
   explorations: readonly Exploration[],
+  currentLearning: readonly RoadmapCurrentArea[],
 ): NowContent | null {
   const workingOn = currentFocus.map(toWorkingOn);
-  const exploring = explorations
-    .filter((exploration) => exploration.endedOn === null)
-    .map((exploration) => ({
-      slug: exploration.slug,
-      name: exploration.name,
-      status: explorationStatusText(exploration.status),
-      href: anchorHref({ kind: "exploration", slug: exploration.slug }),
-    }));
+  const exploring: ExploringItem[] = currentLearning.flatMap(() => []);
   if (workingOn.length === 0 && exploring.length === 0) return null;
   return {
     workingOn,

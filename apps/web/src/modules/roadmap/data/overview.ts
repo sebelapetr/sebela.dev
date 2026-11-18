@@ -27,6 +27,8 @@ export interface ResourceRow {
 export interface ModuleRow {
   readonly slug: string;
   readonly name: string;
+  /** The address of the module's own page, under its area's. */
+  readonly href: string;
   readonly description: string | null;
   readonly order: string;
   readonly estimate: string | null;
@@ -100,6 +102,7 @@ export function toRoadmapOverview(roadmap: Roadmap): RoadmapOverview {
       modules: area.modules.map((module, moduleIndex) => ({
         slug: module.slug,
         name: module.name,
+        href: "",
         description: module.description,
         order: `${romanNumeral(moduleIndex + 1)}.`,
         estimate:

@@ -50,6 +50,22 @@ export interface AskEvidence {
   }[];
   /** The technology groups the experience page shows, in its order. */
   readonly technologyGroups: readonly TechnologyGroupKey[];
+  /** The AI Roadmap's modules in progress, with their area, in the API's order. */
+  readonly learning: readonly EvidenceLearning[];
+}
+
+/** A module in progress on the AI Roadmap, as an answer may name it. */
+export interface EvidenceLearning {
+  /** The area's slug. */
+  readonly area: string;
+  readonly areaName: string;
+  readonly slug: string;
+  readonly name: string;
+  /** The description's first paragraph as plain text; null without one. */
+  readonly summary: string | null;
+  /** The API's completed and all resources of the module. */
+  readonly completed: number;
+  readonly total: number;
 }
 
 function summaryOf(markdown: string | null): string | null {
@@ -92,5 +108,6 @@ export function toAskEvidence(content: AskContent): AskEvidence {
       status,
     })),
     technologyGroups: TECHNOLOGY_GROUP_KEYS.filter((key) => shown.has(key)),
+    learning: [],
   };
 }
