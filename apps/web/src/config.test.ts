@@ -12,6 +12,7 @@ describe("readWebConfig", () => {
       apiBaseUrl: "http://api.example.test",
       siteOrigin: "https://site.example.test",
       mediaBaseUrl: "http://api.example.test/v1/media/files/test",
+      contentRevalidateMs: 60_000,
     });
   });
 
@@ -22,6 +23,7 @@ describe("readWebConfig", () => {
       apiBaseUrl: "https://api.example.test",
       siteOrigin: "https://site.example.test",
       mediaBaseUrl: "http://api.example.test/v1/media/files/test",
+      contentRevalidateMs: 60_000,
     });
   });
 
@@ -148,6 +150,37 @@ describe("readWebConfig: the media files' base address", () => {
     expect(() => read("https://user:s3cret@cdn.example.test/production")).toThrow(
       /^(?!.*s3cret).*WEB_MEDIA_BASE_URL/,
     );
+  });
+});
+
+describe("readWebConfig: the content cache's fallback revalidation interval", () => {
+  const read = (value: string | undefined) =>
+    readWebConfig(
+      value === undefined
+        ? { ...API, ...SITE, ...MEDIA }
+        : { ...API, ...SITE, ...MEDIA, WEB_CONTENT_REVALIDATE_SECONDS: value },
+    ).contentRevalidateMs;
+
+  it("is sixty seconds when unset or empty", () => {
+    expect(read(undefined)).toBe(60_000);
+    expect(read("")).toBe(60_000);
+  });
+
+  it("reads a configured whole number of seconds", () => {
+    expect(read("5")).toBe(5_000);
+    expect(read("1")).toBe(1_000);
+    expect(read("86400")).toBe(86_400_000);
+  });
+
+  it.each([
+    ["zero", "0"],
+    ["a negative number", "-5"],
+    ["a fraction", "1.5"],
+    ["a unit", "60s"],
+    ["text", "soon"],
+    ["more than a day", "86401"],
+  ])("refuses %s and names the variable", (_label, value) => {
+    expect(() => read(value)).toThrow(/WEB_CONTENT_REVALIDATE_SECONDS/);
   });
 });
 

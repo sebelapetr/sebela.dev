@@ -83,7 +83,10 @@ export interface AppDependencies {
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
   readonly log?: Logger;
-  /** Called after every successful write; a failure is logged and never fails the write. */
+  /**
+   * Called after every committed write, never after a failed one; a failure is logged by the
+   * error's name only and never fails or rolls back the write.
+   */
   readonly onWrite?: WriteNotifier;
 }
 
@@ -286,7 +289,9 @@ export function createApp(dependencies: AppDependencies): Api {
     try {
       await onWrite(event);
     } catch (error) {
-      log(redact(`error notifying ${event.method} ${event.path}: ${String(error)}`));
+      // The error's name only: a notifier's message may carry content or its destination.
+      const name = error instanceof Error ? error.name : "error";
+      log(redact(`error notifying ${event.method} ${event.path}: ${name}`));
     }
   };
 

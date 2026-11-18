@@ -34,6 +34,7 @@ export default defineConfig({
         WEB_SITE_ORIGIN: webUrl,
         WEB_MEDIA_BASE_URL: mediaBaseUrl(apiUrl),
         WEB_INVALIDATION_SECRET: "",
+        WEB_CONTENT_REVALIDATE_SECONDS: "",
       },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },

@@ -156,12 +156,19 @@ export interface WebsiteOptions {
   readonly port?: number;
   /** The secret that verifies invalidation notifications; none by default. */
   readonly invalidationSecret?: string;
+  /** The content cache's fallback revalidation interval in seconds; the default (60) otherwise. */
+  readonly contentRevalidateSeconds?: number;
 }
 
 /** Serves the built website, reading the API at `apiBaseUrl`. */
 export async function startWebsite(
   apiBaseUrl: string,
-  { siteOrigin, port: chosenPort, invalidationSecret }: WebsiteOptions = {},
+  {
+    siteOrigin,
+    port: chosenPort,
+    invalidationSecret,
+    contentRevalidateSeconds,
+  }: WebsiteOptions = {},
 ): Promise<Started> {
   const host = required("WEB_HOST");
   const port = chosenPort ?? (await freePort(host));
@@ -174,6 +181,8 @@ export async function startWebsite(
       WEB_SITE_ORIGIN: siteOrigin ?? url,
       WEB_MEDIA_BASE_URL: mediaBaseUrl(apiBaseUrl),
       WEB_INVALIDATION_SECRET: invalidationSecret ?? "",
+      WEB_CONTENT_REVALIDATE_SECONDS:
+        contentRevalidateSeconds === undefined ? "" : String(contentRevalidateSeconds),
     },
     url,
     "/favicon.ico",
