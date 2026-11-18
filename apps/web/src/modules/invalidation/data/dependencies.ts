@@ -35,6 +35,9 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   "roadmap-area": ["profile"],
   "roadmap-module": ["profile"],
   "roadmap-resource": ["profile"],
+  // A diary change names the Prague calendar days it touched (a moved time entry its old and new
+  // day). The diary's list, every day's page and the roadmap read through the same cache, so
+  // invalidating it as a whole refreshes the list and the old and new days alike.
   "roadmap-diary": ["profile"],
 };
 

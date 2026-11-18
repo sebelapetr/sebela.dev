@@ -3,12 +3,11 @@ import { RoadmapFrame } from "../components/roadmap-frame";
 import type { RoadmapSection } from "../components/roadmap-nav";
 
 const SECTIONS = {
-  diary: "Learning Diary",
   bookshelf: "Bookshelf",
   events: "Events",
 } as const satisfies Partial<Record<RoadmapSection, string>>;
 
-/** A roadmap section that is not published yet: the diary, the bookshelf or the events. */
+/** A roadmap section that is not published yet: the bookshelf or the events. */
 export type RoadmapPlaceholderSection = keyof typeof SECTIONS;
 
 /** The section's name, as its page and its title name it. */
