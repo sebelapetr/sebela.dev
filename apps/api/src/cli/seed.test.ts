@@ -19,6 +19,7 @@ import {
   OrganizationListSchema,
   PersonSchema,
   ProjectListSchema,
+  RoadmapSchema,
   ServiceListSchema,
   TechnologyListSchema,
   TestimonialListSchema,
@@ -79,6 +80,21 @@ describe("the seed CLI", () => {
     return schema.parse(await response.json());
   };
 
+  /** The roadmap tree by slug, status and estimate, without timestamps or derived dates. */
+  const roadmapShape = async () =>
+    (await read("/v1/roadmap", RoadmapSchema)).areas.map((area) => ({
+      slug: area.slug,
+      modules: area.modules.map((module) => ({
+        slug: module.slug,
+        resources: module.resources.map(({ slug, status, estimatedMinutes, topics }) => ({
+          slug,
+          status,
+          estimatedMinutes,
+          topics: topics.map((topic) => topic.slug),
+        })),
+      })),
+    }));
+
   /** The number of records of every kind, through the public API. */
   const counts = async () => ({
     technologies: (await read("/v1/technologies", TechnologyListSchema)).length,
@@ -92,6 +108,7 @@ describe("the seed CLI", () => {
     testimonials: (await read("/v1/testimonials", TestimonialListSchema)).length,
     currentFocus: (await read("/v1/current-focus", CurrentFocusListSchema)).length,
     media: (await read("/v1/media", MediaListSchema)).length,
+    roadmap: await roadmapShape(),
   });
 
   describe("with the demo seed", () => {
@@ -112,6 +129,21 @@ describe("the seed CLI", () => {
       expect(loaded.education).toBeGreaterThanOrEqual(2);
       expect(loaded.testimonials).toBeGreaterThanOrEqual(3);
       expect(loaded.currentFocus).toBeGreaterThanOrEqual(2);
+
+      // A fictional roadmap: an empty area, empty modules, mixed statuses and missing estimates.
+      const roadmap = await read("/v1/roadmap", RoadmapSchema);
+      expect(roadmap.summary.areaCount).toBeGreaterThanOrEqual(4);
+      expect(roadmap.areas.some(({ modules }) => modules.length === 0)).toBe(true);
+      const modules = roadmap.areas.flatMap((area) => area.modules);
+      expect(modules.some(({ resources }) => resources.length === 0)).toBe(true);
+      expect(modules.every(({ resources }) => resources.length <= 5)).toBe(true);
+      const resources = modules.flatMap((module) => module.resources);
+      expect(new Set(resources.map(({ status }) => status))).toEqual(
+        new Set(["planned", "in-progress", "completed", "paused", "skipped"]),
+      );
+      expect(resources.some(({ estimatedMinutes }) => estimatedMinutes === null)).toBe(true);
+      expect(resources.some(({ topics }) => topics.length > 0)).toBe(true);
+      expect(result.out).toMatch(/roadmap resources: \d+ created, 0 updated/);
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();
