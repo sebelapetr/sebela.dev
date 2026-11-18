@@ -33,6 +33,7 @@ export default defineConfig({
         WEB_API_BASE_URL: apiUrl,
         WEB_SITE_ORIGIN: webUrl,
         WEB_MEDIA_BASE_URL: mediaBaseUrl(apiUrl),
+        WEB_MEDIA_READ_BASE_URL: "",
         WEB_INVALIDATION_SECRET: "",
         WEB_CONTENT_REVALIDATE_SECONDS: "",
       },

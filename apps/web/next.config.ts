@@ -7,9 +7,9 @@ const config: NextConfig = {
   transpilePackages: ["@sebela/ui"],
   // No `X-Powered-By` header: it tells visitors nothing useful.
   poweredByHeader: false,
-  // The image optimizer fetches only image files directly below `WEB_MEDIA_BASE_URL`; the
-  // settings are read when the server starts (src/media-source.ts).
-  images: imageSettings(process.env),
+  // The image optimizer reads only stored images on the site's own `/media/` path, never another
+  // host; the settings depend on no environment (src/media-source.ts).
+  images: imageSettings(),
 };
 
 export default config;

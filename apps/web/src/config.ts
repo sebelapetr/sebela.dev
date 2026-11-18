@@ -12,10 +12,15 @@ export interface WebConfig {
   readonly siteOrigin: string;
   /**
    * The media files' base address, without a trailing slash: the storage's public address with its
-   * environment folder and, in a worktree, its worktree folder. The image optimizer fetches only
-   * files directly below it.
+   * environment folder and, in a worktree, its worktree folder, as the API names its files. Only
+   * files directly below it are shown or downloaded.
    */
   readonly mediaBaseUrl: string;
+  /**
+   * Where the website's server reads the files below `mediaBaseUrl`, without a trailing slash:
+   * `WEB_MEDIA_READ_BASE_URL`, such as the API's internal address in a container, or the media
+   * base itself when unset or empty. Never named to a visitor.
+   */
   readonly mediaReadBaseUrl: string;
   /**
    * The content cache's fallback revalidation interval in milliseconds, independent of
@@ -84,6 +89,19 @@ const mediaBaseUrl = z
     return base.href;
   });
 
+const mediaReadBaseUrl = z
+  .string()
+  .optional()
+  .transform((value, context) => {
+    if (value === undefined || value === "") return undefined;
+    const base = parseMediaBase(value);
+    if (typeof base === "string") {
+      context.addIssue({ code: "custom", message: base });
+      return z.NEVER;
+    }
+    return base.href;
+  });
+
 /** The fallback revalidation interval when `WEB_CONTENT_REVALIDATE_SECONDS` is unset or empty. */
 const DEFAULT_CONTENT_REVALIDATE_SECONDS = 60;
 /** The longest accepted interval: a day. */
@@ -109,6 +127,7 @@ const schema = z.object({
   WEB_API_BASE_URL: apiBaseUrl,
   WEB_SITE_ORIGIN: siteOrigin,
   WEB_MEDIA_BASE_URL: mediaBaseUrl,
+  WEB_MEDIA_READ_BASE_URL: mediaReadBaseUrl,
   WEB_CONTENT_REVALIDATE_SECONDS: contentRevalidateMs,
 });
 
@@ -121,6 +140,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     WEB_API_BASE_URL: env["WEB_API_BASE_URL"],
     WEB_SITE_ORIGIN: env["WEB_SITE_ORIGIN"],
     WEB_MEDIA_BASE_URL: env["WEB_MEDIA_BASE_URL"],
+    WEB_MEDIA_READ_BASE_URL: env["WEB_MEDIA_READ_BASE_URL"],
     WEB_CONTENT_REVALIDATE_SECONDS: env["WEB_CONTENT_REVALIDATE_SECONDS"],
   });
   if (!result.success) {
@@ -133,7 +153,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     apiBaseUrl: result.data.WEB_API_BASE_URL,
     siteOrigin: result.data.WEB_SITE_ORIGIN,
     mediaBaseUrl: result.data.WEB_MEDIA_BASE_URL,
-    mediaReadBaseUrl: "",
+    mediaReadBaseUrl: result.data.WEB_MEDIA_READ_BASE_URL ?? result.data.WEB_MEDIA_BASE_URL,
     contentRevalidateMs: result.data.WEB_CONTENT_REVALIDATE_SECONDS,
   };
 }

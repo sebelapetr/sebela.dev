@@ -1,7 +1,9 @@
-// Where the website's images may come from. The media base (`WEB_MEDIA_BASE_URL`) names the
-// storage's public address with its environment folder and, in a worktree, its worktree folder;
-// the image optimizer and the profile's media reads accept only an image file directly below it.
-// Nothing here reads a visitor's input as a source: the optimizer refuses every other address.
+// Where the website's images come from. The media base (`WEB_MEDIA_BASE_URL`) names the storage's
+// public address with its environment folder and, in a worktree, its worktree folder; only a
+// stored file directly below it is used. The website serves a stored image from its own path
+// `/media/<file>` (src/app/media/[file]/route.ts), and the image optimizer reads only that path,
+// so it never fetches another host and the server can read the files at an internal address
+// (`WEB_MEDIA_READ_BASE_URL`) that never reaches a page.
 //
 // Plain TypeScript without dependencies, because `next.config.ts` loads it when the server starts.
 import type { NextConfig } from "next";
@@ -21,16 +23,21 @@ export interface MediaBase {
 /** A folder of the base's path: letters, digits, `_` and `-`, so it is never a glob or an escape. */
 const BASE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
-/** A stored image's file name: the storage generates `<uuid>.<png|jpg|webp>`. */
+/** A stored file's name: the storage generates `<uuid>.<png|jpg|webp|pdf>`. */
+const STORED_FILE = /^[A-Za-z0-9-]+\.(?:png|jpg|webp|pdf)$/u;
+
+/** A stored image's file name. */
 const IMAGE_FILE = /^[A-Za-z0-9-]+\.(?:png|jpg|webp)$/u;
 
-/** The same file name as a glob for Next's `remotePatterns`, which matches it with picomatch. */
+/** The site's own path the stored images are served from. */
+const MEDIA_PATH = "/media";
+
+/** The image file name as a glob for Next's `localPatterns`, which matches it with picomatch. */
 const IMAGE_FILE_GLOB = "+([A-Za-z0-9-]).@(png|jpg|webp)";
 
 /**
- * A host as the URL parser writes it, made of plain labels (a name or an IPv4 address). Next reads
- * a remote pattern's host as a glob, so brackets, stars and the like would match other hosts; an
- * IPv6 host, written in brackets, is refused for the same reason.
+ * A host as the URL parser writes it, made of plain labels (a name or an IPv4 address); an IPv6
+ * host, written in brackets, is refused, so a base compares by plain string.
  */
 const PLAIN_HOST = /^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/u;
 
@@ -74,65 +81,50 @@ export function parseMediaBase(value: string): MediaBase | string {
 }
 
 /**
- * Whether `url` is an image file directly below the media base `base`: an absolute address on the
- * same protocol, host and port, without credentials, query, fragment or escaped separators.
+ * The name of the stored file `url` addresses directly below the media base `base`, or null unless
+ * it is an absolute address on the same protocol, host and port, without credentials, query,
+ * fragment or escaped separators, naming a `<name>.<png|jpg|webp|pdf>` the storage writes.
  */
-export function isMediaUrl(url: string, base: string): boolean {
+export function mediaFileName(url: string, base: string): string | null {
   const media = parseMediaBase(base);
-  if (typeof media === "string" || UNSAFE.test(url)) return false;
+  if (typeof media === "string" || UNSAFE.test(url)) return null;
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    return false;
+    return null;
   }
-  if (parsed.username !== "" || parsed.password !== "") return false;
-  if (parsed.protocol !== `${media.protocol}:`) return false;
-  if (parsed.hostname !== media.hostname || parsed.port !== media.port) return false;
+  if (parsed.username !== "" || parsed.password !== "") return null;
+  if (parsed.protocol !== `${media.protocol}:`) return null;
+  if (parsed.hostname !== media.hostname || parsed.port !== media.port) return null;
   // Compare the address as written: the parser would quietly resolve `..` away.
   const prefix = `${media.href}/`;
-  if (!url.startsWith(prefix)) return false;
+  if (!url.startsWith(prefix)) return null;
   const name = url.slice(prefix.length);
-  return IMAGE_FILE.test(name) && parsed.pathname === `${media.path}/${name}`;
+  return STORED_FILE.test(name) && parsed.pathname === `${media.path}/${name}` ? name : null;
+}
+
+/** Whether `name` is a stored image's file name: `<name>.<png|jpg|webp>`, nothing more. */
+export function isImageFileName(name: string): boolean {
+  return IMAGE_FILE.test(name);
+}
+
+/** The site's own path a stored image `name` is served from. */
+export function mediaPath(name: string): string {
+  return `${MEDIA_PATH}/${name}`;
 }
 
 /**
- * Whether a host is a loopback or private IPv4 address, which Next refuses by default. Only
- * addresses are recognised, not names: a local base names its host by address, as `API_HOST` does.
+ * The image optimizer's settings: it reads only stored images on the site's own media path, without
+ * a query and without following a redirect, and no other host at all. They depend on no setting,
+ * so the build and every environment agree. One quality, WebP only and the widths the site renders.
  */
-function isLocalHost(hostname: string): boolean {
-  const octets = hostname.split(".").map(Number);
-  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) return false;
-  const [a = -1, b = -1] = octets;
-  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
-
-/**
- * The image optimizer's settings for an environment such as `process.env`: it fetches only image
- * files directly below `WEB_MEDIA_BASE_URL`, without a query and without following a redirect, and
- * nothing at all when the variable is missing or invalid (the pages then refuse to start through
- * `readWebConfig`). Private addresses are allowed only when the base itself is one, as in a local
- * development or test run. One quality, WebP only and the widths the site renders.
- */
-export function imageSettings(env: Readonly<Record<string, string | undefined>> = {}): ImageConfig {
-  const value = env["WEB_MEDIA_BASE_URL"];
-  const media = value === undefined ? "missing" : parseMediaBase(value);
-  const valid = typeof media !== "string";
+export function imageSettings(): ImageConfig {
   return {
-    remotePatterns: valid
-      ? [
-          {
-            protocol: media.protocol,
-            hostname: media.hostname,
-            port: media.port,
-            pathname: `${media.path}/${IMAGE_FILE_GLOB}`,
-            search: "",
-          },
-        ]
-      : [],
-    localPatterns: [],
+    remotePatterns: [],
+    localPatterns: [{ pathname: `${MEDIA_PATH}/${IMAGE_FILE_GLOB}`, search: "" }],
     maximumRedirects: 0,
-    dangerouslyAllowLocalIP: valid && isLocalHost(media.hostname),
+    dangerouslyAllowLocalIP: false,
     formats: ["image/webp"],
     qualities: [75],
     // The portrait is at most 360 CSS px wide, a logo 160 and an author photo 48, so two device
@@ -140,16 +132,4 @@ export function imageSettings(env: Readonly<Record<string, string | undefined>> 
     deviceSizes: [360, 480, 640, 750],
     imageSizes: [48, 64, 96, 128, 160, 256, 320],
   };
-}
-
-export function mediaFileName(url: string, base: string): string | null {
-  throw new Error(`not implemented: ${url} ${base}`);
-}
-
-export function isImageFileName(name: string): boolean {
-  throw new Error(`not implemented: ${name}`);
-}
-
-export function mediaPath(name: string): string {
-  throw new Error(`not implemented: ${name}`);
 }

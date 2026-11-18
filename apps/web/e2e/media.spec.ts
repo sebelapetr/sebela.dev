@@ -122,8 +122,8 @@ test.describe("the image optimizer's sources", () => {
     await api.stop();
   });
 
-  test("optimizes an image of the configured media folder as WebP", async ({ request }) => {
-    expect(portrait.startsWith(`${mediaBaseUrl(api.url)}/`)).toBe(true);
+  test("optimizes a stored image from the site's own media path as WebP", async ({ request }) => {
+    expect(portrait).toMatch(/^\/media\/[A-Za-z0-9-]+\.png$/u);
     const response = await request.get(
       `${website.url}/_next/image?url=${encodeURIComponent(portrait)}&w=320&q=75`,
       { headers: { Accept: "image/avif,image/webp,*/*" } },
@@ -133,26 +133,56 @@ test.describe("the image optimizer's sources", () => {
     expect(response.headers()["content-type"]).toBe("image/webp");
   });
 
+  test("serves the stored file on the media path as the API stores it", async ({ request }) => {
+    const name = portrait.slice("/media/".length);
+    const original = await request.get(`${mediaBaseUrl(api.url)}/${name}`);
+    const served = await request.get(`${website.url}${portrait}`, { maxRedirects: 0 });
+    expect(served.status()).toBe(200);
+    expect(served.headers()["content-type"]).toBe("image/png");
+    expect(served.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(served.headers()["content-security-policy"]).toBe("default-src 'none'; sandbox");
+    expect((await served.body()).equals(await original.body())).toBe(true);
+    // The page names only the site's path, never the address the server reads the file from.
+    const html = await (await request.get(`${website.url}/`)).text();
+    expect(html).not.toContain(mediaBaseUrl(api.url));
+  });
+
+  test("answers 404 on the media path for anything but a stored image", async ({ request }) => {
+    const name = portrait.slice("/media/".length);
+    for (const path of [
+      `/media/${name.replace(/\.png$/u, ".pdf")}`,
+      `/media/${name.replace(/\.png$/u, ".svg")}`,
+      `/media/..%2f..%2fv1%2fperson`,
+      `/media/%2e%2e.png`,
+      `/media/missing-file.png`,
+    ]) {
+      const response = await request.get(`${website.url}${path}`, { maxRedirects: 0 });
+      expect({ path, status: response.status() }).toEqual({ path, status: 404 });
+    }
+  });
+
   test("refuses every other source, width and quality", async ({ request }) => {
     const base = mediaBaseUrl(api.url);
-    const name = portrait.slice(base.length + 1);
+    const name = portrait.slice("/media/".length);
     const host = required("API_HOST");
     const otherPort = origin(host, await freePort(host));
     const refused = [
-      // Another host, the API's own routes, another environment's or worktree's folder.
+      // The stored file's own address, another host and the API's own routes.
+      `${base}/${name}`,
       `https://images.example.test/${name}`,
       `${api.url}/v1/person`,
-      `${api.url}/v1/media/files/development/${name}`,
-      `${base}/another-worktree/${name}`,
-      // Traversal, written plainly or escaped, a query, and a file that is not an image.
-      `${base}/../../../person`,
-      `${base}/..%2f..%2f..%2fperson`,
-      `${base}/${name}?download=1`,
-      `${base}/${name.replace(/\.[a-z]+$/u, ".pdf")}`,
-      // The same path on another port, the website itself, a file address and an internal host.
-      `${otherPort}${new URL(portrait).pathname}`,
+      `${otherPort}/media/${name}`,
+      `${website.url}/media/${name}`,
+      // Another path on the site, traversal written plainly or escaped, a query, a nested folder
+      // and a file that is not an image.
+      `/v1/media/files/test/${name}`,
+      `/media/../favicon.ico`,
+      `/media/..%2f..%2fv1%2fperson`,
+      `/media/${name}?download=1`,
+      `/media/nested/${name}`,
+      `/media/${name.replace(/\.[a-z]+$/u, ".pdf")}`,
       "/favicon.ico",
-      `${website.url}/favicon.ico`,
+      "/cv/pdf",
       "file:///etc/passwd",
       "http://169.254.169.254/latest/meta-data/",
     ];
@@ -172,7 +202,7 @@ test.describe("the image optimizer's sources", () => {
   });
 
   test("records what the portrait weighs at each width it is served", async ({ request }) => {
-    const original = await request.get(portrait);
+    const original = await request.get(`${website.url}${portrait}`);
     expect(original.status()).toBe(200);
     const sizes: Record<string, number> = { original: (await original.body()).length };
     for (const width of [160, 256, 320, 480, 750]) {

@@ -1,9 +1,10 @@
 import type { ApiClient, Media } from "@sebela/api-client";
 
-import { isMediaUrl } from "../../../media-source";
+import { isImageFileName, mediaFileName, mediaPath } from "../../../media-source";
 
 /** An image from the API's media, ready for an image element. */
 export interface ImageMedia {
+  /** The site's own path the image is served from, `/media/<file>`. */
   readonly url: string;
   /** The media's alternative text; empty when the media has none. */
   readonly altText: string;
@@ -18,9 +19,9 @@ export interface ReadInit {
 
 /**
  * Reads one media item from the public media route as an image, or null when it cannot be shown:
- * not an image, no address directly below the configured media base `mediaBaseUrl` (the only
- * files the image optimizer fetches), no dimensions, or a read that failed, was refused or timed
- * out.
+ * not an image, no image file directly below the configured media base `mediaBaseUrl`, no
+ * dimensions, or a read that failed, was refused or timed out. The image's address is the site's
+ * own media path, which serves the same file (the only images the image optimizer reads).
  * Never throws, so a missing image never takes the page down with it.
  */
 export async function readImage(
@@ -39,10 +40,11 @@ export async function readImage(
 
 function toImage(media: Media, mediaBaseUrl: string): ImageMedia | null {
   if (!media.mediaType.startsWith("image/")) return null;
-  if (media.url === null || !isMediaUrl(media.url, mediaBaseUrl)) return null;
+  const name = media.url === null ? null : mediaFileName(media.url, mediaBaseUrl);
+  if (name === null || !isImageFileName(name)) return null;
   if (media.width === null || media.height === null) return null;
   return {
-    url: media.url,
+    url: mediaPath(name),
     altText: media.altText ?? "",
     width: media.width,
     height: media.height,
