@@ -13,7 +13,7 @@ label "agent-retry"     "f9d0c4" "Failed once in the phase loop; one more attemp
 label "agent-failed"    "b60205" "Failed twice in the phase loop; skipped until the owner looks"
 label "trial"           "bfdadc" "Practice issue of the harness trial; never merged"
 
-for phase in 00-trial 01-foundation 02-api-db 03-web 04-ai-roadmap 05-mcp-admin 06-rag-memory 07-llm-agent 08-delivery; do
+for phase in 00-trial 01-foundation 02-api-db 03-web 04-ai-roadmap 05-mcp-admin 06-llm-agent 07-ai-service 08-mcp-public 09-rag 10-delivery 11-knowledge-graph 12-ontology 13-mcp-apps; do
   label "phase:$phase" "5319e7" "Issue of phase $phase"
 done
 

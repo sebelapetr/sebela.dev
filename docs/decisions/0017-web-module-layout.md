@@ -1,4 +1,4 @@
-# 0016 — The website uses the module layout beside its routes
+# 0017 — The website uses the module layout beside its routes
 
 Status: accepted
 Date: 2026-11-17

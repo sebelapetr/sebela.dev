@@ -110,7 +110,8 @@ harness/run-phase.sh <phase-folder>
   - every run writes a log outside git.
 - **Sequential.** One issue at a time. Parallel runs are a later improvement.
 - **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed, interrupted or phase done). Interrupted means the usage limit stopped the work on an issue: the loop waits as for any limit and continues the same issue, without a label or a failure counted. The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
-- **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off), `--no-notify`. Logs are in `.worktrees/logs/<phase>/`.
+- **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off), `--no-notify`, `--note "<text>"` (below). Logs are in `.worktrees/logs/<phase>/`.
+- **A note from the owner.** `harness/run-phase.sh <phase-folder> --note "<text>"` hands the orchestrator a note written when the loop is started, for example why the last run was stopped and what an unfinished issue still needs. It adds to the orchestrator's instructions and never replaces a rule or the guard. The loop keeps no state, so the orchestrator first records a note about an issue on that issue as a comment starting with `Owner note:`, where later runs find it. The note stays while the loop only waits for the usage limit and ends with the first run that finished, merged or failed, so it is not repeated to the issues that follow (`ownerNoteSection` and `noteAfter` in `harness/lib/loop.mjs`). A comment on the issue does the same without the option; the option saves the owner that step.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
 - **MCP servers:** the loop loads only `harness/mcp.json` (context7 for library documentation, Playwright for UI checks) with `--strict-mcp-config`, and turns off claude.ai connectors. The owner's personal servers — mail, calendar, drive — are never available to an unattended run.
 - **Settings:** the loop loads only the repository's settings (`--setting-sources project,local`). The owner's `~/.claude` — plugins, global rules, personal agents and skills — does not reach an unattended run, so it behaves the same on any machine.
@@ -139,7 +140,7 @@ The reviewer agent is the only check between issues inside a phase, so a mistake
 
 ## What the reviewer checks
 
-- Every acceptance criterion of the issue
+- Every acceptance criterion of the issue, with the website's whole browser suite run once per review (developers run only the specs they touch; [Browser tests by role](testing.md#browser-tests-by-role))
 - Package boundaries and the trust boundary
 - Access: every write is a private, authenticated route; the API key never reaches client-side code
 - Where test-first is mandatory: the test came before the implementation

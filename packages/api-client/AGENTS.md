@@ -32,7 +32,7 @@ The API key is sent as `Authorization: Bearer` only to operations whose OpenAPI 
 
 **Every pull request that adds, removes or changes a route or a contract schema** runs `pnpm generate:api-client`, commits `src/generated/`, exports any new DTO from `src/index.ts` and extends the consumer contract tests in `apps/api/src/client.test.ts`. CI's drift check fails when the committed files differ from a regeneration.
 
-### Python consumers (phase 7, not scaffolded)
+### Python consumers (phase 6, not scaffolded)
 
 The committed `src/generated/openapi.json` is the language-independent input. A Python client is generated from it, without the TypeScript toolchain, with openapi-python-client (Python 3.11 or later):
 
@@ -42,7 +42,7 @@ uvx openapi-python-client@0.30.0 generate \
   --output-path <target-folder> --overwrite
 ```
 
-Pin the version so the output is reproducible, commit the generated package where phase 7 places it and extend the drift check (`scripts/checks/generated-drift.mjs`) to that folder.
+Pin the version so the output is reproducible, commit the generated package where phase 6 places it and extend the drift check (`scripts/checks/generated-drift.mjs`) to that folder.
 
 ## Module map
 

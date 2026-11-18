@@ -14,7 +14,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   │   └── Dockerfile
 │   ├── mcp-admin/           secured MCP server for content management, TypeScript [5]
 │   │   └── evals/
-│   ├── mcp-public/          Python, public read-only MCP transport [7]
+│   ├── mcp-public/          Python, public read-only MCP transport [8]
 │   └── ai-service/          Python / FastAPI, AI HTTP routes and runtime [7]
 ├── packages/
 │   ├── config/              shared ESLint, TypeScript and Prettier configuration, incl. tsconfig.base.json [1]
@@ -24,9 +24,9 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── contracts/           Zod schemas and types shared by API, web and MCP [2]
 │   ├── api-client/          typed client generated from the OpenAPI document [2]
 │   ├── ui/                  shared React components, design tokens [3]
-│   ├── memory/              indexing and retrieval [6]
-│   └── llm-agent/           Python library: pipelines, read tools, guardrails, evals [7]
-│       ├── src/llm_agent/   importable package; responsibility folders per phase-7 PRD
+│   ├── memory/              knowledge ingest, indexing and retrieval [9]
+│   └── llm-agent/           Python library: pipelines, read tools, guardrails, evals [6]
+│       ├── src/llm_agent/   importable package; responsibility folders per phase-6 PRD
 │       ├── tests/          unit and integration tests
 │       └── evals/          Promptfoo datasets and graders
 ├── harness/                 the agent harness — plain Node, no dependencies [0, hooks 1]; see harness/README.md
@@ -49,7 +49,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI [1]
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
-├── compose.prod.yaml        production overrides [8]
+├── compose.prod.yaml        production overrides [10]
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
 ├── pnpm-lock.yaml           committed lockfile [1]
@@ -205,7 +205,7 @@ Each backend app/package `AGENTS.md` must map actual module paths to public entr
 
 ## Web module layout
 
-The website (`apps/web`) keeps Next's file-based routing in `src/app/` and puts everything else into modules, with the same entry convention and the same lint rule as the backend ([decision 0016](decisions/0016-web-module-layout.md)):
+The website (`apps/web`) keeps Next's file-based routing in `src/app/` and puts everything else into modules, with the same entry convention and the same lint rule as the backend ([decision 0017](decisions/0017-web-module-layout.md)):
 
 ```text
 apps/web/src/
@@ -279,10 +279,11 @@ Several agents work in parallel, each in its own git worktree. They share one Po
 | api            | 3001                        | 3001 + N × 10                         |
 | mcp-admin      | 3002                        | 3002 + N × 10                         |
 | ai-service [7] | 3003                        | 3003 + N × 10                         |
-| mcp-public [7] | 3004                        | 3004 + N × 10                         |
+| mcp-public [8] | 3004                        | 3004 + N × 10                         |
 | postgres       | 5440 (one shared container) | same port, separate database and role |
 
-- The AI-service and public-MCP port assignments above are targets for phase 7; that phase updates worktree environment generation, task wrappers and Compose before these apps run.
+- The AI-service port is a phase-7 target; the public-MCP port is phase 8. Each owning phase updates worktree environment generation, task wrappers and Compose before its app runs. Phase 6 introduces the Python library/toolchain only. MCP Admin and private content writes are internal/SSH-tunnel only; these development port assignments do not authorize public exposure.
+- Knowledge originals use a separately configured private Bunny zone or local root from phase 9, with development/worktree isolation and no public-URL mapping. Do not reuse the public media handler or treat a `private/` prefix as access control.
 - The worktree setup script (`node harness/worktree.mjs create`, also run by the `WorktreeCreate` hook) takes the lowest free slot, creates the worktree's own database and database role in the shared Postgres, or reuses them, and then writes the ports, the database name, the role's credentials and the worktree's storage folder to the worktree's `.env.local`. Then it runs the [backend setup](#worktree-backend-setup) in the worktree: dependencies, pending migrations, the storage folder and the demo seed of an empty profile. It takes the base ports (the main checkout column above) from the environment, as described in [Configuration and environment](#configuration-and-environment). If the requested issue branch `<type>/<n>-<slug>` does not exist but another branch of the same issue `n` does, locally or on `origin`, the script continues that branch and its worktree instead of starting a second one, and says so; an interrupted issue keeps its work.
 - Running setup again for an existing worktree keeps its slot, its database and its role's password and preserves its `.env.local`, including local edits. A missing environment file is generated, and the role gets a new password that only the new file holds, so regenerating the file restores working credentials. An existing file or symbolic link is never overwritten, so a worktree whose `.env.local` predates its database or role gets `DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD` only after that file is deleted and setup runs again.
 - The cleanup script (`node harness/worktree.mjs remove`, also run by the `WorktreeRemove` hook) removes the worktree's storage folder, drops the worktree's database, every other database its role owns and then the role, removes the worktree and frees the slot.

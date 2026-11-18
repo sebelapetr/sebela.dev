@@ -1,4 +1,4 @@
-# 0017 — The website serves stored images from its own origin
+# 0018 — The website serves stored images from its own origin
 
 Status: accepted
 Date: 2026-11-18

@@ -19,7 +19,7 @@ The agent harness of this repository: what lets coding agents work through a pha
 Run a phase (owner only, with Postgres running in the main checkout):
 
 ```sh
-harness/run-phase.sh <phase-folder> [--base <branch>]
+harness/run-phase.sh <phase-folder> [--base <branch>] [--note "<text for the orchestrator>"]
 ```
 
 How the agents work together: [docs/agents.md](../docs/agents.md). What they may and may not do, and how it is enforced: [docs/permissions.md](../docs/permissions.md). Why the harness is shaped this way: [docs/decisions/0007](../docs/decisions/0007-phase-branch-and-loop.md) and [0013](../docs/decisions/0013-harness-at-the-top-level.md).

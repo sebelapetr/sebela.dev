@@ -18,7 +18,7 @@ A backend for the profile domain:
 
 - a `profile` schema in PostgreSQL holding every fact once,
 - an API that serves it — public routes for reading, private routes for writing — described by an OpenAPI document generated from the same schemas it validates with,
-- a typed client generated from that document for the website and the admin MCP server (the Python LLM agent generates its own from the same document in phase 7),
+- a typed client generated from that document for the website and the admin MCP server (the Python LLM agent generates its own from the same document in phase 6),
 - object storage for images and the CV file behind one interface,
 - a demo seed with a fictional person so that every environment has realistic data, and a way to load the owner's real data from outside the repository.
 
@@ -189,7 +189,7 @@ Every table has an identifier, timestamps and, where order matters, a position. 
 - Rate-limit thresholds and windows come from configuration. This phase uses bounded in-memory storage for one API instance; horizontal scaling requires shared counters. Client addresses come from the connection or an explicitly trusted proxy configuration, never arbitrary forwarded headers. Exhausted limits return `429`, `Retry-After` and the common error shape. Limits that protect LLM cost come in phase 7.
 - Request body and upload size limits are enforced while receiving data, before unbounded buffering or expensive processing.
 - No browser needs cross-origin API access in this phase, so CORS is disabled. If a later client needs it, allowed origins are configured explicitly. Origin and CORS never substitute for authentication; server-side callers are not required to send an Origin header.
-- Errors expose no stack traces, SQL details or secrets. Responses declare the correct content type and use `X-Content-Type-Options: nosniff`; deployed API access uses HTTPS, with TLS termination configured in phase 8.
+- Errors expose no stack traces, SQL details or secrets. Responses declare the correct content type and use `X-Content-Type-Options: nosniff`; deployed API access uses HTTPS, with TLS termination configured in phase 10.
 - After a successful write the API has one place where interested parties can be notified. It does nothing yet; the website's cache invalidation attaches there in phase 3.
 
 ### Assembled CV and the downloadable PDF
@@ -320,12 +320,12 @@ Maintain the short, always-loaded rule introduced in PR #62; it points to canoni
 
 - Any UI, including the website's use of the client.
 - The `ai_roadmap` schema and its API (phase 4).
-- The admin MCP server and the record of writes (phase 5); the LLM agent and chat conversations (phase 7).
+- The admin MCP server and the record of writes (phase 5); the LLM agent (phase 6) and chat conversations (phase 7).
 - Image resizing and format conversion (phase 3).
 - Cache invalidation of the website (phase 3); only the attachment point exists.
 - Pagination, filtering and search.
 - A visibility or draft model.
-- Production storage zone set-up and deployment (phase 8).
+- Production storage zone set-up and deployment (phase 10).
 
 ## Further Notes
 

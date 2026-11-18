@@ -80,11 +80,15 @@ When a project is a product built by a team, describe the public product and the
 
 ## Access
 
-There is no visibility model. Everything stored in the database is public content and is shown on the site; nothing is marked private.
+Profile and AI Roadmap records are public content shown on the site, without per-record visibility flags. This does not make authentication, audit, visitor conversations or ingest staging public. Extra documents may enrich public answers after approval without becoming website pages or public downloads.
 
 - The API has **public** routes (read, no authentication) and **private** routes (protected by an API key). Every write is a private route.
 - A per-record private flag is added only when a real use case appears — for example personal notes in the learning diary — and only where it is needed.
-- Until then, do not store anything in the database that must not be public.
+- Do not put confidential information in public profile/roadmap records. Knowledge staging and source metadata are separate private operational data; only approved passage projections enter public search. Source originals stay in private Bunny/local storage.
+- API facts take precedence over extra documents. Extra material supplements explanations and context; identified contradictions are held for owner resolution.
+- Extra knowledge is limited to owner-supplied Markdown, TXT and text-layer PDF in the first version. Local sensitivity checks and owner approval of an exact version precede public indexing; no external websites are crawled.
+- Knowledge about Petr is separate from visitor conversation history. There is one conversation per anonymous browser identity, restored on `/ask`, without a session picker or cross-device identity.
+- Admin MCP and private content-write routes are reachable only internally or through an authenticated SSH tunnel, with API authentication still required. The scoped visitor-conversation exception remains public.
 
 ## Services
 

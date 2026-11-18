@@ -38,7 +38,7 @@ x-api-build: &api-build
 
 services:
   postgres:
-    # pgvector is part of the image from the start, so retrieval (phase 6) needs no other image.
+    # pgvector is part of the image from the start, so retrieval (phase 9) needs no other image.
     # The tag names the versions (pgvector 0.8.7, PostgreSQL 18, Debian trixie); the digest of its
     # multi-architecture index pins the exact content, so a re-pushed tag cannot change what runs.
     # Upgrade both together: a PostgreSQL major version also needs a data upgrade.
