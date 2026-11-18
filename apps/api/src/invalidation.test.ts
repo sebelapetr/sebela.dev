@@ -259,8 +259,18 @@ describe("the website invalidation sender", () => {
     expect(website.deliveries).toHaveLength(1);
   });
 
-  it("spends the documented default budget: three attempts, 250 ms and then 1 s apart", async () => {
+  it("spends the documented default budget: three attempts of 2 s at most, 250 ms and then 1 s apart", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // Each attempt's own timeout is an `AbortSignal.timeout`, which fake timers do not reach.
+    const timeouts = vi.spyOn(AbortSignal, "timeout");
+    // \`vi.waitFor\` advances fake time while it polls, which would move past the retry delays;
+    // this waits on \`setImmediate\`, which is not faked, so the clock moves only when told to.
+    const deliveredWithoutTime = async (deliveries: unknown[], count: number) => {
+      for (let turn = 0; turn < 1_000 && deliveries.length < count; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      expect(deliveries).toHaveLength(count);
+    };
     try {
       const website = fakeWebsite(new TypeError("fetch failed"));
       // The defaults, not the short budget of `start`.
@@ -275,21 +285,15 @@ describe("the website invalidation sender", () => {
       sender = invalidation;
 
       await invalidation.notify({ change });
-      await vi.waitFor(() => {
-        expect(website.deliveries).toHaveLength(1);
-      });
+      await deliveredWithoutTime(website.deliveries, 1);
       await vi.advanceTimersByTimeAsync(249);
       expect(website.deliveries).toHaveLength(1);
       await vi.advanceTimersByTimeAsync(1);
-      await vi.waitFor(() => {
-        expect(website.deliveries).toHaveLength(2);
-      });
+      await deliveredWithoutTime(website.deliveries, 2);
       await vi.advanceTimersByTimeAsync(999);
       expect(website.deliveries).toHaveLength(2);
       await vi.advanceTimersByTimeAsync(1);
-      await vi.waitFor(() => {
-        expect(website.deliveries).toHaveLength(3);
-      });
+      await deliveredWithoutTime(website.deliveries, 3);
       await invalidation.idle();
       await vi.advanceTimersByTimeAsync(60_000);
 
@@ -300,7 +304,9 @@ describe("the website invalidation sender", () => {
         "website invalidation 0b9f2c1e-4a77-4c3d-9a51-000000000001 attempt 3 failed: TypeError",
         "website invalidation 0b9f2c1e-4a77-4c3d-9a51-000000000001 gave up after 3 attempts",
       ]);
+      expect(timeouts.mock.calls).toEqual([[2000], [2000], [2000]]);
     } finally {
+      timeouts.mockRestore();
       vi.useRealTimers();
     }
   });

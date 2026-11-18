@@ -212,6 +212,7 @@ describe("createContentCache", () => {
       ["a proxy's 502", () => new Response("bad gateway", { status: 502 })],
       ["a 503", () => json({ error: "unavailable" }, 503)],
       ["a rate limit", () => json({ error: "rate_limited" }, 429)],
+      ["a request timeout", () => json({ error: "request_timeout" }, 408)],
     ];
 
     /** A cache over an API that answers `read: n` until `down` is set, then fails with `failure`. */
@@ -281,6 +282,26 @@ describe("createContentCache", () => {
       now += 5_000;
       expect((await cache.fetch(get("/v1/person"))).status).toBe(404);
       // Later failures cannot bring the deleted record back.
+      await expect(cache.fetch(get("/v1/person"))).rejects.toThrow("fetch failed");
+    });
+
+    it("forgets an expired copy whose fresh answer is too large to keep", async () => {
+      let now = 1_000_000;
+      const api = fakeApi((_request, count) => {
+        if (count >= 3) return Promise.reject(new TypeError("fetch failed"));
+        return json(count === 1 ? { read: 1 } : { read: count, padding: "x".repeat(64) });
+      });
+      const cache = createContentCache({
+        fetch: api.fetch,
+        now: () => now,
+        maxAgeMs: 5_000,
+        maxBodyBytes: 32,
+      });
+      await cache.fetch(get("/v1/person"));
+
+      now += 5_000;
+      expect(await (await cache.fetch(get("/v1/person"))).json()).toMatchObject({ read: 2 });
+      // The older, smaller copy is not current any more and must not stand in during an outage.
       await expect(cache.fetch(get("/v1/person"))).rejects.toThrow("fetch failed");
     });
 
