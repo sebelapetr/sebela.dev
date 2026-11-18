@@ -340,10 +340,10 @@ describe("readAnalyticsConfig", () => {
   });
 
   it("accepts a plain http script address only on a plain http site, as in local tests", () => {
-    const local = "http://127.0.0.1:4999/script.js";
+    const local = "http://analytics.example.test/script.js";
     expect(
       readAnalyticsConfig({
-        WEB_SITE_ORIGIN: "http://127.0.0.1:3000",
+        WEB_SITE_ORIGIN: "http://site.example.test",
         WEB_ANALYTICS_SCRIPT_URL: local,
         WEB_ANALYTICS_WEBSITE_ID: WEBSITE,
       }),
