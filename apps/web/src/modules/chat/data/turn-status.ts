@@ -24,6 +24,11 @@ export interface ChatTurnDescription {
   readonly note: string | null;
   /** Whether a retry is offered (the store still allows only the latest turn's). */
   readonly retry: boolean;
+  /**
+   * Whether the answer's cards, sources and related pages are shown: while it streams and once it
+   * is complete, never for an answer that failed or was interrupted, which is not a finished one.
+   */
+  readonly showsEvidence: boolean;
   readonly announcement: string;
 }
 
@@ -60,6 +65,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
         tag: turn.status === "streaming" ? "Answering" : null,
         note: null,
         retry: false,
+        showsEvidence: true,
         announcement: ANSWERING,
       };
     case "complete": {
@@ -69,6 +75,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
         tag: OUTCOME_TAGS[outcome],
         note: null,
         retry: false,
+        showsEvidence: true,
         announcement: turn.text,
       };
     }
@@ -85,6 +92,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
         tag: turn.text.length > 0 ? "Incomplete" : "Not answered",
         note,
         retry,
+        showsEvidence: false,
         announcement: retry ? `${note} ${RETRY_HINT}` : note,
       };
     }

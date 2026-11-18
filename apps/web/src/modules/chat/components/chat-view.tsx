@@ -30,7 +30,7 @@ interface AnswerProps {
 
 function Answer({ turn, onRetry, ref }: AnswerProps) {
   const open = isChatTurnOpen(turn);
-  const { tag, note, retry } = describeChatTurn(turn);
+  const { tag, note, retry, showsEvidence } = describeChatTurn(turn);
   return (
     // Focus lands here after a retry, so the keyboard stays at the answer it asked again.
     <div ref={ref} tabIndex={-1} className="flex flex-col gap-2" aria-busy={open}>
@@ -52,6 +52,15 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
           Try again
         </Button>
       ) : null}
+      {showsEvidence ? <AnswerEvidence turn={turn} /> : null}
+    </div>
+  );
+}
+
+/** The answer's cards, its sources and the related pages, in that order. */
+function AnswerEvidence({ turn }: { readonly turn: ChatTurn }) {
+  return (
+    <>
       {turn.blocks.length === 0 ? null : (
         <ul aria-label="Cards" className="flex flex-col gap-3 pt-2">
           {turn.blocks.map((block, index) => (
@@ -75,7 +84,7 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
           ))}
         </ul>
       )}
-    </div>
+    </>
   );
 }
 
