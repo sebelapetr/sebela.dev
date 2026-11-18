@@ -235,6 +235,22 @@ const fixture = (): SeedFiles => ({
       topics: ["rag", "agents"],
     },
   ],
+  "roadmap-diary.json": [
+    { date: "2025-02-03", notes: "Watched a **fictional** talk about vectors." },
+    { date: "2025-02-05", notes: "Only planned the week." },
+  ],
+  "roadmap-time-entries.json": [
+    {
+      resource: "vector-talk",
+      startedAt: "2025-02-03T23:30:00+01:00",
+      endedAt: "2025-02-04T00:30:00+01:00",
+    },
+    {
+      resource: "prompting-guide",
+      startedAt: "2025-02-03T08:00:00Z",
+      endedAt: "2025-02-03T09:15:00Z",
+    },
+  ],
   "files/portrait.jpg": portrait,
   "files/northwind.png": logo,
   "files/cover.png": cover,
@@ -258,6 +274,8 @@ const kinds: SeedKind[] = [
   "roadmapAreas",
   "roadmapModules",
   "roadmapResources",
+  "roadmapDiary",
+  "roadmapTimeEntries",
 ];
 
 const fixtureCounts: Record<SeedKind, number> = {
@@ -276,6 +294,8 @@ const fixtureCounts: Record<SeedKind, number> = {
   roadmapAreas: 2,
   roadmapModules: 3,
   roadmapResources: 3,
+  roadmapDiary: 2,
+  roadmapTimeEntries: 2,
 };
 
 const allCreated = Object.fromEntries(
@@ -367,6 +387,7 @@ describe("seed service", () => {
     testimonials: await profile.listTestimonials(),
     currentFocus: await profile.listCurrentFocus(),
     roadmap: (await roadmap.getRoadmap()).areas,
+    diary: (await roadmap.getDiary()).days,
     media: await media().listMedia(),
   });
 
@@ -530,6 +551,32 @@ describe("seed service", () => {
       expect(tree.summary).toMatchObject({ areaCount: 2, moduleCount: 3, resourceCount: 3 });
     });
 
+    it("creates the diary in Prague days with a session split at midnight", async () => {
+      await load(fixture());
+
+      const diary = await roadmap.getDiary();
+      expect(
+        diary.days.map((day) => ({
+          date: day.date,
+          notes: day.notes,
+          entries: day.entries.map((entry) => [entry.resource.slug, entry.durationSeconds]),
+          totalSeconds: day.totalSeconds,
+        })),
+      ).toEqual([
+        { date: "2025-02-05", notes: "Only planned the week.", entries: [], totalSeconds: 0 },
+        { date: "2025-02-04", notes: null, entries: [["vector-talk", 1800]], totalSeconds: 1800 },
+        {
+          date: "2025-02-03",
+          notes: "Watched a **fictional** talk about vectors.",
+          entries: [
+            ["prompting-guide", 4500],
+            ["vector-talk", 1800],
+          ],
+          totalSeconds: 6300,
+        },
+      ]);
+    });
+
     it("accepts a folder given as a file URL", async () => {
       const folder = await writeSeed(await mkdtemp(join(seedFolder, "url-")), {
         "topics.json": [{ slug: "agents", name: "Agents", position: 0 }],
@@ -634,6 +681,77 @@ describe("seed service", () => {
         ["prompting"],
         ["shipping", "retrieval-basics"],
       ]);
+    });
+
+    it("overwrites diary notes and adds a new session while matching the logged ones", async () => {
+      await load(fixture());
+      const changed = fixture();
+      changed["roadmap-diary.json"] = [
+        { date: "2025-02-03", notes: "Rewritten notes." },
+        { date: "2025-02-04", notes: "A new note on the day after midnight." },
+      ];
+      changed["roadmap-time-entries.json"] = [
+        ...(changed["roadmap-time-entries.json"] as unknown[]),
+        {
+          resource: "prompting-guide",
+          startedAt: "2025-02-03T09:15:00Z",
+          endedAt: "2025-02-03T09:45:00Z",
+        },
+      ];
+
+      const report = await load(changed);
+
+      expect(report.records.roadmapDiary).toEqual({ created: 1, updated: 1 });
+      expect(report.records.roadmapTimeEntries).toEqual({ created: 1, updated: 2 });
+      await expect(roadmap.getDiaryDay("2025-02-03")).resolves.toMatchObject({
+        notes: "Rewritten notes.",
+        totalSeconds: 6300 + 1800,
+      });
+      await expect(roadmap.getDiaryDay("2025-02-04")).resolves.toMatchObject({
+        notes: "A new note on the day after midnight.",
+        totalSeconds: 1800,
+      });
+      await expect(roadmap.getDiaryDay("2025-02-05")).resolves.toMatchObject({
+        notes: "Only planned the week.",
+      });
+    });
+
+    it("matches a session written with another offset as the same instants", async () => {
+      await load(fixture());
+      const before = await snapshot();
+      const changed = fixture();
+      changed["roadmap-time-entries.json"] = [
+        {
+          resource: "vector-talk",
+          startedAt: "2025-02-03T22:30:00Z",
+          endedAt: "2025-02-03T23:30:00Z",
+        },
+      ];
+
+      const report = await load(changed);
+
+      expect(report.records.roadmapTimeEntries).toEqual({ created: 0, updated: 1 });
+      expect(withoutUpdatedAt(await snapshot())).toEqual(withoutUpdatedAt(before));
+    });
+
+    it("refuses a session that overlaps logged time at its location and writes nothing", async () => {
+      await load(fixture());
+      const before = await snapshot();
+      const changed = fixture();
+      changed["roadmap-diary.json"] = [{ date: "2025-02-03", notes: "Must not be written." }];
+      changed["roadmap-time-entries.json"] = [
+        {
+          resource: "prompting-drills",
+          startedAt: "2025-02-03T09:00:00Z",
+          endedAt: "2025-02-03T10:00:00Z",
+        },
+      ];
+
+      const error = await refusal(load(changed));
+
+      expect(error.code).toBe("conflict");
+      expect(error.fields?.map(({ path }) => path)).toEqual(["roadmap-time-entries.json[0]"]);
+      expect(withoutUpdatedAt(await snapshot())).toEqual(withoutUpdatedAt(before));
     });
 
     it("resolves roadmap parents and topics that only the database holds", async () => {
@@ -821,6 +939,15 @@ describe("seed service", () => {
       expect(await filesBelow(storageFolder)).toEqual([]);
     });
 
+    it("treats a diary with only notes as not empty", async () => {
+      await roadmap.writeDiaryNotes("2025-01-01", { notes: "Hand-written." });
+      const before = await snapshot();
+
+      await expect(loadIntoEmpty(fixture())).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
+    });
+
     it("treats a media library with a file as not empty", async () => {
       await media().uploadMedia({
         bytes: samplePng({ width: 8, height: 8 }),
@@ -966,6 +1093,10 @@ describe("seed service", () => {
         { ...guide, topics: ["agents", "ghost-topic"] },
         { ...drills, module: "ghost-module" },
       ];
+      // The talk is no longer in the seed, so only the session on the guide stays.
+      files["roadmap-time-entries.json"] = (
+        files["roadmap-time-entries.json"] as Record<string, unknown>[]
+      ).filter((session) => session["resource"] === "prompting-guide");
 
       const error = await refusal(load(files));
 
@@ -975,6 +1106,70 @@ describe("seed service", () => {
         "roadmap-resources.json[0].topics[1]",
         "roadmap-resources.json[1].module",
       ]);
+      await expectEmpty();
+    });
+
+    it("rejects malformed diary days and sessions before any write", async () => {
+      const files = fixture();
+      files["roadmap-diary.json"] = [
+        { date: "2025-02-30", notes: "No such day." },
+        { date: "2025-02-03", notes: "  " },
+        { date: "2025-02-06", notes: "Fine." },
+        { date: "2025-02-06", notes: "The same day again." },
+      ];
+      const [session] = files["roadmap-time-entries.json"] as Record<string, unknown>[];
+      files["roadmap-time-entries.json"] = [
+        session,
+        { ...session, startedAt: "2025-02-03T22:30:00Z", endedAt: "2025-02-03T23:30:00Z" },
+        { ...session, startedAt: "2025-02-10T10:00:00", endedAt: "2025-02-10T11:00:00+01:00" },
+        { ...session, endedAt: "2025-02-03T22:00:00Z" },
+        { ...session, minutes: 60 },
+      ];
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path).sort()).toEqual(
+        [
+          "roadmap-diary.json[0].date",
+          "roadmap-diary.json[1].notes",
+          "roadmap-diary.json[3].date",
+          "roadmap-time-entries.json[1]",
+          "roadmap-time-entries.json[2].startedAt",
+          "roadmap-time-entries.json[3].endedAt",
+          "roadmap-time-entries.json[4]",
+        ].sort(),
+      );
+      await expectEmpty();
+    });
+
+    it("rejects a session on a resource that neither the seed nor the database has", async () => {
+      const files = fixture();
+      const [session, other] = files["roadmap-time-entries.json"] as Record<string, unknown>[];
+      files["roadmap-time-entries.json"] = [{ ...session, resource: "ghost-talk" }, other];
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path)).toEqual([
+        "roadmap-time-entries.json[0].resource",
+      ]);
+      await expectEmpty();
+    });
+
+    it("refuses sessions of the seed that overlap each other and writes nothing", async () => {
+      const files = fixture();
+      const [session, other] = files["roadmap-time-entries.json"] as Record<string, unknown>[];
+      files["roadmap-time-entries.json"] = [
+        session,
+        other,
+        { ...other, resource: "prompting-drills", startedAt: "2025-02-03T09:00:00Z" },
+      ];
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("conflict");
+      expect(error.fields?.map(({ path }) => path)).toEqual(["roadmap-time-entries.json[2]"]);
       await expectEmpty();
     });
 

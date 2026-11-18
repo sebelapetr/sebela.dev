@@ -1,0 +1,42 @@
+[
+  {
+    "date": "2025-02-10",
+    "notes": "Started the **transformer explainer**. Attention finally reads as a weighted lookup:\n\n- queries ask\n- keys answer\n- values carry the content"
+  },
+  {
+    "date": "2025-02-12",
+    "notes": "Went through positional encodings and stayed past midnight on the multi-head section."
+  },
+  {
+    "date": "2025-02-13",
+    "notes": "Short session after the late night. Summarised the residual stream in my own words."
+  },
+  {
+    "date": "2025-02-14",
+    "notes": "Finished the explainer. Next up: [tokenization](https://example.com/tokenization-notes)."
+  },
+  {
+    "date": "2025-02-17",
+    "notes": "No study today; planned the week and picked the tokenization reading order."
+  },
+  {
+    "date": "2025-02-18",
+    "notes": "Byte-pair encoding by hand on a toy vocabulary of eight words."
+  },
+  {
+    "date": "2025-02-20",
+    "notes": "Compared token counts of the same paragraph in three languages."
+  },
+  {
+    "date": "2025-02-24",
+    "notes": "First module of the prompt patterns course: roles, examples and output formats."
+  },
+  {
+    "date": "2025-02-27",
+    "notes": "Rewrote three fictional support prompts with explicit output schemas."
+  },
+  {
+    "date": "2025-03-03",
+    "notes": "Weekly review only: the course pace is fine, no changes to the plan."
+  }
+]

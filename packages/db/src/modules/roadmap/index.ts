@@ -1,5 +1,15 @@
 export { createRoadmapPersistence } from "./persistence.js";
 export type {
+  ClearDiaryNotesResult,
+  CreateTimeEntriesResult,
+  DeleteTimeEntryResult,
+  DiaryDayRecord,
+  DiaryResourceRecord,
+  ReplaceTimeEntryResult,
+  TimeEntryPiece,
+  TimeEntryRecord,
+  TimeEntryReplacement,
+  TimeEntryWriteFailure,
   CreateRoadmapAreaResult,
   CreateRoadmapModuleResult,
   CreateRoadmapResourceResult,

@@ -634,6 +634,52 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.components.schemas).toHaveProperty("RoadmapCurrentModule");
   });
 
+  it("documents the public diary reads and its private notes and time-entry writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    expect(operation("GET", "/v1/roadmap/diary").security).toEqual([]);
+    expect(operation("GET", "/v1/roadmap/diary").responses["200"]?.content).toEqual(
+      content("Diary"),
+    );
+    const day = operation("GET", "/v1/roadmap/diary/:date");
+    expect(day.security).toEqual([]);
+    expect(day.responses["200"]?.content).toEqual(content("DiaryDay"));
+    expect(Object.keys(day.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+
+    const notes = operation("PATCH", "/v1/roadmap/diary/:date");
+    expect(notes.requestBody?.content).toEqual(content("DiaryNotesWrite"));
+    expect(notes.responses["200"]?.content).toEqual(content("DiaryDay"));
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/diary/:date").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404"]),
+    );
+
+    const create = operation("POST", "/v1/roadmap/time-entries");
+    expect(create.requestBody?.content).toEqual(content("TimeEntryCreate"));
+    expect(create.responses["201"]?.content).toEqual(content("TimeEntryWrite"));
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    const update = operation("PATCH", "/v1/roadmap/time-entries/:id");
+    expect(update.requestBody?.content).toEqual(content("TimeEntryUpdate"));
+    expect(update.responses["200"]?.content).toEqual(content("TimeEntryWrite"));
+    expect(Object.keys(update.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404", "409"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/time-entries/:id").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404"]),
+    );
+    for (const [method, path] of [
+      ["PATCH", "/v1/roadmap/diary/:date"],
+      ["DELETE", "/v1/roadmap/diary/:date"],
+      ["POST", "/v1/roadmap/time-entries"],
+      ["PATCH", "/v1/roadmap/time-entries/:id"],
+      ["DELETE", "/v1/roadmap/time-entries/:id"],
+    ] as const) {
+      expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

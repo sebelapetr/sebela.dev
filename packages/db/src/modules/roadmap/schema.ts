@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  date,
+  index,
   integer,
   pgSchema,
   primaryKey,
@@ -18,6 +20,12 @@ export const roadmapSchema = pgSchema("ai_roadmap");
 export const RESERVED_SLUG_CHECK = "areas_slug_not_reserved";
 /** A resource finishes no earlier than it starts. */
 export const PERIOD_CHECK = "resources_period_is_ordered";
+/**
+ * No two time entries overlap, whatever their learning target; touching endpoints do not overlap.
+ * The exclusion constraint is added by hand in migration `0016_learning_diary.sql`, because
+ * drizzle-kit cannot express it.
+ */
+export const TIME_ENTRY_OVERLAP_EXCLUSION = "time_entries_do_not_overlap";
 
 export const resourceType = roadmapSchema.enum("resource_type", [
   "youtube-video",
@@ -137,5 +145,47 @@ export const resourceTopics = roadmapSchema.table(
   (table) => [
     primaryKey({ columns: [table.resourceId, table.topicId] }),
     unique("resource_topics_position_unique").on(table.resourceId, table.position),
+  ],
+);
+
+/**
+ * Diary days: one row per calendar date in Europe/Prague with its optional Markdown notes. A day
+ * is part of the diary only while it has notes or time entries.
+ */
+export const diaryEntries = roadmapSchema.table("diary_entries", {
+  date: date("date", { mode: "string" }).primaryKey(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Logged study intervals, each within one diary day: it starts on that Prague date and ends no
+ * later than the next Prague midnight. Its resource cannot be deleted while it exists. Durations
+ * are derived from the endpoints, never stored.
+ */
+export const timeEntries = roadmapSchema.table(
+  "time_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    diaryDate: date("diary_date", { mode: "string" })
+      .notNull()
+      .references(() => diaryEntries.date),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => resources.id),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("time_entries_diary_date_index").on(table.diaryDate),
+    index("time_entries_resource_id_index").on(table.resourceId),
+    check("time_entries_period_is_ordered", sql`${table.endedAt} > ${table.startedAt}`),
+    check(
+      "time_entries_within_diary_day",
+      sql`${table.diaryDate} = (${table.startedAt} AT TIME ZONE 'Europe/Prague')::date AND ${table.endedAt} <= ((${table.diaryDate} + 1)::timestamp AT TIME ZONE 'Europe/Prague')`,
+    ),
   ],
 );

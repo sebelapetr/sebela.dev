@@ -7,12 +7,15 @@ import {
   createApiClient,
   type ApiClient,
   type Cv,
+  type Diary,
+  type DiaryDay,
   type ErrorResponse,
   type MediaUpload,
   type Roadmap,
   type RoadmapAreaDetail,
   type RoadmapCurrent,
   type RoadmapModuleDetail,
+  type TimeEntryWrite,
 } from "@sebela/api-client";
 import { samplePdf, samplePng } from "@sebela/services/testing";
 
@@ -1272,5 +1275,100 @@ describe("the generated API client", () => {
       ...Array<string>(6).fill(bearer),
       null,
     ]);
+  });
+
+  it("keeps the learning diary: public day reads, keyed notes and time entries, overlap refused", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const day = (date: string) => ({ params: { path: { date } } });
+    await backend.services.roadmap.createArea({
+      slug: "diary-basics",
+      name: "Diary basics",
+      description: null,
+      weight: 10,
+      position: 9,
+    });
+    await backend.services.roadmap.createModule({
+      slug: "diary-module",
+      area: "diary-basics",
+      name: "Diary module",
+      description: null,
+      position: 0,
+    });
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "diary-guide",
+        module: "diary-module",
+        name: "Diary guide",
+        type: "link",
+        position: 0,
+      },
+    });
+    expect(resource.response.status).toBe(201);
+
+    const empty = await visitor.GET("/v1/roadmap/diary/{date}", day("2026-03-02"));
+    expect(empty.error?.error.code).toBe("not_found");
+    const notes = await client.PATCH("/v1/roadmap/diary/{date}", {
+      ...day("2026-03-02"),
+      body: { notes: "A *fictional* evening." },
+    });
+    const notesDay: DiaryDay | undefined = notes.data;
+    expect(notesDay).toEqual({
+      date: "2026-03-02",
+      notes: "A *fictional* evening.",
+      entries: [],
+      totalSeconds: 0,
+    });
+
+    const session = {
+      resource: "diary-guide",
+      startedAt: "2026-03-02T23:30:00+01:00",
+      endedAt: "2026-03-03T00:30:00+01:00",
+    };
+    const created = await client.POST("/v1/roadmap/time-entries", { body: session });
+    const write: TimeEntryWrite | undefined = created.data;
+    expect(created.response.status).toBe(201);
+    expect(write?.dates).toEqual(["2026-03-02", "2026-03-03"]);
+    const overlap = await client.POST("/v1/roadmap/time-entries", { body: session });
+    expect(overlap.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/roadmap/time-entries", {
+      body: { ...session, resource: "no-such-guide" },
+    });
+    expect(unknown.error?.error.fields?.map(({ path }) => path)).toEqual(["resource"]);
+
+    const read = await visitor.GET("/v1/roadmap/diary");
+    const diary: Diary | undefined = read.data;
+    expect(diary?.days.map(({ date, totalSeconds }) => [date, totalSeconds])).toEqual([
+      ["2026-03-03", 1800],
+      ["2026-03-02", 1800],
+    ]);
+
+    const [first, second] = write?.entries ?? [];
+    const moved = await client.PATCH("/v1/roadmap/time-entries/{id}", {
+      params: { path: { id: first?.id ?? "" } },
+      body: { startedAt: "2026-03-02T22:30:00+01:00" },
+    });
+    expect(moved.data?.entries.map(({ durationSeconds }) => durationSeconds)).toEqual([5400]);
+    for (const entry of [first, second]) {
+      const removed = await client.DELETE("/v1/roadmap/time-entries/{id}", {
+        params: { path: { id: entry?.id ?? "" } },
+      });
+      expect(removed.response.status).toBe(204);
+    }
+    expect(
+      (await client.DELETE("/v1/roadmap/diary/{date}", day("2026-03-02"))).response.status,
+    ).toBe(204);
+    expect((await visitor.GET("/v1/roadmap/diary")).data).toEqual({ days: [] });
+    expect(
+      (
+        await client.DELETE("/v1/roadmap/resources/{slug}", {
+          params: { path: { slug: "diary-guide" } },
+        })
+      ).response.status,
+    ).toBe(204);
+    await backend.services.roadmap.deleteModule("diary-module");
+    await backend.services.roadmap.deleteArea("diary-basics");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
   });
 });

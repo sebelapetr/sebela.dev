@@ -113,6 +113,13 @@
       "when": 1795007102223,
       "tag": "0015_roadmap",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795026474533,
+      "tag": "0016_learning_diary",
+      "breakpoints": true
     }
   ]
 }

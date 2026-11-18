@@ -3,27 +3,9 @@
 import { z } from "zod";
 
 import { SlugParamsSchema, TopicSchema } from "../profile/index.js";
+import { roadmapResourceStatuses, roadmapResourceTypes } from "./catalogs.js";
 
-/** Kinds of learning resource, the values of the original application. */
-export const roadmapResourceTypes = [
-  "youtube-video",
-  "youtube-playlist",
-  "google-drive",
-  "video",
-  "link",
-  "text",
-  "project",
-  "book",
-] as const;
-
-/** Where a resource stands; `paused` and `skipped` are kept on the resource only. */
-export const roadmapResourceStatuses = [
-  "planned",
-  "in-progress",
-  "completed",
-  "paused",
-  "skipped",
-] as const;
+export { roadmapResourceStatuses, roadmapResourceTypes };
 
 /** The status an area or a module derives from its resources; it is never `paused`. */
 export const roadmapDerivedStatuses = ["planned", "in-progress", "completed"] as const;
@@ -375,3 +357,30 @@ export type RoadmapModuleDetail = z.infer<typeof RoadmapModuleDetailSchema>;
 export type RoadmapCurrentModule = z.infer<typeof RoadmapCurrentModuleSchema>;
 export type RoadmapCurrentArea = z.infer<typeof RoadmapCurrentAreaSchema>;
 export type RoadmapCurrent = z.infer<typeof RoadmapCurrentSchema>;
+
+export {
+  DiaryDateParamsSchema,
+  DiaryDateSchema,
+  DiaryDaySchema,
+  DiaryNotesWriteSchema,
+  DiaryResourceSchema,
+  DiarySchema,
+  TimeEntryCreateSchema,
+  TimeEntryIdParamsSchema,
+  TimeEntrySchema,
+  TimeEntryUpdateSchema,
+  TimeEntryWriteSchema,
+  diaryTimeZone,
+} from "./diary.js";
+export type {
+  Diary,
+  DiaryDateParams,
+  DiaryDay,
+  DiaryNotesWrite,
+  DiaryResource,
+  TimeEntry,
+  TimeEntryCreate,
+  TimeEntryIdParams,
+  TimeEntryUpdate,
+  TimeEntryWrite,
+} from "./diary.js";

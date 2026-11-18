@@ -37,16 +37,18 @@ import type {
 } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
+import { createLearningDiary, type LearningDiary } from "./diary.js";
 import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 
 /**
- * The AI roadmap: its areas, their modules and the resources in them. Reads return contract
+ * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
+ * time spent on those resources (see `LearningDiary`). Reads return contract
  * records; the whole tree carries progress derived on every read and is never stored. Expected
  * refusals are `DomainError`s: `not_found` for a missing slug, `conflict` for a taken slug or a
  * record that still has children or links, and `validation_failed` naming the offending field for
  * a reserved area slug, an unknown parent or topic, a repeated topic or a finish before the start.
  */
-export interface RoadmapService {
+export interface RoadmapService extends LearningDiary {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
   /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
@@ -73,9 +75,11 @@ export interface RoadmapService {
   createResource(input: RoadmapResourceCreate): Promise<RoadmapResource>;
   /** A given `module` moves the resource; given `topics` replace its links. */
   updateResource(slug: string, changes: RoadmapResourceUpdate): Promise<RoadmapResource>;
-  /** Removes the resource with its topic links. */
+  /** Removes the resource with its topic links; refused with `conflict` while it has time entries. */
   deleteResource(slug: string): Promise<void>;
 }
+
+export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
 
 const iso = (instant: Date | null) => (instant === null ? null : instant.toISOString());
 const instant = (value: string | null) => (value === null ? null : new Date(value));
@@ -360,5 +364,7 @@ export function createRoadmapService(persistence: RoadmapPersistence): RoadmapSe
       if (result.reason === "not_found") throw missing("resource", slug);
       throw stillReferenced("resource", slug, "records linking to it");
     },
+
+    ...createLearningDiary(persistence),
   };
 }

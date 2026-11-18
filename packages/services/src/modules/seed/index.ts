@@ -32,7 +32,9 @@ export type SeedKind =
   | "currentFocus"
   | "roadmapAreas"
   | "roadmapModules"
-  | "roadmapResources";
+  | "roadmapResources"
+  | "roadmapDiary"
+  | "roadmapTimeEntries";
 
 /** How many records of one kind a load created and how many existing ones it updated. */
 export interface SeedCount {
@@ -62,6 +64,11 @@ export interface SeedReport {
  *   the seed names instead of duplicating it. A matched record is overwritten with the seed's
  *   values, so a rerun undoes edits to the records the seed names; records and case studies it does
  *   not name are kept. A rerun of the same folder creates nothing new.
+ * - A diary day is matched by its date and its notes are overwritten; its time entries stay. A
+ *   session is matched by its resource and absolute endpoints, whatever offset they are written
+ *   with: one already logged (in one or more diary-day pieces) is left as it is and counted as
+ *   updated, any other one is logged. A session that overlaps logged time, or another session of
+ *   the seed, is refused as `conflict` at its location and the whole load rolls back.
  * - Every data file is optional; an absent one leaves its kind untouched.
  * - Attached files are reused by content, so an unchanged file is never stored twice. Media a seed
  *   record stopped referring to is deleted after the load unless anything still uses it.
@@ -108,6 +115,8 @@ const emptyCounts = (): Counts => ({
   roadmapAreas: { created: 0, updated: 0 },
   roadmapModules: { created: 0, updated: 0 },
   roadmapResources: { created: 0, updated: 0 },
+  roadmapDiary: { created: 0, updated: 0 },
+  roadmapTimeEntries: { created: 0, updated: 0 },
 });
 
 const isRefusal = (error: unknown, ...codes: string[]) =>
@@ -128,7 +137,10 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Whether the profile holds no person, no record of any kind and no media, and no roadmap area. */
+/**
+ * Whether the profile holds no person, no record of any kind and no media, and the roadmap no area
+ * and no diary day.
+ */
 async function isEmpty(
   profile: ProfileService,
   media: MediaService,
@@ -152,6 +164,7 @@ async function isEmpty(
     () => profile.listCurrentFocus(),
     () => media.listMedia(),
     async () => (await roadmap.getRoadmap()).areas,
+    async () => (await roadmap.getDiary()).days,
   ];
   for (const list of lists) if ((await list()).length > 0) return false;
   return true;
@@ -181,6 +194,10 @@ async function checkReferences(
   const modules = await slugs(
     data.roadmapModules,
     Promise.resolve(tree.flatMap((area) => area.modules)),
+  );
+  const resources = await slugs(
+    data.roadmapResources,
+    Promise.resolve(tree.flatMap((area) => area.modules.flatMap((module) => module.resources))),
   );
 
   const issues: DomainErrorField[] = [];
@@ -232,6 +249,9 @@ async function checkReferences(
   for (const { location, value } of data.roadmapResources) {
     check(modules, value.module, `${location}.module`, "roadmap module");
     checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
+  for (const { location, value } of data.roadmapTimeEntries) {
+    check(resources, value.resource, `${location}.resource`, "roadmap resource");
   }
   return issues;
 }
@@ -486,6 +506,43 @@ export function createSeedService(
           (value) => roadmap.createResource(value),
           (slug, changes) => roadmap.updateResource(slug, changes),
         );
+
+        for (const { location, value } of data.roadmapDiary) {
+          await at(location, async () => {
+            const existing = await roadmap.getDiaryDay(value.date).catch((error: unknown) => {
+              if (isRefusal(error, "not_found")) return null;
+              throw error;
+            });
+            await roadmap.writeDiaryNotes(value.date, { notes: value.notes });
+            counts.roadmapDiary[existing?.notes == null ? "created" : "updated"] += 1;
+          });
+        }
+
+        // A session is matched by its resource and absolute endpoints. Logged intervals never
+        // overlap, so the session is already logged exactly when the resource's entries inside it
+        // fill it completely, however it was split into diary days.
+        const logged =
+          data.roadmapTimeEntries.length === 0
+            ? []
+            : (await roadmap.getDiary()).days.flatMap((day) => day.entries);
+        for (const { location, value } of data.roadmapTimeEntries) {
+          const start = Date.parse(value.startedAt);
+          const end = Date.parse(value.endedAt);
+          const covered = logged
+            .filter(
+              (entry) =>
+                entry.resource.slug === value.resource &&
+                Date.parse(entry.startedAt) >= start &&
+                Date.parse(entry.endedAt) <= end,
+            )
+            .reduce((sum, entry) => sum + entry.durationSeconds * 1000, 0);
+          if (covered === end - start) {
+            counts.roadmapTimeEntries.updated += 1;
+            continue;
+          }
+          await at(location, () => roadmap.createTimeEntry(value));
+          counts.roadmapTimeEntries.created += 1;
+        }
         return true;
       });
     } catch (error) {

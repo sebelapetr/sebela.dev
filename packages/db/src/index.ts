@@ -116,6 +116,16 @@ export type {
   UpdateTestimonialResult,
 } from "./modules/profile/index.js";
 export type {
+  ClearDiaryNotesResult,
+  CreateTimeEntriesResult,
+  DeleteTimeEntryResult,
+  DiaryDayRecord,
+  DiaryResourceRecord,
+  ReplaceTimeEntryResult,
+  TimeEntryPiece,
+  TimeEntryRecord,
+  TimeEntryReplacement,
+  TimeEntryWriteFailure,
   CreateRoadmapAreaResult,
   CreateRoadmapModuleResult,
   CreateRoadmapResourceResult,

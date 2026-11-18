@@ -37,7 +37,10 @@ export interface WriteEvent {
   readonly operationId: string;
   readonly method: string;
   readonly path: string;
-  /** The content record the write changed. */
+  /**
+   * The content record the write changed. A write that changes several records, such as a time
+   * entry over two diary days, reports one event for each.
+   */
   readonly change: ContentChange;
 }
 
@@ -53,29 +56,38 @@ const property = (value: unknown, name: string): unknown =>
   typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
 
 /**
- * The content change a committed write made: its route's domain and action, and the record named
- * by the `slug` or `id` path parameter, or else by the result. The person has no record. `null`
- * when the record cannot be named; the app then logs it instead of notifying.
+ * The content changes a committed write made: its route's domain and action, and each record the
+ * route's `records` names, or else the one record named by the `slug` or `id` path parameter, or by
+ * the result. The person has no record. `null` when a record cannot be named; the app then logs it
+ * instead of notifying.
  */
-function changeOf(
-  route: RouteDocumentation,
+function changesOf(
+  route: RouteDefinition,
   params: unknown,
   result: unknown,
-): ContentChange | null {
+): ContentChange[] | null {
   if (route.method === "GET" || !route.content) return null;
-  const record =
-    route.content === "person"
-      ? null
-      : (property(params, "slug") ??
-        property(params, "id") ??
-        property(result, "slug") ??
-        property(result, "id"));
-  const parsed = ContentChangeSchema.safeParse({
-    domain: route.content,
-    record,
-    action: ACTIONS[route.method],
-  });
-  return parsed.success ? parsed.data : null;
+  const records: readonly unknown[] = route.records
+    ? route.records({ params, result })
+    : [
+        route.content === "person"
+          ? null
+          : (property(params, "slug") ??
+            property(params, "id") ??
+            property(result, "slug") ??
+            property(result, "id")),
+      ];
+  const changes: ContentChange[] = [];
+  for (const record of records) {
+    const parsed = ContentChangeSchema.safeParse({
+      domain: route.content,
+      record,
+      action: ACTIONS[route.method],
+    });
+    if (!parsed.success) return null;
+    changes.push(parsed.data);
+  }
+  return changes.length > 0 ? changes : null;
 }
 
 export interface AppDependencies {
@@ -253,6 +265,13 @@ const describingRoadmap: RoadmapService = {
   createResource: documentationOnly,
   updateResource: documentationOnly,
   deleteResource: documentationOnly,
+  getDiary: documentationOnly,
+  getDiaryDay: documentationOnly,
+  writeDiaryNotes: documentationOnly,
+  deleteDiaryNotes: documentationOnly,
+  createTimeEntry: documentationOnly,
+  updateTimeEntry: documentationOnly,
+  deleteTimeEntry: documentationOnly,
 };
 
 /**
@@ -334,14 +353,16 @@ export function createApp(dependencies: AppDependencies): Api {
       const result = await route.handle({ body: c.get("body"), params });
       // Reached only once the service has committed; a failed write throws before it.
       if (route.method !== "GET") {
-        const change = changeOf(route, params, result);
-        if (change) {
-          await notify({
-            operationId: route.operationId,
-            method: route.method,
-            path: c.req.path,
-            change,
-          });
+        const changes = changesOf(route, params, result);
+        if (changes) {
+          for (const change of changes) {
+            await notify({
+              operationId: route.operationId,
+              method: route.method,
+              path: c.req.path,
+              change,
+            });
+          }
         } else {
           log(redact(`error notifying ${route.method} ${c.req.path}: no content record`));
         }

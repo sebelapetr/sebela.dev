@@ -1,7 +1,7 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write to the profile or to the roadmap shows once the interval has elapsed, on the
+// seconds, a write to the profile, the roadmap or the learning diary shows once the interval has elapsed, on the
 // overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
 // leaves its old address; a restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
@@ -109,6 +109,30 @@ test.describe("cached content without invalidation notifications", () => {
         intervals: [500],
       })
       .toContain("Late orbits");
+  });
+
+  test("a diary write with a dropped notification shows once the fallback interval has elapsed", async () => {
+    // This fixture has no diary: the warmed list says so and the day does not exist yet.
+    const empty = "No diary entries yet.";
+    const day = "/ai-roadmap/diary/2026-03-05";
+    expect((await read("/ai-roadmap/diary")).body).toContain(empty);
+    expect((await read(day)).status).toBe(404);
+
+    const response = await fetch(`${api.url}/v1/roadmap/diary/2026-03-05`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: "Fictional notes about late orbits." }),
+    });
+    // The write succeeds although its notification cannot be delivered.
+    expect(response.status, "PATCH /v1/roadmap/diary/2026-03-05").toBe(200);
+
+    // Inside the interval the cached list is still served: no notification arrived.
+    expect((await read("/ai-roadmap/diary")).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read("/ai-roadmap/diary")).body, within)
+      .toContain("Fictional notes about late orbits.");
+    await expect.poll(async () => (await read(day)).status, within).toBe(200);
   });
 
   test("a new module and resource reach the warmed area page and homepage Exploring after the interval", async () => {

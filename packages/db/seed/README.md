@@ -24,22 +24,24 @@ testimonial photos included, stays in the owner's private seed folder.
 Every data file is optional; an absent file leaves its kind of record untouched. Any other `.json`
 file in the folder is refused, so a misspelt name does not silently load nothing.
 
-| File                     | Holds                                                                | Identity                              |
-| ------------------------ | -------------------------------------------------------------------- | ------------------------------------- |
-| `person.json`            | one object: the person                                               | the single person                     |
-| `technologies.json`      | an array of technologies                                             | `slug`                                |
-| `topics.json`            | an array of topics                                                   | `slug`                                |
-| `organizations.json`     | an array of organizations                                            | `slug`                                |
-| `experiences.json`       | an array of experiences                                              | `slug`                                |
-| `projects.json`          | an array of projects, each with an optional `caseStudy`              | `slug`; the case study by its project |
-| `explorations.json`      | an array of explorations                                             | `slug`                                |
-| `services.json`          | an array of services with their evidence                             | `slug`                                |
-| `education.json`         | an array of education records                                        | `slug`                                |
-| `testimonials.json`      | an array of testimonials                                             | `slug`                                |
-| `current-focus.json`     | an array of current-focus entries                                    | `slug`                                |
-| `roadmap-areas.json`     | an array of roadmap areas                                            | `slug`                                |
-| `roadmap-modules.json`   | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules     |
-| `roadmap-resources.json` | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources   |
+| File                        | Holds                                                                | Identity                                          |
+| --------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
+| `person.json`               | one object: the person                                               | the single person                                 |
+| `technologies.json`         | an array of technologies                                             | `slug`                                            |
+| `topics.json`               | an array of topics                                                   | `slug`                                            |
+| `organizations.json`        | an array of organizations                                            | `slug`                                            |
+| `experiences.json`          | an array of experiences                                              | `slug`                                            |
+| `projects.json`             | an array of projects, each with an optional `caseStudy`              | `slug`; the case study by its project             |
+| `explorations.json`         | an array of explorations                                             | `slug`                                            |
+| `services.json`             | an array of services with their evidence                             | `slug`                                            |
+| `education.json`            | an array of education records                                        | `slug`                                            |
+| `testimonials.json`         | an array of testimonials                                             | `slug`                                            |
+| `current-focus.json`        | an array of current-focus entries                                    | `slug`                                            |
+| `roadmap-areas.json`        | an array of roadmap areas                                            | `slug`                                            |
+| `roadmap-modules.json`      | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules                 |
+| `roadmap-resources.json`    | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources               |
+| `roadmap-diary.json`        | an array of learning diary days, each `{ "date", "notes" }`          | `date`                                            |
+| `roadmap-time-entries.json` | an array of study sessions, each naming its `resource`               | `resource`, `startedAt` and `endedAt` as instants |
 
 Each record has exactly the fields of the API's create request for its kind (the Zod schemas in
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
@@ -54,6 +56,21 @@ Each record has exactly the fields of the API's create request for its kind (the
   module its `area`, a roadmap resource its `module` and `topics`, and so on. A reference may name a record of the same folder or one already in the database.
 
 A slug is unique within its file.
+
+### Learning diary and time entries
+
+- **A diary day** is `{ "date": "2025-02-10", "notes": "…" }`: a calendar date in Europe/Prague
+  and its Markdown notes, as in the API's notes write. A date is unique within its file. A day
+  with notes and no session is allowed; time entries need no notes.
+- **A session** is exactly the API's time entry create request: `{ "resource", "startedAt",
+"endedAt" }`. Both instants carry `Z` or a UTC offset (`2025-02-12T22:30:00+01:00`), are whole
+  seconds, and the end lies after the start. The resource is a roadmap resource slug of the folder
+  or the database. A session across Prague midnight is split into one time entry per diary day,
+  exactly as through the API.
+- **Sessions have no slug.** A session is identified by its resource and its absolute endpoints, so
+  `2025-02-12T22:30:00+01:00` and `2025-02-12T21:30:00Z` are the same instant. The same session is
+  listed once per file. Sessions may not overlap each other or time already logged, whatever the
+  resource; adjacent sessions are allowed.
 
 ## Attached files
 
@@ -75,7 +92,13 @@ A slug is unique within its file.
 - **Roadmap modules and resources are matched by their own slug**, not by their parent. A rerun
   in which a module names another area, or a resource another module, moves the existing record
   there instead of creating a second one. Its topic links are replaced by the seed's list.
-- **A rerun of an unchanged folder changes nothing**: no new records, links or media.
+- **Diary days are matched by date.** Their notes are overwritten; their time entries are kept.
+- **Sessions are matched by resource and instants.** A session whose whole interval is already
+  logged on its resource, in one or more diary-day pieces, is left as it is and counted as updated;
+  any other session is logged. There is no reconciliation beyond that: a session removed from the
+  seed or moved to other instants is not deleted, and a moved one that overlaps the old one is
+  refused as an overlap.
+- **A rerun of an unchanged folder changes nothing**: no new records, links, media or time entries.
 - **Changing a record in the seed** and loading again updates that record only.
 - **Superseded media are removed.** When a seed record stops referring to a file (it declares
   another one, `null` or omits the key), the media it referred to before are deleted after the
@@ -90,7 +113,7 @@ A slug is unique within its file.
 
 - **Worktree setup seeds only an empty profile.** `node harness/worktree.mjs create` runs
   `seed --if-empty` (`SeedService.loadSeedIntoEmpty`): it loads the demo seed only when the
-  worktree's database holds no person, no record of any kind, no media and no roadmap area, and otherwise prints that
+  worktree's database holds no person, no record of any kind, no media, no roadmap area and no diary day, and otherwise prints that
   the seed was skipped and writes nothing. Running setup again on an existing worktree therefore
   applies pending migrations but never overwrites content an agent has edited. The folder is still
   read and validated, so an invalid seed fails setup either way.
@@ -106,6 +129,8 @@ A slug is unique within its file.
   example `experiences.json[0].technologies[1]`. Nothing is written.
 - A folder, data file or attached file that cannot be read (missing permissions, for example) is
   refused the same way, without the path the file system named.
+- A session that overlaps logged time or another session of the seed is refused as a conflict at
+  its location, for example `roadmap-time-entries.json[3]`, and nothing is kept.
 - A failure during the load itself (for example a constraint the database refuses) rolls back every
   record written by this load and removes the files it stored. A file that cannot be removed is
   reported on the error output by its storage key.

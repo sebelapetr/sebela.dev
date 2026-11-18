@@ -131,6 +131,66 @@ export type UpdateRoadmapResourceResult =
 export type DeleteRoadmapRecordResult =
   { ok: true } | { ok: false; reason: "not_found" | "referenced" };
 
+/** One piece of a study session within one diary day, as the caller split it. */
+export interface TimeEntryPiece {
+  /** The diary day, `YYYY-MM-DD` in Europe/Prague, in which the piece starts. */
+  date: string;
+  startedAt: Date;
+  endedAt: Date;
+}
+
+/** The resource a time entry belongs to, with the slugs of its module and area. */
+export interface DiaryResourceRecord {
+  slug: string;
+  name: string;
+  type: RoadmapResourceType;
+  link: string | null;
+  module: string;
+  area: string;
+}
+
+export interface TimeEntryRecord {
+  id: string;
+  /** Its diary day, `YYYY-MM-DD`. */
+  date: string;
+  resource: DiaryResourceRecord;
+  startedAt: Date;
+  endedAt: Date;
+}
+
+/** A diary day with its notes and its time entries in start order. */
+export interface DiaryDayRecord {
+  date: string;
+  notes: string | null;
+  entries: TimeEntryRecord[];
+}
+
+/**
+ * Why a time-entry write was refused: the resource does not exist, or a piece overlaps a stored
+ * interval of any learning target.
+ */
+export type TimeEntryWriteFailure =
+  { ok: false; reason: "unknown_resource" } | { ok: false; reason: "overlap" };
+
+export type CreateTimeEntriesResult =
+  { ok: true; entries: TimeEntryRecord[] } | TimeEntryWriteFailure;
+
+/** What replaces a time entry: the resource slug and the new pieces, the first keeping the id. */
+export interface TimeEntryReplacement {
+  resource: string;
+  pieces: TimeEntryPiece[];
+}
+
+export type ReplaceTimeEntryResult<Refusal> =
+  | { ok: true; entries: TimeEntryRecord[]; previousDate: string }
+  | { ok: false; reason: "not_found" }
+  | TimeEntryWriteFailure
+  | Refusal;
+
+export type DeleteTimeEntryResult = { ok: true; date: string } | { ok: false; reason: "not_found" };
+
+export type ClearDiaryNotesResult = { ok: true } | { ok: false; reason: "not_found" };
+
 /**
  * Persistence of the AI roadmap: areas, their modules and the resources in them, with ordered
  * topic links to the profile's shared topics. Parents are real foreign keys without a cascade, so a
@@ -178,6 +238,40 @@ export interface RoadmapPersistence {
     slug: string,
     changes: Partial<RoadmapResourceFields & RoadmapResourceRelations>,
   ): Promise<UpdateRoadmapResourceResult>;
-  /** Deletes the resource and its topic links. */
+  /**
+   * Deletes the resource and its topic links; `referenced` while a time entry belongs to it.
+   */
   deleteRoadmapResource(slug: string): Promise<DeleteRoadmapRecordResult>;
+
+  /**
+   * Every diary day that has notes or time entries, newest first, read in one consistent
+   * snapshot. A day without either is not part of the diary.
+   */
+  loadDiary(): Promise<DiaryDayRecord[]>;
+  /** The diary day, or `null` when it has neither notes nor time entries. */
+  findDiaryDay(date: string): Promise<DiaryDayRecord | null>;
+  /** Creates the day or replaces its notes; its time entries stay. */
+  writeDiaryNotes(date: string, notes: string): Promise<DiaryDayRecord>;
+  /** Clears the day's notes and keeps its time entries; `not_found` when it has no notes. */
+  clearDiaryNotes(date: string): Promise<ClearDiaryNotesResult>;
+  /** The time entry, or `null`. */
+  findTimeEntry(id: string): Promise<TimeEntryRecord | null>;
+  /**
+   * Stores the pieces of one session on the resource, all or nothing, creating missing days also
+   * under concurrent writes. The database refuses a piece that overlaps any stored interval,
+   * including one committed concurrently, as `overlap`; touching endpoints do not overlap. Each
+   * piece must lie within its diary day and end after it starts, or the write throws.
+   */
+  createTimeEntries(resource: string, pieces: TimeEntryPiece[]): Promise<CreateTimeEntriesResult>;
+  /**
+   * Replaces the time entry, locked against concurrent writes, with what `plan` derives from its
+   * current state, all or nothing; `plan` may instead return its own refusal, which writes nothing.
+   * The first piece keeps the entry's id. The same guarantees as `createTimeEntries` hold.
+   */
+  replaceTimeEntry<Refusal extends { ok: false }>(
+    id: string,
+    plan: (current: TimeEntryRecord) => TimeEntryReplacement | Refusal,
+  ): Promise<ReplaceTimeEntryResult<Refusal>>;
+  /** Deletes the time entry and returns its day, whose notes stay. */
+  deleteTimeEntry(id: string): Promise<DeleteTimeEntryResult>;
 }

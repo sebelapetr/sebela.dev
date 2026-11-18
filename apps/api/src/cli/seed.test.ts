@@ -12,6 +12,8 @@ import {
   CaseStudySchema,
   CurrentFocusListSchema,
   CvSchema,
+  DiaryDaySchema,
+  DiarySchema,
   EducationListSchema,
   ExperienceListSchema,
   ExplorationListSchema,
@@ -110,6 +112,16 @@ describe("the seed CLI", () => {
     currentFocus: (await read("/v1/current-focus", CurrentFocusListSchema)).length,
     media: (await read("/v1/media", MediaListSchema)).length,
     roadmap: await roadmapShape(),
+    diary: (await read("/v1/roadmap/diary", DiarySchema)).days.map((day) => ({
+      date: day.date,
+      notes: day.notes,
+      entries: day.entries.map(({ resource, startedAt, endedAt }) => [
+        resource.slug,
+        startedAt,
+        endedAt,
+      ]),
+      totalSeconds: day.totalSeconds,
+    })),
   });
 
   describe("with the demo seed", () => {
@@ -151,6 +163,21 @@ describe("the seed CLI", () => {
       const current = await read("/v1/roadmap/current", RoadmapCurrentSchema);
       expect(current.areas.length).toBeGreaterThanOrEqual(2);
       expect(current.areas.every(({ modules: inProgress }) => inProgress.length > 0)).toBe(true);
+
+      // A few weeks of diary: notes-only days, logged days and a session split at Prague midnight.
+      const diary = await read("/v1/roadmap/diary", DiarySchema);
+      expect(diary.days.length).toBeGreaterThanOrEqual(8);
+      expect(diary.days.some(({ entries, notes }) => entries.length === 0 && notes)).toBe(true);
+      expect(diary.days.some(({ entries }) => entries.length > 0)).toBe(true);
+      for (const day of diary.days) {
+        expect(day.totalSeconds).toBe(
+          day.entries.reduce((sum, { durationSeconds }) => sum + durationSeconds, 0),
+        );
+      }
+      expect(result.out).toMatch(/diary days: \d+ created, 0 updated/);
+      expect(result.out).toMatch(/time entry sessions: \d+ created, 0 updated/);
+      const firstDay = diary.days.at(-1)?.date ?? "";
+      expect((await read(`/v1/roadmap/diary/${firstDay}`, DiaryDaySchema)).date).toBe(firstDay);
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();

@@ -56,6 +56,7 @@ describe("the content change", () => {
       "roadmap-area",
       "roadmap-module",
       "roadmap-resource",
+      "roadmap-diary",
       "media",
     ]);
     expect(contentChangeActions).toEqual(["created", "updated", "deleted"]);
@@ -68,6 +69,7 @@ describe("the content change", () => {
       { domain: "case-study", record: "routing-engine", action: "deleted" },
       { domain: "current-focus", record: "agent-evals", action: "updated" },
       { domain: "roadmap-resource", record: "prompting-notes", action: "deleted" },
+      { domain: "roadmap-diary", record: "2026-03-02", action: "updated" },
       { domain: "media", record: MEDIA, action: "deleted" },
     ]) {
       expect(ContentChangeSchema.parse(change)).toEqual(change);
@@ -86,6 +88,9 @@ describe("the content change", () => {
       { domain: "media", record: "not-a-uuid", action: "updated" },
       { domain: "media", record: "northwind-logo", action: "updated" },
       { domain: "media", record: null, action: "deleted" },
+      { domain: "roadmap-diary", record: "prompting-notes", action: "updated" },
+      { domain: "roadmap-diary", record: "2026-02-30", action: "updated" },
+      { domain: "roadmap-diary", record: null, action: "updated" },
       { domain: "experience", record: "northwind-lead", action: "updated", url: "/experience" },
       { domain: "experience", record: "northwind-lead", action: "updated", cacheKey: "all" },
       { domain: "experience", record: "x".repeat(101), action: "updated" },

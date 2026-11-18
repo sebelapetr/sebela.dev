@@ -10,6 +10,7 @@ import {
   WriteRefused,
 } from "../profile/index.js";
 import { breaksCheck, isStillReferenced } from "./database-errors.js";
+import { createDiaryPersistence } from "./diary.js";
 import {
   areas,
   modules,
@@ -231,6 +232,7 @@ function resourceScalars(
 /** Every roadmap persistence operation over one connection or transaction. */
 export function createRoadmapPersistence(db: Database): RoadmapPersistence {
   return {
+    ...createDiaryPersistence(db),
     loadRoadmapTree() {
       return db.transaction(
         async (tx): Promise<RoadmapAreaNode[]> => {
