@@ -181,3 +181,15 @@ export function readInvalidationSecret(env: Readonly<Record<string, string | und
   }
   return value;
 }
+
+/** The optional analytics integration's settings. */
+export interface AnalyticsConfig {
+  readonly scriptUrl: string;
+  readonly websiteId: string;
+}
+
+export function readAnalyticsConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): AnalyticsConfig | null {
+  throw new Error(`Not implemented (${String(Object.keys(env).length)} settings)`);
+}
