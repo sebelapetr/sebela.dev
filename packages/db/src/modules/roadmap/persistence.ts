@@ -232,7 +232,7 @@ function resourceScalars(
 /** Every roadmap persistence operation over one connection or transaction. */
 export function createRoadmapPersistence(db: Database): RoadmapPersistence {
   return {
-    ...createDiaryPersistence(),
+    ...createDiaryPersistence(db),
     loadRoadmapTree() {
       return db.transaction(
         async (tx): Promise<RoadmapAreaNode[]> => {

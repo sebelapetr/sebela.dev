@@ -78,7 +78,7 @@ describe("roadmap persistence", () => {
 
   beforeEach(async () => {
     await connection.db.execute(
-      sql`TRUNCATE ${sql.identifier("ai_roadmap")}.${sql.identifier("resource_topics")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("resources")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("modules")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("areas")}`,
+      sql`TRUNCATE ${sql.identifier("ai_roadmap")}.${sql.identifier("time_entries")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("diary_entries")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("resource_topics")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("resources")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("modules")}, ${sql.identifier("ai_roadmap")}.${sql.identifier("areas")}`,
     );
     for (const { slug } of await profile.listTopics()) await profile.deleteTopic(slug);
     for (const [position, slug] of ["agents", "rag", "evals"].entries()) {

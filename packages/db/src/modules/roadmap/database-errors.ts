@@ -16,3 +16,9 @@ export function breaksCheck(error: unknown, constraint: string): boolean {
   const cause = driverError(error);
   return cause?.code === "23514" && cause.constraint === constraint;
 }
+
+/** Whether the database refused a row because it conflicts under the named exclusion constraint. */
+export function breaksExclusion(error: unknown, constraint: string): boolean {
+  const cause = driverError(error);
+  return cause?.code === "23P01" && cause.constraint === constraint;
+}
