@@ -1,0 +1,23 @@
+[
+  {
+    "slug": "signal-basics",
+    "area": "orbit-foundations",
+    "name": "Signal basics",
+    "description": "Reading fictional signals.",
+    "position": 0
+  },
+  {
+    "slug": "empty-drawer",
+    "area": "orbit-foundations",
+    "name": "Empty drawer",
+    "description": null,
+    "position": 1
+  },
+  {
+    "slug": "calm-queues",
+    "area": "quiet-systems",
+    "name": "Calm queues",
+    "description": null,
+    "position": 0
+  }
+]

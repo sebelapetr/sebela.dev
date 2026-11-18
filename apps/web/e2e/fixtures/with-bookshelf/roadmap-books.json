@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "quiet-orbit-handbook",
+    "title": "The Quiet Orbit Handbook",
+    "author": "Ada Example",
+    "description": "A **fictional** handbook on reading signals before trusting them.",
+    "pages": 248,
+    "year": 2024,
+    "isbn": "978-0-00-000000-2",
+    "priority": 0,
+    "startedOn": "2026-02-20",
+    "endedOn": "2026-03-03",
+    "summary": "## What stayed\n\n- Read the signal twice before acting on it.\n- Notes </script><script>window.__bookInjected = true</script> with <b>raw</b> markup, <img src=\"x\" onerror=\"window.__bookInjected = true\"> and [a trap](javascript:window.__bookInjected=true).\n\nA long word: averyveryverylongfictionalidentifierthatkeepsgoingwithoutanyspacesatallsoitmustbreakinsteadofwideningthepage.",
+    "cover": {
+      "file": "files/quiet-orbit-cover.png",
+      "altText": "A placeholder cover for the fictional quiet orbit handbook."
+    }
+  },
+  {
+    "slug": "drifting-signals",
+    "title": "Drifting Signals",
+    "author": "Mira Sample",
+    "description": "An invented tour of noisy channels.",
+    "priority": 1,
+    "startedOn": "2026-03-01"
+  },
+  {
+    "slug": "bare-volume",
+    "title": "A Bare Volume",
+    "priority": 2
+  }
+]
