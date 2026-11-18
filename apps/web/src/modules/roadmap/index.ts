@@ -3,9 +3,11 @@
 // estimates, each area and module leading to its own page), an area's page (its modules), a
 // module's page (its resources, each with the anchor a source link lands on), the learning diary's
 // list and each diary day's page (study time and sessions at Prague's wall-clock times, grouped by
-// area and module) and the bookshelf and events addresses as explicit placeholders until their
-// pages are published — rendered from the content the profile module reads. Gives the overview's
-// lead, the detail pages' breadcrumbs and the diary's names for the pages' metadata.
+// area and module), the bookshelf (every book in shelf order with its derived status) and each
+// book's page (its facts, progress, reading time, resource and summary), and the events address as
+// an explicit placeholder until its page is published — rendered from the content the profile
+// module reads. Gives the overview's lead, the detail pages' breadcrumbs, the diary's names and the
+// bookshelf's and books' page facts for the pages' metadata.
 export { roadmapLead, toRoadmapOverview } from "./data/overview";
 export {
   roadmapPageFacts,
@@ -15,6 +17,15 @@ export {
   type RoadmapPageFacts,
 } from "./data/detail";
 export { DIARY_NAME, formatDiaryDate } from "./data/diary";
+export {
+  BOOKSHELF_NAME,
+  bookPageFacts,
+  bookshelfPageFacts,
+  type BookPageFacts,
+  type BookshelfPageFacts,
+} from "./data/bookshelf";
+export { RoadmapBookTemplate } from "./templates/book";
+export { RoadmapBookshelfTemplate } from "./templates/bookshelf";
 export { RoadmapAreaTemplate } from "./templates/area";
 export { RoadmapDiaryTemplate } from "./templates/diary";
 export { RoadmapDiaryDayTemplate } from "./templates/diary-day";

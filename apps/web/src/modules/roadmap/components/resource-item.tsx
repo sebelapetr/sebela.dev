@@ -6,6 +6,7 @@ import { cn } from "@sebela/ui/lib/utils";
 import { ProseMarkdown } from "../../_shared";
 import type { ResourceRow } from "../data/overview";
 import { EstimateBadge, TypeBadge } from "./badges";
+import { BookLink } from "./book-parts";
 import { ROADMAP_ITEM, ROADMAP_MARKER } from "./layout";
 import { ResourceIcon } from "./resource-icon";
 import { resourceMarker, resourceStatusWords } from "./status";
@@ -13,7 +14,7 @@ import { resourceMarker, resourceStatusWords } from "./status";
 /**
  * One resource on a module's timeline: its type icon in a marker coloured by its status, its name
  * (a link that opens in a new tab when it has a safe address), its status for screen readers, its
- * type and its estimate, then its description. On its module's own page it carries its anchor, so
+ * type and its estimate, the way to the book it reads on the bookshelf, then its description. On its module's own page it carries its anchor, so
  * a source link lands on it (and highlights it), and its heading is one level higher.
  */
 export function ResourceItem({
@@ -67,6 +68,9 @@ export function ResourceItem({
         <div className="flex flex-wrap items-center gap-2 self-start sm:flex-nowrap sm:self-auto">
           <TypeBadge label={resource.typeLabel} />
           {resource.estimate === null ? null : <EstimateBadge estimate={resource.estimate} />}
+          {resource.bookHref === null ? null : (
+            <BookLink href={resource.bookHref} resource={resource.name} />
+          )}
         </div>
       </div>
       {resource.description === null ? null : (

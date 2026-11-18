@@ -1,7 +1,7 @@
 // The profile module: the website's read of the API's public profile, experience, services, CV
-// and AI Roadmap routes, the learning diary's included (and the records the Ask page's answers
-// rest on), of the current CV PDF's file and of the stored images the site serves on its own media
-// path, with the process-local content cache those reads share and its invalidation. Server-only.
+// and AI Roadmap routes, the learning diary and the bookshelf included (and the records the Ask
+// page's answers rest on), of the current CV PDF's file and of the stored images the site serves on
+// its own media path, with the process-local content cache those reads share and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
