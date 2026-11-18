@@ -114,23 +114,57 @@ export function mediaBaseUrl(apiBaseUrl: string): string {
   return `${apiBaseUrl}/v1/media/files/test`;
 }
 
-/** Serves the API's end-to-end server for the fixture on the given port, or a free one. */
-export async function startApi(fixture: Fixture, port?: number): Promise<Started> {
-  const host = required("API_HOST");
-  port ??= await freePort(host);
-  return start(apiCommand(fixture), { API_PORT: String(port) }, origin(host, port), "/health");
+/** Where an end-to-end API sends its signed invalidation notifications, and with which secret. */
+export interface Invalidation {
+  readonly url: string;
+  readonly secret: string;
+}
+
+export interface ApiOptions {
+  /** The port to listen on; a free one by default. */
+  readonly port?: number;
+  /** Signed invalidation notifications after content writes; none by default. */
+  readonly invalidation?: Invalidation;
+  /** An absolute file the server writes a new API key to, for tests that write content. */
+  readonly keyFile?: string;
 }
 
 /**
- * Serves the built website on a free port, reading the API at `apiBaseUrl`. Its canonical origin is
- * its own address unless `siteOrigin` names another one.
+ * Serves the API's end-to-end server for the fixture. It sends no invalidation notifications
+ * unless `invalidation` names a receiver, whatever the checkout's environment says.
  */
+export async function startApi(fixture: Fixture, options: ApiOptions = {}): Promise<Started> {
+  const host = required("API_HOST");
+  const port = options.port ?? (await freePort(host));
+  return start(
+    apiCommand(fixture),
+    {
+      API_PORT: String(port),
+      API_WEB_INVALIDATION_URL: options.invalidation?.url ?? "",
+      API_WEB_INVALIDATION_SECRET: options.invalidation?.secret ?? "",
+      API_E2E_KEY_FILE: options.keyFile ?? "",
+    },
+    origin(host, port),
+    "/health",
+  );
+}
+
+export interface WebsiteOptions {
+  /** The canonical origin; the website's own address by default. */
+  readonly siteOrigin?: string;
+  /** The port to listen on; a free one by default. */
+  readonly port?: number;
+  /** The secret that verifies invalidation notifications; none by default. */
+  readonly invalidationSecret?: string;
+}
+
+/** Serves the built website, reading the API at `apiBaseUrl`. */
 export async function startWebsite(
   apiBaseUrl: string,
-  { siteOrigin }: { readonly siteOrigin?: string } = {},
+  { siteOrigin, port: chosenPort, invalidationSecret }: WebsiteOptions = {},
 ): Promise<Started> {
   const host = required("WEB_HOST");
-  const port = await freePort(host);
+  const port = chosenPort ?? (await freePort(host));
   const url = origin(host, port);
   return start(
     webCommand(),
@@ -139,6 +173,7 @@ export async function startWebsite(
       WEB_API_BASE_URL: apiBaseUrl,
       WEB_SITE_ORIGIN: siteOrigin ?? url,
       WEB_MEDIA_BASE_URL: mediaBaseUrl(apiBaseUrl),
+      WEB_INVALIDATION_SECRET: invalidationSecret ?? "",
     },
     url,
     "/favicon.ico",

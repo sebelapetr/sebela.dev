@@ -73,6 +73,7 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
     defineRoute<UploadBody>({
       operationId: "uploadMedia",
       method: "POST",
+      content: "media",
       path: LIST,
       access: "private",
       budget: "upload",
@@ -101,6 +102,7 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
     defineRoute<MediaUpdate, { id: string }>({
       operationId: "updateMedia",
       method: "PATCH",
+      content: "media",
       path: ITEM,
       access: "private",
       summary: "Update the alt text of media",
@@ -114,6 +116,7 @@ export function mediaRoutes(media: MediaService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteMedia",
       method: "DELETE",
+      content: "media",
       path: ITEM,
       access: "private",
       summary: "Delete media",

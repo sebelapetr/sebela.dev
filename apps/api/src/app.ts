@@ -3,6 +3,11 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { every } from "hono/combine";
 import { z } from "zod";
 
+import {
+  ContentChangeSchema,
+  type ContentChange,
+  type ContentChangeAction,
+} from "@sebela/contracts";
 import type { MediaService, ProfileService, Services } from "@sebela/services";
 
 import type { ApiConfig } from "./config.js";
@@ -31,9 +36,46 @@ export interface WriteEvent {
   readonly operationId: string;
   readonly method: string;
   readonly path: string;
+  /** The content record the write changed. */
+  readonly change: ContentChange;
 }
 
 export type WriteNotifier = (event: WriteEvent) => Promise<void>;
+
+const ACTIONS: Record<Exclude<RouteDocumentation["method"], "GET">, ContentChangeAction> = {
+  POST: "created",
+  PATCH: "updated",
+  DELETE: "deleted",
+};
+
+const property = (value: unknown, name: string): unknown =>
+  typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
+
+/**
+ * The content change a committed write made: its route's domain and action, and the record named
+ * by the `slug` or `id` path parameter, or else by the result. The person has no record. `null`
+ * when the record cannot be named; the app then logs it instead of notifying.
+ */
+function changeOf(
+  route: RouteDocumentation,
+  params: unknown,
+  result: unknown,
+): ContentChange | null {
+  if (route.method === "GET" || !route.content) return null;
+  const record =
+    route.content === "person"
+      ? null
+      : (property(params, "slug") ??
+        property(params, "id") ??
+        property(result, "slug") ??
+        property(result, "id"));
+  const parsed = ContentChangeSchema.safeParse({
+    domain: route.content,
+    record,
+    action: ACTIONS[route.method],
+  });
+  return parsed.success ? parsed.data : null;
+}
 
 export interface AppDependencies {
   readonly services: Pick<Services, "profile" | "apiKeys" | "media">;
@@ -249,10 +291,25 @@ export function createApp(dependencies: AppDependencies): Api {
   };
 
   const register = (route: RouteDefinition) => {
+    if (route.method !== "GET" && !route.content) {
+      throw new Error(`The write route ${route.operationId} declares no content domain.`);
+    }
     app.on(route.method, route.path, guard(route), async (c) => {
-      const result = await route.handle({ body: c.get("body"), params: c.get("params") });
+      const params = c.get("params");
+      const result = await route.handle({ body: c.get("body"), params });
+      // Reached only once the service has committed; a failed write throws before it.
       if (route.method !== "GET") {
-        await notify({ operationId: route.operationId, method: route.method, path: c.req.path });
+        const change = changeOf(route, params, result);
+        if (change) {
+          await notify({
+            operationId: route.operationId,
+            method: route.method,
+            path: c.req.path,
+            change,
+          });
+        } else {
+          log(redact(`error notifying ${route.method} ${c.req.path}: no content record`));
+        }
       }
       if (route.response.location) {
         c.header("Location", fillLocation(route.response.location, result));

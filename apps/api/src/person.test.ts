@@ -166,5 +166,12 @@ describe("the person API", () => {
       "PATCH /v1/person",
       "DELETE /v1/person",
     ]);
+    expect(events.map((event) => event.change)).toEqual(
+      ["created", "updated", "deleted"].map((action) => ({
+        domain: "person",
+        record: null,
+        action,
+      })),
+    );
   });
 });

@@ -48,6 +48,7 @@ export function technologyRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createTechnology",
       method: "POST",
+      content: "technology",
       path: LIST,
       access: "private",
       summary: "Create a technology",
@@ -65,6 +66,7 @@ export function technologyRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateTechnology",
       method: "PATCH",
+      content: "technology",
       path: ITEM,
       access: "private",
       summary: "Update a technology",
@@ -79,6 +81,7 @@ export function technologyRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteTechnology",
       method: "DELETE",
+      content: "technology",
       path: ITEM,
       access: "private",
       summary: "Delete a technology",

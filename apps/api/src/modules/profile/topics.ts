@@ -47,6 +47,7 @@ export function topicRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createTopic",
       method: "POST",
+      content: "topic",
       path: LIST,
       access: "private",
       summary: "Create a topic",
@@ -64,6 +65,7 @@ export function topicRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateTopic",
       method: "PATCH",
+      content: "topic",
       path: ITEM,
       access: "private",
       summary: "Update a topic",
@@ -77,6 +79,7 @@ export function topicRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteTopic",
       method: "DELETE",
+      content: "topic",
       path: ITEM,
       access: "private",
       summary: "Delete a topic",

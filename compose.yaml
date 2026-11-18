@@ -5,7 +5,8 @@
 # Compose. Compose interpolates every service, also those of an inactive profile, so the services
 # of the profile `api` require nothing here: Postgres-only commands work with the Postgres settings
 # alone. A missing API setting is empty in the containers, where the API's and the migration's own
-# validation stops them with its name (`API_TRUSTED_PROXIES` and `STORAGE_WORKTREE` may be empty).
+# validation stops them with its name (`API_TRUSTED_PROXIES`, `STORAGE_WORKTREE` and the two
+# `API_WEB_INVALIDATION_*` settings may be empty).
 # `pnpm stack:up` checks the two host-side settings, `API_HOST` and `API_PORT`, before it starts.
 #
 # `docker compose up` starts Postgres only. The profile `api` adds the containerised API stack of
@@ -94,6 +95,8 @@ services:
       API_RATE_LIMIT_KEY: ${API_RATE_LIMIT_KEY:-}
       API_RATE_LIMIT_MAX_TRACKED: ${API_RATE_LIMIT_MAX_TRACKED:-}
       API_RATE_LIMIT_UPLOAD: ${API_RATE_LIMIT_UPLOAD:-}
+      API_WEB_INVALIDATION_URL: ${API_WEB_INVALIDATION_URL:-}
+      API_WEB_INVALIDATION_SECRET: ${API_WEB_INVALIDATION_SECRET:-}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       # Local files live on the media volume below, not in the checkout, so they survive a restart
       # or a rebuilt container. The key namespaces (environment, worktree) apply below this folder.

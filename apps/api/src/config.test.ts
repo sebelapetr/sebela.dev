@@ -17,7 +17,13 @@ const env = {
   API_RATE_LIMIT_UPLOAD: "10/60",
   MEDIA_MAX_BYTES: "10485760",
   API_RATE_LIMIT_MAX_TRACKED: "5000",
+  API_WEB_INVALIDATION_URL: "",
+  API_WEB_INVALIDATION_SECRET: "",
 };
+
+// A disposable fixture secret and a fictional destination.
+const SECRET = "fixture-invalidation-secret-0123456789";
+const DESTINATION = "https://web.example.test/api/invalidate";
 
 describe("readApiConfig", () => {
   it("reads every setting from the environment", () => {
@@ -35,6 +41,7 @@ describe("readApiConfig", () => {
         upload: { max: 10, windowMs: 60_000 },
         maxTrackedCallers: 5000,
       },
+      websiteInvalidation: null,
     });
   });
 
@@ -68,5 +75,61 @@ describe("readApiConfig", () => {
     expect(() => readApiConfig({ ...env, API_RATE_LIMIT_PUBLIC: "10" })).toThrow(
       /API_RATE_LIMIT_PUBLIC/,
     );
+  });
+
+  describe("website invalidation", () => {
+    const configured = {
+      ...env,
+      API_WEB_INVALIDATION_URL: DESTINATION,
+      API_WEB_INVALIDATION_SECRET: SECRET,
+    };
+
+    it("reads the destination and the signing secret together", () => {
+      expect(readApiConfig(configured).websiteInvalidation).toEqual({
+        url: DESTINATION,
+        secret: SECRET,
+      });
+    });
+
+    it("is off when both are empty, and both must be present", () => {
+      expect(readApiConfig(env).websiteInvalidation).toBeNull();
+      expect(() => readApiConfig({ ...env, API_WEB_INVALIDATION_URL: undefined })).toThrow(
+        /API_WEB_INVALIDATION_URL/,
+      );
+      expect(() => readApiConfig({ ...env, API_WEB_INVALIDATION_SECRET: undefined })).toThrow(
+        /API_WEB_INVALIDATION_SECRET/,
+      );
+    });
+
+    it("refuses one without the other, naming the missing one", () => {
+      expect(() => readApiConfig({ ...configured, API_WEB_INVALIDATION_SECRET: "" })).toThrow(
+        /API_WEB_INVALIDATION_SECRET/,
+      );
+      expect(() => readApiConfig({ ...configured, API_WEB_INVALIDATION_URL: "" })).toThrow(
+        /API_WEB_INVALIDATION_URL/,
+      );
+    });
+
+    it("refuses a destination that is not a plain http or https address", () => {
+      for (const url of [
+        "web.example.test/api/invalidate",
+        "ftp://web.example.test/api/invalidate",
+        "https://user:pass@web.example.test/api/invalidate",
+        `${DESTINATION}?secret=${SECRET}`,
+        `${DESTINATION}#fragment`,
+      ]) {
+        const attempt = () => readApiConfig({ ...configured, API_WEB_INVALIDATION_URL: url });
+        expect(attempt, url).toThrow(/API_WEB_INVALIDATION_URL/);
+        expect(attempt, url).not.toThrow(new RegExp(SECRET));
+      }
+    });
+
+    it("refuses a short secret without echoing it", () => {
+      const attempt = () =>
+        readApiConfig({ ...configured, API_WEB_INVALIDATION_SECRET: "short-fixture-secret" });
+
+      expect(attempt).toThrow(/API_WEB_INVALIDATION_SECRET/);
+      expect(attempt).not.toThrow(/short-fixture-secret/);
+    });
   });
 });

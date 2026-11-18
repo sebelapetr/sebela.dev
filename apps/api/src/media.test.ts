@@ -146,7 +146,15 @@ describe("the media API", () => {
         .app.request("/v1/media", { method: "POST", ...upload(png, {}, auth) }, connection());
 
       expect(response.status).toBe(201);
-      expect(events).toEqual([{ operationId: "uploadMedia", method: "POST", path: "/v1/media" }]);
+      const { id } = MediaSchema.parse(await response.json());
+      expect(events).toEqual([
+        {
+          operationId: "uploadMedia",
+          method: "POST",
+          path: "/v1/media",
+          change: { domain: "media", record: id, action: "created" },
+        },
+      ]);
     });
   });
 

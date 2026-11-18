@@ -235,6 +235,9 @@ export function createWorktree({
           WEB_API_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}`,
           // Its canonical links, sitemap and llms.txt name the worktree's own website.
           WEB_SITE_ORIGIN: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}`,
+          // The API signs its invalidations for the worktree's own website with a secret of its own.
+          API_WEB_INVALIDATION_URL: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}/internal/invalidation`,
+          ...invalidationSecrets(randomPassword()),
         }),
         { flag: "wx", mode: 0o600 },
       );
@@ -250,6 +253,11 @@ export function createWorktree({
 
   backend.setup({ root: worktreePath, owner: name });
   return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
+}
+
+// The same server-only signing secret for the API's sender and the website's receiver.
+function invalidationSecrets(secret) {
+  return { API_WEB_INVALIDATION_SECRET: secret, WEB_INVALIDATION_SECRET: secret };
 }
 
 // Also true for a symbolic link, whether or not it leads anywhere.

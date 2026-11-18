@@ -217,11 +217,17 @@ describe("the organization API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createOrganization", method: "POST", path: "/v1/organizations" },
+      {
+        operationId: "createOrganization",
+        method: "POST",
+        path: "/v1/organizations",
+        change: { domain: "organization", record: "northwind", action: "created" },
+      },
       {
         operationId: "deleteOrganization",
         method: "DELETE",
         path: "/v1/organizations/northwind",
+        change: { domain: "organization", record: "northwind", action: "deleted" },
       },
     ]);
     expect((await request("/v1/organizations/northwind")).status).toBe(404);

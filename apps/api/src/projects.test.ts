@@ -391,8 +391,18 @@ describe("the project API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createProject", method: "POST", path: "/v1/projects" },
-      { operationId: "deleteProject", method: "DELETE", path: "/v1/projects/routing-engine" },
+      {
+        operationId: "createProject",
+        method: "POST",
+        path: "/v1/projects",
+        change: { domain: "project", record: "routing-engine", action: "created" },
+      },
+      {
+        operationId: "deleteProject",
+        method: "DELETE",
+        path: "/v1/projects/routing-engine",
+        change: { domain: "project", record: "routing-engine", action: "deleted" },
+      },
     ]);
     expect((await request("/v1/projects/routing-engine")).status).toBe(404);
     expect((await request("/v1/experiences/northwind-lead")).status).toBe(200);

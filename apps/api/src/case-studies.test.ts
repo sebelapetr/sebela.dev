@@ -291,8 +291,18 @@ describe("the case-study API", () => {
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(events).toEqual([
-      { operationId: "createCaseStudy", method: "POST", path: ADDRESS },
-      { operationId: "deleteCaseStudy", method: "DELETE", path: ADDRESS },
+      {
+        operationId: "createCaseStudy",
+        method: "POST",
+        path: ADDRESS,
+        change: { domain: "case-study", record: "routing-engine", action: "created" },
+      },
+      {
+        operationId: "deleteCaseStudy",
+        method: "DELETE",
+        path: ADDRESS,
+        change: { domain: "case-study", record: "routing-engine", action: "deleted" },
+      },
     ]);
     expect((await request(ADDRESS)).status).toBe(404);
     const project = ProjectSchema.parse(

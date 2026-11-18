@@ -1,6 +1,6 @@
 // The profile module: the website's read of the API's public profile, experience, services and CV
-// routes (and the records the Ask page's answers rest on), and of the current CV PDF's file.
-// Server-only.
+// routes (and the records the Ask page's answers rest on), and of the current CV PDF's file, with
+// the process-local content cache those reads share and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -8,6 +8,7 @@ import { cache } from "react";
 import { createApiClient, type ApiClient } from "@sebela/api-client";
 
 import { readWebConfig } from "../../config";
+import { createContentCache, type ContentCache } from "./data/content-cache";
 import { loadAsk, type AskResult } from "./data/load-ask";
 import { loadCv, type CvResult } from "./data/load-cv";
 import { loadExperience, type ExperienceResult } from "./data/load-experience";
@@ -31,7 +32,18 @@ export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./data/load
 
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
+/** The content cache of this process, shared by every route and page bundle loading this module. */
+const CACHE_KEY = Symbol.for("sebela.web.profile.contentCache");
+
+function contentCache(): ContentCache {
+  const holder = globalThis as unknown as Record<symbol, ContentCache | undefined>;
+  const cache = holder[CACHE_KEY] ?? createContentCache({ fetch: (request) => fetch(request) });
+  holder[CACHE_KEY] = cache;
+  return cache;
+}
+
 let client: ApiClient | undefined;
+let uncachedClient: ApiClient | undefined;
 
 /** The API's base address, from the environment validated on every call. */
 function apiBaseUrl(): string {
@@ -43,15 +55,34 @@ function mediaBaseUrl(): string {
   return readWebConfig(process.env).mediaBaseUrl;
 }
 
-/** The API client, created on first use after the environment is validated once per process. */
+/**
+ * The API client the pages read through, answering from the content cache: created on first use
+ * after the environment is validated once per process.
+ */
 function apiClient(): ApiClient {
-  client ??= createApiClient({ baseUrl: apiBaseUrl() });
+  const cache = contentCache();
+  client ??= createApiClient({ baseUrl: apiBaseUrl(), fetch: cache.fetch });
   return client;
+}
+
+/** The API client of reads that must be fresh, past the content cache. */
+function freshApiClient(): ApiClient {
+  uncachedClient ??= createApiClient({ baseUrl: apiBaseUrl() });
+  return uncachedClient;
+}
+
+/**
+ * Forgets every cached profile read, so the next request of every page, its metadata, the
+ * sitemap, `llms.txt` and the Open Graph images reads current data. A read already under way when
+ * it is called is not kept. Called by the invalidation module after a verified notification.
+ */
+export function invalidateProfileContent(): void {
+  contentCache().invalidate();
 }
 
 /**
  * The homepage's content for the current request, read once per request however many components
- * ask (React `cache`). Never cached across requests.
+ * ask (React `cache`), from the content cache.
  */
 export const getHomepage = cache((): Promise<HomepageResult> =>
   loadHomepage(apiClient(), { mediaBaseUrl: mediaBaseUrl() }),
@@ -59,7 +90,7 @@ export const getHomepage = cache((): Promise<HomepageResult> =>
 
 /**
  * The experience page's content for the current request: the person's header facts and the
- * published experiences, read once per request (React `cache`). Never cached across requests.
+ * published experiences, read once per request (React `cache`), from the content cache.
  */
 export const getExperience = cache((): Promise<ExperienceResult> =>
   loadExperience(apiClient(), { mediaBaseUrl: mediaBaseUrl() }),
@@ -67,19 +98,20 @@ export const getExperience = cache((): Promise<ExperienceResult> =>
 
 /**
  * The services page's content for the current request: the person's header facts and services
- * prose and the services, read once per request (React `cache`). Never cached across requests.
+ * prose and the services, read once per request (React `cache`), from the content cache.
  */
 export const getServices = cache((): Promise<ServicesResult> => loadServices(apiClient()));
 
 /**
  * The Ask page's content for the current request: the person's name the assistant speaks about,
- * their contact and the public records its answers rest on, read once per request (React `cache`). Never cached across requests.
+ * their contact and the public records its answers rest on, read once per request (React `cache`),
+ * from the content cache.
  */
 export const getAsk = cache((): Promise<AskResult> => loadAsk(apiClient()));
 
 /**
  * The CV page's content for the current request: the API's assembled CV and the PDF's upload day,
- * read once per request (React `cache`). Never cached across requests.
+ * read once per request (React `cache`), from the content cache.
  */
 export const getCv = cache((): Promise<CvResult> => loadCv(apiClient()));
 
@@ -88,5 +120,5 @@ export const getCv = cache((): Promise<CvResult> => loadCv(apiClient()));
  * Delivered only whole and as a PDF; otherwise no PDF or an unavailable one.
  */
 export function getCvPdfFile(): Promise<CvPdfFile> {
-  return readCvPdfFile(apiClient(), { apiBaseUrl: apiBaseUrl() });
+  return readCvPdfFile(freshApiClient(), { apiBaseUrl: apiBaseUrl() });
 }
