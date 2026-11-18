@@ -270,6 +270,27 @@ test.describe("an answer that fails", () => {
     await expect(answer.getByRole("link", { name: "Experience" })).toBeFocused();
   });
 
+  test("shows focus at the answer only after a keyboard retry, never after a click", async ({
+    page,
+  }) => {
+    const focusVisible = (target: ReturnType<typeof turns>) =>
+      target.evaluate((element) => element.matches(":focus-visible"));
+    await askFailing(page, site.url(), unknownQuestion, "interrupt", "interrupt");
+    await answered(page);
+    const answer = turns(page).last().locator("[aria-busy]");
+    await retryButton(page).click();
+    await expect(answer).toBeFocused();
+    expect(await focusVisible(answer)).toBe(false);
+    await answered(page);
+
+    await composer(page).focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(retryButton(page)).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(answer).toBeFocused();
+    expect(await focusVisible(answer)).toBe(true);
+  });
+
   test("reaches Try again with Tab after the composer's failure", async ({ page }) => {
     await askFailing(page, site.url(), unknownQuestion, "interrupt");
     await answered(page);
