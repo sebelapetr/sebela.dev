@@ -680,6 +680,43 @@ describe("the OpenAPI document and the reference", () => {
     }
   });
 
+  it("documents the public bookshelf reads and its private book writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    const list = operation("GET", "/v1/roadmap/books");
+    expect(list.security).toEqual([]);
+    expect(list.responses["200"]?.content).toEqual(content("RoadmapBookList"));
+    const item = operation("GET", "/v1/roadmap/books/:slug");
+    expect(item.security).toEqual([]);
+    expect(item.responses["200"]?.content).toEqual(content("RoadmapBook"));
+    expect(Object.keys(item.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+
+    const create = operation("POST", "/v1/roadmap/books");
+    expect(create.requestBody?.content).toEqual(content("RoadmapBookCreate"));
+    expect(create.responses["201"]?.content).toEqual(content("RoadmapBook"));
+    expect(create.responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    const update = operation("PATCH", "/v1/roadmap/books/:slug");
+    expect(update.requestBody?.content).toEqual(content("RoadmapBookUpdate"));
+    expect(Object.keys(update.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/books/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404", "409"]),
+    );
+    for (const [method, path] of [
+      ["POST", "/v1/roadmap/books"],
+      ["PATCH", "/v1/roadmap/books/:slug"],
+      ["DELETE", "/v1/roadmap/books/:slug"],
+    ] as const) {
+      expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(document.components.schemas).toHaveProperty("RoadmapBookResource");
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });
