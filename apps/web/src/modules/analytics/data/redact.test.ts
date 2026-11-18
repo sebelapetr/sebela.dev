@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canonicalPath, externalReferrer, redactPayload } from "./redact";
+import { canonicalPath, externalReferrer, NOT_FOUND_PATH, redactPayload } from "./redact";
 
 const SITE = "https://site.example.test";
 // A fictional conversation identifier, as the chat puts it in the Ask page's address.
@@ -15,8 +15,26 @@ describe("canonicalPath", () => {
     ["/services?utm_source=newsletter#consulting", "/services"],
     [`${SITE}/ask?c=${CONVERSATION}#latest`, "/ask"],
     [SITE, "/"],
+    ["/services", "/services"],
+    ["/cv?print=1", "/cv"],
+    ["/ai-roadmap", "/ai-roadmap"],
+    ["/cv/pdf/unavailable", "/cv/pdf/unavailable"],
   ])("reports %s as %s", (url, path) => {
     expect(canonicalPath(url, SITE)).toBe(path);
+  });
+
+  // The not-found page shows whatever address was typed, which is no page of the site and may be
+  // free text; it is reported under one fixed path.
+  it.each([
+    ["an unknown address", "/my-private-note-for-casey"],
+    ["a page below a page", "/experience/fictional-shop"],
+    ["another case", "/Experience"],
+    ["a trailing slash", "/ask/"],
+    ["an encoded question", "/what%20did%20casey%20build%3F"],
+    ["the PDF download, which is no page", "/cv/pdf"],
+  ])("reports %s under the fixed not-found path", (_label, url) => {
+    expect(canonicalPath(url, SITE)).toBe(NOT_FOUND_PATH);
+    expect(NOT_FOUND_PATH).toBe("/404");
   });
 
   it("reports the root for something that is not an address", () => {
@@ -77,5 +95,11 @@ describe("redactPayload", () => {
   it("keeps a missing field missing and drops a field that is not text", () => {
     const redacted = redactPayload({ website: payload.website, url: "/cv?x=1", screen: 5 }, SITE);
     expect(redacted).toEqual({ website: payload.website, url: "/cv", referrer: "" });
+  });
+
+  it("reports an address that is no page under the fixed not-found path", () => {
+    expect(redactPayload({ ...payload, url: `${SITE}/casey-private?x=1` }, SITE)["url"]).toBe(
+      NOT_FOUND_PATH,
+    );
   });
 });

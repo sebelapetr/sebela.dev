@@ -180,6 +180,26 @@ test.describe("analytics through the stand-in", () => {
     expect(event?.body).not.toContain("casey");
   });
 
+  test("reports an address that is no page under one fixed path, never what was typed", async ({
+    page,
+  }) => {
+    const { url, stub } = site();
+    if (stub === undefined) throw new Error("no stand-in");
+    const already = stub.events().length;
+    const typed = "/a-private-note-for-casey";
+    const response = await page.goto(`${url}${typed}?q=fictional#top`);
+    expect(response?.status()).toBe(404);
+    await hydrated(page);
+    await expect.poll(() => stub.events().length).toBe(already + 1);
+    await page.getByRole("banner").getByRole("link", { name: "Experience", exact: true }).click();
+    await expect(page).toHaveURL(`${url}/experience`);
+    await expect.poll(() => urls(stub).slice(already)).toEqual(["/404", "/experience"]);
+    for (const event of stub.events().slice(already)) {
+      expect(event.body).not.toContain("private-note");
+      expect(event.body).not.toContain("fictional");
+    }
+  });
+
   test("adds nothing to see or reach with the keyboard, in every width and theme", async ({
     page,
   }, testInfo) => {
