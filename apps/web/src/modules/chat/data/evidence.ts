@@ -108,6 +108,16 @@ export function toAskEvidence(content: AskContent): AskEvidence {
       status,
     })),
     technologyGroups: TECHNOLOGY_GROUP_KEYS.filter((key) => shown.has(key)),
-    learning: [],
+    learning: content.currentLearning.flatMap((area) =>
+      area.modules.map((module) => ({
+        area: area.slug,
+        areaName: area.name,
+        slug: module.slug,
+        name: module.name,
+        summary: summaryOf(module.description),
+        completed: module.progress.completed,
+        total: module.progress.total,
+      })),
+    ),
   };
 }

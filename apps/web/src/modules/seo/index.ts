@@ -1,6 +1,6 @@
 // The seo module: what search engines and language models read about the profile — each indexed
-// page's metadata and Open Graph preview image, the homepage's structured data, the sitemap,
-// robots.txt and llms.txt — on the
+// page's metadata and Open Graph preview image, the homepage's structured data, the AI Roadmap
+// area and module pages' metadata and breadcrumbs, the sitemap, robots.txt and llms.txt — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
 // not published answers 404 and one that cannot be read answers 503, never an empty document.
 // Server-only.
@@ -19,9 +19,17 @@ import {
   type PageFacts,
 } from "./data/page-metadata";
 import { profileTextResponse, textResponse } from "./data/responses";
+import {
+  roadmapPageMetadata as buildRoadmapPageMetadata,
+  type RoadmapPageFacts,
+} from "./data/roadmap-page";
 import { siteOrigin } from "./data/site-origin";
 
 export { ProfileStructuredData } from "./components/profile-structured-data";
+
+export { RoadmapStructuredData } from "./components/roadmap-structured-data";
+
+export type { RoadmapPageCrumb, RoadmapPageFacts } from "./data/roadmap-page";
 
 export type { IndexedPage, PageFacts } from "./data/page-metadata";
 
@@ -33,6 +41,15 @@ export { isPreviewPage } from "./data/open-graph-card";
  */
 export function pageMetadata(page: IndexedPage, facts: PageFacts): Metadata {
   return buildPageMetadata(siteOrigin(), page, facts);
+}
+
+/**
+ * An AI Roadmap area's or module's page metadata on the canonical origin: title from its
+ * breadcrumbs, description, canonical address and Open Graph basics, kept out of search results
+ * until the roadmap is indexed as a whole.
+ */
+export function roadmapPageMetadata(facts: RoadmapPageFacts): Metadata {
+  return buildRoadmapPageMetadata(siteOrigin(), facts);
 }
 
 /** The sitemap of the indexed pages; 404 or 503 while the profile is missing or unreadable. */

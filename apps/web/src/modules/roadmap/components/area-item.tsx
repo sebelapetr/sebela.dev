@@ -5,6 +5,7 @@ import type { AreaRow } from "../data/overview";
 import { CurrentBadge, ProgressBadge, WeightIndicator } from "./badges";
 import { ModuleItem } from "./module-item";
 import { ROADMAP_TIMELINE } from "./layout";
+import { PageLink } from "./page-link";
 import { RoadmapBranch } from "./roadmap-branch";
 import { triggerMarker } from "./status";
 
@@ -57,6 +58,7 @@ export function AreaItem({ area }: { readonly area: AreaRow }) {
           ))}
         </Timeline>
       )}
+      <PageLink href={area.href} kind="area" name={area.name} />
     </RoadmapBranch>
   );
 }

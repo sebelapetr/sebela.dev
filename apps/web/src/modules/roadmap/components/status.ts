@@ -41,3 +41,25 @@ const RESOURCE_STATUS_WORDS: Readonly<Record<RoadmapResourceStatus, string>> = {
 export function resourceStatusWords(status: RoadmapResourceStatus): string {
   return RESOURCE_STATUS_WORDS[status];
 }
+
+const DERIVED_STATUS_WORDS: Readonly<Record<RoadmapDerivedStatus, string>> = {
+  completed: "Completed",
+  "in-progress": "In progress",
+  planned: "Planned",
+};
+
+/** An area's or a module's derived status in words. */
+export function derivedStatusWords(status: RoadmapDerivedStatus): string {
+  return DERIVED_STATUS_WORDS[status];
+}
+
+const STATUS_DOTS: Readonly<Record<RoadmapDerivedStatus, string>> = {
+  completed: "bg-success",
+  "in-progress": "bg-primary",
+  planned: "bg-muted-foreground/40",
+};
+
+/** The dot beside an area's or a module's status words, in the timeline markers' colours. */
+export function statusDot(status: RoadmapDerivedStatus): string {
+  return STATUS_DOTS[status];
+}

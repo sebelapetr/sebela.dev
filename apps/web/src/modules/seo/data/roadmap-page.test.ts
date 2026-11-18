@@ -137,6 +137,7 @@ describe("roadmapStructuredData", () => {
     expect(JSON.parse(json)).toMatchObject({
       "@graph": [
         { name: "</script><script>alert(1)</script> — AI Engineering Roadmap — Robin Example" },
+        { itemListElement: [{}, { name: "</script><script>alert(1)</script>" }] },
       ],
     });
   });

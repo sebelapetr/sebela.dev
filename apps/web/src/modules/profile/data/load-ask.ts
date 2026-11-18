@@ -41,7 +41,7 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
  * Reads the Ask page's content from the API's public routes: the person, the experiences, the
- * services, the explorations and the technologies, uncached and limited in time. A person that
+ * services, the explorations, the technologies and the AI Roadmap's current learning, uncached and limited in time. A person that
  * does not exist makes the page missing; a failed read of the person or of any list makes the
  * whole content unavailable, so an answer never rests on a profile with a part silently missing.
  */
@@ -49,13 +49,15 @@ export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
   try {
-    const [person, experiences, services, explorations, technologies] = await Promise.all([
-      client.GET("/v1/person", init()),
-      client.GET("/v1/experiences", init()),
-      client.GET("/v1/services", init()),
-      client.GET("/v1/explorations", init()),
-      client.GET("/v1/technologies", init()),
-    ]);
+    const [person, experiences, services, explorations, technologies, currentLearning] =
+      await Promise.all([
+        client.GET("/v1/person", init()),
+        client.GET("/v1/experiences", init()),
+        client.GET("/v1/services", init()),
+        client.GET("/v1/explorations", init()),
+        client.GET("/v1/technologies", init()),
+        client.GET("/v1/roadmap/current", init()),
+      ]);
     if (person.data === undefined) {
       return person.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
     }
@@ -63,7 +65,8 @@ export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): 
       experiences.data === undefined ||
       services.data === undefined ||
       explorations.data === undefined ||
-      technologies.data === undefined
+      technologies.data === undefined ||
+      currentLearning.data === undefined
     ) {
       return { status: "unavailable" };
     }
@@ -77,7 +80,7 @@ export async function loadAsk(client: ApiClient, options: LoadAskOptions = {}): 
         services: services.data,
         explorations: explorations.data,
         technologies: technologies.data,
-        currentLearning: [],
+        currentLearning: currentLearning.data.areas,
       },
     };
   } catch {

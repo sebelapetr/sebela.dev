@@ -1,6 +1,6 @@
 import type { CurrentFocus, Exploration, RoadmapCurrentArea } from "@sebela/api-client";
 
-import { anchorHref, routes } from "../../_shared";
+import { anchorHref, roadmapHref, routes } from "../../_shared";
 
 /** Where an item of Working on leads: its project on the experience page, or its own web link. */
 export interface WorkingOnLink {
@@ -50,17 +50,24 @@ export interface NowContent {
   readonly exploring: readonly ExploringItem[];
   /** The independent R&D block on the experience page; null without any exploration. */
   readonly independentRdHref: string | null;
-  /** The AI Roadmap (a placeholder until phase 4). */
+  /** The AI Roadmap's overview. */
   readonly roadmapHref: string;
 }
 
+/**
+ * The homepage's Now: Working on is every current focus in the API's order; Exploring is every AI
+ * Roadmap area whose derived status is in progress, with its modules in progress, in the API's
+ * order, each linking to its own page and showing the API's completed of all resources. Nothing is
+ * recounted here. Explorations stay on the experience page, reached by the independent R&D link.
+ * Null when nothing is being built and nothing on the roadmap is in progress.
+ */
 export function toNow(
   currentFocus: readonly CurrentFocus[],
   explorations: readonly Exploration[],
   currentLearning: readonly RoadmapCurrentArea[],
 ): NowContent | null {
   const workingOn = currentFocus.map(toWorkingOn);
-  const exploring: ExploringItem[] = currentLearning.flatMap(() => []);
+  const exploring = currentLearning.map(toExploring);
   if (workingOn.length === 0 && exploring.length === 0) return null;
   return {
     workingOn,
@@ -68,6 +75,25 @@ export function toNow(
     independentRdHref: explorations.length === 0 ? null : anchorHref({ kind: "independent-rd" }),
     roadmapHref: routes.aiRoadmap,
   };
+}
+
+function toExploring(area: RoadmapCurrentArea): ExploringItem {
+  return {
+    slug: area.slug,
+    name: area.name,
+    href: roadmapHref({ area: area.slug }),
+    progress: progressText(area.progress),
+    modules: area.modules.map((module) => ({
+      slug: module.slug,
+      name: module.name,
+      href: roadmapHref({ area: area.slug, module: module.slug }),
+      progress: progressText(module.progress),
+    })),
+  };
+}
+
+function progressText(progress: { readonly completed: number; readonly total: number }): string {
+  return `${String(progress.completed)}/${String(progress.total)}`;
 }
 
 function toWorkingOn(focus: CurrentFocus): WorkingOnItem {

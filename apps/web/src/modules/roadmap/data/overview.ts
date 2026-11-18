@@ -3,7 +3,12 @@ import type {
   RoadmapDerivedStatus,
   RoadmapResourceStatus,
   RoadmapResourceType,
+  RoadmapTreeArea,
+  RoadmapTreeModule,
+  RoadmapTreeResource,
 } from "@sebela/api-client";
+
+import { roadmapHref } from "../../_shared";
 
 export interface RoadmapFacts {
   readonly areaCount: number;
@@ -65,7 +70,7 @@ export const ROADMAP_PATH = "/ai-roadmap";
 
 /** The address of an area's page; the slug is encoded, so it never leaves the roadmap. */
 export function areaHref(slug: string): string {
-  return `${ROADMAP_PATH}/${encodeURIComponent(slug)}`;
+  return roadmapHref({ area: slug });
 }
 
 /**
@@ -86,46 +91,76 @@ export function toRoadmapOverview(roadmap: Roadmap): RoadmapOverview {
       lastUpdated: summary.lastUpdatedAt === null ? null : formatLastUpdated(summary.lastUpdatedAt),
     },
     start: first === undefined ? null : { name: first.name, href: areaHref(first.slug) },
-    areas: roadmap.areas.map((area, index) => ({
-      slug: area.slug,
-      name: area.name,
-      description: area.description,
-      order: `${String(index + 1)}.`,
-      href: areaHref(area.slug),
-      weight: area.weight,
-      weightLevel: weightLevel(area.weight),
-      weightLabel: weightLabel(area.weight),
-      completed: area.progress.completed,
-      total: area.progress.total,
-      status: area.progress.status,
-      current: area.progress.status === "in-progress",
-      modules: area.modules.map((module, moduleIndex) => ({
-        slug: module.slug,
-        name: module.name,
-        href: "",
-        description: module.description,
-        order: `${romanNumeral(moduleIndex + 1)}.`,
-        estimate:
-          module.progress.estimatedMinutes > 0
-            ? estimateLabel(module.progress.estimatedMinutes)
-            : null,
-        completed: module.progress.completed,
-        total: module.progress.total,
-        status: module.progress.status,
-        resources: module.resources.map((resource) => ({
-          slug: resource.slug,
-          name: resource.name,
-          description: resource.description,
-          type: resource.type,
-          typeLabel: resourceTypeLabel(resource.type),
-          status: resource.status,
-          estimate:
-            resource.estimatedMinutes === null ? null : estimateLabel(resource.estimatedMinutes),
-          href: safeLink(resource.link),
-        })),
-      })),
-    })),
+    areas: roadmap.areas.map((area, index) => toAreaRow(area, index)),
   };
+}
+
+/** An area as the overview lists it, numbered by its index in the API's order. */
+export function toAreaRow(area: RoadmapTreeArea, index: number): AreaRow {
+  return { ...areaFields(area), order: `${String(index + 1)}.` };
+}
+
+/** An area's facts and modules, without its place among the areas. */
+export function areaFields(area: RoadmapTreeArea): Omit<AreaRow, "order"> {
+  return {
+    slug: area.slug,
+    name: area.name,
+    description: area.description,
+    href: areaHref(area.slug),
+    weight: area.weight,
+    weightLevel: weightLevel(area.weight),
+    weightLabel: weightLabel(area.weight),
+    completed: area.progress.completed,
+    total: area.progress.total,
+    status: area.progress.status,
+    current: area.progress.status === "in-progress",
+    modules: area.modules.map((module, index) => toModuleRow(area.slug, module, index)),
+  };
+}
+
+/** A module as its area lists it, numbered in Roman numerals by its index in the API's order. */
+export function toModuleRow(area: string, module: RoadmapTreeModule, index: number): ModuleRow {
+  return {
+    ...moduleFields(area, module),
+    order: `${romanNumeral(index + 1)}.`,
+    resources: module.resources.map(toResourceRow),
+  };
+}
+
+/** A module's facts under its area, without its place among the modules and its resources. */
+export function moduleFields(
+  area: string,
+  module: RoadmapTreeModule,
+): Omit<ModuleRow, "order" | "resources"> {
+  return {
+    slug: module.slug,
+    name: module.name,
+    href: roadmapHref({ area, module: module.slug }),
+    description: module.description,
+    estimate: plannedEstimate(module.progress.estimatedMinutes),
+    completed: module.progress.completed,
+    total: module.progress.total,
+    status: module.progress.status,
+  };
+}
+
+/** A resource as its module lists it, its link kept only when it is safe to follow. */
+export function toResourceRow(resource: RoadmapTreeResource): ResourceRow {
+  return {
+    slug: resource.slug,
+    name: resource.name,
+    description: resource.description,
+    type: resource.type,
+    typeLabel: resourceTypeLabel(resource.type),
+    status: resource.status,
+    estimate: resource.estimatedMinutes === null ? null : estimateLabel(resource.estimatedMinutes),
+    href: safeLink(resource.link),
+  };
+}
+
+/** A container's planned effort from the API's estimated minutes, or none when nothing is estimated. */
+export function plannedEstimate(estimatedMinutes: number): string | null {
+  return estimatedMinutes > 0 ? estimateLabel(estimatedMinutes) : null;
 }
 
 /** What the roadmap holds, its planned hours and its last update, as the overview's lead. */
@@ -234,19 +269,4 @@ export function safeLink(link: string | null): string | null {
   if (link === null || !URL.canParse(link)) return null;
   const { protocol } = new URL(link);
   return protocol === "https:" || protocol === "http:" ? link : null;
-}
-
-/** An area as its own page names it: slug, name and its number in the API's order. */
-export interface RoadmapAreaHeading {
-  readonly slug: string;
-  readonly name: string;
-  readonly order: string;
-}
-
-/** The area with this slug, or null when no area has it (the page is then not found). */
-export function findRoadmapArea(roadmap: Roadmap, slug: string): RoadmapAreaHeading | null {
-  const index = roadmap.areas.findIndex((area) => area.slug === slug);
-  const area = roadmap.areas[index];
-  if (area === undefined) return null;
-  return { slug: area.slug, name: area.name, order: `${String(index + 1)}.` };
 }
