@@ -1,7 +1,7 @@
-// The learning diary's persistence, private to the roadmap module: diary days with their notes and
-// the time entries logged in them. The overlap guarantee lives in the exclusion constraint of
+// The learning diary's persistence, private to the roadmap module: diary days with their notes, the
+// time entries logged in them and the events covering them. The overlap guarantee lives in the exclusion constraint of
 // `time_entries`, so it holds for concurrent writes without a preflight read.
-import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, sql, type SQL } from "drizzle-orm";
 
 import type { Database } from "../../database.js";
 import { type Executor, WriteRefused } from "../profile/index.js";
@@ -9,6 +9,7 @@ import { breaksExclusion } from "./database-errors.js";
 import {
   areas,
   diaryEntries,
+  events,
   modules,
   resources,
   TIME_ENTRY_OVERLAP_EXCLUSION,
@@ -16,6 +17,8 @@ import {
 } from "./schema.js";
 import type {
   DiaryDayRecord,
+  DiaryEventRecord,
+  DiaryResourceRecord,
   RoadmapPersistence,
   TimeEntryPiece,
   TimeEntryRecord,
@@ -41,53 +44,134 @@ const now = sql`clock_timestamp()`;
 const entryColumns = {
   id: timeEntries.id,
   date: timeEntries.diaryDate,
-  resource: {
-    slug: resources.slug,
-    name: resources.name,
-    type: resources.type,
-    link: resources.link,
-    module: modules.slug,
-    area: areas.slug,
-  },
+  resourceSlug: resources.slug,
+  resourceName: resources.name,
+  resourceType: resources.type,
+  resourceLink: resources.link,
+  module: modules.slug,
+  area: areas.slug,
+  eventSlug: events.slug,
+  eventName: events.name,
+  eventKind: events.kind,
+  eventStartsOn: events.startsOn,
+  eventEndsOn: events.endsOn,
+  eventLink: events.link,
   startedAt: timeEntries.startedAt,
   endedAt: timeEntries.endedAt,
 };
 
-/** Time entries with their resource, module and area, in start order. */
+const diaryEventColumns = {
+  slug: events.slug,
+  name: events.name,
+  kind: events.kind,
+  startsOn: events.startsOn,
+  endsOn: events.endsOn,
+  link: events.link,
+};
+
+/**
+ * Time entries with their resource, module and area or with their event, in start order. The
+ * targets are built here because Drizzle does not turn a nested object of left-joined columns
+ * from several tables into `null`.
+ */
 async function loadEntries(db: Executor, where: SQL | undefined): Promise<TimeEntryRecord[]> {
   const rows = await db
     .select(entryColumns)
     .from(timeEntries)
-    .innerJoin(resources, eq(timeEntries.resourceId, resources.id))
-    .innerJoin(modules, eq(resources.moduleId, modules.id))
-    .innerJoin(areas, eq(modules.areaId, areas.id))
+    .leftJoin(resources, eq(timeEntries.resourceId, resources.id))
+    .leftJoin(modules, eq(resources.moduleId, modules.id))
+    .leftJoin(areas, eq(modules.areaId, areas.id))
+    .leftJoin(events, eq(timeEntries.eventId, events.id))
     .where(where)
     .orderBy(asc(timeEntries.startedAt));
-  return rows.map((row) => ({ ...row, event: null }));
+  return rows.map((row): TimeEntryRecord => {
+    const resource: DiaryResourceRecord | null =
+      row.resourceSlug === null
+        ? null
+        : {
+            slug: row.resourceSlug,
+            name: row.resourceName ?? "",
+            type: row.resourceType ?? "link",
+            link: row.resourceLink,
+            module: row.module ?? "",
+            area: row.area ?? "",
+          };
+    const event: DiaryEventRecord | null =
+      row.eventSlug === null
+        ? null
+        : {
+            slug: row.eventSlug,
+            name: row.eventName ?? "",
+            kind: row.eventKind ?? "conference",
+            startsOn: row.eventStartsOn ?? "",
+            endsOn: row.eventEndsOn ?? "",
+            link: row.eventLink,
+          };
+    return {
+      id: row.id,
+      date: row.date,
+      resource,
+      event,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+    };
+  });
 }
 
-/** The days matching `where`, newest first, without the ones that have neither notes nor entries. */
-async function loadDays(db: Executor, where: SQL | undefined): Promise<DiaryDayRecord[]> {
-  const days = await db
+/** The calendar day after a `YYYY-MM-DD` date. */
+function nextDate(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + 1);
+  return day.toISOString().slice(0, 10);
+}
+
+/**
+ * The diary days, newest first: every day with notes or time entries and every day an event
+ * covers, or only `date` when given. Event days are derived from the event dates, never stored.
+ */
+async function loadDays(db: Executor, date?: string): Promise<DiaryDayRecord[]> {
+  const stored = await db
     .select({ date: diaryEntries.date, notes: diaryEntries.notes })
     .from(diaryEntries)
-    .where(where)
-    .orderBy(desc(diaryEntries.date));
-  if (days.length === 0) return [];
-  const entries = await loadEntries(
-    db,
-    inArray(
-      timeEntries.diaryDate,
-      days.map((day) => day.date),
-    ),
-  );
-  return days
-    .map((day) => ({
-      ...day,
-      entries: entries.filter((entry) => entry.date === day.date),
-      events: [],
-    }))
-    .filter((day) => day.notes !== null || day.entries.length > 0);
+    .where(date === undefined ? undefined : eq(diaryEntries.date, date));
+  const covering = await db
+    .select(diaryEventColumns)
+    .from(events)
+    .where(
+      date === undefined ? undefined : and(lte(events.startsOn, date), gte(events.endsOn, date)),
+    )
+    .orderBy(asc(events.startsOn), asc(events.slug));
+
+  const days = new Map<string, DiaryDayRecord>();
+  const day = (on: string) => {
+    let found = days.get(on);
+    if (!found) {
+      found = { date: on, notes: null, entries: [], events: [] };
+      days.set(on, found);
+    }
+    return found;
+  };
+  for (const row of stored) day(row.date).notes = row.notes;
+  for (const event of covering) {
+    if (date !== undefined) {
+      day(date).events.push(event);
+      continue;
+    }
+    for (let on = event.startsOn; on <= event.endsOn; on = nextDate(on)) day(on).events.push(event);
+  }
+  if (stored.length > 0) {
+    const entries = await loadEntries(
+      db,
+      inArray(
+        timeEntries.diaryDate,
+        stored.map((row) => row.date),
+      ),
+    );
+    for (const entry of entries) day(entry.date).entries.push(entry);
+  }
+  return [...days.values()]
+    .filter((found) => found.notes !== null || found.entries.length > 0 || found.events.length > 0)
+    .sort((left, right) => (left.date < right.date ? 1 : -1));
 }
 
 /** The id of the resource with the slug, locked against a concurrent delete; refuses an unknown one. */
@@ -104,8 +188,31 @@ async function resourceId(tx: Executor, slug: string): Promise<string> {
 }
 
 /**
- * Stores the pieces on the resource, creating missing days first in date order, so concurrent
- * writes into the same new day neither fail nor deadlock. The first piece may keep a given id.
+ * The id of the event with the slug, locked against a concurrent delete or date edit; refuses an
+ * unknown event and a piece on a day outside its dates.
+ */
+async function eventId(tx: Executor, slug: string, pieces: TimeEntryPiece[]): Promise<string> {
+  const [row] = await tx
+    .select({ id: events.id, startsOn: events.startsOn, endsOn: events.endsOn })
+    .from(events)
+    .where(eq(events.slug, slug))
+    .for("share");
+  if (!row) throw new WriteRefused<TimeEntryWriteFailure>({ ok: false, reason: "unknown_event" });
+  if (pieces.some((piece) => piece.date < row.startsOn || piece.date > row.endsOn)) {
+    throw new WriteRefused<TimeEntryWriteFailure>({
+      ok: false,
+      reason: "outside_event",
+      startsOn: row.startsOn,
+      endsOn: row.endsOn,
+    });
+  }
+  return row.id;
+}
+
+/**
+ * Stores the pieces on the resource or event, creating missing days first in date order, so
+ * concurrent writes into the same new day neither fail nor deadlock. The first piece may keep a
+ * given id.
  */
 async function insertPieces(
   tx: Executor,
@@ -114,8 +221,10 @@ async function insertPieces(
   firstId?: string,
 ): Promise<TimeEntryRecord[]> {
   if (pieces.length === 0) throw new Error("A time-entry write needs at least one piece.");
-  if (!("resource" in target)) throw new Error("Not implemented.");
-  const id = await resourceId(tx, target.resource);
+  const owner =
+    "resource" in target
+      ? { resourceId: await resourceId(tx, target.resource) }
+      : { eventId: await eventId(tx, target.event, pieces) };
   const dates = [...new Set(pieces.map((piece) => piece.date))].sort();
   await tx
     .insert(diaryEntries)
@@ -127,7 +236,7 @@ async function insertPieces(
       pieces.map((piece, index) => ({
         ...(index === 0 && firstId !== undefined ? { id: firstId } : {}),
         diaryDate: piece.date,
-        resourceId: id,
+        ...owner,
         startedAt: piece.startedAt,
         endedAt: piece.endedAt,
       })),
@@ -160,16 +269,16 @@ async function refusable<T, Failure>(write: () => Promise<T>): Promise<T | Failu
 export function createDiaryPersistence(db: Database): DiaryPersistence {
   return {
     loadDiary() {
-      return db.transaction((tx) => loadDays(tx, undefined), {
+      return db.transaction((tx) => loadDays(tx), {
         isolationLevel: "repeatable read",
         accessMode: "read only",
       });
     },
     findDiaryDay(date) {
-      return db.transaction(
-        async (tx) => (await loadDays(tx, eq(diaryEntries.date, date)))[0] ?? null,
-        { isolationLevel: "repeatable read", accessMode: "read only" },
-      );
+      return db.transaction(async (tx) => (await loadDays(tx, date))[0] ?? null, {
+        isolationLevel: "repeatable read",
+        accessMode: "read only",
+      });
     },
     writeDiaryNotes(date, notes) {
       return db.transaction(async (tx) => {
@@ -177,7 +286,7 @@ export function createDiaryPersistence(db: Database): DiaryPersistence {
           .insert(diaryEntries)
           .values({ date, notes })
           .onConflictDoUpdate({ target: diaryEntries.date, set: { notes, updatedAt: now } });
-        const [day] = await loadDays(tx, eq(diaryEntries.date, date));
+        const [day] = await loadDays(tx, date);
         if (!day) throw new Error("The written diary day is missing.");
         return day;
       });
