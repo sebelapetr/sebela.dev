@@ -2,7 +2,7 @@
 
 Source: [MCP Admin PRD](prd.md). The owner approved direct publication of this five-slice breakdown in conversation, using the repository-local [to-issues skill](../../.claude/skills/to-issues/SKILL.md).
 
-Published on 2026-11-18: **5 issues, 3 AFK and 2 HITL**. Labels are `phase:05-mcp-admin`, `afk`/`hitl` and `ready-for-agent`; labels do not waive dependencies or HITL gates. No MCP implementation, real-model eval or phase loop was started by this publication.
+Published on 2026-11-18: **5 issues, 4 AFK and 1 HITL**. Labels are `phase:05-mcp-admin`, `afk`/`hitl` and `ready-for-agent`; labels do not waive dependencies or HITL gates. No MCP implementation, real-model eval or phase loop was started by this publication.
 
 Acceptance specifications: [24 deterministic security families](security.md) and [32 Czech/English model cases](evals.md). These describe future tests/evals, not measured results.
 
@@ -14,7 +14,7 @@ API/database phase 2, website phase 3 and planning PR #134 are owner-merged. Pha
 
 | Slice | Issue                                                       | Title                                                                       | Type | Blocked by                                                                                                               | Phase-5 stories               |
 | ----- | ----------------------------------------------------------- | --------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| S01   | [#153](https://github.com/sebelapetr/sebela.dev/issues/153) | Connect a private authenticated MCP Admin using the official SDK and Hono   | HITL | Phase 4 owner-merged; [#115](https://github.com/sebelapetr/sebela.dev/issues/115); planning documents owner-merged       | 15–20, 24–26                  |
+| S01   | [#153](https://github.com/sebelapetr/sebela.dev/issues/153) | Connect a private authenticated MCP Admin using the official SDK and Hono   | AFK  | Phase 4 owner-merged; [#115](https://github.com/sebelapetr/sebela.dev/issues/115); planning documents owner-merged       | 15–20, 24–26                  |
 | S02   | [#154](https://github.com/sebelapetr/sebela.dev/issues/154) | Manage all content through constrained MCP tools and atomic API audit       | AFK  | [#153](https://github.com/sebelapetr/sebela.dev/issues/153)                                                              | 7, 9–14, 17, 19–25            |
 | S03   | [#155](https://github.com/sebelapetr/sebela.dev/issues/155) | Record learning sessions resources books and events through task tools      | AFK  | [#154](https://github.com/sebelapetr/sebela.dev/issues/154)                                                              | 1–6, 11, 13–14, 19, 21, 23–25 |
 | S04   | [#156](https://github.com/sebelapetr/sebela.dev/issues/156) | Upload and attach media through the profile and CV maintenance flow         | AFK  | [#154](https://github.com/sebelapetr/sebela.dev/issues/154)                                                              | 7–11, 14, 21, 23–25           |
@@ -22,11 +22,11 @@ API/database phase 2, website phase 3 and planning PR #134 are owner-merged. Pha
 
 ## Scope ownership
 
-- **S01** delivers the secure read path using official MCP SDK + Hono, reuses Bearer/API-key verification and establishes the external-client evaluation harness. It does not rebuild API-key generation or the API. Exact SDK/client/model settings and baseline gates are verified with the owner during this HITL issue.
+- **S01** delivers the secure read path using official MCP SDK + Hono, reuses Bearer/API-key verification and establishes the external-client evaluation harness. It does not rebuild API-key generation or the API. An automated SDK test client verifies the authenticated path with ephemeral fixture keys. Pin SDK/test-client/model settings and record the read-only baseline against the fixed eval gates; no owner-client connection or manual baseline approval blocks S02.
 - **S02** delivers the complete generic content registry, profile-update skill, one-record deletion and atomic API-owned audit across profile/learning/media mutations. Reuse the generated API client; no tool per endpoint, arbitrary SQL/HTTP or raw operational-table access. Model restraint does not replace authorization/client approval.
 - **S03** delivers resource find/add/status, one complete session operation, events/books and diary-entry/add-event skills. API owns calendar/overlap/derived rules and atomic session/audit writes. Do not reimplement generic CRUD/audit or duplicate book time accounting.
 - **S04** delivers bounded upload/attachment and update-cv, extending the profile skill rather than duplicating it. Reuse existing storage/media validation. No visitor upload, generated CV or RAG ingest is introduced.
-- **S05** is the owner's complete connected workflow, actual destructive approval/decline, all skills and integrated security/eval acceptance. Security/test work belongs to each earlier functional slice; this gate verifies completeness rather than postponing it.
+- **S05** is the owner's actual client/internal-or-SSH-tunnel connection, client approval configuration, complete connected workflow, actual destructive approval/decline, all skills and integrated security/eval acceptance. Review the recorded baseline and pinned client/model settings here; human review cannot waive a failing gate. Security/test work belongs to each earlier functional slice; this gate verifies completeness rather than postponing it.
 
 ## Shared acceptance and execution rules
 
@@ -40,10 +40,10 @@ API/database phase 2, website phase 3 and planning PR #134 are owner-merged. Pha
 
 ## Running the phase
 
-After prerequisite merges, complete **S01 interactively** and record the actual connection/baseline acceptance. The phase loop skips HITL issues, so publication/`ready-for-agent` is not permission to bypass that gate. Only then does the owner start the AFK segment:
+After prerequisite merges, the owner may start the AFK segment. **S01–S04 are AFK**, including the automated SDK-client connection and read-only baseline in S01. Every slice must satisfy its applicable gates before dependent work proceeds; no manual S01 approval is required:
 
 ```bash
 harness/run-phase.sh 05-mcp-admin
 ```
 
-Finish **S05 interactively** after S02–S04. A no-eligible-issues/phase-done report alone cannot accept an open HITL gate or failed safety case. Issue branches/PRs target `phase/05-mcp-admin`; the orchestrator may squash-merge reviewed green issue PRs there. Only the owner merges the phase PR into `master`. No loop/implementation was launched by planning publication.
+Finish **S05 interactively** after S01–S04. The phase loop skips this HITL issue; the owner connects the actual client and accepts the complete workflow here. A no-eligible-issues/phase-done report alone cannot accept an open HITL gate or failed safety case. Issue branches/PRs target `phase/05-mcp-admin`; the orchestrator may squash-merge reviewed green issue PRs there. Only the owner merges the phase PR into `master`. No loop/implementation was launched by planning publication.

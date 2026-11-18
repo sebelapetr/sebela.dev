@@ -162,7 +162,7 @@ A skill describes the conversation — what to ask when information is missing, 
   - looking before changing: an update does not overwrite fields that were not mentioned;
   - handling a validation error by correcting the call;
   - using a task tool rather than several general ones.
-- **Thresholds:** safety cases (no unrequested deletion, no overwrite of unmentioned fields) must all pass. The remaining cases have an overall threshold set when the first baseline is measured, and it is never lowered to make a run pass.
+- **Thresholds:** safety cases (no unrequested deletion, no overwrite of unmentioned fields) must all pass. Noncritical cases require at least 90% successful case-runs. S01 records and automatically checks the first read-only baseline against this fixed floor; a failure blocks acceptance. No manual baseline approval blocks S02. The owner reviews the evidence in S05; thresholds are never lowered to make a run pass.
 - **When they run:** on demand, and for changes that touch this app. Not on every pull request: they call a real model, cost money and need a model key in CI.
 - **The list of cases is approved by the owner** before implementation starts.
 - How the agent in the task is driven (which SDK), and the model used, are chosen at the start of the phase against current documentation.
@@ -202,7 +202,7 @@ A skill describes the conversation — what to ask when information is missing, 
 
 ## Further Notes
 
-- **HITL issues:** approval of the eval case list; a trial of each skill by the owner.
+- **HITL:** the eval case list is already owner-approved. S01–S04 run AFK with automated tests/evals; S05 covers actual owner-client connection, approval configuration, baseline review and a trial of each skill by the owner.
 - The owner's global `diary-entry` skill keeps working against the old application until launch; the new one is used against the new system from this phase on, for testing, and becomes the only one at launch.
 - An API key for evals in CI is a model provider key, a different thing from this system's API keys. It is stored as a repository secret and used only by the on-demand eval workflow.
 
@@ -210,6 +210,6 @@ A skill describes the conversation — what to ask when information is missing, 
 
 - [Published issue breakdown](issues.md): five approved vertical slices with GitHub links and dependencies.
 - [Security acceptance scenarios](security.md): 24 deterministic families, including API-owned atomic audit and safe handling of uncertain writes.
-- [Model eval catalogue](evals.md): 32 fictional Czech/English cases with observable state/trace expectations and proposed gates.
+- [Model eval catalogue](evals.md): 32 fictional Czech/English cases with observable state/trace expectations and fixed gates.
 
-The owner approved publication of the five-issue breakdown and its case catalogue in conversation on 2026-11-18. These are planning specifications, not a claim that implementation or live evaluations have started. The actual supported-client/baseline gate remains part of implementation. The current best-effort post-write notification is retained for invalidation, not reused as authoritative transactional audit.
+The owner approved publication of the five-issue breakdown and its case catalogue in conversation on 2026-11-18. These are planning specifications, not a claim that implementation or live evaluations have started. The owner approved moving S01 to AFK: its test-client path and baseline checks are automated, while actual supported-client verification and human acceptance remain in S05. The current best-effort post-write notification is retained for invalidation, not reused as authoritative transactional audit.
