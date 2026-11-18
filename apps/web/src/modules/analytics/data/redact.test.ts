@@ -59,7 +59,7 @@ describe("redactPayload", () => {
 
   it("keeps only an external referrer's origin", () => {
     expect(
-      redactPayload({ ...payload, referrer: "https://search.example.test/?q=x" }, SITE).referrer,
+      redactPayload({ ...payload, referrer: "https://search.example.test/?q=x" }, SITE)["referrer"],
     ).toBe("https://search.example.test");
   });
 

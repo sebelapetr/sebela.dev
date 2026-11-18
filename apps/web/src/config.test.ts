@@ -295,7 +295,7 @@ describe("readAnalyticsConfig", () => {
   it("writes the website identifier in lower case", () => {
     expect(
       read({ WEB_ANALYTICS_SCRIPT_URL: SCRIPT, WEB_ANALYTICS_WEBSITE_ID: WEBSITE.toUpperCase() })
-        .websiteId,
+        ?.websiteId,
     ).toBe(WEBSITE);
   });
 
