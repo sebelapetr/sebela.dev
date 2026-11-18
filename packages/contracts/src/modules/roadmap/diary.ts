@@ -35,13 +35,18 @@ const WrittenInstantSchema = z.iso.datetime({ offset: true }).meta({
 /** A read instant, always UTC. */
 const InstantSchema = z.iso.datetime();
 
-/** The end of a written interval lies after its start, compared as instants. */
+/**
+ * The end of a written interval lies after its start, compared as instants. An instant that is
+ * already refused is not compared, so a missing offset is reported once.
+ */
 function endFollowsStart(
   value: { startedAt?: string | undefined; endedAt?: string | undefined },
   context: z.core.$RefinementCtx,
 ) {
   const { startedAt, endedAt } = value;
-  if (startedAt === undefined || endedAt === undefined) return;
+  const written = (instant: string | undefined): instant is string =>
+    WrittenInstantSchema.safeParse(instant).success;
+  if (!written(startedAt) || !written(endedAt)) return;
   if (Date.parse(endedAt) <= Date.parse(startedAt)) {
     context.addIssue({ code: "custom", path: ["endedAt"], message: ORDER_RULE });
   }
