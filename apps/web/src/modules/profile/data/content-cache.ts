@@ -9,6 +9,8 @@ export interface ContentCacheOptions {
   readonly maxEntries?: number;
   /** Largest body kept, in bytes; a larger one is returned but not kept. 1 MiB by default. */
   readonly maxBodyBytes?: number;
+  /** Where a stale answer is reported. */
+  readonly log?: (line: string) => void;
 }
 
 /**

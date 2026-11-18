@@ -16,6 +16,8 @@ export interface WebConfig {
    * files directly below it.
    */
   readonly mediaBaseUrl: string;
+  /** How long the content cache serves a read before it reads it again, in milliseconds. */
+  readonly contentRevalidateMs: number;
 }
 
 const apiBaseUrl = z
@@ -104,6 +106,7 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     apiBaseUrl: result.data.WEB_API_BASE_URL,
     siteOrigin: result.data.WEB_SITE_ORIGIN,
     mediaBaseUrl: result.data.WEB_MEDIA_BASE_URL,
+    contentRevalidateMs: 60_000,
   };
 }
 
