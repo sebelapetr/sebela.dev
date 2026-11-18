@@ -30,6 +30,8 @@ import type {
   TestimonialService,
 } from "./types.js";
 
+export type { MediaAddress } from "./cv.js";
+export { mediaRefused } from "./media-references.js";
 export type {
   CaseStudyService,
   CatalogService,
