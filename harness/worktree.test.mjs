@@ -494,6 +494,23 @@ test("a generated environment file gives the website its own canonical origin", 
   assert.notEqual(otherSettings.WEB_SITE_ORIGIN, settings.WEB_SITE_ORIGIN);
 });
 
+test("a generated environment file signs the API's invalidations for the worktree's own website", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.API_WEB_INVALIDATION_URL);
+  assert.equal(address.hostname, example.WEB_HOST);
+  assert.equal(Number(address.port), Number(settings.WEB_PORT));
+  assert.equal(address.pathname, "/internal/invalidation");
+  assert.equal(address.search, "");
+  assert.ok(settings.WEB_INVALIDATION_SECRET.length >= 32, "a secret of at least 32 characters");
+  assert.equal(settings.API_WEB_INVALIDATION_SECRET, settings.WEB_INVALIDATION_SECRET);
+  assert.notEqual(otherSettings.WEB_INVALIDATION_SECRET, settings.WEB_INVALIDATION_SECRET);
+  assert.notEqual(otherSettings.API_WEB_INVALIDATION_URL, settings.API_WEB_INVALIDATION_URL);
+});
+
 test("a generated environment file lets the website optimise only its worktree's media", (t) => {
   const { create, envPath } = fixture(t);
   const other = create("feat/other");

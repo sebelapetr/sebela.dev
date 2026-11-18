@@ -104,3 +104,9 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
     mediaBaseUrl: result.data.WEB_MEDIA_BASE_URL,
   };
 }
+
+export function readInvalidationSecret(env: Readonly<Record<string, string | undefined>>): string {
+  throw new Error(
+    `readInvalidationSecret is not implemented (${String(Object.keys(env).length)} variables)`,
+  );
+}

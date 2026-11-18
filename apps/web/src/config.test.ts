@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readWebConfig } from "./config";
+import { readInvalidationSecret, readWebConfig } from "./config";
 
 const SITE = { WEB_SITE_ORIGIN: "https://site.example.test" };
 const API = { WEB_API_BASE_URL: "http://api.example.test" };
@@ -148,5 +148,34 @@ describe("readWebConfig: the media files' base address", () => {
     expect(() => read("https://user:s3cret@cdn.example.test/production")).toThrow(
       /^(?!.*s3cret).*WEB_MEDIA_BASE_URL/,
     );
+  });
+});
+
+describe("readInvalidationSecret", () => {
+  // Disposable fixture values, used by nothing but these tests.
+  const secret = "fixture-secret-for-tests-only-0123456789";
+
+  it("reads the website's invalidation signing secret", () => {
+    expect(readInvalidationSecret({ WEB_INVALIDATION_SECRET: secret })).toBe(secret);
+  });
+
+  it("needs nothing else of the website's configuration", () => {
+    expect(readInvalidationSecret({ ...API, WEB_INVALIDATION_SECRET: secret })).toBe(secret);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+  ])("refuses a %s secret and names the variable", (_label, value) => {
+    const env = value === undefined ? {} : { WEB_INVALIDATION_SECRET: value };
+    expect(() => readInvalidationSecret(env)).toThrow(/WEB_INVALIDATION_SECRET is required/);
+  });
+
+  it("refuses a secret shorter than 32 characters and does not repeat it", () => {
+    const short = "x".repeat(31);
+    expect(() => readInvalidationSecret({ WEB_INVALIDATION_SECRET: short })).toThrow(
+      /^(?!.*x{31}).*WEB_INVALIDATION_SECRET must be at least 32 characters/,
+    );
+    expect(readInvalidationSecret({ WEB_INVALIDATION_SECRET: "x".repeat(32) })).toHaveLength(32);
   });
 });
