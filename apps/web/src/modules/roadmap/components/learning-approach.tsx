@@ -32,7 +32,7 @@ export function LearningApproach() {
           than if you studied them in complete isolation - the knowledge compounds.
         </p>
         <p className="text-xs text-muted-foreground">
-          The percentages below represent the recommended share of total learning effort.
+          The dots beside each area show its recommended share of the total learning effort.
         </p>
       </div>
     </section>
