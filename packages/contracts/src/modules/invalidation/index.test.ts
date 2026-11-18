@@ -56,6 +56,7 @@ describe("the content change", () => {
       "roadmap-area",
       "roadmap-module",
       "roadmap-resource",
+      "roadmap-book",
       "roadmap-diary",
       "media",
     ]);

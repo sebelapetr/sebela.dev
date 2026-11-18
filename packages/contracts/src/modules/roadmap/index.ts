@@ -384,3 +384,10 @@ export type {
   TimeEntryUpdate,
   TimeEntryWrite,
 } from "./diary.js";
+export {
+  RoadmapBookCreateSchema,
+  RoadmapBookListSchema,
+  RoadmapBookSchema,
+  RoadmapBookUpdateSchema,
+  roadmapBookStatuses,
+} from "./books.js";

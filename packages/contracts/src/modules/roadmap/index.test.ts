@@ -167,8 +167,20 @@ describe("RoadmapResourceCreateSchema", () => {
       startedAt: null,
       finishedAt: null,
       link: null,
+      book: null,
       topics: [],
     });
+  });
+
+  it("links a book only from a resource of type book", () => {
+    const reading = { ...notes, type: "book", book: "fictional-patterns" };
+    expect(RoadmapResourceCreateSchema.parse(reading)).toEqual(reading);
+    const result = RoadmapResourceCreateSchema.safeParse({ ...notes, book: "fictional-patterns" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["book"]);
+    expect(RoadmapResourceCreateSchema.safeParse({ ...reading, book: "Not A Slug" }).success).toBe(
+      false,
+    );
   });
 
   it("refuses an unknown type or status", () => {
@@ -218,6 +230,22 @@ describe("RoadmapResourceUpdateSchema", () => {
       }).success,
     ).toBe(false);
     expect(RoadmapResourceUpdateSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("accepts a book link or its removal and refuses a book with another type in one body", () => {
+    expect(RoadmapResourceUpdateSchema.parse({ book: "fictional-patterns" })).toEqual({
+      book: "fictional-patterns",
+    });
+    expect(RoadmapResourceUpdateSchema.parse({ book: null, type: "text" })).toEqual({
+      book: null,
+      type: "text",
+    });
+    const result = RoadmapResourceUpdateSchema.safeParse({
+      type: "link",
+      book: "fictional-patterns",
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["book"]);
   });
 });
 
@@ -310,6 +338,7 @@ const treeResource = {
   finishedAt: notes.finishedAt,
   link: notes.link,
   position: notes.position,
+  book: null,
   topics: [{ ...stored, slug: "agents", name: "Agents", position: 0 }],
 };
 const moduleNode = {
