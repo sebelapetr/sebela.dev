@@ -42,3 +42,4 @@ export type {
   ServiceService,
   TestimonialService,
 } from "./modules/profile/index.js";
+export type { RoadmapService } from "./modules/roadmap/index.js";
