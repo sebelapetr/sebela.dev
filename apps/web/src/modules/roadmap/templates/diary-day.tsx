@@ -49,13 +49,13 @@ export function RoadmapDiaryDayTemplate({ content }: { readonly content: Roadmap
             </h2>
             {page.areas.map((area) => (
               <div key={area.slug} className="flex flex-col gap-4">
-                <h3 className="text-xl font-semibold wrap-anywhere">
+                <h3 className="type-item wrap-anywhere">
                   <MaybeLink href={area.href}>{area.name}</MaybeLink>
                 </h3>
                 <div className="flex flex-col gap-6 border-l border-border pl-4">
                   {area.modules.map((group) => (
                     <div key={group.slug} className="flex flex-col gap-3">
-                      <h4 className="text-lg font-medium wrap-anywhere">
+                      <h4 className="font-semibold wrap-anywhere">
                         <MaybeLink href={group.href}>{group.name}</MaybeLink>
                       </h4>
                       <ul aria-label={`Sessions in ${group.name}`} className="flex flex-col gap-4">

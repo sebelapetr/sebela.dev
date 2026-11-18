@@ -22,8 +22,7 @@ export function RoadmapDiaryTemplate({ content }: { readonly content: RoadmapDia
             <h1 className="type-title">{DIARY_NAME}</h1>
           </div>
           <p className="type-lead max-w-prose text-muted-foreground">
-            A public record of my learning: what I studied each day, for how long, and what I
-            noticed along the way, as I move from full-stack development to AI engineering.
+            What was studied each day, for how long, and the notes taken along the way.
           </p>
         </header>
         {list.days.length === 0 ? (
