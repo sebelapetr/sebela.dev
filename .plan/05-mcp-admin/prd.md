@@ -2,8 +2,8 @@
 
 |            |                                                                                                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Draft, awaiting approval                                                                                                                                          |
-| Date       | 2026-11-17                                                                                                                                                        |
+| Status     | Approved in conversation; implementation pending                                                                                                                  |
+| Date       | 2026-11-18                                                                                                                                                        |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                                                        |
 | Depends on | Phases 2 and 4                                                                                                                                                    |
 | Result     | The owner manages all content by talking to an agent: a secured MCP server over the API's private routes, the skills that use it, and evals that prove it behaves |
@@ -73,8 +73,15 @@ The capability is also dangerous: whatever can write the profile can also wreck 
 - API authentication is required even on the internal network and through a tunnel. Service addresses, trusted proxies and tunnel targets are configuration; do not hard-code them.
 - It reaches data only through the TypeScript content API over HTTP, using the generated client and shared schemas. It does not call FastAPI or the Python chat pipeline; the external agent supplies its own model. The separate Python `mcp-public` adapter is delivered in phase 8.
 
+### MCP implementation stack
+
+- Use the official TypeScript MCP SDK (`@modelcontextprotocol/server`), its official Hono adapter (`@modelcontextprotocol/hono`) and Hono for Streamable HTTP. Pin compatible exact versions during the first implementation slice. Hono is the HTTP/middleware layer; SDK handles MCP. Do not hand-write JSON-RPC or introduce a separate REST endpoint for every tool.
+- This reuses the HTTP framework already used by `apps/api`; it does not duplicate the content REST API. See the [official Hono adapter](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/packages/middleware/hono/README.md).
+- Install application authentication and bounded-request controls before MCP dispatch; SDK defaults do not replace authorization, rate limits or API validation.
+
 ### Security
 
+- The caller supplies `Authorization: Bearer <api-key>` to MCP. Use that caller key for authenticated first-party private API calls; generated public reads carry no key. Reuse the existing API-key CLI, random-key generation, `auth.api_keys` hash store and revocation; no duplicate login/key system is built.
 - **Credential boundary.** Use this system's revocable, named administrative API credentials, explicitly provisioned for this first-party gateway. The API remains the key-verification authority; refuse the MCP connection before discovery and recheck authorization for every operation. Document the private authentication-check operation needed for discovery, without exposing key hashes or creating a second key store.
 - This private API-key mechanism is not an OAuth proxy. Do not accept arbitrary third-party access tokens or forward OAuth tokens between different resource audiences; any future OAuth integration needs its own reviewed audience/token-exchange design. Confirm SDK/specification compatibility before implementation.
 - No raw key in model context, tool arguments/results, URLs, logs, traces or audit payloads. Credentials stay in the request authentication layer and are forwarded only to the configured first-party API, never to caller-selected hosts or across redirects. The process necessarily handles credentials in memory: compromising it can expose active credentials. There is no claim that holding no persistent key makes compromise harmless.
@@ -106,7 +113,7 @@ Cover the complete content API from phases 2 and 4: profile, experiences, projec
 | Log a study session     | Finds or creates the day's diary entry, finds the resource (or event), stores the time record and the notes |
 | Find a resource         | Searches resources by name or link and returns candidates                                                   |
 | Add a resource          | Adds a resource to a module                                                                                 |
-| Set a resource's status | Started, completed, paused, skipped                                                                         |
+| Set a resource's status | Planned, in-progress, completed, paused, skipped                                                            |
 | Add an event            | Creates the event                                                                                           |
 | Add or update a book    | Creates a book or changes its state and summary                                                             |
 | Upload a file           | Uploads an image or a PDF and returns the media record                                                      |
@@ -125,6 +132,8 @@ Cover the complete content API from phases 2 and 4: profile, experiences, projec
 - Tool descriptions state when to use the tool and when to use another one instead.
 - Errors from the API are returned in a form the agent can act on: the field, the reason.
 - A task tool that finds more than one candidate returns the candidates instead of choosing.
+
+- Natural "started" maps to the phase-4 `in-progress` contract value; book status is derived from dates, not a separate writable status field.
 
 ### Skills
 
@@ -196,3 +205,11 @@ A skill describes the conversation — what to ask when information is missing, 
 - **HITL issues:** approval of the eval case list; a trial of each skill by the owner.
 - The owner's global `diary-entry` skill keeps working against the old application until launch; the new one is used against the new system from this phase on, for testing, and becomes the only one at launch.
 - An API key for evals in CI is a model provider key, a different thing from this system's API keys. It is stored as a repository secret and used only by the on-demand eval workflow.
+
+## Approved phase-5 planning artifacts
+
+- [Published issue breakdown](issues.md): five approved vertical slices with GitHub links and dependencies.
+- [Security acceptance scenarios](security.md): 24 deterministic families, including API-owned atomic audit and safe handling of uncertain writes.
+- [Model eval catalogue](evals.md): 32 fictional Czech/English cases with observable state/trace expectations and proposed gates.
+
+The owner approved publication of the five-issue breakdown and its case catalogue in conversation on 2026-11-18. These are planning specifications, not a claim that implementation or live evaluations have started. The actual supported-client/baseline gate remains part of implementation. The current best-effort post-write notification is retained for invalidation, not reused as authoritative transactional audit.
