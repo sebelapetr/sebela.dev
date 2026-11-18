@@ -46,6 +46,7 @@ function resource(slug: string, overrides: Partial<RoadmapTreeResource> = {}): R
     startedAt: null,
     finishedAt: null,
     link: null,
+    book: null,
     position: 0,
     topics: [],
     createdAt: STAMP,
