@@ -121,7 +121,7 @@ function BlockCard({ block }: { readonly block: ChatBlock }) {
               <CardTitle>
                 <a
                   href={mailtoHref(block.email)}
-                  className="inline-flex min-h-11 items-center break-all underline underline-offset-4"
+                  className="inline-flex min-h-11 items-center wrap-anywhere underline underline-offset-4"
                 >
                   {block.email}
                 </a>

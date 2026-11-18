@@ -1,0 +1,29 @@
+[
+  {
+    "slug": "logistics-process-automation",
+    "name": "Automation of manual freight forwarding, warehouse and customs paperwork processes",
+    "summary": "Fictional manual steps between orders, warehouses and customs portals replaced by dependable tools.",
+    "audience": "Fictional freight forwarders and warehouse operators whose clerks retype the same data into several systems.",
+    "deliverable": "A working tool, its documentation, a replay test suite and a hand-over to the team that runs it.",
+    "position": 0,
+    "evidence": [
+      {
+        "kind": "project",
+        "project": "cross-border-customs-declarations"
+      },
+      {
+        "kind": "exploration",
+        "exploration": "manifest-question-answering"
+      },
+      {
+        "kind": "exploration",
+        "exploration": "declaration-agent-permissions"
+      },
+      {
+        "kind": "link",
+        "label": "Independent research and development behind the AI engineering focus",
+        "path": "/experience#independent-rd"
+      }
+    ]
+  }
+]

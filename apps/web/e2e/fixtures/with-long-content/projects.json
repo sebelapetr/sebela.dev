@@ -1,0 +1,19 @@
+[
+  {
+    "slug": "cross-border-customs-declarations",
+    "experience": "northern-freight-principal-engineer",
+    "name": "Cross-border customs declarations generated from consolidated warehouse shipment manifests",
+    "summary": "Generates the **fictional** cooperative's customs declarations from its warehouse manifests.",
+    "problem": "Clerks retyped every consolidated shipment manifest into three different customs portals, each with its own identifiers such as `EXPORT_DECLARATION_REFERENCE_NUMBER_WITH_CHECK_DIGIT`.",
+    "workDone": "Built one export service over PostgreSQL that maps a manifest to each portal's declaration format and keeps every submission auditable.",
+    "result": "Declarations leave the warehouse the same hour the truck is loaded instead of the next morning.",
+    "startedOn": "2021-04-01",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["typescript", "postgresql", "message-queues"],
+    "caseStudy": {
+      "role": "Principal engineer responsible for the declaration model, the portal adapters and their test suite",
+      "body": "## Context and constraints of three different customs portals\n\nA **fictional** cooperative with three portals and one manifest format.\n\n## Approach\n\nEvery portal adapter was checked against a year of replayed manifests, including the `consolidated_freight_dispatch_reconciliation_job` output, before it shipped.\n\n## Outcome\n\nThe replay suite guards every change to the declaration model."
+    }
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "typescript",
+    "name": "TypeScript",
+    "tier": "primary",
+    "group": "core",
+    "logoKey": "typescript",
+    "position": 0
+  },
+  {
+    "slug": "postgresql",
+    "name": "PostgreSQL",
+    "tier": "primary",
+    "group": "core",
+    "logoKey": "postgresql",
+    "position": 1
+  },
+  {
+    "slug": "retrieval",
+    "name": "Retrieval-augmented generation with hybrid lexical and vector search",
+    "tier": "primary",
+    "group": "ai_engineering_focus",
+    "position": 2
+  },
+  {
+    "slug": "message-queues",
+    "name": "Message queues and transactional outbox delivery",
+    "tier": "secondary",
+    "group": null,
+    "position": 3
+  }
+]

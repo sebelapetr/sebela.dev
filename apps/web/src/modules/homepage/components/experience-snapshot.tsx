@@ -53,16 +53,21 @@ export function ExperienceSnapshot({
             <div key={line.label} className="flex flex-col gap-1 sm:flex-row sm:gap-6">
               <dt className="type-label shrink-0 sm:w-48">{line.label}</dt>
               <dd>
-                {/* A name never breaks from its separator, so no line starts with a dot. */}
-                {line.names.map((name, index) => (
-                  <span key={name}>
-                    {index === 0 ? null : " "}
-                    <span className="whitespace-nowrap">
-                      {name}
-                      {index === line.names.length - 1 ? null : " ·"}
+                {/* A name's last word never breaks from its separator, so no line starts with a
+                    dot; a name longer than the line still wraps between its other words. */}
+                {line.names.map((name, index) => {
+                  const split = name.lastIndexOf(" ") + 1;
+                  return (
+                    <span key={name}>
+                      {index === 0 ? null : " "}
+                      {name.slice(0, split)}
+                      <span className="whitespace-nowrap">
+                        {name.slice(split)}
+                        {index === line.names.length - 1 ? null : " ·"}
+                      </span>
                     </span>
-                  </span>
-                ))}
+                  );
+                })}
               </dd>
             </div>
           ))}

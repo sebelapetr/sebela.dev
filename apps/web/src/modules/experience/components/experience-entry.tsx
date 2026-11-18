@@ -61,7 +61,7 @@ export function ExperienceEntry({ entry }: { readonly entry: TimelineEntry }) {
             <p>
               <a
                 href={entry.organization.website}
-                className="inline-flex min-h-11 items-center text-sm font-medium break-all underline-offset-4 hover:underline focus-visible:underline"
+                className="inline-flex min-h-11 items-center text-sm font-medium wrap-anywhere underline-offset-4 hover:underline focus-visible:underline"
               >
                 {entry.organization.name} website
               </a>

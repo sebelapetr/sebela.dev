@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "northern-freight-principal-engineer",
+    "title": "Principal software engineer and technical lead for routing, dispatch and warehouse integrations",
+    "kind": "main_job",
+    "organization": "northern-freight-cooperative",
+    "startedOn": "2019-11-21",
+    "summary": "Leads the **fictional** cooperative's routing, dispatch and warehouse integration platform, from the nightly `consolidated_freight_dispatch_reconciliation_job` to the screens dispatchers use all day, documented at https://docs.consolidated-northern-fictional-freight.example.test/platform/architecture/overview.",
+    "responsibilities": [
+      "Own the architecture of the routing, dispatch, tracking and warehouse integration services across every depot of the cooperative",
+      "Review every change to the customs declaration exports before it reaches the authorities' fictional test environment"
+    ],
+    "inCv": true,
+    "technologies": ["typescript", "postgresql", "retrieval", "message-queues"]
+  }
+]

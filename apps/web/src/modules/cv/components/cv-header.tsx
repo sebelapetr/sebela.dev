@@ -1,7 +1,7 @@
 import type { CvDocument } from "../data/cv-document";
 
 const contactLinkClass =
-  "inline-flex min-h-11 items-center text-sm font-medium break-all underline-offset-4 hover:underline focus-visible:underline print:min-h-0";
+  "inline-flex min-h-11 items-center text-sm font-medium wrap-anywhere underline-offset-4 hover:underline focus-visible:underline print:min-h-0";
 
 /**
  * The CV's header: the name as the page's heading, the headline, then the location, the email
