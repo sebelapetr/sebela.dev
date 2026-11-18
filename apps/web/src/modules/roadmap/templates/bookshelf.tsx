@@ -27,7 +27,7 @@ export function RoadmapBookshelfTemplate({
             <h1 className="type-title">{BOOKSHELF_NAME}</h1>
           </div>
           <p className="type-lead max-w-prose text-muted-foreground">
-            The books I read along the roadmap, what I am reading now and what comes next.
+            Books read along the roadmap, the ones being read now and those still to come.
           </p>
         </header>
         {page.books.length === 0 ? (
