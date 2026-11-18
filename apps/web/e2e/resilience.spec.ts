@@ -95,52 +95,76 @@ async function expectKeyboardReachable(page: Page) {
   }
 }
 
-/** The stored copies of a fixture file in the API's end-to-end storage folders. */
-async function storedCopies(fixtureFile: string): Promise<string[]> {
-  const expected = await readFile(fixtureFile);
+/** The API's end-to-end storage folders that exist now. */
+async function storageFolders(): Promise<Set<string>> {
+  const entries = await readdir(scratch, { withFileTypes: true }).catch(() => []);
+  return new Set(
+    entries
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("e2e-storage-"))
+      .map((entry) => join(scratch, entry.name)),
+  );
+}
+
+/** The stored copies of the fixture's files in one API's storage folder. */
+async function storedCopies(
+  storage: string,
+  fixture: Fixture,
+  files: readonly string[],
+): Promise<string[]> {
+  const expected = await Promise.all(
+    files.map((file) => readFile(join(fixtureFolder(fixture), "files", file))),
+  );
   const found: string[] = [];
-  for (const root of await readdir(scratch, { withFileTypes: true })) {
-    if (!root.isDirectory() || !root.name.startsWith("e2e-storage-")) continue;
-    const folder = join(scratch, root.name);
-    for (const entry of await readdir(folder, { withFileTypes: true, recursive: true })) {
-      if (!entry.isFile()) continue;
-      const path = join(entry.parentPath, entry.name);
-      if ((await readFile(path)).equals(expected)) found.push(path);
-    }
+  for (const entry of await readdir(storage, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    const content = await readFile(path);
+    if (expected.some((file) => file.equals(content))) found.push(path);
   }
   return found;
 }
 
-/** Moves the stored copies of the fixture's files away; returns how to bring them back. */
-async function removeStored(fixture: Fixture, files: readonly string[]) {
-  const stored = (
-    await Promise.all(
-      files.map((file) => storedCopies(join(fixtureFolder(fixture), "files", file))),
-    )
-  ).flat();
-  expect(stored.length).toBeGreaterThanOrEqual(files.length);
-  for (const path of stored) await rename(path, `${path}.away`);
-  return async () => {
-    for (const path of stored) await rename(`${path}.away`, path);
+/**
+ * Starts an API for the fixture and a website reading it for the enclosing block. With `gone`, the
+ * API's stored copies of those fixture files are moved away once it has started — its own storage
+ * folder only, the one that appeared when it started — and brought back before it stops, since
+ * the API deletes its folder when it stops. `restore()` brings them back earlier; it runs once.
+ */
+function serve(fixture: Fixture, gone: readonly string[] = []) {
+  const started: { api?: Started; website?: Started; moved: string[] } = { moved: [] };
+  const restore = async () => {
+    const moved = started.moved;
+    started.moved = [];
+    for (const path of moved) await rename(`${path}.away`, path);
   };
-}
-
-/** Starts an API for the fixture and a website reading it for the enclosing block. */
-function serve(fixture: Fixture) {
-  const started: { api?: Started; website?: Started } = {};
   test.beforeAll(async () => {
+    const before = await storageFolders();
     started.api = await startApi(fixture);
     started.website = await startWebsite(started.api.url);
+    if (gone.length === 0) return;
+    const own = [...(await storageFolders())].filter((folder) => !before.has(folder));
+    expect(own).toHaveLength(1);
+    const stored = await storedCopies(own[0] ?? "", fixture, gone);
+    expect(stored.length).toBeGreaterThanOrEqual(gone.length);
+    for (const path of stored) {
+      await rename(path, `${path}.away`);
+      started.moved.push(path);
+    }
   });
   test.afterAll(async () => {
-    await started.website?.stop();
-    await started.api?.stop();
+    try {
+      await restore();
+    } finally {
+      await started.website?.stop();
+      await started.api?.stop();
+    }
   });
   return {
     get url() {
       if (started.website === undefined) throw new Error("The website has not started");
       return started.website.url;
     },
+    restore,
   };
 }
 
@@ -253,6 +277,18 @@ test.describe("a profile without any optional content", () => {
     await expect(
       page.getByRole("button", { name: `What is ${sparse.name} working on now?` }),
     ).toBeVisible();
+
+    // Too little evidence and nothing to contact: the answer says so without an empty contact card.
+    await hydrated(page);
+    await page
+      .getByRole("button", { name: `What are ${sparse.name}'s strongest engineering skills?` })
+      .click();
+    const answer = page.getByRole("list", { name: "Conversation" }).locator(":scope > li").last();
+    await expect(answer.locator("[aria-busy='false']")).toHaveCount(1);
+    await expect(answer).toContainText("I don't have enough evidence");
+    await expect(answer.getByRole("list", { name: "Cards" })).toHaveCount(0);
+    await expect(answer.getByRole("list", { name: "Sources", exact: true })).toHaveCount(0);
+    await expect(answer).not.toContainText("Contact");
   });
 });
 
@@ -277,16 +313,7 @@ test.describe("a profile without any optional content in every width and mode", 
 });
 
 test.describe("a CV PDF whose file cannot be served", () => {
-  const website = serve("with-experience");
-  let restore: (() => Promise<void>) | undefined;
-
-  test.beforeAll(async () => {
-    restore = await removeStored("with-experience", ["cv.pdf"]);
-  });
-
-  test.afterAll(async () => {
-    await restore?.();
-  });
+  const website = serve("with-experience", ["cv.pdf"]);
 
   for (const entry of [
     { from: "the homepage's experience snapshot", path: "/", within: "Experience" },
@@ -327,8 +354,7 @@ test.describe("a CV PDF whose file cannot be served", () => {
     expect(failed.headers()["location"]).toBe("/cv/pdf/unavailable");
     expect(failed.headers()["cache-control"]).toBe("no-store");
 
-    await restore?.();
-    restore = undefined;
+    await website.restore();
     await page.goto(`${website.url}/cv/pdf/unavailable`);
     const [download] = await Promise.all([
       page.waitForEvent("download"),
@@ -339,22 +365,13 @@ test.describe("a CV PDF whose file cannot be served", () => {
 });
 
 test.describe("images whose originals are gone", () => {
-  const website = serve("with-experience");
-  let restore: (() => Promise<void>) | undefined;
-
-  test.beforeAll(async () => {
-    // A new API stores the images under new keys, so no optimized copy of them exists yet.
-    restore = await removeStored("with-experience", [
-      "fernway-logistics.png",
-      "open-ledger-kit.png",
-      "pinecrest-health.png",
-      "avatar-riley.png",
-    ]);
-  });
-
-  test.afterAll(async () => {
-    await restore?.();
-  });
+  // A new API stores the images under new keys, so no optimized copy of them exists yet.
+  const website = serve("with-experience", [
+    "fernway-logistics.png",
+    "open-ledger-kit.png",
+    "pinecrest-health.png",
+    "avatar-riley.png",
+  ]);
 
   test("leave nothing in their place and the rows aligned, never a broken image", async ({
     page,
@@ -439,7 +456,8 @@ test.describe("an API that fails, stays silent and comes back", () => {
     test(`${path} says it is unavailable with a failure status, not indexed`, async ({ page }) => {
       const response = await page.goto(`${website.url}${path}`);
       expect(response?.status()).toBe(500);
-      expect(response?.headers()["cache-control"] ?? "").not.toMatch(/s-maxage|public/u);
+      // Never stored by the browser or a shared cache, so the next request asks again.
+      expect(response?.headers()["cache-control"]).toMatch(/\bno-store\b/u);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(unavailable);
       await expect(page).toHaveTitle("Content unavailable");
       await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute(
@@ -519,6 +537,9 @@ test.describe("an API that fails, stays silent and comes back", () => {
   test("cached content outlives the next outage instead of the failure coming back", async ({
     page,
   }) => {
+    // This outage begins within the revalidation interval, so the copies are still fresh: the
+    // failure must not replace them. An outage past the interval (a stale copy served while the
+    // API fails) is covered by cache-recovery.spec.ts.
     proxy.mode = "down";
     for (const path of contentRoutes) {
       const response = await page.goto(`${website.url}${path}`);

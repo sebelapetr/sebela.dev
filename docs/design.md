@@ -125,7 +125,7 @@ Sections of a page are not equally tall and are not separated by hard horizontal
 
 On the homepage: the hero gets a lot of space, Selected work is the most prominent block, Experience is compact, Now is an editorial split layout, Services are plain. Lists of work are numbered editorial rows, not cards.
 
-The homepage's sections, in this order, 96/128 px apart: the hero, What I do, Selected work, Experience, Now, Services, Contact (`#contact`), then the footer. Each section is an `h2` (`type-heading`); a section without content is left out entirely, never shown empty or with filler.
+The homepage's sections, in this order, 96/128 px apart: the hero, What I do, Selected work, Experience, Now, Services, Contact (`#contact`), then the footer. Each section is an `h2` (`type-heading`); a section without content is left out entirely, never shown empty or with filler. Contact is the one exception: it is the target of the header's Contact link and of every "Get in touch", so without an email address or web links it stays and says, as muted body text, "No contact details are published yet.", the way `/services` says it has no services.
 
 **What I do** is three short columns from `sm` (stacked on mobile): Software systems, Integrations & automation, AI engineering, each a `type-item` name and one muted sentence. The sentences are the site's own copy and describe kinds of work only — no results, numbers or clients — and AI engineering reads as the current focus, never as a delivered track record.
 
