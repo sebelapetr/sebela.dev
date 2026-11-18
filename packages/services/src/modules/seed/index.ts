@@ -32,6 +32,7 @@ export type SeedKind =
   | "currentFocus"
   | "roadmapAreas"
   | "roadmapModules"
+  | "roadmapBooks"
   | "roadmapResources"
   | "roadmapDiary"
   | "roadmapTimeEntries";
@@ -114,6 +115,7 @@ const emptyCounts = (): Counts => ({
   currentFocus: { created: 0, updated: 0 },
   roadmapAreas: { created: 0, updated: 0 },
   roadmapModules: { created: 0, updated: 0 },
+  roadmapBooks: { created: 0, updated: 0 },
   roadmapResources: { created: 0, updated: 0 },
   roadmapDiary: { created: 0, updated: 0 },
   roadmapTimeEntries: { created: 0, updated: 0 },
