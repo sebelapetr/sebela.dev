@@ -1,8 +1,13 @@
 import {
   RoadmapAreaCreateSchema,
+  RoadmapAreaDetailSchema,
+  RoadmapAreaParamsSchema,
   RoadmapAreaSchema,
   RoadmapAreaUpdateSchema,
+  RoadmapCurrentSchema,
   RoadmapModuleCreateSchema,
+  RoadmapModuleDetailSchema,
+  RoadmapModuleParamsSchema,
   RoadmapModuleSchema,
   RoadmapModuleUpdateSchema,
   RoadmapResourceCreateSchema,
@@ -16,6 +21,9 @@ import type { RoadmapService } from "@sebela/services";
 import { defineRoute, type RouteDefinition } from "../../routing.js";
 
 const TREE = "/v1/roadmap";
+const AREA_DETAIL = "/v1/roadmap/tree/:area";
+const MODULE_DETAIL = "/v1/roadmap/tree/:area/:module";
+const CURRENT = "/v1/roadmap/current";
 const AREAS = "/v1/roadmap/areas";
 const AREA = "/v1/roadmap/areas/:slug";
 const MODULES = "/v1/roadmap/modules";
@@ -24,7 +32,9 @@ const RESOURCES = "/v1/roadmap/resources";
 const RESOURCE = "/v1/roadmap/resources/:slug";
 
 /**
- * The HTTP routes of the AI roadmap: the whole tree with derived progress in one public read,
+ * The HTTP routes of the AI roadmap: the whole tree with derived progress in one public read, the
+ * public detail of one area or one module of that tree at its nested address (a module under
+ * another area is not found), the public current learning (the in-progress areas and modules),
  * public reads of each area, module and resource by slug, and authenticated create, update and
  * delete of each. Domain errors become `not_found`, `conflict` (a taken slug, or deleting a parent
  * that still has children) and `validation_failed` naming the field (a reserved area slug, an
@@ -47,6 +57,61 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
       response: { status: 200, description: "The roadmap tree.", schema: RoadmapSchema },
       errors: [],
       handle: () => roadmap.getRoadmap(),
+    }),
+    defineRoute({
+      operationId: "getRoadmapAreaDetail",
+      method: "GET",
+      path: AREA_DETAIL,
+      access: "public",
+      summary: "Read one area of the roadmap tree",
+      description:
+        "The area exactly as it appears in the whole roadmap: its modules and their resources in " +
+        "position order, with the same derived progress. A missing area is not found.",
+      params: RoadmapAreaParamsSchema,
+      response: {
+        status: 200,
+        description: "The area with its modules and resources.",
+        schema: RoadmapAreaDetailSchema,
+      },
+      errors: ["not_found"],
+      handle: ({ params }) => roadmap.getAreaDetail(params.area),
+    }),
+    defineRoute({
+      operationId: "getRoadmapModuleDetail",
+      method: "GET",
+      path: MODULE_DETAIL,
+      access: "public",
+      summary: "Read one module of the roadmap tree",
+      description:
+        "The module exactly as it appears in the whole roadmap, with its resources in position " +
+        "order and its derived progress, and the area it belongs to without its modules. A " +
+        "missing area or module, or a module that belongs to another area, is not found.",
+      params: RoadmapModuleParamsSchema,
+      response: {
+        status: 200,
+        description: "The module with its resources and its area.",
+        schema: RoadmapModuleDetailSchema,
+      },
+      errors: ["not_found"],
+      handle: ({ params }) => roadmap.getModuleDetail(params.area, params.module),
+    }),
+    defineRoute({
+      operationId: "getRoadmapCurrent",
+      method: "GET",
+      path: CURRENT,
+      access: "public",
+      summary: "Read what is currently being learned",
+      description:
+        "The areas whose derived status is `in-progress`, each with only its `in-progress` " +
+        "modules, in roadmap order, with the same progress as the whole roadmap and without " +
+        "resources. Nothing in progress is the valid empty `areas` list.",
+      response: {
+        status: 200,
+        description: "The areas and modules in progress.",
+        schema: RoadmapCurrentSchema,
+      },
+      errors: [],
+      handle: () => roadmap.getCurrentLearning(),
     }),
 
     defineRoute({

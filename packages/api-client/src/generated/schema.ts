@@ -678,6 +678,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/roadmap/tree/{area}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one area of the roadmap tree
+         * @description The area exactly as it appears in the whole roadmap: its modules and their resources in position order, with the same derived progress. A missing area is not found.
+         */
+        get: operations["getRoadmapAreaDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/tree/{area}/{module}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one module of the roadmap tree
+         * @description The module exactly as it appears in the whole roadmap, with its resources in position order and its derived progress, and the area it belongs to without its modules. A missing area or module, or a module that belongs to another area, is not found.
+         */
+        get: operations["getRoadmapModuleDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read what is currently being learned
+         * @description The areas whose derived status is `in-progress`, each with only its `in-progress` modules, in roadmap order, with the same progress as the whole roadmap and without resources. Nothing in progress is the valid empty `areas` list.
+         */
+        get: operations["getRoadmapCurrent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roadmap/areas/{slug}": {
         parameters: {
             query?: never;
@@ -2098,6 +2158,15 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description The area node of the roadmap tree, with its modules and their resources. */
+        RoadmapAreaDetail: {
+            area: components["schemas"]["RoadmapTreeArea"];
+        };
+        /** @description The module node of the roadmap tree and the area that holds it. */
+        RoadmapModuleDetail: {
+            area: components["schemas"]["RoadmapArea"];
+            module: components["schemas"]["RoadmapTreeModule"];
+        };
         RoadmapArea: {
             /** Format: uuid */
             id: string;
@@ -2114,6 +2183,77 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @description The areas and modules whose derived status is `in-progress`, in the order of the roadmap; empty when nothing is. */
+        RoadmapCurrent: {
+            areas: components["schemas"]["RoadmapCurrentArea"][];
+        };
+        RoadmapCurrentArea: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description The recommended share of learning effort, 1 to 100. It is not progress and not logged time. */
+            weight: number;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            progress: {
+                /** @description Resources with the status `completed`. */
+                completed: number;
+                /** @description All resources, whatever their status. */
+                total: number;
+                /**
+                 * @description Always `in-progress` here.
+                 * @constant
+                 */
+                status: "in-progress";
+                /** @description The latest finish among completed resources once the whole container is completed; `null` otherwise or when no completed resource has a finish. */
+                completedAt: string | null;
+                /** @description The latest change of any of its resources; `null` when it has none. */
+                lastUpdatedAt: string | null;
+                /** @description The sum of every resource estimate; a missing estimate counts as zero. */
+                estimatedMinutes: number;
+            };
+            modules: components["schemas"]["RoadmapCurrentModule"][];
+        };
+        RoadmapCurrentModule: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            progress: {
+                /** @description Resources with the status `completed`. */
+                completed: number;
+                /** @description All resources, whatever their status. */
+                total: number;
+                /**
+                 * @description Always `in-progress` here.
+                 * @constant
+                 */
+                status: "in-progress";
+                /** @description The latest finish among completed resources once the whole container is completed; `null` otherwise or when no completed resource has a finish. */
+                completedAt: string | null;
+                /** @description The latest change of any of its resources; `null` when it has none. */
+                lastUpdatedAt: string | null;
+                /** @description The sum of every resource estimate; a missing estimate counts as zero. */
+                estimatedMinutes: number;
+            };
         };
         RoadmapModule: {
             /** Format: uuid */
@@ -7089,6 +7229,179 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Roadmap"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapAreaDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The slug of the area. */
+                area: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The area with its modules and resources. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapAreaDetail"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapModuleDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The slug of the area the module belongs to. */
+                area: string;
+                /** @description The slug of the module. */
+                module: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The module with its resources and its area. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapModuleDetail"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapCurrent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The areas and modules in progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapCurrent"];
                 };
             };
             /** @description `credentials_in_url` (a credential was sent in the query string) */
