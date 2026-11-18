@@ -2,9 +2,12 @@ import type {
   Roadmap,
   RoadmapArea,
   RoadmapAreaCreate,
+  RoadmapAreaDetail,
   RoadmapAreaUpdate,
+  RoadmapCurrent,
   RoadmapModule,
   RoadmapModuleCreate,
+  RoadmapModuleDetail,
   RoadmapModuleUpdate,
   RoadmapResource,
   RoadmapResourceCreate,
@@ -40,6 +43,9 @@ import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 export interface RoadmapService {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
+  getAreaDetail(area: string): Promise<RoadmapAreaDetail>;
+  getModuleDetail(area: string, module: string): Promise<RoadmapModuleDetail>;
+  getCurrentLearning(): Promise<RoadmapCurrent>;
   getArea(slug: string): Promise<RoadmapArea>;
   createArea(input: RoadmapAreaCreate): Promise<RoadmapArea>;
   updateArea(slug: string, changes: RoadmapAreaUpdate): Promise<RoadmapArea>;
@@ -203,6 +209,15 @@ export function createRoadmapService(persistence: RoadmapPersistence): RoadmapSe
   return {
     async getRoadmap() {
       return toRoadmap(await persistence.loadRoadmapTree());
+    },
+    getAreaDetail() {
+      return Promise.reject(new Error("Not implemented yet."));
+    },
+    getModuleDetail() {
+      return Promise.reject(new Error("Not implemented yet."));
+    },
+    getCurrentLearning() {
+      return Promise.reject(new Error("Not implemented yet."));
     },
 
     async getArea(slug) {
