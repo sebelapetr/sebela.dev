@@ -321,3 +321,10 @@ export type RoadmapTreeResource = z.infer<typeof RoadmapTreeResourceSchema>;
 export type RoadmapTreeModule = z.infer<typeof RoadmapTreeModuleSchema>;
 export type RoadmapTreeArea = z.infer<typeof RoadmapTreeAreaSchema>;
 export type Roadmap = z.infer<typeof RoadmapSchema>;
+
+// Placeholders for the detail and current-learning reads (issue #110); specified by the tests.
+export const RoadmapAreaParamsSchema = z.never();
+export const RoadmapModuleParamsSchema = z.never();
+export const RoadmapAreaDetailSchema = z.never();
+export const RoadmapModuleDetailSchema = z.never();
+export const RoadmapCurrentSchema = z.never();
