@@ -1,7 +1,4 @@
 import type {
-  Diary,
-  DiaryDay,
-  DiaryNotesWrite,
   Roadmap,
   RoadmapArea,
   RoadmapAreaCreate,
@@ -21,9 +18,6 @@ import type {
   RoadmapTreeArea,
   RoadmapTreeModule,
   RoadmapTreeResource,
-  TimeEntryCreate,
-  TimeEntryUpdate,
-  TimeEntryWrite,
   Topic,
 } from "@sebela/contracts";
 import type {
@@ -43,16 +37,18 @@ import type {
 } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
+import { createLearningDiary, type LearningDiary } from "./diary.js";
 import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 
 /**
- * The AI roadmap: its areas, their modules and the resources in them. Reads return contract
+ * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
+ * time spent on those resources (see `LearningDiary`). Reads return contract
  * records; the whole tree carries progress derived on every read and is never stored. Expected
  * refusals are `DomainError`s: `not_found` for a missing slug, `conflict` for a taken slug or a
  * record that still has children or links, and `validation_failed` naming the offending field for
  * a reserved area slug, an unknown parent or topic, a repeated topic or a finish before the start.
  */
-export interface RoadmapService {
+export interface RoadmapService extends LearningDiary {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
   /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
@@ -81,39 +77,9 @@ export interface RoadmapService {
   updateResource(slug: string, changes: RoadmapResourceUpdate): Promise<RoadmapResource>;
   /** Removes the resource with its topic links; refused with `conflict` while it has time entries. */
   deleteResource(slug: string): Promise<void>;
-
-  /** Every diary day with notes or time entries, newest first; may be empty. */
-  getDiary(): Promise<Diary>;
-  /** One diary day; a date without notes or time entries is `not_found`. */
-  getDiaryDay(date: string): Promise<DiaryDay>;
-  /** Creates the day or replaces its notes; its time entries stay. */
-  writeDiaryNotes(date: string, input: DiaryNotesWrite): Promise<DiaryDay>;
-  /** Clears the day's notes and keeps its time entries; `not_found` when it has no notes. */
-  deleteDiaryNotes(date: string): Promise<void>;
-  /**
-   * Logs a session on a resource, split at each Prague midnight into one entry per diary day.
-   * Refused with `validation_failed` for an unknown resource, an end not after the start or a
-   * fraction of a second, and with `conflict` when it overlaps any logged interval.
-   */
-  createTimeEntry(input: TimeEntryCreate): Promise<TimeEntryWrite>;
-  /**
-   * Changes the given fields of a time entry and splits the result again; the first piece keeps
-   * the id. Returns the old and new days. The same refusals as `createTimeEntry`, judged on the
-   * merged interval, and `not_found` for a missing entry.
-   */
-  updateTimeEntry(id: string, changes: TimeEntryUpdate): Promise<TimeEntryWrite>;
-  /** Deletes the time entry and returns its day; its notes stay. */
-  deleteTimeEntry(id: string): Promise<TimeEntryDeletion>;
 }
 
-/** The diary days a time-entry deletion changed. */
-export interface TimeEntryDeletion {
-  readonly dates: string[];
-}
-
-const notYet = (): never => {
-  throw new Error("Not implemented.");
-};
+export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
 
 const iso = (instant: Date | null) => (instant === null ? null : instant.toISOString());
 const instant = (value: string | null) => (value === null ? null : new Date(value));
@@ -399,12 +365,6 @@ export function createRoadmapService(persistence: RoadmapPersistence): RoadmapSe
       throw stillReferenced("resource", slug, "records linking to it");
     },
 
-    getDiary: notYet,
-    getDiaryDay: notYet,
-    writeDiaryNotes: notYet,
-    deleteDiaryNotes: notYet,
-    createTimeEntry: notYet,
-    updateTimeEntry: notYet,
-    deleteTimeEntry: notYet,
+    ...createLearningDiary(persistence),
   };
 }
