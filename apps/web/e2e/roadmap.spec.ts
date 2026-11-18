@@ -371,8 +371,9 @@ test.describe("the roadmap overview", () => {
         const own = document.querySelector(`[data-roadmap-slug="${child}"]`)?.closest("li");
         const parent = own?.parentElement?.closest("li");
         return (
-          parent?.querySelector<HTMLElement>(":scope > [data-roadmap-slug]")?.dataset.roadmapSlug ??
-          null
+          parent
+            ?.querySelector<HTMLElement>(":scope > [data-roadmap-slug]")
+            ?.getAttribute("data-roadmap-slug") ?? null
         );
       }, slug);
     }
