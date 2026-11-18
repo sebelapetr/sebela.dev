@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type SubmitEvent } from "react";
+import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, ArrowUp, Plus } from "lucide-react";
+import { ArrowRight, ArrowUp, Plus, RotateCcw } from "lucide-react";
 
 import { Button } from "@sebela/ui/components/button";
 import { Input } from "@sebela/ui/components/input";
@@ -14,43 +14,53 @@ import { conversationHref, conversationIdFromParam } from "../data/address";
 import type { AskEvidence } from "../data/evidence";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
 import { askSuggestions } from "../data/prepared-answers";
+import { describeChatTurn } from "../data/turn-status";
 import { useConversation } from "../hooks/use-conversation";
 import { AnswerBlock, AnswerSources } from "./answer-blocks";
 
 const textLinkClass =
   "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline";
 
-/** What the live region says when an answer ends. */
-function announcement(turn: ChatTurn): string {
-  switch (turn.status) {
-    case "pending":
-    case "streaming":
-      return "Answering…";
-    case "complete":
-      return turn.text;
-    case "failed":
-      return "The answer could not be completed.";
-    case "interrupted":
-      return "The answer was interrupted.";
-  }
+interface AnswerProps {
+  readonly turn: ChatTurn;
+  /** Asks again; given only for the latest turn, shown only where a retry can help. */
+  readonly onRetry?: () => void;
+  readonly ref?: Ref<HTMLDivElement>;
 }
 
-function Answer({ turn }: { readonly turn: ChatTurn }) {
+function Answer({ turn, onRetry, ref }: AnswerProps) {
   const open = isChatTurnOpen(turn);
+  const { tag, note, retry, showsEvidence } = describeChatTurn(turn);
   return (
-    <div className="flex flex-col gap-2" aria-busy={open}>
-      <p className="type-label">Assistant</p>
+    // Focus lands here after a retry, so the keyboard stays at the answer it asked again.
+    <div ref={ref} tabIndex={-1} className="flex flex-col gap-2" aria-busy={open}>
+      <p className="flex flex-wrap items-center gap-2">
+        <span className="type-label">Assistant</span>
+        {tag === null ? null : (
+          <span className="type-tag rounded-sm border border-border px-1.5">{tag}</span>
+        )}
+      </p>
       {turn.text.length === 0 && open ? (
         <p className="text-muted-foreground">Answering…</p>
-      ) : (
+      ) : turn.text.length === 0 ? null : (
         <p className="max-w-prose text-pretty whitespace-pre-line">{turn.text}</p>
       )}
-      {turn.status === "failed" ? (
-        <p className="text-sm text-muted-foreground">The answer could not be completed.</p>
+      {note === null ? null : <p className="text-sm text-muted-foreground">{note}</p>}
+      {retry && onRetry !== undefined ? (
+        <Button type="button" variant="outline" className="self-start" onClick={onRetry}>
+          <RotateCcw aria-hidden="true" />
+          Try again
+        </Button>
       ) : null}
-      {turn.status === "interrupted" ? (
-        <p className="text-sm text-muted-foreground">The answer was interrupted.</p>
-      ) : null}
+      {showsEvidence ? <AnswerEvidence turn={turn} /> : null}
+    </div>
+  );
+}
+
+/** The answer's cards, its sources and the related pages, in that order. */
+function AnswerEvidence({ turn }: { readonly turn: ChatTurn }) {
+  return (
+    <>
       {turn.blocks.length === 0 ? null : (
         <ul aria-label="Cards" className="flex flex-col gap-3 pt-2">
           {turn.blocks.map((block, index) => (
@@ -74,7 +84,7 @@ function Answer({ turn }: { readonly turn: ChatTurn }) {
           ))}
         </ul>
       )}
-    </div>
+    </>
   );
 }
 
@@ -89,10 +99,11 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
   const { name } = evidence;
   const searchParams = useSearchParams();
   const addressId = conversationIdFromParam(searchParams.get("c"));
-  const { snapshot, open, submit, newChat } = useConversation(evidence);
+  const { snapshot, open, submit, retry, newChat } = useConversation(evidence);
   const [question, setQuestion] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const lastTurnRef = useRef<HTMLLIElement>(null);
+  const lastAnswerRef = useRef<HTMLDivElement>(null);
   const turnCount = snapshot.turns.length;
   const latest = snapshot.turns.at(-1);
   const [watched, setWatched] = useState<string | null>(null);
@@ -119,7 +130,7 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
       : isChatTurnOpen(latest)
         ? "Answering…"
         : watched === latest.requestId
-          ? announcement(latest)
+          ? describeChatTurn(latest).announcement
           : "";
 
   function ask(text: string): void {
@@ -134,6 +145,12 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
   function onSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
     ask(question);
+  }
+
+  function retryLatest(requestId: string): void {
+    if (retry(requestId) !== "sent") return;
+    // The retry button goes with the failed answer; the keyboard stays at the answer.
+    lastAnswerRef.current?.focus();
   }
 
   function startNewChat(): void {
@@ -203,7 +220,17 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
                 <p className="sr-only">You asked:</p>
                 <p className="text-pretty whitespace-pre-line">{turn.question}</p>
               </div>
-              <Answer turn={turn} />
+              {index === turnCount - 1 ? (
+                <Answer
+                  ref={lastAnswerRef}
+                  turn={turn}
+                  onRetry={() => {
+                    retryLatest(turn.requestId);
+                  }}
+                />
+              ) : (
+                <Answer turn={turn} />
+              )}
             </li>
           ))}
         </ol>
