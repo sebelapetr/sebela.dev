@@ -12,6 +12,7 @@ import {
 } from "@sebela/contracts";
 import { samplePng } from "@sebela/services/testing";
 
+import { createApp } from "./app.js";
 import {
   createWebsiteInvalidation,
   type WebsiteInvalidation,
@@ -22,6 +23,7 @@ import {
   connection,
   json,
   openTestBackend,
+  testConfig,
   upload,
   type TestBackend,
 } from "./test-support.js";
@@ -255,6 +257,70 @@ describe("the website invalidation sender", () => {
     await invalidation.idle();
 
     expect(website.deliveries).toHaveLength(1);
+  });
+
+  it("spends the documented default budget: three attempts, 250 ms and then 1 s apart", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const website = fakeWebsite(new TypeError("fetch failed"));
+      // The defaults, not the short budget of `start`.
+      const invalidation = createWebsiteInvalidation({
+        url: DESTINATION,
+        secret: SECRET,
+        log: (line) => lines.push(line),
+        fetch: website.fetch,
+        now: () => NOW,
+        randomId: () => "0b9f2c1e-4a77-4c3d-9a51-000000000001",
+      });
+      sender = invalidation;
+
+      await invalidation.notify({ change });
+      await vi.waitFor(() => {
+        expect(website.deliveries).toHaveLength(1);
+      });
+      await vi.advanceTimersByTimeAsync(249);
+      expect(website.deliveries).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => {
+        expect(website.deliveries).toHaveLength(2);
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(website.deliveries).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => {
+        expect(website.deliveries).toHaveLength(3);
+      });
+      await invalidation.idle();
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(website.deliveries).toHaveLength(3);
+      expect(lines).toEqual([
+        "website invalidation 0b9f2c1e-4a77-4c3d-9a51-000000000001 attempt 1 failed: TypeError",
+        "website invalidation 0b9f2c1e-4a77-4c3d-9a51-000000000001 attempt 2 failed: TypeError",
+        "website invalidation 0b9f2c1e-4a77-4c3d-9a51-000000000001 attempt 3 failed: TypeError",
+        "website invalidation 0b9f2c1e-4a77-4c3d-9a51-000000000001 gave up after 3 attempts",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("delivers a repeated change as a new event each time", async () => {
+    const website = fakeWebsite(204);
+    const invalidation = start(website);
+
+    await invalidation.notify({ change });
+    await invalidation.notify({ change });
+    await invalidation.idle();
+
+    const ids = [];
+    for (const delivery of website.deliveries) {
+      const verification = await verify(delivery);
+      if (!verification.ok) throw new Error(`refused: ${verification.reason}`);
+      expect(verification.notification.changes).toEqual([change]);
+      ids.push(verification.notification.eventId);
+    }
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("refuses a secret shorter than the minimum when it is created", () => {
@@ -494,5 +560,66 @@ describe("notifying the website of committed content writes", () => {
     expect((await send("/v1/technologies/postgres", "GET")).status).toBe(200);
     await invalidation.idle();
     expect(website.deliveries).toHaveLength(3);
+  });
+
+  it("keeps a committed write when the notifier throws or rejects, and logs only metadata", async () => {
+    const detail = "fictional notifier detail with a headline";
+    for (const failing of [
+      () => {
+        throw new Error(detail);
+      },
+      () => Promise.reject(new TypeError(detail)),
+    ]) {
+      const lines: string[] = [];
+      const { app } = backend.api({ onWrite: failing, log: (line) => lines.push(line) });
+
+      const created = await app.request(
+        "/v1/technologies",
+        { method: "POST", ...json(technology, auth) },
+        connection(),
+      );
+
+      expect(created.status).toBe(201);
+      expect((await send("/v1/technologies/postgres", "GET")).status).toBe(200);
+      const notifying = lines.filter((line) => line.startsWith("error notifying"));
+      expect(notifying).toHaveLength(1);
+      expect(notifying[0]).toMatch(/^error notifying POST \/v1\/technologies: (Type)?Error$/u);
+      expect(lines.join("\n")).not.toContain(detail);
+      await backend.services.profile.deleteTechnology("postgres");
+    }
+  });
+
+  it("sends nothing when the write's transaction fails", async () => {
+    const failure = new Error("fictional failed transaction");
+    const services = new Proxy(backend.services, {
+      get(target, property, receiver) {
+        const value: unknown = Reflect.get(target, property, receiver);
+        if (property !== "profile") return value;
+        return new Proxy(target.profile, {
+          get(profile, name) {
+            if (name === "createTechnology") return () => Promise.reject(failure);
+            const method: unknown = Reflect.get(profile, name);
+            return typeof method === "function"
+              ? (...args: unknown[]): unknown => Reflect.apply(method, profile, args)
+              : method;
+          },
+        });
+      },
+    });
+    const { app: failing } = createApp({
+      services,
+      config: testConfig(),
+      log: () => undefined,
+      onWrite: invalidation.notify,
+    });
+
+    const response = await failing.request(
+      "/v1/technologies",
+      { method: "POST", ...json(technology, auth) },
+      connection(),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await delivered()).toEqual([]);
   });
 });
