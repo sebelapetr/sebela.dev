@@ -66,4 +66,31 @@ describe("persistence transactions", () => {
     await expect(persistence.profile.findTopic("mcp")).resolves.toBeNull();
     await expect(persistence.profile.findOrganization("contoso")).resolves.toBeNull();
   });
+
+  it("gives the work roadmap persistence in the same transaction", async () => {
+    await expect(
+      persistence.transaction(async (profile, roadmap) => {
+        await profile.createTopic({ slug: "rag", name: "RAG", position: 4 });
+        await roadmap.createRoadmapArea({
+          slug: "basics",
+          name: "Basics",
+          description: null,
+          weight: 20,
+          position: 0,
+        });
+        await roadmap.createRoadmapModule({
+          slug: "retrieval",
+          area: "basics",
+          name: "Retrieval",
+          description: null,
+          position: 0,
+        });
+        throw new Error("A fictional failure.");
+      }),
+    ).rejects.toThrow("A fictional failure.");
+
+    await expect(persistence.roadmap.findRoadmapArea("basics")).resolves.toBeNull();
+    await expect(persistence.roadmap.findRoadmapModule("retrieval")).resolves.toBeNull();
+    await expect(persistence.profile.findTopic("rag")).resolves.toBeNull();
+  });
 });
