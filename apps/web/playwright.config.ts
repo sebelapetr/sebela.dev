@@ -10,6 +10,8 @@ const webUrl = origin(required("WEB_HOST"), required("WEB_PORT"));
 
 export default defineConfig({
   testDir: "e2e",
+  // The complete stack's browser step runs against containers (playwright.complete-stack.config.ts).
+  testIgnore: "complete-stack/**",
   fullyParallel: false,
   workers: 1,
   forbidOnly: Boolean(process.env["CI"]),
