@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Diary, DiaryDay, TimeEntry } from "@sebela/api-client";
+import type { Diary, DiaryDay, DiaryEvent, TimeEntry } from "@sebela/api-client";
 
 import {
   diaryDayHref,
@@ -47,6 +47,34 @@ const areas = [
   },
   { slug: "second-area", name: "Second area", modules: [{ slug: "third-module", name: "Third" }] },
 ];
+
+const summit: DiaryEvent = {
+  slug: "fictional-summit",
+  name: "Fictional Summit",
+  kind: "conference",
+  startsOn: "2026-03-01",
+  endsOn: "2026-03-03",
+  link: "https://example.test/summit",
+};
+
+const meetup: DiaryEvent = {
+  slug: "fictional-meetup",
+  name: "Fictional Meetup",
+  kind: "meetup",
+  startsOn: "2026-03-02",
+  endsOn: "2026-03-02",
+  link: "javascript:alert(1)",
+};
+
+function attendance(
+  id: string,
+  event: DiaryEvent,
+  startedAt: string,
+  endedAt: string,
+  durationSeconds: number,
+): TimeEntry {
+  return { id, date: "2026-03-02", resource: null, event, startedAt, endedAt, durationSeconds };
+}
 
 describe("formatDiaryDate", () => {
   it("names the calendar day itself, never shifted by a time zone", () => {
@@ -121,6 +149,7 @@ describe("toDiaryList", () => {
           total: "1h 30m",
           sessions: "2 sessions",
           notes: "Worked on **signals**.",
+          events: [],
         },
         {
           date: "2026-03-01",
@@ -129,6 +158,7 @@ describe("toDiaryList", () => {
           total: null,
           sessions: null,
           notes: "Only notes today.",
+          events: [],
         },
         {
           date: "2026-02-27",
@@ -137,9 +167,69 @@ describe("toDiaryList", () => {
           total: "20 min",
           sessions: "1 session",
           notes: null,
+          events: [],
         },
       ],
     });
+  });
+
+  it("lists a day covered only by an event, without notes or time, with its events", () => {
+    const diary: Diary = {
+      days: [
+        {
+          date: "2026-03-02",
+          notes: null,
+          entries: [],
+          totalSeconds: 0,
+          events: [summit, meetup],
+        },
+      ],
+    };
+
+    expect(toDiaryList(diary)).toEqual({
+      days: [
+        {
+          date: "2026-03-02",
+          title: "Monday, March 2, 2026",
+          href: "/ai-roadmap/diary/2026-03-02",
+          total: null,
+          sessions: null,
+          notes: null,
+          events: [
+            {
+              slug: "fictional-summit",
+              name: "Fictional Summit",
+              kindLabel: "Conference",
+              dayOf: "Day 2 of 3",
+            },
+            {
+              slug: "fictional-meetup",
+              name: "Fictional Meetup",
+              kindLabel: "Meetup",
+              dayOf: null,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("counts attendance at an event in a day's total and sessions", () => {
+    const diary: Diary = {
+      days: [
+        {
+          date: "2026-03-02",
+          notes: null,
+          entries: [
+            attendance("talk", summit, "2026-03-02T12:00:00Z", "2026-03-02T13:00:00Z", 3600),
+          ],
+          totalSeconds: 3600,
+          events: [summit],
+        },
+      ],
+    };
+
+    expect(toDiaryList(diary).days[0]).toMatchObject({ total: "1h", sessions: "1 session" });
   });
 
   it("is empty for an empty diary", () => {
@@ -396,6 +486,99 @@ describe("toDiaryDayPage", () => {
     ).toEqual(["a"]);
   });
 
+  it("shows the events covering the day with their attendance at Prague times", () => {
+    const day: DiaryDay = {
+      date: "2026-03-02",
+      notes: null,
+      entries: [
+        entry("a", "2026-03-02T07:00:00Z", "2026-03-02T08:00:00Z", 3600),
+        attendance("late", summit, "2026-03-02T14:00:00Z", "2026-03-02T15:30:00Z", 5400),
+        attendance("early", summit, "2026-03-02T09:00:00Z", "2026-03-02T09:45:00Z", 2700),
+      ],
+      totalSeconds: 11700,
+      events: [summit, meetup],
+    };
+
+    const page = toDiaryDayPage(day, areas);
+
+    expect(page).toMatchObject({ total: "3h 15m", sessions: "3 sessions" });
+    expect(page.events).toEqual([
+      {
+        slug: "fictional-summit",
+        name: "Fictional Summit",
+        kindLabel: "Conference",
+        dayOf: "Day 2 of 3",
+        period: "March 1–3, 2026",
+        href: "https://example.test/summit",
+        sessions: [
+          {
+            id: "early",
+            start: "10:00",
+            end: "10:45",
+            startedAt: "2026-03-02T09:00:00Z",
+            endedAt: "2026-03-02T09:45:00Z",
+            duration: "45 min",
+          },
+          {
+            id: "late",
+            start: "15:00",
+            end: "16:30",
+            startedAt: "2026-03-02T14:00:00Z",
+            endedAt: "2026-03-02T15:30:00Z",
+            duration: "1h 30m",
+          },
+        ],
+      },
+      {
+        slug: "fictional-meetup",
+        name: "Fictional Meetup",
+        kindLabel: "Meetup",
+        dayOf: null,
+        period: "March 2, 2026",
+        href: null,
+        sessions: [],
+      },
+    ]);
+  });
+
+  it("shows a day covered only by an event, with no total, sessions or groups", () => {
+    const day: DiaryDay = {
+      date: "2026-03-02",
+      notes: null,
+      entries: [],
+      totalSeconds: 0,
+      events: [meetup],
+    };
+
+    expect(toDiaryDayPage(day, areas)).toMatchObject({
+      total: null,
+      sessions: null,
+      notes: null,
+      areas: [],
+      events: [{ slug: "fictional-meetup", sessions: [] }],
+    });
+  });
+
+  it("still shows attendance whose event the day's events do not list, after them", () => {
+    const day: DiaryDay = {
+      date: "2026-03-02",
+      notes: null,
+      entries: [attendance("talk", summit, "2026-03-02T12:00:00Z", "2026-03-02T13:00:00Z", 3600)],
+      totalSeconds: 3600,
+      events: [meetup],
+    };
+
+    expect(
+      toDiaryDayPage(day, areas).events.map((group) => [
+        group.slug,
+        group.sessions.map((session) => session.id),
+      ]),
+    ).toEqual([
+      ["fictional-meetup", []],
+      ["fictional-summit", ["talk"]],
+    ]);
+  });
+
   it("has no total, sessions or groups on a day with notes only", () => {
     const day: DiaryDay = {
       date: "2026-03-01",
@@ -410,6 +593,7 @@ describe("toDiaryDayPage", () => {
       sessions: null,
       notes: "Just notes.",
       areas: [],
+      events: [],
     });
   });
 });
