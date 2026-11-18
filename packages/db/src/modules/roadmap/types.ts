@@ -189,6 +189,57 @@ export type UpdateRoadmapBookResult =
   | { ok: false; reason: "not_found" }
   | RoadmapBookWriteFailure;
 
+/** Kinds of attended event. */
+export type RoadmapEventKind = "conference" | "meetup" | "workshop" | "lecture";
+
+export interface RoadmapEventFields {
+  name: string;
+  kind: RoadmapEventKind;
+  organizer: string | null;
+  /** The first day, `YYYY-MM-DD` in Europe/Prague, inclusive. */
+  startsOn: string;
+  /** The last day, `YYYY-MM-DD`, inclusive and not before `startsOn`. */
+  endsOn: string;
+  place: string | null;
+  online: boolean;
+  link: string | null;
+  takeaways: string | null;
+}
+
+/** An event's relations as written: the slugs of existing shared topics, in order. */
+export interface RoadmapEventRelations {
+  topics: string[];
+}
+
+export interface RoadmapEventRecord extends RoadmapEventFields {
+  id: string;
+  slug: string;
+  /** Its topics in link order. */
+  topics: TopicRecord[];
+  /** The elapsed seconds of the time entries logged on it; its date range adds nothing. */
+  attendanceSeconds: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Why an event write was refused. */
+export type RoadmapEventWriteFailure =
+  | { ok: false; reason: "unknown_topics"; slugs: string[] }
+  | { ok: false; reason: "repeated_topics" }
+  | { ok: false; reason: "invalid_period" };
+
+export type CreateRoadmapEventResult =
+  | { ok: true; event: RoadmapEventRecord }
+  | { ok: false; reason: "conflict" }
+  | RoadmapEventWriteFailure;
+
+export type UpdateRoadmapEventResult =
+  | { ok: true; event: RoadmapEventRecord }
+  | { ok: false; reason: "not_found" }
+  /** The new dates would leave attendance on the listed days, ascending, outside the event. */
+  | { ok: false; reason: "strands_attendance"; dates: string[] }
+  | RoadmapEventWriteFailure;
+
 /** `referenced` while a child or another record still points to it. */
 export type DeleteRoadmapRecordResult =
   { ok: true } | { ok: false; reason: "not_found" | "referenced" };
@@ -211,35 +262,58 @@ export interface DiaryResourceRecord {
   area: string;
 }
 
+/** The event a time entry belongs to or a diary day shows. */
+export interface DiaryEventRecord {
+  slug: string;
+  name: string;
+  kind: RoadmapEventKind;
+  startsOn: string;
+  endsOn: string;
+  link: string | null;
+}
+
+/** What a time entry is logged on: one resource by slug or one event by slug. */
+export type TimeEntryTarget = { resource: string } | { event: string };
+
 export interface TimeEntryRecord {
   id: string;
   /** Its diary day, `YYYY-MM-DD`. */
   date: string;
-  resource: DiaryResourceRecord;
+  /** The resource studied, or `null` for attendance at an event. */
+  resource: DiaryResourceRecord | null;
+  /** The event attended, or `null` for a study session. */
+  event: DiaryEventRecord | null;
   startedAt: Date;
   endedAt: Date;
 }
 
-/** A diary day with its notes and its time entries in start order. */
+/**
+ * A diary day with its notes, its time entries in start order and the events whose date range
+ * covers it, by start date, then slug.
+ */
 export interface DiaryDayRecord {
   date: string;
   notes: string | null;
   entries: TimeEntryRecord[];
+  events: DiaryEventRecord[];
 }
 
 /**
- * Why a time-entry write was refused: the resource does not exist, or a piece overlaps a stored
- * interval of any learning target.
+ * Why a time-entry write was refused: the resource or event does not exist, a piece of attendance
+ * falls on a day outside the event's dates, or a piece overlaps a stored interval of any target.
  */
 export type TimeEntryWriteFailure =
-  { ok: false; reason: "unknown_resource" } | { ok: false; reason: "overlap" };
+  | { ok: false; reason: "unknown_resource" }
+  | { ok: false; reason: "unknown_event" }
+  | { ok: false; reason: "outside_event"; startsOn: string; endsOn: string }
+  | { ok: false; reason: "overlap" };
 
 export type CreateTimeEntriesResult =
   { ok: true; entries: TimeEntryRecord[] } | TimeEntryWriteFailure;
 
-/** What replaces a time entry: the resource slug and the new pieces, the first keeping the id. */
+/** What replaces a time entry: its target and the new pieces, the first keeping the id. */
 export interface TimeEntryReplacement {
-  resource: string;
+  target: TimeEntryTarget;
   pieces: TimeEntryPiece[];
 }
 
@@ -323,11 +397,37 @@ export interface RoadmapPersistence {
   deleteRoadmapBook(slug: string): Promise<DeleteRoadmapRecordResult>;
 
   /**
-   * Every diary day that has notes or time entries, newest first, read in one consistent
-   * snapshot. A day without either is not part of the diary.
+   * Every attended event, newest start first, then latest end and slug, each with its topics and
+   * attendance time, read in one consistent snapshot.
+   */
+  listRoadmapEvents(): Promise<RoadmapEventRecord[]>;
+  /** The event with the slug, or `null`. */
+  findRoadmapEvent(slug: string): Promise<RoadmapEventRecord | null>;
+  /**
+   * Creates an event with its topic links, all or nothing; `conflict` when the slug is taken and
+   * `invalid_period` when it ends before it starts.
+   */
+  createRoadmapEvent(
+    fields: RoadmapEventFields & RoadmapEventRelations & { slug: string },
+  ): Promise<CreateRoadmapEventResult>;
+  /**
+   * Changes only the given fields, locked against concurrent attendance writes; given `topics`
+   * replace its links. Refused with `strands_attendance`, changing nothing, when a time entry on
+   * the event would fall outside its new dates.
+   */
+  updateRoadmapEvent(
+    slug: string,
+    changes: Partial<RoadmapEventFields & RoadmapEventRelations>,
+  ): Promise<UpdateRoadmapEventResult>;
+  /** Deletes the event and its topic links; `referenced` while a time entry belongs to it. */
+  deleteRoadmapEvent(slug: string): Promise<DeleteRoadmapRecordResult>;
+
+  /**
+   * Every diary day that has notes, time entries or an event covering it, newest first, read in
+   * one consistent snapshot. A day without any of them is not part of the diary.
    */
   loadDiary(): Promise<DiaryDayRecord[]>;
-  /** The diary day, or `null` when it has neither notes nor time entries. */
+  /** The diary day, or `null` when it has no notes, no time entries and no covering event. */
   findDiaryDay(date: string): Promise<DiaryDayRecord | null>;
   /** Creates the day or replaces its notes; its time entries stay. */
   writeDiaryNotes(date: string, notes: string): Promise<DiaryDayRecord>;
@@ -336,12 +436,17 @@ export interface RoadmapPersistence {
   /** The time entry, or `null`. */
   findTimeEntry(id: string): Promise<TimeEntryRecord | null>;
   /**
-   * Stores the pieces of one session on the resource, all or nothing, creating missing days also
-   * under concurrent writes. The database refuses a piece that overlaps any stored interval,
-   * including one committed concurrently, as `overlap`; touching endpoints do not overlap. Each
-   * piece must lie within its diary day and end after it starts, or the write throws.
+   * Stores the pieces of one session on the resource or event, all or nothing, creating missing
+   * days also under concurrent writes. Attendance must fall on the event's days (`outside_event`),
+   * judged against the event locked against a concurrent date edit. The database refuses a piece
+   * that overlaps any stored interval of either target, including one committed concurrently, as
+   * `overlap`; touching endpoints do not overlap. Each piece must lie within its diary day and end
+   * after it starts, or the write throws.
    */
-  createTimeEntries(resource: string, pieces: TimeEntryPiece[]): Promise<CreateTimeEntriesResult>;
+  createTimeEntries(
+    target: TimeEntryTarget,
+    pieces: TimeEntryPiece[],
+  ): Promise<CreateTimeEntriesResult>;
   /**
    * Replaces the time entry, locked against concurrent writes, with what `plan` derives from its
    * current state, all or nothing; `plan` may instead return its own refusal, which writes nothing.

@@ -19,6 +19,7 @@ import type {
   RoadmapPersistence,
   TimeEntryPiece,
   TimeEntryRecord,
+  TimeEntryTarget,
   TimeEntryWriteFailure,
 } from "./types.js";
 
@@ -53,8 +54,8 @@ const entryColumns = {
 };
 
 /** Time entries with their resource, module and area, in start order. */
-function loadEntries(db: Executor, where: SQL | undefined): Promise<TimeEntryRecord[]> {
-  return db
+async function loadEntries(db: Executor, where: SQL | undefined): Promise<TimeEntryRecord[]> {
+  const rows = await db
     .select(entryColumns)
     .from(timeEntries)
     .innerJoin(resources, eq(timeEntries.resourceId, resources.id))
@@ -62,6 +63,7 @@ function loadEntries(db: Executor, where: SQL | undefined): Promise<TimeEntryRec
     .innerJoin(areas, eq(modules.areaId, areas.id))
     .where(where)
     .orderBy(asc(timeEntries.startedAt));
+  return rows.map((row) => ({ ...row, event: null }));
 }
 
 /** The days matching `where`, newest first, without the ones that have neither notes nor entries. */
@@ -80,7 +82,11 @@ async function loadDays(db: Executor, where: SQL | undefined): Promise<DiaryDayR
     ),
   );
   return days
-    .map((day) => ({ ...day, entries: entries.filter((entry) => entry.date === day.date) }))
+    .map((day) => ({
+      ...day,
+      entries: entries.filter((entry) => entry.date === day.date),
+      events: [],
+    }))
     .filter((day) => day.notes !== null || day.entries.length > 0);
 }
 
@@ -103,12 +109,13 @@ async function resourceId(tx: Executor, slug: string): Promise<string> {
  */
 async function insertPieces(
   tx: Executor,
-  resource: string,
+  target: TimeEntryTarget,
   pieces: TimeEntryPiece[],
   firstId?: string,
 ): Promise<TimeEntryRecord[]> {
   if (pieces.length === 0) throw new Error("A time-entry write needs at least one piece.");
-  const id = await resourceId(tx, resource);
+  if (!("resource" in target)) throw new Error("Not implemented.");
+  const id = await resourceId(tx, target.resource);
   const dates = [...new Set(pieces.map((piece) => piece.date))].sort();
   await tx
     .insert(diaryEntries)
@@ -188,10 +195,10 @@ export function createDiaryPersistence(db: Database): DiaryPersistence {
       const [entry] = await loadEntries(db, eq(timeEntries.id, id));
       return entry ?? null;
     },
-    createTimeEntries(resource, pieces) {
+    createTimeEntries(target, pieces) {
       return refusable(() =>
         db.transaction(
-          async (tx) => ({ ok: true, entries: await insertPieces(tx, resource, pieces) }) as const,
+          async (tx) => ({ ok: true, entries: await insertPieces(tx, target, pieces) }) as const,
         ),
       );
     },
@@ -208,7 +215,7 @@ export function createDiaryPersistence(db: Database): DiaryPersistence {
           const replacement = plan(current);
           if ("ok" in replacement) return replacement;
           await tx.delete(timeEntries).where(eq(timeEntries.id, id));
-          const entries = await insertPieces(tx, replacement.resource, replacement.pieces, id);
+          const entries = await insertPieces(tx, replacement.target, replacement.pieces, id);
           return { ok: true, entries, previousDate: current.date } as const;
         }),
       );

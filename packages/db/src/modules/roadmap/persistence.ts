@@ -243,6 +243,10 @@ function resourceScalars(
   return fields;
 }
 
+function notImplemented(): never {
+  throw new Error("Not implemented.");
+}
+
 /** Every roadmap persistence operation over one connection or transaction. */
 export function createRoadmapPersistence(db: Database): RoadmapPersistence {
   return {
@@ -392,5 +396,11 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
     deleteRoadmapBook(slug) {
       return deleteBySlug(db, books, slug);
     },
+
+    listRoadmapEvents: notImplemented,
+    findRoadmapEvent: notImplemented,
+    createRoadmapEvent: notImplemented,
+    updateRoadmapEvent: notImplemented,
+    deleteRoadmapEvent: notImplemented,
   };
 }
