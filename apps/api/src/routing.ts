@@ -25,7 +25,8 @@ export interface RouteDocumentation {
   readonly budget?: RateBudget;
   /**
    * The content domain a write route changes, required on every write. After the write commits, the
-   * app reports it with the record from the `slug` or `id` path parameter or the result.
+   * app reports it with the record from the `slug` or `id` path parameter or the result, or with
+   * each record the route's `records` names.
    */
   readonly content?: ContentDomain;
   /** The path parameters, `:name` in `path`; validated before the body. */
@@ -83,18 +84,25 @@ export interface FileResponse {
 export interface RouteDefinition extends RouteDocumentation {
   /** Runs the operation; the result is sent as the JSON success body, or as a file. */
   handle(input: { readonly body: unknown; readonly params: unknown }): Promise<unknown>;
+  /**
+   * The records of the route's content domain a committed write changed, when one write changes
+   * several, for example every diary day a time entry left or entered. The app reports each one.
+   */
+  records?(input: { readonly params: unknown; readonly result: unknown }): readonly string[];
 }
 
 /**
  * Declares a route whose handler receives the parsed output of its body and path-parameter
- * schemas. The types are erased afterwards: the app validates with exactly these schemas before it
+ * schemas, and whose `records` receives those parameters and the handler's result. The types are
+ * erased afterwards: the app validates with exactly these schemas before it
  * calls `handle`.
  */
-export function defineRoute<Body = undefined, Params = undefined>(
-  route: Omit<RouteDefinition, "body" | "params" | "handle"> & {
+export function defineRoute<Body = undefined, Params = undefined, Result = unknown>(
+  route: Omit<RouteDefinition, "body" | "params" | "handle" | "records"> & {
     readonly body?: z.ZodType<Body>;
     readonly params?: z.ZodObject & z.ZodType<Params>;
-    handle(input: { readonly body: Body; readonly params: Params }): Promise<unknown>;
+    handle(input: { readonly body: Body; readonly params: Params }): Promise<Result>;
+    records?(input: { readonly params: Params; readonly result: Result }): readonly string[];
   },
 ): RouteDefinition {
   return route;

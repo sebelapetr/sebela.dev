@@ -19,6 +19,7 @@ import {
 import type { RoadmapService } from "@sebela/services";
 
 import { defineRoute, type RouteDefinition } from "../../routing.js";
+import { diaryRoutes } from "./diary.js";
 
 const TREE = "/v1/roadmap";
 const AREA_DETAIL = "/v1/roadmap/tree/:area";
@@ -38,7 +39,9 @@ const RESOURCE = "/v1/roadmap/resources/:slug";
  * public reads of each area, module and resource by slug, and authenticated create, update and
  * delete of each. Domain errors become `not_found`, `conflict` (a taken slug, or deleting a parent
  * that still has children) and `validation_failed` naming the field (a reserved area slug, an
- * unknown parent or topic, a repeated topic, a finish before the start).
+ * unknown parent or topic, a repeated topic, a finish before the start). The learning diary adds
+ * public reads of the diary and one Prague calendar day and authenticated writes of a day's notes
+ * and of time entries, refused with `conflict` on an overlap.
  */
 export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
   return [
@@ -307,5 +310,6 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
         return undefined;
       },
     }),
+    ...diaryRoutes(roadmap),
   ];
 }
