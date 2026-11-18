@@ -427,3 +427,11 @@ export {
   RoadmapEventUpdateSchema,
   roadmapEventKinds,
 } from "./events.js";
+export type {
+  DiaryEvent,
+  RoadmapEvent,
+  RoadmapEventCreate,
+  RoadmapEventKind,
+  RoadmapEventList,
+  RoadmapEventUpdate,
+} from "./events.js";
