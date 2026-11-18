@@ -5,13 +5,12 @@
 // at once; during an outage cached pages keep their last good content while uncached pages say the
 // content is unavailable; and once the API answers again, pages are current without a rebuild.
 import { randomBytes } from "node:crypto";
-import { once } from "node:events";
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { createServer, request, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
+import { startProxy, type Proxy } from "./proxy";
 import { freePort, origin, required, startApi, startWebsite, type Started } from "./stack";
 
 const scratch = fileURLToPath(new URL("../../../.tmp/", import.meta.url));
@@ -19,51 +18,6 @@ const revalidateSeconds = 5;
 const unavailable = "This page could not be loaded right now.";
 
 test.describe.configure({ mode: "serial" });
-
-/** A proxy to `target` that answers 503 to everything while it is down. */
-interface Proxy {
-  readonly url: string;
-  down: boolean;
-  close(): Promise<void>;
-}
-
-async function startProxy(target: string): Promise<Proxy> {
-  const host = required("WEB_HOST");
-  const port = await freePort(host);
-  const state = { down: false };
-  const server: Server = createServer((incoming, outgoing) => {
-    if (state.down) {
-      outgoing.writeHead(503).end();
-      return;
-    }
-    const forwarded = request(
-      new URL(incoming.url ?? "/", target),
-      { method: incoming.method, headers: { ...incoming.headers, host: new URL(target).host } },
-      (answer) => {
-        outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
-        answer.pipe(outgoing);
-      },
-    );
-    forwarded.on("error", () => outgoing.writeHead(502).end());
-    incoming.pipe(forwarded);
-  });
-  server.listen(port, host);
-  await once(server, "listening");
-  return {
-    url: origin(host, port),
-    get down() {
-      return state.down;
-    },
-    set down(value: boolean) {
-      state.down = value;
-    },
-    async close() {
-      server.closeAllConnections();
-      server.close();
-      await once(server, "close");
-    },
-  };
-}
 
 test.describe("cached content without invalidation notifications", () => {
   let api: Started;
@@ -153,7 +107,7 @@ test.describe("cached content without invalidation notifications", () => {
     const recovered = "Fictional engineer who came back after the outage";
     expect((await read("/")).body).toContain(cached);
 
-    proxy.down = true;
+    proxy.mode = "down";
     await new Promise((resolve) => setTimeout(resolve, (revalidateSeconds + 1) * 1_000));
 
     // The expired copy is served instead of an error or an empty page.
@@ -166,7 +120,7 @@ test.describe("cached content without invalidation notifications", () => {
     expect(uncached?.status()).toBe(500);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(unavailable);
 
-    proxy.down = false;
+    proxy.mode = "up";
     await setHeadline(recovered);
 
     // No rebuild and no notification: the expired copy is read again on the next request.

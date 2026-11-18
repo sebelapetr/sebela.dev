@@ -1,0 +1,13 @@
+[
+  {
+    "slug": "quietfield-developer",
+    "title": "Developer",
+    "kind": "main_job",
+    "organization": "quietfield-transit",
+    "startedOn": "2019-04-01",
+    "summary": "Builds the timetable tools of a **fictional** transit company.",
+    "responsibilities": [],
+    "inCv": true,
+    "technologies": []
+  }
+]
