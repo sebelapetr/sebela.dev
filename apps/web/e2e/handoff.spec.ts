@@ -59,6 +59,49 @@ async function expectAccessible(page: Page) {
   ).toEqual([]);
 }
 
+/**
+ * Every word of a link's label that fits a line stays whole: only a word longer than the line (an
+ * address) may break inside.
+ */
+async function expectWordsWhole(page: Page) {
+  const broken = await page.locator("a").evaluateAll((links) =>
+    links
+      .filter((link) => link.checkVisibility())
+      .flatMap((link) => {
+        const found: string[] = [];
+        const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          const text = node.textContent ?? "";
+          for (const match of text.matchAll(/\S+/gu)) {
+            if (match[0].length > 20) continue;
+            const range = document.createRange();
+            range.setStart(node, match.index);
+            range.setEnd(node, match.index + match[0].length);
+            const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+            if (tops.size > 1) found.push(match[0]);
+          }
+        }
+        return found;
+      }),
+  );
+  expect(broken).toEqual([]);
+}
+
+/** The header's navigation labels each stay on one line. */
+async function expectNavigationOnOneLine(page: Page) {
+  const labels = page.getByRole("navigation", { name: "Main" }).getByRole("link");
+  const lines = await labels.evaluateAll((links) =>
+    links
+      .filter((link) => link.checkVisibility())
+      .map((link) => {
+        const range = document.createRange();
+        range.selectNodeContents(link);
+        return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      }),
+  );
+  for (const count of lines) expect(count).toBe(1);
+}
+
 function item(page: Page, anchor: string) {
   return page.locator(`[id="${anchor}"]`);
 }
@@ -96,6 +139,8 @@ test.describe("long content", () => {
             await expectLoaded(page);
             await expectNoHorizontalScroll(page);
             await expectAccessible(page);
+            await expectWordsWhole(page);
+            await expectNavigationOnOneLine(page);
             await page.screenshot({
               path: testInfo.outputPath(`long-${label}-${String(width)}-${scheme}.png`),
               fullPage,
@@ -147,6 +192,7 @@ test.describe("long content", () => {
         await page.goto(`${site.url()}/cv`);
         await expectLoaded(page);
         await expectNoHorizontalScroll(page);
+        await expectWordsWhole(page);
         await page.screenshot({
           path: testInfo.outputPath(`long-cv-print-${scheme}.png`),
           fullPage: true,
