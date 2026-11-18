@@ -79,18 +79,19 @@ export function BookCover({
   );
 }
 
-/** The way from a resource that reads a book to the book's page on the bookshelf, 44 px tall. */
+/**
+ * The way from a resource that reads a book to the book's page on the bookshelf, 44 px tall. Its
+ * name starts with the visible text and adds the resource, so a list of them stays distinguishable.
+ */
 export function BookLink({ href, resource }: { readonly href: string; readonly resource: string }) {
   return (
     <Link
       href={href}
       prefetch={false}
+      aria-label={`On the bookshelf: ${resource}`}
       className="inline-flex min-h-11 items-center gap-1 rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
     >
-      <span>
-        On the bookshelf
-        <span className="sr-only">: {resource}</span>
-      </span>
+      On the bookshelf
       <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
     </Link>
   );
