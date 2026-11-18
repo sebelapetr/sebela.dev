@@ -200,6 +200,7 @@ export async function startWebsite(
       WEB_API_BASE_URL: apiBaseUrl,
       WEB_SITE_ORIGIN: siteOrigin ?? url,
       WEB_MEDIA_BASE_URL: mediaBaseUrl(apiBaseUrl),
+      WEB_MEDIA_READ_BASE_URL: "",
       WEB_INVALIDATION_SECRET: invalidationSecret ?? "",
       WEB_CONTENT_REVALIDATE_SECONDS:
         contentRevalidateSeconds === undefined ? "" : String(contentRevalidateSeconds),

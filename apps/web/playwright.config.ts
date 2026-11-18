@@ -23,6 +23,8 @@ function workers(): number {
 
 export default defineConfig({
   testDir: "e2e",
+  // The complete stack's browser step runs against containers (playwright.complete-stack.config.ts).
+  testIgnore: "complete-stack/**",
   fullyParallel: false,
   workers: workers(),
   forbidOnly: Boolean(process.env["CI"]),
@@ -46,6 +48,7 @@ export default defineConfig({
         WEB_API_BASE_URL: apiUrl,
         WEB_SITE_ORIGIN: webUrl,
         WEB_MEDIA_BASE_URL: mediaBaseUrl(apiUrl),
+        WEB_MEDIA_READ_BASE_URL: "",
         WEB_INVALIDATION_SECRET: "",
         WEB_CONTENT_REVALIDATE_SECONDS: "",
       },

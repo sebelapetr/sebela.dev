@@ -246,7 +246,7 @@ describe("loadHomepage", () => {
         headline: "Fictional engineer for tests",
         shortBio: "Robin is **made up** for the tests.",
         photo: {
-          url: "https://media.example.test/files/test/portrait.png",
+          url: "/media/portrait.png",
           altText: "A fictional portrait.",
           width: 640,
           height: 800,

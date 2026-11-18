@@ -47,7 +47,7 @@ export function profileStructuredData(origin: string, profile: StructuredProfile
         name: profile.name,
         description: profile.headline,
         url: home,
-        ...(profile.photo === null ? {} : { image: profile.photo.url }),
+        ...(profile.photo === null ? {} : { image: new URL(profile.photo.url, home).href }),
         ...(profile.contact.email === null ? {} : { email: profile.contact.email.address }),
         ...(links.length === 0 ? {} : { sameAs: links }),
       },

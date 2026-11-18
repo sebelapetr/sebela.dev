@@ -21,12 +21,13 @@
     "build": "turbo run build",
     "ci:root": "turbo run lint:root check:config test:harness test:checks --continue",
     "ci:affected": "turbo run lint typecheck test build --affected --continue",
-    "stack:up": "node --env-file-if-exists=.env --eval \"for (const name of ['API_HOST', 'API_PORT']) if (!process.env[name]) { console.error('stack:up: set ' + name + ' (documented in .env.example)'); process.exitCode = 1; }\" && docker compose --profile api up --build --detach --wait",
+    "stack:up": "node --env-file-if-exists=.env --eval \"for (const name of ['API_HOST', 'API_PORT', 'WEB_HOST', 'WEB_PORT']) if (!process.env[name]) { console.error('stack:up: set ' + name + ' (documented in .env.example)'); process.exitCode = 1; }\" && docker compose --profile api --profile web up --build --detach --wait",
     "stack:seed": "docker compose --profile api run --rm api node dist/cli/seed.js",
     "stack:api-keys": "docker compose --profile api run --rm api node dist/cli/api-keys.js",
-    "stack:logs": "docker compose --profile api logs",
-    "stack:down": "docker compose --profile api rm --stop --force api migrate",
-    "test:api-stack": "node scripts/checks/api-stack.e2e.mjs"
+    "stack:logs": "docker compose --profile api --profile web logs",
+    "stack:down": "docker compose --profile api --profile web rm --stop --force web api migrate",
+    "test:api-stack": "node scripts/checks/api-stack.e2e.mjs",
+    "test:web-stack": "node scripts/checks/web-stack.e2e.mjs"
   },
   "devDependencies": {
     "@sebela/config": "workspace:*",

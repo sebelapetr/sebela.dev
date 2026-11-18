@@ -1,6 +1,7 @@
 // The profile module: the website's read of the API's public profile, experience, services and CV
-// routes (and the records the Ask page's answers rest on), and of the current CV PDF's file, with
-// the process-local content cache those reads share and its invalidation. Server-only.
+// routes (and the records the Ask page's answers rest on), of the current CV PDF's file and of the
+// stored images the site serves on its own media path, with the process-local content cache those
+// reads share and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -15,6 +16,7 @@ import { loadExperience, type ExperienceResult } from "./data/load-experience";
 import { loadHomepage, type HomepageResult } from "./data/load-homepage";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
+import { readMediaFile } from "./data/read-media-file";
 
 export type { AskContent, AskResult } from "./data/load-ask";
 
@@ -135,5 +137,18 @@ export const getCv = cache((): Promise<CvResult> => loadCv(apiClient()));
  * Delivered only whole and as a PDF; otherwise no PDF or an unavailable one.
  */
 export function getCvPdfFile(): Promise<CvPdfFile> {
-  return readCvPdfFile(freshApiClient(), { apiBaseUrl: apiBaseUrl() });
+  const config = readWebConfig(process.env);
+  return readCvPdfFile(freshApiClient(), {
+    apiBaseUrl: config.apiBaseUrl,
+    mediaRead: { baseUrl: config.mediaBaseUrl, readBaseUrl: config.mediaReadBaseUrl },
+  });
+}
+
+/**
+ * The stored image `name` (`<file>.<png|jpg|webp>` directly below the media base) as the answer of
+ * the site's own media path, read fresh from `WEB_MEDIA_READ_BASE_URL` or the media base. Any other
+ * name or a file the storage lacks is a 404; any other failure an empty 502. Never throws.
+ */
+export function getMediaFile(name: string): Promise<Response> {
+  return readMediaFile(name, { mediaReadBaseUrl: readWebConfig(process.env).mediaReadBaseUrl });
 }

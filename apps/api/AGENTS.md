@@ -24,26 +24,27 @@ The trust boundary of the repository. It may import `@sebela/services`, `@sebela
 
 ## Container stack
 
-The main checkout can run the API in Docker: the profile `api` of the root `compose.yaml`, built from `Dockerfile` here (context: the repository root, allowlisted by the root `.dockerignore`). Worktrees run the API on the host with the commands above.
+The main checkout can run the API in Docker: the profile `api` of the root `compose.yaml`, built from `Dockerfile` here (context: the repository root, allowlisted by the root `.dockerignore`). `pnpm stack:up` starts it together with the website container (profile `web`, `apps/web/AGENTS.md`, "Container"). Worktrees run the API on the host with the commands above.
 
-| Task                                            | Command (repository root)                                                                                   |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Build, migrate and start; returns once healthy  | `pnpm stack:up`                                                                                             |
-| Load the demo seed                              | `pnpm stack:seed`                                                                                           |
-| Load a private seed folder outside the checkout | `docker compose --profile api run --rm --volume <absolute folder>:/seed:ro api node dist/cli/seed.js /seed` |
-| Create, list or revoke an API key               | `pnpm --silent stack:api-keys create <name>` / `list` / `revoke <id>`                                       |
-| Logs                                            | `pnpm stack:logs`                                                                                           |
-| Stop and remove the API containers              | `pnpm stack:down` (Postgres keeps running for the worktrees)                                                |
-| Stop everything, keep data and media            | `docker compose --profile api down` (a plain `docker compose down` leaves the profile's containers running) |
-| Delete the data and the media as well           | `docker compose --profile api down --volumes`                                                               |
+| Task                                                           | Command (repository root)                                                                                                 |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Build, migrate and start API and website; returns once healthy | `pnpm stack:up`                                                                                                           |
+| Load the demo seed                                             | `pnpm stack:seed`                                                                                                         |
+| Load a private seed folder outside the checkout                | `docker compose --profile api run --rm --volume <absolute folder>:/seed:ro api node dist/cli/seed.js /seed`               |
+| Create, list or revoke an API key                              | `pnpm --silent stack:api-keys create <name>` / `list` / `revoke <id>`                                                     |
+| Logs                                                           | `pnpm stack:logs`                                                                                                         |
+| Stop and remove the API and website containers                 | `pnpm stack:down` (Postgres keeps running for the worktrees)                                                              |
+| Stop everything, keep data and media                           | `docker compose --profile api --profile web down` (a plain `docker compose down` leaves the profiles' containers running) |
+| Delete the data and the media as well                          | `docker compose --profile api --profile web down --volumes`                                                               |
 
 - **Order.** `migrate` (`node /app/packages/db/dist/cli/migrate.js`, the same image) starts once Postgres is healthy and applies the committed migrations; `api` starts only when it has exited with 0. A failed migration leaves the API down; the server itself never migrates. Running `stack:up` again re-runs `migrate`, which applies only new migrations.
 - **Content.** Neither a start nor a restart seeds, resets or deletes content. The seed and the first key are separate, explicit one-off commands in a container of the `api` service; the key is printed once to the terminal, never to the service logs. The seed's rerun rules are those of `packages/db/seed/README.md`.
 - **Configuration.** The containers get the same validated settings as the host API from the checkout's environment (`.env`), forwarded variable by variable in `compose.yaml`. None is required by Compose, so the Postgres-only commands of a checkout work without them: a missing one reaches the container empty, and `readApiConfig`, `readMediaConfig` or the migration's database settings stop it with its name. `pnpm stack:up` first refuses to start without `API_HOST` and `API_PORT`, the host address and port the API is published on; empty ones would publish it on every interface on a random port, so start the stack with `pnpm stack:up`, not a plain `docker compose --profile api up`. Four values are part of the declaration: inside the network the API reaches Postgres by its service name on the container port, and listens on every interface of its container on its own container port (`8080`). The database, role and password are the checkout's `DATABASE_*`.
 - **Media.** `STORAGE_LOCAL_ROOT` is the folder of the named volume `api-media` (`/var/lib/sebela/media`), owned by the image's unprivileged `node` user; the key namespaces of `STORAGE_ENVIRONMENT` and `STORAGE_WORKTREE` apply below it. Uploads survive restarts and rebuilt containers and are deleted only with the volume. `STORAGE_PUBLIC_BASE_URL` stays the published address.
+- **Website invalidation.** With `API_WEB_INVALIDATION_SECRET` set, `compose.yaml` points `API_WEB_INVALIDATION_URL` at the website container inside the Compose network (`http://web:8080/internal/invalidation`); without it the stack sends no notifications. The website container reads `WEB_INVALIDATION_SECRET`, which must be the same value.
 - **Rate limits.** Requests from the host arrive through Docker's network, so every local caller shares one client address. Development only.
 - **Image.** Production dependencies, the built `dist/` of the API and its workspace packages, the committed migrations and the fictional demo seed. No environment file, credentials or personal content; a private seed is mounted at run time. The runtime stage lists the manifest of every workspace package; add a new package's `package.json` there. The base image is pinned by tag and digest.
-- **Smoke check.** `pnpm test:api-stack` (`scripts/checks/api-stack.e2e.mjs`, CI job `API stack smoke`) checks all of the above in a disposable Compose project; see `docs/testing.md`, "CI".
+- **Smoke check.** `pnpm test:api-stack` (`scripts/checks/api-stack.e2e.mjs`, CI job `API stack smoke`) checks all of the above in a disposable Compose project; `pnpm test:web-stack` (`scripts/checks/web-stack.e2e.mjs`, CI job `Website stack smoke`) runs two complete stacks with the website side by side; see `docs/testing.md`, "CI".
 
 ## Configuration
 

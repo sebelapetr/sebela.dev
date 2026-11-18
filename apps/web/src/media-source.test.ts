@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { matchRemotePattern } from "next/dist/shared/lib/match-remote-pattern";
+import { matchLocalPattern } from "next/dist/shared/lib/match-local-pattern";
 
-import { imageSettings, isMediaUrl } from "./media-source";
+import { imageSettings, isImageFileName, mediaFileName, mediaPath } from "./media-source";
 
 // Loopback hosts and explicit ports come from the environment, so they are
 // covered by the end-to-end tests (e2e/media.spec.ts); unit tests stay on
 // fictional hosts without a port.
 const API = "http://api.example.test";
 const BASE = `${API}/v1/media/files/development/feat-55`;
-const FILE = `${BASE}/0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10.png`;
+const ID = "0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10";
+const NAME = `${ID}.png`;
+const FILE = `${BASE}/${NAME}`;
 const CDN = "https://cdn.example.test/production";
 
-describe("isMediaUrl", () => {
-  it("accepts a file directly below the media base", () => {
-    expect(isMediaUrl(FILE, BASE)).toBe(true);
-    expect(isMediaUrl(`${CDN}/0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10.webp`, CDN)).toBe(true);
+describe("mediaFileName", () => {
+  it("names a stored file directly below the media base", () => {
+    expect(mediaFileName(FILE, BASE)).toBe(NAME);
+    expect(mediaFileName(`${CDN}/${ID}.webp`, CDN)).toBe(`${ID}.webp`);
+    expect(mediaFileName(`${BASE}/${ID}.jpg`, `${BASE}/`)).toBe(`${ID}.jpg`);
+    expect(mediaFileName(`${BASE}/${ID}.pdf`, BASE)).toBe(`${ID}.pdf`);
   });
 
   it.each([
@@ -42,7 +46,8 @@ describe("isMediaUrl", () => {
     ["an encoded backslash", `${BASE}/..%5c..%5cperson`],
     ["a backslash", `${BASE}\\..\\a.png`],
     ["a nested folder", `${BASE}/nested/a.png`],
-    ["a file that is not an image", `${BASE}/0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10.pdf`],
+    ["a file the storage never writes", `${BASE}/${ID}.svg`],
+    ["an upper-case extension", `${BASE}/${ID}.PNG`],
     ["a name of dots", `${BASE}/..png`],
     ["a query", `${FILE}?w=1`],
     ["an empty query", `${FILE}?`],
@@ -53,123 +58,77 @@ describe("isMediaUrl", () => {
     ["the optimizer itself", `${API}/_next/image?url=%2Fa.png&w=64&q=75`],
     ["not an address", "portrait.png"],
   ])("refuses %s", (_label, url) => {
-    expect(isMediaUrl(url, BASE)).toBe(false);
+    expect(mediaFileName(url, BASE)).toBeNull();
+  });
+});
+
+describe("isImageFileName", () => {
+  it.each([`${ID}.png`, `${ID}.jpg`, `${ID}.webp`])("accepts the stored image %s", (name) => {
+    expect(isImageFileName(name)).toBe(true);
+  });
+
+  it.each([
+    `${ID}.pdf`,
+    `${ID}.svg`,
+    `${ID}.jpeg`,
+    `${ID}.PNG`,
+    "..png",
+    ".png",
+    `../${ID}.png`,
+    `${ID}.png/x`,
+    `${ID}.png?w=1`,
+    "",
+  ])("refuses %s", (name) => {
+    expect(isImageFileName(name)).toBe(false);
+  });
+});
+
+describe("mediaPath", () => {
+  it("serves a stored image from the site's own media path", () => {
+    expect(mediaPath(NAME)).toBe(`/media/${NAME}`);
   });
 });
 
 describe("imageSettings", () => {
-  it("lets the optimizer fetch only the configured media folder, without a query", () => {
-    expect(imageSettings({ WEB_MEDIA_BASE_URL: CDN }).remotePatterns).toEqual([
-      {
-        protocol: "https",
-        hostname: "cdn.example.test",
-        port: "",
-        pathname: "/production/+([A-Za-z0-9-]).@(png|jpg|webp)",
-        search: "",
-      },
+  const settings = imageSettings();
+
+  it("lets the optimizer read only the site's own media path, never another host", () => {
+    expect(settings.localPatterns).toEqual([
+      { pathname: "/media/+([A-Za-z0-9-]).@(png|jpg|webp)", search: "" },
     ]);
-  });
-
-  it("keeps the worktree's own folder", () => {
-    expect(imageSettings({ WEB_MEDIA_BASE_URL: `${BASE}/` }).remotePatterns).toEqual([
-      {
-        protocol: "http",
-        hostname: "api.example.test",
-        port: "",
-        pathname: "/v1/media/files/development/feat-55/+([A-Za-z0-9-]).@(png|jpg|webp)",
-        search: "",
-      },
-    ]);
-  });
-
-  it("matches, with Next's own matcher, exactly the files isMediaUrl accepts", () => {
-    const [pattern] = imageSettings({ WEB_MEDIA_BASE_URL: BASE }).remotePatterns ?? [];
-    if (pattern === undefined || pattern instanceof URL) throw new Error("No remote pattern");
-    const candidates = [
-      FILE,
-      `${BASE}/a.jpg`,
-      `${BASE}/a.webp`,
-      `${BASE}/a.pdf`,
-      `${BASE}/..%2f..%2fperson.png`,
-      `${BASE}/%2e%2e.png`,
-      `${BASE}/nested/a.png`,
-      `${BASE}-other/a.png`,
-      `${FILE}?w=1`,
-      `${API}/v1/media/files/development/a.png`,
-      `${API}/v1/person`,
-    ];
-    for (const candidate of candidates) {
-      expect({ candidate, matched: matchRemotePattern(pattern, new URL(candidate)) }).toEqual({
-        candidate,
-        matched: isMediaUrl(candidate, BASE),
-      });
-    }
-    expect(matchRemotePattern(pattern, new URL(FILE))).toBe(true);
-  });
-
-  it("matches, with Next's own matcher, only the configured address host", () => {
-    const base = "http://10.0.0.5/v1/media/files/test";
-    const [pattern] = imageSettings({ WEB_MEDIA_BASE_URL: base }).remotePatterns ?? [];
-    if (pattern === undefined || pattern instanceof URL) throw new Error("No remote pattern");
-    const name = "0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10.png";
-    const candidates = [
-      `${base}/${name}`,
-      `http://10.0.0.6/v1/media/files/test/${name}`,
-      `http://10.0.0.50/v1/media/files/test/${name}`,
-      `http://110.0.0.5/v1/media/files/test/${name}`,
-      `http://a/v1/media/files/test/${name}`,
-      `http://f/v1/media/files/test/${name}`,
-    ];
-    for (const candidate of candidates) {
-      expect({ candidate, matched: matchRemotePattern(pattern, new URL(candidate)) }).toEqual({
-        candidate,
-        matched: isMediaUrl(candidate, base),
-      });
-    }
-    expect(matchRemotePattern(pattern, new URL(`${base}/${name}`))).toBe(true);
-    expect(matchRemotePattern(pattern, new URL(`http://a/v1/media/files/test/${name}`))).toBe(
-      false,
-    );
-  });
-
-  it("allows no local image paths and follows no redirect", () => {
-    const settings = imageSettings({ WEB_MEDIA_BASE_URL: CDN });
-    expect(settings.localPatterns).toEqual([]);
+    expect(settings.remotePatterns).toEqual([]);
+    expect(settings.dangerouslyAllowLocalIP).toBe(false);
     expect(settings.maximumRedirects).toBe(0);
   });
 
-  it("refuses private addresses for a public media host", () => {
-    expect(imageSettings({ WEB_MEDIA_BASE_URL: CDN }).dangerouslyAllowLocalIP).toBe(false);
-    expect(imageSettings({ WEB_MEDIA_BASE_URL: BASE }).dangerouslyAllowLocalIP).toBe(false);
+  it("matches, with Next's own matcher, exactly the paths mediaPath gives a stored image", () => {
+    const [pattern] = settings.localPatterns ?? [];
+    if (pattern === undefined) throw new Error("No local pattern");
+    const candidates: [string, boolean][] = [
+      [mediaPath(NAME), true],
+      [mediaPath(`${ID}.jpg`), true],
+      [mediaPath(`${ID}.webp`), true],
+      [mediaPath(`${ID}.pdf`), false],
+      [mediaPath(`${ID}.svg`), false],
+      [`/media/nested/${NAME}`, false],
+      [`/media/%2e%2e.png`, false],
+      [`/media/..%2f..%2fperson.png`, false],
+      [`${mediaPath(NAME)}?w=1`, false],
+      [`/v1/media/files/test/${NAME}`, false],
+      [`/cv/pdf`, false],
+      [`/_next/image?url=${encodeURIComponent(mediaPath(NAME))}`, false],
+    ];
+    for (const [candidate, expected] of candidates) {
+      const matched = matchLocalPattern(pattern, new URL(candidate, "http://site.example.test"));
+      expect({ candidate, matched }).toEqual({ candidate, matched: expected });
+    }
   });
 
-  it.each([
-    ["a private network address", "http://10.0.0.5/v1/media/files/test"],
-    ["another private network address", "http://192.168.1.20/v1/media/files/test"],
-  ])("allows private addresses only when the base itself is %s", (_label, base) => {
-    expect(imageSettings({ WEB_MEDIA_BASE_URL: base }).dangerouslyAllowLocalIP).toBe(true);
-  });
-
-  it.each([
-    ["missing", undefined],
-    ["invalid", "ftp://cdn.example.test/production"],
-    ["the bare origin", "https://cdn.example.test"],
-    ["with a query", "https://cdn.example.test/production?x=1"],
-    // A host is matched as a glob, so only plain names and IPv4 addresses are accepted.
-    ["a unique local IPv6 address", "http://[fdab::cdef]/v1/media/files/test"],
-    ["a public IPv6 address", "http://[2001:db8::abcd]/v1/media/files/test"],
-    ["a host with a star", "https://a*b.example.test/production"],
-    ["a host with an extended glob", "https://+(a).example.test/production"],
-    ["a host with braces", "https://{a,b}.example.test/production"],
-    ["a host with an exclamation mark", "https://a!b.example.test/production"],
-  ])("lets the optimizer fetch nothing when the base is %s", (_label, value) => {
-    const settings = imageSettings(value === undefined ? {} : { WEB_MEDIA_BASE_URL: value });
-    expect(settings.remotePatterns).toEqual([]);
-    expect(settings.dangerouslyAllowLocalIP).toBe(false);
+  it("needs no setting, so the build and the server agree whatever the environment says", () => {
+    expect(imageSettings()).toEqual(settings);
   });
 
   it("offers only the widths the site renders, in WebP", () => {
-    const settings = imageSettings({ WEB_MEDIA_BASE_URL: CDN });
     expect(settings.formats).toEqual(["image/webp"]);
     expect(Math.max(...(settings.deviceSizes ?? []))).toBeLessThanOrEqual(1080);
     expect(settings.qualities).toEqual([75]);

@@ -159,3 +159,33 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: node scripts/checks/api-stack.e2e.mjs
+
+  # The complete containerised stack of compose.yaml (profiles `api` and `web`): two disposable
+  # Compose projects side by side, each with its own ports, volumes, storage folder and secrets,
+  # seeded with the fictional demo seed. Real pages, the CV PDF and stored images through the website
+  # container, an authenticated edit the website shows at once, isolation of keys, files and signed
+  # invalidations between the two, and the hero's question to the mock Ask page in Chromium with
+  # screenshots kept as an artifact. Removed at the end. The dependencies are installed only for
+  # Playwright; the stack itself is built from the images.
+  web-stack:
+    name: Website stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Chromium for Playwright
+        run: pnpm --filter @sebela/web exec playwright install --with-deps chromium
+      - name: Two complete stacks
+        run: pnpm test:web-stack
+      - name: Screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-stack
+          path: apps/web/test-results/complete-stack/
+          if-no-files-found: ignore

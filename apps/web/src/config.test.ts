@@ -12,6 +12,7 @@ describe("readWebConfig", () => {
       apiBaseUrl: "http://api.example.test",
       siteOrigin: "https://site.example.test",
       mediaBaseUrl: "http://api.example.test/v1/media/files/test",
+      mediaReadBaseUrl: "http://api.example.test/v1/media/files/test",
       contentRevalidateMs: 60_000,
     });
   });
@@ -23,6 +24,7 @@ describe("readWebConfig", () => {
       apiBaseUrl: "https://api.example.test",
       siteOrigin: "https://site.example.test",
       mediaBaseUrl: "http://api.example.test/v1/media/files/test",
+      mediaReadBaseUrl: "http://api.example.test/v1/media/files/test",
       contentRevalidateMs: 60_000,
     });
   });
@@ -150,6 +152,61 @@ describe("readWebConfig: the media files' base address", () => {
     expect(() => read("https://user:s3cret@cdn.example.test/production")).toThrow(
       /^(?!.*s3cret).*WEB_MEDIA_BASE_URL/,
     );
+  });
+});
+
+describe("readWebConfig: where the server reads the media files", () => {
+  const read = (value: string | undefined) =>
+    readWebConfig(
+      value === undefined
+        ? { ...API, ...SITE, ...MEDIA }
+        : { ...API, ...SITE, ...MEDIA, WEB_MEDIA_READ_BASE_URL: value },
+    ).mediaReadBaseUrl;
+
+  it("is the media base itself when unset or empty, as on a host", () => {
+    expect(read(undefined)).toBe("http://api.example.test/v1/media/files/test");
+    expect(read("")).toBe("http://api.example.test/v1/media/files/test");
+  });
+
+  it("keeps a separate read address without a trailing slash", () => {
+    expect(read("http://api/v1/media/files/development/feat-1/")).toBe(
+      "http://api/v1/media/files/development/feat-1",
+    );
+  });
+
+  it.each([
+    ["not an address", "api/v1/media/files/test"],
+    ["another scheme", "file:///var/storage/test"],
+    ["a query", "http://api/v1/media/files/test?a=1"],
+    ["no folder", "http://api/"],
+    ["an encoded separator", "http://api/v1/media/files%2Ftest"],
+  ])("refuses %s and names the variable", (_label, value) => {
+    expect(() => read(value)).toThrow(/WEB_MEDIA_READ_BASE_URL/);
+  });
+
+  it("refuses credentials and does not repeat them", () => {
+    expect(() => read("http://user:s3cret@api/v1/media/files/test")).toThrow(
+      /^(?!.*s3cret).*WEB_MEDIA_READ_BASE_URL/,
+    );
+  });
+});
+
+describe("readWebConfig: a container next to the API", () => {
+  it("reads the API and the media files internally and names only public origins to visitors", () => {
+    expect(
+      readWebConfig({
+        WEB_API_BASE_URL: "http://api",
+        WEB_SITE_ORIGIN: "http://site.example.test",
+        WEB_MEDIA_BASE_URL: "http://media.example.test/v1/media/files/development/feat-1",
+        WEB_MEDIA_READ_BASE_URL: "http://api/v1/media/files/development/feat-1",
+      }),
+    ).toEqual({
+      apiBaseUrl: "http://api",
+      siteOrigin: "http://site.example.test",
+      mediaBaseUrl: "http://media.example.test/v1/media/files/development/feat-1",
+      mediaReadBaseUrl: "http://api/v1/media/files/development/feat-1",
+      contentRevalidateMs: 60_000,
+    });
   });
 });
 
