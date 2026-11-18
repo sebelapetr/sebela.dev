@@ -7,7 +7,8 @@ import type { HomepageProfile } from "../../profile";
 
 /**
  * The closing contact block, the target of `/#contact`: the email address and web links from the
- * API and one button that opens an email. Without an email address only the links remain; the CV's
+ * API and one button that opens an email. Without an email address only the links remain; without
+ * either the block says so, so the header's Contact link never lands on a bare heading. The CV's
  * actions live in the experience snapshot.
  */
 export function Contact({ contact }: { readonly contact: HomepageProfile["contact"] }) {
@@ -20,6 +21,9 @@ export function Contact({ contact }: { readonly contact: HomepageProfile["contac
       <h2 id="contact-heading" className="type-heading">
         Have a project or a role in mind?
       </h2>
+      {contact.email === null && contact.links.length === 0 ? (
+        <p className="text-muted-foreground">No contact details are published yet.</p>
+      ) : null}
       {contact.email === null ? null : (
         <p className="type-intro">
           Write to{" "}
