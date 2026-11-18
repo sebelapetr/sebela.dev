@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 
 /**
  * The way from an opened area or module on the overview to its own page: a 44 px text link with an
- * arrow, its accessible name naming the item.
+ * arrow, its accessible name naming the item after the visible words.
  */
 export function PageLink({
   href,
@@ -19,9 +19,10 @@ export function PageLink({
       <Link
         href={href}
         prefetch={false}
+        aria-label={`Open the ${kind} page: ${name}`}
         className="inline-flex min-h-11 items-center gap-1 rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        Open the {kind} page<span className="sr-only">: {name}</span>
+        Open the {kind} page
         <ArrowRight aria-hidden="true" className="size-3.5" />
       </Link>
     </p>
