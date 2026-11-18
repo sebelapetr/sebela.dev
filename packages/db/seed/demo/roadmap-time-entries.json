@@ -68,5 +68,30 @@
     "resource": "prompt-patterns-course",
     "startedAt": "2025-03-04T19:00:00+01:00",
     "endedAt": "2025-03-04T20:15:00+01:00"
+  },
+  {
+    "resource": "vector-search-handbook-reading",
+    "startedAt": "2025-02-15T09:00:00+01:00",
+    "endedAt": "2025-02-15T10:30:00+01:00"
+  },
+  {
+    "resource": "vector-search-handbook-reading",
+    "startedAt": "2025-02-16T20:00:00+01:00",
+    "endedAt": "2025-02-16T21:15:00+01:00"
+  },
+  {
+    "resource": "vector-search-handbook-reading",
+    "startedAt": "2025-02-22T10:00:00+01:00",
+    "endedAt": "2025-02-22T11:00:00+01:00"
+  },
+  {
+    "resource": "evaluation-field-guide-reading",
+    "startedAt": "2025-03-05T19:00:00+01:00",
+    "endedAt": "2025-03-05T19:50:00+01:00"
+  },
+  {
+    "resource": "evaluation-field-guide-reading",
+    "startedAt": "2025-03-06T07:30:00+01:00",
+    "endedAt": "2025-03-06T08:00:00+01:00"
   }
 ]
