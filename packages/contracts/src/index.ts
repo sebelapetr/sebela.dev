@@ -130,6 +130,28 @@ export type {
   TopicUpdate,
 } from "./modules/profile/index.js";
 export {
+  ContentChangeSchema,
+  InvalidationNotificationSchema,
+  contentChangeActions,
+  contentDomains,
+  encodeInvalidationNotification,
+  invalidationHeaders,
+  invalidationMaxBodyBytes,
+  invalidationMaxChanges,
+  invalidationSecretMinLength,
+  invalidationToleranceSeconds,
+  signInvalidationNotification,
+  verifyInvalidationNotification,
+} from "./modules/invalidation/index.js";
+export type {
+  ContentChange,
+  ContentChangeAction,
+  ContentDomain,
+  InvalidationNotification,
+  InvalidationRefusal,
+  InvalidationVerification,
+} from "./modules/invalidation/index.js";
+export {
   ChatBlockSchema,
   ChatRelatedLinkSchema,
   ChatSourceSchema,
