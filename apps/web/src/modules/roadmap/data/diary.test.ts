@@ -15,7 +15,7 @@ function entry(
   startedAt: string,
   endedAt: string,
   durationSeconds: number,
-  resource: Partial<TimeEntry["resource"]> = {},
+  resource: Partial<NonNullable<TimeEntry["resource"]>> = {},
 ): TimeEntry {
   return {
     id,
@@ -29,6 +29,7 @@ function entry(
       area: "first-area",
       ...resource,
     },
+    event: null,
     startedAt,
     endedAt,
     durationSeconds,
@@ -92,13 +93,21 @@ describe("toDiaryList", () => {
             entry("b", "2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z", 1800),
           ],
           totalSeconds: 5400,
+          events: [],
         },
-        { date: "2026-03-01", notes: "Only notes today.", entries: [], totalSeconds: 0 },
+        {
+          date: "2026-03-01",
+          notes: "Only notes today.",
+          entries: [],
+          totalSeconds: 0,
+          events: [],
+        },
         {
           date: "2026-02-27",
           notes: null,
           entries: [entry("c", "2026-02-27T08:00:00Z", "2026-02-27T08:20:00Z", 1200)],
           totalSeconds: 1200,
+          events: [],
         },
       ],
     };
@@ -149,6 +158,7 @@ describe("toDiaryDayPage", () => {
         entry("morning", "2026-03-02T07:05:00.000Z", "2026-03-02T08:35:00.000Z", 5400),
       ],
       totalSeconds: 7200,
+      events: [],
     };
 
     const page = toDiaryDayPage(day, areas);
@@ -168,6 +178,7 @@ describe("toDiaryDayPage", () => {
         entry("dst", "2025-10-25T23:30:00.000Z", "2025-10-26T01:30:00.000Z", 7200),
       ],
       totalSeconds: 7200,
+      events: [],
     };
 
     const [only] = toDiaryDayPage(day, areas).areas[0]?.modules[0]?.entries ?? [];
@@ -191,6 +202,7 @@ describe("toDiaryDayPage", () => {
         entry("w", "2026-03-02T06:00:00Z", "2026-03-02T06:10:00Z", 600),
       ],
       totalSeconds: 5700,
+      events: [],
     };
 
     const page = toDiaryDayPage(day, areas);
@@ -233,6 +245,7 @@ describe("toDiaryDayPage", () => {
         entry("k", "2026-03-02T09:00:00Z", "2026-03-02T09:30:00Z", 1800),
       ],
       totalSeconds: 5400,
+      events: [],
     };
 
     const page = toDiaryDayPage(day, areas);
@@ -272,6 +285,7 @@ describe("toDiaryDayPage", () => {
         }),
       ],
       totalSeconds: 2720,
+      events: [],
     };
 
     const entries = toDiaryDayPage(day, areas).areas[0]?.modules[0]?.entries;
@@ -315,6 +329,7 @@ describe("toDiaryDayPage", () => {
         entry("other", "2026-03-02T09:00:00Z", "2026-03-02T10:00:00Z", 3600),
       ],
       totalSeconds: 7200,
+      events: [],
     };
 
     const entries = toDiaryDayPage(day, areas, [{ resource: "orbit-reading", book: "quiet/orbit" }])
@@ -332,6 +347,7 @@ describe("toDiaryDayPage", () => {
       notes: "Learnt *much*.",
       entries: [entry("a", "2026-03-02T07:00:00Z", "2026-03-02T08:00:00Z", 3600)],
       totalSeconds: 3600,
+      events: [],
     };
 
     expect(toDiaryDayPage(day, areas)).toMatchObject({
@@ -348,12 +364,45 @@ describe("toDiaryDayPage", () => {
     });
   });
 
+  it("keeps attendance at an event out of the area groups, without failing on it", () => {
+    const attendance: TimeEntry = {
+      id: "talk",
+      date: "2026-03-02",
+      resource: null,
+      event: {
+        slug: "fictional-summit",
+        name: "Fictional Summit",
+        kind: "conference",
+        startsOn: "2026-03-02",
+        endsOn: "2026-03-03",
+        link: null,
+      },
+      startedAt: "2026-03-02T12:00:00Z",
+      endedAt: "2026-03-02T13:00:00Z",
+      durationSeconds: 3600,
+    };
+    const day: DiaryDay = {
+      date: "2026-03-02",
+      notes: null,
+      entries: [entry("a", "2026-03-02T07:00:00Z", "2026-03-02T08:00:00Z", 3600), attendance],
+      totalSeconds: 7200,
+      events: [],
+    };
+
+    const page = toDiaryDayPage(day, areas);
+
+    expect(
+      page.areas.flatMap((area) => area.modules.flatMap((m) => m.entries.map((e) => e.id))),
+    ).toEqual(["a"]);
+  });
+
   it("has no total, sessions or groups on a day with notes only", () => {
     const day: DiaryDay = {
       date: "2026-03-01",
       notes: "Just notes.",
       entries: [],
       totalSeconds: 0,
+      events: [],
     };
 
     expect(toDiaryDayPage(day, areas)).toMatchObject({
