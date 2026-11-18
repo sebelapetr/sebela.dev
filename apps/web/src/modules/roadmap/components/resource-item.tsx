@@ -16,18 +16,12 @@ import { resourceMarker, resourceStatusWords } from "./status";
  * type and its estimate, then its description.
  */
 export function ResourceItem({ resource }: { readonly resource: ResourceRow }) {
-  const dimmed = resource.status === "planned" && "opacity-60";
   return (
     <li className={cn("relative", ROADMAP_ITEM)} data-roadmap-slug={resource.slug}>
       <TimelineMarker className={cn(ROADMAP_MARKER, resourceMarker(resource.status))}>
         <ResourceIcon type={resource.type} />
       </TimelineMarker>
-      <div
-        className={cn(
-          "flex w-full flex-col items-stretch gap-2 rounded-lg px-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-3",
-          dimmed,
-        )}
-      >
+      <div className="flex w-full flex-col items-stretch gap-2 rounded-lg px-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-3">
         <h4 className="flex min-w-0 flex-wrap items-center gap-x-2 text-base leading-snug font-medium wrap-anywhere">
           {resource.href === null ? (
             <span>{resource.name}</span>

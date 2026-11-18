@@ -1,5 +1,4 @@
 import { Timeline } from "@sebela/ui/components/timeline";
-import { cn } from "@sebela/ui/lib/utils";
 
 import { ProseMarkdown } from "../../_shared";
 import type { AreaRow } from "../data/overview";
@@ -16,7 +15,6 @@ const DESCRIPTION_LIMIT = 160;
  * its progress, its description, and its modules when it is opened.
  */
 export function AreaItem({ area }: { readonly area: AreaRow }) {
-  const dimmed = area.status === "planned" && "opacity-60";
   return (
     <RoadmapBranch
       slug={area.slug}
@@ -29,7 +27,7 @@ export function AreaItem({ area }: { readonly area: AreaRow }) {
       }
       heading={
         <>
-          <span className={cn("flex min-w-0 flex-wrap items-center gap-2", dimmed)}>
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="min-w-0 text-lg leading-snug font-medium wrap-anywhere sm:text-xl">
               <span aria-hidden="true" className="mr-2 text-muted-foreground">
                 {area.order}
@@ -43,12 +41,7 @@ export function AreaItem({ area }: { readonly area: AreaRow }) {
               label={area.weightLabel}
             />
           </span>
-          <span
-            className={cn(
-              "flex flex-wrap items-center gap-2 self-start sm:flex-nowrap sm:self-auto",
-              dimmed,
-            )}
-          >
+          <span className="flex flex-wrap items-center gap-2 self-start sm:flex-nowrap sm:self-auto">
             <ProgressBadge completed={area.completed} total={area.total} />
           </span>
         </>
