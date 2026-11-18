@@ -1,7 +1,7 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write to the profile, the roadmap or the learning diary shows once the interval has elapsed, on the
+// seconds, a write to the profile, the roadmap, the learning diary or the bookshelf shows once the interval has elapsed, on the
 // overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
 // leaves its old address; a restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
@@ -133,6 +133,51 @@ test.describe("cached content without invalidation notifications", () => {
       .poll(async () => (await read("/ai-roadmap/diary")).body, within)
       .toContain("Fictional notes about late orbits.");
     await expect.poll(async () => (await read(day)).status, within).toBe(200);
+  });
+
+  test("book writes with dropped notifications reach the warmed shelf and book page after the interval", async () => {
+    async function write(method: string, path: string, body: unknown, expected: number) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.status, `${method} ${path}`).toBe(expected);
+    }
+    // This fixture has no books: the warmed shelf says so and the book does not exist yet.
+    const empty = "No books yet.";
+    const book = "/ai-roadmap/bookshelf/late-orbit-almanac";
+    expect((await read("/ai-roadmap/bookshelf")).body).toContain(empty);
+    expect((await read(book)).status).toBe(404);
+
+    await write(
+      "POST",
+      "/v1/roadmap/books",
+      { slug: "late-orbit-almanac", title: "Late Orbit Almanac" },
+      201,
+    );
+
+    // Inside the interval the cached shelf is still served: no notification arrived.
+    expect((await read("/ai-roadmap/bookshelf")).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read("/ai-roadmap/bookshelf")).body, within)
+      .toContain("Late Orbit Almanac");
+    await expect.poll(async () => (await read(book)).status, within).toBe(200);
+
+    // A change to the now warmed book page shows there and on the shelf after the interval too.
+    await write(
+      "PATCH",
+      "/v1/roadmap/books/late-orbit-almanac",
+      { title: "Later Orbit Almanac" },
+      200,
+    );
+    expect((await read(book)).body).not.toContain("Later Orbit Almanac");
+    await expect.poll(async () => (await read(book)).body, within).toContain("Later Orbit Almanac");
+    await expect
+      .poll(async () => (await read("/ai-roadmap/bookshelf")).body, within)
+      .toContain("Later Orbit Almanac");
   });
 
   test("a new module and resource reach the warmed area page and homepage Exploring after the interval", async () => {

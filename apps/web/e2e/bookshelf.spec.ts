@@ -391,6 +391,7 @@ test.describe("the bookshelf", () => {
         ["completed", completedBook],
         ["bare", bareBook],
         ["module", modulePage],
+        ["diary-day", diaryDay],
       ] as const) {
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.goto(`${website.url}${path}`);
