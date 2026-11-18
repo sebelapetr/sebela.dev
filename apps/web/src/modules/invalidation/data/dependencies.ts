@@ -35,6 +35,7 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   "roadmap-area": ["profile"],
   "roadmap-module": ["profile"],
   "roadmap-resource": ["profile"],
+  "roadmap-diary": ["profile"],
 };
 
 /**
