@@ -48,6 +48,15 @@ export type {
   RoadmapModuleResult,
 } from "./data/load-roadmap-detail";
 
+export type {
+  RoadmapDiaryAreaName,
+  RoadmapDiaryContent,
+  RoadmapDiaryDayContent,
+  RoadmapDiaryDayResult,
+  RoadmapDiaryModuleName,
+  RoadmapDiaryResult,
+} from "./data/load-roadmap-diary";
+
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
 /** The content cache of this process, shared by every route and page bundle loading this module. */
