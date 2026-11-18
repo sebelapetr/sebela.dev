@@ -49,7 +49,7 @@ export function RoadmapBranch({
           </TimelineTrigger>
         </Heading>
         {description === null ? null : (
-          <div className="mt-1 ml-2 text-sm text-muted-foreground sm:ml-7">
+          <div className="mt-1 ml-2 text-sm text-muted-foreground sm:ml-8">
             <div className={cn("wrap-anywhere [&>*+*]:mt-2", clamped && "line-clamp-2")}>
               {description}
             </div>

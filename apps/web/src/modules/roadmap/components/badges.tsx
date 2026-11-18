@@ -2,8 +2,8 @@ import { CircleCheck } from "lucide-react";
 
 import { cn } from "@sebela/ui/lib/utils";
 
-const PILL =
-  "inline-flex items-center rounded-full bg-muted/80 px-2 py-0.5 text-xs text-muted-foreground";
+// The pills keep the original roadmap's 2 px vertical padding (docs/design.md, AI Roadmap).
+const PILL = "inline-flex items-center rounded-full bg-muted/80 px-2 py-0.5 text-muted-foreground";
 
 /** Completed of all resources as a pill, with the same count in words for screen readers. */
 export function ProgressBadge({
@@ -15,7 +15,7 @@ export function ProgressBadge({
 }) {
   return (
     <>
-      <span aria-hidden="true" className={cn(PILL, "gap-1 font-medium tabular-nums")}>
+      <span aria-hidden="true" className={cn(PILL, "type-tag gap-1 tabular-nums")}>
         {completed}/{total}
         <CircleCheck className="size-3" />
       </span>
@@ -30,7 +30,7 @@ export function ProgressBadge({
 export function EstimateBadge({ estimate }: { readonly estimate: string }) {
   return (
     <>
-      <span aria-hidden="true" className={cn(PILL, "font-medium tabular-nums")}>
+      <span aria-hidden="true" className={cn(PILL, "type-tag tabular-nums")}>
         ~{estimate}
       </span>
       <span className="sr-only">, estimated {estimate}</span>
@@ -40,7 +40,8 @@ export function EstimateBadge({ estimate }: { readonly estimate: string }) {
 
 /** A resource's type as a pill. */
 export function TypeBadge({ label }: { readonly label: string }) {
-  return <span className={PILL}>{label}</span>;
+  // Regular weight, unlike the counts: the original sets the type lighter than the numbers.
+  return <span className={cn(PILL, "text-xs")}>{label}</span>;
 }
 
 /** The "Current" pill of an area being worked on. */

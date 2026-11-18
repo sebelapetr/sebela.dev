@@ -49,7 +49,7 @@ export function ResourceItem({ resource }: { readonly resource: ResourceRow }) {
         </div>
       </div>
       {resource.description === null ? null : (
-        <div className="mt-1 ml-2 text-sm wrap-anywhere text-muted-foreground sm:ml-7 [&>*+*]:mt-2">
+        <div className="mt-1 ml-2 text-sm wrap-anywhere text-muted-foreground sm:ml-8 [&>*+*]:mt-2">
           <ProseMarkdown>{resource.description}</ProseMarkdown>
         </div>
       )}
