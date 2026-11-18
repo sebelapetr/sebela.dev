@@ -28,7 +28,10 @@ export type SeedKind =
   | "services"
   | "education"
   | "testimonials"
-  | "currentFocus";
+  | "currentFocus"
+  | "roadmapAreas"
+  | "roadmapModules"
+  | "roadmapResources";
 
 /** How many records of one kind a load created and how many existing ones it updated. */
 export interface SeedCount {
@@ -100,6 +103,9 @@ const emptyCounts = (): Counts => ({
   education: { created: 0, updated: 0 },
   testimonials: { created: 0, updated: 0 },
   currentFocus: { created: 0, updated: 0 },
+  roadmapAreas: { created: 0, updated: 0 },
+  roadmapModules: { created: 0, updated: 0 },
+  roadmapResources: { created: 0, updated: 0 },
 });
 
 const isRefusal = (error: unknown, ...codes: string[]) =>

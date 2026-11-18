@@ -12,6 +12,7 @@ import { DomainError } from "../../errors.js";
 import { samplePdf, samplePng, sampleJpeg } from "../../testing.js";
 import { createMediaService, type CleanupFailure, type MediaLimits } from "../media/index.js";
 import { createProfileService, type ProfileService } from "../profile/index.js";
+import { createRoadmapService, type RoadmapService } from "../roadmap/index.js";
 import { openStorage, type OpenedStorage } from "../storage/index.js";
 import { createSeedService, type SeedKind, type SeedReport } from "./index.js";
 
@@ -185,6 +186,55 @@ const fixture = (): SeedFiles => ({
       topics: ["agents", "rag"],
     },
   ],
+  "roadmap-areas.json": [
+    { slug: "foundations", name: "Foundations", weight: 40, position: 0 },
+    {
+      slug: "practice",
+      name: "Practice",
+      description: "A **fictional** area.",
+      weight: 60,
+      position: 1,
+    },
+  ],
+  "roadmap-modules.json": [
+    { slug: "prompting", area: "foundations", name: "Prompting", position: 0 },
+    { slug: "retrieval-basics", area: "foundations", name: "Retrieval basics", position: 1 },
+    { slug: "shipping", area: "practice", name: "Shipping", position: 0 },
+  ],
+  "roadmap-resources.json": [
+    {
+      slug: "prompting-guide",
+      module: "prompting",
+      name: "A fictional prompting guide",
+      type: "link",
+      status: "completed",
+      estimatedMinutes: 90,
+      startedAt: "2025-01-02T09:00:00.000Z",
+      finishedAt: "2025-01-05T18:00:00.000Z",
+      link: "https://guide.example.test/",
+      position: 0,
+      topics: ["agents"],
+    },
+    {
+      slug: "prompting-drills",
+      module: "prompting",
+      name: "Fictional drills",
+      type: "project",
+      status: "skipped",
+      position: 1,
+    },
+    {
+      slug: "vector-talk",
+      module: "retrieval-basics",
+      name: "A fictional talk",
+      type: "youtube-video",
+      status: "in-progress",
+      estimatedMinutes: 45,
+      startedAt: "2025-02-01T09:00:00.000Z",
+      position: 0,
+      topics: ["rag", "agents"],
+    },
+  ],
   "files/portrait.jpg": portrait,
   "files/northwind.png": logo,
   "files/cover.png": cover,
@@ -205,6 +255,9 @@ const kinds: SeedKind[] = [
   "education",
   "testimonials",
   "currentFocus",
+  "roadmapAreas",
+  "roadmapModules",
+  "roadmapResources",
 ];
 
 const fixtureCounts: Record<SeedKind, number> = {
@@ -220,6 +273,9 @@ const fixtureCounts: Record<SeedKind, number> = {
   education: 1,
   testimonials: 1,
   currentFocus: 1,
+  roadmapAreas: 2,
+  roadmapModules: 3,
+  roadmapResources: 3,
 };
 
 const allCreated = Object.fromEntries(
@@ -272,6 +328,7 @@ describe("seed service", () => {
   let database: TemporaryDatabase;
   let persistence: Persistence;
   let profile: ProfileService;
+  let roadmap: RoadmapService;
   let seedFolder: string;
   let storageFolder: string;
   let opened: OpenedStorage;
@@ -284,7 +341,7 @@ describe("seed service", () => {
       onCleanupFailure: (failure) => failures.push(failure),
     });
 
-  const seed = (over: Pick<Persistence, "profile" | "transaction"> = persistence) =>
+  const seed = (over: Pick<Persistence, "profile" | "roadmap" | "transaction"> = persistence) =>
     createSeedService(over, {
       storage: opened,
       limits,
@@ -309,6 +366,7 @@ describe("seed service", () => {
     education: await profile.listEducation(),
     testimonials: await profile.listTestimonials(),
     currentFocus: await profile.listCurrentFocus(),
+    roadmap: (await roadmap.getRoadmap()).areas,
     media: await media().listMedia(),
   });
 
@@ -325,6 +383,7 @@ describe("seed service", () => {
     database = await createTemporaryDatabase(readDatabaseConfig(process.env));
     persistence = createPersistence(database.config);
     profile = createProfileService(persistence.profile);
+    roadmap = createRoadmapService(persistence.roadmap);
     seedFolder = await mkdtemp(join(tmpdir(), "sebela-seed-"));
     storageFolder = await mkdtemp(join(tmpdir(), "sebela-seed-storage-"));
     opened = openStorage({
@@ -426,6 +485,51 @@ describe("seed service", () => {
       expect(await filesBelow(storageFolder)).toHaveLength(5);
     });
 
+    it("creates the roadmap hierarchy in order with its topic links and derived progress", async () => {
+      await load(fixture());
+
+      const tree = await roadmap.getRoadmap();
+      expect(
+        tree.areas.map((area) => ({
+          slug: area.slug,
+          modules: area.modules.map((module) => ({
+            slug: module.slug,
+            resources: module.resources.map((resource) => [
+              resource.slug,
+              resource.status,
+              resource.estimatedMinutes,
+              resource.topics.map((topic) => topic.slug),
+            ]),
+          })),
+        })),
+      ).toEqual([
+        {
+          slug: "foundations",
+          modules: [
+            {
+              slug: "prompting",
+              resources: [
+                ["prompting-guide", "completed", 90, ["agents"]],
+                ["prompting-drills", "skipped", null, []],
+              ],
+            },
+            {
+              slug: "retrieval-basics",
+              resources: [["vector-talk", "in-progress", 45, ["rag", "agents"]]],
+            },
+          ],
+        },
+        { slug: "practice", modules: [{ slug: "shipping", resources: [] }] },
+      ]);
+      expect(tree.areas[0]?.modules[0]?.progress).toMatchObject({
+        completed: 1,
+        total: 2,
+        status: "completed",
+        completedAt: "2025-01-05T18:00:00.000Z",
+      });
+      expect(tree.summary).toMatchObject({ areaCount: 2, moduleCount: 3, resourceCount: 3 });
+    });
+
     it("accepts a folder given as a file URL", async () => {
       const folder = await writeSeed(await mkdtemp(join(seedFolder, "url-")), {
         "topics.json": [{ slug: "agents", name: "Agents", position: 0 }],
@@ -490,6 +594,70 @@ describe("seed service", () => {
       expect(after.projects).toHaveLength(2);
       expect(after.services[0]?.evidence).toHaveLength(3);
       expect(withoutUpdatedAt(after.topics)).toEqual(withoutUpdatedAt(before.topics));
+    });
+
+    it("moves a roadmap module and resource and relinks topics without duplicating them", async () => {
+      await load(fixture());
+      const before = await roadmap.getResource("vector-talk");
+      const changed = fixture();
+      const [prompting, retrieval, shipping] = changed["roadmap-modules.json"] as Record<
+        string,
+        unknown
+      >[];
+      changed["roadmap-modules.json"] = [
+        prompting,
+        { ...retrieval, area: "practice", position: 1 },
+        shipping,
+      ];
+      const [guide, drills, talk] = changed["roadmap-resources.json"] as Record<string, unknown>[];
+      changed["roadmap-resources.json"] = [
+        guide,
+        drills,
+        { ...talk, module: "shipping", topics: ["agents"] },
+      ];
+
+      await expect(load(changed)).resolves.toMatchObject({
+        records: {
+          roadmapAreas: { created: 0, updated: 2 },
+          roadmapModules: { created: 0, updated: 3 },
+          roadmapResources: { created: 0, updated: 3 },
+        },
+      });
+
+      expect(await roadmap.getModule("retrieval-basics")).toMatchObject({ area: "practice" });
+      const after = await roadmap.getResource("vector-talk");
+      expect(after).toMatchObject({ id: before.id, module: "shipping" });
+      expect(after.topics.map((topic) => topic.slug)).toEqual(["agents"]);
+      const tree = await roadmap.getRoadmap();
+      expect(tree.summary).toMatchObject({ areaCount: 2, moduleCount: 3, resourceCount: 3 });
+      expect(tree.areas.map((area) => area.modules.map((module) => module.slug))).toEqual([
+        ["prompting"],
+        ["shipping", "retrieval-basics"],
+      ]);
+    });
+
+    it("resolves roadmap parents and topics that only the database holds", async () => {
+      await load(fixture());
+
+      const report = await load({
+        "roadmap-resources.json": [
+          {
+            slug: "shipping-checklist",
+            module: "shipping",
+            name: "A fictional checklist",
+            type: "text",
+            position: 0,
+            topics: ["rag"],
+          },
+        ],
+      });
+
+      expect(report.records.roadmapResources).toEqual({ created: 1, updated: 0 });
+      await expect(roadmap.getResource("shipping-checklist")).resolves.toMatchObject({
+        module: "shipping",
+        status: "planned",
+        estimatedMinutes: null,
+      });
     });
 
     it("replaces a changed author photo and clears a removed one", async () => {
@@ -637,6 +805,22 @@ describe("seed service", () => {
       expect(await filesBelow(storageFolder)).toEqual([]);
     });
 
+    it("treats a roadmap with only an area as not empty", async () => {
+      await roadmap.createArea({
+        slug: "hand-made",
+        name: "Hand made",
+        description: null,
+        weight: 10,
+        position: 0,
+      });
+      const before = await snapshot();
+
+      await expect(loadIntoEmpty(fixture())).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
+      expect(await filesBelow(storageFolder)).toEqual([]);
+    });
+
     it("treats a media library with a file as not empty", async () => {
       await media().uploadMedia({
         bytes: samplePng({ width: 8, height: 8 }),
@@ -747,6 +931,53 @@ describe("seed service", () => {
       await expectEmpty();
     });
 
+    it("rejects a reserved roadmap area slug and an invalid resource before any write", async () => {
+      const files = fixture();
+      const [foundations, practice] = files["roadmap-areas.json"] as Record<string, unknown>[];
+      files["roadmap-areas.json"] = [foundations, { ...practice, slug: "bookshelf" }];
+      const [guide, drills, talk] = files["roadmap-resources.json"] as Record<string, unknown>[];
+      files["roadmap-resources.json"] = [
+        { ...guide, finishedAt: "2024-12-31T00:00:00.000Z" },
+        { ...drills, status: "abandoned" },
+        talk,
+      ];
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path).sort()).toEqual([
+        "roadmap-areas.json[1].slug",
+        "roadmap-resources.json[0].finishedAt",
+        "roadmap-resources.json[1].status",
+      ]);
+      await expectEmpty();
+    });
+
+    it("rejects roadmap references that neither the seed nor the database has", async () => {
+      const files = fixture();
+      const [prompting, retrieval] = files["roadmap-modules.json"] as Record<string, unknown>[];
+      files["roadmap-modules.json"] = [
+        prompting,
+        retrieval,
+        { ...retrieval, slug: "x", area: "ghost-area" },
+      ];
+      const [guide, drills] = files["roadmap-resources.json"] as Record<string, unknown>[];
+      files["roadmap-resources.json"] = [
+        { ...guide, topics: ["agents", "ghost-topic"] },
+        { ...drills, module: "ghost-module" },
+      ];
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path).sort()).toEqual([
+        "roadmap-modules.json[2].area",
+        "roadmap-resources.json[0].topics[1]",
+        "roadmap-resources.json[1].module",
+      ]);
+      await expectEmpty();
+    });
+
     it("refuses a missing seed folder without naming it", async () => {
       const missing = join(seedFolder, "does-not-exist");
       const error = await refusal(seed().loadSeed(missing));
@@ -787,14 +1018,15 @@ describe("seed service", () => {
   });
 
   describe("a failure while writing", () => {
-    it("rolls every write back and removes the files it stored", async () => {
-      const failing: Pick<Persistence, "profile" | "transaction"> = {
+    it("rolls every write back, the roadmap last, and removes the files it stored", async () => {
+      const failing: Pick<Persistence, "profile" | "roadmap" | "transaction"> = {
         profile: persistence.profile,
+        roadmap: persistence.roadmap,
         transaction: (work) =>
-          persistence.transaction((profileInTransaction) =>
-            work({
-              ...profileInTransaction,
-              createCurrentFocus: () => Promise.reject(new Error("A fictional failure.")),
+          persistence.transaction((profileInTransaction, roadmapInTransaction) =>
+            work(profileInTransaction, {
+              ...roadmapInTransaction,
+              createRoadmapResource: () => Promise.reject(new Error("A fictional failure.")),
             }),
           ),
       };
@@ -811,13 +1043,14 @@ describe("seed service", () => {
       const before = await snapshot();
       const changed = fixture();
       changed["files/cover.png"] = otherCover;
-      const failing: Pick<Persistence, "profile" | "transaction"> = {
+      const failing: Pick<Persistence, "profile" | "roadmap" | "transaction"> = {
         profile: persistence.profile,
+        roadmap: persistence.roadmap,
         transaction: (work) =>
-          persistence.transaction((profileInTransaction) =>
-            work({
-              ...profileInTransaction,
-              updateCurrentFocus: () => Promise.reject(new Error("A fictional failure.")),
+          persistence.transaction((profileInTransaction, roadmapInTransaction) =>
+            work(profileInTransaction, {
+              ...roadmapInTransaction,
+              updateRoadmapResource: () => Promise.reject(new Error("A fictional failure.")),
             }),
           ),
       };
