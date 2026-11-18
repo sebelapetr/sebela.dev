@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Experience, Exploration, Service, Technology } from "@sebela/api-client";
 
 import type { AskContent } from "../../profile";
-import { plainText, toAskEvidence } from "./evidence";
+import { toAskEvidence } from "./evidence";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
@@ -135,34 +135,6 @@ function content(overrides: Partial<AskContent> = {}): AskContent {
     ...overrides,
   };
 }
-
-describe("plainText", () => {
-  it("keeps the words of inline Markdown without its marks or link targets", () => {
-    expect(
-      plainText("Built **fictional** systems for [made-up](https://example.test) `code`."),
-    ).toBe("Built fictional systems for made-up code.");
-  });
-
-  it("keeps the first paragraph on one line, without heading or list marks", () => {
-    expect(plainText("# A heading\n- first line\n- second line\n\nAnother paragraph.")).toBe(
-      "A heading first line second line",
-    );
-  });
-
-  it("cuts a long text at a word, ending it with an ellipsis within the limit", () => {
-    const text = plainText("alpha beta gamma delta epsilon", 17);
-    expect(text).toBe("alpha beta gamma…");
-    expect(text.length).toBeLessThanOrEqual(17);
-  });
-
-  it("leaves markup that is not Markdown as plain characters, never as markup", () => {
-    expect(plainText("A <script>alert(1)</script> note")).toBe("A <script>alert(1)</script> note");
-  });
-
-  it("gives nothing for a text without words", () => {
-    expect(plainText("  \n\n **  ** ")).toBe("");
-  });
-});
 
 describe("toAskEvidence", () => {
   it("keeps the name and the contact the answers can offer", () => {

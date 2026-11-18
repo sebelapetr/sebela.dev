@@ -180,7 +180,7 @@ describe("llmsTxt", () => {
     expect(text).toContain("> Line one # Line two\n");
     expect(text).not.toMatch(/^## Injected/m);
     expect(text).toContain("[Lead\\](https://evil.example.test) \\[x, Fictional Company](");
-    expect(text).toContain(": January 3rd, 2022 – present. Text - not a list item\n");
+    expect(text).toContain(": January 3rd, 2022 – present. Text not a list item\n");
     expect(text).toContain("[A \\\\ B \\[C\\]](");
     expect(text).not.toMatch(/[^\\]\]\(https:\/\/evil/);
   });

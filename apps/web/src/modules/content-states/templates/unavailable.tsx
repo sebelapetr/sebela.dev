@@ -14,6 +14,8 @@ export function UnavailableTemplate({ retry }: { readonly retry: () => void }) {
     <>
       {/* The page's own metadata failed with its content; React hoists this into the head. */}
       <title>Content unavailable</title>
+      {/* A temporary failure is never indexed in place of the page. */}
+      <meta name="robots" content="noindex" />
       <StatePage
         label="Content unavailable"
         heading="This page could not be loaded right now."

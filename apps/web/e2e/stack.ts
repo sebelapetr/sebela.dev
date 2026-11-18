@@ -112,14 +112,21 @@ export async function startApi(fixture: Fixture, port?: number): Promise<Started
   return start(apiCommand(fixture), { API_PORT: String(port) }, origin(host, port), "/health");
 }
 
-/** Serves the built website on a free port, reading the API at `apiBaseUrl`. */
-export async function startWebsite(apiBaseUrl: string): Promise<Started> {
+/**
+ * Serves the built website on a free port, reading the API at `apiBaseUrl`. Its canonical origin is
+ * its own address unless `siteOrigin` names another one.
+ */
+export async function startWebsite(
+  apiBaseUrl: string,
+  { siteOrigin }: { readonly siteOrigin?: string } = {},
+): Promise<Started> {
   const host = required("WEB_HOST");
   const port = await freePort(host);
+  const url = origin(host, port);
   return start(
     webCommand(),
-    { WEB_PORT: String(port), WEB_API_BASE_URL: apiBaseUrl },
-    origin(host, port),
+    { WEB_PORT: String(port), WEB_API_BASE_URL: apiBaseUrl, WEB_SITE_ORIGIN: siteOrigin ?? url },
+    url,
     "/favicon.ico",
   );
 }
