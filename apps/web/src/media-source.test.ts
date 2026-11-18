@@ -107,6 +107,31 @@ describe("imageSettings", () => {
     expect(matchRemotePattern(pattern, new URL(FILE))).toBe(true);
   });
 
+  it("matches, with Next's own matcher, only the configured address host", () => {
+    const base = "http://10.0.0.5/v1/media/files/test";
+    const [pattern] = imageSettings({ WEB_MEDIA_BASE_URL: base }).remotePatterns ?? [];
+    if (pattern === undefined || pattern instanceof URL) throw new Error("No remote pattern");
+    const name = "0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10.png";
+    const candidates = [
+      `${base}/${name}`,
+      `http://10.0.0.6/v1/media/files/test/${name}`,
+      `http://10.0.0.50/v1/media/files/test/${name}`,
+      `http://110.0.0.5/v1/media/files/test/${name}`,
+      `http://a/v1/media/files/test/${name}`,
+      `http://f/v1/media/files/test/${name}`,
+    ];
+    for (const candidate of candidates) {
+      expect({ candidate, matched: matchRemotePattern(pattern, new URL(candidate)) }).toEqual({
+        candidate,
+        matched: isMediaUrl(candidate, base),
+      });
+    }
+    expect(matchRemotePattern(pattern, new URL(`${base}/${name}`))).toBe(true);
+    expect(matchRemotePattern(pattern, new URL(`http://a/v1/media/files/test/${name}`))).toBe(
+      false,
+    );
+  });
+
   it("allows no local image paths and follows no redirect", () => {
     const settings = imageSettings({ WEB_MEDIA_BASE_URL: CDN });
     expect(settings.localPatterns).toEqual([]);
@@ -116,16 +141,11 @@ describe("imageSettings", () => {
   it("refuses private addresses for a public media host", () => {
     expect(imageSettings({ WEB_MEDIA_BASE_URL: CDN }).dangerouslyAllowLocalIP).toBe(false);
     expect(imageSettings({ WEB_MEDIA_BASE_URL: BASE }).dangerouslyAllowLocalIP).toBe(false);
-    expect(
-      imageSettings({ WEB_MEDIA_BASE_URL: "http://[2001:db8::abcd]/v1/media/files/test" })
-        .dangerouslyAllowLocalIP,
-    ).toBe(false);
   });
 
   it.each([
     ["a private network address", "http://10.0.0.5/v1/media/files/test"],
     ["another private network address", "http://192.168.1.20/v1/media/files/test"],
-    ["a unique local IPv6 address", "http://[fdab::cdef]/v1/media/files/test"],
   ])("allows private addresses only when the base itself is %s", (_label, base) => {
     expect(imageSettings({ WEB_MEDIA_BASE_URL: base }).dangerouslyAllowLocalIP).toBe(true);
   });
@@ -135,6 +155,13 @@ describe("imageSettings", () => {
     ["invalid", "ftp://cdn.example.test/production"],
     ["the bare origin", "https://cdn.example.test"],
     ["with a query", "https://cdn.example.test/production?x=1"],
+    // A host is matched as a glob, so only plain names and IPv4 addresses are accepted.
+    ["a unique local IPv6 address", "http://[fdab::cdef]/v1/media/files/test"],
+    ["a public IPv6 address", "http://[2001:db8::abcd]/v1/media/files/test"],
+    ["a host with a star", "https://a*b.example.test/production"],
+    ["a host with an extended glob", "https://+(a).example.test/production"],
+    ["a host with braces", "https://{a,b}.example.test/production"],
+    ["a host with an exclamation mark", "https://a!b.example.test/production"],
   ])("lets the optimizer fetch nothing when the base is %s", (_label, value) => {
     const settings = imageSettings(value === undefined ? {} : { WEB_MEDIA_BASE_URL: value });
     expect(settings.remotePatterns).toEqual([]);
