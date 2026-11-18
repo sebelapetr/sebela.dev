@@ -4,6 +4,10 @@ import { defineConfig } from "drizzle-kit";
 // Generating needs no database connection; applying them is `pnpm --filter @sebela/db db:migrate`.
 export default defineConfig({
   dialect: "postgresql",
-  schema: ["./src/modules/profile/schema.ts", "./src/modules/api-keys/schema.ts"],
+  schema: [
+    "./src/modules/profile/schema.ts",
+    "./src/modules/roadmap/schema.ts",
+    "./src/modules/api-keys/schema.ts",
+  ],
   out: "./migrations",
 });

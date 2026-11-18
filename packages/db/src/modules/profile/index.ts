@@ -134,6 +134,13 @@ export type {
   UpdatePersonResult,
 } from "./person.js";
 
+// For persistence modules that link their records to the shared topic catalog: the table their
+// foreign keys reference, its record columns and the locked slug lookup that refuses repeated and
+// unknown topics by throwing `WriteRefused` inside the caller's transaction.
+export { topicColumns } from "./catalogs.js";
+export { type Executor, topicIds, WriteRefused } from "./relations.js";
+export { topics } from "./schema.js";
+
 /** Persistence operations of the profile domain. */
 export interface ProfilePersistence
   extends
