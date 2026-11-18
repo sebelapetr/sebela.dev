@@ -105,7 +105,8 @@ function Session({ session }: { readonly session: DiarySession }) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <p className="text-base font-medium wrap-anywhere">
           {resource.href === null ? (
-            <span>{resource.name}</span>
+            // As tall as a linked name, so every session keeps the same rhythm.
+            <span className="inline-flex min-h-11 items-center">{resource.name}</span>
           ) : (
             <a
               href={resource.href}
