@@ -277,6 +277,7 @@ const kinds: SeedKind[] = [
   "roadmapModules",
   "roadmapBooks",
   "roadmapResources",
+  "roadmapEvents",
   "roadmapDiary",
   "roadmapTimeEntries",
 ];
@@ -298,6 +299,7 @@ const fixtureCounts: Record<SeedKind, number> = {
   roadmapModules: 3,
   roadmapBooks: 0,
   roadmapResources: 3,
+  roadmapEvents: 0,
   roadmapDiary: 2,
   roadmapTimeEntries: 2,
 };
@@ -393,6 +395,7 @@ describe("seed service", () => {
     roadmap: (await roadmap.getRoadmap()).areas,
     diary: (await roadmap.getDiary()).days,
     books: await roadmap.listBooks(),
+    events: await roadmap.listEvents(),
     media: await media().listMedia(),
   });
 
@@ -1037,6 +1040,171 @@ describe("seed service", () => {
 
       expect(await snapshot()).toEqual(before);
       expect(await filesBelow(storageFolder)).toEqual([]);
+    });
+  });
+
+  describe("the attended events", () => {
+    /**
+     * The fixture with two fictional events, one across the turn of a year and one online on a
+     * single day, and attendance logged on the first.
+     */
+    const withEvents = (): SeedFiles => {
+      const files = fixture();
+      files["roadmap-events.json"] = [
+        {
+          slug: "harbour-summit",
+          name: "Fictional Harbour Summit",
+          kind: "conference",
+          organizer: "Harbour Guild",
+          startsOn: "2025-12-30",
+          endsOn: "2026-01-02",
+          place: "Harbour City",
+          link: "https://summit.example.test/",
+          takeaways: "A **fictional** takeaway.",
+          topics: ["rag", "agents"],
+        },
+        {
+          slug: "agents-evening",
+          name: "A fictional agents evening",
+          kind: "meetup",
+          startsOn: "2025-02-10",
+          endsOn: "2025-02-10",
+          online: true,
+        },
+      ];
+      files["roadmap-time-entries.json"] = [
+        ...(files["roadmap-time-entries.json"] as unknown[]),
+        {
+          event: "harbour-summit",
+          startedAt: "2025-12-31T09:00:00+01:00",
+          endedAt: "2025-12-31T10:30:00+01:00",
+        },
+      ];
+      return files;
+    };
+
+    it("creates events with their topics, their days in the diary and the attendance", async () => {
+      await expect(load(withEvents())).resolves.toMatchObject({
+        records: {
+          roadmapEvents: { created: 2, updated: 0 },
+          roadmapTimeEntries: { created: 3, updated: 0 },
+        },
+      });
+
+      const events = await roadmap.listEvents();
+      expect(events.map(({ slug }) => slug)).toEqual(["harbour-summit", "agents-evening"]);
+      expect(events[0]).toMatchObject({
+        organizer: "Harbour Guild",
+        startsOn: "2025-12-30",
+        endsOn: "2026-01-02",
+        online: false,
+        attendanceSeconds: 5400,
+      });
+      expect(events[0]?.topics.map(({ slug }) => slug)).toEqual(["rag", "agents"]);
+      expect(events[1]).toMatchObject({ online: true, place: null, attendanceSeconds: 0 });
+
+      const days = (await roadmap.getDiary()).days;
+      const eventDays = days
+        .filter((day) => day.events.length > 0)
+        .map((day) => [day.date, day.events.map(({ slug }) => slug)]);
+      expect(eventDays).toEqual([
+        ["2026-01-02", ["harbour-summit"]],
+        ["2026-01-01", ["harbour-summit"]],
+        ["2025-12-31", ["harbour-summit"]],
+        ["2025-12-30", ["harbour-summit"]],
+        ["2025-02-10", ["agents-evening"]],
+      ]);
+    });
+
+    it("keeps every event, topic link and attendance session of an identical rerun", async () => {
+      await load(withEvents());
+      const before = await snapshot();
+
+      await expect(load(withEvents())).resolves.toMatchObject({
+        records: {
+          roadmapEvents: { created: 0, updated: 2 },
+          roadmapTimeEntries: { created: 0, updated: 3 },
+        },
+      });
+
+      expect(withoutUpdatedAt(await snapshot())).toEqual(withoutUpdatedAt(before));
+    });
+
+    it("overwrites an edited event with the seed's values", async () => {
+      await load(withEvents());
+      await roadmap.updateEvent("agents-evening", { name: "Renamed by hand", topics: ["rag"] });
+
+      await load(withEvents());
+
+      await expect(roadmap.getEvent("agents-evening")).resolves.toMatchObject({
+        name: "A fictional agents evening",
+        topics: [],
+      });
+    });
+
+    it("rejects event and topic references that neither the seed nor the database has", async () => {
+      const files = withEvents();
+      const [summit, evening] = files["roadmap-events.json"] as Record<string, unknown>[];
+      files["roadmap-events.json"] = [{ ...summit, topics: ["rag", "ghost-topic"] }, evening];
+      const sessions = files["roadmap-time-entries.json"] as Record<string, unknown>[];
+      files["roadmap-time-entries.json"] = sessions.map((session) =>
+        session["event"] === "harbour-summit" ? { ...session, event: "ghost-event" } : session,
+      );
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path)).toEqual([
+        "roadmap-events.json[0].topics[1]",
+        "roadmap-time-entries.json[2].event",
+      ]);
+      await expectEmpty();
+    });
+
+    it("refuses attendance outside its event at its location and writes nothing", async () => {
+      const files = withEvents();
+      const sessions = files["roadmap-time-entries.json"] as Record<string, unknown>[];
+      files["roadmap-time-entries.json"] = sessions.map((session) =>
+        session["event"] === "harbour-summit"
+          ? {
+              ...session,
+              startedAt: "2026-01-03T09:00:00+01:00",
+              endedAt: "2026-01-03T10:00:00+01:00",
+            }
+          : session,
+      );
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path)).toEqual([
+        "roadmap-time-entries.json[2].startedAt",
+      ]);
+      await expectEmpty();
+    });
+
+    it("treats a roadmap with only an event as not empty", async () => {
+      await roadmap.createEvent({
+        slug: "hand-noted",
+        name: "A fictional hand-noted event",
+        kind: "lecture",
+        organizer: null,
+        startsOn: "2025-03-01",
+        endsOn: "2025-03-01",
+        place: null,
+        online: false,
+        link: null,
+        takeaways: null,
+        topics: [],
+      });
+      const before = await snapshot();
+      const folder = await mkdtemp(join(seedFolder, "empty-events-"));
+
+      await expect(
+        seed().loadSeedIntoEmpty(await writeSeed(folder, withEvents())),
+      ).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
     });
   });
 

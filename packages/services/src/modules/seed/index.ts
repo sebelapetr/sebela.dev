@@ -34,6 +34,7 @@ export type SeedKind =
   | "roadmapModules"
   | "roadmapBooks"
   | "roadmapResources"
+  | "roadmapEvents"
   | "roadmapDiary"
   | "roadmapTimeEntries";
 
@@ -118,6 +119,7 @@ const emptyCounts = (): Counts => ({
   roadmapModules: { created: 0, updated: 0 },
   roadmapBooks: { created: 0, updated: 0 },
   roadmapResources: { created: 0, updated: 0 },
+  roadmapEvents: { created: 0, updated: 0 },
   roadmapDiary: { created: 0, updated: 0 },
   roadmapTimeEntries: { created: 0, updated: 0 },
 });
