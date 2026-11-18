@@ -165,6 +165,9 @@ services:
       WEB_MEDIA_READ_BASE_URL: ${WEB_MEDIA_READ_BASE_URL:-http://api:8080/v1/media/files/${STORAGE_ENVIRONMENT:-}/${STORAGE_WORKTREE:-}}
       WEB_INVALIDATION_SECRET: ${WEB_INVALIDATION_SECRET:-}
       WEB_CONTENT_REVALIDATE_SECONDS: ${WEB_CONTENT_REVALIDATE_SECONDS:-}
+      # Optional analytics (apps/web/AGENTS.md, "Configuration"): both empty means none.
+      WEB_ANALYTICS_SCRIPT_URL: ${WEB_ANALYTICS_SCRIPT_URL:-}
+      WEB_ANALYTICS_WEBSITE_ID: ${WEB_ANALYTICS_WEBSITE_ID:-}
     ports:
       - "${WEB_HOST:-}:${WEB_PORT:-}:8080"
     depends_on:
