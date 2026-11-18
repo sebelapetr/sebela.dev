@@ -9,6 +9,9 @@ Canonical domain terms for this repository. Use these names in code, schemas, AP
 | **Module**                 | An ordered group of resources within one area of the AI Roadmap.                                                                       | A code module when talking about the roadmap                       |
 | **Resource**               | One thing to learn from in a roadmap module (a video, book, link, project and so on), with a status and an optional estimate.          | “Lesson”, “item”                                                   |
 | **Roadmap progress**       | Completed resources over all resources of an area, module or the whole roadmap, derived on every read and never stored.                | Logged time; estimates or weight as completed work                 |
+| **Learning diary**         | The public record of what was studied when: diary days with notes and time entries.                                                    | “Journal”, “log” as a page name                                    |
+| **Diary day**              | One Europe/Prague calendar date of the learning diary, with optional notes and its time entries.                                       | A UTC date                                                         |
+| **Time entry**             | One studied interval on a resource within one diary day; its duration is derived from its endpoints.                                   | “Work log”; a stored duration                                      |
 | **Profile**                | The structured public content about the person and their professional work, stored under the `profile` schema.                         | “User profile” when referring to this content model                |
 | **Experience**             | A period in a professional role at an organization; it belongs on the career timeline.                                                 | “Job” as the entity name                                           |
 | **Project**                | Work delivered within an experience and described through its problem, contribution and result.                                        | “Exploration” for delivered work                                   |
@@ -42,7 +45,7 @@ Canonical domain terms for this repository. Use these names in code, schemas, AP
 - An **Experience** contains delivered **Projects**; a **Case study** may explain one Project in depth.
 - An **Exploration** is outside the Experience timeline and is never presented as delivered work. It can support a **Service** as evidence while retaining its status.
 - **Topics** connect Profile content to the AI Engineering Roadmap; **Technologies** describe tools and languages.
-- The AI Roadmap is ordered **Areas** → **Modules** → **Resources**; a resource links **Topics**. **Roadmap progress** comes only from resource statuses.
+- The AI Roadmap is ordered **Areas** → **Modules** → **Resources**; a resource links **Topics**. **Roadmap progress** comes only from resource statuses. **Time entries** log time on **Resources** and are grouped into **Diary days**; logged time is not progress.
 - The **CV page** and **CV PDF** are separate outputs with separate maintenance paths.
 
 ## Updating this glossary

@@ -80,7 +80,7 @@ When a project is a product built by a team, describe the public product and the
 
 ## Entities of the AI roadmap
 
-Delivered in phase 4 (issue #109): schema `ai_roadmap` in `packages/db`, contracts in `packages/contracts`, the routes in `apps/api/AGENTS.md`. Areas, modules and resources are public content, read as one tree by `GET /v1/roadmap` and written only through private routes. Issue #110 adds the reads of one area or module at its nested address and the current learning (the areas and modules whose derived status is `in-progress`, which the homepage's Exploring shows); both are cut from the same tree with the same progress rules. A module read under an area it does not belong to does not exist.
+Delivered in phase 4 (issue #109): schema `ai_roadmap` in `packages/db`, contracts in `packages/contracts`, the routes in `apps/api/AGENTS.md`. Areas, modules and resources are public content, read as one tree by `GET /v1/roadmap` and written only through private routes. Issue #110 adds the reads of one area or module at its nested address and the current learning (the areas and modules whose derived status is `in-progress`, which the homepage's Exploring shows); both are cut from the same tree with the same progress rules. A module read under an area it does not belong to does not exist. Issue #111 adds the learning diary below.
 
 | Entity   | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -102,12 +102,28 @@ Progress is derived from the resource statuses on every read and never stored ([
 
 Estimates and area weight are planned effort. They never stand in for logged time or completed work.
 
+### Learning diary
+
+The learning diary records what was studied when ([decision 0020](decisions/0020-learning-diary-prague-days.md)). It is public content like the rest of the roadmap, read through `GET /v1/roadmap/diary` and one day at a time, and written only through private routes (`apps/api/AGENTS.md`).
+
+| Entity     | Meaning                                                                                                                                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diary day  | One Europe/Prague calendar date with optional Markdown notes; at most one per date. A day exists in the diary when it has notes or time entries. Deleting the notes keeps its time entries.               |
+| Time entry | One studied interval on one roadmap resource, with absolute start and end instants in whole seconds, the end after the start, lying within one diary day. A resource with time entries cannot be deleted. |
+
+- **Prague days.** A time entry belongs to the Prague calendar date of its start, whatever the server's or browser's timezone. Inputs carry `Z` or an offset, so a repeated local hour in autumn is unambiguous. The original application grouped by UTC date; this is an intended correction, so an evening session after 23:00 or 22:00 Prague time can land on a different day than it did there.
+- **Splitting.** A session across Prague midnight is split into one time entry per affected day without changing its elapsed time, and is written whole or not at all; 23:30–00:30 without an offset change gives 30 minutes to each day. An edit follows the same rule and changes both the old and the new days; notes stay.
+- **No overlap.** No two time entries overlap, whatever their resources; adjacent intervals are allowed. The database refuses an overlap at the write itself, so of two concurrent overlapping writes one loses. A later kind of target (Events) extends the same table and constraint instead of adding a separate check.
+- **Durations.** A duration is the actual elapsed time between the endpoints, so a day with a daylight-saving change counts the real hours. Durations and a day's total are derived on every read, summed before any display rounding, and never stored.
+- **Seed identity.** A diary day is identified by its date, a seed session by its resource and absolute endpoints; a rerun adds nothing (`packages/db/seed/README.md`).
+- Statistics over logged time and the diary-entry skill belong to later issues.
+
 ## Access
 
 Profile and AI Roadmap records are public content shown on the site, without per-record visibility flags. This does not make authentication, audit, visitor conversations or ingest staging public. Extra documents may enrich public answers after approval without becoming website pages or public downloads.
 
 - The API has **public** routes (read, no authentication) and **private** routes (protected by an API key). Every write is a private route.
-- A per-record private flag is added only when a real use case appears — for example personal notes in the learning diary — and only where it is needed.
+- A per-record private flag is added only when a real use case appears and only where it is needed; the learning diary's notes are public, like every roadmap record.
 - Do not put confidential information in public profile/roadmap records. Knowledge staging and source metadata are separate private operational data; only approved passage projections enter public search. Source originals stay in private Bunny/local storage.
 - API facts take precedence over extra documents. Extra material supplements explanations and context; identified contradictions are held for owner resolution.
 - Extra knowledge is limited to owner-supplied Markdown, TXT and text-layer PDF in the first version. Local sensitivity checks and owner approval of an exact version precede public indexing; no external websites are crawled.
