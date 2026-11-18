@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { apiCommand, origin, required, webCommand } from "./e2e/stack";
+import { apiCommand, mediaBaseUrl, origin, required, webCommand } from "./e2e/stack";
 
 // The browser tests run the built website (`pnpm build` first) against the API's end-to-end
 // server: a real API on a temporary database of its own, seeded from a fictional fixture. Both
@@ -27,7 +27,11 @@ export default defineConfig({
     {
       ...webCommand(),
       url: webUrl,
-      env: { WEB_API_BASE_URL: apiUrl, WEB_SITE_ORIGIN: webUrl },
+      env: {
+        WEB_API_BASE_URL: apiUrl,
+        WEB_SITE_ORIGIN: webUrl,
+        WEB_MEDIA_BASE_URL: mediaBaseUrl(apiUrl),
+      },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
     },

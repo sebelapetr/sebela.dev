@@ -51,7 +51,15 @@ test.describe("homepage read from the API", () => {
 
     const photo = page.getByRole("img", { name: /grey placeholder portrait/u });
     await expect(photo).toBeVisible();
-    expect(await photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(480);
+    // Served through the image optimizer (e2e/media.spec.ts checks the sources it chooses).
+    await expect
+      .poll(() =>
+        photo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0),
+      )
+      .toBe(true);
+    expect(await photo.evaluate((image: HTMLImageElement) => image.currentSrc)).toContain(
+      "/_next/image?url=",
+    );
 
     await expect(page.getByRole("link", { name: "Work with me" })).toHaveAttribute(
       "href",

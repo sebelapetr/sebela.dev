@@ -503,7 +503,7 @@ test("a generated environment file lets the website optimise only its worktree's
   const address = new URL(settings.WEB_MEDIA_BASE_URL);
   assert.equal(
     address.href,
-    `${settings.STORAGE_PUBLIC_BASE_URL}/${settings.STORAGE_ENVIRONMENT}/${settings.STORAGE_WORKTREE}`,
+    `${settings.STORAGE_PUBLIC_BASE_URL}/${example.STORAGE_ENVIRONMENT}/${settings.STORAGE_WORKTREE}`,
   );
   assert.equal(address.hostname, example.API_HOST);
   assert.equal(Number(address.port), Number(settings.API_PORT));

@@ -35,7 +35,7 @@ describe("colorTokens", () => {
     const tokens = Object.entries(colorTokens[theme]);
     expect(tokens.length).toBeGreaterThan(0);
     for (const [name, value] of tokens) {
-      expect({ name, value }).toEqual({ name, value: properties.get(kebab(name)) });
+      expect(properties.get(kebab(name)), name).toBe(value);
     }
   });
 });

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { matchRemotePattern } from "next/dist/shared/lib/match-remote-pattern";
+
 import { imageSettings, isMediaUrl } from "./media-source";
 
 // Loopback hosts and explicit ports come from the environment, so they are
@@ -40,6 +42,8 @@ describe("isMediaUrl", () => {
     ["an encoded backslash", `${BASE}/..%5c..%5cperson`],
     ["a backslash", `${BASE}\\..\\a.png`],
     ["a nested folder", `${BASE}/nested/a.png`],
+    ["a file that is not an image", `${BASE}/0b6f4f43-61a4-4c1e-8f0e-6f1c1c5d2a10.pdf`],
+    ["a name of dots", `${BASE}/..png`],
     ["a query", `${FILE}?w=1`],
     ["an empty query", `${FILE}?`],
     ["a fragment", `${FILE}#x`],
@@ -60,7 +64,7 @@ describe("imageSettings", () => {
         protocol: "https",
         hostname: "cdn.example.test",
         port: "",
-        pathname: "/production/**",
+        pathname: "/production/+([A-Za-z0-9-]).@(png|jpg|webp)",
         search: "",
       },
     ]);
@@ -72,10 +76,35 @@ describe("imageSettings", () => {
         protocol: "http",
         hostname: "api.example.test",
         port: "",
-        pathname: "/v1/media/files/development/feat-55/**",
+        pathname: "/v1/media/files/development/feat-55/+([A-Za-z0-9-]).@(png|jpg|webp)",
         search: "",
       },
     ]);
+  });
+
+  it("matches, with Next's own matcher, exactly the files isMediaUrl accepts", () => {
+    const [pattern] = imageSettings({ WEB_MEDIA_BASE_URL: BASE }).remotePatterns ?? [];
+    if (pattern === undefined || pattern instanceof URL) throw new Error("No remote pattern");
+    const candidates = [
+      FILE,
+      `${BASE}/a.jpg`,
+      `${BASE}/a.webp`,
+      `${BASE}/a.pdf`,
+      `${BASE}/..%2f..%2fperson.png`,
+      `${BASE}/%2e%2e.png`,
+      `${BASE}/nested/a.png`,
+      `${BASE}-other/a.png`,
+      `${FILE}?w=1`,
+      `${API}/v1/media/files/development/a.png`,
+      `${API}/v1/person`,
+    ];
+    for (const candidate of candidates) {
+      expect({ candidate, matched: matchRemotePattern(pattern, new URL(candidate)) }).toEqual({
+        candidate,
+        matched: isMediaUrl(candidate, BASE),
+      });
+    }
+    expect(matchRemotePattern(pattern, new URL(FILE))).toBe(true);
   });
 
   it("allows no local image paths and follows no redirect", () => {
@@ -87,11 +116,16 @@ describe("imageSettings", () => {
   it("refuses private addresses for a public media host", () => {
     expect(imageSettings({ WEB_MEDIA_BASE_URL: CDN }).dangerouslyAllowLocalIP).toBe(false);
     expect(imageSettings({ WEB_MEDIA_BASE_URL: BASE }).dangerouslyAllowLocalIP).toBe(false);
+    expect(
+      imageSettings({ WEB_MEDIA_BASE_URL: "http://[2001:db8::abcd]/v1/media/files/test" })
+        .dangerouslyAllowLocalIP,
+    ).toBe(false);
   });
 
   it.each([
     ["a private network address", "http://10.0.0.5/v1/media/files/test"],
     ["another private network address", "http://192.168.1.20/v1/media/files/test"],
+    ["a unique local IPv6 address", "http://[fdab::cdef]/v1/media/files/test"],
   ])("allows private addresses only when the base itself is %s", (_label, base) => {
     expect(imageSettings({ WEB_MEDIA_BASE_URL: base }).dangerouslyAllowLocalIP).toBe(true);
   });

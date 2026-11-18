@@ -56,8 +56,8 @@ export type HomepageResult =
 export interface LoadHomepageOptions {
   /** How long each request may take; 5 seconds by default. */
   readonly timeoutMs?: number;
-  /** The configured media files' base address; images outside it are not shown. */
-  readonly mediaBaseUrl?: string;
+  /** The configured media base (`WEB_MEDIA_BASE_URL`); an image outside it is not shown. */
+  readonly mediaBaseUrl: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -72,7 +72,7 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  */
 export async function loadHomepage(
   client: ApiClient,
-  options: LoadHomepageOptions = {},
+  options: LoadHomepageOptions,
 ): Promise<HomepageResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
@@ -102,7 +102,9 @@ export async function loadHomepage(
     }
 
     const [photo, cvPdf] = await Promise.all([
-      person.photoId === null ? null : readImage(client, person.photoId, init()),
+      person.photoId === null
+        ? null
+        : readImage(client, person.photoId, init(), options.mediaBaseUrl),
       person.cvPdfId === null ? null : readCvPdf(client, person.cvPdfId, init()),
     ]);
     return {

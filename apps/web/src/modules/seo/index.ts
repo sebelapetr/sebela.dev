@@ -1,5 +1,6 @@
 // The seo module: what search engines and language models read about the profile — each indexed
-// page's metadata, the homepage's structured data, the sitemap, robots.txt and llms.txt — on the
+// page's metadata and Open Graph preview image, the homepage's structured data, the sitemap,
+// robots.txt and llms.txt — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
 // not published answers 404 and one that cannot be read answers 503, never an empty document.
 // Server-only.
@@ -9,7 +10,9 @@ import type { Metadata } from "next";
 
 import { getHomepage } from "../profile";
 import { robotsTxt, sitemapXml } from "./data/indexing";
+import { openGraphImage } from "./components/open-graph-image";
 import { llmsTxt } from "./data/llms-txt";
+import { openGraphCard } from "./data/open-graph-card";
 import {
   pageMetadata as buildPageMetadata,
   type IndexedPage,
@@ -22,9 +25,11 @@ export { ProfileStructuredData } from "./components/profile-structured-data";
 
 export type { IndexedPage, PageFacts } from "./data/page-metadata";
 
+export { isPreviewPage } from "./data/open-graph-card";
+
 /**
  * An indexed page's metadata on the canonical origin: title, description, canonical address and
- * Open Graph basics, from the facts the page read.
+ * Open Graph basics with the page's preview image, from the facts the page read.
  */
 export function pageMetadata(page: IndexedPage, facts: PageFacts): Metadata {
   return buildPageMetadata(siteOrigin(), page, facts);
@@ -49,4 +54,17 @@ export async function llmsTxtResponse(): Promise<Response> {
   return profileTextResponse(result, "text/plain; charset=utf-8", (profile) =>
     llmsTxt(origin, profile),
   );
+}
+
+/**
+ * An indexed page's Open Graph preview image, a 1200 × 630 PNG: the person's name and headline
+ * from the profile, or the site's own card while the profile is missing or cannot be read, so a
+ * shared link always has a preview. The profile's card is revalidated on every use (`no-cache`)
+ * so an edited profile is never shown stale; the fallback is never stored.
+ */
+export async function openGraphImageResponse(page: IndexedPage): Promise<Response> {
+  const result = await getHomepage();
+  const facts = result.status === "ready" ? result.profile : null;
+  const card = openGraphCard(siteOrigin(), page, facts);
+  return openGraphImage(card, facts === null ? "no-store" : "no-cache");
 }

@@ -38,6 +38,11 @@ function apiBaseUrl(): string {
   return readWebConfig(process.env).apiBaseUrl;
 }
 
+/** The media base the website shows images from, from the environment validated on every call. */
+function mediaBaseUrl(): string {
+  return readWebConfig(process.env).mediaBaseUrl;
+}
+
 /** The API client, created on first use after the environment is validated once per process. */
 function apiClient(): ApiClient {
   client ??= createApiClient({ baseUrl: apiBaseUrl() });
@@ -48,13 +53,17 @@ function apiClient(): ApiClient {
  * The homepage's content for the current request, read once per request however many components
  * ask (React `cache`). Never cached across requests.
  */
-export const getHomepage = cache((): Promise<HomepageResult> => loadHomepage(apiClient()));
+export const getHomepage = cache((): Promise<HomepageResult> =>
+  loadHomepage(apiClient(), { mediaBaseUrl: mediaBaseUrl() }),
+);
 
 /**
  * The experience page's content for the current request: the person's header facts and the
  * published experiences, read once per request (React `cache`). Never cached across requests.
  */
-export const getExperience = cache((): Promise<ExperienceResult> => loadExperience(apiClient()));
+export const getExperience = cache((): Promise<ExperienceResult> =>
+  loadExperience(apiClient(), { mediaBaseUrl: mediaBaseUrl() }),
+);
 
 /**
  * The services page's content for the current request: the person's header facts and services

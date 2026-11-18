@@ -50,8 +50,8 @@ export type ExperienceResult =
 export interface LoadExperienceOptions {
   /** How long each request may take; 5 seconds by default. */
   readonly timeoutMs?: number;
-  /** The configured media files' base address; images outside it are not shown. */
-  readonly mediaBaseUrl?: string;
+  /** The configured media base (`WEB_MEDIA_BASE_URL`); an image outside it is not shown. */
+  readonly mediaBaseUrl: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -64,9 +64,12 @@ async function readImages(
   client: ApiClient,
   ids: readonly string[],
   init: () => ReadInit,
+  mediaBaseUrl: string,
 ): Promise<ReadonlyMap<string, ImageMedia>> {
   const distinct = [...new Set(ids)];
-  const images = await Promise.all(distinct.map((id) => readImage(client, id, init())));
+  const images = await Promise.all(
+    distinct.map((id) => readImage(client, id, init(), mediaBaseUrl)),
+  );
   const usable = new Map<string, ImageMedia>();
   distinct.forEach((id, index) => {
     const image = images[index];
@@ -85,7 +88,7 @@ async function readImages(
  */
 export async function loadExperience(
   client: ApiClient,
-  options: LoadExperienceOptions = {},
+  options: LoadExperienceOptions,
 ): Promise<ExperienceResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
@@ -131,8 +134,8 @@ export async function loadExperience(
     testimonials.flatMap(({ authorPhotoId }) => (authorPhotoId === null ? [] : [authorPhotoId])),
   );
   const [logos, authorPhotos, cvPdf] = await Promise.all([
-    readImages(client, logoIds, init),
-    readImages(client, authorPhotoIds, init),
+    readImages(client, logoIds, init, options.mediaBaseUrl),
+    readImages(client, authorPhotoIds, init, options.mediaBaseUrl),
     person.cvPdfId === null ? null : readCvPdf(client, person.cvPdfId, init()),
   ]);
 
