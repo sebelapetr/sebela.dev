@@ -284,7 +284,7 @@ The website reads content only through the public API routes and never holds an 
 Known limits of this stage:
 
 - **The chat is a mock.** Ask streams prepared answers from deterministic scenarios in the browser; no model, conversation storage or rate limit exists until phase 7 replaces the adapter ([extension points](apps/web/AGENTS.md#extension-points)).
-- **The AI Roadmap is partly built.** `/ai-roadmap` shows the overview of areas, modules and resources from the API, each area and module has its own page, and `/ai-roadmap/diary` shows the learning diary by Prague calendar day; the bookshelf, events, diary statistics and the roadmap answer card arrive later in phase 4.
+- **The AI Roadmap is partly built.** `/ai-roadmap` shows the overview of areas, modules and resources from the API, each area and module has its own page, `/ai-roadmap/diary` shows the learning diary by Prague calendar day, and `/ai-roadmap/bookshelf` shows the books read, each with its own page; events, diary statistics and the roadmap answer card arrive later in phase 4.
 - **Analytics are optional.** Without the analytics settings the website sends nothing.
 - **Not deployed.** Production deployment, backups and the launch are phase 10.
 
