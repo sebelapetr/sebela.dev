@@ -279,8 +279,9 @@ test.describe("the roadmap overview", () => {
           path: test.info().outputPath(`roadmap-${String(width)}-${scheme}.png`),
           fullPage: true,
         });
+        // axe at the narrowest and the widest layout: wrapping and the side column differ.
+        if (width === 360 || width === 1280) await expectAccessible(page);
       }
-      await expectAccessible(page);
     }
   });
 
@@ -358,6 +359,31 @@ test.describe("the roadmap overview", () => {
     expect(await text("/ai-roadmap")).toContain("4 vetted resources");
     // The area's own address follows the same content.
     expect(await text("/ai-roadmap/quiet-systems")).toContain("Quieter systems");
+  });
+
+  test("moving a module to another area or a resource to another module reaches the overview", async ({
+    page,
+  }) => {
+    /** The slug of the item that holds the given item on the rendered tree, or null. */
+    async function parentOf(slug: string): Promise<string | null> {
+      await page.goto(`${website.url}/ai-roadmap`);
+      return page.evaluate((child) => {
+        const own = document.querySelector(`[data-roadmap-slug="${child}"]`)?.closest("li");
+        const parent = own?.parentElement?.closest("li");
+        return (
+          parent?.querySelector<HTMLElement>(":scope > [data-roadmap-slug]")?.dataset.roadmapSlug ??
+          null
+        );
+      }, slug);
+    }
+
+    expect(await parentOf("calm-queues")).toBe("quiet-systems");
+    await write("PATCH", "/v1/roadmap/modules/calm-queues", { area: "orbit-foundations" });
+    await expect.poll(() => parentOf("calm-queues"), within).toBe("orbit-foundations");
+
+    expect(await parentOf("signal-book")).toBe("signal-basics");
+    await write("PATCH", "/v1/roadmap/resources/signal-book", { module: "calm-queues" });
+    await expect.poll(() => parentOf("signal-book"), within).toBe("calm-queues");
   });
 });
 
