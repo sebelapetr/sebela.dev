@@ -480,6 +480,20 @@ test("a generated environment file points the website at the worktree's own API"
   assert.notEqual(otherSettings.WEB_API_BASE_URL, settings.WEB_API_BASE_URL);
 });
 
+test("a generated environment file gives the website its own canonical origin", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.WEB_SITE_ORIGIN);
+  assert.equal(address.hostname, example.WEB_HOST);
+  assert.equal(Number(address.port), Number(settings.WEB_PORT));
+  assert.equal(settings.WEB_SITE_ORIGIN, address.origin);
+  assert.equal(Number(new URL(otherSettings.WEB_SITE_ORIGIN).port), Number(otherSettings.WEB_PORT));
+  assert.notEqual(otherSettings.WEB_SITE_ORIGIN, settings.WEB_SITE_ORIGIN);
+});
+
 test("setup runs the backend stages in the worktree once its database and settings exist", (t) => {
   const { backend, worktree } = fixture(t);
 
