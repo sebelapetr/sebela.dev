@@ -717,6 +717,44 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.components.schemas).toHaveProperty("RoadmapBookResource");
   });
 
+  it("documents the public event reads and its private event writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    const list = operation("GET", "/v1/roadmap/events");
+    expect(list.security).toEqual([]);
+    expect(list.responses["200"]?.content).toEqual(content("RoadmapEventList"));
+    const item = operation("GET", "/v1/roadmap/events/:slug");
+    expect(item.security).toEqual([]);
+    expect(item.responses["200"]?.content).toEqual(content("RoadmapEvent"));
+    expect(Object.keys(item.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+
+    const create = operation("POST", "/v1/roadmap/events");
+    expect(create.requestBody?.content).toEqual(content("RoadmapEventCreate"));
+    expect(create.responses["201"]?.content).toEqual(content("RoadmapEvent"));
+    expect(create.responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    const update = operation("PATCH", "/v1/roadmap/events/:slug");
+    expect(update.requestBody?.content).toEqual(content("RoadmapEventUpdate"));
+    expect(update.responses["200"]?.content).toEqual(content("RoadmapEvent"));
+    expect(Object.keys(update.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404", "409"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/events/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404", "409"]),
+    );
+    for (const [method, path] of [
+      ["POST", "/v1/roadmap/events"],
+      ["PATCH", "/v1/roadmap/events/:slug"],
+      ["DELETE", "/v1/roadmap/events/:slug"],
+    ] as const) {
+      expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(document.components.schemas).toHaveProperty("DiaryEvent");
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

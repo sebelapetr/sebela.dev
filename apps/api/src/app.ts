@@ -277,6 +277,11 @@ const describingRoadmap: RoadmapService = {
   createBook: documentationOnly,
   updateBook: documentationOnly,
   deleteBook: documentationOnly,
+  listEvents: documentationOnly,
+  getEvent: documentationOnly,
+  createEvent: documentationOnly,
+  updateEvent: documentationOnly,
+  deleteEvent: documentationOnly,
 };
 
 /**

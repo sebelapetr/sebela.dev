@@ -1321,6 +1321,7 @@ describe("the generated API client", () => {
       notes: "A *fictional* evening.",
       entries: [],
       totalSeconds: 0,
+      events: [],
     });
 
     const session = {

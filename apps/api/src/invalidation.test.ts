@@ -619,6 +619,42 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
+  it("names the event each event write changed and the days attendance on it changed", async () => {
+    const event = {
+      slug: "fictional-summit",
+      name: "Fictional Summit",
+      kind: "conference",
+      startsOn: "2026-04-01",
+      endsOn: "2026-04-02",
+    };
+    expect((await send("/v1/roadmap/events", "POST", json(event, auth))).status).toBe(201);
+    const moved = json({ startsOn: "2026-04-02", endsOn: "2026-04-03" }, auth);
+    expect((await send("/v1/roadmap/events/fictional-summit", "PATCH", moved)).status).toBe(200);
+    const session = {
+      event: "fictional-summit",
+      startedAt: "2026-04-02T09:00:00+02:00",
+      endedAt: "2026-04-02T10:00:00+02:00",
+    };
+    const logged = await send("/v1/roadmap/time-entries", "POST", json(session, auth));
+    expect(logged.status).toBe(201);
+    const { entries } = (await logged.json()) as { entries: { id: string }[] };
+    const id = entries[0]?.id ?? "";
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+    expect(
+      (await send("/v1/roadmap/events/fictional-summit", "DELETE", { headers: auth })).status,
+    ).toBe(204);
+
+    expect(await delivered()).toEqual([
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "created" }],
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "updated" }],
+      [{ domain: "roadmap-diary", record: "2026-04-02", action: "created" }],
+      [{ domain: "roadmap-diary", record: "2026-04-02", action: "deleted" }],
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "deleted" }],
+    ]);
+  });
+
   it("sends nothing for a refused, invalid, conflicting or failed write, or a read", async () => {
     await send("/v1/technologies", "POST", json(technology, auth));
     await invalidation.idle();

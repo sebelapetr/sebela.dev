@@ -116,8 +116,8 @@ describe("the seed CLI", () => {
     diary: (await read("/v1/roadmap/diary", DiarySchema)).days.map((day) => ({
       date: day.date,
       notes: day.notes,
-      entries: day.entries.map(({ resource, startedAt, endedAt }) => [
-        resource.slug,
+      entries: day.entries.map(({ resource, event, startedAt, endedAt }) => [
+        resource?.slug ?? event?.slug,
         startedAt,
         endedAt,
       ]),
