@@ -211,6 +211,7 @@ apps/web/src/
   app/                            # App Router routes only: page, layout, error, not-found, route files
     experience/page.tsx           # thin: metadata, notFound(), the request; renders a module's template
   config.ts                       # validated runtime configuration
+  media-source.ts                 # where images may come from; next.config.ts and modules use it
   modules/
     <name>/index.ts               # the module's entry: selected exports only
     <name>/templates/             # the composition of a whole page

@@ -27,13 +27,20 @@ const IMAGE_FILE = /^[A-Za-z0-9-]+\.(?:png|jpg|webp)$/u;
 /** The same file name as a glob for Next's `remotePatterns`, which matches it with picomatch. */
 const IMAGE_FILE_GLOB = "+([A-Za-z0-9-]).@(png|jpg|webp)";
 
+/**
+ * A host as the URL parser writes it, made of plain labels (a name or an IPv4 address). Next reads
+ * a remote pattern's host as a glob, so brackets, stars and the like would match other hosts; an
+ * IPv6 host, written in brackets, is refused for the same reason.
+ */
+const PLAIN_HOST = /^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/u;
+
 /** Characters an address may hide traversal or a second meaning behind. */
 const UNSAFE = /[\\?#]|%(?:2e|2f|5c)/iu;
 
 /**
  * Reads a media base address. Returns what is wrong with it (never repeating the value) unless it
- * is an http or https address without credentials, query or fragment whose path names at least one
- * plain folder.
+ * is an http or https address without credentials, query or fragment, with a plain host name or IPv4
+ * address, whose path names at least one plain folder.
  */
 export function parseMediaBase(value: string): MediaBase | string {
   if (UNSAFE.test(value)) return "must not have a query, a fragment or an escaped path";
@@ -47,6 +54,7 @@ export function parseMediaBase(value: string): MediaBase | string {
     return "must be an http or https address";
   }
   if (url.username !== "" || url.password !== "") return "must not contain credentials";
+  if (!PLAIN_HOST.test(url.hostname)) return "must name its host by a plain name or IPv4 address";
   const segments = url.pathname.replace(/\/+$/u, "").split("/").slice(1);
   if (segments.length === 0 || !segments.every((segment) => BASE_SEGMENT.test(segment))) {
     return "must name the storage's environment folder with plain folder names";
@@ -88,31 +96,11 @@ export function isMediaUrl(url: string, base: string): boolean {
   return IMAGE_FILE.test(name) && parsed.pathname === `${media.path}/${name}`;
 }
 
-/** An IPv6 address (as the URL parser writes it) as its eight numbers, or null. */
-function ipv6Groups(address: string): number[] | null {
-  const [head = "", tail, ...rest] = address.split("::");
-  if (rest.length > 0) return null;
-  const parse = (part: string) => (part === "" ? [] : part.split(":").map((g) => parseInt(g, 16)));
-  const start = parse(head);
-  const end = tail === undefined ? [] : parse(tail);
-  const zeros = tail === undefined ? 0 : 8 - start.length - end.length;
-  const groups = [...start, ...Array<number>(Math.max(zeros, 0)).fill(0), ...end];
-  return groups.length === 8 && groups.every((group) => Number.isInteger(group)) ? groups : null;
-}
-
 /**
- * Whether a host is a loopback or private network address, which Next refuses by default. Only
+ * Whether a host is a loopback or private IPv4 address, which Next refuses by default. Only
  * addresses are recognised, not names: a local base names its host by address, as `API_HOST` does.
  */
 function isLocalHost(hostname: string): boolean {
-  if (hostname.startsWith("[")) {
-    const groups = ipv6Groups(hostname.slice(1, -1).toLowerCase());
-    if (groups === null) return false;
-    const [first = 0] = groups;
-    const loopback = groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1;
-    // Unique local addresses, fc00::/7.
-    return loopback || (first & 0xfe00) === 0xfc00;
-  }
   const octets = hostname.split(".").map(Number);
   if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) return false;
   const [a = -1, b = -1] = octets;
