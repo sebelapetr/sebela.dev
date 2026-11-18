@@ -5,7 +5,10 @@ import { z } from "zod";
 
 import { SlugParamsSchema } from "../profile/index.js";
 
-/** The records named by slug; a case study is named by its project's slug. */
+/**
+ * The records named by slug; a case study is named by its project's slug, and the roadmap's areas,
+ * modules and resources by their own slugs.
+ */
 const sluggedDomains = [
   "technology",
   "topic",
@@ -18,9 +21,12 @@ const sluggedDomains = [
   "service",
   "education",
   "current-focus",
+  "roadmap-area",
+  "roadmap-module",
+  "roadmap-resource",
 ] as const;
 
-/** The content domains a write can change, one per kind of profile record. */
+/** The content domains a write can change, one per kind of profile or roadmap record. */
 export const contentDomains = ["person", ...sluggedDomains, "media"] as const;
 
 /** What the write did to the record. */
