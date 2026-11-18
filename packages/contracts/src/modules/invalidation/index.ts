@@ -7,7 +7,7 @@ import { SlugParamsSchema } from "../profile/index.js";
 
 /**
  * The records named by slug; a case study is named by its project's slug, and the roadmap's areas,
- * modules and resources by their own slugs.
+ * modules, resources and books by their own slugs.
  */
 const sluggedDomains = [
   "technology",
@@ -24,6 +24,7 @@ const sluggedDomains = [
   "roadmap-area",
   "roadmap-module",
   "roadmap-resource",
+  "roadmap-book",
 ] as const;
 
 /** The content domains a write can change, one per kind of profile or roadmap record. */

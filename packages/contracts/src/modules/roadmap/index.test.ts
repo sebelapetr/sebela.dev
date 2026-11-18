@@ -53,6 +53,7 @@ const notes = {
   finishedAt: "2026-01-03T09:30:00.000Z",
   link: "https://example.com/prompting-notes",
   position: 0,
+  book: null,
   topics: ["agents", "evaluation"],
 };
 
@@ -262,6 +263,7 @@ describe("RoadmapSchema", () => {
       finishedAt: notes.finishedAt,
       link: notes.link,
       position: notes.position,
+      book: notes.book,
     };
     const tree = {
       summary: {
