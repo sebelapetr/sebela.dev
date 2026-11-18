@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   RoadmapAreaCreateSchema,
+  RoadmapAreaDetailSchema,
+  RoadmapAreaParamsSchema,
   RoadmapAreaUpdateSchema,
+  RoadmapCurrentSchema,
   RoadmapModuleCreateSchema,
+  RoadmapModuleDetailSchema,
+  RoadmapModuleParamsSchema,
   RoadmapModuleUpdateSchema,
   RoadmapResourceCreateSchema,
   RoadmapResourceUpdateSchema,
@@ -287,6 +292,120 @@ describe("RoadmapSchema", () => {
         areas: [
           { ...stored, ...foundations, progress: { ...progress, status: "paused" }, modules: [] },
         ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+/** The tree nodes of the fictional hierarchy, as the detail and current reads return them. */
+const treeResource = {
+  ...stored,
+  slug: notes.slug,
+  name: notes.name,
+  description: notes.description,
+  type: notes.type,
+  status: notes.status,
+  estimatedMinutes: notes.estimatedMinutes,
+  startedAt: notes.startedAt,
+  finishedAt: notes.finishedAt,
+  link: notes.link,
+  position: notes.position,
+  topics: [{ ...stored, slug: "agents", name: "Agents", position: 0 }],
+};
+const moduleNode = {
+  ...stored,
+  slug: prompting.slug,
+  name: prompting.name,
+  description: prompting.description,
+  position: prompting.position,
+  progress,
+};
+const current = { ...progress, status: "in-progress", completedAt: null };
+
+describe("the detail addresses", () => {
+  it("name an area, and a module inside its area, by slug", () => {
+    expect(RoadmapAreaParamsSchema.parse({ area: "foundations" })).toEqual({
+      area: "foundations",
+    });
+    expect(
+      RoadmapModuleParamsSchema.parse({ area: "foundations", module: "prompting-basics" }),
+    ).toEqual({ area: "foundations", module: "prompting-basics" });
+  });
+
+  it("refuse a slug that is not one and a module without its area", () => {
+    expect(RoadmapAreaParamsSchema.safeParse({ area: "Not A Slug" }).success).toBe(false);
+    expect(RoadmapModuleParamsSchema.safeParse({ module: "prompting-basics" }).success).toBe(false);
+    expect(
+      RoadmapModuleParamsSchema.safeParse({ area: "foundations", module: "../x" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("RoadmapAreaDetailSchema", () => {
+  it("holds the area with its progress and its modules with their resources", () => {
+    const detail = {
+      area: {
+        ...stored,
+        ...foundations,
+        progress,
+        modules: [{ ...moduleNode, resources: [treeResource] }],
+      },
+    };
+    expect(RoadmapAreaDetailSchema.parse(detail)).toEqual(detail);
+  });
+
+  it("refuses an area without its derived progress", () => {
+    expect(
+      RoadmapAreaDetailSchema.safeParse({ area: { ...stored, ...foundations, modules: [] } })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("RoadmapModuleDetailSchema", () => {
+  it("holds the module with its progress and resources and the area it belongs to", () => {
+    const detail = {
+      area: { ...stored, ...foundations },
+      module: { ...moduleNode, resources: [treeResource] },
+    };
+    expect(RoadmapModuleDetailSchema.parse(detail)).toEqual(detail);
+  });
+
+  it("refuses a module without its area", () => {
+    expect(
+      RoadmapModuleDetailSchema.safeParse({ module: { ...moduleNode, resources: [] } }).success,
+    ).toBe(false);
+  });
+});
+
+describe("RoadmapCurrentSchema", () => {
+  it("accepts no current learning as a valid answer", () => {
+    expect(RoadmapCurrentSchema.parse({ areas: [] })).toEqual({ areas: [] });
+  });
+
+  it("holds the areas in progress with their modules in progress, without resources", () => {
+    const learning = {
+      areas: [
+        {
+          ...stored,
+          ...foundations,
+          progress: current,
+          modules: [{ ...moduleNode, progress: current }],
+        },
+      ],
+    };
+    expect(RoadmapCurrentSchema.parse(learning)).toEqual(learning);
+  });
+
+  it.each(["planned", "completed"])("refuses an area or a module that is %s", (status) => {
+    const area = { ...stored, ...foundations, progress: current, modules: [] };
+    expect(
+      RoadmapCurrentSchema.safeParse({ areas: [{ ...area, progress: { ...current, status } }] })
+        .success,
+    ).toBe(false);
+    expect(
+      RoadmapCurrentSchema.safeParse({
+        areas: [{ ...area, modules: [{ ...moduleNode, progress: { ...current, status } }] }],
       }).success,
     ).toBe(false);
   });

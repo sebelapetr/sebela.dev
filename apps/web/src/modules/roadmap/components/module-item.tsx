@@ -4,6 +4,7 @@ import { ProseMarkdown } from "../../_shared";
 import type { ModuleRow } from "../data/overview";
 import { EstimateBadge, ProgressBadge } from "./badges";
 import { ROADMAP_TIMELINE } from "./layout";
+import { PageLink } from "./page-link";
 import { RoadmapBranch } from "./roadmap-branch";
 import { ResourceItem } from "./resource-item";
 import { triggerMarker } from "./status";
@@ -52,6 +53,7 @@ export function ModuleItem({ module }: { readonly module: ModuleRow }) {
           ))}
         </Timeline>
       )}
+      <PageLink href={module.href} kind="module" name={module.name} />
     </RoadmapBranch>
   );
 }

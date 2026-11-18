@@ -10,6 +10,9 @@ import {
   type ErrorResponse,
   type MediaUpload,
   type Roadmap,
+  type RoadmapAreaDetail,
+  type RoadmapCurrent,
+  type RoadmapModuleDetail,
 } from "@sebela/api-client";
 import { samplePdf, samplePng } from "@sebela/services/testing";
 
@@ -1222,6 +1225,25 @@ describe("the generated API client", () => {
       "orbit-drills",
     ]);
 
+    const areaDetail = await client.GET("/v1/roadmap/tree/{area}", {
+      params: { path: { area: "orbit-basics" } },
+    });
+    const areaNode: RoadmapAreaDetail | undefined = areaDetail.data;
+    expect(areaNode).toEqual({ area: roadmap?.areas[0] });
+    const moduleDetail = await client.GET("/v1/roadmap/tree/{area}/{module}", {
+      params: { path: { area: "orbit-basics", module: "orbit-prompts" } },
+    });
+    const moduleNode: RoadmapModuleDetail | undefined = moduleDetail.data;
+    expect(moduleNode?.module).toEqual(roadmap?.areas[0]?.modules[0]);
+    expect(moduleNode?.area.slug).toBe("orbit-basics");
+    const unrelated = await client.GET("/v1/roadmap/tree/{area}/{module}", {
+      params: { path: { area: "orbit-elsewhere", module: "orbit-prompts" } },
+    });
+    expect(unrelated.error?.error.code).toBe("not_found");
+    const nothingCurrent = await client.GET("/v1/roadmap/current");
+    const current: RoadmapCurrent | undefined = nothingCurrent.data;
+    expect(current).toEqual({ areas: [] });
+
     const replanned = await client.PATCH("/v1/roadmap/resources/{slug}", {
       ...at("orbit-drills"),
       body: { status: "planned", estimatedMinutes: 30 },
@@ -1246,7 +1268,7 @@ describe("the generated API client", () => {
     const bearer = `Bearer ${key}`;
     expect(authorizations).toEqual([
       ...Array<string>(7).fill(bearer),
-      null,
+      ...Array<null>(5).fill(null),
       ...Array<string>(6).fill(bearer),
       null,
     ]);

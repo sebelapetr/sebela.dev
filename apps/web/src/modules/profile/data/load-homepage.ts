@@ -4,6 +4,7 @@ import type {
   Experience,
   Exploration,
   Project,
+  RoadmapCurrentArea,
   Service,
   Technology,
 } from "@sebela/api-client";
@@ -40,6 +41,11 @@ export interface HomepageProfile {
   readonly explorations: readonly Exploration[];
   /** The services in the API's order: by position, then slug. */
   readonly services: readonly Service[];
+  /**
+   * The AI Roadmap's current learning: the areas with in-progress modules and those modules, in
+   * the roadmap's order, exactly as the API answered them. Empty when nothing is in progress.
+   */
+  readonly currentLearning: readonly RoadmapCurrentArea[];
   /** The current CV PDF; null without one or when it cannot be offered. */
   readonly cvPdf: CvPdf | null;
 }
@@ -64,7 +70,7 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
  * Reads the homepage's content from the API's public routes: the person, the experiences (with
- * their projects), the technologies, the current focus, the explorations, the services and, if the
+ * their projects), the technologies, the current focus, the explorations, the services, the AI Roadmap's current learning and, if the
  * person has them, its photo and its CV PDF. Every request is uncached and limited in time. A photo
  * or PDF that cannot be shown or offered leaves the profile without one; a person or a list that
  * cannot be read makes the whole content unavailable, so a failed read never looks like a section
@@ -78,15 +84,23 @@ export async function loadHomepage(
   const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
 
   try {
-    const [personRead, experiences, technologies, currentFocus, explorations, services] =
-      await Promise.all([
-        client.GET("/v1/person", init()),
-        client.GET("/v1/experiences", init()),
-        client.GET("/v1/technologies", init()),
-        client.GET("/v1/current-focus", init()),
-        client.GET("/v1/explorations", init()),
-        client.GET("/v1/services", init()),
-      ]);
+    const [
+      personRead,
+      experiences,
+      technologies,
+      currentFocus,
+      explorations,
+      services,
+      currentLearning,
+    ] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/experiences", init()),
+      client.GET("/v1/technologies", init()),
+      client.GET("/v1/current-focus", init()),
+      client.GET("/v1/explorations", init()),
+      client.GET("/v1/services", init()),
+      client.GET("/v1/roadmap/current", init()),
+    ]);
     const person = personRead.data;
     if (person === undefined) {
       return personRead.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
@@ -96,7 +110,8 @@ export async function loadHomepage(
       technologies.data === undefined ||
       currentFocus.data === undefined ||
       explorations.data === undefined ||
-      services.data === undefined
+      services.data === undefined ||
+      currentLearning.data === undefined
     ) {
       return { status: "unavailable" };
     }
@@ -122,6 +137,7 @@ export async function loadHomepage(
         currentFocus: currentFocus.data,
         explorations: explorations.data,
         services: services.data,
+        currentLearning: currentLearning.data.areas,
         cvPdf,
       },
     };

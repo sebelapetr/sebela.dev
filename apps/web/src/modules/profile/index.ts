@@ -15,6 +15,12 @@ import { loadCv, type CvResult } from "./data/load-cv";
 import { loadExperience, type ExperienceResult } from "./data/load-experience";
 import { loadHomepage, type HomepageResult } from "./data/load-homepage";
 import { loadRoadmap, type RoadmapResult } from "./data/load-roadmap";
+import {
+  loadRoadmapArea,
+  loadRoadmapModule,
+  type RoadmapAreaResult,
+  type RoadmapModuleResult,
+} from "./data/load-roadmap-detail";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
 import { readMediaFile } from "./data/read-media-file";
@@ -34,6 +40,13 @@ export type { ImageMedia } from "./data/image";
 export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./data/load-homepage";
 
 export type { RoadmapContent, RoadmapResult } from "./data/load-roadmap";
+
+export type {
+  RoadmapAreaContent,
+  RoadmapAreaResult,
+  RoadmapModuleContent,
+  RoadmapModuleResult,
+} from "./data/load-roadmap-detail";
 
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
@@ -128,6 +141,25 @@ export const getServices = cache((): Promise<ServicesResult> => loadServices(api
  * from the content cache.
  */
 export const getRoadmap = cache((): Promise<RoadmapResult> => loadRoadmap(apiClient()));
+
+/**
+ * An AI Roadmap area's page for the current request: the person's header facts and the area with
+ * its modules, resources and the API's derived progress, read once per request and slug (React
+ * `cache`), from the content cache. A missing area or an address that is not a slug is missing.
+ */
+export const getRoadmapArea = cache((area: string): Promise<RoadmapAreaResult> =>
+  loadRoadmapArea(apiClient(), area),
+);
+
+/**
+ * An AI Roadmap module's page for the current request: the person's header facts and the module
+ * with its area, resources and the API's derived progress, read once per request and slugs (React
+ * `cache`), from the content cache. A module under another area is missing, as is a missing one.
+ */
+export const getRoadmapModule = cache(
+  (area: string, module: string): Promise<RoadmapModuleResult> =>
+    loadRoadmapModule(apiClient(), area, module),
+);
 
 /**
  * The Ask page's content for the current request: the person's name the assistant speaks about,

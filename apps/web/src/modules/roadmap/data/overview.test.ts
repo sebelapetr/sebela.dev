@@ -10,7 +10,6 @@ import type {
 
 import {
   estimateLabel,
-  findRoadmapArea,
   formatLastUpdated,
   roadmapLead,
   resourceTypeLabel,
@@ -287,6 +286,17 @@ describe("toRoadmapOverview", () => {
 
     expect(row?.href).toBe("/ai-roadmap/..%2Fx%3Fy%23z");
   });
+
+  it("links every module to its own page under its area", () => {
+    const [row] = toRoadmapOverview(
+      roadmap([area("first-area", { modules: [module("first-module"), module("a/b")] })]),
+    ).areas;
+
+    expect(row?.modules.map((m) => m.href)).toEqual([
+      "/ai-roadmap/first-area/first-module",
+      "/ai-roadmap/first-area/a%2Fb",
+    ]);
+  });
 });
 
 describe("estimateLabel", () => {
@@ -373,23 +383,6 @@ describe("safeLink", () => {
     "ftp://example.test/file",
   ])("drops %s", (link) => {
     expect(safeLink(link)).toBeNull();
-  });
-});
-
-describe("findRoadmapArea", () => {
-  const tree = roadmap([area("first", { name: "First" }), area("second", { name: "Second" })]);
-
-  it("finds an area by its slug with its name and number in the API's order", () => {
-    expect(findRoadmapArea(tree, "second")).toEqual({
-      slug: "second",
-      name: "Second",
-      order: "2.",
-    });
-  });
-
-  it("finds nothing for a slug no area has", () => {
-    expect(findRoadmapArea(tree, "unknown")).toBeNull();
-    expect(findRoadmapArea(roadmap([]), "first")).toBeNull();
   });
 });
 

@@ -606,6 +606,34 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.components.schemas).toHaveProperty("RoadmapSummary");
   });
 
+  it("documents the public roadmap detail and current-learning reads", () => {
+    for (const [path, schema, params] of [
+      ["/v1/roadmap/tree/:area", "RoadmapAreaDetail", ["area"]],
+      ["/v1/roadmap/tree/:area/:module", "RoadmapModuleDetail", ["area", "module"]],
+      ["/v1/roadmap/current", "RoadmapCurrent", []],
+    ] as const) {
+      const read = operation("GET", path);
+      expect(read.security, path).toEqual([]);
+      expect(read.responses["200"]?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+      });
+      expect(read.parameters?.map(({ name, in: where }) => [name, where]) ?? []).toEqual(
+        params.map((name) => [name, "path"]),
+      );
+      expect(Object.keys(document.paths[path.replace(/:([a-z]+)/g, "{$1}")] ?? {})).toEqual([
+        "get",
+      ]);
+    }
+    for (const path of ["/v1/roadmap/tree/:area", "/v1/roadmap/tree/:area/:module"]) {
+      expect(Object.keys(operation("GET", path).responses)).toEqual(
+        expect.arrayContaining(["200", "400", "404"]),
+      );
+    }
+    expect(Object.keys(operation("GET", "/v1/roadmap/current").responses)).not.toContain("404");
+    expect(document.components.schemas).toHaveProperty("RoadmapCurrentArea");
+    expect(document.components.schemas).toHaveProperty("RoadmapCurrentModule");
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });

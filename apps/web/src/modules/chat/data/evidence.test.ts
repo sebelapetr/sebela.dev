@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { Experience, Exploration, Service, Technology } from "@sebela/api-client";
+import type {
+  Experience,
+  Exploration,
+  RoadmapCurrentArea,
+  Service,
+  Technology,
+} from "@sebela/api-client";
 
 import type { AskContent } from "../../profile";
 import { toAskEvidence } from "./evidence";
@@ -120,6 +126,44 @@ function exploration(slug: string, status: Exploration["status"]): Exploration {
   };
 }
 
+function currentProgress(completed: number, total: number): RoadmapCurrentArea["progress"] {
+  return {
+    completed,
+    total,
+    status: "in-progress",
+    completedAt: null,
+    lastUpdatedAt: STAMP,
+    estimatedMinutes: 0,
+  };
+}
+
+function currentArea(
+  slug: string,
+  modules: [slug: string, description: string | null][],
+): RoadmapCurrentArea {
+  return {
+    id: "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f",
+    slug,
+    name: `Area ${slug}`,
+    description: null,
+    weight: 10,
+    position: 0,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    progress: currentProgress(1, 5),
+    modules: modules.map(([moduleSlug, description]) => ({
+      id: "8d9e0f1a-2b3c-4d4e-8f5a-6b7c8d9e0f1a",
+      slug: moduleSlug,
+      name: `Module ${moduleSlug}`,
+      description,
+      position: 0,
+      createdAt: STAMP,
+      updatedAt: STAMP,
+      progress: currentProgress(1, 2),
+    })),
+  };
+}
+
 function content(overrides: Partial<AskContent> = {}): AskContent {
   return {
     name: "Robin Example",
@@ -132,6 +176,7 @@ function content(overrides: Partial<AskContent> = {}): AskContent {
       technology("typescript"),
       technology("retrieval", "primary", "ai_engineering_focus"),
     ],
+    currentLearning: [],
     ...overrides,
   };
 }
@@ -185,6 +230,54 @@ describe("toAskEvidence", () => {
       ["tool-scopes", "designed"],
     ]);
     expect(evidence.explorations[0]?.summary).toBe("Tries a fictional idea.");
+  });
+
+  it("keeps every module in progress on the roadmap with its area, in the API's order", () => {
+    const evidence = toAskEvidence(
+      content({
+        currentLearning: [
+          currentArea("signals", [
+            ["signal-basics", "Learns *fictional* signals."],
+            ["signal-depth", null],
+          ]),
+          currentArea("queues", [["calm-queues", "  "]]),
+        ],
+      }),
+    );
+
+    expect(evidence.learning).toEqual([
+      {
+        area: "signals",
+        areaName: "Area signals",
+        slug: "signal-basics",
+        name: "Module signal-basics",
+        summary: "Learns fictional signals.",
+        completed: 1,
+        total: 2,
+      },
+      {
+        area: "signals",
+        areaName: "Area signals",
+        slug: "signal-depth",
+        name: "Module signal-depth",
+        summary: null,
+        completed: 1,
+        total: 2,
+      },
+      {
+        area: "queues",
+        areaName: "Area queues",
+        slug: "calm-queues",
+        name: "Module calm-queues",
+        summary: null,
+        completed: 1,
+        total: 2,
+      },
+    ]);
+  });
+
+  it("has no learning when nothing on the roadmap is in progress", () => {
+    expect(toAskEvidence(content()).learning).toEqual([]);
   });
 
   it("names the technology groups the experience page shows, in its order", () => {

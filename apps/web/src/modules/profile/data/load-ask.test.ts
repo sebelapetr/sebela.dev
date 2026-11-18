@@ -141,7 +141,45 @@ function clientWith(routes: Record<string, Route>) {
   return { client, requests };
 }
 
-const LISTS = ["/v1/experiences", "/v1/services", "/v1/explorations", "/v1/technologies"];
+const LISTS = [
+  "/v1/experiences",
+  "/v1/services",
+  "/v1/explorations",
+  "/v1/technologies",
+  "/v1/roadmap/current",
+];
+
+/** A fictional module being learned now, as the current-learning route answers it. */
+const currentModule = {
+  id: "6f7a8b9c-0d1e-4f2a-8b3c-4d5e6f7a8b92",
+  slug: "fictional-module",
+  name: "Fictional module",
+  description: "A made-up **module**.",
+  position: 0,
+  createdAt: STAMP,
+  updatedAt: STAMP,
+  progress: {
+    completed: 1,
+    total: 2,
+    status: "in-progress" as const,
+    completedAt: null,
+    lastUpdatedAt: STAMP,
+    estimatedMinutes: 60,
+  },
+};
+
+const currentArea = {
+  id: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a81",
+  slug: "fictional-area",
+  name: "Fictional area",
+  description: null,
+  weight: 20,
+  position: 0,
+  createdAt: STAMP,
+  updatedAt: STAMP,
+  progress: { ...currentModule.progress, total: 3 },
+  modules: [currentModule],
+};
 
 function routes(overrides: Record<string, Route> = {}): Record<string, Route> {
   return {
@@ -150,6 +188,7 @@ function routes(overrides: Record<string, Route> = {}): Record<string, Route> {
     "/v1/services": () => json([service("automation")]),
     "/v1/explorations": () => json([exploration("answer-checks")]),
     "/v1/technologies": () => json([technology("retrieval")]),
+    "/v1/roadmap/current": () => json({ areas: [currentArea] }),
     ...overrides,
   };
 }
@@ -168,6 +207,7 @@ describe("loadAsk", () => {
         services: [service("automation")],
         explorations: [exploration("answer-checks")],
         technologies: [technology("retrieval")],
+        currentLearning: [currentArea],
       },
     });
   });

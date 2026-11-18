@@ -15,6 +15,7 @@ import {
 import { loadHomepage } from "./load-homepage";
 
 const BASE = "https://api.example.test";
+const STAMP = "2026-01-01T00:00:00.000Z";
 /** The configured media folder the fixtures' addresses are in. */
 const OPTIONS = { mediaBaseUrl: "https://media.example.test/files/test" };
 const PHOTO_ID = "5f0c6a52-4f7e-4c4a-9d1e-0c2b7d3e8a11";
@@ -207,7 +208,13 @@ const LISTS = [
   "/v1/current-focus",
   "/v1/explorations",
   "/v1/services",
+  "/v1/roadmap/current",
 ] as const;
+
+/** What a list route answers when a test does not say: nothing published. */
+function emptyAnswer(path: (typeof LISTS)[number]): unknown {
+  return path === "/v1/roadmap/current" ? { areas: [] } : [];
+}
 
 /**
  * A client whose requests go to `routes` by path; an unknown path fails the test. The list routes
@@ -215,7 +222,7 @@ const LISTS = [
  */
 function clientWith(given: Record<string, Route>) {
   const routes: Record<string, Route> = {
-    ...Object.fromEntries(LISTS.map((path) => [path, () => json([])])),
+    ...Object.fromEntries(LISTS.map((path) => [path, () => json(emptyAnswer(path))])),
     ...given,
   };
   const requests: Request[] = [];
@@ -265,6 +272,7 @@ describe("loadHomepage", () => {
         currentFocus: [],
         explorations: [],
         services: [],
+        currentLearning: [],
         cvPdf: null,
       },
     });
@@ -475,6 +483,59 @@ describe("loadHomepage", () => {
       expect(result.profile.currentFocus).toEqual(currentFocus);
       expect(result.profile.explorations).toEqual(explorations);
       expect(result.profile.services).toEqual(services);
+    });
+
+    it("keeps the roadmap's current learning as the API answered it", async () => {
+      const current = {
+        areas: [
+          {
+            id: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a81",
+            slug: "fictional-area",
+            name: "Fictional area",
+            description: null,
+            weight: 20,
+            position: 0,
+            createdAt: STAMP,
+            updatedAt: STAMP,
+            progress: {
+              completed: 1,
+              total: 3,
+              status: "in-progress",
+              completedAt: null,
+              lastUpdatedAt: STAMP,
+              estimatedMinutes: 120,
+            },
+            modules: [
+              {
+                id: "6f7a8b9c-0d1e-4f2a-8b3c-4d5e6f7a8b92",
+                slug: "fictional-module",
+                name: "Fictional module",
+                description: null,
+                position: 0,
+                createdAt: STAMP,
+                updatedAt: STAMP,
+                progress: {
+                  completed: 1,
+                  total: 2,
+                  status: "in-progress",
+                  completedAt: null,
+                  lastUpdatedAt: STAMP,
+                  estimatedMinutes: 60,
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const { client } = clientWith({
+        "/v1/person": () => json(person({ photoId: null })),
+        "/v1/roadmap/current": () => json(current),
+      });
+
+      const result = await loadHomepage(client, OPTIONS);
+      if (result.status !== "ready") throw new Error("not ready");
+
+      expect(result.profile.currentLearning).toEqual(current.areas);
     });
 
     it("keeps every project of the experiences in their order, for the homepage to select from", async () => {

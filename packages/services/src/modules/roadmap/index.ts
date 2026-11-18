@@ -2,13 +2,21 @@ import type {
   Roadmap,
   RoadmapArea,
   RoadmapAreaCreate,
+  RoadmapAreaDetail,
   RoadmapAreaUpdate,
+  RoadmapCurrent,
+  RoadmapCurrentArea,
+  RoadmapCurrentModule,
   RoadmapModule,
   RoadmapModuleCreate,
+  RoadmapModuleDetail,
   RoadmapModuleUpdate,
+  RoadmapProgress,
   RoadmapResource,
   RoadmapResourceCreate,
   RoadmapResourceUpdate,
+  RoadmapTreeArea,
+  RoadmapTreeModule,
   RoadmapTreeResource,
   Topic,
 } from "@sebela/contracts";
@@ -17,6 +25,7 @@ import type {
   RoadmapAreaNode,
   RoadmapAreaRecord,
   RoadmapModuleFields,
+  RoadmapModuleNode,
   RoadmapModuleRecord,
   RoadmapModuleRelations,
   RoadmapPersistence,
@@ -40,6 +49,15 @@ import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 export interface RoadmapService {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
+  /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
+  getAreaDetail(area: string): Promise<RoadmapAreaDetail>;
+  /**
+   * One module node of the whole roadmap, unchanged, with its area; a missing area or module,
+   * or a module of another area, is `not_found`.
+   */
+  getModuleDetail(area: string, module: string): Promise<RoadmapModuleDetail>;
+  /** The areas and modules whose derived status is `in-progress`, in roadmap order; may be empty. */
+  getCurrentLearning(): Promise<RoadmapCurrent>;
   getArea(slug: string): Promise<RoadmapArea>;
   createArea(input: RoadmapAreaCreate): Promise<RoadmapArea>;
   updateArea(slug: string, changes: RoadmapAreaUpdate): Promise<RoadmapArea>;
@@ -179,20 +197,52 @@ function toResource(record: RoadmapResourceRecord): RoadmapResource {
   return { ...toTreeResource(record), module: record.module };
 }
 
+/** A module node of the tree with its derived progress and its resources. */
+function toTreeModuleNode(module: RoadmapModuleNode): RoadmapTreeModule {
+  return {
+    ...toTreeModule(module),
+    progress: moduleProgress(module.resources),
+    resources: module.resources.map(toTreeResource),
+  };
+}
+
+/** An area node of the tree with its derived progress and its modules. */
+function toTreeArea(area: RoadmapAreaNode): RoadmapTreeArea {
+  return {
+    ...toArea(area),
+    progress: areaProgress(area.modules.map((module) => module.resources)),
+    modules: area.modules.map(toTreeModuleNode),
+  };
+}
+
 /** The contract tree with progress derived from the stored resources. */
 function toRoadmap(tree: readonly RoadmapAreaNode[]): Roadmap {
   return {
     summary: roadmapSummary(tree.map((area) => area.modules.map((module) => module.resources))),
-    areas: tree.map((area) => ({
-      ...toArea(area),
-      progress: areaProgress(area.modules.map((module) => module.resources)),
-      modules: area.modules.map((module) => ({
-        ...toTreeModule(module),
-        progress: moduleProgress(module.resources),
-        resources: module.resources.map(toTreeResource),
-      })),
-    })),
+    areas: tree.map(toTreeArea),
   };
+}
+
+function isInProgress(
+  progress: RoadmapProgress,
+): progress is RoadmapProgress & { status: "in-progress" } {
+  return progress.status === "in-progress";
+}
+
+/** The in-progress areas and modules of the tree, in its order, without resources. */
+function toCurrentLearning(tree: readonly RoadmapAreaNode[]): RoadmapCurrent {
+  const areas: RoadmapCurrentArea[] = [];
+  for (const area of tree) {
+    const progress = areaProgress(area.modules.map((module) => module.resources));
+    if (!isInProgress(progress)) continue;
+    const modules: RoadmapCurrentModule[] = [];
+    for (const module of area.modules) {
+      const current = moduleProgress(module.resources);
+      if (isInProgress(current)) modules.push({ ...toTreeModule(module), progress: current });
+    }
+    areas.push({ ...toArea(area), progress, modules });
+  }
+  return { areas };
 }
 
 /**
@@ -203,6 +253,26 @@ export function createRoadmapService(persistence: RoadmapPersistence): RoadmapSe
   return {
     async getRoadmap() {
       return toRoadmap(await persistence.loadRoadmapTree());
+    },
+    async getAreaDetail(slug) {
+      const area = (await persistence.loadRoadmapTree()).find((node) => node.slug === slug);
+      if (!area) throw missing("area", slug);
+      return { area: toTreeArea(area) };
+    },
+    async getModuleDetail(areaSlug, moduleSlug) {
+      const area = (await persistence.loadRoadmapTree()).find((node) => node.slug === areaSlug);
+      if (!area) throw missing("area", areaSlug);
+      const module = area.modules.find((node) => node.slug === moduleSlug);
+      if (!module) {
+        throw new DomainError(
+          "not_found",
+          `There is no roadmap module "${moduleSlug}" in the area "${areaSlug}".`,
+        );
+      }
+      return { area: toArea(area), module: toTreeModuleNode(module) };
+    },
+    async getCurrentLearning() {
+      return toCurrentLearning(await persistence.loadRoadmapTree());
     },
 
     async getArea(slug) {

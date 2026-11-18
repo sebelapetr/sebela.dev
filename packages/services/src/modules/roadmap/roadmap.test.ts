@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  RoadmapAreaDetailSchema,
   RoadmapAreaSchema,
+  RoadmapCurrentSchema,
+  RoadmapModuleDetailSchema,
   RoadmapModuleSchema,
   RoadmapResourceSchema,
   RoadmapSchema,
@@ -183,6 +186,119 @@ describe("roadmap service", () => {
         completedAt: promptGuide.finishedAt,
       });
       expect(area?.modules[0]?.progress.completedAt).toBe(promptGuide.finishedAt);
+    });
+  });
+
+  describe("detail reads", () => {
+    it("return an area exactly as the whole roadmap shows it", async () => {
+      await createHierarchy();
+      await roadmap.createModule({ ...prompting, slug: "empty-module", position: 1 });
+
+      const detail = await roadmap.getAreaDetail("foundations");
+
+      expect(RoadmapAreaDetailSchema.parse(detail)).toEqual(detail);
+      const [area] = (await roadmap.getRoadmap()).areas;
+      expect(detail).toEqual({ area });
+    });
+
+    it("return a module exactly as the whole roadmap shows it, with its area", async () => {
+      const { area } = await createHierarchy();
+
+      const detail = await roadmap.getModuleDetail("foundations", "prompting");
+
+      expect(RoadmapModuleDetailSchema.parse(detail)).toEqual(detail);
+      const [node] = (await roadmap.getRoadmap()).areas;
+      expect(detail).toEqual({ area, module: node?.modules[0] });
+    });
+
+    it("report a missing area or module as not found", async () => {
+      await createHierarchy();
+      await expect(roadmap.getAreaDetail("missing")).rejects.toMatchObject({ code: "not_found" });
+      await expect(roadmap.getModuleDetail("missing", "prompting")).rejects.toMatchObject({
+        code: "not_found",
+      });
+      await expect(roadmap.getModuleDetail("foundations", "missing")).rejects.toMatchObject({
+        code: "not_found",
+      });
+    });
+
+    it("do not find a module under an area it does not belong to", async () => {
+      await createHierarchy();
+      await roadmap.createArea({
+        ...foundations,
+        slug: "agents-area",
+        name: "Agents",
+        position: 1,
+      });
+
+      await expect(roadmap.getModuleDetail("agents-area", "prompting")).rejects.toMatchObject({
+        code: "not_found",
+      });
+    });
+  });
+
+  describe("current learning", () => {
+    const resource = (slug: string, module: string, status: RoadmapResourceCreate["status"]) =>
+      roadmap.createResource({
+        ...promptGuide,
+        slug,
+        module,
+        status,
+        finishedAt: status === "completed" ? promptGuide.finishedAt : null,
+        topics: [],
+      });
+
+    it("is empty when nothing is in progress", async () => {
+      await createHierarchy();
+      await roadmap.createArea({ ...foundations, slug: "paused-area", position: 1 });
+      await roadmap.createModule({ ...prompting, slug: "paused-module", area: "paused-area" });
+      await resource("paused-reading", "paused-module", "paused");
+      await resource("planned-reading", "paused-module", "planned");
+
+      await expect(roadmap.getCurrentLearning()).resolves.toEqual({ areas: [] });
+    });
+
+    it("holds only the areas and modules in progress, in roadmap order", async () => {
+      await roadmap.createArea({ ...foundations, slug: "later-area", position: 2 });
+      await roadmap.createArea({ ...foundations, slug: "done-area", position: 1 });
+      await roadmap.createArea(foundations);
+      await roadmap.createModule({ ...prompting, slug: "later-module", area: "later-area" });
+      await roadmap.createModule({ ...prompting, slug: "done-module", area: "done-area" });
+      await roadmap.createModule({ ...prompting, slug: "second", position: 2 });
+      await roadmap.createModule({ ...prompting, slug: "finished", position: 1 });
+      await roadmap.createModule({ ...prompting, slug: "first", position: 0 });
+      await roadmap.createModule({ ...prompting, slug: "untouched", position: 3 });
+      await resource("later-reading", "later-module", "in-progress");
+      await resource("done-reading", "done-module", "completed");
+      await resource("second-reading", "second", "in-progress");
+      await resource("finished-reading", "finished", "completed");
+      await resource("first-reading", "first", "completed");
+      await resource("first-video", "first", "in-progress");
+      await resource("untouched-reading", "untouched", "planned");
+
+      const current = await roadmap.getCurrentLearning();
+
+      expect(RoadmapCurrentSchema.parse(current)).toEqual(current);
+      expect(
+        current.areas.map(({ slug, modules }) => [slug, modules.map((module) => module.slug)]),
+      ).toEqual([
+        ["foundations", ["first", "second"]],
+        ["later-area", ["later-module"]],
+      ]);
+      const tree = await roadmap.getRoadmap();
+      const [area] = tree.areas;
+      const first = area?.modules.find(({ slug }) => slug === "first");
+      expect(current.areas[0]).toMatchObject({ id: area?.id, progress: area?.progress });
+      expect(current.areas[0]?.modules[0]).toEqual({
+        id: first?.id,
+        slug: "first",
+        name: first?.name,
+        description: first?.description,
+        position: first?.position,
+        createdAt: first?.createdAt,
+        updatedAt: first?.updatedAt,
+        progress: first?.progress,
+      });
     });
   });
 

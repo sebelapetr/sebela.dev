@@ -11,7 +11,13 @@ export { MediaImage, type MediaImageSource } from "./components/media-image";
 export { SiteHeader } from "./components/site-header";
 export { ProseMarkdown, proseComponents } from "./components/markdown";
 export { careerYears } from "./career";
-export { anchorHref, anchorId, type AnchorTarget } from "./anchors";
+export {
+  anchorHref,
+  anchorId,
+  roadmapHref,
+  type AnchorTarget,
+  type RoadmapPageTarget,
+} from "./anchors";
 export { toEducationRows, type EducationRow } from "./education";
 export { experienceKindLabel } from "./experience-kind";
 export { explorationStatusText, type ExplorationStatusText } from "./exploration-status";

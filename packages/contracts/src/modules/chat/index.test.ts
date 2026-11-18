@@ -206,6 +206,22 @@ describe("ChatSourceSchema and ChatSourcesSchema", () => {
     expect(ChatSourceSchema.safeParse(source).success).toBe(false);
   });
 
+  it("points a roadmap source at its area, its module or a resource on its module page", () => {
+    for (const href of [
+      "/ai-roadmap/foundations",
+      "/ai-roadmap/foundations/prompting-basics",
+      "/ai-roadmap/foundations/prompting-basics#resource-prompting-notes",
+    ]) {
+      const source = {
+        record: { kind: "roadmap_item", id: "prompting-notes" },
+        title: "Notes",
+        href,
+      };
+      expect(ChatSourceSchema.parse(source)).toEqual(source);
+      expect(ChatBlockSchema.parse({ ...blocks.RoadmapCard, href })).toMatchObject({ href });
+    }
+  });
+
   it("holds at least one source", () => {
     expect(ChatSourcesSchema.safeParse([]).success).toBe(false);
     expect(ChatSourcesSchema.parse([experienceSource])).toEqual([experienceSource]);

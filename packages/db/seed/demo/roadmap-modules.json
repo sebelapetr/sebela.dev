@@ -3,6 +3,7 @@
     "slug": "llm-basics",
     "area": "foundations",
     "name": "How language models work",
+    "description": "What a **fictional** learner needs before anything else: tokens, attention and why sampling settings change an answer.",
     "position": 0
   },
   {
@@ -15,12 +16,14 @@
     "slug": "embeddings",
     "area": "foundations",
     "name": "Embeddings",
+    "description": "Turning text into vectors and reading the space they live in.\n\n- Distance and similarity\n- Where embeddings mislead",
     "position": 2
   },
   {
     "slug": "search-fundamentals",
     "area": "retrieval-systems",
     "name": "Search fundamentals",
+    "description": "Keyword and vector search side by side, before any retrieval pipeline is built on top of them.",
     "position": 0
   },
   {
@@ -52,6 +55,7 @@
     "slug": "agent-loops",
     "area": "agents-in-production",
     "name": "Agent loops",
+    "description": "Planning, acting and checking in a loop, and knowing when to stop.",
     "position": 1
   },
   {

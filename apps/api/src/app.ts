@@ -238,6 +238,9 @@ const describingMedia: MediaService = {
 /** A roadmap service for describing routes; describing never calls it. */
 const describingRoadmap: RoadmapService = {
   getRoadmap: documentationOnly,
+  getAreaDetail: documentationOnly,
+  getModuleDetail: documentationOnly,
+  getCurrentLearning: documentationOnly,
   getArea: documentationOnly,
   createArea: documentationOnly,
   updateArea: documentationOnly,
