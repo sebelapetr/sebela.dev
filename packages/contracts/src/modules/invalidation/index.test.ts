@@ -57,6 +57,7 @@ describe("the content change", () => {
       "roadmap-module",
       "roadmap-resource",
       "roadmap-book",
+      "roadmap-event",
       "roadmap-diary",
       "media",
     ]);
@@ -70,6 +71,7 @@ describe("the content change", () => {
       { domain: "case-study", record: "routing-engine", action: "deleted" },
       { domain: "current-focus", record: "agent-evals", action: "updated" },
       { domain: "roadmap-resource", record: "prompting-notes", action: "deleted" },
+      { domain: "roadmap-event", record: "fictional-ai-summit", action: "updated" },
       { domain: "roadmap-diary", record: "2026-03-02", action: "updated" },
       { domain: "media", record: MEDIA, action: "deleted" },
     ]) {
