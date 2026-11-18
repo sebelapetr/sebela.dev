@@ -14,6 +14,8 @@ import {
 import { loadExperience } from "./load-experience";
 
 const BASE = "https://api.example.test";
+/** The configured media folder the fixtures' addresses are in. */
+const OPTIONS = { mediaBaseUrl: "https://media.example.test/files/test" };
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function person(overrides: Partial<Person> = {}): Person {
@@ -192,7 +194,7 @@ describe("loadExperience", () => {
       "/v1/education": () => json(educations),
     });
 
-    expect(await loadExperience(client)).toEqual({
+    expect(await loadExperience(client, OPTIONS)).toEqual({
       status: "ready",
       content: {
         name: "Robin Example",
@@ -232,7 +234,7 @@ describe("loadExperience", () => {
         [`/v1/media/${PDF_ID}`]: () => json(pdf()),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
       expect(result.status === "ready" && result.content.cvPdf).toEqual({
         updatedOn: "2026-03-14",
       });
@@ -245,7 +247,7 @@ describe("loadExperience", () => {
         [`/v1/media/${PDF_ID}`]: () => new Response("Bad gateway", { status: 502 }),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
       expect(result.status).toBe("ready");
       expect(result.status === "ready" && result.content.cvPdf).toBeNull();
     });
@@ -257,7 +259,7 @@ describe("loadExperience", () => {
       "/v1/experiences": () => json([]),
     });
 
-    const result = await loadExperience(client);
+    const result = await loadExperience(client, OPTIONS);
 
     expect(result.status === "ready" && result.content.experiences).toEqual([]);
     expect(result.status === "ready" && result.content.careerStartedOn).toBeNull();
@@ -269,7 +271,7 @@ describe("loadExperience", () => {
       "/v1/experiences": () => json(twoExperiences),
     });
 
-    expect(await loadExperience(client)).toMatchObject({
+    expect(await loadExperience(client, OPTIONS)).toMatchObject({
       status: "ready",
       content: { explorations: [], technologies: [], education: [] },
     });
@@ -281,7 +283,7 @@ describe("loadExperience", () => {
       "/v1/experiences": () => json([]),
     });
 
-    await loadExperience(client);
+    await loadExperience(client, OPTIONS);
 
     expect(
       requests.map((request) => [request.method, new URL(request.url).pathname]).sort(),
@@ -304,7 +306,7 @@ describe("loadExperience", () => {
       "/v1/experiences": () => json([]),
     });
 
-    expect(await loadExperience(client)).toEqual({ status: "missing" });
+    expect(await loadExperience(client, OPTIONS)).toEqual({ status: "missing" });
   });
 
   const failures: [string, Route][] = [
@@ -325,7 +327,7 @@ describe("loadExperience", () => {
       "/v1/experiences": () => json(twoExperiences),
     });
 
-    expect(await loadExperience(client)).toEqual({ status: "unavailable" });
+    expect(await loadExperience(client, OPTIONS)).toEqual({ status: "unavailable" });
   });
 
   it.each(failures)(
@@ -336,7 +338,7 @@ describe("loadExperience", () => {
         "/v1/experiences": route,
       });
 
-      expect(await loadExperience(client)).toEqual({ status: "unavailable" });
+      expect(await loadExperience(client, OPTIONS)).toEqual({ status: "unavailable" });
     },
   );
 
@@ -352,7 +354,7 @@ describe("loadExperience", () => {
             [path]: route,
           });
 
-          expect(await loadExperience(client)).toEqual({ status: "unavailable" });
+          expect(await loadExperience(client, OPTIONS)).toEqual({ status: "unavailable" });
         },
       );
     },
@@ -373,7 +375,9 @@ describe("loadExperience", () => {
       "/v1/education": hang,
     });
 
-    expect(await loadExperience(client, { timeoutMs: 20 })).toEqual({ status: "unavailable" });
+    expect(await loadExperience(client, { ...OPTIONS, timeoutMs: 20 })).toEqual({
+      status: "unavailable",
+    });
   });
   describe("organization logos", () => {
     const logoUrl = (id: string) => `/v1/media/${id}`;
@@ -393,7 +397,7 @@ describe("loadExperience", () => {
             media({
               id: OTHER_LOGO_ID,
               altText: null,
-              url: "https://media.example.test/b.webp",
+              url: "https://media.example.test/files/test/b.webp",
               mediaType: "image/webp",
               width: 64,
               height: 64,
@@ -401,7 +405,7 @@ describe("loadExperience", () => {
           ),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result.status === "ready" && result.content.logos).toEqual(
         new Map([
@@ -416,7 +420,12 @@ describe("loadExperience", () => {
           ],
           [
             OTHER_LOGO_ID,
-            { url: "https://media.example.test/b.webp", altText: "", width: 64, height: 64 },
+            {
+              url: "https://media.example.test/files/test/b.webp",
+              altText: "",
+              width: 64,
+              height: 64,
+            },
           ],
         ]),
       );
@@ -436,7 +445,7 @@ describe("loadExperience", () => {
         "/v1/experiences": () => json(twoExperiences),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result.status === "ready" && result.content.logos).toEqual(new Map());
       expect(requests.filter(isMediaRead)).toEqual([]);
@@ -446,6 +455,11 @@ describe("loadExperience", () => {
       ["is not an image", { mediaType: "application/pdf" }],
       ["has no address", { url: null }],
       ["has an address that is not a web address", { url: "javascript:alert(1)" }],
+      [
+        "is outside the configured media folder",
+        { url: "https://media.example.test/files/other/a.png" },
+      ],
+      ["is on another host", { url: "https://elsewhere.example.test/files/test/a.png" }],
       ["has no width", { width: null }],
       ["has no height", { height: null }],
     ])("leaves out a logo that %s", async (_label, overrides) => {
@@ -455,7 +469,7 @@ describe("loadExperience", () => {
         [logoUrl(LOGO_ID)]: () => json(media(overrides)),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result).toMatchObject({ status: "ready" });
       expect(result.status === "ready" && result.content.logos).toEqual(new Map());
@@ -470,7 +484,7 @@ describe("loadExperience", () => {
           [logoUrl(LOGO_ID)]: route,
         });
 
-        const result = await loadExperience(client);
+        const result = await loadExperience(client, OPTIONS);
 
         expect(result.status === "ready" && result.content.experiences).toHaveLength(1);
         expect(result.status === "ready" && result.content.logos).toEqual(new Map());
@@ -484,7 +498,7 @@ describe("loadExperience", () => {
         [logoUrl(LOGO_ID)]: () => apiError("not_found", 404),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result.status === "ready" && result.content.logos).toEqual(new Map());
     });
@@ -536,11 +550,15 @@ describe("loadExperience", () => {
         [photoUrl(PHOTO_ID)]: () => json(photo()),
         [photoUrl(OTHER_PHOTO_ID)]: () =>
           json(
-            photo({ id: OTHER_PHOTO_ID, altText: null, url: "https://media.example.test/b.webp" }),
+            photo({
+              id: OTHER_PHOTO_ID,
+              altText: null,
+              url: "https://media.example.test/files/test/b.webp",
+            }),
           ),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result.status === "ready" && result.content.authorPhotos).toEqual(
         new Map([
@@ -555,7 +573,12 @@ describe("loadExperience", () => {
           ],
           [
             OTHER_PHOTO_ID,
-            { url: "https://media.example.test/b.webp", altText: "", width: 160, height: 160 },
+            {
+              url: "https://media.example.test/files/test/b.webp",
+              altText: "",
+              width: 160,
+              height: 160,
+            },
           ],
         ]),
       );
@@ -576,7 +599,7 @@ describe("loadExperience", () => {
         "/v1/experiences": () => json([withQuotes(quote("first", null))]),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());
       expect(requests.filter(isMediaRead)).toEqual([]);
@@ -586,6 +609,11 @@ describe("loadExperience", () => {
       ["is not an image", { mediaType: "application/pdf" }],
       ["has no address", { url: null }],
       ["has an address that is not a web address", { url: "javascript:alert(1)" }],
+      [
+        "is outside the configured media folder",
+        { url: "https://media.example.test/files/other/a.png" },
+      ],
+      ["is on another host", { url: "https://elsewhere.example.test/files/test/a.png" }],
       ["has no width", { width: null }],
       ["has no height", { height: null }],
     ])("leaves out an author photo that %s", async (_label, overrides) => {
@@ -595,7 +623,7 @@ describe("loadExperience", () => {
         [photoUrl(PHOTO_ID)]: () => json(photo(overrides)),
       });
 
-      const result = await loadExperience(client);
+      const result = await loadExperience(client, OPTIONS);
 
       expect(result).toMatchObject({ status: "ready" });
       expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());
@@ -610,7 +638,7 @@ describe("loadExperience", () => {
           [photoUrl(PHOTO_ID)]: route,
         });
 
-        const result = await loadExperience(client);
+        const result = await loadExperience(client, OPTIONS);
 
         expect(result.status === "ready" && result.content.experiences).toHaveLength(1);
         expect(result.status === "ready" && result.content.authorPhotos).toEqual(new Map());

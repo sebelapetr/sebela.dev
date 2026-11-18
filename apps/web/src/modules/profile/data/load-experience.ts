@@ -50,6 +50,8 @@ export type ExperienceResult =
 export interface LoadExperienceOptions {
   /** How long each request may take; 5 seconds by default. */
   readonly timeoutMs?: number;
+  /** The configured media files' base address; images outside it are not shown. */
+  readonly mediaBaseUrl?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;

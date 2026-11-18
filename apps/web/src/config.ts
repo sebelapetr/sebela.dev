@@ -6,6 +6,8 @@ export interface WebConfig {
   readonly apiBaseUrl: string;
   /** The site's canonical public origin, without a trailing slash. */
   readonly siteOrigin: string;
+  /** The media files' base address, without a trailing slash. */
+  readonly mediaBaseUrl: string;
 }
 
 const apiBaseUrl = z
@@ -73,5 +75,9 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
       `Invalid website configuration (documented in .env.example): ${problems.join("; ")}`,
     );
   }
-  return { apiBaseUrl: result.data.WEB_API_BASE_URL, siteOrigin: result.data.WEB_SITE_ORIGIN };
+  return {
+    apiBaseUrl: result.data.WEB_API_BASE_URL,
+    siteOrigin: result.data.WEB_SITE_ORIGIN,
+    mediaBaseUrl: "",
+  };
 }

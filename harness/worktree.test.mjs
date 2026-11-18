@@ -494,6 +494,22 @@ test("a generated environment file gives the website its own canonical origin", 
   assert.notEqual(otherSettings.WEB_SITE_ORIGIN, settings.WEB_SITE_ORIGIN);
 });
 
+test("a generated environment file lets the website optimise only its worktree's media", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  const address = new URL(settings.WEB_MEDIA_BASE_URL);
+  assert.equal(
+    address.href,
+    `${settings.STORAGE_PUBLIC_BASE_URL}/${settings.STORAGE_ENVIRONMENT}/${settings.STORAGE_WORKTREE}`,
+  );
+  assert.equal(address.hostname, example.API_HOST);
+  assert.equal(Number(address.port), Number(settings.API_PORT));
+  assert.notEqual(otherSettings.WEB_MEDIA_BASE_URL, settings.WEB_MEDIA_BASE_URL);
+});
+
 test("setup runs the backend stages in the worktree once its database and settings exist", (t) => {
   const { backend, worktree } = fixture(t);
 
