@@ -159,6 +159,7 @@ export function toDiaryList(diary: Diary): DiaryList {
  * resource's link is kept only when it is safe. An area or module the roadmap does not name keeps
  * its slug as its name, has no link and follows the named ones in the order it first appears. A
  * session on a resource that reads a book (`books`) links to the book's page on the bookshelf.
+ * Attendance at an event is counted in the day's total and sessions but has no area group.
  */
 export function toDiaryDayPage(
   day: DiaryDay,
@@ -182,7 +183,14 @@ export function toDiaryDayPage(
   };
 }
 
-function toSession(entry: TimeEntry, bookOf: ReadonlyMap<string, string>): DiarySession {
+/** A time entry on a resource; attendance at an event has no area or module to group under. */
+type ResourceEntry = TimeEntry & { readonly resource: NonNullable<TimeEntry["resource"]> };
+
+function onResource(entry: TimeEntry): entry is ResourceEntry {
+  return entry.resource !== null;
+}
+
+function toSession(entry: ResourceEntry, bookOf: ReadonlyMap<string, string>): DiarySession {
   const book = bookOf.get(entry.resource.slug);
   return {
     id: entry.id,
@@ -211,10 +219,10 @@ function groupSessions(
   areas: readonly RoadmapDiaryAreaName[],
   bookOf: ReadonlyMap<string, string>,
 ): DiaryAreaGroup[] {
-  const byArea = new Map<string, Map<string, TimeEntry[]>>();
-  for (const entry of entries) {
+  const byArea = new Map<string, Map<string, ResourceEntry[]>>();
+  for (const entry of entries.filter(onResource)) {
     const { area, module } = entry.resource;
-    const modules = byArea.get(area) ?? new Map<string, TimeEntry[]>();
+    const modules = byArea.get(area) ?? new Map<string, ResourceEntry[]>();
     byArea.set(area, modules);
     modules.set(module, [...(modules.get(module) ?? []), entry]);
   }
