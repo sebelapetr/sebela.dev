@@ -1,0 +1,17 @@
+{
+  "name": "Avery </script> Quill",
+  "headline": "Fictional engineer </script><script>window.__injected = true</script> & <b>tests</b>",
+  "shortBio": "Avery is a **fictional** person whose texts try to break out: </script><!-- & ]] ([x](https://evil.example.test)).",
+  "longBio": "Avery does not exist.",
+  "location": "Testville",
+  "email": "avery@quill.example.test",
+  "links": [
+    {
+      "label": "Notes ](https://evil.example.test) [",
+      "url": "https://quill.example.test/notes"
+    }
+  ],
+  "availability": null,
+  "careerStartedOn": null,
+  "photo": null
+}

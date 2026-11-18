@@ -25,7 +25,7 @@ export function Hero({ profile }: { readonly profile: HomepageProfile }) {
         <Portrait photo={profile.photo} name={profile.name} />
       </div>
       <div className="flex min-w-0 flex-col gap-6">
-        <h1 id="hero-heading" className="flex flex-col gap-3">
+        <h1 id="hero-heading" className="flex flex-col gap-3 break-words">
           <span className="type-label">{profile.name}</span>
           <span className="type-display">{profile.headline}</span>
         </h1>

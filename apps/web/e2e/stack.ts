@@ -10,7 +10,8 @@ const webFolder = fileURLToPath(new URL("..", import.meta.url));
 const apiFolder = fileURLToPath(new URL("../../api", import.meta.url));
 
 /** The fictional seed folders of `e2e/fixtures/`. */
-export type Fixture = "with-experience" | "with-photo" | "without-photo";
+export type Fixture =
+  "with-experience" | "with-photo" | "with-unsafe-text" | "without-photo" | "without-profile";
 
 export function required(name: string): string {
   const value = process.env[name];
