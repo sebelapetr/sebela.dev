@@ -35,3 +35,4 @@ Date: YYYY-MM-DD
 | 0014 | [The API client is generated with openapi-typescript and openapi-fetch](0014-generated-api-client.md)          |
 | 0015 | [A caller-scoped unit of work for loading a seed](0015-caller-scoped-unit-of-work-for-the-seed.md)             |
 | 0016 | The website uses the module layout beside its routes                                                           |
+| 0017 | [The website serves stored images from its own origin](0017-images-from-the-website-origin.md)                 |

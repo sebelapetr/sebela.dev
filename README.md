@@ -81,16 +81,16 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 
 ### Stack
 
-| Area             | Technology                                                                 | Status                                                                                 |
-| ---------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                              |
-| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Planned (phase 3)                                                                      |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Delivered; the TypeScript client is generated, the Python client follows in phase 7    |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 6)            |
-| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                                      |
-| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Vitest for the backend and Node's test runner for tooling delivered; the rest planned  |
-| Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                                |
-| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                        | Compose for local Postgres and the API, API image and CI delivered; deployment planned |
+| Area             | Technology                                                                 | Status                                                                                                 |
+| ---------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                                              |
+| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Planned (phase 3)                                                                                      |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Delivered; the TypeScript client is generated, the Python client follows in phase 7                    |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 6)                            |
+| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                                                      |
+| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Vitest for the backend and Node's test runner for tooling delivered; the rest planned                  |
+| Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                                                |
+| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                        | Compose for local Postgres, the API and the website, their images and CI delivered; deployment planned |
 
 The visual direction is editorial and monochrome: strong typography, generous whitespace, light and dark themes. See [design](docs/design.md).
 
@@ -186,16 +186,16 @@ docker compose up --detach --wait
 
 This one command starts PostgreSQL 18 with pgvector and returns when the service is healthy. Run it in the main checkout: the stack has a fixed project name, so the main checkout and every worktree share this one container, each with its own database. `docker compose down` stops it and keeps the data; `docker compose down --volumes` deletes the data as well.
 
-To run the API in a container as well, from the main checkout:
+To run the API and the website in containers as well, from the main checkout:
 
 ```sh
-pnpm stack:up                                  # build the image, migrate, then start the API
+pnpm stack:up                                  # build the images, migrate, then start the API and the website
 pnpm stack:seed                                # load the fictional demo seed (explicit, never automatic)
 pnpm --silent stack:api-keys create my-laptop  # print the first API key once; store it yourself
-pnpm stack:down                                # stop and remove the API containers; Postgres keeps running
+pnpm stack:down                                # stop and remove the API and website containers; Postgres keeps running
 ```
 
-`stack:up` starts a one-off migration service once Postgres is healthy and the API only after the migrations succeeded; a failed migration keeps the API down. Running `stack:up` again applies only new migrations; neither a start nor a restart seeds or resets content. Uploaded media live in the volume `api-media` and survive restarts. To stop everything, Postgres included, run `docker compose --profile api down` (a plain `docker compose down` leaves the API running); add `--volumes` only to delete the data and the media. The API runs in a container or on the host (`pnpm --filter @sebela/api start`), not both: they publish the same port. Worktrees always use the host. The image holds code and the demo seed only; personal content is loaded from a folder outside the repository at run time. Details: [`apps/api/AGENTS.md`](apps/api/AGENTS.md#container-stack).
+`stack:up` starts a one-off migration service once Postgres is healthy, the API only after the migrations succeeded and the website once the API is healthy; a failed migration keeps the API down. The website is published on `WEB_HOST` and `WEB_PORT` and the API on `API_HOST` and `API_PORT`; inside the Compose network the website reads the API by its service name, and pages name stored images only by the website's own `/media/<file>`. Running `stack:up` again applies only new migrations; neither a start nor a restart seeds or resets content. Uploaded media live in the volume `api-media` and survive restarts. To stop everything, Postgres included, run `docker compose --profile api --profile web down` (a plain `docker compose down` leaves the API and the website running); add `--volumes` only to delete the data and the media. The API and the website run in containers or on the host (`pnpm --filter @sebela/api start`, `pnpm --filter @sebela/web start`), not both: they publish the same ports. Worktrees always use the host. The images hold code only, and the API's also the demo seed; personal content is loaded from a folder outside the repository at run time. Details: [`apps/api/AGENTS.md`](apps/api/AGENTS.md#container-stack) and [`apps/web/AGENTS.md`](apps/web/AGENTS.md#container).
 
 ### 4. Run the quality checks
 
@@ -206,7 +206,7 @@ pnpm test       # package tests, harness tests and check tests
 pnpm build
 ```
 
-CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus end-to-end runs of the worktree databases and of the worktree backend setup against a disposable Postgres (jobs `Worktree database lifecycle` and `Worktree backend setup`) and a smoke check of the containerised API stack. You can run them yourself with Docker: `node harness/worktree-databases.e2e.mjs`, `node harness/worktree-backend.e2e.mjs` and `pnpm test:api-stack`; each removes its containers, volumes and images at the end. Details: [testing](docs/testing.md).
+CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus end-to-end runs of the worktree databases and of the worktree backend setup against a disposable Postgres (jobs `Worktree database lifecycle` and `Worktree backend setup`) smoke checks of the containerised API stack and of two complete stacks with the website side by side, and the website's browser tests. You can run them yourself with Docker: `node harness/worktree-databases.e2e.mjs`, `node harness/worktree-backend.e2e.mjs`, `pnpm test:api-stack` and `pnpm test:web-stack`; each removes its containers, volumes and images at the end. Details: [testing](docs/testing.md).
 
 ### 5. Work in an isolated worktree
 
@@ -297,7 +297,7 @@ See [agent orchestration](docs/agents.md), [permissions](docs/permissions.md) an
 - **Evals-first:** MCP and AI behaviour, including grounding, unknown answers, source correctness and direct and indirect prompt injection. Safety suites must pass completely; other thresholds are set from the baseline and never lowered to pass a run.
 - **Merge gate:** lint, typecheck, tests and build, enforced by CI on every pull request. API integration tests use real PostgreSQL and fictional fixtures.
 
-The merge gate, the harness and check tests (Node's built-in test runner), the backend's Vitest suites against temporary PostgreSQL databases, the worktree runs, the API stack smoke check and the generated-client drift check are in place today. Playwright, pytest and Promptfoo suites arrive with the apps they verify. Details: [testing policy](docs/testing.md).
+The merge gate, the harness and check tests (Node's built-in test runner), the backend's Vitest suites against temporary PostgreSQL databases, the worktree runs, the API and website stack smoke checks, the website's Playwright tests and the generated-client drift check are in place today. pytest and Promptfoo suites arrive with the apps they verify. Details: [testing policy](docs/testing.md).
 
 ## Documentation
 
