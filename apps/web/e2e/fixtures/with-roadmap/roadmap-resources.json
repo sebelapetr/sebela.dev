@@ -1,0 +1,52 @@
+[
+  {
+    "slug": "signal-explainer",
+    "module": "signal-basics",
+    "name": "A fictional signal explainer",
+    "type": "youtube-video",
+    "status": "completed",
+    "estimatedMinutes": 90,
+    "startedAt": "2025-03-01T18:00:00.000Z",
+    "finishedAt": "2025-03-03T20:00:00.000Z",
+    "link": "https://learn.example.test/signal-explainer",
+    "position": 0
+  },
+  {
+    "slug": "signal-notes",
+    "module": "signal-basics",
+    "name": "Unsafe signal notes",
+    "description": "Notes </script><script>window.__roadmapInjected = true</script> with <b>raw</b> markup, <img src=\"x\" onerror=\"window.__roadmapInjected = true\"> and [a trap](javascript:window.__roadmapInjected=true).",
+    "type": "text",
+    "status": "in-progress",
+    "estimatedMinutes": 30,
+    "startedAt": "2025-03-05T18:00:00.000Z",
+    "link": null,
+    "position": 1
+  },
+  {
+    "slug": "signal-playground",
+    "module": "signal-basics",
+    "name": "A signal playground",
+    "type": "project",
+    "status": "skipped",
+    "position": 2
+  },
+  {
+    "slug": "signal-book",
+    "module": "signal-basics",
+    "name": "A fictional book on signals",
+    "type": "book",
+    "status": "paused",
+    "estimatedMinutes": 600,
+    "position": 3
+  },
+  {
+    "slug": "queue-guide",
+    "module": "calm-queues",
+    "name": "A fictional queue guide",
+    "type": "link",
+    "status": "planned",
+    "link": "https://learn.example.test/queue-guide",
+    "position": 0
+  }
+]

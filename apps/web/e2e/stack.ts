@@ -16,6 +16,7 @@ export type Fixture =
   | "with-experience"
   | "with-long-content"
   | "with-photo"
+  | "with-roadmap"
   | "with-sparse-content"
   | "with-unsafe-text"
   | "without-photo"
