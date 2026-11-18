@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  RoadmapAreaDetailSchema,
   RoadmapAreaSchema,
+  RoadmapCurrentSchema,
+  RoadmapModuleDetailSchema,
   RoadmapModuleSchema,
   RoadmapResourceSchema,
   RoadmapSchema,
@@ -230,6 +233,83 @@ describe("the roadmap API", () => {
       estimatedHours: 2,
     });
     expect(roadmap.summary.lastUpdatedAt).not.toBeNull();
+  });
+
+  it("reads an area and a module detail publicly, equal to their overview nodes", async () => {
+    await createHierarchy();
+    const overview = await tree();
+    const [area] = overview.areas;
+
+    const areaResponse = await request("/v1/roadmap/tree/basics");
+    expect(areaResponse.status).toBe(200);
+    expect(RoadmapAreaDetailSchema.parse(await areaResponse.json())).toEqual({ area });
+
+    const moduleResponse = await request("/v1/roadmap/tree/basics/prompting");
+    expect(moduleResponse.status).toBe(200);
+    const detail = RoadmapModuleDetailSchema.parse(await moduleResponse.json());
+    expect(detail.module).toEqual(area?.modules[0]);
+    expect(detail.area).toEqual(
+      RoadmapAreaSchema.parse(await (await request("/v1/roadmap/areas/basics")).json()),
+    );
+  });
+
+  it("answers a missing area, a missing module and a module of another area with not found", async () => {
+    await createHierarchy();
+
+    for (const path of [
+      "/v1/roadmap/tree/missing",
+      "/v1/roadmap/tree/missing/prompting",
+      "/v1/roadmap/tree/basics/missing",
+      // The module exists, but under the area "basics", not "practice".
+      "/v1/roadmap/tree/practice/prompting",
+    ]) {
+      const response = await request(path);
+      expect(response.status, path).toBe(404);
+      expect(await response.json()).toEqual({ error: { code: "not_found", message: anyText } });
+    }
+  });
+
+  it("refuses an invalid area or module slug in a detail address, naming the parameter", async () => {
+    for (const [path, field] of [
+      ["/v1/roadmap/tree/Not%20A%20Slug", "area"],
+      ["/v1/roadmap/tree/basics/Not%20A%20Slug", "module"],
+    ] as const) {
+      const response = await request(path);
+      expect(response.status, path).toBe(400);
+      const error = await errorOf(response);
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path: name }) => name)).toEqual([field]);
+    }
+  });
+
+  it("reads the current learning publicly: only in-progress areas and modules", async () => {
+    expect(await (await request("/v1/roadmap/current")).json()).toEqual({ areas: [] });
+    await createHierarchy();
+    // Nothing is in progress yet: completed and empty parents are not current.
+    expect(await (await request("/v1/roadmap/current")).json()).toEqual({ areas: [] });
+
+    expect(
+      (
+        await post("/v1/roadmap/resources", {
+          slug: "shipping-checklist",
+          module: "shipping",
+          name: "A fictional shipping checklist",
+          type: "text",
+          status: "in-progress",
+          position: 0,
+        })
+      ).status,
+    ).toBe(201);
+
+    const response = await request("/v1/roadmap/current");
+    expect(response.status).toBe(200);
+    const current = RoadmapCurrentSchema.parse(await response.json());
+    const practiceNode = (await tree()).areas[1];
+    expect(current.areas.map(({ slug }) => slug)).toEqual(["practice"]);
+    expect(current.areas[0]?.progress).toEqual(practiceNode?.progress);
+    expect(current.areas[0]?.modules.map(({ slug }) => slug)).toEqual(["shipping"]);
+    expect(current.areas[0]?.modules[0]?.progress).toEqual(practiceNode?.modules[0]?.progress);
+    expect(current.areas[0]?.modules[0]).not.toHaveProperty("resources");
   });
 
   it.each(reservedRoadmapAreaSlugs)("refuses the reserved area slug %s", async (slug) => {
