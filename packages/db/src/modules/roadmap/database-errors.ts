@@ -22,3 +22,9 @@ export function breaksExclusion(error: unknown, constraint: string): boolean {
   const cause = driverError(error);
   return cause?.code === "23P01" && cause.constraint === constraint;
 }
+
+/** Whether the database refused a row because it repeats a value under the named unique constraint. */
+export function breaksUnique(error: unknown, constraint: string): boolean {
+  const cause = driverError(error);
+  return cause?.code === "23505" && cause.constraint === constraint;
+}

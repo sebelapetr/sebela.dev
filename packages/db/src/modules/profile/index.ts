@@ -139,7 +139,17 @@ export type {
 // unknown topics by throwing `WriteRefused` inside the caller's transaction.
 export { topicColumns } from "./catalogs.js";
 export { type Executor, topicIds, WriteRefused } from "./relations.js";
-export { topics } from "./schema.js";
+export { media, topics } from "./schema.js";
+// For persistence modules that refer to uploaded media: its record columns, the locked check that
+// refuses unknown or unsuitable media by throwing `WriteRefused`, and the wrapper that turns such a
+// refusal into the write's failure.
+export {
+  checkMediaReferences,
+  type MediaKind,
+  mediaColumns,
+  type MediaReference,
+  refusingMedia,
+} from "./media.js";
 
 /** Persistence operations of the profile domain. */
 export interface ProfilePersistence

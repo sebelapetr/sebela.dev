@@ -12,7 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { topics } from "../profile/index.js";
+import { media, topics } from "../profile/index.js";
 
 export const roadmapSchema = pgSchema("ai_roadmap");
 
@@ -26,6 +26,13 @@ export const PERIOD_CHECK = "resources_period_is_ordered";
  * drizzle-kit cannot express it.
  */
 export const TIME_ENTRY_OVERLAP_EXCLUSION = "time_entries_do_not_overlap";
+
+/** A book ends no earlier than it starts. */
+export const BOOK_PERIOD_CHECK = "books_period_is_ordered";
+/** At most one resource links a book. */
+export const BOOK_LINK_UNIQUE = "resources_book_id_unique";
+/** Only a resource of type `book` links a book. */
+export const BOOK_LINK_TYPE_CHECK = "resources_book_needs_book_type";
 
 export const resourceType = roadmapSchema.enum("resource_type", [
   "youtube-video",
@@ -91,8 +98,43 @@ export const modules = roadmapSchema.table(
 );
 
 /**
+ * Books on the bookshelf. The optional cover refers to an uploaded image without a cascade, so a
+ * cover in use cannot be deleted. Reading dates are calendar dates; the status is derived from
+ * them on read, and the reading time comes from the linking resource's time entries.
+ */
+export const books = roadmapSchema.table(
+  "books",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    author: text("author"),
+    description: text("description"),
+    pages: integer("pages"),
+    year: integer("year"),
+    isbn: text("isbn"),
+    priority: integer("priority").notNull(),
+    startedOn: date("started_on", { mode: "string" }),
+    endedOn: date("ended_on", { mode: "string" }),
+    summary: text("summary"),
+    coverId: uuid("cover_id").references(() => media.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("books_priority_not_negative", sql`${table.priority} >= 0`),
+    check("books_pages_positive", sql`${table.pages} IS NULL OR ${table.pages} > 0`),
+    check(
+      BOOK_PERIOD_CHECK,
+      sql`${table.startedOn} IS NULL OR ${table.endedOn} IS NULL OR ${table.endedOn} >= ${table.startedOn}`,
+    ),
+  ],
+);
+
+/**
  * Learning resources of a module. The plain foreign key keeps a module with resources from being
- * deleted; a missing estimate stays unknown rather than zero.
+ * deleted; a missing estimate stays unknown rather than zero. A resource of type `book` may link
+ * one book, and each book is linked by at most one resource; a linked book cannot be deleted.
  */
 export const resources = roadmapSchema.table(
   "resources",
@@ -111,10 +153,13 @@ export const resources = roadmapSchema.table(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     link: text("link"),
     position: integer("position").notNull(),
+    bookId: uuid("book_id").references(() => books.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    unique(BOOK_LINK_UNIQUE).on(table.bookId),
+    check(BOOK_LINK_TYPE_CHECK, sql`${table.bookId} IS NULL OR ${table.type} = 'book'`),
     check("resources_position_not_negative", sql`${table.position} >= 0`),
     check(
       "resources_estimate_not_negative",

@@ -80,7 +80,7 @@ function isMediaReferenceFailure(failure: unknown): failure is MediaReferenceFai
 /**
  * The metadata of uploaded files in `profile.media`. Keys are unique; the check constraints
  * refuse an empty file, an image without positive dimensions and a PDF with dimensions. Persons,
- * organizations, projects and testimonials refer to media through foreign keys without a cascade,
+ * organizations, projects, testimonials and roadmap books refer to media through foreign keys without a cascade,
  * so a referenced delete is refused by the database and returned as `referenced`.
  */
 export function createMediaPersistence(db: Database): MediaPersistence {
