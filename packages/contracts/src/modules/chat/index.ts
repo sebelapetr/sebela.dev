@@ -50,7 +50,7 @@ export const chatErrorCodes = [
 
 export type ChatErrorCode = (typeof chatErrorCodes)[number];
 
-/** The typed blocks an answer can carry besides text; `RoadmapCard` is reserved for phase 4. */
+/** The typed blocks an answer can carry besides text. */
 export const chatBlockTypes = [
   "ContactCard",
   "ExperienceCard",
@@ -168,7 +168,10 @@ const ExplorationCardSchema = z.object({
   href: SitePathSchema,
 });
 
-/** Reserved: the AI Roadmap and its item addresses arrive in phase 4. */
+/**
+ * An AI Roadmap area, module or resource. `href` is its page: `/ai-roadmap/<area>`,
+ * `/ai-roadmap/<area>/<module>`, or a resource as `/ai-roadmap/<area>/<module>#resource-<slug>`.
+ */
 const RoadmapCardSchema = z.object({
   type: z.literal("RoadmapCard"),
   title: text(200),

@@ -303,6 +303,53 @@ export const RoadmapSchema = z
     description: "Every level is ordered by position, then slug.",
   });
 
+/** The address of an area page: `/v1/roadmap/tree/{area}`. */
+export const RoadmapAreaParamsSchema = z.strictObject({
+  area: SlugSchema.meta({ description: "The slug of the area." }),
+});
+
+/** The address of a module page inside its area: `/v1/roadmap/tree/{area}/{module}`. */
+export const RoadmapModuleParamsSchema = z.strictObject({
+  area: SlugSchema.meta({ description: "The slug of the area the module belongs to." }),
+  module: SlugSchema.meta({ description: "The slug of the module." }),
+});
+
+/** One area as the overview shows it: the same node, progress and ordering as in `Roadmap`. */
+export const RoadmapAreaDetailSchema = z.object({ area: RoadmapTreeAreaSchema }).meta({
+  id: "RoadmapAreaDetail",
+  description: "The area node of the roadmap tree, with its modules and their resources.",
+});
+
+/** One module as the overview shows it, with the area it belongs to for navigation. */
+export const RoadmapModuleDetailSchema = z
+  .object({ area: RoadmapAreaSchema, module: RoadmapTreeModuleSchema })
+  .meta({
+    id: "RoadmapModuleDetail",
+    description: "The module node of the roadmap tree and the area that holds it.",
+  });
+
+const InProgressSchema = RoadmapProgressSchema.extend({
+  status: z.literal("in-progress").meta({ description: "Always `in-progress` here." }),
+});
+
+/** A module whose derived status is `in-progress`, without its resources. */
+export const RoadmapCurrentModuleSchema = RoadmapModuleSchema.omit({ area: true })
+  .extend({ progress: InProgressSchema })
+  .meta({ id: "RoadmapCurrentModule" });
+
+/** An area whose derived status is `in-progress` with its modules that are. */
+export const RoadmapCurrentAreaSchema = RoadmapAreaSchema.extend({
+  progress: InProgressSchema,
+  modules: z.array(RoadmapCurrentModuleSchema),
+}).meta({ id: "RoadmapCurrentArea" });
+
+/** What is being learned now: the in-progress areas and modules, in roadmap order. */
+export const RoadmapCurrentSchema = z.object({ areas: z.array(RoadmapCurrentAreaSchema) }).meta({
+  id: "RoadmapCurrent",
+  description:
+    "The areas and modules whose derived status is `in-progress`, in the order of the roadmap; empty when nothing is.",
+});
+
 export type RoadmapResourceType = (typeof roadmapResourceTypes)[number];
 export type RoadmapResourceStatus = (typeof roadmapResourceStatuses)[number];
 export type RoadmapDerivedStatus = (typeof roadmapDerivedStatuses)[number];
@@ -321,10 +368,10 @@ export type RoadmapTreeResource = z.infer<typeof RoadmapTreeResourceSchema>;
 export type RoadmapTreeModule = z.infer<typeof RoadmapTreeModuleSchema>;
 export type RoadmapTreeArea = z.infer<typeof RoadmapTreeAreaSchema>;
 export type Roadmap = z.infer<typeof RoadmapSchema>;
-
-// Placeholders for the detail and current-learning reads (issue #110); specified by the tests.
-export const RoadmapAreaParamsSchema = z.never();
-export const RoadmapModuleParamsSchema = z.never();
-export const RoadmapAreaDetailSchema = z.never();
-export const RoadmapModuleDetailSchema = z.never();
-export const RoadmapCurrentSchema = z.never();
+export type RoadmapAreaParams = z.infer<typeof RoadmapAreaParamsSchema>;
+export type RoadmapModuleParams = z.infer<typeof RoadmapModuleParamsSchema>;
+export type RoadmapAreaDetail = z.infer<typeof RoadmapAreaDetailSchema>;
+export type RoadmapModuleDetail = z.infer<typeof RoadmapModuleDetailSchema>;
+export type RoadmapCurrentModule = z.infer<typeof RoadmapCurrentModuleSchema>;
+export type RoadmapCurrentArea = z.infer<typeof RoadmapCurrentAreaSchema>;
+export type RoadmapCurrent = z.infer<typeof RoadmapCurrentSchema>;
