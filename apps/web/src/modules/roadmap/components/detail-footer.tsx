@@ -30,12 +30,12 @@ export function DetailFooter({
           {next ? <AdjacentLink crumb={next} direction="next" /> : null}
         </nav>
       ) : null}
-      <p>
+      <div>
         <Link href={ROADMAP_PATH} prefetch={false} className={buttonVariants()}>
           Go to full roadmap
           <ArrowRight aria-hidden="true" />
         </Link>
-      </p>
+      </div>
     </div>
   );
 }
@@ -52,13 +52,12 @@ function AdjacentLink({
     <Link
       href={crumb.href}
       prefetch={false}
-      aria-label={`${next ? "Next" : "Previous"} area: ${crumb.name}`}
       className={cn(
         "group flex min-h-11 flex-col gap-1 rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         next && "sm:col-start-2 sm:items-end sm:text-right",
       )}
     >
-      <span className="type-label">{next ? "Next area" : "Previous area"}</span>
+      <span className="type-label">{next ? "Next area" : "Previous area"}</span>{" "}
       <span className="inline-flex items-center gap-1 font-medium wrap-anywhere underline-offset-4 group-hover:underline group-focus-visible:underline">
         {next ? null : <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />}
         {crumb.name}
