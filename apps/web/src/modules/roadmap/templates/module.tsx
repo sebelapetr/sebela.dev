@@ -1,6 +1,7 @@
 import { Timeline } from "@sebela/ui/components/timeline";
 
 import type { RoadmapModuleContent } from "../../profile";
+import { DetailFooter } from "../components/detail-footer";
 import { DetailHeader } from "../components/detail-header";
 import { ROADMAP_TIMELINE } from "../components/layout";
 import { ResourceItem } from "../components/resource-item";
@@ -9,9 +10,9 @@ import { toRoadmapModulePage } from "../data/detail";
 
 /**
  * A module's own page under the roadmap's sub-navigation: the way from the overview through its
- * area, the module's name, status, planned estimate and progress, its description, then its
- * resources in the API's order on the timeline, each with the anchor a source link lands on.
- * Without resources the page says so.
+ * area, the module's name, status, planned estimate and progress, its description and last change,
+ * then its resources in the API's order on the timeline, each with the anchor a source link lands
+ * on, and the way back to the full roadmap. Without resources the page says so.
  */
 export function RoadmapModuleTemplate({ content }: { readonly content: RoadmapModuleContent }) {
   const page = toRoadmapModulePage(content.area, content.module);
@@ -28,6 +29,7 @@ export function RoadmapModuleTemplate({ content }: { readonly content: RoadmapMo
           completed={page.completed}
           total={page.total}
           description={page.description}
+          updated={page.updated}
         />
         <section aria-labelledby="module-resources-heading" className="flex flex-col gap-6">
           <h2 id="module-resources-heading" className="type-heading">
@@ -48,6 +50,7 @@ export function RoadmapModuleTemplate({ content }: { readonly content: RoadmapMo
             </Timeline>
           )}
         </section>
+        <DetailFooter />
       </div>
     </RoadmapFrame>
   );

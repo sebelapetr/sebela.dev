@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getRoadmapModule } from "../../../../modules/profile";
-import { RoadmapModuleTemplate, toRoadmapModulePage } from "../../../../modules/roadmap";
+import { RoadmapModuleTemplate, roadmapPageFacts } from "../../../../modules/roadmap";
 import { RoadmapStructuredData, roadmapPageMetadata } from "../../../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never a page without its module. */
@@ -32,26 +32,15 @@ async function readContent(params: ModulePageProps["params"]) {
   return result.content;
 }
 
-function facts(content: Awaited<ReturnType<typeof readContent>>) {
-  const page = toRoadmapModulePage(content.area, content.module);
-  return {
-    name: content.name,
-    kind: "module" as const,
-    breadcrumbs: page.breadcrumbs,
-    summary: page.description,
-    estimatedMinutes: content.module.progress.estimatedMinutes,
-  };
-}
-
 export async function generateMetadata({ params }: ModulePageProps): Promise<Metadata> {
-  return roadmapPageMetadata(facts(await readContent(params)));
+  return roadmapPageMetadata(roadmapPageFacts(await readContent(params)));
 }
 
 export default async function RoadmapModulePage({ params }: ModulePageProps) {
   const content = await readContent(params);
   return (
     <>
-      <RoadmapStructuredData facts={facts(content)} />
+      <RoadmapStructuredData facts={roadmapPageFacts(content)} />
       <RoadmapModuleTemplate content={content} />
     </>
   );

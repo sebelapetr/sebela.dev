@@ -9,9 +9,10 @@ import { Breadcrumbs } from "./breadcrumbs";
 import { StatusLabel } from "./status-label";
 
 /**
- * The heading block of an area's or a module's own page: the breadcrumbs, the kind as a label, the
- * name as the page's `h1` with "Current" while it is in progress, its status, planned estimate and
- * progress, anything the page adds to them (an area's weight), then its Markdown description.
+ * The heading block of an area's or a module's own page: the breadcrumbs, the kind as a label above
+ * the name, the name alone as the page's `h1`, "Current" while it is in progress, its status,
+ * planned estimate and progress, anything the page adds to them (an area's weight), its Markdown
+ * description, then when it last changed.
  */
 export function DetailHeader({
   kind,
@@ -24,6 +25,7 @@ export function DetailHeader({
   total,
   extra,
   description,
+  updated,
 }: {
   readonly kind: string;
   readonly name: string;
@@ -35,15 +37,17 @@ export function DetailHeader({
   readonly total: number;
   readonly extra?: ReactNode;
   readonly description: string | null;
+  /** When the page's content last changed (`March 14, 2026`), or null. */
+  readonly updated: string | null;
 }) {
   return (
     <header className="flex flex-col gap-6">
       <Breadcrumbs crumbs={breadcrumbs} />
       <div className="flex flex-col gap-4">
-        <h1 className="flex flex-col gap-3">
-          <span className="type-label">{kind}</span>
-          <span className="type-title wrap-anywhere">{name}</span>
-        </h1>
+        <div className="flex flex-col gap-3">
+          <p className="type-label">{kind}</p>
+          <h1 className="type-title wrap-anywhere">{name}</h1>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {current ? <CurrentBadge /> : null}
           <StatusLabel status={status} />
@@ -57,6 +61,7 @@ export function DetailHeader({
           <ProseMarkdown>{description}</ProseMarkdown>
         </div>
       )}
+      {updated === null ? null : <p className="text-sm text-muted-foreground">Updated {updated}</p>}
     </header>
   );
 }

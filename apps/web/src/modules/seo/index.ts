@@ -1,6 +1,6 @@
 // The seo module: what search engines and language models read about the profile — each indexed
 // page's metadata and Open Graph preview image, the homepage's structured data, the AI Roadmap
-// area and module pages' metadata and breadcrumbs, the sitemap, robots.txt and llms.txt — on the
+// area and module pages' metadata, breadcrumbs, course data and preview images, the sitemap, robots.txt and llms.txt — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
 // not published answers 404 and one that cannot be read answers 503, never an empty document.
 // Server-only.
@@ -18,8 +18,9 @@ import {
   type IndexedPage,
   type PageFacts,
 } from "./data/page-metadata";
-import { profileTextResponse, textResponse } from "./data/responses";
+import { notFoundResponse, profileTextResponse, textResponse } from "./data/responses";
 import {
+  roadmapOpenGraphCard,
   roadmapPageMetadata as buildRoadmapPageMetadata,
   type RoadmapPageFacts,
 } from "./data/roadmap-page";
@@ -35,6 +36,9 @@ export type { IndexedPage, PageFacts } from "./data/page-metadata";
 
 export { isPreviewPage } from "./data/open-graph-card";
 
+/** The answer for a preview image or document that does not exist: 404, kept out of search. */
+export { notFoundResponse };
+
 /**
  * An indexed page's metadata on the canonical origin: title, description, canonical address and
  * Open Graph basics with the page's preview image, from the facts the page read.
@@ -45,8 +49,8 @@ export function pageMetadata(page: IndexedPage, facts: PageFacts): Metadata {
 
 /**
  * An AI Roadmap area's or module's page metadata on the canonical origin: title from its
- * breadcrumbs, description, canonical address and Open Graph basics, kept out of search results
- * until the roadmap is indexed as a whole.
+ * breadcrumbs, description, canonical address, Open Graph basics with the page's own preview image
+ * and a large Twitter card, kept out of search results until the roadmap is indexed as a whole.
  */
 export function roadmapPageMetadata(facts: RoadmapPageFacts): Metadata {
   return buildRoadmapPageMetadata(siteOrigin(), facts);
@@ -83,5 +87,17 @@ export async function openGraphImageResponse(page: IndexedPage): Promise<Respons
   const result = await getHomepage();
   const facts = result.status === "ready" ? result.profile : null;
   const card = openGraphCard(siteOrigin(), page, facts);
+  return openGraphImage(card, facts === null ? "no-store" : "no-cache");
+}
+
+/**
+ * An AI Roadmap area's or module's Open Graph preview image, a 1200 × 630 PNG: the page's kind and
+ * name and whose roadmap it is on, or the site's own roadmap card while the page cannot be read
+ * (`facts` is null), so a shared link always has a preview. The page's card is revalidated on every
+ * use (`no-cache`); the fallback is never stored. A page that does not exist has no image: its
+ * route answers 404 itself.
+ */
+export function roadmapOpenGraphImageResponse(facts: RoadmapPageFacts | null): Response {
+  const card = roadmapOpenGraphCard(siteOrigin(), facts);
   return openGraphImage(card, facts === null ? "no-store" : "no-cache");
 }

@@ -6,7 +6,13 @@
 // rendered from the content the profile module reads. Gives the overview's lead and the detail
 // pages' breadcrumbs for the pages' metadata.
 export { roadmapLead, toRoadmapOverview } from "./data/overview";
-export { toRoadmapAreaPage, toRoadmapModulePage, type RoadmapCrumb } from "./data/detail";
+export {
+  roadmapPageFacts,
+  toRoadmapAreaPage,
+  toRoadmapModulePage,
+  type RoadmapCrumb,
+  type RoadmapPageFacts,
+} from "./data/detail";
 export { RoadmapAreaTemplate } from "./templates/area";
 export { RoadmapModuleTemplate } from "./templates/module";
 export { RoadmapOverviewTemplate } from "./templates/overview";

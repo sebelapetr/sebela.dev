@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getRoadmapArea } from "../../../modules/profile";
-import { RoadmapAreaTemplate, toRoadmapAreaPage } from "../../../modules/roadmap";
+import { RoadmapAreaTemplate, roadmapPageFacts } from "../../../modules/roadmap";
 import { RoadmapStructuredData, roadmapPageMetadata } from "../../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never a page without its area. */
@@ -29,26 +29,15 @@ async function readContent(params: AreaPageProps["params"]) {
   return result.content;
 }
 
-function facts(content: Awaited<ReturnType<typeof readContent>>) {
-  const page = toRoadmapAreaPage(content.area);
-  return {
-    name: content.name,
-    kind: "area" as const,
-    breadcrumbs: page.breadcrumbs,
-    summary: page.description,
-    estimatedMinutes: content.area.progress.estimatedMinutes,
-  };
-}
-
 export async function generateMetadata({ params }: AreaPageProps): Promise<Metadata> {
-  return roadmapPageMetadata(facts(await readContent(params)));
+  return roadmapPageMetadata(roadmapPageFacts(await readContent(params)));
 }
 
 export default async function RoadmapAreaPage({ params }: AreaPageProps) {
   const content = await readContent(params);
   return (
     <>
-      <RoadmapStructuredData facts={facts(content)} />
+      <RoadmapStructuredData facts={roadmapPageFacts(content)} />
       <RoadmapAreaTemplate content={content} />
     </>
   );

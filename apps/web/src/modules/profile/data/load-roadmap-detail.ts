@@ -51,8 +51,10 @@ export interface LoadRoadmapDetailOptions {
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
- * Reads an area's page from the API's public routes: the person and the area with its modules,
- * resources and derived progress, uncached and limited in time. An area or person that does not
+ * Reads an area's page from the API's public routes: the person, the area with its modules,
+ * resources and derived progress, and the roadmap's areas in order (slug and name, for the way to
+ * the area's neighbours), uncached and limited in time. A failed read of the roadmap's areas makes
+ * the page unavailable. An area or person that does not
  * exist, or an address that is not a slug, makes the page missing; any other failed read makes it
  * unavailable, never missing. The area is returned as the API answered it.
  */
@@ -63,19 +65,21 @@ export async function loadRoadmapArea(
 ): Promise<RoadmapAreaResult> {
   const init = requestInit(options);
   try {
-    const [personRead, areaRead] = await Promise.all([
+    const [personRead, areaRead, treeRead] = await Promise.all([
       client.GET("/v1/person", init()),
       client.GET("/v1/roadmap/tree/{area}", { params: { path: { area } }, ...init() }),
+      client.GET("/v1/roadmap", init()),
     ]);
     if (personRead.data === undefined) return failedRead(personRead.response);
     if (areaRead.data === undefined) return failedRead(areaRead.response);
+    if (treeRead.data === undefined) return { status: "unavailable" };
     return {
       status: "ready",
       content: {
         name: personRead.data.name,
         headline: personRead.data.headline,
         area: areaRead.data.area,
-        areas: [],
+        areas: treeRead.data.areas.map(({ slug, name }) => ({ slug, name })),
       },
     };
   } catch {
