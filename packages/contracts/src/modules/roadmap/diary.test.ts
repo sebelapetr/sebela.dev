@@ -80,6 +80,21 @@ describe("TimeEntryCreateSchema", () => {
     expect(result.error?.issues[0]?.path).toEqual(["startedAt"]);
   });
 
+  it("does not compare the end with a start it already refused", () => {
+    // Read as a local time of the process, the start could fall either side of the end.
+    const result = TimeEntryCreateSchema.safeParse({
+      ...session,
+      startedAt: "2026-03-03T00:30:00",
+      endedAt: "2026-03-02T23:30:00Z",
+    });
+    expect(result.error?.issues.map((issue) => issue.path)).toEqual([["startedAt"]]);
+    const update = TimeEntryUpdateSchema.safeParse({
+      startedAt: session.startedAt,
+      endedAt: "2026-03-02",
+    });
+    expect(update.error?.issues.map((issue) => issue.path)).toEqual([["endedAt"]]);
+  });
+
   it.each([
     ["equal to", "2026-03-02T23:30:00+01:00"],
     ["before", "2026-03-02T22:30:00Z"],
