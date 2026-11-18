@@ -93,5 +93,20 @@
     "resource": "evaluation-field-guide-reading",
     "startedAt": "2025-03-06T07:30:00+01:00",
     "endedAt": "2025-03-06T08:00:00+01:00"
+  },
+  {
+    "event": "year-end-agents-workshop",
+    "startedAt": "2024-12-31T10:00:00+01:00",
+    "endedAt": "2024-12-31T12:00:00+01:00"
+  },
+  {
+    "event": "retrieval-summit",
+    "startedAt": "2025-02-26T09:00:00+01:00",
+    "endedAt": "2025-02-26T12:30:00+01:00"
+  },
+  {
+    "event": "retrieval-summit",
+    "startedAt": "2025-02-28T13:00:00+01:00",
+    "endedAt": "2025-02-28T16:30:00+01:00"
   }
 ]
