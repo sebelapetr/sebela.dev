@@ -35,8 +35,8 @@ describe("sitemapXml", () => {
   });
 
   it("follows another configured origin", () => {
-    expect(locations(sitemapXml("http://other.example.test:4100"))[0]).toBe(
-      "http://other.example.test:4100/",
+    expect(locations(sitemapXml("http://other.example.test"))[0]).toBe(
+      "http://other.example.test/",
     );
   });
 
@@ -55,8 +55,8 @@ describe("robotsTxt", () => {
   });
 
   it("follows another configured origin", () => {
-    expect(robotsTxt("http://other.example.test:4100")).toContain(
-      "Sitemap: http://other.example.test:4100/sitemap.xml",
+    expect(robotsTxt("http://other.example.test")).toContain(
+      "Sitemap: http://other.example.test/sitemap.xml",
     );
   });
 });

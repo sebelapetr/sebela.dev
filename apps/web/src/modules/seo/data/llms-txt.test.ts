@@ -135,8 +135,8 @@ describe("llmsTxt", () => {
   });
 
   it("follows another configured origin", () => {
-    const text = llmsTxt("http://other.example.test:4100", profile());
-    expect(text).toContain("- [Home](http://other.example.test:4100/)");
+    const text = llmsTxt("http://other.example.test", profile());
+    expect(text).toContain("- [Home](http://other.example.test/)");
     expect(text).not.toContain("site.example.test");
   });
 

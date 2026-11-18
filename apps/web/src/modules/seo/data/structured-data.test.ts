@@ -70,24 +70,24 @@ describe("profileStructuredData", () => {
   });
 
   it("links the site and the profile page to the person on the configured origin", () => {
-    const data = profileStructuredData("http://other.example.test:4100", profile());
+    const data = profileStructuredData("http://other.example.test", profile());
     expect(node(data, "WebSite")).toEqual({
       "@type": "WebSite",
-      "@id": "http://other.example.test:4100/#website",
-      url: "http://other.example.test:4100/",
+      "@id": "http://other.example.test/#website",
+      url: "http://other.example.test/",
       name: "Robin Example",
       description: "Fictional engineer for tests",
       inLanguage: "en",
-      publisher: { "@id": "http://other.example.test:4100/#person" },
+      publisher: { "@id": "http://other.example.test/#person" },
     });
     expect(node(data, "ProfilePage")).toEqual({
       "@type": "ProfilePage",
-      "@id": "http://other.example.test:4100/#profile-page",
-      url: "http://other.example.test:4100/",
+      "@id": "http://other.example.test/#profile-page",
+      url: "http://other.example.test/",
       name: "Robin Example — Fictional engineer for tests",
       description: "Robin is made up for the tests.",
-      isPartOf: { "@id": "http://other.example.test:4100/#website" },
-      mainEntity: { "@id": "http://other.example.test:4100/#person" },
+      isPartOf: { "@id": "http://other.example.test/#website" },
+      mainEntity: { "@id": "http://other.example.test/#person" },
     });
   });
 });

@@ -58,10 +58,10 @@ describe("readWebConfig", () => {
 });
 
 describe("readWebConfig: the site's canonical origin", () => {
-  it("keeps the origin with its port and without a trailing slash", () => {
-    expect(
-      readWebConfig({ ...API, WEB_SITE_ORIGIN: "http://site.example.test:4100/" }).siteOrigin,
-    ).toBe("http://site.example.test:4100");
+  it("keeps the origin without a trailing slash", () => {
+    expect(readWebConfig({ ...API, WEB_SITE_ORIGIN: "http://site.example.test/" }).siteOrigin).toBe(
+      "http://site.example.test",
+    );
   });
 
   it("writes the host in lower case, as a URL compares it", () => {

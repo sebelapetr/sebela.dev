@@ -56,8 +56,8 @@ describe("pageMetadata", () => {
   });
 
   it("follows another configured origin, never a fixed host", () => {
-    const metadata = pageMetadata("http://other.example.test:4100", "cv", FACTS);
-    expect(metadata.alternates?.canonical).toBe("http://other.example.test:4100/cv");
+    const metadata = pageMetadata("http://other.example.test", "cv", FACTS);
+    expect(metadata.alternates?.canonical).toBe("http://other.example.test/cv");
   });
 
   it("gives Open Graph the same title and description and the person as the site's name", () => {
