@@ -531,6 +531,71 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
+  it("names each diary day a notes or time-entry write changed, old and new", async () => {
+    const { roadmap } = backend.services;
+    for (const day of (await roadmap.getDiary()).days) {
+      for (const entry of day.entries) await roadmap.deleteTimeEntry(entry.id);
+      if (day.notes !== null) await roadmap.deleteDiaryNotes(day.date);
+    }
+    if ((await roadmap.getRoadmap()).areas.length === 0) {
+      // Set up without notifying.
+      for (const [path, body] of [
+        ["/v1/roadmap/areas", { slug: "basics", name: "Basics", weight: 100, position: 0 }],
+        ["/v1/roadmap/modules", { slug: "prompting", area: "basics", name: "Prompt", position: 0 }],
+        [
+          "/v1/roadmap/resources",
+          {
+            slug: "prompting-guide",
+            module: "prompting",
+            name: "Guide",
+            type: "link",
+            position: 0,
+          },
+        ],
+      ] as const) {
+        const response = await backend
+          .api()
+          .app.request(path, { method: "POST", ...json(body, auth) }, connection());
+        expect(response.status).toBe(201);
+      }
+    }
+
+    const notes = json({ notes: "Late reading." }, auth);
+    expect((await send("/v1/roadmap/diary/2026-03-02", "PATCH", notes)).status).toBe(200);
+    const session = {
+      resource: "prompting-guide",
+      startedAt: "2026-03-02T23:30:00+01:00",
+      endedAt: "2026-03-03T00:30:00+01:00",
+    };
+    const created = await send("/v1/roadmap/time-entries", "POST", json(session, auth));
+    expect(created.status).toBe(201);
+    const { entries } = (await created.json()) as { entries: { id: string }[] };
+    const id = entries[0]?.id ?? "";
+    const moved = { startedAt: "2026-03-05T08:00:00+01:00", endedAt: "2026-03-05T09:00:00+01:00" };
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "PATCH", json(moved, auth))).status).toBe(
+      200,
+    );
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+    expect((await send("/v1/roadmap/diary/2026-03-02", "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+
+    const day = (record: string, action: ContentChange["action"]) => [
+      { domain: "roadmap-diary", record, action },
+    ];
+    expect(await delivered()).toEqual([
+      day("2026-03-02", "updated"),
+      day("2026-03-02", "created"),
+      day("2026-03-03", "created"),
+      day("2026-03-02", "updated"),
+      day("2026-03-05", "updated"),
+      day("2026-03-05", "deleted"),
+      day("2026-03-02", "deleted"),
+    ]);
+  });
+
   it("sends nothing for a refused, invalid, conflicting or failed write, or a read", async () => {
     await send("/v1/technologies", "POST", json(technology, auth));
     await invalidation.idle();

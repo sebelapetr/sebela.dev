@@ -253,6 +253,13 @@ const describingRoadmap: RoadmapService = {
   createResource: documentationOnly,
   updateResource: documentationOnly,
   deleteResource: documentationOnly,
+  getDiary: documentationOnly,
+  getDiaryDay: documentationOnly,
+  writeDiaryNotes: documentationOnly,
+  deleteDiaryNotes: documentationOnly,
+  createTimeEntry: documentationOnly,
+  updateTimeEntry: documentationOnly,
+  deleteTimeEntry: documentationOnly,
 };
 
 /**
