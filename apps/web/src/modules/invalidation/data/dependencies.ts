@@ -29,6 +29,11 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   education: ["profile"],
   "current-focus": ["profile"],
   media: ["profile"],
+  // The roadmap pages arrive with their own issue; until then a roadmap write refreshes the
+  // whole cache like any other content write.
+  "roadmap-area": ["profile"],
+  "roadmap-module": ["profile"],
+  "roadmap-resource": ["profile"],
 };
 
 /**
