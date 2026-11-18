@@ -1,5 +1,6 @@
-import type { RoadmapBookStatus } from "@sebela/api-client";
+import type { RoadmapBook, RoadmapBookStatus } from "@sebela/api-client";
 
+import { anchorHref, bookshelfHref, formatDate } from "../../_shared";
 import type {
   ImageMedia,
   RoadmapBookContent,
@@ -7,6 +8,8 @@ import type {
   RoadmapShelfBook,
 } from "../../profile";
 import type { RoadmapCrumb } from "./detail";
+import { formatStudyTime } from "./diary";
+import { ROADMAP_PATH } from "./overview";
 
 /** The bookshelf's name, as its pages and titles name it. */
 export const BOOKSHELF_NAME = "Bookshelf";
@@ -87,18 +90,115 @@ export interface BookPageFacts {
   };
 }
 
+const STATUS_LABELS: Record<RoadmapBookStatus, string> = {
+  "to-read": "To read",
+  reading: "Reading",
+  completed: "Completed",
+};
+
+const OVERVIEW_CRUMB: RoadmapCrumb = { name: "AI Engineering Roadmap", href: ROADMAP_PATH };
+const BOOKSHELF_CRUMB: RoadmapCrumb = { name: BOOKSHELF_NAME, href: bookshelfHref() };
+
+/**
+ * The bookshelf: every book in the API's shelf order, numbered by its place on the shelf, with its
+ * status as the API derived it, and the way from the overview. Empty without books.
+ */
 export function toBookshelfPage(books: readonly RoadmapShelfBook[]): BookshelfPage {
-  throw new Error("not implemented", { cause: books });
+  return {
+    books: books.map((shelfBook, index) => ({
+      number: String(index + 1).padStart(2, "0"),
+      ...bookRow(shelfBook),
+    })),
+    breadcrumbs: [OVERVIEW_CRUMB, BOOKSHELF_CRUMB],
+  };
 }
 
+/**
+ * A book's own page: its facts, reading dates and logged time, the resource that reads it and its
+ * summary. Whatever the book lacks is left out, never invented; the logged time is shown only for
+ * a book a resource reads, since time is logged on the resource alone.
+ */
 export function toBookPage(content: RoadmapShelfBook): BookPage {
-  throw new Error("not implemented", { cause: content });
+  const { book } = content;
+  const row = bookRow(content);
+  return {
+    ...row,
+    facts: bookFacts(book),
+    started: bookDate(book.startedOn),
+    completed: bookDate(book.endedOn),
+    timeLogged: book.resource === null ? null : formatStudyTime(book.readingSeconds),
+    resource:
+      book.resource === null
+        ? null
+        : {
+            name: book.resource.name,
+            href: anchorHref({ kind: "roadmap-resource", ...book.resource }),
+          },
+    summary: book.summary,
+    breadcrumbs: [OVERVIEW_CRUMB, BOOKSHELF_CRUMB, { name: book.title, href: row.href }],
+  };
 }
 
+/** What the bookshelf's metadata rests on: its books in shelf order. */
 export function bookshelfPageFacts(content: RoadmapBookshelfContent): BookshelfPageFacts {
-  throw new Error("not implemented", { cause: content });
+  return {
+    name: content.name,
+    kind: "bookshelf",
+    breadcrumbs: [OVERVIEW_CRUMB, BOOKSHELF_CRUMB],
+    summary: null,
+    books: content.books.map(({ book }) => ({
+      title: book.title,
+      author: book.author,
+      href: bookshelfHref(book.slug),
+      description: book.description,
+    })),
+  };
 }
 
+/** What a book's page metadata rests on: its description, its facts and its cover. */
 export function bookPageFacts(content: RoadmapBookContent): BookPageFacts {
-  throw new Error("not implemented", { cause: content });
+  const { book } = content;
+  return {
+    name: content.name,
+    kind: "book",
+    breadcrumbs: [
+      OVERVIEW_CRUMB,
+      BOOKSHELF_CRUMB,
+      { name: book.title, href: bookshelfHref(book.slug) },
+    ],
+    summary: book.description,
+    book: {
+      title: book.title,
+      author: book.author,
+      isbn: book.isbn,
+      pages: book.pages,
+      year: book.year,
+      image: content.cover?.url ?? null,
+    },
+  };
+}
+
+function bookRow({ book, cover }: RoadmapShelfBook): Omit<ShelfBookRow, "number"> {
+  return {
+    slug: book.slug,
+    title: book.title,
+    href: bookshelfHref(book.slug),
+    author: book.author,
+    description: book.description,
+    status: book.status,
+    statusLabel: STATUS_LABELS[book.status],
+    cover,
+  };
+}
+
+function bookFacts(book: RoadmapBook): string[] {
+  const facts: string[] = [];
+  if (book.pages !== null) facts.push(book.pages === 1 ? "1 page" : `${String(book.pages)} pages`);
+  if (book.year !== null) facts.push(`Published ${String(book.year)}`);
+  if (book.isbn !== null) facts.push(`ISBN ${book.isbn}`);
+  return facts;
+}
+
+function bookDate(date: string | null): BookDate | null {
+  return date === null ? null : { text: formatDate(date), dateTime: date };
 }

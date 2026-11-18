@@ -92,5 +92,6 @@ export function roadmapHref(target: RoadmapPageTarget): string {
  * `/ai-roadmap/bookshelf/<book>`. The book's slug stays inside its own path segment.
  */
 export function bookshelfHref(book?: string): string {
-  throw new Error("not implemented", { cause: book });
+  const shelf = `${routes.aiRoadmap}/bookshelf`;
+  return book === undefined ? shelf : `${shelf}/${encodeURIComponent(book)}`;
 }

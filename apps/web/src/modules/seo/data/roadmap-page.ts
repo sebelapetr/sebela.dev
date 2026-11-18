@@ -1,7 +1,9 @@
 // The metadata, structured data and preview images of the AI Roadmap's own pages below the overview
-// (an area's and a module's page): their titles, descriptions, canonical addresses, Open Graph
-// basics with a preview image at `/og<page path>`, breadcrumbs and the page as a schema.org Course
-// (part of its area, with the API's estimate), from the page's own API read.
+// (an area's and a module's page, the bookshelf and a book's page): their titles, descriptions,
+// canonical addresses, Open Graph basics with a preview image at `/og<page path>`, breadcrumbs and
+// the page's own entity (an area or module as a schema.org Course, part of its area, with the API's
+// estimate; the bookshelf as an ItemList of its books; a book as a Book), from the page's own API
+// read.
 import type { Metadata } from "next";
 
 import { plainText } from "../../_shared";
@@ -72,8 +74,8 @@ const DESCRIPTION_MAX = 160;
 const CARD_LABELS = {
   area: "Learning area",
   module: "Learning module",
-  bookshelf: "Learning area",
-  book: "Learning area",
+  bookshelf: "Bookshelf",
+  book: "Book",
 } as const;
 
 /** The roadmap's own name, on the site's fallback card and in every page's description. */
@@ -108,35 +110,13 @@ export function roadmapPageMetadata(origin: string, facts: RoadmapPageFacts): Me
 
 /**
  * The page's schema.org JSON-LD: the page as part of the website, its breadcrumbs from the overview
- * on `origin`, and the area or module as a Course the person provides, with the API's planned
- * estimate when there is one and, for a module, the area's Course it is part of.
+ * on `origin`, and the page's own entity: an area or module as a Course the person provides, with
+ * the API's planned estimate when there is one and, for a module, the area's Course it is part of;
+ * the bookshelf as an ItemList of its books in shelf order; a book as a Book with every fact it has
+ * and none it lacks.
  */
 export function roadmapStructuredData(origin: string, facts: RoadmapPageFacts): object {
   const { title, description, url } = describe(origin, facts);
-  const [page, parent] = facts.breadcrumbs.toReversed();
-  const course = {
-    "@type": "Course",
-    "@id": `${url}#course`,
-    url,
-    name: page?.name ?? title,
-    description,
-    inLanguage: "en",
-    provider: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
-    mainEntityOfPage: { "@id": `${url}#webpage` },
-    ...("estimatedMinutes" in facts && facts.estimatedMinutes > 0
-      ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` }
-      : {}),
-    ...(facts.kind === "module" && parent !== undefined
-      ? {
-          isPartOf: {
-            "@type": "Course",
-            "@id": `${pageUrl(origin, parent.href)}#course`,
-            name: parent.name,
-            url: pageUrl(origin, parent.href),
-          },
-        }
-      : {}),
-  };
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -160,19 +140,100 @@ export function roadmapStructuredData(origin: string, facts: RoadmapPageFacts): 
           item: pageUrl(origin, crumb.href),
         })),
       },
-      course,
+      pageEntity(origin, facts, { title, description, url }),
     ],
+  };
+}
+
+function pageEntity(
+  origin: string,
+  facts: RoadmapPageFacts,
+  { title, description, url }: { title: string; description: string; url: string },
+): object {
+  const [page, parent] = facts.breadcrumbs.toReversed();
+  if (facts.kind === "bookshelf") {
+    return {
+      "@type": "ItemList",
+      "@id": `${url}#books`,
+      name: page?.name ?? title,
+      numberOfItems: facts.books.length,
+      itemListElement: facts.books.map((book, index) => {
+        const about = book.description === null ? "" : plainText(book.description, DESCRIPTION_MAX);
+        return {
+          "@type": "ListItem",
+          position: index + 1,
+          name: book.author === null ? book.title : `${book.title} by ${book.author}`,
+          url: pageUrl(origin, book.href),
+          ...(about === "" ? {} : { description: about }),
+        };
+      }),
+    };
+  }
+  if (facts.kind === "book") {
+    const { book } = facts;
+    return {
+      "@type": "Book",
+      "@id": `${url}#book`,
+      url,
+      name: book.title,
+      description,
+      ...(book.author === null ? {} : { author: { "@type": "Person", name: book.author } }),
+      ...(book.isbn === null ? {} : { isbn: book.isbn }),
+      ...(book.pages === null ? {} : { numberOfPages: book.pages }),
+      ...(book.year === null ? {} : { datePublished: String(book.year) }),
+      ...(book.image === null ? {} : { image: `${origin}${book.image}` }),
+      mainEntityOfPage: { "@id": `${url}#webpage` },
+    };
+  }
+  return {
+    "@type": "Course",
+    "@id": `${url}#course`,
+    url,
+    name: page?.name ?? title,
+    description,
+    inLanguage: "en",
+    provider: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
+    mainEntityOfPage: { "@id": `${url}#webpage` },
+    ...(facts.estimatedMinutes > 0 ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` } : {}),
+    ...(facts.kind === "module" && parent !== undefined
+      ? {
+          isPartOf: {
+            "@type": "Course",
+            "@id": `${pageUrl(origin, parent.href)}#course`,
+            name: parent.name,
+            url: pageUrl(origin, parent.href),
+          },
+        }
+      : {}),
   };
 }
 
 function describe(origin: string, facts: RoadmapPageFacts) {
   const names = facts.breadcrumbs.map((crumb) => crumb.name).reverse();
   const title = [...names, facts.name].join(" — ");
-  const summary = facts.summary === null ? "" : plainText(facts.summary, DESCRIPTION_MAX);
-  const description = summary === "" ? fallbackDescription(facts.name, names) : summary;
+  const description =
+    facts.kind === "book"
+      ? bookDescription(facts, names)
+      : summaryText(facts.summary, DESCRIPTION_MAX) || fallbackDescription(facts.name, names);
   const page = facts.breadcrumbs.at(-1);
   const url = pageUrl(origin, page?.href ?? "/");
   return { title, description, url };
+}
+
+function summaryText(summary: string | null, max: number): string {
+  return summary === null ? "" : plainText(summary, max);
+}
+
+/**
+ * A book's description: its title and author, then its own description as plain text within a
+ * search result's length; what the page is when it has neither an author nor a description.
+ */
+function bookDescription(facts: RoadmapBookPageFacts, names: readonly string[]): string {
+  const { title, author } = facts.book;
+  const lead = author === null ? `${title}.` : `${title} by ${author}.`;
+  const about = summaryText(facts.summary, DESCRIPTION_MAX - lead.length - 1);
+  if (about !== "") return `${lead} ${about}`;
+  return author === null ? fallbackDescription(facts.name, names) : lead;
 }
 
 /** What the page is, from its names: `Module, part of Area on <name>'s AI Engineering Roadmap.` */
@@ -193,7 +254,7 @@ export function roadmapOpenGraphImageUrl(origin: string, facts: RoadmapPageFacts
 
 /**
  * The page's preview card: its kind, its name and whose roadmap it is on (a module's also names its
- * area), or the site's own roadmap card when the page cannot be read (`facts` is null).
+ * area, a book its author), or the site's own roadmap card when the page cannot be read (`facts` is null).
  */
 export function roadmapOpenGraphCard(
   origin: string,
@@ -205,6 +266,8 @@ export function roadmapOpenGraphCard(
   const subtitle =
     facts.kind === "module" && parent !== undefined
       ? `Part of ${parent.name} on ${roadmap}`
-      : roadmap;
+      : facts.kind === "book" && facts.book.author !== null
+        ? `By ${facts.book.author}, on ${roadmap}`
+        : roadmap;
   return textCard(origin, CARD_LABELS[facts.kind], page?.name ?? ROADMAP_NAME, subtitle);
 }

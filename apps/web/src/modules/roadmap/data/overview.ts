@@ -8,7 +8,7 @@ import type {
   RoadmapTreeResource,
 } from "@sebela/api-client";
 
-import { roadmapHref } from "../../_shared";
+import { bookshelfHref, roadmapHref } from "../../_shared";
 
 export interface RoadmapFacts {
   readonly areaCount: number;
@@ -146,7 +146,10 @@ export function moduleFields(
   };
 }
 
-/** A resource as its module lists it, its link kept only when it is safe to follow. */
+/**
+ * A resource as its module lists it, its link kept only when it is safe to follow, with the page of
+ * the book it reads on the bookshelf.
+ */
 export function toResourceRow(resource: RoadmapTreeResource): ResourceRow {
   return {
     slug: resource.slug,
@@ -157,7 +160,7 @@ export function toResourceRow(resource: RoadmapTreeResource): ResourceRow {
     status: resource.status,
     estimate: resource.estimatedMinutes === null ? null : estimateLabel(resource.estimatedMinutes),
     href: safeLink(resource.link),
-    bookHref: null,
+    bookHref: resource.book === null ? null : bookshelfHref(resource.book),
   };
 }
 

@@ -92,7 +92,7 @@ export async function loadRoadmapDiary(
 /**
  * Reads a diary day's page from the API's public routes: the person, the day with its notes, time
  * entries and derived total, and the roadmap's areas and modules in order (slug and name, for the
- * entries' grouping), uncached and limited in time. A day without a diary record, an address that
+ * entries' grouping) with every resource that reads a book, uncached and limited in time. A day without a diary record, an address that
  * is not a calendar day or a person that does not exist makes the page missing; any other failed
  * read, the roadmap's included, makes it unavailable, never missing.
  */
@@ -125,7 +125,13 @@ export async function loadRoadmapDiaryDay(
           name: area.name,
           modules: area.modules.map(({ slug, name }) => ({ slug, name })),
         })),
-        books: [],
+        books: treeRead.data.areas.flatMap((area) =>
+          area.modules.flatMap((module) =>
+            module.resources.flatMap(({ slug, book }) =>
+              book === null ? [] : [{ resource: slug, book }],
+            ),
+          ),
+        ),
       },
     };
   } catch {
