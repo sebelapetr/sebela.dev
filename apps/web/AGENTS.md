@@ -92,7 +92,7 @@ Cache dependencies, for the signed invalidation slice ("Refresh rendered profile
 
 ## Caching and invalidation
 
-The `profile` module reads the API through a process-local content cache (`data/content-cache.ts`), passed to the generated client as its `fetch`: GET answers with status 200 are kept by address, at most 256 entries of at most 1 MiB each, for at most 60 seconds (a fixed constant; #57 makes the age configurable). Any other status and every failed read pass through unkept, so a failure is never served as content and "Try again" reads again. The CV PDF's file read (`getCvPdfFile`) never goes through it. The cache lives on `globalThis`, so every route of the server process shares one.
+The `profile` module reads the API through a process-local content cache (`data/content-cache.ts`), passed to the generated client as its `fetch`: GET answers with status 200 are kept by address, at most 256 entries of at most 1 MiB each, for at most 60 seconds (a fixed constant; #57 makes the age configurable). Any other status and every failed read pass through unkept, so a failure is never served as content and "Try again" reads again. The CV PDF's file read (`getCvPdfFile`) never goes through it. The cache lives on `globalThis`, so every route of the server process shares one. It is not shared between processes: a notification clears only the instance it reaches, so with several website instances the others serve older content for up to 60 seconds.
 
 The API sends a signed notification after each committed content write (`apps/api/AGENTS.md`, Website invalidation; contract in `packages/contracts/AGENTS.md`). `POST /internal/invalidation` (`modules/invalidation`) answers it:
 
