@@ -127,7 +127,18 @@ export function toRoadmapOverview(roadmap: Roadmap): RoadmapOverview {
 
 /** What the roadmap holds, its planned hours and its last update, as the overview's lead. */
 export function roadmapLead(facts: RoadmapFacts): string {
-  throw new Error(`not implemented: ${String(facts.areaCount)}`);
+  const updated = facts.lastUpdated === null ? "" : ` (last updated ${facts.lastUpdated})`;
+  return (
+    "A structured, hands-on path from full-stack development to production AI engineering: " +
+    `${count(facts.areaCount, "area")}, ${count(facts.moduleCount, "module")}, ` +
+    `${count(facts.resourceCount, "vetted resource")}, ` +
+    `roughly ${count(facts.estimatedHours, "hour")} of study and implementation. ` +
+    `Free, and updated as I actually work through it${updated}.`
+  );
+}
+
+function count(amount: number, noun: string): string {
+  return `${String(amount)} ${noun}${amount === 1 ? "" : "s"}`;
 }
 
 /** Planned minutes in short words: `45m` under an hour, `2h` for whole hours, `1.5h` otherwise. */
