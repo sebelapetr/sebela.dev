@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { anchorHref, anchorId, roadmapHref } from "./anchors";
+import { anchorHref, anchorId, bookshelfHref, roadmapHref } from "./anchors";
 
 describe("anchorId", () => {
   it("names each kind of item by its stable slug", () => {
@@ -104,5 +104,15 @@ describe("roadmap addresses", () => {
     expect(anchorHref({ kind: "roadmap-resource", area: "a/b", module: "c", slug: "d" })).toBe(
       "/ai-roadmap/a%2Fb/c#resource-d",
     );
+  });
+
+  it("addresses the bookshelf and a book on it", () => {
+    expect(bookshelfHref()).toBe("/ai-roadmap/bookshelf");
+    expect(bookshelfHref("quiet-orbit")).toBe("/ai-roadmap/bookshelf/quiet-orbit");
+  });
+
+  it("never lets a book's slug leave the bookshelf", () => {
+    expect(bookshelfHref("../cv")).toBe("/ai-roadmap/bookshelf/..%2Fcv");
+    expect(bookshelfHref("a?b#c")).toBe("/ai-roadmap/bookshelf/a%3Fb%23c");
   });
 });

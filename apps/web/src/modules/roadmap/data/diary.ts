@@ -1,7 +1,7 @@
 import type { Diary, DiaryDay, TimeEntry } from "@sebela/api-client";
 
-import { roadmapHref } from "../../_shared";
-import type { RoadmapDiaryAreaName } from "../../profile";
+import { bookshelfHref, roadmapHref } from "../../_shared";
+import type { RoadmapDiaryAreaName, RoadmapDiaryBookLink } from "../../profile";
 import type { RoadmapCrumb } from "./detail";
 import { resourceTypeLabel, ROADMAP_PATH, safeLink } from "./overview";
 
@@ -38,6 +38,8 @@ export interface DiarySession {
     readonly typeLabel: string;
     /** A safe absolute `http(s)` address, or null. */
     readonly href: string | null;
+    /** The page of the book the resource reads, on the bookshelf, or null. */
+    readonly bookHref: string | null;
   };
 }
 
@@ -155,12 +157,15 @@ export function toDiaryList(diary: Diary): DiaryList {
  * the overview through the diary, and its sessions grouped by area, then module, in the roadmap's
  * order (`areas`), each group's sessions by their start. Times are Prague's wall-clock times; a
  * resource's link is kept only when it is safe. An area or module the roadmap does not name keeps
- * its slug as its name, has no link and follows the named ones in the order it first appears.
+ * its slug as its name, has no link and follows the named ones in the order it first appears. A
+ * session on a resource that reads a book (`books`) links to the book's page on the bookshelf.
  */
 export function toDiaryDayPage(
   day: DiaryDay,
   areas: readonly RoadmapDiaryAreaName[],
+  books: readonly RoadmapDiaryBookLink[] = [],
 ): DiaryDayPage {
+  const bookOf = new Map(books.map((link) => [link.resource, link.book]));
   const title = formatDiaryDate(day.date);
   return {
     date: day.date,
@@ -168,7 +173,7 @@ export function toDiaryDayPage(
     total: totalLabel(day),
     sessions: sessionCount(day.entries),
     notes: day.notes,
-    areas: groupSessions(day.entries, areas),
+    areas: groupSessions(day.entries, areas, bookOf),
     breadcrumbs: [
       { name: "AI Engineering Roadmap", href: ROADMAP_PATH },
       { name: DIARY_NAME, href: DIARY_PATH },
@@ -177,7 +182,8 @@ export function toDiaryDayPage(
   };
 }
 
-function toSession(entry: TimeEntry): DiarySession {
+function toSession(entry: TimeEntry, bookOf: ReadonlyMap<string, string>): DiarySession {
+  const book = bookOf.get(entry.resource.slug);
   return {
     id: entry.id,
     start: pragueTime(entry.startedAt),
@@ -189,6 +195,7 @@ function toSession(entry: TimeEntry): DiarySession {
       name: entry.resource.name,
       typeLabel: resourceTypeLabel(entry.resource.type),
       href: safeLink(entry.resource.link),
+      bookHref: book === undefined ? null : bookshelfHref(book),
     },
   };
 }
@@ -202,6 +209,7 @@ function rank(slugs: readonly string[], slug: string): number {
 function groupSessions(
   entries: readonly TimeEntry[],
   areas: readonly RoadmapDiaryAreaName[],
+  bookOf: ReadonlyMap<string, string>,
 ): DiaryAreaGroup[] {
   const byArea = new Map<string, Map<string, TimeEntry[]>>();
   for (const entry of entries) {
@@ -234,7 +242,7 @@ function groupSessions(
                   : roadmapHref({ area: areaSlug, module: moduleSlug }),
               entries: [...sessions]
                 .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
-                .map(toSession),
+                .map((entry) => toSession(entry, bookOf)),
             };
           }),
       };

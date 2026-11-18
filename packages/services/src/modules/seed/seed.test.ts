@@ -27,6 +27,8 @@ const cover = samplePng({ width: 60, height: 30 });
 const otherCover = samplePng({ width: 61, height: 30 });
 const avatar = samplePng({ width: 20, height: 20 });
 const otherAvatar = samplePng({ width: 21, height: 21 });
+const bookCover = samplePng({ width: 50, height: 75 });
+const otherBookCover = samplePng({ width: 51, height: 75 });
 const cv = samplePdf();
 
 /** A small, complete fictional seed: every kind of record, every relation and some media. */
@@ -273,6 +275,7 @@ const kinds: SeedKind[] = [
   "currentFocus",
   "roadmapAreas",
   "roadmapModules",
+  "roadmapBooks",
   "roadmapResources",
   "roadmapDiary",
   "roadmapTimeEntries",
@@ -293,6 +296,7 @@ const fixtureCounts: Record<SeedKind, number> = {
   currentFocus: 1,
   roadmapAreas: 2,
   roadmapModules: 3,
+  roadmapBooks: 0,
   roadmapResources: 3,
   roadmapDiary: 2,
   roadmapTimeEntries: 2,
@@ -388,6 +392,7 @@ describe("seed service", () => {
     currentFocus: await profile.listCurrentFocus(),
     roadmap: (await roadmap.getRoadmap()).areas,
     diary: (await roadmap.getDiary()).days,
+    books: await roadmap.listBooks(),
     media: await media().listMedia(),
   });
 
@@ -852,6 +857,186 @@ describe("seed service", () => {
       expect(after.person).toEqual(before.person);
       expect(after.projects).toEqual(before.projects);
       expect(after.media).toEqual(before.media);
+    });
+  });
+
+  describe("the bookshelf", () => {
+    /** The fixture with two fictional books, one with a cover, read by a resource of type book. */
+    const withBooks = (): SeedFiles => {
+      const files = fixture();
+      files["roadmap-books.json"] = [
+        {
+          slug: "fictional-patterns",
+          title: "Fictional patterns",
+          author: "Ada Example",
+          pages: 320,
+          priority: 0,
+          startedOn: "2025-02-01",
+          summary: "A **fictional** summary.",
+          cover: { file: "files/book.png", altText: "A fictional book cover." },
+        },
+        { slug: "fictional-backlog", title: "A fictional backlog", priority: 1 },
+      ];
+      files["roadmap-resources.json"] = [
+        ...(files["roadmap-resources.json"] as unknown[]),
+        {
+          slug: "patterns-reading",
+          module: "shipping",
+          name: "Reading fictional patterns",
+          type: "book",
+          status: "in-progress",
+          position: 0,
+          book: "fictional-patterns",
+          topics: ["agents", "rag"],
+        },
+      ];
+      files["roadmap-time-entries.json"] = [
+        ...(files["roadmap-time-entries.json"] as unknown[]),
+        {
+          resource: "patterns-reading",
+          startedAt: "2025-02-06T19:00:00Z",
+          endedAt: "2025-02-06T19:40:00Z",
+        },
+      ];
+      files["files/book.png"] = bookCover;
+      return files;
+    };
+
+    it("creates books with their cover, the resource link and the reading time", async () => {
+      await expect(load(withBooks())).resolves.toMatchObject({
+        records: {
+          roadmapBooks: { created: 2, updated: 0 },
+          roadmapResources: { created: 4, updated: 0 },
+          roadmapTimeEntries: { created: 3, updated: 0 },
+        },
+        media: { uploaded: 6, reused: 0, removed: 0 },
+      });
+
+      const books = await roadmap.listBooks();
+      expect(books.map(({ slug, status }) => [slug, status])).toEqual([
+        ["fictional-patterns", "reading"],
+        ["fictional-backlog", "to-read"],
+      ]);
+      expect(books[0]).toMatchObject({
+        author: "Ada Example",
+        pages: 320,
+        summary: "A **fictional** summary.",
+        cover: { width: 50, height: 75, altText: "A fictional book cover." },
+        resource: { slug: "patterns-reading", module: "shipping", area: "practice" },
+        readingSeconds: 2400,
+      });
+      expect(books[1]).toMatchObject({ author: null, cover: null, resource: null });
+      await expect(roadmap.getResource("patterns-reading")).resolves.toMatchObject({
+        book: "fictional-patterns",
+      });
+    });
+
+    it("keeps every book, link and cover of an identical rerun", async () => {
+      await load(withBooks());
+      const before = await snapshot();
+      const files = await filesBelow(storageFolder);
+
+      await expect(load(withBooks())).resolves.toMatchObject({
+        records: { roadmapBooks: { created: 0, updated: 2 } },
+        media: { uploaded: 0, reused: 6, removed: 0 },
+      });
+
+      expect(withoutUpdatedAt(await snapshot())).toEqual(withoutUpdatedAt(before));
+      expect(await filesBelow(storageFolder)).toEqual(files);
+      expect(failures).toEqual([]);
+    });
+
+    it("replaces a changed cover and removes the one no record uses any more", async () => {
+      await load(withBooks());
+      const oldCover = (await roadmap.getBook("fictional-patterns")).coverId;
+      const changed = withBooks();
+      const [patterns, backlog] = changed["roadmap-books.json"] as Record<string, unknown>[];
+      changed["roadmap-books.json"] = [
+        { ...patterns, cover: { file: "files/book-2.png", altText: "A new fictional cover." } },
+        backlog,
+      ];
+      changed["files/book-2.png"] = otherBookCover;
+
+      await expect(load(changed)).resolves.toMatchObject({
+        media: { uploaded: 1, reused: 5, removed: 1 },
+      });
+
+      const after = await roadmap.getBook("fictional-patterns");
+      expect(after.coverId).not.toBe(oldCover);
+      expect(after.cover).toMatchObject({ width: 51, altText: "A new fictional cover." });
+      expect((await media().listMedia()).some(({ id }) => id === oldCover)).toBe(false);
+      expect(await filesBelow(storageFolder)).toHaveLength(6);
+      expect(await roadmap.listBooks()).toHaveLength(2);
+    });
+
+    it("rejects a link to a book that neither the seed nor the database has", async () => {
+      const files = withBooks();
+      const resources = files["roadmap-resources.json"] as Record<string, unknown>[];
+      files["roadmap-resources.json"] = resources.map((resource) =>
+        resource["slug"] === "patterns-reading" ? { ...resource, book: "ghost-book" } : resource,
+      );
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path)).toEqual(["roadmap-resources.json[3].book"]);
+      await expectEmpty();
+    });
+
+    it("resolves a link to a book that only the database holds", async () => {
+      await roadmap.createBook({
+        slug: "hand-shelved",
+        title: "A fictional hand-shelved book",
+        author: null,
+        description: null,
+        pages: null,
+        year: null,
+        isbn: null,
+        priority: 0,
+        startedOn: null,
+        endedOn: null,
+        summary: null,
+        coverId: null,
+      });
+      const files = withBooks();
+      delete files["roadmap-books.json"];
+      const resources = files["roadmap-resources.json"] as Record<string, unknown>[];
+      files["roadmap-resources.json"] = resources.map((resource) =>
+        resource["slug"] === "patterns-reading" ? { ...resource, book: "hand-shelved" } : resource,
+      );
+
+      await load(files);
+
+      await expect(roadmap.getBook("hand-shelved")).resolves.toMatchObject({
+        resource: { slug: "patterns-reading" },
+        readingSeconds: 2400,
+      });
+    });
+
+    it("treats a bookshelf with only a book as not empty", async () => {
+      await roadmap.createBook({
+        slug: "hand-shelved",
+        title: "A fictional hand-shelved book",
+        author: null,
+        description: null,
+        pages: null,
+        year: null,
+        isbn: null,
+        priority: 0,
+        startedOn: null,
+        endedOn: null,
+        summary: null,
+        coverId: null,
+      });
+      const before = await snapshot();
+      const folder = await mkdtemp(join(seedFolder, "empty-books-"));
+
+      await expect(
+        seed().loadSeedIntoEmpty(await writeSeed(folder, withBooks())),
+      ).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
+      expect(await filesBelow(storageFolder)).toEqual([]);
     });
   });
 

@@ -46,6 +46,7 @@ function resource(slug: string, overrides: Partial<RoadmapTreeResource> = {}): R
     startedAt: null,
     finishedAt: null,
     link: null,
+    book: null,
     position: 0,
     topics: [],
     createdAt: STAMP,
@@ -257,6 +258,7 @@ describe("toRoadmapOverview", () => {
         status: "completed",
         estimate: "45m",
         href: "https://example.test/paper",
+        bookHref: null,
       },
       {
         slug: "unknown",
@@ -267,6 +269,7 @@ describe("toRoadmapOverview", () => {
         status: "skipped",
         estimate: null,
         href: null,
+        bookHref: null,
       },
       {
         slug: "unsafe",
@@ -277,7 +280,30 @@ describe("toRoadmapOverview", () => {
         status: "planned",
         estimate: null,
         href: null,
+        bookHref: null,
       },
+    ]);
+  });
+
+  it("leads a resource of a book to the book's page on the bookshelf", () => {
+    const [row] = toRoadmapOverview(
+      roadmap([
+        area("first-area", {
+          modules: [
+            module("first-module", {
+              resources: [
+                resource("reading", { type: "book", book: "quiet-orbit" }),
+                resource("odd", { type: "book", book: "a/b?c" }),
+              ],
+            }),
+          ],
+        }),
+      ]),
+    ).areas;
+
+    expect(row?.modules[0]?.resources.map((r) => r.bookHref)).toEqual([
+      "/ai-roadmap/bookshelf/quiet-orbit",
+      "/ai-roadmap/bookshelf/a%2Fb%3Fc",
     ]);
   });
 

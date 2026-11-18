@@ -257,3 +257,210 @@ describe("roadmapStructuredData", () => {
     });
   });
 });
+
+type BookshelfFacts = Extract<RoadmapPageFacts, { kind: "bookshelf" }>;
+type BookFacts = Extract<RoadmapPageFacts, { kind: "book" }>;
+
+const BOOKSHELF: BookshelfFacts = {
+  name: "Robin Example",
+  kind: "bookshelf",
+  breadcrumbs: [
+    { name: "AI Engineering Roadmap", href: "/ai-roadmap" },
+    { name: "Bookshelf", href: "/ai-roadmap/bookshelf" },
+  ],
+  summary: null,
+  books: [
+    {
+      title: "The Quiet Orbit",
+      author: "Ada Example",
+      href: "/ai-roadmap/bookshelf/quiet-orbit",
+      description: "A **fictional** book.\n\nMore later.",
+    },
+    {
+      title: "Untitled Notes",
+      author: null,
+      href: "/ai-roadmap/bookshelf/notes",
+      description: null,
+    },
+  ],
+};
+
+const BOOK: BookFacts = {
+  name: "Robin Example",
+  kind: "book",
+  breadcrumbs: [
+    ...BOOKSHELF.breadcrumbs,
+    { name: "The Quiet Orbit", href: "/ai-roadmap/bookshelf/quiet-orbit" },
+  ],
+  summary: "A **fictional** book about [signals](https://example.test).",
+  book: {
+    title: "The Quiet Orbit",
+    author: "Ada Example",
+    isbn: "9780000000002",
+    pages: 240,
+    year: 2021,
+    image: "/media/cover.png",
+  },
+};
+
+const SPARSE_BOOK: BookFacts = {
+  ...BOOK,
+  summary: null,
+  book: {
+    title: "The Quiet Orbit",
+    author: null,
+    isbn: null,
+    pages: null,
+    year: null,
+    image: null,
+  },
+};
+
+describe("the bookshelf's and a book's metadata", () => {
+  it("titles the bookshelf and a book by the way to them", () => {
+    expect(roadmapPageMetadata(ORIGIN, BOOKSHELF).title).toBe(
+      "Bookshelf — AI Engineering Roadmap — Robin Example",
+    );
+    expect(roadmapPageMetadata(ORIGIN, BOOK).title).toBe(
+      "The Quiet Orbit — Bookshelf — AI Engineering Roadmap — Robin Example",
+    );
+  });
+
+  it("describes the bookshelf by what it is, never by a fact of its own", () => {
+    expect(roadmapPageMetadata(ORIGIN, BOOKSHELF).description).toBe(
+      "Bookshelf on Robin Example's AI Engineering Roadmap.",
+    );
+  });
+
+  it("describes a book by its title, its author and its description as plain text", () => {
+    expect(roadmapPageMetadata(ORIGIN, BOOK).description).toBe(
+      "The Quiet Orbit by Ada Example. A fictional book about signals.",
+    );
+  });
+
+  it("keeps a book's description within a search result's length", () => {
+    const description = roadmapPageMetadata(ORIGIN, {
+      ...BOOK,
+      summary: "word ".repeat(80),
+    }).description;
+    expect(description?.length).toBeLessThanOrEqual(160);
+    expect(description?.startsWith("The Quiet Orbit by Ada Example. word")).toBe(true);
+    expect(description?.endsWith("…")).toBe(true);
+  });
+
+  it("describes a book without an author or a description by what it is, inventing nothing", () => {
+    expect(roadmapPageMetadata(ORIGIN, SPARSE_BOOK).description).toBe(
+      "The Quiet Orbit, part of Bookshelf on Robin Example's AI Engineering Roadmap.",
+    );
+    expect(
+      roadmapPageMetadata(ORIGIN, { ...SPARSE_BOOK, summary: "Notes **only**." }).description,
+    ).toBe("The Quiet Orbit. Notes only.");
+  });
+
+  it("gives a book its canonical address and its own preview image, out of search results", () => {
+    const metadata = roadmapPageMetadata(ORIGIN, BOOK);
+    expect(metadata.alternates?.canonical).toBe(
+      "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit",
+    );
+    expect(roadmapOpenGraphImageUrl(ORIGIN, BOOK)).toBe(
+      "https://site.example.test/og/ai-roadmap/bookshelf/quiet-orbit",
+    );
+    expect(metadata.robots).toEqual({ index: false });
+  });
+});
+
+describe("the bookshelf's and a book's preview cards", () => {
+  it("names the bookshelf and whose roadmap it is on", () => {
+    expect(roadmapOpenGraphCard(ORIGIN, BOOKSHELF)).toEqual({
+      site: "site.example.test",
+      label: "Bookshelf",
+      title: "Bookshelf",
+      subtitle: "Robin Example's AI Engineering Roadmap",
+    });
+  });
+
+  it("names a book with its author, or only the roadmap without one", () => {
+    expect(roadmapOpenGraphCard(ORIGIN, BOOK)).toEqual({
+      site: "site.example.test",
+      label: "Book",
+      title: "The Quiet Orbit",
+      subtitle: "By Ada Example, on Robin Example's AI Engineering Roadmap",
+    });
+    expect(roadmapOpenGraphCard(ORIGIN, SPARSE_BOOK).subtitle).toBe(
+      "Robin Example's AI Engineering Roadmap",
+    );
+  });
+});
+
+describe("the bookshelf's and a book's structured data", () => {
+  function graph(facts: RoadmapPageFacts): object[] {
+    return (roadmapStructuredData(ORIGIN, facts) as { "@graph": object[] })["@graph"];
+  }
+
+  it("lists the bookshelf's books in its order, each by its title, author and page", () => {
+    expect(graph(BOOKSHELF)).toContainEqual({
+      "@type": "ItemList",
+      "@id": "https://site.example.test/ai-roadmap/bookshelf#books",
+      name: "Bookshelf",
+      numberOfItems: 2,
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "The Quiet Orbit by Ada Example",
+          url: "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit",
+          description: "A fictional book.",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Untitled Notes",
+          url: "https://site.example.test/ai-roadmap/bookshelf/notes",
+        },
+      ],
+    });
+    expect(graph(BOOKSHELF)).not.toContainEqual(expect.objectContaining({ "@type": "Course" }));
+  });
+
+  it("describes a book with every fact it has, its cover on the origin", () => {
+    expect(graph(BOOK)).toContainEqual({
+      "@type": "Book",
+      "@id": "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit#book",
+      url: "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit",
+      name: "The Quiet Orbit",
+      description: "The Quiet Orbit by Ada Example. A fictional book about signals.",
+      author: { "@type": "Person", name: "Ada Example" },
+      isbn: "9780000000002",
+      numberOfPages: 240,
+      datePublished: "2021",
+      image: "https://site.example.test/media/cover.png",
+      mainEntityOfPage: {
+        "@id": "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit#webpage",
+      },
+    });
+  });
+
+  it("leaves out every fact a book does not have, never inventing one", () => {
+    expect(graph(SPARSE_BOOK)).toContainEqual({
+      "@type": "Book",
+      "@id": "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit#book",
+      url: "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit",
+      name: "The Quiet Orbit",
+      description: "The Quiet Orbit, part of Bookshelf on Robin Example's AI Engineering Roadmap.",
+      mainEntityOfPage: {
+        "@id": "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit#webpage",
+      },
+    });
+  });
+
+  it("serializes a book's title with markup so it can never close the script element", () => {
+    const title = "</script><script>alert(1)</script>";
+    const json = serializeJsonLd(
+      roadmapStructuredData(ORIGIN, { ...SPARSE_BOOK, book: { ...SPARSE_BOOK.book, title } }),
+    );
+    expect(json).not.toContain("</script>");
+    expect((JSON.parse(json) as { "@graph": object[] })["@graph"]).toContainEqual(
+      expect.objectContaining({ "@type": "Book", name: title }),
+    );
+  });
+});

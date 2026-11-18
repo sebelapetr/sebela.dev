@@ -1,0 +1,44 @@
+[
+  {
+    "slug": "fictional-evaluation-field-guide",
+    "title": "A Fictional Field Guide to Evaluation",
+    "author": "Jonas Placeholder",
+    "description": "A **fictional** handbook on building golden sets and grading answers.",
+    "pages": 248,
+    "year": 2025,
+    "priority": 0,
+    "startedOn": "2025-03-05",
+    "cover": {
+      "file": "files/book-evaluation-field-guide.png",
+      "altText": "A placeholder cover for the fictional evaluation field guide."
+    }
+  },
+  {
+    "slug": "fictional-reflection-patterns",
+    "title": "Fictional Reflection Patterns",
+    "author": "Ada Example",
+    "priority": 1
+  },
+  {
+    "slug": "fictional-vector-search-handbook",
+    "title": "The Fictional Vector Search Handbook",
+    "author": "Mira Sample",
+    "description": "An invented tour of embeddings, indexes and hybrid ranking.",
+    "pages": 312,
+    "year": 2024,
+    "isbn": "978-0-00-000000-2",
+    "priority": 2,
+    "startedOn": "2025-02-15",
+    "endedOn": "2025-02-22",
+    "summary": "## What stayed\n\n- Normalise vectors before comparing them.\n- Measure recall before tuning the index.\n\nA *fictional* summary for the demo seed.",
+    "cover": {
+      "file": "files/book-vector-search-handbook.png",
+      "altText": "A placeholder cover for the fictional vector search handbook."
+    }
+  },
+  {
+    "slug": "fictional-agent-ergonomics",
+    "title": "Fictional Agent Ergonomics",
+    "priority": 3
+  }
+]

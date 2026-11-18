@@ -60,6 +60,7 @@ describe("the learning diary", () => {
         finishedAt: null,
         link: position === 0 ? "https://example.com/prompt-guide" : null,
         position,
+        book: null,
         topics: [],
       });
     }

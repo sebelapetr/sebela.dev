@@ -1,0 +1,23 @@
+[
+  {
+    "slug": "orbit-foundations",
+    "name": "Orbit foundations",
+    "description": "How the fictional orbit models behave, what they can and cannot be trusted with, and how to talk to them before building anything larger on top of them. This text is long on purpose, so the overview clamps it.",
+    "weight": 40,
+    "position": 0
+  },
+  {
+    "slug": "quiet-systems",
+    "name": "Quiet systems",
+    "description": "Calm queues and retries for fictional workloads.",
+    "weight": 50,
+    "position": 1
+  },
+  {
+    "slug": "later-ideas",
+    "name": "Later ideas",
+    "description": null,
+    "weight": 10,
+    "position": 2
+  }
+]

@@ -7,6 +7,7 @@ import {
   type Person,
   type Roadmap,
   type RoadmapTreeArea,
+  type RoadmapTreeResource,
 } from "@sebela/api-client";
 
 import { loadRoadmapDiary, loadRoadmapDiaryDay } from "./load-roadmap-diary";
@@ -94,6 +95,26 @@ function area(slug: string, name: string, modules: [string, string][]): RoadmapT
       progress,
       resources: [],
     })),
+  };
+}
+
+function resourceOf(slug: string): RoadmapTreeResource {
+  return {
+    id: "0e1f2a3b-4c5d-4e6f-8a7b-9c0d1e2f3a4b",
+    slug,
+    name: `Fictional ${slug}`,
+    description: null,
+    type: "link",
+    status: "planned",
+    estimatedMinutes: null,
+    startedAt: null,
+    finishedAt: null,
+    link: null,
+    book: null,
+    position: 0,
+    topics: [],
+    createdAt: STAMP,
+    updatedAt: STAMP,
   };
 }
 
@@ -271,8 +292,39 @@ describe("loadRoadmapDiaryDay", () => {
             modules: [{ slug: "fictional-module", name: "Fictional module" }],
           },
         ],
+        books: [],
       },
     });
+  });
+
+  it("names the book each resource of the day's roadmap reads, from the tree it reads anyway", async () => {
+    const reading = { ...resourceOf("orbit-reading"), type: "book" as const, book: "quiet-orbit" };
+    const tree: Roadmap = {
+      ...roadmap,
+      areas: roadmap.areas.map((candidate, index) =>
+        index === 0
+          ? {
+              ...candidate,
+              modules: candidate.modules.map((module) => ({
+                ...module,
+                resources: [resourceOf("plain-link"), reading],
+              })),
+            }
+          : candidate,
+      ),
+    };
+    const { client, requests } = clientWith({
+      "/v1/person": () => json(person()),
+      [DAY_PATH]: () => json(day),
+      [TREE_PATH]: () => json(tree),
+    });
+
+    const result = await loadRoadmapDiaryDay(client, "2026-03-02");
+
+    expect(result.status === "ready" && result.content.books).toEqual([
+      { resource: "orbit-reading", book: "quiet-orbit" },
+    ]);
+    expect(requests).toHaveLength(3);
   });
 
   it("reads only public routes, without credentials and without a cache", async () => {

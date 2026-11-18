@@ -6,7 +6,7 @@
 // adjacent areas, way back to the full roadmap, titles, structured data and preview images, a
 // module only under its own area, a resource's anchor, the chat's roadmap card
 // and source, the homepage's Exploring, safe rendering, the sub-navigation that only roadmap pages
-// show, the static placeholders (bookshelf and events), the empty and the unavailable state, and roadmap writes reaching
+// show, the static placeholder (events), the empty and the unavailable state, and roadmap writes reaching
 // the warmed overview, old and new detail pages and the homepage through the signed invalidation.
 // Widths, themes, axe and touch targets are checked on the overview with its first area open and
 // on the area and module pages.
@@ -28,11 +28,9 @@ const unavailable = "This page could not be loaded right now.";
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
 
-// The sections still published as placeholders; the diary has its own pages (diary.spec.ts).
-const sections = [
-  { path: "/ai-roadmap/bookshelf", label: "Bookshelf" },
-  { path: "/ai-roadmap/events", label: "Events" },
-] as const;
+// The sections still published as placeholders; the diary (diary.spec.ts) and the bookshelf
+// (bookshelf.spec.ts) have their own pages.
+const sections = [{ path: "/ai-roadmap/events", label: "Events" }] as const;
 
 async function expectNoHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(
@@ -310,6 +308,7 @@ test.describe("the roadmap overview", () => {
       { path: "/ai-roadmap/orbit-foundations", current: "Roadmap" },
       { path: "/ai-roadmap/orbit-foundations/signal-basics", current: "Roadmap" },
       { path: "/ai-roadmap/diary", current: "Learning Diary" },
+      { path: "/ai-roadmap/bookshelf", current: "Bookshelf" },
       ...sections.map(({ path, label }) => ({ path, current: label })),
     ]) {
       await page.goto(`${website.url}${path}`);

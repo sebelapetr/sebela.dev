@@ -19,6 +19,7 @@ import {
   PersonCreateSchema,
   ProjectCreateSchema,
   RoadmapAreaCreateSchema,
+  RoadmapBookCreateSchema,
   RoadmapModuleCreateSchema,
   RoadmapResourceCreateSchema,
   ServiceCreateSchema,
@@ -35,6 +36,7 @@ import {
   type PersonCreate,
   type ProjectCreate,
   type RoadmapAreaCreate,
+  type RoadmapBookCreate,
   type RoadmapModuleCreate,
   type RoadmapResourceCreate,
   type ServiceCreate,
@@ -62,6 +64,7 @@ export const dataFiles = {
   currentFocus: "current-focus.json",
   roadmapAreas: "roadmap-areas.json",
   roadmapModules: "roadmap-modules.json",
+  roadmapBooks: "roadmap-books.json",
   roadmapResources: "roadmap-resources.json",
   roadmapDiary: "roadmap-diary.json",
   roadmapTimeEntries: "roadmap-time-entries.json",
@@ -143,6 +146,7 @@ export interface SeedData {
   readonly currentFocus: readonly Located<CurrentFocusCreate>[];
   readonly roadmapAreas: readonly Located<RoadmapAreaCreate>[];
   readonly roadmapModules: readonly Located<RoadmapModuleCreate>[];
+  readonly roadmapBooks: readonly Located<RoadmapBookCreate, "coverId">[];
   readonly roadmapResources: readonly Located<RoadmapResourceCreate>[];
   readonly roadmapDiary: readonly Located<SeedDiaryDay>[];
   readonly roadmapTimeEntries: readonly Located<TimeEntryCreate>[];
@@ -407,6 +411,11 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
   const roadmapModules = located(
     await parseList(dataFiles.roadmapModules, RoadmapModuleCreateSchema),
   );
+  const roadmapBooks = located(
+    await parseList(dataFiles.roadmapBooks, RoadmapBookCreateSchema, [
+      { key: "cover", field: "coverId", expects: "image" },
+    ]),
+  );
   const roadmapResources = located(
     await parseList(dataFiles.roadmapResources, RoadmapResourceCreateSchema),
   );
@@ -434,6 +443,7 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     currentFocus,
     roadmapAreas,
     roadmapModules,
+    roadmapBooks,
     roadmapResources,
     roadmapDiary,
     roadmapTimeEntries,

@@ -19,6 +19,7 @@ import {
 import type { RoadmapService } from "@sebela/services";
 
 import { defineRoute, type RouteDefinition } from "../../routing.js";
+import { bookRoutes } from "./books.js";
 import { diaryRoutes } from "./diary.js";
 
 const TREE = "/v1/roadmap";
@@ -41,7 +42,9 @@ const RESOURCE = "/v1/roadmap/resources/:slug";
  * that still has children) and `validation_failed` naming the field (a reserved area slug, an
  * unknown parent or topic, a repeated topic, a finish before the start). The learning diary adds
  * public reads of the diary and one Prague calendar day and authenticated writes of a day's notes
- * and of time entries, refused with `conflict` on an overlap.
+ * and of time entries, refused with `conflict` on an overlap. The bookshelf adds public reads of
+ * every book and of one book, with derived status and reading time, and authenticated writes; a
+ * resource of type `book` links a book through its `book` field.
  */
 export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
   return [
@@ -263,7 +266,9 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
       description:
         "The resource belongs to the module named by `module`, and every slug in `topics` must " +
         "name an existing topic. Omitted fields make a planned resource without an estimate, " +
-        "dates, link or topics. The slug is unique across all resources.",
+        "dates, link, book or topics. The slug is unique across all resources. A `book` names an " +
+        "existing book that no other resource links, and only a resource of type `book` may name " +
+        "one (`validation_failed` on `book`).",
       body: RoadmapResourceCreateSchema,
       response: {
         status: 201,
@@ -283,7 +288,8 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
       summary: "Update a roadmap resource",
       description:
         "Changes only the fields sent; a given `module` moves the resource and given `topics` " +
-        "replace its topic links. The finish cannot be before the start, including a stored one.",
+        "replace its topic links. The finish cannot be before the start, including a stored one. " +
+        "A `book` links one book to a resource of type `book` only; `null` clears it.",
       params: SlugParamsSchema,
       body: RoadmapResourceUpdateSchema,
       response: {
@@ -311,5 +317,6 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
       },
     }),
     ...diaryRoutes(roadmap),
+    ...bookRoutes(roadmap),
   ];
 }

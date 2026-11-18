@@ -47,6 +47,7 @@ const promptGuide: RoadmapResourceCreate = {
   finishedAt: "2025-03-04T18:00:00.000Z",
   link: "https://example.com/prompt-guide",
   position: 0,
+  book: null,
   topics: ["agents", "rag"],
 };
 

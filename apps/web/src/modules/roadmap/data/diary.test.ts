@@ -284,7 +284,12 @@ describe("toDiaryDayPage", () => {
         startedAt: "2026-03-02T07:00:00Z",
         endedAt: "2026-03-02T07:45:00Z",
         duration: "45 min",
-        resource: { name: "Safe guide", typeLabel: "Book", href: "https://example.test/guide" },
+        resource: {
+          name: "Safe guide",
+          typeLabel: "Book",
+          href: "https://example.test/guide",
+          bookHref: null,
+        },
       },
       {
         id: "unsafe",
@@ -293,8 +298,31 @@ describe("toDiaryDayPage", () => {
         startedAt: "2026-03-02T08:00:00Z",
         endedAt: "2026-03-02T08:00:20Z",
         duration: "<1 min",
-        resource: { name: "Unsafe guide", typeLabel: "Link", href: null },
+        resource: { name: "Unsafe guide", typeLabel: "Link", href: null, bookHref: null },
       },
+    ]);
+  });
+
+  it("leads a session on a book's resource to the book's page on the bookshelf", () => {
+    const day: DiaryDay = {
+      date: "2026-03-02",
+      notes: null,
+      entries: [
+        entry("reading", "2026-03-02T07:00:00Z", "2026-03-02T08:00:00Z", 3600, {
+          slug: "orbit-reading",
+          type: "book",
+        }),
+        entry("other", "2026-03-02T09:00:00Z", "2026-03-02T10:00:00Z", 3600),
+      ],
+      totalSeconds: 7200,
+    };
+
+    const entries = toDiaryDayPage(day, areas, [{ resource: "orbit-reading", book: "quiet/orbit" }])
+      .areas[0]?.modules[0]?.entries;
+
+    expect(entries?.map((session) => session.resource.bookHref)).toEqual([
+      "/ai-roadmap/bookshelf/quiet%2Forbit",
+      null,
     ]);
   });
 

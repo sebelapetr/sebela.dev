@@ -1,6 +1,7 @@
 // The seo module: what search engines and language models read about the profile — each indexed
 // page's metadata and Open Graph preview image, the homepage's structured data, the AI Roadmap
-// area and module pages' metadata, breadcrumbs, course data and preview images, the sitemap, robots.txt and llms.txt — on the
+// area, module, bookshelf and book pages' metadata, breadcrumbs, course, book list and book data
+// and preview images, the sitemap, robots.txt and llms.txt — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
 // not published answers 404 and one that cannot be read answers 503, never an empty document.
 // Server-only.
@@ -48,7 +49,7 @@ export function pageMetadata(page: IndexedPage, facts: PageFacts): Metadata {
 }
 
 /**
- * An AI Roadmap area's or module's page metadata on the canonical origin: title from its
+ * An AI Roadmap area's, module's, the bookshelf's or a book's page metadata on the canonical origin: title from its
  * breadcrumbs, description, canonical address, Open Graph basics with the page's own preview image
  * and a large Twitter card, kept out of search results until the roadmap is indexed as a whole.
  */
@@ -91,9 +92,9 @@ export async function openGraphImageResponse(page: IndexedPage): Promise<Respons
 }
 
 /**
- * An AI Roadmap area's or module's Open Graph preview image, a 1200 × 630 PNG: the page's kind and
- * name and whose roadmap it is on, or the site's own roadmap card while the page cannot be read
- * (`facts` is null), so a shared link always has a preview. The page's card is revalidated on every
+ * An AI Roadmap area's, module's, the bookshelf's or a book's Open Graph preview image, a 1200 × 630
+ * PNG: the page's kind and name and whose roadmap it is on, or the site's own roadmap card while the
+ * page cannot be read (`facts` is null), so a shared link always has a preview. The page's card is revalidated on every
  * use (`no-cache`); the fallback is never stored. A page that does not exist has no image: its
  * route answers 404 itself.
  */

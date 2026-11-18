@@ -13,6 +13,9 @@ import {
   type MediaUpload,
   type Roadmap,
   type RoadmapAreaDetail,
+  type RoadmapBook,
+  type RoadmapBookList,
+  type RoadmapBookStatus,
   type RoadmapCurrent,
   type RoadmapModuleDetail,
   type TimeEntryWrite,
@@ -1368,6 +1371,89 @@ describe("the generated API client", () => {
     ).toBe(204);
     await backend.services.roadmap.deleteModule("diary-module");
     await backend.services.roadmap.deleteArea("diary-basics");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+  it("keeps the bookshelf: public reads, keyed writes, the resource link and its refusals", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await backend.services.roadmap.createArea({
+      slug: "shelf-basics",
+      name: "Shelf basics",
+      description: null,
+      weight: 10,
+      position: 8,
+    });
+    await backend.services.roadmap.createModule({
+      slug: "shelf-module",
+      area: "shelf-basics",
+      name: "Shelf module",
+      description: null,
+      position: 0,
+    });
+
+    const created = await client.POST("/v1/roadmap/books", {
+      body: { slug: "shelf-patterns", title: "Fictional shelf patterns", startedOn: "2026-03-01" },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe("/v1/roadmap/books/shelf-patterns");
+    const status: RoadmapBookStatus | undefined = created.data?.status;
+    expect(status).toBe("reading");
+    const taken = await client.POST("/v1/roadmap/books", {
+      body: { slug: "shelf-patterns", title: "Again" },
+    });
+    expect(taken.error?.error.code).toBe("conflict");
+
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "shelf-reading",
+        module: "shelf-module",
+        name: "Reading shelf patterns",
+        type: "book",
+        position: 0,
+        book: "shelf-patterns",
+      },
+    });
+    expect(resource.data?.book).toBe("shelf-patterns");
+    const wrongType = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "shelf-link",
+        module: "shelf-module",
+        name: "Not a book",
+        type: "link",
+        position: 1,
+        book: "shelf-patterns",
+      },
+    });
+    expect(wrongType.error?.error.fields?.map(({ path }) => path)).toContain("book");
+
+    const list = await visitor.GET("/v1/roadmap/books");
+    const shelf: RoadmapBookList | undefined = list.data;
+    expect(shelf?.map(({ slug, resource: link }) => [slug, link?.slug])).toEqual([
+      ["shelf-patterns", "shelf-reading"],
+    ]);
+    const finished = await client.PATCH("/v1/roadmap/books/{slug}", {
+      ...at("shelf-patterns"),
+      body: { endedOn: "2026-03-09" },
+    });
+    expect(finished.data?.status).toBe("completed");
+    const read = await visitor.GET("/v1/roadmap/books/{slug}", at("shelf-patterns"));
+    const book: RoadmapBook | undefined = read.data;
+    expect(book).toMatchObject({ status: "completed", readingSeconds: 0, cover: null });
+
+    const linked = await client.DELETE("/v1/roadmap/books/{slug}", at("shelf-patterns"));
+    expect(linked.error?.error.code).toBe("conflict");
+    expect(
+      (await client.DELETE("/v1/roadmap/resources/{slug}", at("shelf-reading"))).response.status,
+    ).toBe(204);
+    expect(
+      (await client.DELETE("/v1/roadmap/books/{slug}", at("shelf-patterns"))).response.status,
+    ).toBe(204);
+    const missing = await visitor.GET("/v1/roadmap/books/{slug}", at("shelf-patterns"));
+    expect(missing.error?.error.code).toBe("not_found");
+    await backend.services.roadmap.deleteModule("shelf-module");
+    await backend.services.roadmap.deleteArea("shelf-basics");
 
     expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
   });

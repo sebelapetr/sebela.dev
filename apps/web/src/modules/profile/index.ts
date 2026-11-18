@@ -1,7 +1,7 @@
 // The profile module: the website's read of the API's public profile, experience, services, CV
-// and AI Roadmap routes, the learning diary's included (and the records the Ask page's answers
-// rest on), of the current CV PDF's file and of the stored images the site serves on its own media
-// path, with the process-local content cache those reads share and its invalidation. Server-only.
+// and AI Roadmap routes, the learning diary and the bookshelf included (and the records the Ask
+// page's answers rest on), of the current CV PDF's file and of the stored images the site serves on
+// its own media path, with the process-local content cache those reads share and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -21,6 +21,12 @@ import {
   type RoadmapAreaResult,
   type RoadmapModuleResult,
 } from "./data/load-roadmap-detail";
+import {
+  loadRoadmapBook,
+  loadRoadmapBookshelf,
+  type RoadmapBookResult,
+  type RoadmapBookshelfResult,
+} from "./data/load-roadmap-books";
 import {
   loadRoadmapDiary,
   loadRoadmapDiaryDay,
@@ -55,7 +61,16 @@ export type {
 } from "./data/load-roadmap-detail";
 
 export type {
+  RoadmapBookContent,
+  RoadmapBookResult,
+  RoadmapBookshelfContent,
+  RoadmapBookshelfResult,
+  RoadmapShelfBook,
+} from "./data/load-roadmap-books";
+
+export type {
   RoadmapDiaryAreaName,
+  RoadmapDiaryBookLink,
   RoadmapDiaryContent,
   RoadmapDiaryDayContent,
   RoadmapDiaryDayResult,
@@ -193,6 +208,25 @@ export const getRoadmapDiary = cache((): Promise<RoadmapDiaryResult> =>
  */
 export const getRoadmapDiaryDay = cache((date: string): Promise<RoadmapDiaryDayResult> =>
   loadRoadmapDiaryDay(apiClient(), date),
+);
+
+/**
+ * The bookshelf for the current request: the person's header facts and every book in the API's
+ * shelf order with its derived status, reading time, linked resource and cover as the site's image,
+ * read once per request (React `cache`), from the content cache. An empty shelf is ready.
+ */
+export const getRoadmapBookshelf = cache((): Promise<RoadmapBookshelfResult> =>
+  loadRoadmapBookshelf(apiClient(), { mediaBaseUrl: mediaBaseUrl() }),
+);
+
+/**
+ * A book's page for the current request: the person's header facts and the book with its derived
+ * status, reading time, linked resource and cover as the site's image, read once per request and
+ * slug (React `cache`), from the content cache. A missing book or an address that is not a slug is
+ * missing.
+ */
+export const getRoadmapBook = cache((slug: string): Promise<RoadmapBookResult> =>
+  loadRoadmapBook(apiClient(), slug, { mediaBaseUrl: mediaBaseUrl() }),
 );
 
 /**

@@ -76,6 +76,19 @@
     "position": 1
   },
   {
+    "slug": "vector-search-handbook-reading",
+    "module": "embeddings",
+    "name": "Reading the fictional vector search handbook",
+    "type": "book",
+    "status": "completed",
+    "estimatedMinutes": 360,
+    "startedAt": "2025-02-15T08:00:00Z",
+    "finishedAt": "2025-02-22T10:00:00Z",
+    "position": 2,
+    "book": "fictional-vector-search-handbook",
+    "topics": ["retrieval"]
+  },
+  {
     "slug": "bm25-walkthrough",
     "module": "search-fundamentals",
     "name": "A fictional BM25 walkthrough",
@@ -174,6 +187,18 @@
     "topics": ["evaluation"]
   },
   {
+    "slug": "evaluation-field-guide-reading",
+    "module": "rag-evaluation",
+    "name": "Reading the fictional evaluation field guide",
+    "type": "book",
+    "status": "in-progress",
+    "estimatedMinutes": 300,
+    "startedAt": "2025-03-05T18:00:00Z",
+    "position": 4,
+    "book": "fictional-evaluation-field-guide",
+    "topics": ["evaluation", "retrieval"]
+  },
+  {
     "slug": "tool-schema-tutorial",
     "module": "tool-calling",
     "name": "A fictional tutorial on tool schemas",
@@ -227,7 +252,8 @@
     "type": "book",
     "status": "planned",
     "position": 2,
-    "topics": ["agents"]
+    "topics": ["agents"],
+    "book": "fictional-reflection-patterns"
   },
   {
     "slug": "guardrail-checklist",

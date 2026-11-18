@@ -596,6 +596,29 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
+  it("names the book each bookshelf write changed", async () => {
+    const book = { slug: "fictional-patterns", title: "Fictional Patterns" };
+    expect((await send("/v1/roadmap/books", "POST", json(book, auth))).status).toBe(201);
+    expect(
+      (
+        await send(
+          "/v1/roadmap/books/fictional-patterns",
+          "PATCH",
+          json({ startedOn: "2026-03-02" }, auth),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await send("/v1/roadmap/books/fictional-patterns", "DELETE", { headers: auth })).status,
+    ).toBe(204);
+
+    expect(await delivered()).toEqual([
+      [{ domain: "roadmap-book", record: "fictional-patterns", action: "created" }],
+      [{ domain: "roadmap-book", record: "fictional-patterns", action: "updated" }],
+      [{ domain: "roadmap-book", record: "fictional-patterns", action: "deleted" }],
+    ]);
+  });
+
   it("sends nothing for a refused, invalid, conflicting or failed write, or a read", async () => {
     await send("/v1/technologies", "POST", json(technology, auth));
     await invalidation.idle();

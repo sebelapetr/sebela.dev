@@ -181,6 +181,12 @@ function clientWith(overrides: Record<string, Route>) {
 
 const twoExperiences = [experience("current", null), experience("older", "2019-12-31")];
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("loadExperience", () => {
   it("returns the header facts and every section's records in the API's order", async () => {
     const explorations = [exploration("local-agent"), exploration("memory-graph")];
@@ -363,7 +369,9 @@ describe("loadExperience", () => {
   it("gives up on an API that does not answer in time", async () => {
     const hang: Route = (request) =>
       new Promise<Response>((_resolve, reject) => {
+        hanging.add(request);
         request.signal.addEventListener("abort", () => {
+          hanging.delete(request);
           reject(request.signal.reason as Error);
         });
       });

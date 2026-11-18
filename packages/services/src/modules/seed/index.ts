@@ -32,6 +32,7 @@ export type SeedKind =
   | "currentFocus"
   | "roadmapAreas"
   | "roadmapModules"
+  | "roadmapBooks"
   | "roadmapResources"
   | "roadmapDiary"
   | "roadmapTimeEntries";
@@ -63,7 +64,8 @@ export interface SeedReport {
  *   slug. A roadmap module or resource is matched by its own slug, so a rerun moves it to the parent
  *   the seed names instead of duplicating it. A matched record is overwritten with the seed's
  *   values, so a rerun undoes edits to the records the seed names; records and case studies it does
- *   not name are kept. A rerun of the same folder creates nothing new.
+ *   not name are kept. A rerun of the same folder creates nothing new. Books are loaded before
+ *   resources, so a resource of type `book` can link a book of the same seed by its slug.
  * - A diary day is matched by its date and its notes are overwritten; its time entries stay. A
  *   session is matched by its resource and absolute endpoints, whatever offset they are written
  *   with: one already logged (in one or more diary-day pieces) is left as it is and counted as
@@ -114,6 +116,7 @@ const emptyCounts = (): Counts => ({
   currentFocus: { created: 0, updated: 0 },
   roadmapAreas: { created: 0, updated: 0 },
   roadmapModules: { created: 0, updated: 0 },
+  roadmapBooks: { created: 0, updated: 0 },
   roadmapResources: { created: 0, updated: 0 },
   roadmapDiary: { created: 0, updated: 0 },
   roadmapTimeEntries: { created: 0, updated: 0 },
@@ -138,8 +141,8 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Whether the profile holds no person, no record of any kind and no media, and the roadmap no area
- * and no diary day.
+ * Whether the profile holds no person, no record of any kind and no media, and the roadmap no area,
+ * no diary day and no book.
  */
 async function isEmpty(
   profile: ProfileService,
@@ -165,6 +168,7 @@ async function isEmpty(
     () => media.listMedia(),
     async () => (await roadmap.getRoadmap()).areas,
     async () => (await roadmap.getDiary()).days,
+    () => roadmap.listBooks(),
   ];
   for (const list of lists) if ((await list()).length > 0) return false;
   return true;
@@ -195,6 +199,7 @@ async function checkReferences(
     data.roadmapModules,
     Promise.resolve(tree.flatMap((area) => area.modules)),
   );
+  const books = await slugs(data.roadmapBooks, roadmap.listBooks());
   const resources = await slugs(
     data.roadmapResources,
     Promise.resolve(tree.flatMap((area) => area.modules.flatMap((module) => module.resources))),
@@ -248,6 +253,7 @@ async function checkReferences(
   }
   for (const { location, value } of data.roadmapResources) {
     check(modules, value.module, `${location}.module`, "roadmap module");
+    check(books, value.book, `${location}.book`, "roadmap book");
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
   for (const { location, value } of data.roadmapTimeEntries) {
@@ -498,6 +504,17 @@ export function createSeedService(
           (slug) => roadmap.getModule(slug),
           (value) => roadmap.createModule(value),
           (slug, changes) => roadmap.updateModule(slug, changes),
+        );
+        await upsert(
+          "roadmapBooks",
+          data.roadmapBooks,
+          (slug) => roadmap.getBook(slug),
+          (value) => roadmap.createBook(value),
+          (slug, changes, existing) => {
+            supersede(existing.coverId, changes.coverId);
+            return roadmap.updateBook(slug, changes);
+          },
+          ({ value, files }) => ({ ...value, coverId: mediaId(files.coverId) }),
         );
         await upsert(
           "roadmapResources",

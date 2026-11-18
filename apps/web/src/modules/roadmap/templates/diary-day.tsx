@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ProseMarkdown } from "../../_shared";
 import type { RoadmapDiaryDayContent } from "../../profile";
 import { TypeBadge } from "../components/badges";
+import { BookLink } from "../components/book-parts";
 import { Breadcrumbs } from "../components/breadcrumbs";
 import { RoadmapFrame } from "../components/roadmap-frame";
 import { DIARY_NAME, toDiaryDayPage, type DiarySession } from "../data/diary";
@@ -14,10 +15,11 @@ const HEADING_LINK =
  * A diary day's own page under the roadmap's sub-navigation: the way from the overview through the
  * diary, the day in words, its study time and sessions, its Markdown notes (rendered safely), then
  * what was studied when — grouped by area, then module, in the roadmap's order, each session with
- * its Prague start and end, its duration and its resource. A day with notes only shows its notes.
+ * its Prague start and end, its duration and its resource, which leads to the book it reads on the
+ * bookshelf. A day with notes only shows its notes.
  */
 export function RoadmapDiaryDayTemplate({ content }: { readonly content: RoadmapDiaryDayContent }) {
-  const page = toDiaryDayPage(content.day, content.areas);
+  const page = toDiaryDayPage(content.day, content.areas, content.books);
   return (
     <RoadmapFrame name={content.name} section="diary">
       <article className="flex max-w-3xl flex-col gap-12">
@@ -90,7 +92,7 @@ function MaybeLink({
   );
 }
 
-/** One study session: its Prague start and end, its duration, then its resource and type. */
+/** One study session: its Prague start and end, its duration, then its resource, type and book. */
 function Session({ session }: { readonly session: DiarySession }) {
   const { resource } = session;
   return (
@@ -122,6 +124,9 @@ function Session({ session }: { readonly session: DiarySession }) {
           )}
         </p>
         <TypeBadge label={resource.typeLabel} />
+        {resource.bookHref === null ? null : (
+          <BookLink href={resource.bookHref} resource={resource.name} />
+        )}
       </div>
     </li>
   );

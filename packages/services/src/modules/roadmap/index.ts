@@ -37,18 +37,22 @@ import type {
 } from "@sebela/db";
 
 import { DomainError } from "../../errors.js";
+import type { MediaAddress } from "../profile/index.js";
+import { createBookshelf, type Bookshelf } from "./books.js";
 import { createLearningDiary, type LearningDiary } from "./diary.js";
 import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 
 /**
  * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
- * time spent on those resources (see `LearningDiary`). Reads return contract
+ * time spent on those resources (see `LearningDiary`), and the bookshelf of books that resources of
+ * type `book` read (see `Bookshelf`). Reads return contract
  * records; the whole tree carries progress derived on every read and is never stored. Expected
  * refusals are `DomainError`s: `not_found` for a missing slug, `conflict` for a taken slug or a
  * record that still has children or links, and `validation_failed` naming the offending field for
- * a reserved area slug, an unknown parent or topic, a repeated topic or a finish before the start.
+ * a reserved area slug, an unknown parent or topic, a repeated topic, a finish before the start or
+ * an unusable book link (an unknown book, one another resource links, or a type other than `book`).
  */
-export interface RoadmapService extends LearningDiary {
+export interface RoadmapService extends LearningDiary, Bookshelf {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
   /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
@@ -79,7 +83,16 @@ export interface RoadmapService extends LearningDiary {
   deleteResource(slug: string): Promise<void>;
 }
 
+export type { Bookshelf } from "./books.js";
 export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
+
+export interface RoadmapServiceOptions {
+  /**
+   * The public address of a media key, used for book covers. Without it no key can be addressed
+   * and a cover's `url` is `null`, as for a key the storage cannot address.
+   */
+  readonly mediaAddress?: MediaAddress;
+}
 
 const iso = (instant: Date | null) => (instant === null ? null : instant.toISOString());
 const instant = (value: string | null) => (value === null ? null : new Date(value));
@@ -109,6 +122,12 @@ function resourceRefusal(failure: RoadmapResourceWriteFailure, module?: string):
       return invalid("topics", "List each topic once.");
     case "invalid_period":
       return invalid("finishedAt", "The finish cannot be before the start.");
+    case "unknown_book":
+      return invalid("book", "There is no such book on the bookshelf; create it first.");
+    case "book_taken":
+      return invalid("book", "Another resource already reads this book; a book has one resource.");
+    case "book_requires_book_type":
+      return invalid("book", "Only a resource of type book can link a book.");
   }
 }
 
@@ -191,6 +210,7 @@ function toTreeResource(record: RoadmapResourceRecord): RoadmapTreeResource {
     finishedAt: iso(record.finishedAt),
     link: record.link,
     position: record.position,
+    book: record.book,
     topics: record.topics.map(toTopic),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -253,7 +273,10 @@ function toCurrentLearning(tree: readonly RoadmapAreaNode[]): RoadmapCurrent {
  * The roadmap over its persistence. The database decides slug uniqueness, reserved area slugs,
  * parents, topics and the ordered period, so a racing write is judged on the row that results.
  */
-export function createRoadmapService(persistence: RoadmapPersistence): RoadmapService {
+export function createRoadmapService(
+  persistence: RoadmapPersistence,
+  options: RoadmapServiceOptions = {},
+): RoadmapService {
   return {
     async getRoadmap() {
       return toRoadmap(await persistence.loadRoadmapTree());
@@ -366,5 +389,6 @@ export function createRoadmapService(persistence: RoadmapPersistence): RoadmapSe
     },
 
     ...createLearningDiary(persistence),
+    ...createBookshelf(persistence, options.mediaAddress ?? (() => null)),
   };
 }

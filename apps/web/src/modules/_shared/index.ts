@@ -14,6 +14,7 @@ export { careerYears } from "./career";
 export {
   anchorHref,
   anchorId,
+  bookshelfHref,
   roadmapHref,
   type AnchorTarget,
   type RoadmapPageTarget,

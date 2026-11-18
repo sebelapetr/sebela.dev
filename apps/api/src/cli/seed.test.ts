@@ -21,6 +21,7 @@ import {
   OrganizationListSchema,
   PersonSchema,
   ProjectListSchema,
+  RoadmapBookListSchema,
   RoadmapCurrentSchema,
   RoadmapSchema,
   ServiceListSchema,
@@ -122,6 +123,13 @@ describe("the seed CLI", () => {
       ]),
       totalSeconds: day.totalSeconds,
     })),
+    books: (await read("/v1/roadmap/books", RoadmapBookListSchema)).map((book) => ({
+      slug: book.slug,
+      status: book.status,
+      cover: book.cover?.key ?? null,
+      resource: book.resource?.slug ?? null,
+      readingSeconds: book.readingSeconds,
+    })),
   });
 
   describe("with the demo seed", () => {
@@ -178,6 +186,22 @@ describe("the seed CLI", () => {
       expect(result.out).toMatch(/time entry sessions: \d+ created, 0 updated/);
       const firstDay = diary.days.at(-1)?.date ?? "";
       expect((await read(`/v1/roadmap/diary/${firstDay}`, DiaryDaySchema)).date).toBe(firstDay);
+
+      // A bookshelf in every status, with a cover and a book read through a resource with time.
+      const books = await read("/v1/roadmap/books", RoadmapBookListSchema);
+      expect(new Set(books.map(({ status }) => status))).toEqual(
+        new Set(["to-read", "reading", "completed"]),
+      );
+      expect(books.some(({ cover }) => cover?.url?.startsWith(MEDIA_PUBLIC_BASE))).toBe(true);
+      expect(books.some(({ cover }) => cover === null)).toBe(true);
+      expect(books.some(({ resource, readingSeconds }) => resource && readingSeconds > 0)).toBe(
+        true,
+      );
+      expect(books.some(({ summary }) => summary !== null)).toBe(true);
+      expect(result.out).toMatch(/roadmap books: \d+ created, 0 updated/);
+      const linking = resources.filter(({ book }) => book !== null);
+      expect(linking.length).toBeGreaterThanOrEqual(1);
+      expect(linking.every(({ type }) => type === "book")).toBe(true);
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();

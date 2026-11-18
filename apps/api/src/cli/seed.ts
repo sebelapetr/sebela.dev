@@ -40,6 +40,7 @@ const kindLabels: Record<SeedKind, string> = {
   currentFocus: "current focus",
   roadmapAreas: "roadmap areas",
   roadmapModules: "roadmap modules",
+  roadmapBooks: "roadmap books",
   roadmapResources: "roadmap resources",
   roadmapDiary: "diary days",
   roadmapTimeEntries: "time entry sessions",

@@ -7865,7 +7865,7 @@
       "patch": {
         "operationId": "updateRoadmapResource",
         "summary": "Update a roadmap resource",
-        "description": "Changes only the fields sent; a given `module` moves the resource and given `topics` replace its topic links. The finish cannot be before the start, including a stored one.",
+        "description": "Changes only the fields sent; a given `module` moves the resource and given `topics` replace its topic links. The finish cannot be before the start, including a stored one. A `book` links one book to a resource of type `book` only; `null` clears it.",
         "security": [
           {
             "bearerAuth": []
@@ -8106,7 +8106,7 @@
       "post": {
         "operationId": "createRoadmapResource",
         "summary": "Create a roadmap resource",
-        "description": "The resource belongs to the module named by `module`, and every slug in `topics` must name an existing topic. Omitted fields make a planned resource without an estimate, dates, link or topics. The slug is unique across all resources.",
+        "description": "The resource belongs to the module named by `module`, and every slug in `topics` must name an existing topic. Omitted fields make a planned resource without an estimate, dates, link, book or topics. The slug is unique across all resources. A `book` names an existing book that no other resource links, and only a resource of type `book` may name one (`validation_failed` on `book`).",
         "security": [
           {
             "bearerAuth": []
@@ -8894,6 +8894,511 @@
           },
           "404": {
             "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/books": {
+      "get": {
+        "operationId": "listRoadmapBooks",
+        "summary": "Read the bookshelf",
+        "description": "Every book by ascending priority, then slug, with its cover, the status derived from its dates, the resource of type `book` that links it and the time logged on that resource. An empty bookshelf is the valid empty list.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The books.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapBookList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRoadmapBook",
+        "summary": "Add a book to the bookshelf",
+        "description": "The slug is unique and stable; a taken slug is a conflict. Omitted optional fields mean none and an omitted priority means `0`. A `coverId` must name an uploaded image (`validation_failed` on `coverId` otherwise); the end cannot be before the start (`validation_failed` on `endedOn`). A book is linked by giving its slug as the `book` of a resource of type `book`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapBookCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created book.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapBook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/books/{slug}": {
+      "get": {
+        "operationId": "getRoadmapBook",
+        "summary": "Read a book",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The book.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapBook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRoadmapBook",
+        "summary": "Update a book",
+        "description": "Changes only the fields sent; `null` clears an optional field and the slug cannot change. A `coverId` must name an uploaded image (`validation_failed` on `coverId` otherwise); the end cannot be before the start (`validation_failed` on `endedOn`). The period is judged with the stored dates.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapBookUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated book.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapBook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRoadmapBook",
+        "summary": "Delete a book",
+        "description": "A book that a resource still links is not deleted (`409`); clear the resource's `book` first. The cover media stays.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The book was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11293,6 +11798,21 @@
             "maximum": 1000000,
             "description": "Ascending order among its siblings; ties are ordered by slug."
           },
+          "book": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "description": "The stable, unique address of the record, for example `paldock`."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none."
+          },
           "topics": {
             "maxItems": 50,
             "type": "array",
@@ -11430,6 +11950,22 @@
             "maximum": 1000000,
             "description": "Ascending order among its siblings; ties are ordered by slug."
           },
+          "book": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "description": "The stable, unique address of the record, for example `paldock`."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none."
+          },
           "topics": {
             "default": [],
             "maxItems": 50,
@@ -11525,6 +12061,293 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
             "description": "An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoadmapBookCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "author": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when unknown."
+          },
+          "description": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A short Markdown introduction; `null` when there is none."
+          },
+          "pages": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when unknown."
+          },
+          "year": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The publication year; `null` when unknown."
+          },
+          "isbn": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d[\\d -]{8,15}[\\dX]$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ISBN-10 or ISBN-13 as printed; `null` when unknown."
+          },
+          "priority": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Shelf order: books are listed by ascending priority, then by slug."
+          },
+          "startedOn": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day reading started, `YYYY-MM-DD`; `null` when it has not."
+          },
+          "endedOn": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day reading ended, `YYYY-MM-DD`, not before `startedOn`; `null` when it has not."
+          },
+          "summary": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reading summary in Markdown; `null` when there is none."
+          },
+          "coverId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written."
+          }
+        },
+        "required": [
+          "slug",
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapBookUpdate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when unknown."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A short Markdown introduction; `null` when there is none."
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when unknown."
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The publication year; `null` when unknown."
+          },
+          "isbn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d[\\d -]{8,15}[\\dX]$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ISBN-10 or ISBN-13 as printed; `null` when unknown."
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Shelf order: books are listed by ascending priority, then by slug."
+          },
+          "startedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day reading started, `YYYY-MM-DD`; `null` when it has not."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day reading ended, `YYYY-MM-DD`, not before `startedOn`; `null` when it has not."
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reading summary in Markdown; `null` when there is none."
+          },
+          "coverId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written."
           }
         },
         "additionalProperties": false
@@ -13734,6 +14557,21 @@
             "maximum": 1000000,
             "description": "Ascending order among its siblings; ties are ordered by slug."
           },
+          "book": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "description": "The stable, unique address of the record, for example `paldock`."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none."
+          },
           "topics": {
             "type": "array",
             "items": {
@@ -13764,6 +14602,7 @@
           "finishedAt",
           "link",
           "position",
+          "book",
           "topics",
           "createdAt",
           "updatedAt"
@@ -14338,6 +15177,21 @@
             "maximum": 1000000,
             "description": "Ascending order among its siblings; ties are ordered by slug."
           },
+          "book": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "description": "The stable, unique address of the record, for example `paldock`."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none."
+          },
           "topics": {
             "type": "array",
             "items": {
@@ -14369,6 +15223,7 @@
           "finishedAt",
           "link",
           "position",
+          "book",
           "topics",
           "createdAt",
           "updatedAt"
@@ -14543,6 +15398,262 @@
         "required": [
           "entries",
           "dates"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapBookList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoadmapBook"
+        },
+        "description": "Ordered by priority, then slug."
+      },
+      "RoadmapBook": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when unknown."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A short Markdown introduction; `null` when there is none."
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when unknown."
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The publication year; `null` when unknown."
+          },
+          "isbn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d[\\d -]{8,15}[\\dX]$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ISBN-10 or ISBN-13 as printed; `null` when unknown."
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Shelf order: books are listed by ascending priority, then by slug."
+          },
+          "startedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day reading started, `YYYY-MM-DD`; `null` when it has not."
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day reading ended, `YYYY-MM-DD`, not before `startedOn`; `null` when it has not."
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reading summary in Markdown; `null` when there is none."
+          },
+          "coverId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written."
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Media"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The cover image; `null` when none."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "to-read",
+              "reading",
+              "completed"
+            ],
+            "description": "Derived on read: `completed` when `endedOn` is set, otherwise `reading` when `startedOn` is set, otherwise `to-read`."
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoadmapBookResource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The resource of type `book` that links this book; `null` when none does."
+          },
+          "readingSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The elapsed seconds of every time entry logged on the linking resource; `0` without one. Derived on read; the book has no time of its own."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "author",
+          "description",
+          "pages",
+          "year",
+          "isbn",
+          "priority",
+          "startedOn",
+          "endedOn",
+          "summary",
+          "coverId",
+          "cover",
+          "status",
+          "resource",
+          "readingSeconds",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapBookResource": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of its module."
+          },
+          "area": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The slug of its module's area."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "module",
+          "area"
         ],
         "additionalProperties": false
       }

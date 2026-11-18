@@ -63,6 +63,7 @@ describe("learning diary persistence", () => {
         finishedAt: null,
         link: `https://example.com/${slug}`,
         position,
+        book: null,
         topics: [],
       });
     }

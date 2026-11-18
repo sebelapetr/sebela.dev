@@ -9,10 +9,14 @@ import {
   type TopicRecord,
   WriteRefused,
 } from "../profile/index.js";
-import { breaksCheck, isStillReferenced } from "./database-errors.js";
+import { bookId, createBookPersistence, linkedBookSlug } from "./books.js";
+import { breaksCheck, breaksUnique, isStillReferenced } from "./database-errors.js";
 import { createDiaryPersistence } from "./diary.js";
 import {
   areas,
+  BOOK_LINK_TYPE_CHECK,
+  BOOK_LINK_UNIQUE,
+  books,
   modules,
   PERIOD_CHECK,
   RESERVED_SLUG_CHECK,
@@ -70,6 +74,7 @@ const resourceColumns = {
   finishedAt: resources.finishedAt,
   link: resources.link,
   position: resources.position,
+  book: linkedBookSlug,
   createdAt: resources.createdAt,
   updatedAt: resources.updatedAt,
 };
@@ -186,7 +191,10 @@ async function linkTopics(tx: Executor, resourceId: string, slugs: string[]) {
     .values(ids.map((topicId, position) => ({ resourceId, topicId, position })));
 }
 
-/** Runs a write; a refusal or a broken check rolls it back and becomes its failure. */
+/**
+ * Runs a write; a refusal, a broken check or a second link to one book rolls it back and becomes its
+ * failure.
+ */
 async function refusable<T, Failure>(write: () => Promise<T>): Promise<T | Failure> {
   try {
     return await write();
@@ -197,6 +205,11 @@ async function refusable<T, Failure>(write: () => Promise<T>): Promise<T | Failu
     if (breaksCheck(error, RESERVED_SLUG_CHECK)) {
       return { ok: false, reason: "reserved_slug" } as Failure;
     }
+    if (breaksCheck(error, BOOK_LINK_TYPE_CHECK)) {
+      return { ok: false, reason: "book_requires_book_type" } as Failure;
+    }
+    if (breaksUnique(error, BOOK_LINK_UNIQUE))
+      return { ok: false, reason: "book_taken" } as Failure;
     throw error;
   }
 }
@@ -204,7 +217,7 @@ async function refusable<T, Failure>(write: () => Promise<T>): Promise<T | Failu
 /** Deletes the row with the slug; `referenced` while a foreign key still points to it. */
 async function deleteBySlug(
   db: Database,
-  table: typeof areas | typeof modules | typeof resources,
+  table: typeof areas | typeof modules | typeof resources | typeof books,
   slug: string,
 ): Promise<DeleteRoadmapRecordResult> {
   try {
@@ -226,6 +239,7 @@ function resourceScalars(
   const fields: Partial<RoadmapResourceFields & RoadmapResourceRelations> = { ...changes };
   delete fields.module;
   delete fields.topics;
+  delete fields.book;
   return fields;
 }
 
@@ -327,12 +341,16 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
       const [row] = await loadResources(db, eq(resources.slug, slug));
       return row?.resource ?? null;
     },
-    createRoadmapResource({ module, topics: topicSlugs, ...fields }) {
+    createRoadmapResource({ module, topics: topicSlugs, book, ...fields }) {
       return refusable(() =>
         db.transaction(async (tx) => {
           const [row] = await tx
             .insert(resources)
-            .values({ ...fields, moduleId: await moduleId(tx, module) })
+            .values({
+              ...fields,
+              moduleId: await moduleId(tx, module),
+              bookId: await bookId(tx, book),
+            })
             .onConflictDoNothing({ target: resources.slug })
             .returning({ id: resources.id });
           if (!row) return { ok: false, reason: "conflict" } as const;
@@ -357,6 +375,7 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
               ...(changes.module === undefined
                 ? {}
                 : { moduleId: await moduleId(tx, changes.module) }),
+              ...(changes.book === undefined ? {} : { bookId: await bookId(tx, changes.book) }),
               updatedAt: now,
             })
             .where(eq(resources.id, current.id));
@@ -367,6 +386,11 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
     },
     deleteRoadmapResource(slug) {
       return deleteBySlug(db, resources, slug);
+    },
+
+    ...createBookPersistence(db),
+    deleteRoadmapBook(slug) {
+      return deleteBySlug(db, books, slug);
     },
   };
 }

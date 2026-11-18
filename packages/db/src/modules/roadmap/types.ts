@@ -1,4 +1,4 @@
-import type { TopicRecord } from "../profile/index.js";
+import type { MediaRecord, MediaReferenceFailure, TopicRecord } from "../profile/index.js";
 
 /** Kinds of learning resource. */
 export type RoadmapResourceType =
@@ -61,10 +61,14 @@ export interface RoadmapResourceFields {
   position: number;
 }
 
-/** A resource's relations as written: the slugs of an existing module and topics, in order. */
+/**
+ * A resource's relations as written: the slugs of an existing module and topics, in order, and of
+ * the existing book it reads or `null`.
+ */
 export interface RoadmapResourceRelations {
   module: string;
   topics: string[];
+  book: string | null;
 }
 
 export interface RoadmapResourceRecord extends RoadmapResourceFields {
@@ -74,6 +78,8 @@ export interface RoadmapResourceRecord extends RoadmapResourceFields {
   module: string;
   /** Its topics in link order. */
   topics: TopicRecord[];
+  /** The slug of the book it reads, or `null`. */
+  book: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -115,7 +121,10 @@ export type RoadmapResourceWriteFailure =
   | { ok: false; reason: "unknown_module" }
   | { ok: false; reason: "unknown_topics"; slugs: string[] }
   | { ok: false; reason: "repeated_topics" }
-  | { ok: false; reason: "invalid_period" };
+  | { ok: false; reason: "invalid_period" }
+  | { ok: false; reason: "unknown_book" }
+  | { ok: false; reason: "book_requires_book_type" }
+  | { ok: false; reason: "book_taken" };
 
 export type CreateRoadmapResourceResult =
   | { ok: true; resource: RoadmapResourceRecord }
@@ -126,6 +135,59 @@ export type UpdateRoadmapResourceResult =
   | { ok: true; resource: RoadmapResourceRecord }
   | { ok: false; reason: "not_found" }
   | RoadmapResourceWriteFailure;
+
+export interface RoadmapBookFields {
+  title: string;
+  author: string | null;
+  description: string | null;
+  pages: number | null;
+  year: number | null;
+  isbn: string | null;
+  /** Shelf order: ascending, ties by slug. */
+  priority: number;
+  /** `YYYY-MM-DD`, or `null`. */
+  startedOn: string | null;
+  /** `YYYY-MM-DD`, not before `startedOn`, or `null`. */
+  endedOn: string | null;
+  summary: string | null;
+  /** The cover image's media id, or `null`. */
+  coverId: string | null;
+}
+
+/** The resource of type `book` that links a book, with the slugs of its module and area. */
+export interface RoadmapBookResourceRecord {
+  slug: string;
+  name: string;
+  module: string;
+  area: string;
+}
+
+export interface RoadmapBookRecord extends RoadmapBookFields {
+  id: string;
+  slug: string;
+  /** The media record of the cover, or `null`. */
+  cover: MediaRecord | null;
+  /** The resource that links the book, or `null`. */
+  resource: RoadmapBookResourceRecord | null;
+  /** The elapsed seconds of the linking resource's time entries; `0` without one. */
+  readingSeconds: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Why a book write was refused: an unusable cover or an end before the start. */
+export type RoadmapBookWriteFailure =
+  MediaReferenceFailure | { ok: false; reason: "invalid_period" };
+
+export type CreateRoadmapBookResult =
+  | { ok: true; book: RoadmapBookRecord }
+  | { ok: false; reason: "conflict" }
+  | RoadmapBookWriteFailure;
+
+export type UpdateRoadmapBookResult =
+  | { ok: true; book: RoadmapBookRecord }
+  | { ok: false; reason: "not_found" }
+  | RoadmapBookWriteFailure;
 
 /** `referenced` while a child or another record still points to it. */
 export type DeleteRoadmapRecordResult =
@@ -242,6 +304,23 @@ export interface RoadmapPersistence {
    * Deletes the resource and its topic links; `referenced` while a time entry belongs to it.
    */
   deleteRoadmapResource(slug: string): Promise<DeleteRoadmapRecordResult>;
+
+  /**
+   * Every book by priority, then slug, each with its cover, linking resource and reading time,
+   * read in one consistent snapshot.
+   */
+  listRoadmapBooks(): Promise<RoadmapBookRecord[]>;
+  /** The book with the slug, or `null`. */
+  findRoadmapBook(slug: string): Promise<RoadmapBookRecord | null>;
+  /** `conflict` when the slug is taken; a cover must be an existing image. */
+  createRoadmapBook(fields: RoadmapBookFields & { slug: string }): Promise<CreateRoadmapBookResult>;
+  /** Changes only the given fields; `null` clears an optional one. */
+  updateRoadmapBook(
+    slug: string,
+    changes: Partial<RoadmapBookFields>,
+  ): Promise<UpdateRoadmapBookResult>;
+  /** `referenced` while a resource links the book; its cover media stays. */
+  deleteRoadmapBook(slug: string): Promise<DeleteRoadmapRecordResult>;
 
   /**
    * Every diary day that has notes or time entries, newest first, read in one consistent

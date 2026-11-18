@@ -21,6 +21,7 @@ export const reservedRoadmapAreaSlugs = [
 const RESERVED_SLUG = "This slug is reserved for a roadmap page.";
 const FINISH_RULE = "The finish cannot be before the start.";
 const UNIQUE_TOPICS = "List each topic once.";
+const BOOK_TYPE = "Only a resource of type `book` can link a book.";
 
 /** Trimmed, non-empty text of at most `max` characters. */
 const text = (max: number) => z.string().trim().min(1).max(max);
@@ -74,6 +75,11 @@ const resourceFields = {
     .nullable()
     .meta({ description: "An absolute `http` or `https` address; `null` when there is none." }),
   position: PositionSchema,
+  book: SlugSchema.nullable().meta({
+    description:
+      "The slug of the existing book this resource reads; only a resource of type `book` can " +
+      "link one, and each book is linked by at most one resource. `null` when none.",
+  }),
 };
 
 const AreaSlugSchema = SlugSchema.refine(
@@ -114,6 +120,16 @@ function topicsAreUnique(value: { topics?: string[] | undefined }, context: z.co
   if (topics !== undefined && new Set(topics).size !== topics.length) {
     context.addIssue({ code: "custom", path: ["topics"], message: UNIQUE_TOPICS });
   }
+}
+
+/** A linked book needs the type `book`, checked when both are set in the same body. */
+function bookNeedsBookType(
+  value: { type?: string | undefined; book?: string | null | undefined },
+  context: z.core.$RefinementCtx,
+) {
+  const { type, book } = value;
+  if (type === undefined || book === undefined || book === null) return;
+  if (type !== "book") context.addIssue({ code: "custom", path: ["book"], message: BOOK_TYPE });
 }
 
 const nonEmpty = (change: object) => Object.keys(change).length > 0;
@@ -185,7 +201,7 @@ export const RoadmapModuleUpdateSchema = z
 
 /**
  * Body of creating a resource in an existing module with its topic links. Omitted fields mean a
- * planned resource without a description, estimate, dates, link or topics.
+ * planned resource without a description, estimate, dates, link, book or topics.
  */
 export const RoadmapResourceCreateSchema = z
   .strictObject({
@@ -198,10 +214,12 @@ export const RoadmapResourceCreateSchema = z
     startedAt: resourceFields.startedAt.default(null),
     finishedAt: resourceFields.finishedAt.default(null),
     link: resourceFields.link.default(null),
+    book: resourceFields.book.default(null),
     topics: TopicSlugsSchema.default([]),
   })
   .superRefine(finishFollowsStart)
   .superRefine(topicsAreUnique)
+  .superRefine(bookNeedsBookType)
   .meta({ id: "RoadmapResourceCreate" });
 
 /**
@@ -215,6 +233,7 @@ export const RoadmapResourceUpdateSchema = z
   .refine(nonEmpty, NON_EMPTY)
   .superRefine(finishFollowsStart)
   .superRefine(topicsAreUnique)
+  .superRefine(bookNeedsBookType)
   .meta({ id: "RoadmapResourceUpdate" });
 
 /** Derived progress of an area or a module; computed on read, never stored. */
@@ -384,3 +403,19 @@ export type {
   TimeEntryUpdate,
   TimeEntryWrite,
 } from "./diary.js";
+export {
+  RoadmapBookCreateSchema,
+  RoadmapBookListSchema,
+  RoadmapBookResourceSchema,
+  RoadmapBookSchema,
+  RoadmapBookUpdateSchema,
+  roadmapBookStatuses,
+} from "./books.js";
+export type {
+  RoadmapBook,
+  RoadmapBookCreate,
+  RoadmapBookList,
+  RoadmapBookResource,
+  RoadmapBookStatus,
+  RoadmapBookUpdate,
+} from "./books.js";
