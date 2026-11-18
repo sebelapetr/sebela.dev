@@ -105,6 +105,14 @@ Checks run at three points before CI, each lighter than the next:
 
 The developer still runs the tests and the build for what it changed before it finishes; CI runs everything.
 
+### Browser tests by role
+
+The website's browser suite (`pnpm test:e2e`) takes minutes, so each role runs only its share of it:
+
+- **Developer:** only the spec files its change adds or touches, by path (`pnpm --filter @sebela/web test:e2e e2e/<name>.spec.ts`, after `pnpm --filter @sebela/web build`), and while fixing one failure only that test (`-g "<title>"`). Never the whole suite: a change elsewhere that breaks another spec is found by the reviewer's run.
+- **Reviewer:** the whole suite once per review, before writing the objections. A re-review after fixes runs only the specs the fixes touch and the ones that failed; it does not run the whole suite again.
+- **CI:** the whole suite on every push, as the condition for merging.
+
 ## CI
 
 Lint, typecheck, tests and build must pass before a pull request can merge. A failing check is fixed, not disabled. The orchestrator merges an issue pull request only when every check reported on it is green (`gh pr checks --watch`).

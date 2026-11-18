@@ -19,7 +19,7 @@ These are binding. If something in the issue contradicts them, stop and report i
 
 ## What you check
 
-1. **Acceptance criteria** — each one, against the actual behaviour, not against the developer's summary. Run the tests and, for UI, open the page.
+1. **Acceptance criteria** — each one, against the actual behaviour, not against the developer's summary. Run the tests and, for UI, open the page. Run the website's whole browser suite (`pnpm test:e2e`) once per review, before you write your objections; on a re-review after fixes run only the specs the fixes touch and the ones that failed, not the whole suite again (`docs/testing.md`, Browser tests by role).
 2. **Boundaries and deep modules** — no forbidden package/private-module imports or cycles; only `apps/api` reaches the database. Check complete public operations, documented guarantees/errors, hidden SQL/driver details and an accurate module map, using the canonical deep-module standard. A folder or lint pass alone does not prove information hiding.
 3. **Access** — every write is a private, authenticated route; the API key never reaches client-side code.
 4. **Order of work** — where test-first is mandatory, the test commit precedes the implementation commit in the branch history.

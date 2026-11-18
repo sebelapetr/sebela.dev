@@ -140,7 +140,7 @@ The reviewer agent is the only check between issues inside a phase, so a mistake
 
 ## What the reviewer checks
 
-- Every acceptance criterion of the issue
+- Every acceptance criterion of the issue, with the website's whole browser suite run once per review (developers run only the specs they touch; [Browser tests by role](testing.md#browser-tests-by-role))
 - Package boundaries and the trust boundary
 - Access: every write is a private, authenticated route; the API key never reaches client-side code
 - Where test-first is mandatory: the test came before the implementation
