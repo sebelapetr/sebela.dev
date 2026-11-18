@@ -226,5 +226,8 @@ export interface RoadmapAreaHeading {
 
 /** The area with this slug, or null when no area has it (the page is then not found). */
 export function findRoadmapArea(roadmap: Roadmap, slug: string): RoadmapAreaHeading | null {
-  throw new Error(`not implemented: ${String(roadmap.areas.length)} ${slug}`);
+  const index = roadmap.areas.findIndex((area) => area.slug === slug);
+  const area = roadmap.areas[index];
+  if (area === undefined) return null;
+  return { slug: area.slug, name: area.name, order: `${String(index + 1)}.` };
 }
