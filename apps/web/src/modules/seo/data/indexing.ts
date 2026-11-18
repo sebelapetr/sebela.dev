@@ -1,8 +1,8 @@
 // What crawlers are told: the sitemap lists the profile's real, stable pages on the configured
 // origin, and robots.txt lets every crawler read the site and points at the sitemap. The chat (and
-// its conversations), the AI Roadmap's placeholder and the CV PDF's download and failure pages are
-// never listed; those pages say `noindex` themselves, which crawlers can only read when robots.txt
-// does not block them.
+// its conversations), the AI Roadmap's pages (until their SEO, #115) and the CV PDF's download
+// and failure pages are never listed; those pages say `noindex` themselves, which crawlers can only
+// read when robots.txt does not block them.
 import { routes } from "../../_shared";
 
 /** The pages search engines may index, in the sitemap's order. */

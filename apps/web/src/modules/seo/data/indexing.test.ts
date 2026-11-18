@@ -13,7 +13,7 @@ describe("indexedPaths", () => {
     expect(indexedPaths).toEqual(["/", "/experience", "/services", "/cv"]);
   });
 
-  it("never include the chat, its conversations, the roadmap placeholder or the PDF download", () => {
+  it("never include the chat, its conversations, the roadmap pages or the PDF download", () => {
     for (const path of indexedPaths) {
       expect(path).not.toMatch(/^\/(?:ask|ai-roadmap|cv\/pdf)/);
       expect(path).not.toContain("?");
