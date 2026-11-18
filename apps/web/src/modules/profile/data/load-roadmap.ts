@@ -22,11 +22,39 @@ export interface LoadRoadmapOptions {
   readonly timeoutMs?: number;
 }
 
-export function loadRoadmap(
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+/**
+ * Reads the AI Roadmap's content from the API's public routes: the person and the whole roadmap
+ * tree, uncached and limited in time. A person that does not exist makes the pages missing; a
+ * failed read of either makes the whole content unavailable, never an empty roadmap. The tree is
+ * returned as the API answered it: its order, progress and totals are the API's, never recounted.
+ */
+export async function loadRoadmap(
   client: ApiClient,
   options: LoadRoadmapOptions = {},
 ): Promise<RoadmapResult> {
-  return Promise.reject(
-    new Error(`not implemented: ${typeof client.GET} ${JSON.stringify(options)}`),
-  );
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
+
+  try {
+    const [personRead, roadmapRead] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/roadmap", init()),
+    ]);
+    if (personRead.data === undefined) {
+      return personRead.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
+    }
+    if (roadmapRead.data === undefined) return { status: "unavailable" };
+    return {
+      status: "ready",
+      content: {
+        name: personRead.data.name,
+        headline: personRead.data.headline,
+        roadmap: roadmapRead.data,
+      },
+    };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
