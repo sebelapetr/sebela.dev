@@ -1,11 +1,14 @@
-// The AI Roadmap overview against the fictional roadmap of e2e/fixtures/with-roadmap/ (Robin
-// Ashby): three areas (one in progress with a long description, one planned, one without
-// modules), a module without resources and five resources of every status, one whose description
-// tries to inject markup and a `javascript:` link. It covers the content and its counts, opening
-// areas and modules by pointer and keyboard, safe rendering, the sub-navigation that only roadmap
-// pages show, the temporary placeholders, the empty and the unavailable state, and a roadmap
-// write reaching the warmed page through the signed invalidation. Widths, themes, axe and touch
-// targets are checked on the overview with its first area open.
+// The AI Roadmap against the fictional roadmap of e2e/fixtures/with-roadmap/ (Robin Ashby): three
+// areas (one in progress with a long description, one planned, one without modules), a module
+// without resources and five resources of every status, one whose description tries to inject
+// markup and a `javascript:` link. It covers the overview's content and counts, opening areas and
+// modules by pointer and keyboard, the area and module pages with their breadcrumbs, titles and
+// structured data, a module only under its own area, a resource's anchor, the chat's roadmap card
+// and source, the homepage's Exploring, safe rendering, the sub-navigation that only roadmap pages
+// show, the static placeholders, the empty and the unavailable state, and roadmap writes reaching
+// the warmed overview, old and new detail pages and the homepage through the signed invalidation.
+// Widths, themes, axe and touch targets are checked on the overview with its first area open and
+// on the area and module pages.
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -62,25 +65,28 @@ async function expectTouchTargets(page: Page) {
 }
 
 // No marker on the rail covers the text of its row: every visible marker ends left of where its
-// area's, module's or resource's name starts.
-async function expectMarkersBesideNames(page: Page) {
-  const rows = await page.locator('main [data-slot="timeline-marker"]').evaluateAll((markers) =>
-    markers
-      .filter((marker) => marker.checkVisibility())
-      .map((marker) => {
-        const item = marker.closest("li");
-        const name = item?.querySelector(
-          ":scope > div > h4, :scope > div > :is(h2, h3) > button > span:not([data-slot])",
-        );
-        if (name === null || name === undefined) return { row: marker.outerHTML, gap: -1 };
-        const range = document.createRange();
-        range.selectNodeContents(name);
-        const text = range.getClientRects()[0];
-        return {
-          row: name.textContent.slice(0, 60),
-          gap: (text?.left ?? 0) - marker.getBoundingClientRect().right,
-        };
-      }),
+// area's, module's or resource's name starts. A resource's name is an `h4` on the overview and an
+// `h3` on its module's page.
+async function expectMarkersBesideNames(page: Page, resourceHeading: "h3" | "h4" = "h4") {
+  const rows = await page.locator('main [data-slot="timeline-marker"]').evaluateAll(
+    (markers, heading) =>
+      markers
+        .filter((marker) => marker.checkVisibility())
+        .map((marker) => {
+          const item = marker.closest("li");
+          const name = item?.querySelector(
+            `:scope > div > ${heading}, :scope > div > :is(h2, h3) > button > span:not([data-slot])`,
+          );
+          if (name === null || name === undefined) return { row: marker.outerHTML, gap: -1 };
+          const range = document.createRange();
+          range.selectNodeContents(name);
+          const text = range.getClientRects()[0];
+          return {
+            row: name.textContent.slice(0, 60),
+            gap: (text?.left ?? 0) - marker.getBoundingClientRect().right,
+          };
+        }),
+    resourceHeading,
   );
   expect(rows.length).toBeGreaterThan(0);
   for (const { row, gap } of rows) expect(gap, row).toBeGreaterThanOrEqual(4);
@@ -100,6 +106,10 @@ function subNavigation(page: Page) {
 /** An area's or a module's heading row, by the start of its accessible name. */
 function trigger(page: Page, label: string) {
   return page.getByRole("button", { name: new RegExp(`^${label}`, "u") });
+}
+
+function breadcrumbs(page: Page) {
+  return page.getByRole("navigation", { name: "Breadcrumb" });
 }
 
 function robots(page: Page) {
@@ -154,6 +164,12 @@ test.describe("the roadmap overview", () => {
     return response.text();
   }
 
+  async function status(path: string): Promise<number> {
+    const response = await fetch(`${website.url}${path}`);
+    await response.body?.cancel();
+    return response.status;
+  }
+
   test("shows the counts, the planned hours and the way in, kept out of search results", async ({
     page,
   }) => {
@@ -191,7 +207,7 @@ test.describe("the roadmap overview", () => {
     await hydrated(page);
     const area = trigger(page, "Orbit foundations");
     await expect(area).toHaveAttribute("aria-expanded", "false");
-    await expect(page.getByText("Signal basics")).toBeHidden();
+    await expect(page.getByRole("list", { name: "Modules of Orbit foundations" })).toBeHidden();
 
     await area.click();
     await expect(area).toHaveAttribute("aria-expanded", "true");
@@ -219,7 +235,7 @@ test.describe("the roadmap overview", () => {
 
     await area.click();
     await expect(area).toHaveAttribute("aria-expanded", "false");
-    await expect(page.getByText("Signal basics")).toBeHidden();
+    await expect(page.getByRole("list", { name: "Modules of Orbit foundations" })).toBeHidden();
   });
 
   test("the keyboard opens and closes areas, and Show more opens a long description", async ({
@@ -291,6 +307,7 @@ test.describe("the roadmap overview", () => {
     for (const { path, current } of [
       { path: "/ai-roadmap", current: "Roadmap" },
       { path: "/ai-roadmap/orbit-foundations", current: "Roadmap" },
+      { path: "/ai-roadmap/orbit-foundations/signal-basics", current: "Roadmap" },
       ...sections.map(({ path, label }) => ({ path, current: label })),
     ]) {
       await page.goto(`${website.url}${path}`);
@@ -320,7 +337,7 @@ test.describe("the roadmap overview", () => {
     }
   });
 
-  test("unfinished pages are explicit placeholders, and an unknown area is not found", async ({
+  test("the static sections are explicit placeholders; unknown and unrelated pages are not found", async ({
     page,
   }) => {
     for (const { path, label } of sections) {
@@ -335,33 +352,299 @@ test.describe("the roadmap overview", () => {
       );
     }
 
-    const response = await page.goto(`${website.url}/ai-roadmap/orbit-foundations`);
-    expect(response?.status()).toBe(200);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Orbit foundations");
-    await expect(page.locator("main")).toContainText("This area's own page is not published yet.");
-    expect(await robots(page)).toContain("noindex");
-    await expectAccessible(page);
-
-    const missing = await page.goto(`${website.url}/ai-roadmap/no-such-area`);
-    expect(missing?.status()).toBe(404);
+    for (const path of [
+      "/ai-roadmap/no-such-area",
+      "/ai-roadmap/orbit-foundations/no-such-module",
+      // A module exists only under its own area.
+      "/ai-roadmap/quiet-systems/signal-basics",
+      // Not a slug: the API rejects it, and the page is simply not found.
+      "/ai-roadmap/Orbit%20Foundations",
+      "/ai-roadmap/orbit-foundations/Signal%20Basics",
+    ]) {
+      const missing = await page.goto(`${website.url}${path}`);
+      expect(missing?.status(), path).toBe(404);
+    }
   });
 
-  test("a roadmap write reaches the warmed overview within ten seconds", async () => {
+  test("the overview leads to an area's page and a module's page, and the breadcrumbs lead back", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/ai-roadmap`);
+    await hydrated(page);
+    await trigger(page, "Orbit foundations").click();
+    await page.getByRole("link", { name: "Open the area page: Orbit foundations" }).click();
+
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
+    await expect(page).toHaveTitle(`Orbit foundations — AI Engineering Roadmap — ${name}`);
+    expect(await robots(page)).toContain("noindex");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("AreaOrbit foundations");
+    await expect(breadcrumbs(page).getByRole("link")).toHaveText(["AI Engineering Roadmap"]);
+    await expect(breadcrumbs(page).locator('[aria-current="page"]')).toHaveText(
+      "Orbit foundations",
+    );
+    // The API's derived values, as on the overview: skipped counts in the denominator only.
+    const header = page.locator("main header");
+    await expect(header).toContainText("Current");
+    await expect(header).toContainText("In progress");
+    await expect(header).toContainText("1/4");
+    // The modules in the API's order, each a link to its own page with its own status.
+    const modules = page.locator("main section ol > li");
+    await expect(modules.locator("h3")).toHaveText(["Signal basics", "Empty drawer"]);
+    await expect(modules.nth(0)).toContainText("In progress");
+    await expect(modules.nth(0)).toContainText("Reading fictional signals.");
+    await expect(modules.nth(1)).toContainText("Planned");
+
+    await page.getByRole("link", { name: "Signal basics", exact: true }).click();
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
+    await expect(page).toHaveTitle(
+      `Signal basics — Orbit foundations — AI Engineering Roadmap — ${name}`,
+    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Module of Orbit foundationsSignal basics",
+    );
+    const resources = page.getByRole("list", { name: "Resources of Signal basics" });
+    await expect(resources.locator("h3")).toHaveText([
+      /A fictional signal explainer \(opens in a new tab\), Completed/u,
+      /Unsafe signal notes, In progress/u,
+      /A signal playground, Skipped/u,
+      /A fictional book on signals, Paused/u,
+    ]);
+    await expect(resources).toContainText("~1.5h");
+    await expect(resources).toContainText("Book");
+    const link = resources.getByRole("link", { name: /A fictional signal explainer/u });
+    await expect(link).toHaveAttribute("href", "https://learn.example.test/signal-explainer");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+
+    await breadcrumbs(page).getByRole("link", { name: "Orbit foundations" }).click();
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
+    await breadcrumbs(page).getByRole("link", { name: "AI Engineering Roadmap" }).click();
+    await expect(page).toHaveURL(/\/ai-roadmap$/u);
+
+    // The overview's opened module leads to its page too.
+    await hydrated(page);
+    await trigger(page, "Orbit foundations").click();
+    await trigger(page, "Signal basics").click();
+    await page.getByRole("link", { name: "Open the module page: Signal basics" }).click();
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
+  });
+
+  test("the keyboard follows the module links and the breadcrumbs", async ({ page }) => {
+    await page.goto(`${website.url}/ai-roadmap/orbit-foundations`);
+    await hydrated(page);
+    const drawer = page.getByRole("link", { name: "Empty drawer", exact: true });
+    await drawer.focus();
+    await expect(drawer).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/empty-drawer$/u);
+    await expect(page.locator("main")).toContainText("No resources yet.");
+
+    const crumb = breadcrumbs(page).getByRole("link", { name: "Orbit foundations" });
+    await crumb.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
+  });
+
+  test("an area without modules and a module without resources say so", async ({ page }) => {
+    const area = await page.goto(`${website.url}/ai-roadmap/later-ideas`);
+    expect(area?.status()).toBe(200);
+    await expect(page.locator("main")).toContainText("No modules yet.");
+    await expect(page.locator("main header")).toContainText("0/0");
+    await expectAccessible(page);
+
+    const drawer = await page.goto(`${website.url}/ai-roadmap/orbit-foundations/empty-drawer`);
+    expect(drawer?.status()).toBe(200);
+    await expect(page.locator("main")).toContainText("No resources yet.");
+    await expectAccessible(page);
+  });
+
+  test("the module page renders descriptions as text: no script, image, raw markup or javascript: link", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/ai-roadmap/orbit-foundations/signal-basics`);
+    await hydrated(page);
+    const notes = page.locator('[data-roadmap-slug="signal-notes"]');
+    await expect(notes).toContainText("a trap");
+    await expect(notes.locator("script, img, b, iframe")).toHaveCount(0);
+    await expect(page.locator('main a[href^="javascript:"]')).toHaveCount(0);
+    expect(await page.evaluate(() => "__roadmapInjected" in window)).toBe(false);
+  });
+
+  test("each page describes its way from the overview as structured data at its own address", async ({
+    page,
+  }) => {
+    for (const { path, names } of [
+      {
+        path: "/ai-roadmap/orbit-foundations",
+        names: ["AI Engineering Roadmap", "Orbit foundations"],
+      },
+      {
+        path: "/ai-roadmap/orbit-foundations/signal-basics",
+        names: ["AI Engineering Roadmap", "Orbit foundations", "Signal basics"],
+      },
+    ]) {
+      await page.goto(`${website.url}${path}`);
+      const graphs = await page
+        .locator('script[type="application/ld+json"]')
+        .evaluateAll((scripts) =>
+          scripts.map((script) => JSON.parse(script.textContent) as unknown),
+        );
+      const list = graphs
+        .flatMap((graph) => (graph as { "@graph"?: unknown[] })["@graph"] ?? [])
+        .find(
+          (node): node is { itemListElement: { name: string; item: string }[] } =>
+            (node as { "@type"?: string })["@type"] === "BreadcrumbList",
+        );
+      expect(
+        list?.itemListElement.map((item) => item.name),
+        path,
+      ).toEqual(names);
+      expect(new URL(list?.itemListElement.at(-1)?.item ?? "").pathname, path).toBe(path);
+      const description = await page.locator('meta[name="description"]').getAttribute("content");
+      expect(description, path).not.toBe("");
+      await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
+        "content",
+        new RegExp(`^${names.at(-1) ?? ""} — `, "u"),
+      );
+    }
+  });
+
+  test("a resource's address lands on the resource itself", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 700 });
+    await page.goto(
+      `${website.url}/ai-roadmap/orbit-foundations/signal-basics#resource-signal-book`,
+    );
+    const resource = page.locator("#resource-signal-book");
+    await expect(resource).toContainText("A fictional book on signals");
+    await expect(resource).toBeInViewport();
+  });
+
+  test("the chat's roadmap card and source lead to the module being learned", async ({ page }) => {
+    await page.goto(`${website.url}/ask`);
+    await hydrated(page);
+    await page.getByRole("button", { name: `What is ${name} working on now?` }).click();
+    const answer = page.getByRole("list", { name: "Conversation" }).locator(":scope > li").last();
+    await expect(answer.locator("[aria-busy='false']")).toHaveCount(1);
+    await expect(answer).toContainText("Signal basics is still being learned");
+
+    const card = answer.getByRole("list", { name: "Cards" }).locator(":scope > li");
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText("AI Roadmap");
+    await expect(card.getByRole("link", { name: "Signal basics" })).toHaveAttribute(
+      "href",
+      "/ai-roadmap/orbit-foundations/signal-basics",
+    );
+    const source = answer
+      .getByRole("list", { name: "Sources", exact: true })
+      .getByRole("link", { name: "Signal basics, AI Roadmap" });
+    await expect(source).toHaveAttribute("href", "/ai-roadmap/orbit-foundations/signal-basics");
+    await source.click();
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Signal basics");
+  });
+
+  test("the homepage's Exploring shows the learning in progress and leads to its pages", async ({
+    page,
+  }) => {
+    await page.goto(website.url);
+    const now = page.getByRole("region", { name: "Now", exact: true });
+    await expect(now.getByRole("heading", { level: 3, name: "Exploring" })).toBeVisible();
+    await expect(now.getByRole("link", { name: "Orbit foundations" })).toHaveAttribute(
+      "href",
+      "/ai-roadmap/orbit-foundations",
+    );
+    await expect(now).toContainText("1/4 resources completed");
+    // Only what is in progress: the planned area and the untouched module are not listed.
+    await expect(now).not.toContainText("Quiet systems");
+    await expect(now).not.toContainText("Empty drawer");
+    const modules = now.getByRole("list", { name: "Orbit foundations modules in progress" });
+    await expect(modules.getByRole("link")).toHaveText(["Signal basics"]);
+
+    await hydrated(page);
+    await modules.getByRole("link", { name: "Signal basics" }).click();
+    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
+  });
+
+  test("the area and module pages fit every width and mode, accessible and with large targets", async ({
+    page,
+  }) => {
+    const pages = [
+      { path: "/ai-roadmap/orbit-foundations", shot: "roadmap-area" },
+      { path: "/ai-roadmap/orbit-foundations/signal-basics", shot: "roadmap-module" },
+    ];
+    for (const scheme of schemes) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const { path, shot } of pages) {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.goto(`${website.url}${path}`);
+        await hydrated(page);
+        for (const width of widths) {
+          await page.setViewportSize({ width, height: 900 });
+          await expectNoHorizontalScroll(page);
+          await expectTouchTargets(page);
+          if (shot === "roadmap-module") await expectMarkersBesideNames(page, "h3");
+          await page.screenshot({
+            path: test.info().outputPath(`${shot}-${String(width)}-${scheme}.png`),
+            fullPage: true,
+          });
+          if (width === 360 || width === 1280) await expectAccessible(page);
+        }
+      }
+      // The homepage's Now with Exploring filled, at the narrowest and the widest layout.
+      await page.goto(website.url);
+      for (const width of [360, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        const now = page.getByRole("region", { name: "Now", exact: true });
+        await now.scrollIntoViewIfNeeded();
+        await now.screenshot({
+          path: test.info().outputPath(`homepage-now-${String(width)}-${scheme}.png`),
+        });
+      }
+    }
+  });
+
+  test("a roadmap write reaches the warmed overview, detail pages and homepage within ten seconds", async () => {
     const overview = await text("/ai-roadmap");
     expect(overview).toContain("Quiet systems");
     expect(overview).toContain("A fictional queue guide");
+    // Warm every page the writes below change.
+    expect(await text("/ai-roadmap/quiet-systems")).toContain("Quiet systems");
+    expect(await text("/ai-roadmap/quiet-systems/calm-queues")).toContain(
+      "A fictional queue guide",
+    );
+    expect(await text("/")).not.toContain("Quiet systems");
+    expect(await text("/ai-roadmap/quiet-systems/calm-queues")).not.toContain(">Current<");
+
+    // A status change derives new current learning: the homepage's Exploring follows.
+    await write("PATCH", "/v1/roadmap/resources/queue-guide", { status: "in-progress" });
+    await expect.poll(() => text("/"), within).toContain("Quiet systems");
+    await expect
+      .poll(() => text("/ai-roadmap/quiet-systems/calm-queues"), within)
+      .toContain(">Current<");
 
     await write("PATCH", "/v1/roadmap/areas/quiet-systems", { name: "Quieter systems" });
-    await expect.poll(() => text("/ai-roadmap"), within).toContain("Quieter systems");
+    for (const path of [
+      "/ai-roadmap",
+      "/ai-roadmap/quiet-systems",
+      "/ai-roadmap/quiet-systems/calm-queues",
+      "/",
+    ]) {
+      await expect
+        .poll(() => text(path), { ...within, message: path })
+        .toContain("Quieter systems");
+    }
 
     await write("DELETE", "/v1/roadmap/resources/queue-guide");
     await expect.poll(() => text("/ai-roadmap"), within).not.toContain("A fictional queue guide");
     expect(await text("/ai-roadmap")).toContain("4 vetted resources");
-    // The area's own address follows the same content.
-    expect(await text("/ai-roadmap/quiet-systems")).toContain("Quieter systems");
+    await expect
+      .poll(() => text("/ai-roadmap/quiet-systems/calm-queues"), within)
+      .toContain("No resources yet.");
+    // Nothing in the area is in progress any more: it leaves the homepage's Exploring.
+    await expect.poll(() => text("/"), within).not.toContain("Quieter systems");
   });
 
-  test("moving a module to another area or a resource to another module reaches the overview", async ({
+  test("moving a module to another area or a resource to another module reaches the overview and both pages", async ({
     page,
   }) => {
     /** The slug of the item that holds the given item on the rendered tree, or null. */
@@ -378,13 +661,29 @@ test.describe("the roadmap overview", () => {
       }, slug);
     }
 
+    // Warm the old and the new addresses.
+    expect(await status("/ai-roadmap/quiet-systems/calm-queues")).toBe(200);
+    expect(await status("/ai-roadmap/orbit-foundations/calm-queues")).toBe(404);
+    expect(await text("/ai-roadmap/orbit-foundations")).not.toContain("Calm queues");
+
     expect(await parentOf("calm-queues")).toBe("quiet-systems");
     await write("PATCH", "/v1/roadmap/modules/calm-queues", { area: "orbit-foundations" });
     await expect.poll(() => parentOf("calm-queues"), within).toBe("orbit-foundations");
+    await expect.poll(() => status("/ai-roadmap/quiet-systems/calm-queues"), within).toBe(404);
+    await expect.poll(() => status("/ai-roadmap/orbit-foundations/calm-queues"), within).toBe(200);
+    await expect.poll(() => text("/ai-roadmap/orbit-foundations"), within).toContain("Calm queues");
+    await expect.poll(() => text("/ai-roadmap/quiet-systems"), within).toContain("No modules yet.");
+
+    const signals = "/ai-roadmap/orbit-foundations/signal-basics";
+    const queues = "/ai-roadmap/orbit-foundations/calm-queues";
+    expect(await text(signals)).toContain("A fictional book on signals");
+    expect(await text(queues)).not.toContain("A fictional book on signals");
 
     expect(await parentOf("signal-book")).toBe("signal-basics");
     await write("PATCH", "/v1/roadmap/resources/signal-book", { module: "calm-queues" });
     await expect.poll(() => parentOf("signal-book"), within).toBe("calm-queues");
+    await expect.poll(() => text(signals), within).not.toContain("A fictional book on signals");
+    await expect.poll(() => text(queues), within).toContain("A fictional book on signals");
   });
 });
 
@@ -398,8 +697,13 @@ test.describe("a profile without a roadmap", () => {
     await expect(page.getByRole("link", { name: /^Start here/u })).toHaveCount(0);
     await expect(subNavigation(page)).toBeVisible();
     await expectAccessible(page);
-    const missing = await page.goto("/ai-roadmap/orbit-foundations");
-    expect(missing?.status()).toBe(404);
+    for (const path of [
+      "/ai-roadmap/orbit-foundations",
+      "/ai-roadmap/orbit-foundations/signal-basics",
+    ]) {
+      const missing = await page.goto(path);
+      expect(missing?.status(), path).toBe(404);
+    }
   });
 });
 
@@ -416,12 +720,18 @@ test.describe("an unreachable API", () => {
     await website.stop();
   });
 
-  test("the overview shows the unavailable state; the static placeholders still load", async ({
+  test("the overview and detail pages show the unavailable state, never not found; the static placeholders still load", async ({
     page,
   }) => {
-    const response = await page.goto(`${website.url}/ai-roadmap`);
-    expect(response?.status()).toBe(500);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(unavailable);
+    for (const path of [
+      "/ai-roadmap",
+      "/ai-roadmap/orbit-foundations",
+      "/ai-roadmap/orbit-foundations/signal-basics",
+    ]) {
+      const response = await page.goto(`${website.url}${path}`);
+      expect(response?.status(), path).toBe(500);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(unavailable);
+    }
     await expectAccessible(page);
     for (const { path } of sections) {
       const placeholder = await page.goto(`${website.url}${path}`);

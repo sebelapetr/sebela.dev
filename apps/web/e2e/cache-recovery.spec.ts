@@ -1,7 +1,8 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write to the profile or to the roadmap shows once the interval has elapsed; a
+// seconds, a write to the profile or to the roadmap shows once the interval has elapsed, on the
+// overview, an area's page and the homepage's Exploring alike; a
 // restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
 // again, pages are current without a rebuild.
@@ -108,6 +109,48 @@ test.describe("cached content without invalidation notifications", () => {
         intervals: [500],
       })
       .toContain("Late orbits");
+  });
+
+  test("a new module and resource reach the warmed area page and homepage Exploring after the interval", async () => {
+    async function create(path: string, body: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(response.status, `POST ${path}`).toBe(201);
+    }
+
+    // Warm the area page and the homepage: the area has no modules, and nothing is in progress.
+    expect((await read("/ai-roadmap/late-orbits")).body).toContain("No modules yet.");
+    expect((await read("/")).body).not.toContain("Exploring");
+
+    await create("/v1/roadmap/modules", {
+      slug: "slow-drift",
+      area: "late-orbits",
+      name: "Slow drift",
+      position: 0,
+    });
+    await create("/v1/roadmap/resources", {
+      slug: "drift-notes",
+      module: "slow-drift",
+      name: "Fictional drift notes",
+      type: "link",
+      status: "in-progress",
+      position: 0,
+    });
+
+    const fallback = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read("/ai-roadmap/late-orbits")).body, fallback)
+      .toContain("Slow drift");
+    // The module's own page was never cached, so it is current at once.
+    expect((await read("/ai-roadmap/late-orbits/slow-drift")).body).toContain(
+      "Fictional drift notes",
+    );
+    await expect
+      .poll(async () => (await read("/")).body, fallback)
+      .toMatch(/Exploring[\s\S]*Late orbits[\s\S]*Slow drift/u);
   });
 
   test("a restarted website reads current content at once", async () => {

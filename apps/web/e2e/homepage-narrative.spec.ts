@@ -6,7 +6,7 @@ import { startApi, startWebsite, type Started } from "./stack";
 // Fixture values (e2e/fixtures/with-experience/): a fictional career that exists only for these
 // tests. Two current-focus entries (one on the route planner, one with its own web link), one
 // ongoing exploration (Tool scopes, designed only) beside two finished ones, two current roles and
-// three services.
+// three services, and no AI Roadmap, so Now has no Exploring column.
 const workingOn = [
   {
     title: "Taking the route planner to every depot",
@@ -143,7 +143,9 @@ test.describe("the homepage's narrative read from the API", () => {
     await page.goto(website.url);
     const section = region(page, "Now");
     const columns = section.getByRole("heading", { level: 3 });
-    await expect(columns).toHaveText(["Working on", "Exploring"]);
+    // Exploring is the AI Roadmap's learning in progress; this fixture has no roadmap, so the column
+    // is left out rather than filled with explorations or made-up activity.
+    await expect(columns).toHaveText(["Working on"]);
     for (const item of workingOn) {
       await expect(section.getByRole("heading", { level: 4, name: item.title })).toBeVisible();
       await expect(section.getByRole("list", { name: `${item.title} topics` })).toHaveText(
@@ -156,11 +158,8 @@ test.describe("the homepage's narrative read from the API", () => {
     }
     // The focus's Markdown renders as inline elements, never as raw syntax.
     await expect(section.locator("strong").first()).toHaveText("fictional");
-    // Only the ongoing exploration, with its stored status in words.
-    const exploring = section.getByRole("link", { name: "Tool scopes" });
-    await expect(exploring).toHaveAttribute("href", "/experience#exploration-tool-scopes");
-    await expect(section).toContainText("Designed");
-    await expect(section).toContainText("Unimplemented design, planned or architected only");
+    // Explorations are delivered or designed work, never current learning.
+    await expect(section).not.toContainText("Tool scopes");
     await expect(section).not.toContainText("Answer checker");
     await expect(section).not.toContainText("Chunk comparison");
   });
