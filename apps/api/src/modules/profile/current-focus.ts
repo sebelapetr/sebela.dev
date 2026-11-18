@@ -56,6 +56,7 @@ export function currentFocusRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createCurrentFocus",
       method: "POST",
+      content: "current-focus",
       path: LIST,
       access: "private",
       summary: "Create a current-focus entry",
@@ -74,6 +75,7 @@ export function currentFocusRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateCurrentFocus",
       method: "PATCH",
+      content: "current-focus",
       path: ITEM,
       access: "private",
       summary: "Update a current-focus entry",
@@ -92,6 +94,7 @@ export function currentFocusRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteCurrentFocus",
       method: "DELETE",
+      content: "current-focus",
       path: ITEM,
       access: "private",
       summary: "Delete a current-focus entry",

@@ -41,6 +41,7 @@ export function testConfig(
     bodyLimitBytes: 16 * 1024,
     uploadLimitBytes: MEDIA_LIMITS.maxBytes,
     trustedProxies: [],
+    websiteInvalidation: null,
     ...rest,
     rateLimits: {
       health: roomy,

@@ -24,6 +24,7 @@ export function personRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createPerson",
       method: "POST",
+      content: "person",
       path: PATH,
       access: "private",
       summary: "Create the person",
@@ -42,6 +43,7 @@ export function personRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updatePerson",
       method: "PATCH",
+      content: "person",
       path: PATH,
       access: "private",
       summary: "Update the person",
@@ -54,6 +56,7 @@ export function personRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deletePerson",
       method: "DELETE",
+      content: "person",
       path: PATH,
       access: "private",
       summary: "Delete the person",

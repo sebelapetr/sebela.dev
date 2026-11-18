@@ -51,6 +51,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createService",
       method: "POST",
+      content: "service",
       path: LIST,
       access: "private",
       summary: "Create a service",
@@ -69,6 +70,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateService",
       method: "PATCH",
+      content: "service",
       path: ITEM,
       access: "private",
       summary: "Update a service",
@@ -83,6 +85,7 @@ export function serviceRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteService",
       method: "DELETE",
+      content: "service",
       path: ITEM,
       access: "private",
       summary: "Delete a service",

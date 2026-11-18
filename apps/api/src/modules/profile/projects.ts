@@ -56,6 +56,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createProject",
       method: "POST",
+      content: "project",
       path: LIST,
       access: "private",
       summary: "Create a project",
@@ -74,6 +75,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateProject",
       method: "PATCH",
+      content: "project",
       path: ITEM,
       access: "private",
       summary: "Update a project",
@@ -92,6 +94,7 @@ export function projectRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteProject",
       method: "DELETE",
+      content: "project",
       path: ITEM,
       access: "private",
       summary: "Delete a project",

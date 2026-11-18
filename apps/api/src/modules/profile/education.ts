@@ -55,6 +55,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createEducation",
       method: "POST",
+      content: "education",
       path: LIST,
       access: "private",
       summary: "Create an education record",
@@ -73,6 +74,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateEducation",
       method: "PATCH",
+      content: "education",
       path: ITEM,
       access: "private",
       summary: "Update an education record",
@@ -91,6 +93,7 @@ export function educationRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteEducation",
       method: "DELETE",
+      content: "education",
       path: ITEM,
       access: "private",
       summary: "Delete an education record",

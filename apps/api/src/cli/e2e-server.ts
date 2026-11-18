@@ -17,6 +17,7 @@ import { createTemporaryDatabase } from "@sebela/services/testing";
 
 import { createApp, type Logger } from "../app.js";
 import { readApiConfig } from "../config.js";
+import { createWebsiteInvalidation } from "../modules/invalidation/index.js";
 import { logCleanupFailure } from "../modules/media/index.js";
 
 const log: Logger = (line) => {
@@ -64,7 +65,16 @@ async function main() {
     throw error;
   }
 
-  const { app } = createApp({ services, config, log });
+  // Signed notifications to the website after committed content writes, when configured.
+  const invalidation = config.websiteInvalidation
+    ? createWebsiteInvalidation({ ...config.websiteInvalidation, log })
+    : null;
+  const { app } = createApp({
+    services,
+    config,
+    log,
+    ...(invalidation ? { onWrite: invalidation.notify } : {}),
+  });
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
     log(`e2e API listening on http://${host}:${String(info.port)}`);
   });
@@ -74,8 +84,7 @@ async function main() {
     if (stopping) return;
     stopping = true;
     server.close(() => {
-      services
-        .close()
+      Promise.all([invalidation?.close(), services.close()])
         .then(cleanUp)
         .then(
           () => process.exit(0),

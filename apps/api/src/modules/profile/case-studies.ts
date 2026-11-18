@@ -36,6 +36,7 @@ export function caseStudyRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createCaseStudy",
       method: "POST",
+      content: "case-study",
       path: ITEM,
       access: "private",
       summary: "Create the case study of a project",
@@ -55,6 +56,7 @@ export function caseStudyRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateCaseStudy",
       method: "PATCH",
+      content: "case-study",
       path: ITEM,
       access: "private",
       summary: "Update the case study of a project",
@@ -68,6 +70,7 @@ export function caseStudyRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteCaseStudy",
       method: "DELETE",
+      content: "case-study",
       path: ITEM,
       access: "private",
       summary: "Delete the case study of a project",

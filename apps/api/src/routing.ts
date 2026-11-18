@@ -1,5 +1,7 @@
 import type { z } from "zod";
 
+import type { ContentDomain } from "@sebela/contracts";
+
 import type { ApiConfig } from "./config.js";
 
 export type Method = "GET" | "POST" | "PATCH" | "DELETE";
@@ -21,6 +23,11 @@ export interface RouteDocumentation {
   readonly description?: string;
   /** The per-client budget, when it is not the one of its access, for example `upload`. */
   readonly budget?: RateBudget;
+  /**
+   * The content domain a write route changes, required on every write. After the write commits, the
+   * app reports it with the record from the `slug` or `id` path parameter or the result.
+   */
+  readonly content?: ContentDomain;
   /** The path parameters, `:name` in `path`; validated before the body. */
   readonly params?: z.ZodObject;
   /** The JSON request body; validated before the handler runs. */

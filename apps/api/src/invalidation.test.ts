@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   MediaSchema,
@@ -65,6 +65,7 @@ function fakeWebsite(...outcomes: Outcome[]) {
       headers: new Headers(init.headers),
     });
     if (outcome instanceof Error) return Promise.reject(outcome);
+    if (init.signal?.aborted) return Promise.reject(init.signal.reason as Error);
     if (outcome === "hang") {
       return new Promise((_, reject) => {
         init.signal?.addEventListener("abort", () => {
@@ -246,6 +247,9 @@ describe("the website invalidation sender", () => {
 
     await invalidation.notify({ change });
     await invalidation.notify({ change });
+    await vi.waitFor(() => {
+      expect(website.deliveries).toHaveLength(1);
+    });
     await invalidation.close();
     await invalidation.notify({ change });
     await invalidation.idle();

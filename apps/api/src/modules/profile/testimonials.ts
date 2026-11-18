@@ -56,6 +56,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "createTestimonial",
       method: "POST",
+      content: "testimonial",
       path: LIST,
       access: "private",
       summary: "Create a testimonial",
@@ -74,6 +75,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "updateTestimonial",
       method: "PATCH",
+      content: "testimonial",
       path: ITEM,
       access: "private",
       summary: "Update a testimonial",
@@ -92,6 +94,7 @@ export function testimonialRoutes(profile: ProfileService): RouteDefinition[] {
     defineRoute({
       operationId: "deleteTestimonial",
       method: "DELETE",
+      content: "testimonial",
       path: ITEM,
       access: "private",
       summary: "Delete a testimonial",
