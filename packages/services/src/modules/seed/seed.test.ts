@@ -1093,6 +1093,10 @@ describe("seed service", () => {
         { ...guide, topics: ["agents", "ghost-topic"] },
         { ...drills, module: "ghost-module" },
       ];
+      // The talk is no longer in the seed, so only the session on the guide stays.
+      files["roadmap-time-entries.json"] = (
+        files["roadmap-time-entries.json"] as Record<string, unknown>[]
+      ).filter((session) => session["resource"] === "prompting-guide");
 
       const error = await refusal(load(files));
 
@@ -1116,7 +1120,7 @@ describe("seed service", () => {
       const [session] = files["roadmap-time-entries.json"] as Record<string, unknown>[];
       files["roadmap-time-entries.json"] = [
         session,
-        { ...session, startedAt: "2025-02-03T23:30:00+01:00", endedAt: "2025-02-04T00:30:00Z" },
+        { ...session, startedAt: "2025-02-03T22:30:00Z", endedAt: "2025-02-03T23:30:00Z" },
         { ...session, startedAt: "2025-02-10T10:00:00", endedAt: "2025-02-10T11:00:00+01:00" },
         { ...session, endedAt: "2025-02-03T22:00:00Z" },
         { ...session, minutes: 60 },

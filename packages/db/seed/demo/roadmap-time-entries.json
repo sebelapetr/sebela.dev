@@ -1,0 +1,72 @@
+[
+  {
+    "resource": "transformer-explainer",
+    "startedAt": "2025-02-10T18:00:00+01:00",
+    "endedAt": "2025-02-10T19:30:00+01:00"
+  },
+  {
+    "resource": "transformer-explainer",
+    "startedAt": "2025-02-11T07:15:00+01:00",
+    "endedAt": "2025-02-11T08:00:00+01:00"
+  },
+  {
+    "resource": "transformer-explainer",
+    "startedAt": "2025-02-11T20:00:00+01:00",
+    "endedAt": "2025-02-11T21:10:00+01:00"
+  },
+  {
+    "resource": "transformer-explainer",
+    "startedAt": "2025-02-12T22:30:00+01:00",
+    "endedAt": "2025-02-13T00:45:00+01:00"
+  },
+  {
+    "resource": "transformer-explainer",
+    "startedAt": "2025-02-13T19:00:00+01:00",
+    "endedAt": "2025-02-13T19:40:00+01:00"
+  },
+  {
+    "resource": "transformer-explainer",
+    "startedAt": "2025-02-14T19:00:00+01:00",
+    "endedAt": "2025-02-14T21:00:00+01:00"
+  },
+  {
+    "resource": "tokenization-notes",
+    "startedAt": "2025-02-18T18:00:00+01:00",
+    "endedAt": "2025-02-18T19:20:00+01:00"
+  },
+  {
+    "resource": "tokenization-notes",
+    "startedAt": "2025-02-19T06:45:00+01:00",
+    "endedAt": "2025-02-19T07:30:00+01:00"
+  },
+  {
+    "resource": "tokenization-notes",
+    "startedAt": "2025-02-20T18:15:00+01:00",
+    "endedAt": "2025-02-20T20:30:00+01:00"
+  },
+  {
+    "resource": "prompt-patterns-course",
+    "startedAt": "2025-02-24T17:00:00+01:00",
+    "endedAt": "2025-02-24T18:30:00+01:00"
+  },
+  {
+    "resource": "prompt-patterns-course",
+    "startedAt": "2025-02-25T20:00:00+01:00",
+    "endedAt": "2025-02-25T20:50:00+01:00"
+  },
+  {
+    "resource": "prompt-patterns-course",
+    "startedAt": "2025-02-27T18:00:00+01:00",
+    "endedAt": "2025-02-27T19:45:00+01:00"
+  },
+  {
+    "resource": "prompt-patterns-course",
+    "startedAt": "2025-03-01T09:30:00+01:00",
+    "endedAt": "2025-03-01T11:00:00+01:00"
+  },
+  {
+    "resource": "prompt-patterns-course",
+    "startedAt": "2025-03-04T19:00:00+01:00",
+    "endedAt": "2025-03-04T20:15:00+01:00"
+  }
+]

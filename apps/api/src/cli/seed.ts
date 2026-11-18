@@ -41,6 +41,8 @@ const kindLabels: Record<SeedKind, string> = {
   roadmapAreas: "roadmap areas",
   roadmapModules: "roadmap modules",
   roadmapResources: "roadmap resources",
+  roadmapDiary: "diary days",
+  roadmapTimeEntries: "time entry sessions",
 };
 
 /**
