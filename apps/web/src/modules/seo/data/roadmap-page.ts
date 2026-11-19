@@ -63,16 +63,88 @@ export interface RoadmapBookPageFacts extends RoadmapPageBase {
   };
 }
 
+/** One page an overview or a list page leads to, as its structured data lists it. */
+export interface RoadmapListedPageFacts {
+  readonly name: string;
+  /** The page's site path. */
+  readonly href: string;
+  /** Markdown, or null. */
+  readonly description?: string | null;
+}
+
+/** The roadmap's overview: its areas in the roadmap's order; `summary` is its lead. */
+export interface RoadmapOverviewPageFacts extends RoadmapPageBase {
+  readonly kind: "overview";
+  readonly areas: readonly RoadmapListedPageFacts[];
+}
+
+/** The learning diary's list: its days in the diary's order. */
+export interface RoadmapDiaryPageFacts extends RoadmapPageBase {
+  readonly kind: "diary";
+  readonly days: readonly RoadmapListedPageFacts[];
+}
+
+/** A diary day's page: its calendar day; `summary` is the day's notes. */
+export interface RoadmapDiaryDayPageFacts extends RoadmapPageBase {
+  readonly kind: "diary-day";
+  /** The calendar day, `YYYY-MM-DD`. */
+  readonly date: string;
+}
+
+/** The learning statistics' page. */
+export interface RoadmapStatisticsPageFacts extends RoadmapPageBase {
+  readonly kind: "statistics";
+}
+
+/** An event, as the events page's structured data lists it. */
+export interface RoadmapEventFacts {
+  readonly name: string;
+  /** Its first and last calendar day, `YYYY-MM-DD`. */
+  readonly startsOn: string;
+  readonly endsOn: string;
+  /** A safe absolute `http(s)` address, or null. */
+  readonly href: string | null;
+  readonly online: boolean;
+  readonly place: string | null;
+  readonly organizer: string | null;
+}
+
+/** The events page: its events in the page's order. */
+export interface RoadmapEventsPageFacts extends RoadmapPageBase {
+  readonly kind: "events";
+  readonly events: readonly RoadmapEventFacts[];
+}
+
+/** The reading guide: the work it is based on; `summary` is its opening. */
+export interface RoadmapReadingGuidePageFacts extends RoadmapPageBase {
+  readonly kind: "reading-guide";
+  readonly basedOn: { readonly name: string; readonly url: string };
+}
+
 /** What a roadmap page's metadata rests on, all of it from the page's own API read. */
 export type RoadmapPageFacts =
-  RoadmapCoursePageFacts | RoadmapBookshelfPageFacts | RoadmapBookPageFacts;
+  | RoadmapOverviewPageFacts
+  | RoadmapCoursePageFacts
+  | RoadmapDiaryPageFacts
+  | RoadmapDiaryDayPageFacts
+  | RoadmapStatisticsPageFacts
+  | RoadmapEventsPageFacts
+  | RoadmapBookshelfPageFacts
+  | RoadmapBookPageFacts
+  | RoadmapReadingGuidePageFacts;
 
 /** The longest description, so a search result shows it whole. */
 const DESCRIPTION_MAX = 160;
 
 /** The label a roadmap page's preview card shows above its name. */
 const CARD_LABELS = {
+  overview: "Learning roadmap",
   area: "Learning area",
+  diary: "Learning diary",
+  "diary-day": "Diary day",
+  statistics: "Learning statistics",
+  events: "Events",
+  "reading-guide": "Reading guide",
   module: "Learning module",
   bookshelf: "Bookshelf",
   book: "Book",
@@ -194,7 +266,9 @@ function pageEntity(
     inLanguage: "en",
     provider: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
     mainEntityOfPage: { "@id": `${url}#webpage` },
-    ...(facts.estimatedMinutes > 0 ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` } : {}),
+    ...("estimatedMinutes" in facts && facts.estimatedMinutes > 0
+      ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` }
+      : {}),
     ...(facts.kind === "module" && parent !== undefined
       ? {
           isPartOf: {
