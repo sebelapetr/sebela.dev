@@ -162,6 +162,17 @@ describe("find_resource", () => {
     expect(writes(api)).toEqual([]);
   });
 
+  it("finds a resource by its stored slug", async () => {
+    const { client } = await open();
+
+    const outcome = await call(client, "find_resource", { query: "harbor-patterns-book" });
+
+    expect(outcome.json).toEqual({
+      candidates: [expect.objectContaining({ slug: "harbor-patterns-book" })],
+      truncated: false,
+    });
+  });
+
   it("finds nothing rather than a guess", async () => {
     const { client } = await open();
 
