@@ -11,6 +11,7 @@ import {
   type CleanupFailure,
   type MediaConfig,
   type MediaService,
+  unconfiguredMedia,
 } from "./modules/media/index.js";
 import { createProfileService, type ProfileService } from "./modules/profile/index.js";
 import { createRoadmapService, type RoadmapService } from "./modules/roadmap/index.js";
@@ -47,16 +48,6 @@ export interface ServicesOptions {
 
 const unconfigured = (): never => {
   throw new Error("Media storage is not configured.");
-};
-
-const unconfiguredMedia: MediaService = {
-  listMedia: unconfigured,
-  getMedia: unconfigured,
-  uploadMedia: unconfigured,
-  ensureMedia: unconfigured,
-  updateMedia: unconfigured,
-  deleteMedia: unconfigured,
-  readMediaFile: unconfigured,
 };
 
 const unconfiguredSeed: SeedService = { loadSeed: unconfigured, loadSeedIntoEmpty: unconfigured };

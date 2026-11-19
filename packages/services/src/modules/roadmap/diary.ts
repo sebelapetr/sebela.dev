@@ -189,7 +189,11 @@ export function createLearningDiary(persistence: RoadmapPersistence): LearningDi
       if (!day) throw noDay(date);
       return toDiaryDay(day);
     },
-    getTimeEntry: () => Promise.reject(new Error("Not implemented.")),
+    async getTimeEntry(id) {
+      const record = await persistence.findTimeEntry(id);
+      if (record === null) throw noEntry(id);
+      return toTimeEntry(record);
+    },
     async writeDiaryNotes(date, input) {
       return toDiaryDay(await persistence.writeDiaryNotes(date, input.notes));
     },
