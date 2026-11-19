@@ -435,3 +435,5 @@ export type {
   RoadmapEventList,
   RoadmapEventUpdate,
 } from "./events.js";
+export { RoadmapStatisticsSchema } from "./statistics.js";
+export type { RoadmapStatistics } from "./statistics.js";
