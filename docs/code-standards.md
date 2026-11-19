@@ -83,7 +83,7 @@ The conceptual references are [Ousterhout's modular design](https://web.stanford
 
 ## Python
 
-`apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python. pytest is the deterministic test runner; formatter, linter and type checker are chosen in phase 6 and recorded here. Use `src/llm_agent` as the library import root, responsibility folders and documented public entries; keep runtime/HTTP lifecycle in apps. The same principles apply: validate at the edges, thin handlers, no environment access scattered through the code, no hard-coded endpoints.
+`apps/ai-service`, `apps/mcp-public` and `packages/llm-agent` use Python. The phase-6 toolchain is uv (dependencies/environments and a committed workspace lockfile), Ruff (formatting and lint, including import cleanup/sorting), mypy strict with `pydantic.mypy` (types), and pytest (deterministic tests). Implementation pins compatible stable versions and a supported Python minor; no editor is required. CI uses `uv sync --locked`, `ruff format --check`, `ruff check`, `mypy` with the strict project configuration, and `pytest`, exposed through pnpm/Turbo task wrappers. Separate autoflake, Flake8, isort, Black and a second required type checker are unnecessary. Use `src/llm_agent` as the library import root, responsibility folders and documented public entries; keep runtime/HTTP lifecycle in apps. The same principles apply: validate at the edges, thin handlers, no environment access scattered through the code, no hard-coded endpoints.
 
 ## Dependencies
 
