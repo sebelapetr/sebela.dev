@@ -240,6 +240,90 @@ export type UpdateRoadmapEventResult =
   | { ok: false; reason: "strands_attendance"; dates: string[] }
   | RoadmapEventWriteFailure;
 
+export interface RoadmapProjectIdeaFields {
+  title: string;
+  /** Markdown. */
+  whyItMatters: string;
+  /** Markdown; `null` when there is no advice yet. */
+  howToStart: string | null;
+  position: number;
+}
+
+/** A project idea's relations as written: the slugs of existing shared topics, in order. */
+export interface RoadmapProjectIdeaRelations {
+  topics: string[];
+}
+
+export interface RoadmapProjectIdeaRecord extends RoadmapProjectIdeaFields {
+  id: string;
+  slug: string;
+  /** Its topics in link order. */
+  topics: TopicRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Why a project idea's topic links were refused. */
+export type RoadmapProjectIdeaWriteFailure =
+  | { ok: false; reason: "unknown_topics"; slugs: string[] }
+  | { ok: false; reason: "repeated_topics" };
+
+export type CreateRoadmapProjectIdeaResult =
+  | { ok: true; projectIdea: RoadmapProjectIdeaRecord }
+  | { ok: false; reason: "conflict" }
+  | RoadmapProjectIdeaWriteFailure;
+
+export type UpdateRoadmapProjectIdeaResult =
+  | { ok: true; projectIdea: RoadmapProjectIdeaRecord }
+  | { ok: false; reason: "not_found" }
+  | RoadmapProjectIdeaWriteFailure;
+
+export interface RoadmapFollowedSourceFields {
+  title: string;
+  /** Markdown; `null` when there is none. */
+  description: string | null;
+  link: string | null;
+  /** A free short label such as `newsletter`. */
+  kind: string;
+  position: number;
+}
+
+export interface RoadmapFollowedSourceRecord extends RoadmapFollowedSourceFields {
+  id: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CreateRoadmapFollowedSourceResult =
+  { ok: true; followedSource: RoadmapFollowedSourceRecord } | { ok: false; reason: "conflict" };
+
+export type UpdateRoadmapFollowedSourceResult =
+  { ok: true; followedSource: RoadmapFollowedSourceRecord } | { ok: false; reason: "not_found" };
+
+export interface RoadmapGlossaryTermFields {
+  term: string;
+  /** Markdown. */
+  description: string;
+  position: number;
+}
+
+export interface RoadmapGlossaryTermRecord extends RoadmapGlossaryTermFields {
+  id: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CreateRoadmapGlossaryTermResult =
+  { ok: true; glossaryTerm: RoadmapGlossaryTermRecord } | { ok: false; reason: "conflict" };
+
+export type UpdateRoadmapGlossaryTermResult =
+  { ok: true; glossaryTerm: RoadmapGlossaryTermRecord } | { ok: false; reason: "not_found" };
+
+/** Supporting content is referenced by nothing, so a delete is refused only for a missing slug. */
+export type DeleteRoadmapSupportingResult = { ok: true } | { ok: false; reason: "not_found" };
+
 /** `referenced` while a child or another record still points to it. */
 export type DeleteRoadmapRecordResult =
   { ok: true } | { ok: false; reason: "not_found" | "referenced" };
@@ -489,6 +573,55 @@ export interface RoadmapPersistence {
   ): Promise<UpdateRoadmapEventResult>;
   /** Deletes the event and its topic links; `referenced` while a time entry belongs to it. */
   deleteRoadmapEvent(slug: string): Promise<DeleteRoadmapRecordResult>;
+
+  /** Every project idea by position, then slug, each with its topics, in one consistent snapshot. */
+  listRoadmapProjectIdeas(): Promise<RoadmapProjectIdeaRecord[]>;
+  /** The project idea with the slug, or `null`. */
+  findRoadmapProjectIdea(slug: string): Promise<RoadmapProjectIdeaRecord | null>;
+  /** Creates a project idea with its topic links, all or nothing; `conflict` for a taken slug. */
+  createRoadmapProjectIdea(
+    fields: RoadmapProjectIdeaFields & RoadmapProjectIdeaRelations & { slug: string },
+  ): Promise<CreateRoadmapProjectIdeaResult>;
+  /**
+   * Changes only the given fields, all or nothing; given `topics` replace its links. Its update
+   * time changes with every write.
+   */
+  updateRoadmapProjectIdea(
+    slug: string,
+    changes: Partial<RoadmapProjectIdeaFields & RoadmapProjectIdeaRelations>,
+  ): Promise<UpdateRoadmapProjectIdeaResult>;
+  /** Deletes the project idea and its topic links; its topics stay. */
+  deleteRoadmapProjectIdea(slug: string): Promise<DeleteRoadmapSupportingResult>;
+
+  /** Every followed source by position, then slug. */
+  listRoadmapFollowedSources(): Promise<RoadmapFollowedSourceRecord[]>;
+  /** The followed source with the slug, or `null`. */
+  findRoadmapFollowedSource(slug: string): Promise<RoadmapFollowedSourceRecord | null>;
+  /** `conflict` when the slug is taken. */
+  createRoadmapFollowedSource(
+    fields: RoadmapFollowedSourceFields & { slug: string },
+  ): Promise<CreateRoadmapFollowedSourceResult>;
+  /** Changes only the given fields; `null` clears an optional one. */
+  updateRoadmapFollowedSource(
+    slug: string,
+    changes: Partial<RoadmapFollowedSourceFields>,
+  ): Promise<UpdateRoadmapFollowedSourceResult>;
+  deleteRoadmapFollowedSource(slug: string): Promise<DeleteRoadmapSupportingResult>;
+
+  /** Every glossary term by position, then slug. */
+  listRoadmapGlossaryTerms(): Promise<RoadmapGlossaryTermRecord[]>;
+  /** The glossary term with the slug, or `null`. */
+  findRoadmapGlossaryTerm(slug: string): Promise<RoadmapGlossaryTermRecord | null>;
+  /** `conflict` when the slug is taken. */
+  createRoadmapGlossaryTerm(
+    fields: RoadmapGlossaryTermFields & { slug: string },
+  ): Promise<CreateRoadmapGlossaryTermResult>;
+  /** Changes only the given fields. */
+  updateRoadmapGlossaryTerm(
+    slug: string,
+    changes: Partial<RoadmapGlossaryTermFields>,
+  ): Promise<UpdateRoadmapGlossaryTermResult>;
+  deleteRoadmapGlossaryTerm(slug: string): Promise<DeleteRoadmapSupportingResult>;
 
   /**
    * Every diary day that has notes, time entries or an event covering it, newest first, read in
