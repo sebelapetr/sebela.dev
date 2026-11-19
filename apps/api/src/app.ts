@@ -283,6 +283,21 @@ const describingRoadmap: RoadmapService = {
   createEvent: documentationOnly,
   updateEvent: documentationOnly,
   deleteEvent: documentationOnly,
+  listProjectIdeas: documentationOnly,
+  getProjectIdea: documentationOnly,
+  createProjectIdea: documentationOnly,
+  updateProjectIdea: documentationOnly,
+  deleteProjectIdea: documentationOnly,
+  listFollowedSources: documentationOnly,
+  getFollowedSource: documentationOnly,
+  createFollowedSource: documentationOnly,
+  updateFollowedSource: documentationOnly,
+  deleteFollowedSource: documentationOnly,
+  listGlossaryTerms: documentationOnly,
+  getGlossaryTerm: documentationOnly,
+  createGlossaryTerm: documentationOnly,
+  updateGlossaryTerm: documentationOnly,
+  deleteGlossaryTerm: documentationOnly,
 };
 
 /**
