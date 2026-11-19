@@ -112,7 +112,7 @@ export const E31_LOST = Object.freeze({
 const R1_STARTED = Object.freeze({
   method: /** @type {const} */ ("PATCH"),
   path: `/v1/roadmap/resources/${R1}`,
-  body: { status: "in-progress", startedAt: "2026-11-02T18:00:00+01:00" },
+  body: { status: "in-progress", startedAt: "2026-11-02T17:00:00.000Z" },
 });
 
 /** @type {Readonly<Record<string, Scenario>>} */
