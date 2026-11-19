@@ -2,7 +2,7 @@
 // on fake transcripts, the gate arithmetic and the redacted summary of a Promptfoo result.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,7 +11,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { evaluateGate, type CaseRun } from "./gate.js";
 import { gradeE01, gradeE02, gradeE29, parseToolOutput, type ToolCall } from "./graders.js";
-import { planRun, promptfooEnvironment, removeLeakingFiles, summarize, totals } from "./run.js";
+import {
+  MODEL,
+  answerRecord,
+  planRun,
+  promptfooEnvironment,
+  regradeRuns,
+  removeLeakingFiles,
+  summarize,
+  totals,
+} from "./run.js";
 import generateTests from "./tests.js";
 
 const person = {
@@ -415,6 +424,76 @@ describe("summarize", () => {
   });
 });
 
+describe("pinned model", () => {
+  it("is Claude Sonnet 5.5 at medium effort with prompt caching, in the config and the summary", async () => {
+    const config = await readFile(
+      fileURLToPath(new URL("./promptfooconfig.yaml", import.meta.url)),
+      "utf8",
+    );
+    expect(MODEL).toBe("claude-sonnet-5-5");
+    expect(config).toContain(`- id: anthropic:messages:${MODEL}`);
+    expect(config).toMatch(/^\s+effort: medium$/m);
+    expect(config).toMatch(/^\s+cache_control:\n\s+type: ephemeral$/m);
+    expect(config).not.toMatch(/opus/i);
+  });
+});
+
+describe("answerRecord and regradeRuns", () => {
+  const entry = implementedCases()[0];
+  if (!entry) throw new Error("No implemented case");
+  const toolCalls = [call("get", { entity: "person" }, person)];
+  const report = {
+    results: {
+      results: [
+        {
+          success: false,
+          cost: 0.01,
+          response: {
+            output: "Mira Tolland, Kestrel Bay.",
+            tokenUsage: { total: 900 },
+            metadata: { toolCalls },
+          },
+        },
+      ],
+    },
+  };
+
+  it("keeps the answer and the executed tool calls a grader needs, for the local run folder only", () => {
+    expect(answerRecord(entry, 2, report, true)).toEqual({
+      caseId: "E01",
+      repeat: 2,
+      model: MODEL,
+      output: "Mira Tolland, Kestrel Bay.",
+      toolCalls,
+      unchanged: true,
+    });
+    expect(answerRecord(entry, 1, { results: { results: [] } }, true)).toBeNull();
+  });
+
+  it("grades stored answers again with the current graders, without a model call", () => {
+    const stored = answerRecord(entry, 1, report, true);
+    if (!stored) throw new Error("No record");
+    const [run] = regradeRuns([stored]);
+    expect(run).toMatchObject({ caseId: "E01", repeat: 1, pass: true });
+  });
+
+  it("fails a stored answer whose content changed, whatever the grader says", () => {
+    const stored = answerRecord(entry, 1, report, false);
+    if (!stored) throw new Error("No record");
+    expect(regradeRuns([stored])[0]).toMatchObject({ pass: false });
+  });
+
+  it("refuses answers of another model, an unknown case or a pending one", () => {
+    const stored = answerRecord(entry, 1, report, true);
+    if (!stored) throw new Error("No record");
+    expect(() => regradeRuns([{ ...stored, model: "claude-opus-5-5" }])).toThrow(
+      /claude-opus-5-5.*not the pinned model/,
+    );
+    expect(() => regradeRuns([{ ...stored, caseId: "E99" }])).toThrow(/E99/);
+    expect(() => regradeRuns([{ ...stored, caseId: "E03" }])).toThrow(/E03/);
+  });
+});
+
 describe("totals", () => {
   it("adds up the provider tokens and cost of every case-run as Promptfoo reported them", () => {
     const result = totals([
@@ -455,7 +534,7 @@ describe("planRun", () => {
   it("runs only the named implemented case and marks the run as partial", () => {
     const plan = planRun(["--case", "E02"]);
     expect(plan.cases.map((entry) => entry.id)).toEqual(["E02"]);
-    expect(plan.partial).toEqual({ case: "E02" });
+    expect(plan.partial).toEqual({ cases: ["E02"] });
   });
 
   it("gates a partial run on the named case's repeats only", () => {
@@ -474,12 +553,29 @@ describe("planRun", () => {
     );
   });
 
+  it("runs several named cases as one partial run, gated on those cases only", () => {
+    const plan = planRun(["--case", "E01", "--case", "E29"]);
+    expect(plan.cases.map((entry) => entry.id)).toEqual(["E01", "E29"]);
+    expect(plan.partial).toEqual({ cases: ["E01", "E29"] });
+  });
+
   it("refuses an unknown case, a pending case and a missing or repeated case id", () => {
     expect(() => planRun(["--case", "E99"])).toThrow(/E99.*not in the catalogue/);
     expect(() => planRun(["--case", "E03"])).toThrow(/E03.*not implemented/);
     expect(() => planRun(["--case"])).toThrow(/--case needs a case id/);
     expect(() => planRun(["--case", "--check-fixture"])).toThrow(/--case needs a case id/);
-    expect(() => planRun(["--case", "E01", "--case", "E02"])).toThrow(/only one --case/);
+    expect(() => planRun(["--case", "E01", "--case", "E01"])).toThrow(/E01 is named twice/);
+  });
+
+  it("regrades a stored run without a model, and alone", () => {
+    expect(planRun(["--regrade", "/runs/x"])).toMatchObject({
+      regrade: "/runs/x",
+      checkFixture: false,
+    });
+    expect(() => planRun(["--regrade"])).toThrow(/--regrade needs a run folder/);
+    expect(() => planRun(["--regrade", "/runs/x", "--case", "E01"])).toThrow(
+      /--regrade takes no other option/,
+    );
   });
 
   it("refuses an unknown option", () => {
