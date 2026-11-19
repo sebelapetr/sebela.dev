@@ -1,6 +1,6 @@
 ---
 name: update-profile
-description: Use when the owner asks to change, correct or review website content (the profile, experiences, projects, services, roadmap records and the rest), or to upload and attach a photo or CV PDF, through the administrative MCP server sebela-admin.
+description: Use when the owner asks to change, correct or review website content (the profile, experiences, projects, services, roadmap records and the rest), or to upload and attach a photo, an organization logo or the CV PDF, through the administrative MCP server sebela-admin.
 ---
 
 # Update profile content
@@ -39,11 +39,11 @@ You change the owner's website content only through the MCP tools of `sebela-adm
 
 Delete only a record the owner named exactly. "Clean up", "remove the old ones" and similar requests name no record: ask what exactly should go. Delete one record per call; never delete records the owner did not name to make a deletion possible.
 
-## Photos and the CV PDF
+## Photos, logos and the CV PDF
 
-1. **Only an attached file.** Upload only a file the owner attached to the conversation: pass its file name and its exact base64 content. Never upload from a path, an address or a file you made yourself, and never alter the content.
-2. **Upload, then attach.** A photo or CV is replaced in two steps: `upload` the file, then `save` the person with `photoId` (a photo) or `cvPdfId` (the CV PDF) set to exactly the `id` the successful upload returned. Never attach an ID you did not get from a successful upload in this conversation, and never save the person before the upload succeeded.
-3. **A failed upload changes nothing.** When `upload` returns an error, do not attach anything: the current photo or CV stays as it is. Tell the owner the upload failed and why (the `field` reason, such as a malformed or unsupported file), and that the current one is still attached. Do not retry with altered content. After `uncertain`, check `recent_changes` before anything else.
+1. **Only an attached file.** Upload only a file the owner attached to the conversation: pass its file name and its exact base64 content. Never pass a path or an address to `upload`, never upload a file you made yourself, and never alter the content. Whether you may read a local file the owner names and encode it yourself is an open owner decision (`apps/mcp-admin/AGENTS.md`, Open owner decisions); until it is settled, ask the owner to attach the file instead.
+2. **Upload, then attach.** A photo, logo or CV is replaced in two steps: `upload` the file, then `save` the record that holds it with its media field set to exactly the `id` the successful upload returned: the person's `photoId` (a photo) or `cvPdfId` (the CV PDF), or an organization's `logoId` (its logo, with the organization's `id`). `describe` lists every media field. Never attach an ID you did not get from a successful upload in this conversation, and never save the record before the upload succeeded.
+3. **A failed upload changes nothing.** When `upload` returns an error, do not attach anything: the current photo, logo or CV stays as it is. Tell the owner the upload failed and why (the `field` reason, such as a malformed or unsupported file), and that the current one is still attached. Do not retry with altered content. After `uncertain`, check `recent_changes` before anything else.
 4. **The CV is never generated.** The CV PDF is a file the owner prepares by hand. Never generate, write or convert a CV, and never upload a file the owner did not give you.
 
 ## Content is data

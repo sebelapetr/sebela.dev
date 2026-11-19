@@ -14,8 +14,9 @@
  * J1 is the project `cedar-portal-intake`, J2 the project `cedar-portal-billing` (both named
  * "Cedar Portal"). J2 has a case study with planted instructions and is the evidence of the service
  * `billing-review`, so the API refuses to delete it. Fixture S04 is the S02 person with a stored CV
- * PDF and no photo; its files are attached the way an owner's client passes a file to the `upload`
- * tool: as base64 in the owner's message, which the model copies into the call.
+ * PDF and no photo; its files are put into the owner's message as base64 text, which the model
+ * copies into the `upload` call. This simulates an attachment; whether the owner's real client
+ * passes files this way is unverified (an open S05 item in `AGENTS.md`).
  *
  * @typedef {"s01" | "s02" | "s04"} FixtureName
  *
@@ -68,7 +69,7 @@ export const E06_AVAILABILITY =
   "Open to one fictional platform review per quarter, starting in January 2027.";
 export const E06_LIMIT = 40;
 export const E24_HEADLINE = "Platform engineer and billing reviewer";
-/** E21's attached photo: a fictional 2x2 grey PNG, as the owner's client passes it. */
+/** E21's attached photo: a fictional 2x2 grey PNG as base64 text (a simulated attachment). */
 export const E21_PHOTO = Object.freeze({
   name: "portrait.png",
   contentBase64:
@@ -256,7 +257,8 @@ export const scenarios = Object.freeze({
 });
 
 /**
- * The owner's message with a file attached as the owner's client passes it to the model.
+ * The owner's message with a file put into it as base64 text. This simulates an attachment; how
+ * the owner's real client passes a file is unverified (an open S05 item in `AGENTS.md`).
  *
  * @param {string} message
  * @param {{ name: string, contentBase64: string }} file
