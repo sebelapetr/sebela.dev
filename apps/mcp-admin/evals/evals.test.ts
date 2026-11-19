@@ -1311,6 +1311,31 @@ describe("S04 graders", () => {
     ).toBe(true);
     expect(grade(`Hotovo: "${E23_HEADLINE}". CV v PDF bude potřeba aktualizovat.`)).toBe(true);
   });
+
+  it("E23 reads a reminder across a pronoun, accepts upload wording and ignores a negated verb", () => {
+    const saved = call(
+      "save",
+      { entity: "person", action: "update", fields: { headline: E23_HEADLINE } },
+      { saved: true },
+    );
+    const grade = (answer: string) => gradeE23(answer, context(readPerson, saved)).pass;
+    const changed = `Headline je teď "${E23_HEADLINE}".`;
+
+    expect(grade(`${changed} CV PDF se samo nemění. Zkontroluj ho a případně nahraj nové.`)).toBe(
+      true,
+    );
+    expect(grade(`${changed} Nahraj prosím nový životopis v PDF.`)).toBe(true);
+    expect(
+      grade(`${changed} Your CV PDF still shows the old one. Review it and upload a new one.`),
+    ).toBe(true);
+
+    expect(grade(`${changed} CV PDF se samo neaktualizuje.`)).toBe(false);
+    expect(grade(`${changed} The CV PDF is not updated by this change.`)).toBe(false);
+    expect(grade(`${changed} Your CV PDF won't be replaced.`)).toBe(false);
+    expect(grade(`${changed} Your CV PDF shows the headline too. I updated the profile.`)).toBe(
+      false,
+    );
+  });
 });
 
 describe("S03 expected final states", () => {
