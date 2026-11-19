@@ -25,6 +25,7 @@ import {
   RoadmapCurrentSchema,
   RoadmapEventListSchema,
   RoadmapSchema,
+  RoadmapStatisticsSchema,
   ServiceListSchema,
   TechnologyListSchema,
   TestimonialListSchema,
@@ -215,6 +216,21 @@ describe("the seed CLI", () => {
         diary.days.some(({ events: on, entries }) => on.length > 0 && entries.length === 0),
       ).toBe(true);
       expect(result.out).toMatch(/roadmap events: \d+ created, 0 updated/);
+
+      // Statistics in all three categories, with a quiet week and a daylight-saving day whose
+      // session from 01:30 to 03:30 on the clock lasted one hour.
+      const statistics = await read("/v1/roadmap/statistics", RoadmapStatisticsSchema);
+      expect(statistics.totals.resourceSeconds).toBeGreaterThan(0);
+      expect(statistics.totals.bookSeconds).toBeGreaterThan(0);
+      expect(statistics.totals.eventSeconds).toBeGreaterThan(0);
+      expect(statistics.weeks.some(({ totalSeconds }) => totalSeconds === 0)).toBe(true);
+      expect(statistics.days.find(({ date }) => date === "2025-03-30")?.totalSeconds).toBe(3600);
+      expect(statistics.days.map(({ date, totalSeconds }) => [date, totalSeconds])).toEqual(
+        diary.days
+          .filter(({ entries }) => entries.length > 0)
+          .map(({ date, totalSeconds }) => [date, totalSeconds])
+          .reverse(),
+      );
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();
