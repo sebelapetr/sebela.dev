@@ -1,0 +1,12 @@
+[
+  {
+    "slug": "fictional-ml-summit-2026",
+    "name": "Fictional ML Summit",
+    "kind": "conference",
+    "organizer": "The fictional Inference Society",
+    "startsOn": "2026-11-16",
+    "endsOn": "2026-11-17",
+    "place": "Lantern Hall",
+    "topics": []
+  }
+]

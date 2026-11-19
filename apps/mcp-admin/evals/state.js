@@ -14,10 +14,22 @@
  * @property {string | null} record
  * @property {string} action
  *
+ * @typedef {object} DiaryEntry One logged interval as the diary shows it.
+ * @property {string} target `resource:<slug>` or `event:<slug>`.
+ * @property {string} startedAt
+ * @property {string} endedAt
+ * @property {number} durationSeconds
+ *
+ * @typedef {object} DiaryDayState A diary day with notes or time entries.
+ * @property {string | null} notes
+ * @property {DiaryEntry[]} entries In start order.
+ *
  * @typedef {object} ContentState
  * @property {ContentRecord | null} person
  * @property {Record<string, Record<string, ContentRecord>>} collections Records by entity, then slug.
  * @property {Record<string, ContentRecord | null>} caseStudies By project slug.
+ * @property {Record<string, DiaryDayState>} [diary] By Prague date; days with only a covering
+ *   event are left out, because an event's dates add nothing to the diary.
  * @property {AuditEntry[]} audit Newest first, as the API returns it.
  */
 
@@ -28,6 +40,8 @@ export const COLLECTIONS = Object.freeze({
   project: "/v1/projects",
   service: "/v1/services",
   technology: "/v1/technologies",
+  "roadmap-book": "/v1/roadmap/books",
+  "roadmap-event": "/v1/roadmap/events",
 });
 
 /**
@@ -48,6 +62,7 @@ export async function captureState(apiUrl, key) {
       records.map((record) => [String(record["slug"]), contentRecord(entity, record)]),
     );
   }
+  collections["roadmap-resource"] = roadmapResources(await read(apiUrl, "/v1/roadmap"));
   /** @type {Record<string, ContentRecord | null>} */
   const caseStudies = {};
   for (const slug of Object.keys(collections["project"] ?? {})) {
@@ -57,7 +72,100 @@ export async function captureState(apiUrl, key) {
   const audit = Array.isArray(recent?.["changes"])
     ? /** @type {AuditEntry[]} */ (recent["changes"])
     : [];
-  return { person: isRecord(person) ? person : null, collections, caseStudies, audit };
+  const diary = diaryDays(await read(apiUrl, "/v1/roadmap/diary"));
+  return { person: isRecord(person) ? person : null, collections, caseStudies, diary, audit };
+}
+
+/**
+ * The resources of the roadmap tree by slug, each with the slug of the module it lies in; the
+ * tree has no list of its own for resources.
+ *
+ * @param {unknown} tree
+ * @returns {Record<string, ContentRecord>}
+ */
+function roadmapResources(tree) {
+  /** @type {Record<string, ContentRecord>} */
+  const resources = {};
+  const areas = isRecord(tree) && Array.isArray(tree["areas"]) ? tree["areas"] : [];
+  for (const area of areas) {
+    const modules = isRecord(area) && Array.isArray(area["modules"]) ? area["modules"] : [];
+    for (const module of modules) {
+      if (!isRecord(module) || !Array.isArray(module["resources"])) continue;
+      for (const resource of module["resources"]) {
+        if (!isRecord(resource)) continue;
+        resources[String(resource["slug"])] = contentRecord("roadmap-resource", {
+          ...resource,
+          module: module["slug"],
+        });
+      }
+    }
+  }
+  return resources;
+}
+
+/**
+ * The diary by date: notes and entries, each entry naming its target by kind and slug.
+ *
+ * @param {unknown} diary
+ * @returns {Record<string, DiaryDayState>}
+ */
+function diaryDays(diary) {
+  /** @type {Record<string, DiaryDayState>} */
+  const days = {};
+  const list = isRecord(diary) && Array.isArray(diary["days"]) ? diary["days"] : [];
+  for (const day of list) {
+    if (!isRecord(day)) continue;
+    const notes = typeof day["notes"] === "string" ? day["notes"] : null;
+    const entries = (Array.isArray(day["entries"]) ? day["entries"] : [])
+      .filter(isRecord)
+      .map((entry) => ({
+        target: isRecord(entry["event"])
+          ? `event:${String(entry["event"]["slug"])}`
+          : `resource:${String(isRecord(entry["resource"]) ? entry["resource"]["slug"] : "")}`,
+        startedAt: String(entry["startedAt"]),
+        endedAt: String(entry["endedAt"]),
+        durationSeconds: Number(entry["durationSeconds"]),
+      }));
+    if (notes === null && entries.length === 0) continue;
+    days[String(day["date"])] = { notes, entries };
+  }
+  return days;
+}
+
+/**
+ * The records of an entity a case-run created.
+ *
+ * @param {ContentState} before
+ * @param {ContentState} after
+ * @param {string} entity
+ * @returns {ContentRecord[]}
+ */
+export function createdRecords(before, after, entity) {
+  const was = before.collections[entity] ?? {};
+  return Object.entries(after.collections[entity] ?? {})
+    .filter(([slug]) => was[slug] === undefined)
+    .map(([, record]) => record);
+}
+
+/**
+ * The time entries logged during a case-run: every entry after it that was not there before,
+ * with its diary date, in date and start order.
+ *
+ * @param {ContentState} before
+ * @param {ContentState} after
+ * @returns {(DiaryEntry & { date: string })[]}
+ */
+export function newEntries(before, after) {
+  /** @param {DiaryEntry} entry */
+  const key = (entry) => `${entry.target} ${entry.startedAt} ${entry.endedAt}`;
+  const existing = new Set(
+    Object.values(before.diary ?? {}).flatMap((day) => day.entries.map(key)),
+  );
+  return Object.entries(after.diary ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([date, day]) =>
+      day.entries.filter((entry) => !existing.has(key(entry))).map((entry) => ({ ...entry, date })),
+    );
 }
 
 /**
@@ -128,15 +236,19 @@ export function unchanged(before, after) {
 
 /**
  * The expected state is the state before with exactly the listed changes: field values of the
- * person, and field values of slug-keyed records (or `null` for a deleted record). Changed records
- * may carry a new `updatedAt`; everything else must be identical.
+ * person, field values of slug-keyed records (or `null` for a deleted record), the number of
+ * records of an entity the case creates, and the diary days the case may change. The scenario
+ * checks created records and changed days itself. Changed records may carry a new `updatedAt`;
+ * everything else must be identical.
  *
  * @param {ContentState} before
  * @param {ContentState} after
  * @param {{ person?: Record<string, unknown> } & Record<string, Record<string, unknown> | undefined>} expected
+ * @param {{ diary?: readonly string[], created?: Readonly<Record<string, number>> }} [also]
+ *   Diary dates that may change, and how many records of an entity the case creates.
  * @returns {string | null} the first difference, or null
  */
-export function unchangedExcept(before, after, expected) {
+export function unchangedExcept(before, after, expected, also = {}) {
   const { person: personChange, ...recordChanges } = expected;
   const personFailure = compareRecord("person", before.person, after.person, personChange);
   if (personFailure) return personFailure;
@@ -147,6 +259,10 @@ export function unchangedExcept(before, after, expected) {
     const was = before.collections[entity] ?? {};
     const is = after.collections[entity] ?? {};
     const changes = /** @type {Record<string, unknown>} */ (recordChanges[entity] ?? {});
+    const created = Object.keys(is).filter((slug) => was[slug] === undefined).length;
+    if (created !== (also.created?.[entity] ?? 0)) {
+      return `Expected ${String(also.created?.[entity] ?? 0)} new ${entity} records, found ${String(created)}.`;
+    }
     for (const slug of new Set([...Object.keys(was), ...Object.keys(is)])) {
       const change = changes[slug];
       const label = `${entity} ${slug}`;
@@ -154,7 +270,10 @@ export function unchangedExcept(before, after, expected) {
         if (is[slug] !== undefined) return `The ${label} still exists.`;
         continue;
       }
-      if (was[slug] === undefined) return `The ${label} was created.`;
+      if (was[slug] === undefined) {
+        if (also.created?.[entity]) continue;
+        return `The ${label} was created.`;
+      }
       if (is[slug] === undefined) return `The ${label} was deleted.`;
       const failure = compareRecord(
         label,
@@ -173,6 +292,14 @@ export function unchangedExcept(before, after, expected) {
     if (projectDeleted) continue;
     if (!sameJson(before.caseStudies[slug] ?? null, after.caseStudies[slug] ?? null)) {
       return `The case study of ${slug} changed.`;
+    }
+  }
+  const wasDiary = before.diary ?? {};
+  const isDiary = after.diary ?? {};
+  for (const date of new Set([...Object.keys(wasDiary), ...Object.keys(isDiary)])) {
+    if (also.diary?.includes(date)) continue;
+    if (!sameJson(wasDiary[date] ?? null, isDiary[date] ?? null)) {
+      return `The diary day ${date} changed.`;
     }
   }
   return null;

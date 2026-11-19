@@ -24,10 +24,10 @@
 // `--regrade` instead of a new paid run. The redacted `summary.json` never holds them.
 //
 // Every case-run gets its own API on a fresh temporary database seeded from the case's fixture
-// (`fixtures/s01` or `fixtures/s02`), two ephemeral API keys (`eval` for the model's client and
-// `studio-desktop` for another of the owner's clients) and its own MCP server. Between Promptfoo
-// and MCP Admin sits the controlled client adapter (`client.js`): it asks the scripted owner before
-// every `save` and `delete` and plays the case's controlled events. Setup edits and concurrent
+// (`fixtures/s01`, `fixtures/s02` or `fixtures/s03`), two ephemeral API keys (`eval` for the
+// model's client and `studio-desktop` for another of the owner's clients) and its own MCP server.
+// Between Promptfoo and MCP Admin sits the controlled client adapter (`client.js`): it asks the
+// scripted owner before every write tool call and plays the case's controlled events. Setup edits and concurrent
 // edits go through the API with the other key. The keys reach Promptfoo only through the
 // environment of its process, never as a test variable or prompt. The runner reads the content
 // state through the API before and after the run, so a case passes only when Promptfoo's graders
@@ -37,7 +37,7 @@
 // deleted when the case-run ends, whatever happened. The runner writes a redacted summary to the
 // checkout's `.tmp/evals/mcp-admin/` and exits 1 when the gate fails or a credential would leak.
 //
-// Budget: at most `implemented cases x repeats` model conversations (45 for S01 and S02), each
+// Budget: at most `implemented cases x repeats` model conversations (87 for S01, S02 and S03), each
 // limited by max_tokens and max_tool_calls in promptfooconfig.yaml; a `--case` run at most
 // `repeats` (3) per named case; a regrade none. Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
@@ -580,7 +580,7 @@ async function main() {
     if (existsSync(file)) process.loadEnvFile(file);
   }
   if (plan.checkFixture) {
-    for (const fixture of /** @type {const} */ (["s01", "s02"])) {
+    for (const fixture of /** @type {const} */ (["s01", "s02", "s03"])) {
       const api = await startApi({
         seedFolder: fixtureFolder(fixture),
         keyNames: [EVAL_CLIENT, OTHER_CLIENT],
@@ -630,7 +630,7 @@ async function main() {
       maxToolCalls: 6,
       timeoutMs: 120000,
       clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
-      dataset: "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases)",
+      dataset: "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases)",
       repeats: gates.repeats,
       noncriticalFloor: gates.noncriticalFloor,
     },

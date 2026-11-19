@@ -4,13 +4,14 @@
  * The controlled client adapter of the evals: the part of a supported MCP client that asks the
  * owner before a change. It sits between Promptfoo's MCP client and MCP Admin and forwards every
  * request unchanged, the caller's `Authorization` header included, except `tools/call` requests of
- * the write tools (`save`, `delete`): those are forwarded only when the case's scripted owner
- * decision approves them. A declined call returns a `declined` tool error and never reaches MCP
- * Admin, so it makes no API call.
+ * the write tools (`save`, `delete` and the learning task tools): those are forwarded only when the
+ * case's scripted owner decision approves them. A declined call returns a `declined` tool error and
+ * never reaches MCP Admin, so it makes no API call.
  *
  * The adapter also plays the case's controlled events: a scripted tool result instead of
- * forwarding (`inject`), and an edit by another caller right after a forwarded read
- * (`concurrent`). It logs tool names and decisions only, never arguments, headers or results.
+ * forwarding (`inject`), a scripted result after forwarding an approved write, so the write
+ * commits and its answer is lost (`inject.afterForward`), and an edit by another caller right
+ * after a forwarded read (`concurrent`). It logs tool names and decisions only, never arguments, headers or results.
  *
  * Batched JSON-RPC requests are refused, so no write can pass unseen.
  */
@@ -19,7 +20,15 @@ import { createServer } from "node:http";
 import { matchesRule } from "./scenarios.js";
 
 /** Tools that change content and need the owner's approval in the client. */
-export const WRITE_TOOLS = Object.freeze(["save", "delete"]);
+export const WRITE_TOOLS = Object.freeze([
+  "save",
+  "delete",
+  "add_resource",
+  "set_resource_status",
+  "log_session",
+  "save_event",
+  "save_book",
+]);
 
 /** The tool result of a write the owner declined. */
 export const DECLINED = Object.freeze({
@@ -81,7 +90,11 @@ export function startClientAdapter({ target, approvals, inject, concurrent, host
     }
     const call = toolCall(message);
     if (call) {
-      if (inject && injected < inject.times && matchesRule(inject.match, call.tool, call.args)) {
+      const injects =
+        inject !== undefined &&
+        injected < inject.times &&
+        matchesRule(inject.match, call.tool, call.args);
+      if (injects && !inject.afterForward) {
         injected += 1;
         log.push({ tool: call.tool, decision: "injected" });
         return reply(response, call.id, inject.result);
@@ -94,6 +107,13 @@ export function startClientAdapter({ target, approvals, inject, concurrent, host
         return reply(response, call.id, DECLINED);
       }
       log.push({ tool: call.tool, decision: "forwarded" });
+      if (injects) {
+        // The approved write reaches MCP Admin and commits; its answer is then lost.
+        injected += 1;
+        await forward(request, body);
+        log.push({ tool: call.tool, decision: "injected" });
+        return reply(response, call.id, inject.result);
+      }
     }
     const forwarded = await forward(request, body);
     if (
