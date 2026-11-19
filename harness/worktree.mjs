@@ -47,24 +47,6 @@ export function loadSettings(env = process.env) {
   return { ...example, ...env };
 }
 
-// The owner's settings that a new worktree receives from the main checkout's `.env`, which agents
-// may not read: only the key for the paid model evals (docs/permissions.md, Environment files).
-// Nothing else there — the Postgres superuser password above all — ever reaches a worktree.
-const OWNER_SETTINGS_FOR_WORKTREES = ["ANTHROPIC_API_KEY"];
-
-function ownerSettingsForWorktree(mainRoot) {
-  let owner;
-  try {
-    owner = parseEnv(fs.readFileSync(path.join(mainRoot, ".env"), "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return {};
-    throw error;
-  }
-  return Object.fromEntries(
-    OWNER_SETTINGS_FOR_WORKTREES.filter((name) => owner[name]).map((name) => [name, owner[name]]),
-  );
-}
-
 // Base ports from the settings. Throws when a port is missing or invalid.
 export function loadBasePorts(env = process.env) {
   return basePortsFrom(loadSettings(env));
@@ -256,7 +238,6 @@ export function createWorktree({
           // The API signs its invalidations for the worktree's own website with a secret of its own.
           API_WEB_INVALIDATION_URL: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}/internal/invalidation`,
           ...invalidationSecrets(randomPassword()),
-          ...ownerSettingsForWorktree(mainRoot),
         }),
         { flag: "wx", mode: 0o600 },
       );

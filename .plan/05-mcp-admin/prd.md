@@ -204,7 +204,7 @@ A skill describes the conversation — what to ask when information is missing, 
 
 - **HITL:** the eval case list is already owner-approved. S01–S04 run AFK with automated tests/evals; S05 covers actual owner-client connection, approval configuration, baseline review and a trial of each skill by the owner.
 - The owner's global `diary-entry` skill keeps working against the old application until launch; the new one is used against the new system from this phase on, for testing, and becomes the only one at launch.
-- The key for evals is a model provider key, a different thing from this system's API keys. In CI it is a repository secret used only by the model eval workflow (pull requests into `master` and by hand); locally the owner keeps a separate spend-limited development key outside the repository's tracked files, which only the eval commands use (`docs/permissions.md`).
+- The key for evals is a model provider key, a different thing from this system's API keys. In CI it is a repository secret used only by the model eval workflow (pull requests into `master` and by hand); locally the owner keeps a separate spend-limited development key in the main checkout's `.env.secrets`, which agents cannot read and only the eval command loads, through `harness/with-secrets.mjs` (`docs/permissions.md`, Environment files).
 
 ## Approved phase-5 planning artifacts
 

@@ -20,8 +20,10 @@ export function invokesPrMerge(command) {
 }
 
 const ENV_FILE_NAME = /^\.env(\..+)?$/;
+// The documented examples with placeholders only: the settings and the owner's secrets.
+const EXAMPLE_ENV_FILES = new Set([".env.example", ".env.secrets.example"]);
 const ENV_IN_COMMAND =
-  /(^|[\s'"=/<>|;&(])\.env(?!\.example(?![\w.-]))(\.[\w.-]+)?(?=$|[\s'";&|)<>/*?{}[\]])/;
+  /(^|[\s'"=/<>|;&(])\.env(?!(\.secrets)?\.example(?![\w.-]))(\.[\w.-]+)?(?=$|[\s'";&|)<>/*?{}[\]])/;
 const CONTEXT_IN_COMMAND = /(^|[\s'"=/<>|;&(])\.context(\/|(?=$|[\s'";&|)<>]))/;
 
 function isInside(child, parent) {
@@ -35,7 +37,7 @@ function filePathOf(toolInput) {
 
 function isEnvFile(filePath) {
   const name = path.basename(filePath);
-  return ENV_FILE_NAME.test(name) && name !== ".env.example";
+  return ENV_FILE_NAME.test(name) && !EXAMPLE_ENV_FILES.has(name);
 }
 
 function deny(reason) {
@@ -44,11 +46,11 @@ function deny(reason) {
 
 // Each refusal also says how to reach the same goal allowed, so an agent does not guess.
 const ENV_REASON =
-  "Only .env.example and .env.local inside the session's own worktree may be accessed (docs/permissions.md). If .env only appears as text in content you write, use the Edit or Write tool: they check the file you change, not its content.";
+  "Only .env.example, .env.secrets.example and .env.local inside the session's own worktree may be accessed; the owner's .env and .env.secrets never (docs/permissions.md). A command that needs a secret loads it itself through harness/with-secrets.mjs. If .env only appears as text in content you write, use the Edit or Write tool: they check the file you change, not its content.";
 
 function allowedEnvPath(filePath, worktreeRoot) {
   return (
-    path.basename(filePath) === ".env.example" ||
+    EXAMPLE_ENV_FILES.has(path.basename(filePath)) ||
     (path.basename(filePath) === ".env.local" && worktreeRoot && isInside(filePath, worktreeRoot))
   );
 }
@@ -76,7 +78,7 @@ function checkSearchPattern({
     toolName === "Grep" ? toolInput?.glob : toolName === "Glob" ? toolInput?.pattern : null;
   if (!pattern) return null;
   const segments = String(pattern).split(/[\\/]/);
-  if (segments.some((segment) => segment.startsWith(".env") && segment !== ".env.example")) {
+  if (segments.some((segment) => segment.startsWith(".env") && !EXAMPLE_ENV_FILES.has(segment))) {
     if (/[*?{}[\]]/.test(pattern)) return deny(ENV_REASON);
     const base = path.resolve(cwd ?? mainRoot, toolInput?.path ?? ".");
     const verdict = checkEnvironmentReference(path.resolve(base, pattern), {

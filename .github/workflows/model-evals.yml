@@ -1,6 +1,6 @@
 # Paid model evals, once per phase: on pull requests into the main branch, and by hand. Issue pull
-# requests into a phase branch do not run them; developers run them locally with the eval key that
-# the worktree script copies from the owner's .env (docs/testing.md, "Model evals in CI").
+# requests into a phase branch do not run them; developers run them locally, where the eval command
+# reads the key from the main checkout's .env.secrets (docs/testing.md, Evals-driven development).
 # The key comes from the repository secret ANTHROPIC_API_KEY and is given only to the step that
 # runs the evals.
 name: Model evals

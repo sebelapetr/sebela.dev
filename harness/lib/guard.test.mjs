@@ -49,6 +49,31 @@ test("the example environment file can be read", () => {
   assert.equal(call("Read", { file_path: "/repo/.env.example" }), null);
 });
 
+test("the example secrets file can be read and edited like the example environment", () => {
+  for (const tool of ["Read", "Edit", "Write"])
+    assert.equal(call(tool, { file_path: "/repo/.env.secrets.example" }), null, tool);
+  assert.equal(call("Read", { file_path: `${ownRoot}/.env.secrets.example` }, own), null);
+  assert.equal(bash("cat .env.secrets.example"), null);
+  assert.equal(call("Grep", { pattern: "KEY", glob: ".env.secrets.example" }), null);
+});
+
+test("the owner's secrets file is refused everywhere, in every form", () => {
+  for (const file_path of [
+    "/repo/.env.secrets",
+    `${ownRoot}/.env.secrets`,
+    `${ownRoot}/apps/mcp-admin/.env.secrets`,
+  ]) {
+    for (const tool of ["Read", "Write", "Edit"]) {
+      assert.ok(call(tool, { file_path }), `${tool} ${file_path}`);
+      assert.ok(call(tool, { file_path }, own), `${tool} ${file_path} from a worktree`);
+    }
+  }
+  assert.ok(bash("cat /repo/.env.secrets"));
+  assert.ok(bash("node --env-file=../../.env.secrets -e 1", own));
+  assert.ok(call("Grep", { pattern: "KEY", glob: ".env.secrets" }));
+  assert.ok(call("Glob", { pattern: "**/.env.secrets*" }));
+});
+
 test("shell commands naming an environment file are refused", () => {
   assert.ok(bash("cat .env"));
   assert.ok(bash("grep KEY ./.env.local"));
