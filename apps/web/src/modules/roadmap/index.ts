@@ -8,10 +8,10 @@
 // first, grouped by the year they start in; each also shown on the diary's days it covers, with the
 // time spent at it) and the learning statistics (the API's totals split into resources, books and
 // events, study time by area and module, recent days, weeks and months, and the resources and
-// events with time, each leading to its evidence) — rendered from the content the profile module
-// reads. Gives the overview's lead, the detail pages' breadcrumbs, the diary's, events' and
-// statistics' names and the bookshelf's and books' page facts for the pages' metadata.
-export { roadmapLead, toRoadmapOverview } from "./data/overview";
+// events with time, each leading to its evidence), the overview's supporting sections (project
+// ideas, followed sources, the FAQ and additional terms) and the reading guide beside the bookshelf
+// — rendered from the content the profile module reads. Gives every page's facts for its metadata,
+// structured data and preview image.
 export {
   roadmapPageFacts,
   toRoadmapAreaPage,
@@ -19,11 +19,7 @@ export {
   type RoadmapCrumb,
   type RoadmapPageFacts,
 } from "./data/detail";
-export { DIARY_NAME, formatDiaryDate } from "./data/diary";
-export { EVENTS_NAME } from "./data/events";
-export { STATISTICS_NAME } from "./data/statistics";
 export {
-  BOOKSHELF_NAME,
   bookPageFacts,
   bookshelfPageFacts,
   type BookPageFacts,
@@ -45,4 +41,5 @@ export { RoadmapDiaryDayTemplate } from "./templates/diary-day";
 export { RoadmapEventsTemplate } from "./templates/events";
 export { RoadmapModuleTemplate } from "./templates/module";
 export { RoadmapOverviewTemplate } from "./templates/overview";
+export { RoadmapReadingGuideTemplate } from "./templates/reading-guide";
 export { RoadmapStatisticsTemplate } from "./templates/statistics";

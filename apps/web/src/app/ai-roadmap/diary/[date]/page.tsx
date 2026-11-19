@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getRoadmapDiaryDay } from "../../../../modules/profile";
-import { DIARY_NAME, formatDiaryDate, RoadmapDiaryDayTemplate } from "../../../../modules/roadmap";
+import { diaryDayPageFacts, RoadmapDiaryDayTemplate } from "../../../../modules/roadmap";
+import { RoadmapStructuredData, roadmapPageMetadata } from "../../../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never a page without its day. */
 class ContentUnavailableError extends Error {
@@ -28,15 +29,16 @@ async function readContent(params: DiaryDayPageProps["params"]) {
   return result.content;
 }
 
-// Kept out of search results until the roadmap's SEO arrives (#115).
 export async function generateMetadata({ params }: DiaryDayPageProps): Promise<Metadata> {
-  const content = await readContent(params);
-  return {
-    title: `${formatDiaryDate(content.day.date)} — ${DIARY_NAME} — AI Roadmap — ${content.name}`,
-    robots: { index: false },
-  };
+  return roadmapPageMetadata(diaryDayPageFacts(await readContent(params)));
 }
 
 export default async function RoadmapDiaryDayPage({ params }: DiaryDayPageProps) {
-  return <RoadmapDiaryDayTemplate content={await readContent(params)} />;
+  const content = await readContent(params);
+  return (
+    <>
+      <RoadmapStructuredData facts={diaryDayPageFacts(content)} />
+      <RoadmapDiaryDayTemplate content={content} />
+    </>
+  );
 }

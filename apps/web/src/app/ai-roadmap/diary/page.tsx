@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getRoadmapDiary } from "../../../modules/profile";
-import { DIARY_NAME, RoadmapDiaryTemplate } from "../../../modules/roadmap";
+import { diaryPageFacts, RoadmapDiaryTemplate } from "../../../modules/roadmap";
+import { RoadmapStructuredData, roadmapPageMetadata } from "../../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty diary. */
 class ContentUnavailableError extends Error {
@@ -22,16 +23,16 @@ async function readContent() {
   return result.content;
 }
 
-// Kept out of search results until the roadmap's SEO arrives (#115).
 export async function generateMetadata(): Promise<Metadata> {
-  const content = await readContent();
-  return {
-    title: `${DIARY_NAME} — AI Roadmap — ${content.name}`,
-    robots: { index: false },
-  };
+  return roadmapPageMetadata(diaryPageFacts(await readContent()));
 }
 
 export default async function RoadmapDiaryPage() {
   const content = await readContent();
-  return <RoadmapDiaryTemplate content={content} />;
+  return (
+    <>
+      <RoadmapStructuredData facts={diaryPageFacts(content)} />
+      <RoadmapDiaryTemplate content={content} />
+    </>
+  );
 }

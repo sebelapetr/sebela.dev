@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getRoadmapEvents } from "../../../modules/profile";
-import { EVENTS_NAME, RoadmapEventsTemplate } from "../../../modules/roadmap";
+import { eventsPageFacts, RoadmapEventsTemplate } from "../../../modules/roadmap";
+import { RoadmapStructuredData, roadmapPageMetadata } from "../../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty list of events. */
 class ContentUnavailableError extends Error {
@@ -22,16 +23,16 @@ async function readContent() {
   return result.content;
 }
 
-// Kept out of search results until the roadmap's SEO arrives (#115).
 export async function generateMetadata(): Promise<Metadata> {
-  const content = await readContent();
-  return {
-    title: `${EVENTS_NAME} — AI Roadmap — ${content.name}`,
-    robots: { index: false },
-  };
+  return roadmapPageMetadata(eventsPageFacts(await readContent()));
 }
 
 export default async function RoadmapEventsPage() {
   const content = await readContent();
-  return <RoadmapEventsTemplate content={content} />;
+  return (
+    <>
+      <RoadmapStructuredData facts={eventsPageFacts(content)} />
+      <RoadmapEventsTemplate content={content} />
+    </>
+  );
 }

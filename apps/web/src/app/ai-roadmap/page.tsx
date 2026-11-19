@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { getRoadmap } from "../../modules/profile";
-import { RoadmapOverviewTemplate, roadmapLead, toRoadmapOverview } from "../../modules/roadmap";
+import { overviewPageFacts, RoadmapOverviewTemplate } from "../../modules/roadmap";
+import { RoadmapStructuredData, roadmapPageMetadata } from "../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never an empty roadmap. */
 class ContentUnavailableError extends Error {
@@ -22,19 +23,16 @@ async function readContent() {
   return result.content;
 }
 
-// Kept out of search results until the roadmap's canonical addresses, sitemap and structured
-// data are completed with its later pages.
 export async function generateMetadata(): Promise<Metadata> {
-  const content = await readContent();
-  const overview = toRoadmapOverview(content.roadmap);
-  return {
-    title: `AI Engineering Roadmap — ${content.name}`,
-    description: overview.areas.length === 0 ? content.headline : roadmapLead(overview.facts),
-    robots: { index: false },
-  };
+  return roadmapPageMetadata(overviewPageFacts(await readContent()));
 }
 
 export default async function AiRoadmapPage() {
   const content = await readContent();
-  return <RoadmapOverviewTemplate content={content} />;
+  return (
+    <>
+      <RoadmapStructuredData facts={overviewPageFacts(content)} />
+      <RoadmapOverviewTemplate content={content} />
+    </>
+  );
 }
