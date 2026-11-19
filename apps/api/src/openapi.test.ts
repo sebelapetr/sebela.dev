@@ -134,7 +134,8 @@ describe("the OpenAPI document and the reference", () => {
       ["DELETE", "/v1/topics/:slug"],
     ] as const) {
       const documented = operation(method, path);
-      expect(documented.parameters).toEqual([
+      const pathParameters = documented.parameters?.filter((parameter) => parameter.in === "path");
+      expect(pathParameters).toEqual([
         expect.objectContaining({
           name: "slug",
           in: "path",
@@ -842,13 +843,13 @@ describe("the OpenAPI document and the reference", () => {
         expect.objectContaining({
           name: auditProvenanceHeader,
           in: "header",
-          required: false,
           schema: expect.objectContaining({
             type: "string",
             maxLength: auditProvenanceMaxLength,
           }) as unknown,
         }),
       ]);
+      expect(headers[0]?.required ?? false, `${route.method} ${route.path}`).toBe(false);
     }
   });
 

@@ -1250,6 +1250,26 @@ export interface paths {
         patch: operations["updateRoadmapGlossaryTerm"];
         trace?: never;
     };
+    "/v1/audit/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the newest content changes
+         * @description The newest 20 audited content changes, newest first: one per record a committed write changed, with the verified API key that made it, the operation and route, the provenance label the caller stated, and the record's public read before and after. A refused or failed write records nothing. A caller that lost the response to a write reads this to learn whether the write committed before it tries again. The provenance label is what a caller stated, never proof of who acted or that a human approved.
+         */
+        get: operations["listRecentChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -3319,6 +3339,37 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        RecentChanges: {
+            changes: components["schemas"]["AuditChange"][];
+        };
+        AuditChange: {
+            id: number;
+            /** Format: date-time */
+            occurredAt: string;
+            actor: {
+                /** Format: uuid */
+                keyId: string;
+                keyName: string;
+            };
+            operation: {
+                operationId: string;
+                /** @enum {string} */
+                method: "POST" | "PATCH" | "DELETE";
+                route: string;
+            };
+            provenance: string | null;
+            /** @enum {string} */
+            entity: "person" | "technology" | "topic" | "organization" | "experience" | "project" | "case-study" | "testimonial" | "exploration" | "service" | "education" | "current-focus" | "roadmap-area" | "roadmap-module" | "roadmap-resource" | "roadmap-book" | "roadmap-event" | "roadmap-project-idea" | "roadmap-followed-source" | "roadmap-glossary-term" | "roadmap-diary" | "media" | "roadmap-time-entry";
+            record: string | null;
+            /** @enum {string} */
+            action: "created" | "updated" | "deleted";
+            before: {
+                [key: string]: unknown;
+            } | null;
+            after: {
+                [key: string]: unknown;
+            } | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -3498,7 +3549,10 @@ export interface operations {
     createPerson: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3519,7 +3573,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3591,7 +3645,10 @@ export interface operations {
     deletePerson: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3604,7 +3661,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3658,7 +3715,10 @@ export interface operations {
     updatePerson: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3677,7 +3737,7 @@ export interface operations {
                     "application/json": components["schemas"]["Person"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3798,7 +3858,10 @@ export interface operations {
     createTechnology: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3819,7 +3882,7 @@ export interface operations {
                     "application/json": components["schemas"]["Technology"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3952,7 +4015,10 @@ export interface operations {
     deleteTechnology: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -3968,7 +4034,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4031,7 +4097,10 @@ export interface operations {
     updateTechnology: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -4053,7 +4122,7 @@ export interface operations {
                     "application/json": components["schemas"]["Technology"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4174,7 +4243,10 @@ export interface operations {
     createTopic: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4195,7 +4267,7 @@ export interface operations {
                     "application/json": components["schemas"]["Topic"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4328,7 +4400,10 @@ export interface operations {
     deleteTopic: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -4344,7 +4419,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4407,7 +4482,10 @@ export interface operations {
     updateTopic: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -4429,7 +4507,7 @@ export interface operations {
                     "application/json": components["schemas"]["Topic"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4550,7 +4628,10 @@ export interface operations {
     createOrganization: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4571,7 +4652,7 @@ export interface operations {
                     "application/json": components["schemas"]["Organization"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4704,7 +4785,10 @@ export interface operations {
     deleteOrganization: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -4720,7 +4804,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4783,7 +4867,10 @@ export interface operations {
     updateOrganization: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -4805,7 +4892,7 @@ export interface operations {
                     "application/json": components["schemas"]["Organization"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4926,7 +5013,10 @@ export interface operations {
     createExperience: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4947,7 +5037,7 @@ export interface operations {
                     "application/json": components["schemas"]["Experience"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5080,7 +5170,10 @@ export interface operations {
     deleteExperience: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -5096,7 +5189,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5159,7 +5252,10 @@ export interface operations {
     updateExperience: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -5181,7 +5277,7 @@ export interface operations {
                     "application/json": components["schemas"]["Experience"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5302,7 +5398,10 @@ export interface operations {
     createProject: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5323,7 +5422,7 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5456,7 +5555,10 @@ export interface operations {
     deleteProject: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -5472,7 +5574,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5535,7 +5637,10 @@ export interface operations {
     updateProject: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -5557,7 +5662,7 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5678,7 +5783,10 @@ export interface operations {
     createTestimonial: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5699,7 +5807,7 @@ export interface operations {
                     "application/json": components["schemas"]["Testimonial"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5832,7 +5940,10 @@ export interface operations {
     deleteTestimonial: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -5848,7 +5959,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5902,7 +6013,10 @@ export interface operations {
     updateTestimonial: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -5924,7 +6038,7 @@ export interface operations {
                     "application/json": components["schemas"]["Testimonial"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6057,7 +6171,10 @@ export interface operations {
     createCaseStudy: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6081,7 +6198,7 @@ export interface operations {
                     "application/json": components["schemas"]["CaseStudy"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6162,7 +6279,10 @@ export interface operations {
     deleteCaseStudy: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6178,7 +6298,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6232,7 +6352,10 @@ export interface operations {
     updateCaseStudy: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6254,7 +6377,7 @@ export interface operations {
                     "application/json": components["schemas"]["CaseStudy"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6375,7 +6498,10 @@ export interface operations {
     createExploration: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6396,7 +6522,7 @@ export interface operations {
                     "application/json": components["schemas"]["Exploration"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6529,7 +6655,10 @@ export interface operations {
     deleteExploration: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6545,7 +6674,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6608,7 +6737,10 @@ export interface operations {
     updateExploration: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6630,7 +6762,7 @@ export interface operations {
                     "application/json": components["schemas"]["Exploration"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6751,7 +6883,10 @@ export interface operations {
     createService: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6772,7 +6907,7 @@ export interface operations {
                     "application/json": components["schemas"]["Service"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6905,7 +7040,10 @@ export interface operations {
     deleteService: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6921,7 +7059,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6975,7 +7113,10 @@ export interface operations {
     updateService: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -6997,7 +7138,7 @@ export interface operations {
                     "application/json": components["schemas"]["Service"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7118,7 +7259,10 @@ export interface operations {
     createEducation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7139,7 +7283,7 @@ export interface operations {
                     "application/json": components["schemas"]["Education"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7272,7 +7416,10 @@ export interface operations {
     deleteEducation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -7288,7 +7435,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7342,7 +7489,10 @@ export interface operations {
     updateEducation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -7364,7 +7514,7 @@ export interface operations {
                     "application/json": components["schemas"]["Education"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7485,7 +7635,10 @@ export interface operations {
     createCurrentFocus: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7506,7 +7659,7 @@ export interface operations {
                     "application/json": components["schemas"]["CurrentFocus"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7639,7 +7792,10 @@ export interface operations {
     deleteCurrentFocus: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -7655,7 +7811,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7709,7 +7865,10 @@ export interface operations {
     updateCurrentFocus: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -7731,7 +7890,7 @@ export interface operations {
                     "application/json": components["schemas"]["CurrentFocus"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7910,7 +8069,10 @@ export interface operations {
     uploadMedia: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7931,7 +8093,7 @@ export interface operations {
                     "application/json": components["schemas"]["Media"];
                 };
             };
-            /** @description `validation_failed` (an invalid form, a malformed file or an image over the size limit, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (an invalid form, a malformed file or an image over the size limit or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8055,7 +8217,10 @@ export interface operations {
     deleteMedia: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The identifier of the media. */
                 id: string;
@@ -8071,7 +8236,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8134,7 +8299,10 @@ export interface operations {
     updateMedia: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The identifier of the media. */
                 id: string;
@@ -8156,7 +8324,7 @@ export interface operations {
                     "application/json": components["schemas"]["Media"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8575,7 +8743,10 @@ export interface operations {
     deleteRoadmapArea: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -8591,7 +8762,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8654,7 +8825,10 @@ export interface operations {
     updateRoadmapArea: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -8676,7 +8850,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapArea"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8748,7 +8922,10 @@ export interface operations {
     createRoadmapArea: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8769,7 +8946,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapArea"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8902,7 +9079,10 @@ export interface operations {
     deleteRoadmapModule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -8918,7 +9098,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8981,7 +9161,10 @@ export interface operations {
     updateRoadmapModule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -9003,7 +9186,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapModule"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9075,7 +9258,10 @@ export interface operations {
     createRoadmapModule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9096,7 +9282,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapModule"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9229,7 +9415,10 @@ export interface operations {
     deleteRoadmapResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -9245,7 +9434,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9308,7 +9497,10 @@ export interface operations {
     updateRoadmapResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -9330,7 +9522,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapResource"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9402,7 +9594,10 @@ export interface operations {
     createRoadmapResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9423,7 +9618,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapResource"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9605,7 +9800,10 @@ export interface operations {
     deleteRoadmapDiaryNotes: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description A calendar day in Europe/Prague, `YYYY-MM-DD`. */
                 date: components["schemas"]["DiaryDate"];
@@ -9621,7 +9819,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9675,7 +9873,10 @@ export interface operations {
     writeRoadmapDiaryNotes: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description A calendar day in Europe/Prague, `YYYY-MM-DD`. */
                 date: components["schemas"]["DiaryDate"];
@@ -9697,7 +9898,7 @@ export interface operations {
                     "application/json": components["schemas"]["DiaryDay"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9760,7 +9961,10 @@ export interface operations {
     createRoadmapTimeEntry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9779,7 +9983,7 @@ export interface operations {
                     "application/json": components["schemas"]["TimeEntryWrite"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9851,7 +10055,10 @@ export interface operations {
     deleteRoadmapTimeEntry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 id: string;
             };
@@ -9866,7 +10073,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9920,7 +10127,10 @@ export interface operations {
     updateRoadmapTimeEntry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 id: string;
             };
@@ -9941,7 +10151,7 @@ export interface operations {
                     "application/json": components["schemas"]["TimeEntryWrite"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10071,7 +10281,10 @@ export interface operations {
     createRoadmapBook: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10092,7 +10305,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapBook"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10225,7 +10438,10 @@ export interface operations {
     deleteRoadmapBook: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -10241,7 +10457,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10304,7 +10520,10 @@ export interface operations {
     updateRoadmapBook: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -10326,7 +10545,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapBook"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10447,7 +10666,10 @@ export interface operations {
     createRoadmapEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10468,7 +10690,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapEvent"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10601,7 +10823,10 @@ export interface operations {
     deleteRoadmapEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -10617,7 +10842,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10680,7 +10905,10 @@ export interface operations {
     updateRoadmapEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -10702,7 +10930,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapEvent"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10881,7 +11109,10 @@ export interface operations {
     createRoadmapProjectIdea: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10902,7 +11133,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapProjectIdea"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11035,7 +11266,10 @@ export interface operations {
     deleteRoadmapProjectIdea: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -11051,7 +11285,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11105,7 +11339,10 @@ export interface operations {
     updateRoadmapProjectIdea: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -11127,7 +11364,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapProjectIdea"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11248,7 +11485,10 @@ export interface operations {
     createRoadmapFollowedSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11269,7 +11509,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapFollowedSource"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11402,7 +11642,10 @@ export interface operations {
     deleteRoadmapFollowedSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -11418,7 +11661,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11472,7 +11715,10 @@ export interface operations {
     updateRoadmapFollowedSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -11494,7 +11740,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapFollowedSource"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11615,7 +11861,10 @@ export interface operations {
     createRoadmapGlossaryTerm: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11636,7 +11885,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapGlossaryTerm"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11769,7 +12018,10 @@ export interface operations {
     deleteRoadmapGlossaryTerm: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -11785,7 +12037,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11839,7 +12091,10 @@ export interface operations {
     updateRoadmapGlossaryTerm: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
             path: {
                 /** @description The stable, unique address of the record, for example `paldock`. */
                 slug: string;
@@ -11861,7 +12116,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoadmapGlossaryTerm"];
                 };
             };
-            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11902,6 +12157,66 @@ export interface operations {
             /** @description `unsupported_media_type`: the body is not `application/json`. */
             415: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRecentChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest changes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentChanges"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
                 content: {
