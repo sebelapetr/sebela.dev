@@ -29,6 +29,14 @@ export {
   type BookPageFacts,
   type BookshelfPageFacts,
 } from "./data/bookshelf";
+export {
+  diaryDayPageFacts,
+  diaryPageFacts,
+  eventsPageFacts,
+  overviewPageFacts,
+  readingGuidePageFacts,
+  statisticsPageFacts,
+} from "./data/page-facts";
 export { RoadmapBookTemplate } from "./templates/book";
 export { RoadmapBookshelfTemplate } from "./templates/bookshelf";
 export { RoadmapAreaTemplate } from "./templates/area";
