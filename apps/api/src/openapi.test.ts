@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { CvSchema, PersonSchema } from "@sebela/contracts";
+import {
+  AuditChangeSchema,
+  CvSchema,
+  PersonSchema,
+  auditProvenanceHeader,
+  auditProvenanceMaxLength,
+} from "@sebela/contracts";
 
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
@@ -821,6 +827,41 @@ describe("the OpenAPI document and the reference", () => {
     ]) {
       expect(document.components.schemas, component).toHaveProperty(component);
     }
+  });
+
+  it("documents the optional provenance header on every audited write, and on no read", () => {
+    for (const route of backend.api().routes) {
+      const headers = (operation(route.method, route.path).parameters ?? []).filter(
+        (parameter) => parameter.in === "header",
+      );
+      if (route.audit === null) {
+        expect(headers, `${route.method} ${route.path}`).toEqual([]);
+        continue;
+      }
+      expect(headers, `${route.method} ${route.path}`).toEqual([
+        expect.objectContaining({
+          name: auditProvenanceHeader,
+          in: "header",
+          required: false,
+          schema: expect.objectContaining({
+            type: "string",
+            maxLength: auditProvenanceMaxLength,
+          }) as unknown,
+        }),
+      ]);
+    }
+  });
+
+  it("documents the private recent changes from their contract schema", () => {
+    const documented = operation("GET", "/v1/audit/changes");
+    expect(documented.operationId).toBe("listRecentChanges");
+    expect(documented.security).toEqual([{ bearerAuth: [] }]);
+    expect(documented.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/RecentChanges" } },
+    });
+    expect(
+      Object.keys(document.components.schemas["AuditChange"]?.properties ?? {}).sort(),
+    ).toEqual(Object.keys(AuditChangeSchema.shape).sort());
   });
 
   it("documents the health route", () => {
