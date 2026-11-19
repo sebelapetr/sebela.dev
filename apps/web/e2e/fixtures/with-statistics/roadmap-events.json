@@ -1,0 +1,19 @@
+[
+  {
+    "slug": "spring-orbit-meetup",
+    "name": "Spring orbit meetup",
+    "kind": "meetup",
+    "organizer": "The fictional Orbit Society",
+    "startsOn": "2026-03-03",
+    "endsOn": "2026-03-03",
+    "place": "Testville Library"
+  },
+  {
+    "slug": "unattended-lecture",
+    "name": "An unattended lecture",
+    "kind": "lecture",
+    "startsOn": "2026-03-06",
+    "endsOn": "2026-03-06",
+    "online": true
+  }
+]

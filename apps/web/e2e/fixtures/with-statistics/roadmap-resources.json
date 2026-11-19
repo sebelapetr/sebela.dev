@@ -1,0 +1,39 @@
+[
+  {
+    "slug": "signal-explainer",
+    "module": "signal-basics",
+    "name": "A fictional signal explainer",
+    "type": "youtube-video",
+    "status": "in-progress",
+    "estimatedMinutes": 120,
+    "link": "https://learn.example.test/signal-explainer",
+    "position": 0
+  },
+  {
+    "slug": "orbit-handbook",
+    "module": "signal-tuning",
+    "name": "Reading the quiet orbit handbook",
+    "type": "book",
+    "status": "in-progress",
+    "estimatedMinutes": 600,
+    "position": 0,
+    "book": "quiet-orbit-handbook"
+  },
+  {
+    "slug": "unread-tuning-notes",
+    "module": "signal-tuning",
+    "name": "Tuning notes nobody opened",
+    "type": "text",
+    "status": "planned",
+    "position": 1
+  },
+  {
+    "slug": "queue-notes",
+    "module": "calm-queues",
+    "name": "Queue notes <b>not bold</b> with averyveryverylongfictionalqueueidentifierthatmustbreak",
+    "type": "text",
+    "status": "completed",
+    "link": "https://learn.example.test/queue-notes",
+    "position": 0
+  }
+]
