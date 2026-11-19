@@ -1063,6 +1063,26 @@ export interface paths {
         patch: operations["updateRoadmapEvent"];
         trace?: never;
     };
+    "/v1/roadmap/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the learning statistics
+         * @description Every time entry of the learning diary counted exactly once in each view, in whole seconds aggregated before any rounding: as resource time, book time (a resource of type `book`) or event attendance, which always sum to the total. Days, Monday-start weeks and months are Europe/Prague calendar periods; an interval crossing midnight is already split into its days and a daylight-saving day keeps its actual length. Areas and modules hold study time through each resource's current module, never event attendance. An empty diary is zero totals and empty lists.
+         */
+        get: operations["getRoadmapStatistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -2853,6 +2873,145 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        RoadmapStatistics: {
+            totals: components["schemas"]["LearningTimeTotals"];
+            /** @description Every diary day with logged time, oldest first. */
+            days: components["schemas"]["LearningTimeDay"][];
+            /** @description Every Monday-start week from the first to the last with logged time, oldest first; a week between them without time is present with zero seconds. */
+            weeks: components["schemas"]["LearningTimeWeek"][];
+            /** @description Every calendar month from the first to the last with logged time, oldest first; a month between them without time is present with zero seconds. */
+            months: components["schemas"]["LearningTimeMonth"][];
+            /** @description The areas with study time, by total (largest first), then slug. Resource and book time counts in the current module and area of its resource; event attendance is never part of an area. */
+            areas: components["schemas"]["LearningTimeArea"][];
+            /** @description The resources with logged time, by total (largest first), then slug. */
+            resources: components["schemas"]["LearningTimeResource"][];
+            /** @description The events with attendance, by total (largest first), then slug. */
+            events: components["schemas"]["LearningTimeEvent"][];
+        };
+        LearningTimeTotals: {
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+            /** @description The number of diary days with logged time. */
+            activeDays: number;
+        };
+        /** @description One diary day with logged time; its total equals the diary day's total. */
+        LearningTimeDay: {
+            /**
+             * Format: date
+             * @description The diary day, `YYYY-MM-DD` in Europe/Prague.
+             */
+            date: string;
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+        };
+        LearningTimeWeek: {
+            /**
+             * Format: date
+             * @description The Monday that starts the week, `YYYY-MM-DD` in Europe/Prague.
+             */
+            startsOn: string;
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+        };
+        LearningTimeMonth: {
+            /** @description The calendar month, `YYYY-MM` in Europe/Prague. */
+            month: string;
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+        };
+        LearningTimeArea: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Study time: resource and book time together, never event attendance. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description The area's modules with study time, by total (largest first), then slug. Their totals sum to the area's. */
+            modules: components["schemas"]["LearningTimeModule"][];
+        };
+        LearningTimeModule: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Study time: resource and book time together, never event attendance. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+        };
+        LearningTimeResource: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            type: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /**
+             * @description `book` for a resource of type `book`, otherwise `resource`.
+             * @enum {string}
+             */
+            category: "resource" | "book";
+            /** @description The module the resource is in now. */
+            module: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+                name: string;
+            };
+            /** @description The area of that module. */
+            area: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+                name: string;
+            };
+            /** @description The book the resource reads; `null` when it links none. */
+            book: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+                title: string;
+            } | null;
+            /** @description Time logged on the resource. */
+            totalSeconds: number;
+        };
+        LearningTimeEvent: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            /** @description Attendance logged on the event. */
+            totalSeconds: number;
         };
     };
     responses: never;
@@ -10226,6 +10385,55 @@ export interface operations {
             };
             /** @description `unsupported_media_type`: the body is not `application/json`. */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapStatistics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The learning statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapStatistics"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
