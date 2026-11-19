@@ -1,4 +1,10 @@
-import type { ApiClient, Roadmap } from "@sebela/api-client";
+import type {
+  ApiClient,
+  Roadmap,
+  RoadmapFollowedSourceList,
+  RoadmapGlossaryTermList,
+  RoadmapProjectIdeaList,
+} from "@sebela/api-client";
 
 /** The content of the AI Roadmap pages, all of it from the API. */
 export interface RoadmapContent {
@@ -6,6 +12,12 @@ export interface RoadmapContent {
   readonly headline: string;
   /** The whole tree with its derived progress and totals, exactly as the API answered it. */
   readonly roadmap: Roadmap;
+  /** The project ideas in the API's order (position, then slug); empty when there are none. */
+  readonly projectIdeas: RoadmapProjectIdeaList;
+  /** The followed sources in the API's order; empty when there are none. */
+  readonly followedSources: RoadmapFollowedSourceList;
+  /** The additional terms in the API's order; empty when there are none. */
+  readonly glossaryTerms: RoadmapGlossaryTermList;
 }
 
 /**
@@ -52,6 +64,9 @@ export async function loadRoadmap(
         name: personRead.data.name,
         headline: personRead.data.headline,
         roadmap: roadmapRead.data,
+        projectIdeas: [],
+        followedSources: [],
+        glossaryTerms: [],
       },
     };
   } catch {
