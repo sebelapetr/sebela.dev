@@ -128,8 +128,8 @@ services:
       - "${API_HOST:-}:${API_PORT:-}:8080"
     volumes:
       - api-media:/var/lib/sebela/media
-    # The only service on both networks: Postgres on one, its clients on the other.
-    networks: [content, database]
+    # The only service on every network: Postgres on one, its clients on the others.
+    networks: [admin, content, database]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -200,8 +200,8 @@ services:
 
   # MCP Admin (apps/mcp-admin/AGENTS.md, "Container"): the private administrative MCP server. It
   # holds no API key and no database or storage setting; each caller sends its own key, which it
-  # passes to the API by the API's service name. It shares the content network with the API only
-  # and has no route to Postgres. Published on the host's loopback interface; reach it from another
+  # passes to the API by the API's service name. It shares the admin network with the API only, so
+  # neither the website nor Postgres has a route to it, nor it to them. Published on the host's loopback interface; reach it from another
   # machine through an SSH tunnel, never a public address.
   mcp-admin:
     profiles: [mcp-admin]
@@ -225,7 +225,7 @@ services:
       MCP_ADMIN_RATE_LIMIT_MAX_TRACKED: ${MCP_ADMIN_RATE_LIMIT_MAX_TRACKED:-}
     ports:
       - "${MCP_ADMIN_HOST:-}:${MCP_ADMIN_PORT:-}:8080"
-    networks: [content]
+    networks: [admin]
     depends_on:
       api:
         condition: service_healthy
@@ -246,12 +246,14 @@ services:
     # Stopped with SIGTERM: it ends in-flight MCP exchanges and closes its socket.
     restart: unless-stopped
 
-# Postgres and its clients (the migration and the API) share `database`; the API's clients (the
-# website and MCP Admin) share `content`. Only the API is on both, so nothing but the API and the
-# migration can reach Postgres inside Compose.
+# Postgres and its clients (the migration and the API) share `database`; the API and the website
+# share `content`; the API and MCP Admin share `admin`. Only the API is on all three, so nothing but
+# the API and the migration can reach Postgres, and nothing but the API can reach MCP Admin, inside
+# Compose.
 networks:
   database:
   content:
+  admin:
 
 volumes:
   postgres-data:

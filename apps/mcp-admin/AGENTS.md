@@ -66,7 +66,7 @@ Every setting is required and documented in `.env.example`; a missing or invalid
 
 The profile `mcp-admin` of `compose.yaml` adds the service `mcp-admin`, built from `apps/mcp-admin/Dockerfile` (MCP Admin, the API client and the contracts only; unprivileged `node` user; no environment file). Start it with the API: `docker compose --profile api --profile mcp-admin up --detach --wait`. It listens on the container port 8080, reaches the API as `http://api:8080`, is published on `MCP_ADMIN_HOST`:`MCP_ADMIN_PORT` (loopback) and has a health check on `/health`. Its environment holds only `MCP_ADMIN_*` settings.
 
-Networks: `database` joins Postgres, the migration and the API; `content` joins the API, the website and MCP Admin. MCP Admin has no route to Postgres, and the website holds no API key. `src/deployment.test.ts` checks this policy from `docker compose config` with the example settings, without building or starting an image (D22, D23). The public edge (reverse proxy, TLS, which routes it exposes) is phase 10's; it must expose neither MCP Admin nor private API routes.
+Networks: `database` joins Postgres, the migration and the API; `content` joins the API and the website; `admin` joins the API and MCP Admin. MCP Admin has no route to Postgres or the website, the website has none to MCP Admin, and the website holds no API key. `src/deployment.test.ts` checks this policy from `docker compose config` with the example settings, without building or starting an image (D22, D23). The public edge (reverse proxy, TLS, which routes it exposes) is phase 10's; it must expose neither MCP Admin nor private API routes.
 
 ## Connecting a client
 
