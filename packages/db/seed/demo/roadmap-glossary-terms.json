@@ -1,0 +1,26 @@
+[
+  {
+    "slug": "context-window",
+    "term": "Context window",
+    "description": "The amount of text, measured in tokens, that a model reads in one request: the prompt, any retrieved passages and the answer so far.",
+    "position": 0
+  },
+  {
+    "slug": "embedding",
+    "term": "Embedding",
+    "description": "A list of numbers that represents the meaning of a text, so that similar texts lie close together. Used for **semantic search**.",
+    "position": 1
+  },
+  {
+    "slug": "grounding",
+    "term": "Grounding",
+    "description": "Answering only from supplied sources and pointing to them, instead of from what the model happens to remember.",
+    "position": 2
+  },
+  {
+    "slug": "eval",
+    "term": "Eval",
+    "description": "A repeatable test of a model-based system: fixed inputs, an expected behaviour and a pass threshold.",
+    "position": 3
+  }
+]

@@ -21,7 +21,10 @@ import {
   RoadmapAreaCreateSchema,
   RoadmapBookCreateSchema,
   RoadmapEventCreateSchema,
+  RoadmapFollowedSourceCreateSchema,
+  RoadmapGlossaryTermCreateSchema,
   RoadmapModuleCreateSchema,
+  RoadmapProjectIdeaCreateSchema,
   RoadmapResourceCreateSchema,
   ServiceCreateSchema,
   TechnologyCreateSchema,
@@ -39,7 +42,10 @@ import {
   type RoadmapAreaCreate,
   type RoadmapBookCreate,
   type RoadmapEventCreate,
+  type RoadmapFollowedSourceCreate,
+  type RoadmapGlossaryTermCreate,
   type RoadmapModuleCreate,
+  type RoadmapProjectIdeaCreate,
   type RoadmapResourceCreate,
   type ServiceCreate,
   type TechnologyCreate,
@@ -71,6 +77,9 @@ export const dataFiles = {
   roadmapEvents: "roadmap-events.json",
   roadmapDiary: "roadmap-diary.json",
   roadmapTimeEntries: "roadmap-time-entries.json",
+  roadmapProjectIdeas: "roadmap-project-ideas.json",
+  roadmapFollowedSources: "roadmap-followed-sources.json",
+  roadmapGlossaryTerms: "roadmap-glossary-terms.json",
 } as const;
 
 /** A diary day of the seed: its date and the notes written for it. */
@@ -161,6 +170,9 @@ export interface SeedData {
   readonly roadmapEvents: readonly Located<RoadmapEventCreate>[];
   readonly roadmapDiary: readonly Located<SeedDiaryDay>[];
   readonly roadmapTimeEntries: readonly Located<TimeEntryCreate>[];
+  readonly roadmapProjectIdeas: readonly Located<RoadmapProjectIdeaCreate>[];
+  readonly roadmapFollowedSources: readonly Located<RoadmapFollowedSourceCreate>[];
+  readonly roadmapGlossaryTerms: readonly Located<RoadmapGlossaryTermCreate>[];
   /** The attached files by the SHA-256 digest of their content, each once. */
   readonly files: ReadonlyMap<string, SeedFile>;
 }
@@ -437,6 +449,15 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
   const roadmapTimeEntries = located(
     await parseRecords(dataFiles.roadmapTimeEntries, TimeEntryCreateSchema, bySession),
   );
+  const roadmapProjectIdeas = located(
+    await parseList(dataFiles.roadmapProjectIdeas, RoadmapProjectIdeaCreateSchema),
+  );
+  const roadmapFollowedSources = located(
+    await parseList(dataFiles.roadmapFollowedSources, RoadmapFollowedSourceCreateSchema),
+  );
+  const roadmapGlossaryTerms = located(
+    await parseList(dataFiles.roadmapGlossaryTerms, RoadmapGlossaryTermCreateSchema),
+  );
 
   const files = await readDeclaredFiles(root, declarations, limits, issues);
 
@@ -460,6 +481,9 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     roadmapEvents,
     roadmapDiary,
     roadmapTimeEntries,
+    roadmapProjectIdeas,
+    roadmapFollowedSources,
+    roadmapGlossaryTerms,
     files,
   };
 }
