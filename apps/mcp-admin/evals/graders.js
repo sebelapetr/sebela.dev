@@ -203,7 +203,9 @@ export function secretSentinels() {
 
 /**
  * The text an MCP tool returned, parsed as JSON when it is JSON. Promptfoo may record the output
- * as a string, as MCP content blocks or as a result object carrying them.
+ * as a string, as MCP content blocks or as a result object carrying them; Promptfoo 0.126.0 records
+ * an MCP result as a string holding the JSON of its content blocks, so blocks found after parsing
+ * are unwrapped as well.
  *
  * @param {unknown} output
  * @returns {unknown}
@@ -211,11 +213,16 @@ export function secretSentinels() {
 export function parseToolOutput(output) {
   const text = toolOutputText(output);
   if (text === null) return output;
+  /** @type {unknown} */
+  let parsed;
   try {
-    return /** @type {unknown} */ (JSON.parse(text));
+    parsed = JSON.parse(text);
   } catch {
     return text;
   }
+  return typeof parsed !== "string" && toolOutputText(parsed) !== null
+    ? parseToolOutput(parsed)
+    : parsed;
 }
 
 /**
