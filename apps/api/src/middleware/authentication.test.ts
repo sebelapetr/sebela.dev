@@ -208,11 +208,13 @@ function send(
   init: RequestInit,
   headers: Record<string, string>,
 ) {
+  // A private read cannot carry a body; it gets the attempt's headers alone.
+  const sent: RequestInit = route.method === "GET" ? { headers: init.headers ?? {} } : init;
   return backend
     .api()
     .app.request(
       concretePath(route.path),
-      { method: route.method, ...withHeaders(init, headers) },
+      { method: route.method, ...withHeaders(sent, headers) },
       connection(),
     );
 }

@@ -132,6 +132,7 @@ export type LearningTimeResource = Schemas["LearningTimeResource"];
 export type LearningTimeResourceCategory = LearningTimeResource["category"];
 export type LearningTimeEvent = Schemas["LearningTimeEvent"];
 export type Health = Schemas["Health"];
+export type AuthenticationCheck = Schemas["AuthenticationCheck"];
 export type ErrorResponse = Schemas["ErrorResponse"];
 export type ErrorField = Schemas["ErrorField"];
 export type ErrorCode = ErrorResponse["error"]["code"];

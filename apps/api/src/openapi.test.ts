@@ -827,6 +827,14 @@ describe("the OpenAPI document and the reference", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });
 
+  it("documents the private authentication check without a body", () => {
+    const documented = operation("GET", "/v1/authentication");
+    expect(documented.security).toEqual([{ bearerAuth: [] }]);
+    expect(documented.requestBody).toBeUndefined();
+    expect(Object.keys(documented.responses)).toEqual(["200", "400", "401", "429", "500"]);
+    expect(document.components.schemas).toHaveProperty("AuthenticationCheck");
+  });
+
   it("serves a browsable reference of the document without a key", async () => {
     const response = await backend.api().app.request("/reference", {}, connection());
 

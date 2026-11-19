@@ -7,7 +7,9 @@
 // It takes the usual API settings from the environment (`.env.example`), except the database
 // name, the storage folder and the storage environment, which are its own. When API_E2E_KEY_FILE
 // names a file, it creates an API key on its temporary database and writes it there (mode 0600)
-// for tests that write content through the private routes. When API_E2E_STORAGE_ROOT names a
+// for tests that write content through the private routes. When API_E2E_KEYS_FILE names a file,
+// it creates one key per name in the comma-separated API_E2E_KEY_NAMES and writes
+// `{ database, keys: [{ name, id, key }] }` there (mode 0600). When API_E2E_STORAGE_ROOT names a
 // folder, it stores its files there instead of a new temporary folder below the checkout's `.tmp/`,
 // so the caller knows which folder is this server's. On SIGTERM or SIGINT it stops, drops the
 // database and removes the folder.
@@ -73,6 +75,23 @@ async function main() {
     if (keyFile !== undefined && keyFile !== "") {
       const { key } = await services.apiKeys.createKey("e2e");
       await writeFile(resolve(keyFile), key, { mode: 0o600 });
+    }
+    // Named keys for callers that need several, such as the MCP Admin tests and evals, which also
+    // revoke one through the key command and so need the name of the temporary database.
+    const keysFile = process.env["API_E2E_KEYS_FILE"];
+    if (keysFile !== undefined && keysFile !== "") {
+      const names = (process.env["API_E2E_KEY_NAMES"] ?? "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter((name) => name !== "");
+      const keys = [];
+      for (const name of names) {
+        const { key, metadata } = await services.apiKeys.createKey(name);
+        keys.push({ name, id: metadata.id, key });
+      }
+      await writeFile(resolve(keysFile), JSON.stringify({ database: database.config.name, keys }), {
+        mode: 0o600,
+      });
     }
   } catch (error) {
     await cleanUp();
