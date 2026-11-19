@@ -134,6 +134,8 @@ async function runCase(entry, repeat, folder) {
     let report;
     /** @type {string | null} */
     let stateFailure = null;
+    /** @type {StoredAnswer["states"]} */
+    let states = null;
     /** @type {unknown} */
     let failure;
     /** @type {string[]} */
@@ -155,6 +157,7 @@ async function runCase(entry, repeat, folder) {
       );
       const after = await captureState(api.url, key);
       report = /** @type {unknown} */ (JSON.parse(await readFile(raw, "utf8")));
+      states = { before, after };
       stateFailure = scenario.expect(before, after);
     } catch (error) {
       failure = error;
@@ -169,7 +172,7 @@ async function runCase(entry, repeat, folder) {
       );
     }
     if (failure !== undefined) throw failure;
-    const answer = answerRecord(entry, repeat, report, stateFailure);
+    const answer = answerRecord(entry, repeat, report, stateFailure, states);
     if (answer) {
       await mkdir(join(folder, "answers"), { recursive: true });
       await writeFile(
@@ -362,16 +365,18 @@ export function summarize(entry, repeat, report, stateFailure) {
 /**
  * What a grader needs to grade one case-run again: the final answer and the executed tool calls
  * as Promptfoo recorded them, how the final content differed from the scenario's expected state
- * (null when it matched), and the model that answered. Kept only in the local run folder, never in
- * the redacted summary. Null when Promptfoo produced no single result.
+ * (null when it matched), the fictional fixture content read before and after the run, and the
+ * model that answered. Kept only in the local run folder, never in the redacted summary. Null when
+ * Promptfoo produced no single result.
  *
  * @param {import("./catalogue.js").EvalCase} entry
  * @param {number} repeat
  * @param {any} report Promptfoo's JSON output.
  * @param {string | null} stateFailure
+ * @param {StoredAnswer["states"]} [states]
  * @returns {StoredAnswer | null}
  */
-export function answerRecord(entry, repeat, report, stateFailure) {
+export function answerRecord(entry, repeat, report, stateFailure, states = null) {
   /** @type {any[]} */
   const results = report?.results?.results ?? [];
   const result = results[0];
@@ -383,6 +388,7 @@ export function answerRecord(entry, repeat, report, stateFailure) {
     output: String(result.response?.output ?? ""),
     toolCalls: result.response?.metadata?.toolCalls ?? [],
     stateFailure,
+    ...(states ? { states } : {}),
   };
 }
 
@@ -394,13 +400,16 @@ export function answerRecord(entry, repeat, report, stateFailure) {
  * @property {string} output
  * @property {unknown[]} toolCalls
  * @property {string | null} stateFailure How the final content differed from the expected state.
+ * @property {{ before: import("./state.js").ContentState, after: import("./state.js").ContentState } | null} [states]
+ *   The content read before and after the run, so a fixed expected state is checked again.
  */
 
 /**
  * Grades stored answers again with the current graders, without calling a model: a grader fix is
  * checked on the very answers it failed. A stored answer of another model, or of a case that is
- * unknown or pending, is refused; a final content state that was not the scenario's expected state
- * still fails the case-run (the state is not read again: the fixture is gone). The safety grader
+ * unknown or pending, is refused. The stored content before and after the run is checked again
+ * with the scenario's current expected state; an answer stored without it keeps its recorded
+ * outcome (the fixture is gone, so the state is never read again). The safety grader
  * still refuses key- and connection-string-shaped answers; the sentinel values (the original run's
  * ephemeral keys and the database passwords) were checked when the answers were stored, which
  * happens only after the run's credential scan found none.
@@ -423,10 +432,15 @@ export function regradeRuns(answers) {
     const graded = grader(answer.output, {
       metadata: { toolCalls: /** @type {import("./graders.js").ToolCall[]} */ (answer.toolCalls) },
     });
-    const expectedState = answer.stateFailure === null;
+    const scenario = scenarios[entry.id];
+    const stateFailure =
+      answer.states && scenario
+        ? scenario.expect(answer.states.before, answer.states.after)
+        : answer.stateFailure;
+    const expectedState = stateFailure === null;
     const reasons = [];
     if (!graded.pass) reasons.push(String(graded.reason));
-    if (!expectedState) reasons.push(`Unexpected final state: ${String(answer.stateFailure)}`);
+    if (!expectedState) reasons.push(`Unexpected final state: ${String(stateFailure)}`);
     return {
       caseId: entry.id,
       repeat: answer.repeat,

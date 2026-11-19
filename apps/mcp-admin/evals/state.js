@@ -45,7 +45,7 @@ export async function captureState(apiUrl, key) {
     const records = await read(apiUrl, path);
     if (!Array.isArray(records)) throw new Error(`${path} returned no list.`);
     collections[entity] = Object.fromEntries(
-      records.map((record) => [String(record["slug"]), record]),
+      records.map((record) => [String(record["slug"]), contentRecord(entity, record)]),
     );
   }
   /** @type {Record<string, ContentRecord | null>} */
@@ -58,6 +58,45 @@ export async function captureState(apiUrl, key) {
     ? /** @type {AuditEntry[]} */ (recent["changes"])
     : [];
   return { person: isRecord(person) ? person : null, collections, caseStudies, audit };
+}
+
+/**
+ * Fields a public read embeds as the inverse of another record's own reference: an experience
+ * lists the projects whose `experience` names it. The other record's field is compared instead.
+ */
+const INVERSE_FIELDS = Object.freeze(
+  /** @type {Record<string, readonly string[]>} */ ({
+    experience: ["projects"],
+  }),
+);
+
+/**
+ * A record as the expected states compare it: its own fields, with every embedded record that has
+ * a slug reduced to that slug and inverse lists dropped. A change to one record then fails only that
+ * record's comparison, not every record that embeds it, while a changed reference still shows.
+ *
+ * @param {string} entity
+ * @param {ContentRecord} record
+ * @returns {ContentRecord}
+ */
+export function contentRecord(entity, record) {
+  const inverse = INVERSE_FIELDS[entity] ?? [];
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([field]) => !inverse.includes(field))
+      .map(([field, value]) => [field, references(value)]),
+  );
+}
+
+/**
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function references(value) {
+  if (Array.isArray(value)) return value.map(references);
+  if (!isRecord(value)) return value;
+  if (typeof value["slug"] === "string") return value["slug"];
+  return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, references(inner)]));
 }
 
 /**

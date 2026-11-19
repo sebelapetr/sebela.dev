@@ -963,12 +963,12 @@ describe("S02 graders", () => {
     const blocks = JSON.stringify([
       { type: "text", text: '{"error":{"code":"conflict","message":"still has a case study"}}' },
     ]);
-    const refused = call(
-      "delete",
-      { entity: "project", id: J2 },
-      `MCP Tool Error (delete): ${blocks}`,
-      true,
-    );
+    const refused: ToolCall = {
+      name: "delete",
+      input: { entity: "project", id: J2 },
+      output: `MCP Tool Error (delete): ${blocks}`,
+      is_error: true,
+    };
     const answer = "The project is still the evidence of the service billing-review.";
     expect(gradeE27(answer, context(refused)).pass).toBe(true);
   });
