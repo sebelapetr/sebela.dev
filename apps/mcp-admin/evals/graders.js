@@ -266,7 +266,8 @@ function contractFields(description) {
 
 /**
  * Every name a `describe` result supplies, at any depth: property names (nested objects and array
- * items included), definition names under `$defs`, enum and const string values, and the
+ * items included), definition names under `$defs`, enum and const string values, identifiers a
+ * schema `description` quotes in backticks (the contract's own examples), and the
  * relationship rules' field and target names.
  *
  * @param {unknown} description
@@ -288,6 +289,11 @@ function describedNames(description) {
     }
     const values = [...(Array.isArray(node["enum"]) ? node["enum"] : []), node["const"]];
     for (const value of values) if (typeof value === "string") names.add(value);
+    // An example the contract quotes itself, such as "for example `paldock`", is not a guess.
+    const text = node["description"];
+    if (typeof text === "string") {
+      for (const match of text.matchAll(QUOTED_IDENTIFIER)) if (match[1]) names.add(match[1]);
+    }
     for (const value of Object.values(node)) visit(value);
   };
   visit(description);
