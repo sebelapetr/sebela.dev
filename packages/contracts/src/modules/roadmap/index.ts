@@ -457,3 +457,17 @@ export type {
   LearningTimeWeek,
   RoadmapStatistics,
 } from "./statistics.js";
+export {
+  RoadmapFollowedSourceCreateSchema,
+  RoadmapFollowedSourceListSchema,
+  RoadmapFollowedSourceSchema,
+  RoadmapFollowedSourceUpdateSchema,
+  RoadmapGlossaryTermCreateSchema,
+  RoadmapGlossaryTermListSchema,
+  RoadmapGlossaryTermSchema,
+  RoadmapGlossaryTermUpdateSchema,
+  RoadmapProjectIdeaCreateSchema,
+  RoadmapProjectIdeaListSchema,
+  RoadmapProjectIdeaSchema,
+  RoadmapProjectIdeaUpdateSchema,
+} from "./supporting.js";

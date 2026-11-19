@@ -58,6 +58,9 @@ describe("the content change", () => {
       "roadmap-resource",
       "roadmap-book",
       "roadmap-event",
+      "roadmap-project-idea",
+      "roadmap-followed-source",
+      "roadmap-glossary-term",
       "roadmap-diary",
       "media",
     ]);
@@ -72,6 +75,9 @@ describe("the content change", () => {
       { domain: "current-focus", record: "agent-evals", action: "updated" },
       { domain: "roadmap-resource", record: "prompting-notes", action: "deleted" },
       { domain: "roadmap-event", record: "fictional-ai-summit", action: "updated" },
+      { domain: "roadmap-project-idea", record: "reading-assistant", action: "created" },
+      { domain: "roadmap-followed-source", record: "example-weekly", action: "deleted" },
+      { domain: "roadmap-glossary-term", record: "context-window", action: "updated" },
       { domain: "roadmap-diary", record: "2026-03-02", action: "updated" },
       { domain: "media", record: MEDIA, action: "deleted" },
     ]) {
