@@ -510,8 +510,11 @@ export function createApp(dependencies: AppDependencies): Api {
 
   modules.forEach(register);
 
-  const document: OpenApiDocument = createOpenApiDocument(documented);
-  app.get("/openapi.json", guard(systemRoutes.openapi), (c) => c.json(document));
+  // Built on the first request and kept: building it costs more than the rest of the app.
+  let document: OpenApiDocument | undefined;
+  app.get("/openapi.json", guard(systemRoutes.openapi), (c) =>
+    c.json((document ??= createOpenApiDocument(documented))),
+  );
   app.get(
     "/reference",
     guard(systemRoutes.reference),
