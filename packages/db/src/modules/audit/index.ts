@@ -1,4 +1,8 @@
+import { desc, eq } from "drizzle-orm";
+
 import type { Database } from "../../database.js";
+import { apiKeys } from "../api-keys/index.js";
+import { contentChanges } from "./schema.js";
 
 /** One committed change of one content record, as the API audits it. */
 export interface AuditEntryInput {
@@ -40,9 +44,47 @@ export interface AuditPersistence {
 }
 
 export function createAuditPersistence(db: Database): AuditPersistence {
-  const notImplemented = () => Promise.reject(new Error(`Not implemented for ${typeof db}.`));
   return {
-    recordChanges: notImplemented,
-    listRecentChanges: notImplemented,
+    async recordChanges(entries) {
+      if (entries.length === 0) return;
+      await db.insert(contentChanges).values(
+        entries.map((entry) => ({
+          keyId: entry.keyId,
+          operationId: entry.operationId,
+          method: entry.method,
+          route: entry.route,
+          provenance: entry.provenance,
+          entity: entry.entity,
+          record: entry.record,
+          action: entry.action,
+          before: entry.before,
+          after: entry.after,
+        })),
+      );
+    },
+
+    async listRecentChanges(limit) {
+      const rows = await db
+        .select({ change: contentChanges, keyName: apiKeys.name })
+        .from(contentChanges)
+        .innerJoin(apiKeys, eq(apiKeys.id, contentChanges.keyId))
+        .orderBy(desc(contentChanges.id))
+        .limit(limit);
+      return rows.map(({ change, keyName }) => ({
+        id: change.id,
+        occurredAt: change.occurredAt,
+        keyId: change.keyId,
+        keyName,
+        operationId: change.operationId,
+        method: change.method as AuditEntryInput["method"],
+        route: change.route,
+        provenance: change.provenance,
+        entity: change.entity,
+        record: change.record,
+        action: change.action as AuditEntryInput["action"],
+        before: change.before,
+        after: change.after,
+      }));
+    },
   };
 }
