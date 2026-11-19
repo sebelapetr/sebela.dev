@@ -48,7 +48,8 @@ import { createLearningStatistics, type LearningStatistics } from "./statistics.
  * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
  * time spent on those resources (see `LearningDiary`), and the bookshelf of books that resources of
  * type `book` read (see `Bookshelf`), and the attended events, which are not resources and show
- * on their diary days without adding time (see `EventCalendar`). Reads return contract
+ * on their diary days without adding time (see `EventCalendar`), and the learning statistics
+ * over the logged time (see `LearningStatistics`). Reads return contract
  * records; the whole tree carries progress derived on every read and is never stored. Expected
  * refusals are `DomainError`s: `not_found` for a missing slug, `conflict` for a taken slug or a
  * record that still has children or links, and `validation_failed` naming the offending field for
