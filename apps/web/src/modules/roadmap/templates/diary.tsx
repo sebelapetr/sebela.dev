@@ -3,14 +3,15 @@ import Link from "next/link";
 import { ProseMarkdown } from "../../_shared";
 import type { RoadmapDiaryContent } from "../../profile";
 import { RoadmapFrame } from "../components/roadmap-frame";
+import { StatisticsLink } from "../components/statistics-link";
 import { DIARY_NAME, toDiaryList } from "../data/diary";
 
 /**
  * The learning diary's list under the roadmap's sub-navigation: its name and what it is, then
  * every diary day, newest first, as an editorial row — the day in words as the link to its page,
  * its study time and sessions (none on a day without time), the events covering it and a preview of
- * its Markdown notes, rendered safely. A day covered only by an event is listed like any other.
- * An empty diary says so.
+ * its Markdown notes, rendered safely, and the way to the learning statistics. A day covered only
+ * by an event is listed like any other. An empty diary says so.
  */
 export function RoadmapDiaryTemplate({ content }: { readonly content: RoadmapDiaryContent }) {
   const list = toDiaryList(content.diary);
@@ -25,6 +26,7 @@ export function RoadmapDiaryTemplate({ content }: { readonly content: RoadmapDia
           <p className="type-lead max-w-prose text-muted-foreground">
             What was studied each day, for how long, and the notes taken along the way.
           </p>
+          <StatisticsLink />
         </header>
         {list.days.length === 0 ? (
           <p className="text-base text-muted-foreground">No diary entries yet.</p>

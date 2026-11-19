@@ -6,6 +6,7 @@ import { TypeBadge } from "../components/badges";
 import { BookLink } from "../components/book-parts";
 import { Breadcrumbs } from "../components/breadcrumbs";
 import { RoadmapFrame } from "../components/roadmap-frame";
+import { StatisticsLink } from "../components/statistics-link";
 import {
   DIARY_NAME,
   toDiaryDayPage,
@@ -24,7 +25,7 @@ const HEADING_LINK =
  * its Prague start and end, its duration and its resource, which leads to the book it reads on the
  * bookshelf — then the events covering the day, each with its kind, which day of it this is, its
  * period and the time spent at it that day. A day with notes only shows its notes; a day covered
- * only by an event shows the event.
+ * only by an event shows the event. Its header leads on to the learning statistics.
  */
 export function RoadmapDiaryDayTemplate({ content }: { readonly content: RoadmapDiaryDayContent }) {
   const page = toDiaryDayPage(content.day, content.areas, content.books);
@@ -45,6 +46,7 @@ export function RoadmapDiaryDayTemplate({ content }: { readonly content: Roadmap
                 {page.total} · {page.sessions}
               </p>
             )}
+            <StatisticsLink />
           </div>
         </header>
         {page.notes === null ? null : (

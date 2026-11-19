@@ -253,6 +253,7 @@ const describingRoadmap: RoadmapService = {
   getAreaDetail: documentationOnly,
   getModuleDetail: documentationOnly,
   getCurrentLearning: documentationOnly,
+  getStatistics: documentationOnly,
   getArea: documentationOnly,
   createArea: documentationOnly,
   updateArea: documentationOnly,

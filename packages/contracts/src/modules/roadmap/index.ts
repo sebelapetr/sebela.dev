@@ -435,3 +435,25 @@ export type {
   RoadmapEventList,
   RoadmapEventUpdate,
 } from "./events.js";
+export {
+  LearningTimeAreaSchema,
+  LearningTimeDaySchema,
+  LearningTimeEventSchema,
+  LearningTimeModuleSchema,
+  LearningTimeMonthSchema,
+  LearningTimeResourceSchema,
+  LearningTimeTotalsSchema,
+  LearningTimeWeekSchema,
+  RoadmapStatisticsSchema,
+} from "./statistics.js";
+export type {
+  LearningTimeArea,
+  LearningTimeDay,
+  LearningTimeEvent,
+  LearningTimeModule,
+  LearningTimeMonth,
+  LearningTimeResource,
+  LearningTimeTotals,
+  LearningTimeWeek,
+  RoadmapStatistics,
+} from "./statistics.js";

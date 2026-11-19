@@ -11,6 +11,8 @@ import {
   type DiaryDay,
   type DiaryEvent,
   type ErrorResponse,
+  type LearningTimeResource,
+  type LearningTimeResourceCategory,
   type MediaUpload,
   type Roadmap,
   type RoadmapAreaDetail,
@@ -22,6 +24,7 @@ import {
   type RoadmapEventKind,
   type RoadmapEventList,
   type RoadmapModuleDetail,
+  type RoadmapStatistics,
   type TimeEntryWrite,
 } from "@sebela/api-client";
 import { samplePdf, samplePng } from "@sebela/services/testing";
@@ -1379,6 +1382,79 @@ describe("the generated API client", () => {
 
     expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
   });
+
+  it("reads the learning statistics publicly, split by category and Prague period", async () => {
+    const { client } = consumer(key);
+    const { client: visitor, authorizations } = consumer();
+    await backend.services.roadmap.createArea({
+      slug: "statistics-basics",
+      name: "Statistics basics",
+      description: null,
+      weight: 10,
+      position: 9,
+    });
+    await backend.services.roadmap.createModule({
+      slug: "statistics-module",
+      area: "statistics-basics",
+      name: "Statistics module",
+      description: null,
+      position: 0,
+    });
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "statistics-guide",
+        module: "statistics-module",
+        name: "Statistics guide",
+        type: "link",
+        position: 0,
+      },
+    });
+    expect(resource.response.status).toBe(201);
+    const empty = await visitor.GET("/v1/roadmap/statistics");
+    const none: RoadmapStatistics | undefined = empty.data;
+    expect(none?.totals.totalSeconds).toBe(0);
+    expect(none?.days).toEqual([]);
+
+    const created = await client.POST("/v1/roadmap/time-entries", {
+      body: {
+        resource: "statistics-guide",
+        startedAt: "2026-03-01T23:30:00+01:00",
+        endedAt: "2026-03-02T00:30:00+01:00",
+      },
+    });
+    expect(created.response.status).toBe(201);
+
+    const read = await visitor.GET("/v1/roadmap/statistics");
+    const statistics: RoadmapStatistics | undefined = read.data;
+    expect(statistics?.totals).toEqual({
+      totalSeconds: 3600,
+      resourceSeconds: 3600,
+      bookSeconds: 0,
+      eventSeconds: 0,
+      activeDays: 2,
+    });
+    expect(statistics?.weeks.map(({ startsOn, totalSeconds }) => [startsOn, totalSeconds])).toEqual(
+      [
+        ["2026-02-23", 1800],
+        ["2026-03-02", 1800],
+      ],
+    );
+    const shown: LearningTimeResource[] | undefined = statistics?.resources;
+    const category: LearningTimeResourceCategory | undefined = shown?.[0]?.category;
+    expect(category).toBe("resource");
+    expect(statistics?.areas.map(({ slug, totalSeconds }) => [slug, totalSeconds])).toEqual([
+      ["statistics-basics", 3600],
+    ]);
+
+    for (const entry of created.data?.entries ?? []) {
+      await backend.services.roadmap.deleteTimeEntry(entry.id);
+    }
+    await backend.services.roadmap.deleteResource("statistics-guide");
+    await backend.services.roadmap.deleteModule("statistics-module");
+    await backend.services.roadmap.deleteArea("statistics-basics");
+    expect(authorizations).toEqual([null, null]);
+  });
+
   it("keeps the bookshelf: public reads, keyed writes, the resource link and its refusals", async () => {
     const { client, authorizations } = consumer(key);
     const { client: visitor } = consumer();

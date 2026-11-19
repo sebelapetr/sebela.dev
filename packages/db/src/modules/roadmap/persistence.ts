@@ -25,6 +25,7 @@ import {
   resources,
   resourceTopics,
 } from "./schema.js";
+import { createStatisticsPersistence } from "./statistics.js";
 import type {
   DeleteRoadmapRecordResult,
   RoadmapAreaNode,
@@ -249,6 +250,7 @@ function resourceScalars(
 export function createRoadmapPersistence(db: Database): RoadmapPersistence {
   return {
     ...createDiaryPersistence(db),
+    ...createStatisticsPersistence(db),
     loadRoadmapTree() {
       return db.transaction(
         async (tx): Promise<RoadmapAreaNode[]> => {

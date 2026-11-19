@@ -9953,6 +9953,64 @@
         }
       }
     },
+    "/v1/roadmap/statistics": {
+      "get": {
+        "operationId": "getRoadmapStatistics",
+        "summary": "Read the learning statistics",
+        "description": "Every time entry of the learning diary counted exactly once in each view, in whole seconds aggregated before any rounding: as resource time, book time (a resource of type `book`) or event attendance, which always sum to the total. Days, Monday-start weeks and months are Europe/Prague calendar periods; an interval crossing midnight is already split into its days and a daylight-saving day keeps its actual length. Areas and modules hold study time through each resource's current module, never event attendance. An empty diary is zero totals and empty lists.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The learning statistics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapStatistics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -16629,6 +16687,500 @@
           "attendanceSeconds",
           "createdAt",
           "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapStatistics": {
+        "type": "object",
+        "properties": {
+          "totals": {
+            "$ref": "#/components/schemas/LearningTimeTotals"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeDay"
+            },
+            "description": "Every diary day with logged time, oldest first."
+          },
+          "weeks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeWeek"
+            },
+            "description": "Every Monday-start week from the first to the last with logged time, oldest first; a week between them without time is present with zero seconds."
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeMonth"
+            },
+            "description": "Every calendar month from the first to the last with logged time, oldest first; a month between them without time is present with zero seconds."
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeArea"
+            },
+            "description": "The areas with study time, by total (largest first), then slug. Resource and book time counts in the current module and area of its resource; event attendance is never part of an area."
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeResource"
+            },
+            "description": "The resources with logged time, by total (largest first), then slug."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeEvent"
+            },
+            "description": "The events with attendance, by total (largest first), then slug."
+          }
+        },
+        "required": [
+          "totals",
+          "days",
+          "weeks",
+          "months",
+          "areas",
+          "resources",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeTotals": {
+        "type": "object",
+        "properties": {
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "All logged time: the sum of the three categories."
+          },
+          "resourceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources whose type is not `book`."
+          },
+          "bookSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources of type `book`, counted once."
+          },
+          "eventSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Attendance logged on events."
+          },
+          "activeDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The number of diary days with logged time."
+          }
+        },
+        "required": [
+          "totalSeconds",
+          "resourceSeconds",
+          "bookSeconds",
+          "eventSeconds",
+          "activeDays"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeDay": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The diary day, `YYYY-MM-DD` in Europe/Prague."
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "All logged time: the sum of the three categories."
+          },
+          "resourceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources whose type is not `book`."
+          },
+          "bookSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources of type `book`, counted once."
+          },
+          "eventSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Attendance logged on events."
+          }
+        },
+        "required": [
+          "date",
+          "totalSeconds",
+          "resourceSeconds",
+          "bookSeconds",
+          "eventSeconds"
+        ],
+        "additionalProperties": false,
+        "description": "One diary day with logged time; its total equals the diary day's total."
+      },
+      "LearningTimeWeek": {
+        "type": "object",
+        "properties": {
+          "startsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The Monday that starts the week, `YYYY-MM-DD` in Europe/Prague."
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "All logged time: the sum of the three categories."
+          },
+          "resourceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources whose type is not `book`."
+          },
+          "bookSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources of type `book`, counted once."
+          },
+          "eventSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Attendance logged on events."
+          }
+        },
+        "required": [
+          "startsOn",
+          "totalSeconds",
+          "resourceSeconds",
+          "bookSeconds",
+          "eventSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeMonth": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "The calendar month, `YYYY-MM` in Europe/Prague."
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "All logged time: the sum of the three categories."
+          },
+          "resourceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources whose type is not `book`."
+          },
+          "bookSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources of type `book`, counted once."
+          },
+          "eventSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Attendance logged on events."
+          }
+        },
+        "required": [
+          "month",
+          "totalSeconds",
+          "resourceSeconds",
+          "bookSeconds",
+          "eventSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeArea": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Study time: resource and book time together, never event attendance."
+          },
+          "resourceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources whose type is not `book`."
+          },
+          "bookSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources of type `book`, counted once."
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningTimeModule"
+            },
+            "description": "The area's modules with study time, by total (largest first), then slug. Their totals sum to the area's."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "totalSeconds",
+          "resourceSeconds",
+          "bookSeconds",
+          "modules"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeModule": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Study time: resource and book time together, never event attendance."
+          },
+          "resourceSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources whose type is not `book`."
+          },
+          "bookSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on resources of type `book`, counted once."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "totalSeconds",
+          "resourceSeconds",
+          "bookSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeResource": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "youtube-video",
+              "youtube-playlist",
+              "google-drive",
+              "video",
+              "link",
+              "text",
+              "project",
+              "book"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "resource",
+              "book"
+            ],
+            "description": "`book` for a resource of type `book`, otherwise `resource`."
+          },
+          "module": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "description": "The stable, unique address of the record, for example `paldock`."
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "name"
+            ],
+            "additionalProperties": false,
+            "description": "The module the resource is in now."
+          },
+          "area": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "description": "The stable, unique address of the record, for example `paldock`."
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "name"
+            ],
+            "additionalProperties": false,
+            "description": "The area of that module."
+          },
+          "book": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "description": "The stable, unique address of the record, for example `paldock`."
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "slug",
+                  "title"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The book the resource reads; `null` when it links none."
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Time logged on the resource."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "type",
+          "category",
+          "module",
+          "area",
+          "book",
+          "totalSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "LearningTimeEvent": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "conference",
+              "meetup",
+              "workshop",
+              "lecture"
+            ]
+          },
+          "startsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "endsOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "totalSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Attendance logged on the event."
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "kind",
+          "startsOn",
+          "endsOn",
+          "totalSeconds"
         ],
         "additionalProperties": false
       }

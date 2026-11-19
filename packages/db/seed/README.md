@@ -17,7 +17,10 @@ folder's path. The exit code is 0 for a load or a skipped `--if-empty` load, 1 f
 The repository contains only the fictional demo seed in `demo/`. Its records double as an example
 of every file below. Its attached files are generated placeholders: logos, covers and illustrated
 avatars for testimonial authors, never a photo of a real person. The owner's real content,
-testimonial photos included, stays in the owner's private seed folder.
+testimonial photos included, stays in the owner's private seed folder. Its sessions give the
+learning statistics all three categories (resource, book and event time), quiet weeks, a session
+across Prague midnight and one on the spring daylight-saving night (2025-03-30, 01:30 to 03:30 on
+the clock, one hour of elapsed time).
 
 ## Data files
 

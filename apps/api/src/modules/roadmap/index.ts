@@ -22,6 +22,7 @@ import { defineRoute, type RouteDefinition } from "../../routing.js";
 import { bookRoutes } from "./books.js";
 import { diaryRoutes } from "./diary.js";
 import { eventRoutes } from "./events.js";
+import { statisticsRoutes } from "./statistics.js";
 
 const TREE = "/v1/roadmap";
 const AREA_DETAIL = "/v1/roadmap/tree/:area";
@@ -48,7 +49,9 @@ const RESOURCE = "/v1/roadmap/resources/:slug";
  * resource of type `book` links a book through its `book` field. The attended events add public
  * reads of every event and of one event and authenticated writes; attendance is a time entry with
  * an `event` target, a date edit that would strand it or deleting an event with it is a
- * `conflict`, and an event shows on every diary day of its range without adding time.
+ * `conflict`, and an event shows on every diary day of its range without adding time. The
+ * learning statistics add one public read of the logged time by category, Prague period, area,
+ * module, resource and event.
  */
 export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
   return [
@@ -323,5 +326,6 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
     ...diaryRoutes(roadmap),
     ...bookRoutes(roadmap),
     ...eventRoutes(roadmap),
+    ...statisticsRoutes(roadmap),
   ];
 }

@@ -5,6 +5,7 @@ import { CvSchema, PersonSchema } from "@sebela/contracts";
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
 interface Operation {
+  operationId?: string;
   parameters?: { name: string; in: string; required?: boolean; schema: Record<string, unknown> }[];
   security?: Record<string, string[]>[];
   requestBody?: { content: Record<string, { schema: { $ref?: string } }> };
@@ -753,6 +754,28 @@ describe("the OpenAPI document and the reference", () => {
       expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
     }
     expect(document.components.schemas).toHaveProperty("DiaryEvent");
+  });
+
+  it("documents the learning statistics as one public read without parameters", () => {
+    const read = operation("GET", "/v1/roadmap/statistics");
+    expect(read.operationId).toBe("getRoadmapStatistics");
+    expect(read.security).toEqual([]);
+    expect(read.parameters ?? []).toEqual([]);
+    expect(read.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/RoadmapStatistics" } },
+    });
+    for (const component of [
+      "LearningTimeTotals",
+      "LearningTimeDay",
+      "LearningTimeWeek",
+      "LearningTimeMonth",
+      "LearningTimeArea",
+      "LearningTimeModule",
+      "LearningTimeResource",
+      "LearningTimeEvent",
+    ]) {
+      expect(document.components.schemas, component).toHaveProperty(component);
+    }
   });
 
   it("documents the health route", () => {
