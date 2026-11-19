@@ -480,6 +480,19 @@ test("a generated environment file points the website at the worktree's own API"
   assert.notEqual(otherSettings.WEB_API_BASE_URL, settings.WEB_API_BASE_URL);
 });
 
+test("a generated environment file points MCP Admin at the worktree's own API", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  assert.equal(settings.MCP_ADMIN_API_URL, settings.WEB_API_BASE_URL);
+  const address = new URL(settings.MCP_ADMIN_API_URL);
+  assert.equal(address.hostname, example.API_HOST);
+  assert.equal(Number(address.port), Number(settings.API_PORT));
+  assert.notEqual(otherSettings.MCP_ADMIN_API_URL, settings.MCP_ADMIN_API_URL);
+});
+
 test("a generated environment file gives the website its own canonical origin", (t) => {
   const { create, envPath } = fixture(t);
   const other = create("feat/other");
