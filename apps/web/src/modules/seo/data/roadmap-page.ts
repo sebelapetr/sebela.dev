@@ -1,9 +1,11 @@
-// The metadata, structured data and preview images of the AI Roadmap's own pages below the overview
-// (an area's and a module's page, the bookshelf and a book's page): their titles, descriptions,
-// canonical addresses, Open Graph basics with a preview image at `/og<page path>`, breadcrumbs and
-// the page's own entity (an area or module as a schema.org Course, part of its area, with the API's
-// estimate; the bookshelf as an ItemList of its books; a book as a Book), from the page's own API
-// read.
+// The metadata, structured data and preview images of the AI Roadmap's pages: the overview, an
+// area's and a module's page, the learning diary, a diary day, the learning statistics, the events,
+// the bookshelf, a book's page and the reading guide. Each has its title, description, canonical
+// address, Open Graph basics with a preview image at `/og<page path>`, breadcrumbs and the page's
+// own entity (the overview's areas and the diary's days as ItemLists; an area or module as a
+// schema.org Course, part of its area, with the API's estimate; a diary day as the person's
+// BlogPosting; the events as an ItemList of Events; the bookshelf as an ItemList of its books; a
+// book as a Book; the reading guide as the person's Article), from the page's own read.
 import type { Metadata } from "next";
 
 import { plainText } from "../../_shared";
@@ -157,8 +159,8 @@ const ROADMAP_NAME = "AI Engineering Roadmap";
  * The page's metadata: its title (the breadcrumbs' names from the page up, then the person), its
  * description (the summary's first paragraph as plain text, or what the page is when there is none),
  * its canonical address on `origin`, the same as Open Graph basics with the person as the site, the
- * page's preview image on `origin` (its alt text is the title) and a large Twitter card. Kept out of
- * search results until the roadmap is indexed as a whole.
+ * page's preview image on `origin` (its alt text is the title) and a large Twitter card. Open to
+ * search engines like the rest of the site.
  */
 export function roadmapPageMetadata(origin: string, facts: RoadmapPageFacts): Metadata {
   const { title, description, url } = describe(origin, facts);
@@ -176,16 +178,18 @@ export function roadmapPageMetadata(origin: string, facts: RoadmapPageFacts): Me
       images: [{ url: image, ...OPEN_GRAPH_IMAGE_SIZE, type: "image/png", alt: title }],
     },
     twitter: { card: "summary_large_image", title, description, images: [image] },
-    robots: { index: false },
   };
 }
 
 /**
  * The page's schema.org JSON-LD: the page as part of the website, its breadcrumbs from the overview
- * on `origin`, and the page's own entity: an area or module as a Course the person provides, with
- * the API's planned estimate when there is one and, for a module, the area's Course it is part of;
- * the bookshelf as an ItemList of its books in shelf order; a book as a Book with every fact it has
- * and none it lacks.
+ * on `origin`, and the page's own entity: the overview's areas and the diary's days as ItemLists in
+ * their order; an area or module as a Course the person provides, with the API's planned estimate
+ * when there is one and, for a module, the area's Course it is part of; a diary day as the person's
+ * BlogPosting of its date; the events as an ItemList of Events with only the facts each has; the
+ * bookshelf as an ItemList of its books in shelf order; a book as a Book with every fact it has and
+ * none it lacks; the reading guide as the person's Article based on its source. The statistics have
+ * no entity of their own.
  */
 export function roadmapStructuredData(origin: string, facts: RoadmapPageFacts): object {
   const { title, description, url } = describe(origin, facts);
@@ -212,15 +216,128 @@ export function roadmapStructuredData(origin: string, facts: RoadmapPageFacts): 
           item: pageUrl(origin, crumb.href),
         })),
       },
-      pageEntity(origin, facts, { title, description, url }),
+      ...pageEntities(origin, facts, { title, description, url }),
     ],
+  };
+}
+
+interface PageText {
+  readonly title: string;
+  readonly description: string;
+  readonly url: string;
+}
+
+function pageEntities(origin: string, facts: RoadmapPageFacts, text: PageText): object[] {
+  const { title, description, url } = text;
+  const [page] = facts.breadcrumbs.toReversed();
+  const name = page?.name ?? title;
+  const author = { "@type": "Person", "@id": `${origin}/#person`, name: facts.name };
+  switch (facts.kind) {
+    case "overview":
+      return [pageList(origin, `${url}#areas`, name, facts.areas)];
+    case "diary":
+      return [pageList(origin, `${url}#days`, name, facts.days)];
+    case "diary-day":
+      return [
+        {
+          "@type": "BlogPosting",
+          "@id": `${url}#entry`,
+          url,
+          headline: name,
+          description,
+          datePublished: facts.date,
+          inLanguage: "en",
+          author,
+          mainEntityOfPage: { "@id": `${url}#webpage` },
+        },
+      ];
+    case "statistics":
+      return [];
+    case "events":
+      return [
+        {
+          "@type": "ItemList",
+          "@id": `${url}#events`,
+          name,
+          numberOfItems: facts.events.length,
+          itemListElement: facts.events.map((event, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            item: eventEntity(event),
+          })),
+        },
+      ];
+    case "reading-guide":
+      return [
+        {
+          "@type": "Article",
+          "@id": `${url}#article`,
+          url,
+          headline: name,
+          description,
+          inLanguage: "en",
+          author,
+          isBasedOn: { "@type": "CreativeWork", ...facts.basedOn },
+          mainEntityOfPage: { "@id": `${url}#webpage` },
+        },
+      ];
+    default:
+      return [pageEntity(origin, facts, text)];
+  }
+}
+
+/** An ItemList of the pages a page leads to, each with its description as plain text if any. */
+function pageList(
+  origin: string,
+  id: string,
+  name: string,
+  pages: readonly RoadmapListedPageFacts[],
+): object {
+  return {
+    "@type": "ItemList",
+    "@id": id,
+    name,
+    numberOfItems: pages.length,
+    itemListElement: pages.map((listed, index) => {
+      const about = summaryText(listed.description ?? null, DESCRIPTION_MAX);
+      return {
+        "@type": "ListItem",
+        position: index + 1,
+        name: listed.name,
+        url: pageUrl(origin, listed.href),
+        ...(about === "" ? {} : { description: about }),
+      };
+    }),
+  };
+}
+
+/** An event with its dates and attendance mode and only the other facts it has. */
+function eventEntity(event: RoadmapEventFacts): object {
+  const location = event.online
+    ? { "@type": "VirtualLocation", ...(event.href === null ? {} : { url: event.href }) }
+    : event.place === null
+      ? null
+      : { "@type": "Place", name: event.place };
+  return {
+    "@type": "Event",
+    name: event.name,
+    startDate: event.startsOn,
+    endDate: event.endsOn,
+    eventAttendanceMode: event.online
+      ? "https://schema.org/OnlineEventAttendanceMode"
+      : "https://schema.org/OfflineEventAttendanceMode",
+    ...(event.href === null ? {} : { url: event.href }),
+    ...(location === null ? {} : { location }),
+    ...(event.organizer === null
+      ? {}
+      : { organizer: { "@type": "Organization", name: event.organizer } }),
   };
 }
 
 function pageEntity(
   origin: string,
-  facts: RoadmapPageFacts,
-  { title, description, url }: { title: string; description: string; url: string },
+  facts: RoadmapCoursePageFacts | RoadmapBookshelfPageFacts | RoadmapBookPageFacts,
+  { title, description, url }: PageText,
 ): object {
   const [page, parent] = facts.breadcrumbs.toReversed();
   if (facts.kind === "bookshelf") {
@@ -266,9 +383,7 @@ function pageEntity(
     inLanguage: "en",
     provider: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
     mainEntityOfPage: { "@id": `${url}#webpage` },
-    ...("estimatedMinutes" in facts && facts.estimatedMinutes > 0
-      ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` }
-      : {}),
+    ...(facts.estimatedMinutes > 0 ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` } : {}),
     ...(facts.kind === "module" && parent !== undefined
       ? {
           isPartOf: {
@@ -314,8 +429,9 @@ function bookDescription(facts: RoadmapBookPageFacts, names: readonly string[]):
 function fallbackDescription(name: string, names: readonly string[]): string {
   // The last name is the overview's, which the sentence names itself.
   const [page, ...parents] = names.slice(0, -1);
+  if (page === undefined) return `${name}'s ${ROADMAP_NAME}.`;
   const part = parents.length === 0 ? "" : `, part of ${parents.join(", part of ")}`;
-  return `${page ?? "A page"}${part} on ${name}'s ${ROADMAP_NAME}.`;
+  return `${page}${part} on ${name}'s ${ROADMAP_NAME}.`;
 }
 
 /**
@@ -338,10 +454,12 @@ export function roadmapOpenGraphCard(
   const [page, parent] = facts.breadcrumbs.toReversed();
   const roadmap = `${facts.name}'s ${ROADMAP_NAME}`;
   const subtitle =
-    facts.kind === "module" && parent !== undefined
-      ? `Part of ${parent.name} on ${roadmap}`
-      : facts.kind === "book" && facts.book.author !== null
-        ? `By ${facts.book.author}, on ${roadmap}`
-        : roadmap;
+    facts.kind === "overview"
+      ? `By ${facts.name}`
+      : (facts.kind === "module" || facts.kind === "diary-day") && parent !== undefined
+        ? `Part of ${parent.name} on ${roadmap}`
+        : facts.kind === "book" && facts.book.author !== null
+          ? `By ${facts.book.author}, on ${roadmap}`
+          : roadmap;
   return textCard(origin, CARD_LABELS[facts.kind], page?.name ?? ROADMAP_NAME, subtitle);
 }
