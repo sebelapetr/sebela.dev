@@ -188,7 +188,9 @@ describe("authentication of the private routes", () => {
     await app.request(`/v1/${created.key}`, {}, connection());
 
     expect(lines.length).toBeGreaterThanOrEqual(3);
-    const secret = created.key.split("_")[2] ?? created.key;
+    // The key is `sebela_<16 hex public id>_<43 base64url secret>`; the secret itself may contain `_`.
+    const secret = /^sebela_[0-9a-f]{16}_([A-Za-z0-9_-]{43})$/.exec(created.key)?.[1] ?? "";
+    expect(secret).toHaveLength(43);
     for (const line of lines) expect(line).not.toContain(secret);
   });
 });
@@ -208,11 +210,13 @@ function send(
   init: RequestInit,
   headers: Record<string, string>,
 ) {
+  // A private read cannot carry a body; it gets the attempt's headers alone.
+  const sent: RequestInit = route.method === "GET" ? { headers: init.headers ?? {} } : init;
   return backend
     .api()
     .app.request(
       concretePath(route.path),
-      { method: route.method, ...withHeaders(init, headers) },
+      { method: route.method, ...withHeaders(sent, headers) },
       connection(),
     );
 }

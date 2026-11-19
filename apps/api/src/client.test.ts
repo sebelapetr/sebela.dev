@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createApiClient,
   type ApiClient,
+  type AuthenticationCheck,
   type Cv,
   type Diary,
   type DiaryDay,
@@ -138,6 +139,25 @@ describe("the generated API client", () => {
       expect(refused.error?.error.code).toBe("unauthorized");
       expect(authorizations).toEqual([apiKey === undefined ? null : `Bearer ${apiKey}`]);
     }
+  });
+
+  it("checks a key: authenticated with it, refused without it or once revoked", async () => {
+    const checked = await backend.services.apiKeys.createKey("checked consumer");
+    const { client, authorizations } = consumer(checked.key);
+
+    const valid = await client.GET("/v1/authentication");
+    expect(valid.response.status).toBe(200);
+    const body: AuthenticationCheck | undefined = valid.data;
+    expect(body).toEqual({ status: "authenticated" });
+
+    await backend.services.apiKeys.revokeKey(checked.metadata.id);
+    const revoked = await client.GET("/v1/authentication");
+    expect(revoked.response.status).toBe(401);
+    expect(revoked.error?.error.code).toBe("unauthorized");
+    expect(authorizations).toEqual([`Bearer ${checked.key}`, `Bearer ${checked.key}`]);
+
+    const anonymous = await consumer().client.GET("/v1/authentication");
+    expect(anonymous.response.status).toBe(401);
   });
 
   it("reports an exhausted budget with Retry-After", async () => {

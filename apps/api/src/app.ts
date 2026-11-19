@@ -118,6 +118,9 @@ export interface Api {
 }
 
 const HealthSchema = z.object({ status: z.literal("ok") }).meta({ id: "Health" });
+const AuthenticationCheckSchema = z
+  .object({ status: z.literal("authenticated") })
+  .meta({ id: "AuthenticationCheck" });
 
 const systemRoutes = {
   health: {
@@ -129,6 +132,20 @@ const systemRoutes = {
     budget: "health",
     description: "Answers while the process runs; it does not check the database. Its own budget.",
     response: { status: 200, description: "The API is running.", schema: HealthSchema },
+    errors: [],
+  },
+  authentication: {
+    operationId: "checkAuthentication",
+    method: "GET",
+    path: "/v1/authentication",
+    access: "private",
+    summary: "Check the API key",
+    description:
+      "Answers whether the presented API key is valid now, with the same verification and budgets as " +
+      "every private route. It reads and changes no content and reveals nothing about the key. A " +
+      "server-side caller that acts for the key holder, such as MCP Admin, checks it before every " +
+      "operation, so a revoked key stops working on its next one.",
+    response: { status: 200, description: "The key is valid.", schema: AuthenticationCheckSchema },
     errors: [],
   },
   openapi: {
@@ -165,6 +182,7 @@ const moduleRoutes = (
 /** Every documented route, in the order of the OpenAPI document. */
 const documentedRoutes = (modules: readonly RouteDefinition[]): RouteDocumentation[] => [
   systemRoutes.health,
+  systemRoutes.authentication,
   ...modules,
   systemRoutes.openapi,
   systemRoutes.reference,
@@ -410,6 +428,9 @@ export function createApp(dependencies: AppDependencies): Api {
   };
 
   app.get("/health", guard(systemRoutes.health), (c) => c.json({ status: "ok" as const }));
+  app.get(systemRoutes.authentication.path, guard(systemRoutes.authentication), (c) =>
+    c.json({ status: "authenticated" as const }),
+  );
 
   for (const route of modules) register(route);
 

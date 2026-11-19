@@ -233,6 +233,8 @@ export function createWorktree({
           WEB_MEDIA_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}/v1/media/files/${settings.STORAGE_ENVIRONMENT}/${storageWorktreeName(name)}`,
           // The website reads this worktree's own API, not the main checkout's.
           WEB_API_BASE_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}`,
+          // MCP Admin, too, reaches only this worktree's own API.
+          MCP_ADMIN_API_URL: `http://${settings.API_HOST}:${portsForSlot(slot, basePorts).API_PORT}`,
           // Its canonical links, sitemap and llms.txt name the worktree's own website.
           WEB_SITE_ORIGIN: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}`,
           // The API signs its invalidations for the worktree's own website with a secret of its own.
