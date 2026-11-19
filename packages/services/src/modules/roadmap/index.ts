@@ -42,6 +42,7 @@ import { createBookshelf, type Bookshelf } from "./books.js";
 import { createLearningDiary, type LearningDiary } from "./diary.js";
 import { createEventCalendar, type EventCalendar } from "./events.js";
 import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
+import { createLearningStatistics, type LearningStatistics } from "./statistics.js";
 
 /**
  * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
@@ -54,7 +55,8 @@ import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
  * a reserved area slug, an unknown parent or topic, a repeated topic, a finish before the start or
  * an unusable book link (an unknown book, one another resource links, or a type other than `book`).
  */
-export interface RoadmapService extends LearningDiary, Bookshelf, EventCalendar {
+export interface RoadmapService
+  extends LearningDiary, Bookshelf, EventCalendar, LearningStatistics {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
   /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
@@ -88,6 +90,7 @@ export interface RoadmapService extends LearningDiary, Bookshelf, EventCalendar 
 export type { Bookshelf } from "./books.js";
 export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
 export type { EventCalendar } from "./events.js";
+export type { LearningStatistics } from "./statistics.js";
 
 export interface RoadmapServiceOptions {
   /**
@@ -394,5 +397,6 @@ export function createRoadmapService(
     ...createLearningDiary(persistence),
     ...createBookshelf(persistence, options.mediaAddress ?? (() => null)),
     ...createEventCalendar(persistence),
+    ...createLearningStatistics(persistence),
   };
 }
