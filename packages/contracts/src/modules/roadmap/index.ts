@@ -471,3 +471,17 @@ export {
   RoadmapProjectIdeaSchema,
   RoadmapProjectIdeaUpdateSchema,
 } from "./supporting.js";
+export type {
+  RoadmapFollowedSource,
+  RoadmapFollowedSourceCreate,
+  RoadmapFollowedSourceList,
+  RoadmapFollowedSourceUpdate,
+  RoadmapGlossaryTerm,
+  RoadmapGlossaryTermCreate,
+  RoadmapGlossaryTermList,
+  RoadmapGlossaryTermUpdate,
+  RoadmapProjectIdea,
+  RoadmapProjectIdeaCreate,
+  RoadmapProjectIdeaList,
+  RoadmapProjectIdeaUpdate,
+} from "./supporting.js";
