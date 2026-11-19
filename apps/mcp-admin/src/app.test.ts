@@ -166,6 +166,7 @@ describe("authentication (D01, D02)", () => {
       "list",
       "recent_changes",
       "save",
+      "upload",
     ]);
     const checks = api.calls.filter((call) => call.url === `${API_BASE}/v1/authentication`);
     expect(checks.length).toBeGreaterThanOrEqual(2);

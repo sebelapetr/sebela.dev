@@ -88,6 +88,7 @@ describe("the tool catalogue", () => {
       "list",
       "recent_changes",
       "save",
+      "upload",
     ]);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     for (const name of ["describe", "get", "list", "recent_changes"]) {

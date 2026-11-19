@@ -1,7 +1,8 @@
 // The content-management path over real sockets: the official SDK client -> MCP Admin -> the real
 // API on a temporary database seeded from the fictional S02 fixture. Covers D18 (the API's audit
 // names the verified key and the tool's provenance, with before and after) and the API's own
-// dependency protection on a delete (D21).
+// dependency protection on a delete (D21), and media upload and attachment through the API's own
+// inspection, storage driver and audit (D17, D18).
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -53,6 +54,25 @@ async function connect(): Promise<Client> {
 async function call(client: Client, name: string, args: Record<string, unknown>) {
   const result = await client.callTool({ name, arguments: args });
   return { isError: result.isError === true, json: JSON.parse(toolText(result)) as unknown };
+}
+
+/** A fictional 2x2 PNG and a minimal fictional PDF, as base64 the way a client passes a file. */
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGNoAAMGCAUAKg4GARWeQtcAAAAASUVORK5CYII=";
+const PDF_TEXT =
+  "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n" +
+  "2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\n" +
+  "trailer << /Root 1 0 R >>\n%%EOF\n";
+const base64 = (text: string) => Buffer.from(text).toString("base64");
+
+interface AuditChange {
+  actor: { keyName: string };
+  provenance: string | null;
+  entity: string;
+  record: string;
+  action: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
 }
 
 describe("content management against the real API", () => {
@@ -107,5 +127,81 @@ describe("content management against the real API", () => {
       "cedar-portal-billing",
     );
     expect(still.isError).toBe(false);
+  });
+
+  it("uploads the caller's photo, attaches the returned ID and audits both with the key", async () => {
+    const client = await connect();
+
+    const uploaded = await call(client, "upload", {
+      fileName: "portrait.png",
+      contentBase64: PNG,
+      altText: "A fictional portrait.",
+    });
+    const id = (uploaded.json as { id: string }).id;
+    const saved = await call(client, "save", {
+      entity: "person",
+      action: "update",
+      fields: { photoId: id },
+    });
+    const recent = await call(client, "recent_changes", {});
+    await client.close();
+    const person = (await (await fetch(`${api?.url ?? ""}/v1/person`)).json()) as {
+      photoId: string | null;
+    };
+
+    expect(uploaded.isError).toBe(false);
+    expect(uploaded.json).toMatchObject({
+      entity: "media",
+      action: "created",
+      record: { id, mediaType: "image/png", altText: "A fictional portrait." },
+    });
+    expect(saved.isError).toBe(false);
+    expect(person.photoId).toBe(id);
+    const { changes } = recent.json as { changes: AuditChange[] };
+    const created = changes.find((change) => change.entity === "media" && change.record === id);
+    expect(created).toMatchObject({ actor: { keyName: "owner" }, action: "created" });
+    expect(created?.provenance).toMatch(/^mcp-admin\/upload\/[0-9a-f]{12}$/);
+    expect(JSON.stringify(created)).not.toContain(PNG);
+    expect(changes[0]).toMatchObject({
+      actor: { keyName: "owner" },
+      entity: "person",
+      action: "updated",
+      after: { photoId: id },
+    });
+  });
+
+  it("keeps the current CV when a replacement is malformed, mistyped or traversal-shaped", async () => {
+    const client = await connect();
+    const first = await call(client, "upload", {
+      fileName: "cv.pdf",
+      contentBase64: base64(PDF_TEXT),
+    });
+    const cvPdfId = (first.json as { id: string }).id;
+    await call(client, "save", { entity: "person", action: "update", fields: { cvPdfId } });
+    const listed = async () =>
+      (await (await fetch(`${api?.url ?? ""}/v1/media`)).json()) as
+        { items?: unknown[] } | unknown[];
+    const mediaBefore = JSON.stringify(await listed());
+
+    const refusals = [
+      await call(client, "upload", {
+        fileName: "cv.pdf",
+        contentBase64: base64(PDF_TEXT.replace("%%EOF\n", "")),
+      }),
+      await call(client, "upload", { fileName: "cv.pdf", contentBase64: PNG }),
+      await call(client, "upload", { fileName: "notes.pdf", contentBase64: base64("not a PDF") }),
+      await call(client, "upload", { fileName: "../../cv.pdf", contentBase64: base64(PDF_TEXT) }),
+    ];
+    const person = (await call(client, "get", { entity: "person" })).json as {
+      cvPdfId: string | null;
+    };
+    await client.close();
+
+    for (const refused of refusals) {
+      expect(refused.isError).toBe(true);
+      expect(refused.json).toMatchObject({ error: { code: "field" } });
+    }
+    expect(person.cvPdfId).toBe(cvPdfId);
+    expect(JSON.stringify(await listed())).toBe(mediaBefore);
   });
 });
