@@ -336,6 +336,8 @@ describe("an unavailable authentication check fails closed (D05)", () => {
       "a timeout",
       (request) =>
         new Promise<Response>((_, reject) => {
+          // Like fetch: a request whose signal already fired under load is rejected at once.
+          if (request.signal.aborted) reject(request.signal.reason as Error);
           request.signal.addEventListener("abort", () => {
             reject(request.signal.reason as Error);
           });
@@ -455,6 +457,8 @@ describe("limits (D08)", () => {
       "/v1/person",
       (request) =>
         new Promise<Response>((_, reject) => {
+          // Like fetch: a request whose signal already fired under load is rejected at once.
+          if (request.signal.aborted) reject(request.signal.reason as Error);
           request.signal.addEventListener("abort", () => {
             reject(request.signal.reason as Error);
           });
