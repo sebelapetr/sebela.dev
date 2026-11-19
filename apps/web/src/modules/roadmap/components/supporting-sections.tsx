@@ -102,7 +102,7 @@ function ProjectIdeas({ ideas }: { readonly ideas: readonly ProjectIdeaRow[] }) 
     <Section
       id="project-ideas"
       title="Portfolio Project Ideas"
-      lead="Additional project ideas to strengthen a portfolio beyond the core roadmap."
+      lead="Additional project ideas to strengthen your portfolio beyond the core roadmap."
     >
       <ol className="flex flex-col">
         {ideas.map((idea) => (
@@ -154,7 +154,7 @@ function FollowedSources({ sources }: { readonly sources: readonly FollowedSourc
     <Section
       id="stay-current"
       title="Stay Current"
-      lead="Sources to keep up with the fast-moving AI landscape without getting overwhelmed."
+      lead="Resources to keep up with the rapidly evolving AI landscape. The field moves fast — these help you stay informed without getting overwhelmed."
     >
       <ul className="flex flex-col">
         {sources.map((source) => (
