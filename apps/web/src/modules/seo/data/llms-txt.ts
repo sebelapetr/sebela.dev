@@ -14,6 +14,7 @@ import {
   routes,
 } from "../../_shared";
 import type { HomepageProfile } from "../../profile";
+import type { RoadmapDiscovery } from "./roadmap-discovery";
 
 /** The longest summary of one item. */
 const SUMMARY_MAX = 280;
@@ -61,7 +62,12 @@ function sentences(first: string, summary: string): string {
 }
 
 /** The profile's llms.txt on `origin`. */
-export function llmsTxt(origin: string, profile: HomepageProfile): string {
+export function llmsTxt(
+  origin: string,
+  profile: HomepageProfile,
+  roadmap: RoadmapDiscovery,
+): string {
+  if (roadmap.areas.length > 0) throw new Error("Not implemented yet.");
   const at = (path: string) => `${origin}${path}`;
   const bio = plainText(profile.shortBio, BIO_MAX);
 

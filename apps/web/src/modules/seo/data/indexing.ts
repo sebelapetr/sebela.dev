@@ -26,7 +26,8 @@ function escapeXml(text: string): string {
 }
 
 /** The sitemap of the indexed pages on `origin`, without dates the profile cannot vouch for. */
-export function sitemapXml(origin: string): string {
+export function sitemapXml(origin: string, paths: readonly string[] = []): string {
+  if (paths.length > 0) throw new Error("Not implemented yet.");
   const urls = indexedPaths.map(
     (path) => `  <url><loc>${escapeXml(`${origin}${path}`)}</loc></url>`,
   );

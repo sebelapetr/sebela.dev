@@ -15,6 +15,7 @@ export {
   anchorHref,
   anchorId,
   bookshelfHref,
+  diaryHref,
   roadmapHref,
   type AnchorTarget,
   type RoadmapPageTarget,

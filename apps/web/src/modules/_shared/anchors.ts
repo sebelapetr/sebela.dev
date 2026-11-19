@@ -95,3 +95,11 @@ export function bookshelfHref(book?: string): string {
   const shelf = `${routes.aiRoadmap}/bookshelf`;
   return book === undefined ? shelf : `${shelf}/${encodeURIComponent(book)}`;
 }
+
+/**
+ * The address of the learning diary, `/ai-roadmap/diary`, or of a day's page on it,
+ * `/ai-roadmap/diary/<date>`. The date stays inside its own path segment.
+ */
+export function diaryHref(date?: string): string {
+  throw new Error("not implemented", { cause: date });
+}
