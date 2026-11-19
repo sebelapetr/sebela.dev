@@ -1,6 +1,6 @@
 # Phase 6 — Evaluation specification
 
-Status: owner-agreed policy, documentation review before issue publication. This file specifies future tests; no case, runner, baseline or passing result is delivered by this planning change.
+Status: approved by the owner; scenario ownership is assigned in the [published issue breakdown](issues.md). This file specifies future tests; no case, runner, baseline or passing result is delivered by this planning change.
 
 ## Catalogue and scope
 
