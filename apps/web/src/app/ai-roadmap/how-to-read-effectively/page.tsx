@@ -2,23 +2,23 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
-import { getRoadmap } from "../../../modules/profile";
+import { getRoadmapReadingGuide } from "../../../modules/profile";
 import { readingGuidePageFacts, RoadmapReadingGuideTemplate } from "../../../modules/roadmap";
 import { RoadmapStructuredData, roadmapPageMetadata } from "../../../modules/seo";
 
 /** Content cannot be read now; `error.tsx` shows it, never a page without whose roadmap it is. */
 class ContentUnavailableError extends Error {
   constructor() {
-    super("The reading guide's roadmap could not be read from the API.");
+    super("Whose reading guide it is could not be read from the API.");
     this.name = "ContentUnavailableError";
   }
 }
 
-/** The roadmap the guide belongs to; a profile that is not published yet is not found. */
+/** Whose roadmap the guide belongs to; a profile that is not published yet is not found. */
 async function readContent() {
   // Rendered on every request from the content cache (`modules/profile`), never at build time.
   await connection();
-  const result = await getRoadmap();
+  const result = await getRoadmapReadingGuide();
   if (result.status === "missing") notFound();
   if (result.status === "unavailable") throw new ContentUnavailableError();
   return result.content;

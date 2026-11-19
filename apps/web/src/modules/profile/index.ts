@@ -36,6 +36,10 @@ import {
 } from "./data/load-roadmap-diary";
 import { loadRoadmapEvents, type RoadmapEventsResult } from "./data/load-roadmap-events";
 import {
+  loadRoadmapReadingGuide,
+  type RoadmapReadingGuideResult,
+} from "./data/load-roadmap-reading-guide";
+import {
   loadRoadmapStatistics,
   type RoadmapStatisticsResult,
 } from "./data/load-roadmap-statistics";
@@ -85,6 +89,11 @@ export type {
 } from "./data/load-roadmap-diary";
 
 export type { RoadmapEventsContent, RoadmapEventsResult } from "./data/load-roadmap-events";
+
+export type {
+  RoadmapReadingGuideContent,
+  RoadmapReadingGuideResult,
+} from "./data/load-roadmap-reading-guide";
 export type {
   RoadmapStatisticsContent,
   RoadmapStatisticsResult,
@@ -229,6 +238,15 @@ export const getRoadmapDiaryDay = cache((date: string): Promise<RoadmapDiaryDayR
  */
 export const getRoadmapEvents = cache((): Promise<RoadmapEventsResult> =>
   loadRoadmapEvents(apiClient()),
+);
+
+/**
+ * What the reading guide reads for the current request: only the person's name, read once per
+ * request (React `cache`), from the content cache. The guide's text is the site's own, so a failed
+ * roadmap or supporting-content read never takes it down; a failed person read is unavailable.
+ */
+export const getRoadmapReadingGuide = cache((): Promise<RoadmapReadingGuideResult> =>
+  loadRoadmapReadingGuide(apiClient()),
 );
 
 /**
