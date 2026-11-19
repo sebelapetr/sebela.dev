@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readDatabaseConfig } from "./config.js";
@@ -92,5 +94,42 @@ describe("persistence transactions", () => {
     await expect(persistence.roadmap.findRoadmapArea("basics")).resolves.toBeNull();
     await expect(persistence.roadmap.findRoadmapModule("retrieval")).resolves.toBeNull();
     await expect(persistence.profile.findTopic("rag")).resolves.toBeNull();
+  });
+
+  it("gives the work audit persistence, so a refused audit entry rolls the content back", async () => {
+    const key = await persistence.apiKeys.insertKey({
+      name: "fixture-admin",
+      publicId: "pubtransaction",
+      secretHash: "hash",
+    });
+    const change = {
+      keyId: key.id,
+      operationId: "createTopic",
+      method: "POST",
+      route: "/v1/topics",
+      provenance: null,
+      entity: "topic",
+      record: "audited",
+      action: "created",
+      before: null,
+      after: { slug: "audited" },
+    } as const;
+
+    await persistence.transaction(async (profile, _roadmap, audit) => {
+      await profile.createTopic({ slug: "audited", name: "Audited", position: 5 });
+      await audit.recordChanges([change]);
+    });
+    await expect(
+      persistence.transaction(async (profile, _roadmap, audit) => {
+        await profile.createTopic({ slug: "unaudited", name: "Unaudited", position: 6 });
+        await audit.recordChanges([{ ...change, record: "unaudited", keyId: randomUUID() }]);
+      }),
+    ).rejects.toThrow();
+
+    await expect(persistence.profile.findTopic("audited")).resolves.not.toBeNull();
+    await expect(persistence.profile.findTopic("unaudited")).resolves.toBeNull();
+    await expect(persistence.audit.listRecentChanges(10)).resolves.toMatchObject([
+      { record: "audited", keyName: "fixture-admin" },
+    ]);
   });
 });
