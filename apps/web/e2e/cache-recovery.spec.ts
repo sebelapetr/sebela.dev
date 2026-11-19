@@ -1,7 +1,8 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write to the profile, the roadmap, the learning diary, the bookshelf or the events shows once the interval has elapsed, on the
+// seconds, a write to the profile, the roadmap, the learning diary, the bookshelf, the events or the
+// logged time behind the learning statistics shows once the interval has elapsed, on the
 // overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
 // leaves its old address; a restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
@@ -300,6 +301,53 @@ test.describe("cached content without invalidation notifications", () => {
     await write("DELETE", "/v1/roadmap/resources/drift-notes");
     await write("DELETE", "/v1/roadmap/modules/slow-drift");
     await expect.poll(async () => (await read(moved)).status, fallback).toBe(404);
+  });
+
+  test("logged time with a dropped notification reaches the warmed statistics after the interval", async () => {
+    async function write(method: string, path: string, body: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    const statistics = "/ai-roadmap/diary/stats";
+    await write("POST", "/v1/roadmap/modules", {
+      slug: "tally-drift",
+      area: "far-orbits",
+      name: "Tally drift",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/resources", {
+      slug: "tally-notes",
+      module: "tally-drift",
+      name: "Fictional tally notes",
+      type: "link",
+      position: 0,
+    });
+    // This fixture has no logged time: the warmed statistics say so.
+    const empty = "No time logged yet.";
+    expect((await read(statistics)).body).toContain(empty);
+
+    await write("POST", "/v1/roadmap/time-entries", {
+      resource: "tally-notes",
+      startedAt: "2026-03-10T10:00:00+01:00",
+      endedAt: "2026-03-10T11:30:00+01:00",
+    });
+
+    // Inside the interval the cached statistics are still served: no notification arrived.
+    expect((await read(statistics)).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read(statistics)).body, within)
+      .toContain("Fictional tally notes");
+    const body = (await read(statistics)).body.replaceAll("<!-- -->", "");
+    expect(body).not.toContain(empty);
+    expect(body).toContain("1h 30m");
+    expect(body).toContain("Far orbits");
+    expect(body).toContain("Tuesday, March 10, 2026");
   });
 
   test("a restarted website reads current content at once", async () => {

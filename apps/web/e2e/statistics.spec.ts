@@ -144,7 +144,7 @@ test.describe("the learning statistics", () => {
     return (await response.json()) as T;
   }
 
-  async function write(method: "POST" | "DELETE", path: string, body?: unknown) {
+  async function write(method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) {
     const response = await fetch(`${api.url}${path}`, {
       method,
       headers: {
@@ -161,6 +161,11 @@ test.describe("the learning statistics", () => {
   async function text(path: string): Promise<string> {
     const response = await fetch(`${website.url}${path}`);
     return (await response.text()).replaceAll("<!-- -->", "");
+  }
+
+  // The page's text without its tags, so a label and the value beside it read as one string.
+  async function shown(path: string): Promise<string> {
+    return (await text(path)).replaceAll(/<[^>]*>/gu, "");
   }
 
   test("the API's aggregates, the diary's day totals and the page reconcile", async ({ page }) => {
@@ -226,7 +231,11 @@ test.describe("the learning statistics", () => {
 
     // The figures and kinds, rounded only for display.
     const figures = page.locator("main dl").first();
-    await expect(figures.locator("dt")).toHaveText(["Total time", "Study days", "Avg per day"]);
+    await expect(figures.locator("dt")).toHaveText([
+      "Total time",
+      "Days with time",
+      "Avg per day with time",
+    ]);
     await expect(figures.locator("dd")).toHaveText(["7h 15m", "6", "1h 13m"]);
     const kinds = page.locator("main dl").nth(1);
     await expect(kinds.locator("dd")).toHaveText([
@@ -419,6 +428,52 @@ test.describe("the learning statistics", () => {
     await write("DELETE", `/v1/roadmap/time-entries/${id}`);
     await expect.poll(() => text(statistics), within).not.toContain("An unattended lecture");
     expect(await text(statistics)).toContain("7h 15m");
+  });
+
+  test("a resource moved to another area and made a book moves its logged time on the warmed page", async () => {
+    // Warm the page: the explainer's 2h 30m is resource time in Signal basics (Orbit foundations).
+    const before = await shown(statistics);
+    expect(before).toContain("Resources3h 30m · 48.3%");
+    expect(before).toContain("Orbit foundations");
+    expect(before).toContain("4h 15m · 81.0%");
+    expect(before).toContain("2h 30m · 47.6%");
+    expect(before).toContain("Resource · Signal basics · Orbit foundations");
+
+    await write("PATCH", "/v1/roadmap/resources/signal-explainer", {
+      module: "calm-queues",
+      type: "book",
+    });
+    // Study time stays 5h 15m: Orbit foundations keeps the handbook's 1h 45m (33.3%), Queue craft
+    // gains the explainer (1h + 2h 30m = 3h 30m, 66.7%), and Signal basics has no time left. Of the
+    // 7h 15m total, resources keep 1h (13.8%), books gain it (1h 45m + 2h 30m = 4h 15m, 58.6%) and
+    // events keep 2h (27.6%); the total does not change.
+    await expect
+      .poll(() => shown(statistics), within)
+      .toContain("Book · Calm queues · Queue craft");
+    const moved = await shown(statistics);
+    expect(moved).toContain("7h 15m");
+    expect(moved).toContain("Resources1h · 13.8%");
+    expect(moved).toContain("Books4h 15m · 58.6%");
+    expect(moved).toContain("Events2h · 27.6%");
+    expect(moved).toContain("1h 45m · 33.3%");
+    expect(moved).toContain("3h 30m · 66.7%");
+    expect(moved).not.toContain("4h 15m · 81.0%");
+    expect(moved).not.toContain("2h 30m · 47.6%");
+    expect(moved).not.toContain("Signal basics");
+
+    // Moving it back restores every breakdown without losing or doubling time.
+    await write("PATCH", "/v1/roadmap/resources/signal-explainer", {
+      module: "signal-basics",
+      type: "youtube-video",
+    });
+    await expect
+      .poll(() => shown(statistics), within)
+      .toContain("Resource · Signal basics · Orbit foundations");
+    const back = await shown(statistics);
+    expect(back).toContain("Resources3h 30m · 48.3%");
+    expect(back).toContain("4h 15m · 81.0%");
+    expect(back).toContain("2h 30m · 47.6%");
+    expect(back).toContain("1h · 19.0%");
   });
 });
 
