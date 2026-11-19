@@ -1,5 +1,5 @@
 // The profile module: the website's read of the API's public profile, experience, services, CV
-// and AI Roadmap routes, the learning diary, the bookshelf and the events included (and the
+// and AI Roadmap routes, the learning diary, its statistics, the bookshelf and the events included (and the
 // records the Ask page's answers rest on), of the current CV PDF's file and of the stored images
 // the site serves on its own media path, with the process-local content cache those reads share
 // and its invalidation. Server-only.
@@ -35,6 +35,10 @@ import {
   type RoadmapDiaryResult,
 } from "./data/load-roadmap-diary";
 import { loadRoadmapEvents, type RoadmapEventsResult } from "./data/load-roadmap-events";
+import {
+  loadRoadmapStatistics,
+  type RoadmapStatisticsResult,
+} from "./data/load-roadmap-statistics";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
 import { readMediaFile } from "./data/read-media-file";
@@ -81,6 +85,10 @@ export type {
 } from "./data/load-roadmap-diary";
 
 export type { RoadmapEventsContent, RoadmapEventsResult } from "./data/load-roadmap-events";
+export type {
+  RoadmapStatisticsContent,
+  RoadmapStatisticsResult,
+} from "./data/load-roadmap-statistics";
 
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
@@ -221,6 +229,16 @@ export const getRoadmapDiaryDay = cache((date: string): Promise<RoadmapDiaryDayR
  */
 export const getRoadmapEvents = cache((): Promise<RoadmapEventsResult> =>
   loadRoadmapEvents(apiClient()),
+);
+
+/**
+ * The learning statistics for the current request: the person's header facts and the time logged
+ * in the diary as the API aggregates it (totals by category, days, weeks, months, areas with their
+ * modules, resources and events), read once per request (React `cache`), from the content cache.
+ * No logged time is ready with zero totals; a failed read is unavailable and never kept.
+ */
+export const getRoadmapStatistics = cache((): Promise<RoadmapStatisticsResult> =>
+  loadRoadmapStatistics(apiClient()),
 );
 
 /**

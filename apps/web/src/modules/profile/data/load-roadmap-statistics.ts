@@ -19,9 +19,38 @@ export interface LoadRoadmapStatisticsOptions {
   readonly timeoutMs?: number;
 }
 
-export function loadRoadmapStatistics(
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+/**
+ * Reads the learning statistics from the API's public routes: the person and the statistics,
+ * uncached and limited in time. A person that does not exist makes the page missing; no logged time
+ * is ready with zero totals; any other failed read makes it unavailable, never zero activity. The
+ * figures are returned as the API answered them: they are aggregated there, never recounted here.
+ */
+export async function loadRoadmapStatistics(
   client: ApiClient,
   options: LoadRoadmapStatisticsOptions = {},
 ): Promise<RoadmapStatisticsResult> {
-  return Promise.reject(new Error("not implemented", { cause: { client, options } }));
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const init = () => ({ cache: "no-store" as const, signal: AbortSignal.timeout(timeoutMs) });
+  try {
+    const [personRead, statisticsRead] = await Promise.all([
+      client.GET("/v1/person", init()),
+      client.GET("/v1/roadmap/statistics", init()),
+    ]);
+    if (personRead.data === undefined) {
+      return personRead.response.status === 404 ? { status: "missing" } : { status: "unavailable" };
+    }
+    if (statisticsRead.data === undefined) return { status: "unavailable" };
+    return {
+      status: "ready",
+      content: {
+        name: personRead.data.name,
+        headline: personRead.data.headline,
+        statistics: statisticsRead.data,
+      },
+    };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
