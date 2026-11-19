@@ -296,3 +296,75 @@ export const timeEntries = roadmapSchema.table(
     ),
   ],
 );
+
+/**
+ * Project ideas worth building to learn, shown beside the roadmap. They belong to no area or
+ * module and nothing refers to them; their topics are the profile's shared topics.
+ */
+export const projectIdeas = roadmapSchema.table(
+  "project_ideas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    whyItMatters: text("why_it_matters").notNull(),
+    howToStart: text("how_to_start"),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("project_ideas_position_not_negative", sql`${table.position} >= 0`)],
+);
+
+/**
+ * The ordered topic links of a project idea: pure link rows. They disappear with their idea; a
+ * linked topic cannot be deleted. Each topic is linked once.
+ */
+export const projectIdeaTopics = roadmapSchema.table(
+  "project_idea_topics",
+  {
+    projectIdeaId: uuid("project_idea_id")
+      .notNull()
+      .references(() => projectIdeas.id, { onDelete: "cascade" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectIdeaId, table.topicId] }),
+    unique("project_idea_topics_position_unique").on(table.projectIdeaId, table.position),
+  ],
+);
+
+/** Sources followed to stay current ("stay current"). The kind is a free short label. */
+export const followedSources = roadmapSchema.table(
+  "followed_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    description: text("description"),
+    link: text("link"),
+    kind: text("kind").notNull(),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("followed_sources_position_not_negative", sql`${table.position} >= 0`)],
+);
+
+/** Additional terms explained beside the roadmap; not the repository's own glossary. */
+export const glossaryTerms = roadmapSchema.table(
+  "glossary_terms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    term: text("term").notNull(),
+    description: text("description").notNull(),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("glossary_terms_position_not_negative", sql`${table.position} >= 0`)],
+);
