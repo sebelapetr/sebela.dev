@@ -753,7 +753,7 @@ describe("the S02 scenarios", () => {
   it("approves an upload only of the attached file's exact content, without an entity", () => {
     const [rule] = scenarios["E21"]?.approvals ?? [];
     if (!rule) throw new Error("E21 approves nothing");
-    const upload = (contentBase64: string, fileName = E21_PHOTO.name) => ({
+    const upload = (contentBase64: string, fileName: string = E21_PHOTO.name) => ({
       fileName,
       contentBase64,
     });

@@ -2,10 +2,11 @@
  * The MCP tool catalogue of MCP Admin. A fresh server is built for each MCP request around the
  * content of the verified caller, so no state or key outlives the request.
  *
- * Six tools over the content module's fixed entity registry: `describe`, `list`, `get` and
- * `recent_changes` only read; `save` creates or changes one record and `delete` removes one.
- * Arguments are strict: an unknown key, an entity outside the registry or anything but a single
- * string identifier is refused before any request. Results are JSON text; errors carry a stable
+ * Seven tools over the content module's fixed entity registry: `describe`, `list`, `get` and
+ * `recent_changes` only read; `save` creates or changes one record, `delete` removes one and
+ * `upload` stores one file from base64 bytes the caller passes, returning the media ID to attach.
+ * Arguments are strict: an unknown key, an entity outside the registry, anything but a single
+ * string identifier, or file content that is not canonical base64 is refused before any request. Results are JSON text; errors carry a stable
  * code (`field`, `conflict`, `not_found`, `unavailable`, `uncertain`, `unsupported_operation`) and
  * a message, never a key, a stack or an unredacted upstream answer.
  *
@@ -28,6 +29,9 @@ function result(outcome: Outcome<unknown>): CallToolResult {
     content: [{ type: "text", text: JSON.stringify({ error: outcome.error }) }],
   };
 }
+
+/** Canonical, padded standard base64 of at least one byte. */
+const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true } as const;
 
@@ -128,6 +132,56 @@ export function createAdminServer(content: CallerContent): McpServer {
       },
     },
     async ({ entity: name, id: record }) => result(await content.remove(name, record)),
+  );
+
+  server.registerTool(
+    "upload",
+    {
+      title: "Upload an image or PDF",
+      description:
+        "Stores one file the owner gave you, passed as its bytes in base64, as new media and " +
+        "returns its media ID. It reads no path and fetches no address: only the bytes you pass " +
+        "are sent. The API proves the type from the content (PNG, JPEG, WebP or PDF) and its " +
+        "size; a refused file is a `field` error and nothing is stored. Attach the returned ID " +
+        "with `save` (for example `photoId` or `cvPdfId` of the person) only after a successful " +
+        "upload; a failed upload leaves the current reference as it is. `uncertain` means the " +
+        "outcome is unknown: read the recent changes before trying again.",
+      inputSchema: z.strictObject({
+        fileName: z
+          .string()
+          .describe("A plain file name whose extension matches the file, such as `portrait.png`."),
+        contentBase64: z.string().describe("The file's bytes, base64-encoded with padding."),
+        altText: z
+          .string()
+          .optional()
+          .describe("A description of an image for people who cannot see it."),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ fileName, contentBase64, altText }) => {
+      if (contentBase64.length === 0 || !BASE64.test(contentBase64)) {
+        return result({
+          ok: false,
+          error: {
+            code: "field",
+            message: "The file content is not base64; nothing was sent.",
+            fields: [
+              {
+                path: "contentBase64",
+                message: "The file's own bytes in padded base64; never a path or an address.",
+              },
+            ],
+          },
+        });
+      }
+      const bytes = Buffer.from(contentBase64, "base64");
+      return result(await content.upload({ fileName, bytes, altText }));
+    },
   );
 
   server.registerTool(

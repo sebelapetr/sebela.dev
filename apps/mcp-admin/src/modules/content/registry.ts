@@ -166,7 +166,7 @@ const projectOfCaseStudy: RecordId = {
 const media = (field: string, what: string): Relationship => ({
   field,
   target: "media",
-  rule: `The UUID of existing media to use as ${what}, or null to remove it. Uploading files is not part of this server.`,
+  rule: `The UUID of existing media to use as ${what}, or null to remove it. A new file is uploaded first with the \`upload\` tool; use only the media ID a successful upload returned.`,
 });
 const slugsOf = (field: string, target: Entity): Relationship => ({
   field,
@@ -217,7 +217,11 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     create: { route: "/v1/person", schema: PersonCreateSchema, idFrom: "none" },
     update: { route: "/v1/person", schema: PersonUpdateSchema },
     relationships: [media("photoId", "the profile photo"), media("cvPdfId", "the CV PDF")],
-    notes: ["The CV is a manually prepared PDF; it is never generated."],
+    notes: [
+      "The CV is a manually prepared PDF the owner supplies; it is never generated. A new CV PDF " +
+        "is uploaded with the `upload` tool and attached as `cvPdfId`; a failed upload leaves the " +
+        "current CV attached.",
+    ],
   },
   collection(
     "technology",
@@ -514,7 +518,10 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     update: { route: "/v1/media/{id}", schema: MediaUpdateSchema },
     delete: "/v1/media/{id}",
     relationships: [],
-    notes: ["Uploading files is not part of this server; only the metadata of existing media."],
+    notes: [
+      "A file is added only with the `upload` tool, from the bytes the caller passes; this entity " +
+        "changes the metadata of existing media.",
+    ],
   },
 ];
 
