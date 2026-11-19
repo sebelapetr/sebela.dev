@@ -107,8 +107,9 @@ function breadcrumbs(page: Page) {
   return page.getByRole("navigation", { name: "Breadcrumb" });
 }
 
+// The page's robots tag; roadmap pages are indexed, so it is absent.
 function robots(page: Page) {
-  return page.locator('meta[name="robots"]').getAttribute("content");
+  return page.locator('meta[name="robots"]');
 }
 
 test.describe.configure({ mode: "serial" });
@@ -165,13 +166,13 @@ test.describe("the roadmap overview", () => {
     return response.status;
   }
 
-  test("shows the counts, the planned hours and the way in, kept out of search results", async ({
+  test("shows the counts, the planned hours and the way in, open to search engines", async ({
     page,
   }) => {
     const response = await page.goto(`${website.url}/ai-roadmap`);
     expect(response?.status()).toBe(200);
     await expect(page).toHaveTitle(`AI Engineering Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
     // 90 + 30 + 600 planned minutes are 12 hours; resources without an estimate add nothing.
     await expect(page.locator("main header p").first()).toContainText(
@@ -359,7 +360,7 @@ test.describe("the roadmap overview", () => {
 
     await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
     await expect(page).toHaveTitle(`Orbit foundations — AI Engineering Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orbit foundations");
     await expect(breadcrumbs(page).getByRole("link")).toHaveText(["AI Engineering Roadmap"]);
     await expect(breadcrumbs(page).locator('[aria-current="page"]')).toHaveText(

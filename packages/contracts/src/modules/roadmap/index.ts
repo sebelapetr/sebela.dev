@@ -457,3 +457,31 @@ export type {
   LearningTimeWeek,
   RoadmapStatistics,
 } from "./statistics.js";
+export {
+  RoadmapFollowedSourceCreateSchema,
+  RoadmapFollowedSourceListSchema,
+  RoadmapFollowedSourceSchema,
+  RoadmapFollowedSourceUpdateSchema,
+  RoadmapGlossaryTermCreateSchema,
+  RoadmapGlossaryTermListSchema,
+  RoadmapGlossaryTermSchema,
+  RoadmapGlossaryTermUpdateSchema,
+  RoadmapProjectIdeaCreateSchema,
+  RoadmapProjectIdeaListSchema,
+  RoadmapProjectIdeaSchema,
+  RoadmapProjectIdeaUpdateSchema,
+} from "./supporting.js";
+export type {
+  RoadmapFollowedSource,
+  RoadmapFollowedSourceCreate,
+  RoadmapFollowedSourceList,
+  RoadmapFollowedSourceUpdate,
+  RoadmapGlossaryTerm,
+  RoadmapGlossaryTermCreate,
+  RoadmapGlossaryTermList,
+  RoadmapGlossaryTermUpdate,
+  RoadmapProjectIdea,
+  RoadmapProjectIdeaCreate,
+  RoadmapProjectIdeaList,
+  RoadmapProjectIdeaUpdate,
+} from "./supporting.js";

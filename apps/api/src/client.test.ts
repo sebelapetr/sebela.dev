@@ -23,6 +23,12 @@ import {
   type RoadmapEvent,
   type RoadmapEventKind,
   type RoadmapEventList,
+  type RoadmapFollowedSource,
+  type RoadmapFollowedSourceList,
+  type RoadmapGlossaryTerm,
+  type RoadmapGlossaryTermList,
+  type RoadmapProjectIdea,
+  type RoadmapProjectIdeaList,
   type RoadmapModuleDetail,
   type RoadmapStatistics,
   type TimeEntryWrite,
@@ -1612,6 +1618,88 @@ describe("the generated API client", () => {
     ).toBe(204);
     const missing = await visitor.GET("/v1/roadmap/events/{slug}", at("calendar-summit"));
     expect(missing.error?.error.code).toBe("not_found");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+
+  it("keeps the supporting content: public ordered reads, keyed writes and their refusals", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await backend.services.profile.createTopic({
+      slug: "client-agents",
+      name: "Agents",
+      position: 0,
+    });
+
+    const idea = await client.POST("/v1/roadmap/project-ideas", {
+      body: {
+        slug: "client-idea",
+        title: "A fictional idea",
+        whyItMatters: "It practises **retrieval**.",
+        topics: ["client-agents"],
+        position: 0,
+      },
+    });
+    expect(idea.response.status).toBe(201);
+    expect(idea.response.headers.get("location")).toBe("/v1/roadmap/project-ideas/client-idea");
+    const created: RoadmapProjectIdea | undefined = idea.data;
+    expect(created).toMatchObject({ howToStart: null, topics: [{ slug: "client-agents" }] });
+    const unknown = await client.POST("/v1/roadmap/project-ideas", {
+      body: {
+        slug: "client-other",
+        title: "Other",
+        whyItMatters: "Why.",
+        topics: ["nope"],
+        position: 1,
+      },
+    });
+    expect(unknown.error?.error.fields?.map(({ path }) => path)).toContain("topics");
+    const ideas: RoadmapProjectIdeaList | undefined = (
+      await visitor.GET("/v1/roadmap/project-ideas")
+    ).data;
+    expect(ideas?.map(({ slug }) => slug)).toEqual(["client-idea"]);
+
+    const source = await client.POST("/v1/roadmap/followed-sources", {
+      body: { slug: "client-weekly", title: "Example Weekly", kind: "newsletter", position: 0 },
+    });
+    const followed: RoadmapFollowedSource | undefined = source.data;
+    expect(followed).toMatchObject({ link: null, description: null });
+    const relinked = await client.PATCH("/v1/roadmap/followed-sources/{slug}", {
+      ...at("client-weekly"),
+      body: { link: "https://example.com/weekly" },
+    });
+    expect(relinked.data?.link).toBe("https://example.com/weekly");
+    const sources: RoadmapFollowedSourceList | undefined = (
+      await visitor.GET("/v1/roadmap/followed-sources")
+    ).data;
+    expect(sources?.map(({ slug }) => slug)).toEqual(["client-weekly"]);
+
+    const term = await client.POST("/v1/roadmap/glossary-terms", {
+      body: { slug: "client-term", term: "Context window", description: "Text.", position: 0 },
+    });
+    const explained: RoadmapGlossaryTerm | undefined = term.data;
+    expect(explained?.term).toBe("Context window");
+    const taken = await client.POST("/v1/roadmap/glossary-terms", {
+      body: { slug: "client-term", term: "Again", description: "Text.", position: 1 },
+    });
+    expect(taken.error?.error.code).toBe("conflict");
+    const terms: RoadmapGlossaryTermList | undefined = (
+      await visitor.GET("/v1/roadmap/glossary-terms")
+    ).data;
+    expect(terms?.map(({ slug }) => slug)).toEqual(["client-term"]);
+
+    const anonymous = await visitor.DELETE("/v1/roadmap/glossary-terms/{slug}", at("client-term"));
+    expect(anonymous.response.status).toBe(401);
+    for (const [path, slug] of [
+      ["/v1/roadmap/project-ideas/{slug}", "client-idea"],
+      ["/v1/roadmap/followed-sources/{slug}", "client-weekly"],
+      ["/v1/roadmap/glossary-terms/{slug}", "client-term"],
+    ] as const) {
+      expect((await client.DELETE(path, at(slug))).response.status, path).toBe(204);
+      expect((await visitor.GET(path, at(slug))).error?.error.code, path).toBe("not_found");
+    }
+    await backend.services.profile.deleteTopic("client-agents");
 
     expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
   });

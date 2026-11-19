@@ -23,6 +23,7 @@ import { bookRoutes } from "./books.js";
 import { diaryRoutes } from "./diary.js";
 import { eventRoutes } from "./events.js";
 import { statisticsRoutes } from "./statistics.js";
+import { supportingRoutes } from "./supporting.js";
 
 const TREE = "/v1/roadmap";
 const AREA_DETAIL = "/v1/roadmap/tree/:area";
@@ -51,7 +52,9 @@ const RESOURCE = "/v1/roadmap/resources/:slug";
  * an `event` target, a date edit that would strand it or deleting an event with it is a
  * `conflict`, and an event shows on every diary day of its range without adding time. The
  * learning statistics add one public read of the logged time by category, Prague period, area,
- * module, resource and event.
+ * module, resource and event. The supporting content adds public reads of the project ideas,
+ * followed sources and glossary terms, each ordered by position and then slug, and authenticated
+ * writes; a project idea's unknown or repeated topic is `validation_failed` on `topics`.
  */
 export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
   return [
@@ -327,5 +330,6 @@ export function roadmapRoutes(roadmap: RoadmapService): RouteDefinition[] {
     ...bookRoutes(roadmap),
     ...eventRoutes(roadmap),
     ...statisticsRoutes(roadmap),
+    ...supportingRoutes(roadmap),
   ];
 }

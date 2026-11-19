@@ -676,6 +676,29 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
+  it("names the supporting record each project idea, followed source and term write changed", async () => {
+    const writes = [
+      ["project-ideas", { slug: "fictional-idea", title: "Idea", whyItMatters: "Why." }],
+      ["followed-sources", { slug: "example-weekly", title: "Weekly", kind: "newsletter" }],
+      ["glossary-terms", { slug: "context-window", term: "Context", description: "Text." }],
+    ] as const;
+    for (const [kind, body] of writes) {
+      const path = `/v1/roadmap/${kind}`;
+      expect((await send(path, "POST", json({ ...body, position: 0 }, auth))).status).toBe(201);
+      const item = `${path}/${body.slug}`;
+      expect((await send(item, "PATCH", json({ position: 1 }, auth))).status).toBe(200);
+      expect((await send(item, "DELETE", { headers: auth })).status).toBe(204);
+    }
+
+    const change = (domain: string, record: string) =>
+      (["created", "updated", "deleted"] as const).map((action) => [{ domain, record, action }]);
+    expect(await delivered()).toEqual([
+      ...change("roadmap-project-idea", "fictional-idea"),
+      ...change("roadmap-followed-source", "example-weekly"),
+      ...change("roadmap-glossary-term", "context-window"),
+    ]);
+  });
+
   it("sends nothing for a refused, invalid, conflicting or failed write, or a read", async () => {
     await send("/v1/technologies", "POST", json(technology, auth));
     await invalidation.idle();

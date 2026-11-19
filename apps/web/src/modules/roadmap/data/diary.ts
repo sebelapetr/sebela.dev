@@ -1,6 +1,6 @@
 import type { Diary, DiaryDay, DiaryEvent, TimeEntry } from "@sebela/api-client";
 
-import { bookshelfHref, roadmapHref } from "../../_shared";
+import { bookshelfHref, diaryHref, roadmapHref, roadmapRoutes } from "../../_shared";
 import type { RoadmapDiaryAreaName, RoadmapDiaryBookLink } from "../../profile";
 import type { RoadmapCrumb } from "./detail";
 import { eventDayOf, eventKindLabel, formatEventPeriod } from "./event-format";
@@ -105,14 +105,14 @@ export interface DiaryDayPage {
 }
 
 /** The learning diary's own address. */
-export const DIARY_PATH = `${ROADMAP_PATH}/diary`;
+export const DIARY_PATH = roadmapRoutes.diary;
 
 /** The diary's name, as its pages and titles name it. */
 export const DIARY_NAME = "Learning Diary";
 
 /** The address of a diary day's page; the date stays inside its own path segment. */
 export function diaryDayHref(date: string): string {
-  return `${DIARY_PATH}/${encodeURIComponent(date)}`;
+  return diaryHref(date);
 }
 
 const DIARY_DATE = new Intl.DateTimeFormat("en-US", {

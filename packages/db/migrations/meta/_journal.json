@@ -134,6 +134,13 @@
       "when": 1795042123678,
       "tag": "0018_events",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795055081086,
+      "tag": "0019_supporting-content",
+      "breakpoints": true
     }
   ]
 }

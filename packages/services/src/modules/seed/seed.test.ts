@@ -280,6 +280,9 @@ const kinds: SeedKind[] = [
   "roadmapEvents",
   "roadmapDiary",
   "roadmapTimeEntries",
+  "roadmapProjectIdeas",
+  "roadmapFollowedSources",
+  "roadmapGlossaryTerms",
 ];
 
 const fixtureCounts: Record<SeedKind, number> = {
@@ -302,6 +305,9 @@ const fixtureCounts: Record<SeedKind, number> = {
   roadmapEvents: 0,
   roadmapDiary: 2,
   roadmapTimeEntries: 2,
+  roadmapProjectIdeas: 0,
+  roadmapFollowedSources: 0,
+  roadmapGlossaryTerms: 0,
 };
 
 const allCreated = Object.fromEntries(
@@ -396,6 +402,9 @@ describe("seed service", () => {
     diary: (await roadmap.getDiary()).days,
     books: await roadmap.listBooks(),
     events: await roadmap.listEvents(),
+    projectIdeas: await roadmap.listProjectIdeas(),
+    followedSources: await roadmap.listFollowedSources(),
+    glossaryTerms: await roadmap.listGlossaryTerms(),
     media: await media().listMedia(),
   });
 
@@ -1202,6 +1211,155 @@ describe("seed service", () => {
 
       await expect(
         seed().loadSeedIntoEmpty(await writeSeed(folder, withEvents())),
+      ).resolves.toBeNull();
+
+      expect(await snapshot()).toEqual(before);
+    });
+  });
+
+  describe("the supporting content", () => {
+    /** The fixture with fictional project ideas, followed sources and glossary terms. */
+    const withSupporting = (): SeedFiles => {
+      const files = fixture();
+      files["roadmap-project-ideas.json"] = [
+        {
+          slug: "harbour-assistant",
+          title: "A fictional harbour assistant",
+          whyItMatters: "It practises **retrieval** on a small corpus.",
+          howToStart: "Index three fictional timetables.",
+          topics: ["rag", "agents"],
+          position: 1,
+        },
+        {
+          slug: "tiny-eval-suite",
+          title: "A tiny fictional eval suite",
+          whyItMatters: "Measuring beats guessing.",
+          position: 0,
+        },
+      ];
+      files["roadmap-followed-sources.json"] = [
+        {
+          slug: "harbour-weekly",
+          title: "Fictional Harbour Weekly",
+          description: "A *fictional* newsletter.",
+          link: "https://weekly.example.test/",
+          kind: "newsletter",
+          position: 0,
+        },
+        { slug: "quay-podcast", title: "Fictional Quay Podcast", kind: "podcast", position: 1 },
+      ];
+      files["roadmap-glossary-terms.json"] = [
+        {
+          slug: "context-window",
+          term: "Context window",
+          description: "How much text a model reads at once.",
+          position: 0,
+        },
+      ];
+      return files;
+    };
+
+    it("creates the ideas with their topics, the sources and the terms in order", async () => {
+      await expect(load(withSupporting())).resolves.toMatchObject({
+        records: {
+          roadmapProjectIdeas: { created: 2, updated: 0 },
+          roadmapFollowedSources: { created: 2, updated: 0 },
+          roadmapGlossaryTerms: { created: 1, updated: 0 },
+        },
+      });
+
+      const ideas = await roadmap.listProjectIdeas();
+      expect(ideas.map(({ slug }) => slug)).toEqual(["tiny-eval-suite", "harbour-assistant"]);
+      expect(ideas[0]).toMatchObject({ howToStart: null, topics: [] });
+      expect(ideas[1]?.topics.map(({ slug }) => slug)).toEqual(["rag", "agents"]);
+      const sources = await roadmap.listFollowedSources();
+      expect(sources.map(({ slug }) => slug)).toEqual(["harbour-weekly", "quay-podcast"]);
+      expect(sources[1]).toMatchObject({ description: null, link: null, kind: "podcast" });
+      expect((await roadmap.listGlossaryTerms()).map(({ slug }) => slug)).toEqual([
+        "context-window",
+      ]);
+    });
+
+    it("keeps every idea, topic link, source and term of an identical rerun", async () => {
+      await load(withSupporting());
+      const before = await snapshot();
+
+      await expect(load(withSupporting())).resolves.toMatchObject({
+        records: {
+          roadmapProjectIdeas: { created: 0, updated: 2 },
+          roadmapFollowedSources: { created: 0, updated: 2 },
+          roadmapGlossaryTerms: { created: 0, updated: 1 },
+        },
+      });
+
+      expect(withoutUpdatedAt(await snapshot())).toEqual(withoutUpdatedAt(before));
+    });
+
+    it("overwrites edited supporting records with the seed's values", async () => {
+      await load(withSupporting());
+      await roadmap.updateProjectIdea("harbour-assistant", { title: "Edited", topics: [] });
+      await roadmap.updateFollowedSource("quay-podcast", { link: "https://edited.example.test/" });
+      await roadmap.updateGlossaryTerm("context-window", { term: "Edited" });
+
+      await load(withSupporting());
+
+      await expect(roadmap.getProjectIdea("harbour-assistant")).resolves.toMatchObject({
+        title: "A fictional harbour assistant",
+        topics: [{ slug: "rag" }, { slug: "agents" }],
+      });
+      await expect(roadmap.getFollowedSource("quay-podcast")).resolves.toMatchObject({
+        link: null,
+      });
+      await expect(roadmap.getGlossaryTerm("context-window")).resolves.toMatchObject({
+        term: "Context window",
+      });
+    });
+
+    it("rejects a topic that neither the seed nor the database has and an invalid record", async () => {
+      const files = withSupporting();
+      const [assistant, suite] = files["roadmap-project-ideas.json"] as Record<string, unknown>[];
+      files["roadmap-project-ideas.json"] = [
+        assistant,
+        { ...suite, topics: ["agents", "ghost-topic"] },
+      ];
+      files["roadmap-followed-sources.json"] = [
+        {
+          slug: "bad-link",
+          title: "Fictional",
+          kind: "blog",
+          link: "ftp://x.example.test/",
+          position: 0,
+        },
+      ];
+
+      const error = await refusal(load(files));
+
+      expect(error.code).toBe("validation_failed");
+      expect(error.fields?.map(({ path }) => path)).toEqual([
+        "roadmap-followed-sources.json[0].link",
+      ]);
+      files["roadmap-followed-sources.json"] = [];
+
+      const reference = await refusal(load(files));
+
+      expect(reference.fields?.map(({ path }) => path)).toEqual([
+        "roadmap-project-ideas.json[1].topics[1]",
+      ]);
+      await expectEmpty();
+    });
+
+    it("treats a roadmap with only a glossary term as not empty", async () => {
+      await roadmap.createGlossaryTerm({
+        slug: "hand-noted",
+        term: "Hand-noted",
+        description: "A fictional term.",
+        position: 0,
+      });
+      const before = await snapshot();
+      const folder = await mkdtemp(join(seedFolder, "empty-supporting-"));
+
+      await expect(
+        seed().loadSeedIntoEmpty(await writeSeed(folder, withSupporting())),
       ).resolves.toBeNull();
 
       expect(await snapshot()).toEqual(before);

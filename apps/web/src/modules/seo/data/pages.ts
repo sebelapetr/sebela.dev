@@ -1,8 +1,9 @@
-// The pages search engines may index, with their addresses and their names in titles and on their
-// preview images.
+// The site's main pages search engines may index, with their addresses and their names in titles
+// and on their preview images. The AI Roadmap's pages are indexed too, from their own reads
+// (`roadmap-discovery.ts`, `roadmap-page.ts`).
 import { routes } from "../../_shared";
 
-/** The pages search engines may index; every other page says `noindex` itself. */
+/** The site's main pages, each with its preview image at `/og/<page>`. */
 export type IndexedPage = "home" | "experience" | "services" | "cv";
 
 export const PAGES: Readonly<

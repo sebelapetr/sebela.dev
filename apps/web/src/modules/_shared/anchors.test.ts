@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { anchorHref, anchorId, bookshelfHref, roadmapHref } from "./anchors";
+import { anchorHref, anchorId, bookshelfHref, diaryHref, roadmapHref } from "./anchors";
 
 describe("anchorId", () => {
   it("names each kind of item by its stable slug", () => {
@@ -114,5 +114,16 @@ describe("roadmap addresses", () => {
   it("never lets a book's slug leave the bookshelf", () => {
     expect(bookshelfHref("../cv")).toBe("/ai-roadmap/bookshelf/..%2Fcv");
     expect(bookshelfHref("a?b#c")).toBe("/ai-roadmap/bookshelf/a%3Fb%23c");
+  });
+});
+
+describe("diaryHref", () => {
+  it("addresses the learning diary and a day on it", () => {
+    expect(diaryHref()).toBe("/ai-roadmap/diary");
+    expect(diaryHref("2026-03-02")).toBe("/ai-roadmap/diary/2026-03-02");
+  });
+
+  it("never lets a date leave the diary", () => {
+    expect(diaryHref("../cv")).toBe("/ai-roadmap/diary/..%2Fcv");
   });
 });

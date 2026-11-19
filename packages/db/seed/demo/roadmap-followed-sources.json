@@ -1,0 +1,34 @@
+[
+  {
+    "slug": "example-ai-weekly",
+    "title": "Example AI Weekly",
+    "description": "A *fictional* weekly newsletter with one paper, one tool and one practical write-up.",
+    "link": "https://example.com/ai-weekly",
+    "kind": "newsletter",
+    "position": 0
+  },
+  {
+    "slug": "fictional-evals-podcast",
+    "title": "The Fictional Evals Podcast",
+    "description": "Conversations about measuring language-model systems in production.",
+    "link": "https://example.com/evals-podcast",
+    "kind": "podcast",
+    "position": 1
+  },
+  {
+    "slug": "northgate-engineering-blog",
+    "title": "Northgate Engineering Blog",
+    "description": null,
+    "link": "https://example.com/northgate-blog",
+    "kind": "blog",
+    "position": 2
+  },
+  {
+    "slug": "local-study-group",
+    "title": "A local study group",
+    "description": "A fictional monthly meeting without a website.",
+    "link": null,
+    "kind": "community",
+    "position": 3
+  }
+]

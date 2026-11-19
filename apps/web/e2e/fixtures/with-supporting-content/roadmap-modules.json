@@ -1,0 +1,23 @@
+[
+  {
+    "slug": "signal-basics",
+    "area": "orbit-foundations",
+    "name": "Signal basics",
+    "description": null,
+    "position": 0
+  },
+  {
+    "slug": "signal-tuning",
+    "area": "orbit-foundations",
+    "name": "Signal tuning",
+    "description": null,
+    "position": 1
+  },
+  {
+    "slug": "calm-queues",
+    "area": "queue-craft",
+    "name": "Calm queues",
+    "description": null,
+    "position": 0
+  }
+]

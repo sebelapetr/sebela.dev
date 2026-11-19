@@ -13,6 +13,7 @@ import { bookId, createBookPersistence, linkedBookSlug } from "./books.js";
 import { breaksCheck, breaksUnique, isStillReferenced } from "./database-errors.js";
 import { createDiaryPersistence } from "./diary.js";
 import { createEventPersistence } from "./events.js";
+import { createSupportingPersistence } from "./supporting.js";
 import {
   areas,
   BOOK_LINK_TYPE_CHECK,
@@ -401,5 +402,7 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
     deleteRoadmapEvent(slug) {
       return deleteBySlug(db, events, slug);
     },
+
+    ...createSupportingPersistence(db),
   };
 }

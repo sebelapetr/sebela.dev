@@ -1,0 +1,18 @@
+[
+  {
+    "slug": "orbit-question-desk",
+    "title": "A question desk over fictional orbit notes",
+    "whyItMatters": "Retrieval over notes you know teaches **grounding**, and a [trap link](javascript:window.__supportInjected=true) stays text. <script>window.__supportInjected = true</script><img src=x onerror=\"window.__supportInjected = true\">",
+    "howToStart": "1. Collect a few *fictional* notes.\n2. Index them with keyword search first.",
+    "topics": ["retrieval", "evaluation"],
+    "position": 0
+  },
+  {
+    "slug": "calm-queue-agent",
+    "title": "A calm queue agent with one tool",
+    "whyItMatters": "One tool is enough to practise validating arguments.",
+    "howToStart": null,
+    "topics": [],
+    "position": 1
+  }
+]

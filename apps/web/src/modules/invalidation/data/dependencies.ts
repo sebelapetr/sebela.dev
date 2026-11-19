@@ -47,6 +47,12 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   // the same cache, so invalidating it as a whole refreshes the old and the new days of a moved
   // event; attendance on it is a `roadmap-diary` change naming its days.
   "roadmap-event": ["profile"],
+  // A project idea, followed source or glossary term change names the record. The roadmap overview
+  // shows them as its supporting sections and reads through the same cache, so a change or
+  // deletion refreshes the overview with the rest of the profile.
+  "roadmap-project-idea": ["profile"],
+  "roadmap-followed-source": ["profile"],
+  "roadmap-glossary-term": ["profile"],
 };
 
 /**

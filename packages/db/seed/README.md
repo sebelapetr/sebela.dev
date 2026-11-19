@@ -27,26 +27,29 @@ the clock, one hour of elapsed time).
 Every data file is optional; an absent file leaves its kind of record untouched. Any other `.json`
 file in the folder is refused, so a misspelt name does not silently load nothing.
 
-| File                        | Holds                                                                | Identity                                          |
-| --------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
-| `person.json`               | one object: the person                                               | the single person                                 |
-| `technologies.json`         | an array of technologies                                             | `slug`                                            |
-| `topics.json`               | an array of topics                                                   | `slug`                                            |
-| `organizations.json`        | an array of organizations                                            | `slug`                                            |
-| `experiences.json`          | an array of experiences                                              | `slug`                                            |
-| `projects.json`             | an array of projects, each with an optional `caseStudy`              | `slug`; the case study by its project             |
-| `explorations.json`         | an array of explorations                                             | `slug`                                            |
-| `services.json`             | an array of services with their evidence                             | `slug`                                            |
-| `education.json`            | an array of education records                                        | `slug`                                            |
-| `testimonials.json`         | an array of testimonials                                             | `slug`                                            |
-| `current-focus.json`        | an array of current-focus entries                                    | `slug`                                            |
-| `roadmap-areas.json`        | an array of roadmap areas                                            | `slug`                                            |
-| `roadmap-modules.json`      | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules                 |
-| `roadmap-books.json`        | an array of bookshelf books, each with an optional `cover`           | `slug`                                            |
-| `roadmap-resources.json`    | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources               |
-| `roadmap-events.json`       | an array of attended events, each naming its `topics`                | `slug`                                            |
-| `roadmap-diary.json`        | an array of learning diary days, each `{ "date", "notes" }`          | `date`                                            |
-| `roadmap-time-entries.json` | an array of sessions, each naming its `resource` or its `event`      | the target, `startedAt` and `endedAt` as instants |
+| File                            | Holds                                                                | Identity                                          |
+| ------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
+| `person.json`                   | one object: the person                                               | the single person                                 |
+| `technologies.json`             | an array of technologies                                             | `slug`                                            |
+| `topics.json`                   | an array of topics                                                   | `slug`                                            |
+| `organizations.json`            | an array of organizations                                            | `slug`                                            |
+| `experiences.json`              | an array of experiences                                              | `slug`                                            |
+| `projects.json`                 | an array of projects, each with an optional `caseStudy`              | `slug`; the case study by its project             |
+| `explorations.json`             | an array of explorations                                             | `slug`                                            |
+| `services.json`                 | an array of services with their evidence                             | `slug`                                            |
+| `education.json`                | an array of education records                                        | `slug`                                            |
+| `testimonials.json`             | an array of testimonials                                             | `slug`                                            |
+| `current-focus.json`            | an array of current-focus entries                                    | `slug`                                            |
+| `roadmap-areas.json`            | an array of roadmap areas                                            | `slug`                                            |
+| `roadmap-modules.json`          | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules                 |
+| `roadmap-books.json`            | an array of bookshelf books, each with an optional `cover`           | `slug`                                            |
+| `roadmap-resources.json`        | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources               |
+| `roadmap-events.json`           | an array of attended events, each naming its `topics`                | `slug`                                            |
+| `roadmap-diary.json`            | an array of learning diary days, each `{ "date", "notes" }`          | `date`                                            |
+| `roadmap-time-entries.json`     | an array of sessions, each naming its `resource` or its `event`      | the target, `startedAt` and `endedAt` as instants |
+| `roadmap-project-ideas.json`    | an array of project ideas, each naming its `topics`                  | `slug`                                            |
+| `roadmap-followed-sources.json` | an array of followed sources                                         | `slug`                                            |
+| `roadmap-glossary-terms.json`   | an array of additional glossary terms                                | `slug`                                            |
 
 Each record has exactly the fields of the API's create request for its kind (the Zod schemas in
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
@@ -101,6 +104,17 @@ A slug is unique within its file.
   `2025-02-12T22:30:00+01:00` and `2025-02-12T21:30:00Z` are the same instant. The same session is
   listed once per file. Sessions may not overlap each other or time already logged, whatever the
   resource or event; adjacent sessions are allowed.
+
+### Supporting content
+
+- **A project idea** has the fields of the API's project idea create request: `slug`, `title`,
+  Markdown `whyItMatters`, the optional Markdown `howToStart`, `topics` (existing topic slugs, each
+  once, in display order) and `position`.
+- **A followed source** has `slug`, `title`, `kind` (free text such as `newsletter` or `podcast`),
+  `position` and the optional Markdown `description` and safe `link`.
+- **A glossary term** has `slug`, `term`, Markdown `description` and `position`.
+- They load after events and before the diary, are matched by slug on a rerun (topic links
+  replaced) and are never referenced by other records.
 
 ## Attached files
 
@@ -171,6 +185,51 @@ A slug is unique within its file.
 - A failure during the load itself (for example a constraint the database refuses) rolls back every
   record written by this load and removes the files it stored. A file that cannot be removed is
   reported on the error output by its storage key.
+
+## Launch import
+
+The owner's existing roadmap data is imported once, at launch, through this same seed format. There
+is no import service, synchronization or reconciliation in the repository.
+
+- **Interface.** An external mapper, kept outside the repository with the owner's data and reports,
+  converts the old application's export into a seed folder as described above. The owner loads it
+  once with `pnpm --silent --filter @sebela/api seed <folder>` into a fresh or disposable migrated
+  database first, checks it, then into the target database. The loader's checks, refusals and
+  rerun rules apply unchanged; a refused folder writes nothing.
+- **Out of scope.** Ongoing synchronization, conflict or deletion reconciliation, a migration
+  service and the old application's cached totals. A session removed from the folder after a load
+  is not deleted (see "Loading and reruns").
+
+### Acceptance checklist
+
+Compare the source report with the public API reads of the loaded database:
+
+1. **Counts per kind**: areas, modules, resources, books, events, diary days with notes, project
+   ideas, followed sources and glossary terms equal the source (`GET /v1/roadmap`,
+   `/v1/roadmap/books`, `/v1/roadmap/events`, `/v1/roadmap/diary` and the supporting lists). The
+   command's output gives the created and updated count of every kind.
+2. **Relationships**: every resource sits in its source module and area, every book is linked from
+   its source resource (`resource` on the book), and resources, events and project ideas carry their
+   source topics.
+3. **Elapsed totals**: the sum of the source sessions' elapsed seconds (end minus start as
+   instants) equals `totals.totalSeconds` of `GET /v1/roadmap/statistics`, split into
+   `resourceSeconds`, `bookSeconds` (sessions on resources of type `book`) and `eventSeconds`. Each
+   book's `readingSeconds` and each event's `attendanceSeconds` equal its sessions. The old
+   application's stored totals are not authoritative; recompute from sessions.
+4. **Midnight splits**: the number of time entries in the diary equals the number of source
+   sessions plus one for every Prague midnight a session crosses, and their durations still sum to
+   the source total. The command counts sessions, not entries.
+5. **Prague regrouping**: diary days and statistics days are Europe/Prague dates. A session can
+   move to another date than the one the source shows in UTC, and a daylight-saving night lasts 23
+   or 25 hours, so compare daily totals after converting the source to Prague dates.
+   `totals.activeDays` is the number of Prague days with time.
+6. **Rerun**: loading the same folder again reports 0 created for every kind and leaves every count,
+   relationship and total above unchanged.
+
+The CLI test `apps/api/src/cli/seed.test.ts` ("as the launch import's acceptance check") runs this
+checklist against a small fictional source with a midnight split, a UTC/Prague date difference and
+the spring daylight-saving night. The owner's data, the mapper, real reports and the actual import
+stay outside the repository.
 
 ## Private seed
 

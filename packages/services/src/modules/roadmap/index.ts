@@ -43,13 +43,15 @@ import { createLearningDiary, type LearningDiary } from "./diary.js";
 import { createEventCalendar, type EventCalendar } from "./events.js";
 import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 import { createLearningStatistics, type LearningStatistics } from "./statistics.js";
+import { createSupportingContent, type SupportingContent } from "./supporting.js";
 
 /**
  * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
  * time spent on those resources (see `LearningDiary`), and the bookshelf of books that resources of
  * type `book` read (see `Bookshelf`), and the attended events, which are not resources and show
  * on their diary days without adding time (see `EventCalendar`), and the learning statistics
- * over the logged time (see `LearningStatistics`). Reads return contract
+ * over the logged time (see `LearningStatistics`), and the supporting content beside the roadmap:
+ * project ideas, followed sources and glossary terms (see `SupportingContent`). Reads return contract
  * records; the whole tree carries progress derived on every read and is never stored. Expected
  * refusals are `DomainError`s: `not_found` for a missing slug, `conflict` for a taken slug or a
  * record that still has children or links, and `validation_failed` naming the offending field for
@@ -57,7 +59,7 @@ import { createLearningStatistics, type LearningStatistics } from "./statistics.
  * an unusable book link (an unknown book, one another resource links, or a type other than `book`).
  */
 export interface RoadmapService
-  extends LearningDiary, Bookshelf, EventCalendar, LearningStatistics {
+  extends LearningDiary, Bookshelf, EventCalendar, LearningStatistics, SupportingContent {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
   /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
@@ -92,6 +94,7 @@ export type { Bookshelf } from "./books.js";
 export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
 export type { EventCalendar } from "./events.js";
 export type { LearningStatistics } from "./statistics.js";
+export type { SupportingContent } from "./supporting.js";
 
 export interface RoadmapServiceOptions {
   /**
@@ -399,5 +402,6 @@ export function createRoadmapService(
     ...createBookshelf(persistence, options.mediaAddress ?? (() => null)),
     ...createEventCalendar(persistence),
     ...createLearningStatistics(persistence),
+    ...createSupportingContent(persistence),
   };
 }

@@ -22,6 +22,7 @@ export type Fixture =
   | "with-roadmap"
   | "with-sparse-content"
   | "with-statistics"
+  | "with-supporting-content"
   | "with-unsafe-text"
   | "without-photo"
   | "without-profile";

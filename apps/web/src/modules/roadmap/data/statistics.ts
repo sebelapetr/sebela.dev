@@ -8,7 +8,7 @@ import type {
   RoadmapStatistics,
 } from "@sebela/api-client";
 
-import { anchorHref, bookshelfHref, roadmapHref } from "../../_shared";
+import { anchorHref, bookshelfHref, roadmapHref, roadmapRoutes } from "../../_shared";
 import type { RoadmapCrumb } from "./detail";
 import { DIARY_NAME, DIARY_PATH, diaryDayHref, formatDiaryDate, formatStudyTime } from "./diary";
 import { eventKindLabel, formatEventPeriod } from "./event-format";
@@ -112,7 +112,7 @@ export interface StatisticsPage {
 export const STATISTICS_NAME = "Learning Statistics";
 
 /** The statistics page's own address. */
-export const STATISTICS_PATH = `${DIARY_PATH}/stats`;
+export const STATISTICS_PATH = roadmapRoutes.statistics;
 
 /** How many of the most recent days and weeks the page lists; every month is listed. */
 const RECENT_DAYS = 10;

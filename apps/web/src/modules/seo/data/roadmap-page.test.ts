@@ -88,8 +88,8 @@ describe("roadmapPageMetadata", () => {
     );
   });
 
-  it("keeps the page out of search results until the roadmap is indexed as a whole", () => {
-    expect(roadmapPageMetadata(ORIGIN, AREA).robots).toEqual({ index: false });
+  it("lets search engines index the page", () => {
+    expect(roadmapPageMetadata(ORIGIN, AREA).robots).toBeUndefined();
   });
 });
 
@@ -357,7 +357,7 @@ describe("the bookshelf's and a book's metadata", () => {
     ).toBe("The Quiet Orbit. Notes only.");
   });
 
-  it("gives a book its canonical address and its own preview image, out of search results", () => {
+  it("gives a book its canonical address and its own preview image, open to search", () => {
     const metadata = roadmapPageMetadata(ORIGIN, BOOK);
     expect(metadata.alternates?.canonical).toBe(
       "https://site.example.test/ai-roadmap/bookshelf/quiet-orbit",
@@ -365,7 +365,7 @@ describe("the bookshelf's and a book's metadata", () => {
     expect(roadmapOpenGraphImageUrl(ORIGIN, BOOK)).toBe(
       "https://site.example.test/og/ai-roadmap/bookshelf/quiet-orbit",
     );
-    expect(metadata.robots).toEqual({ index: false });
+    expect(metadata.robots).toBeUndefined();
   });
 });
 
@@ -462,5 +462,338 @@ describe("the bookshelf's and a book's structured data", () => {
     expect((JSON.parse(json) as { "@graph": object[] })["@graph"]).toContainEqual(
       expect.objectContaining({ "@type": "Book", name: title }),
     );
+  });
+});
+
+const OVERVIEW_CRUMB = { name: "AI Engineering Roadmap", href: "/ai-roadmap" };
+const DIARY_CRUMB = { name: "Learning Diary", href: "/ai-roadmap/diary" };
+
+const OVERVIEW: RoadmapPageFacts = {
+  name: "Robin Example",
+  kind: "overview",
+  breadcrumbs: [OVERVIEW_CRUMB],
+  summary: "Two areas, **five** modules.",
+  areas: [
+    { name: "Signal area", href: "/ai-roadmap/signal-area", description: "Learns _signals_." },
+    { name: "Quiet area", href: "/ai-roadmap/quiet-area", description: null },
+  ],
+};
+
+const DIARY: RoadmapPageFacts = {
+  name: "Robin Example",
+  kind: "diary",
+  breadcrumbs: [OVERVIEW_CRUMB, DIARY_CRUMB],
+  summary: null,
+  days: [
+    { name: "Monday, March 2, 2026", href: "/ai-roadmap/diary/2026-03-02" },
+    { name: "Sunday, March 1, 2026", href: "/ai-roadmap/diary/2026-03-01" },
+  ],
+};
+
+const DIARY_DAY: RoadmapPageFacts = {
+  name: "Robin Example",
+  kind: "diary-day",
+  breadcrumbs: [
+    OVERVIEW_CRUMB,
+    DIARY_CRUMB,
+    { name: "Monday, March 2, 2026", href: "/ai-roadmap/diary/2026-03-02" },
+  ],
+  summary: "Read about **fictional** signals.",
+  date: "2026-03-02",
+};
+
+const STATISTICS: RoadmapPageFacts = {
+  name: "Robin Example",
+  kind: "statistics",
+  breadcrumbs: [
+    OVERVIEW_CRUMB,
+    DIARY_CRUMB,
+    { name: "Learning Statistics", href: "/ai-roadmap/diary/stats" },
+  ],
+  summary: null,
+};
+
+const CONF = {
+  name: "Fictional Conf",
+  startsOn: "2026-02-26",
+  endsOn: "2026-02-28",
+  href: "https://conf.example.test/",
+  online: false,
+  place: "Example City",
+  organizer: "Example Org",
+};
+
+const EVENTS: RoadmapPageFacts = {
+  name: "Robin Example",
+  kind: "events",
+  breadcrumbs: [OVERVIEW_CRUMB, { name: "Events", href: "/ai-roadmap/events" }],
+  summary: null,
+  events: [
+    CONF,
+    {
+      name: "Remote Meetup",
+      startsOn: "2026-01-10",
+      endsOn: "2026-01-10",
+      href: null,
+      online: true,
+      place: null,
+      organizer: null,
+    },
+  ],
+};
+
+const READING_GUIDE: RoadmapPageFacts = {
+  name: "Robin Example",
+  kind: "reading-guide",
+  breadcrumbs: [
+    OVERVIEW_CRUMB,
+    { name: "Bookshelf", href: "/ai-roadmap/bookshelf" },
+    { name: "How to Read Effectively", href: "/ai-roadmap/how-to-read-effectively" },
+  ],
+  summary: "Reading has **two** phases.",
+  basedOn: { name: "A fictional talk", url: "https://video.example.test/talk" },
+};
+
+function graphOf(facts: RoadmapPageFacts): object[] {
+  return (roadmapStructuredData(ORIGIN, facts) as { "@graph": object[] })["@graph"];
+}
+
+describe("the overview's, diary's, events', statistics' and reading guide's metadata", () => {
+  it("titles each page by the way to it, from the page up to the person", () => {
+    expect(
+      [OVERVIEW, DIARY, DIARY_DAY, STATISTICS, EVENTS, READING_GUIDE].map(
+        (facts) => roadmapPageMetadata(ORIGIN, facts).title,
+      ),
+    ).toEqual([
+      "AI Engineering Roadmap — Robin Example",
+      "Learning Diary — AI Engineering Roadmap — Robin Example",
+      "Monday, March 2, 2026 — Learning Diary — AI Engineering Roadmap — Robin Example",
+      "Learning Statistics — Learning Diary — AI Engineering Roadmap — Robin Example",
+      "Events — AI Engineering Roadmap — Robin Example",
+      "How to Read Effectively — Bookshelf — AI Engineering Roadmap — Robin Example",
+    ]);
+  });
+
+  it("describes each page by its summary, or by what it is without one", () => {
+    expect(
+      [OVERVIEW, DIARY, DIARY_DAY, STATISTICS, EVENTS, READING_GUIDE].map(
+        (facts) => roadmapPageMetadata(ORIGIN, facts).description,
+      ),
+    ).toEqual([
+      "Two areas, five modules.",
+      "Learning Diary on Robin Example's AI Engineering Roadmap.",
+      "Read about fictional signals.",
+      "Learning Statistics, part of Learning Diary on Robin Example's AI Engineering Roadmap.",
+      "Events on Robin Example's AI Engineering Roadmap.",
+      "Reading has two phases.",
+    ]);
+  });
+
+  it("describes the overview without a summary as the person's roadmap", () => {
+    expect(roadmapPageMetadata(ORIGIN, { ...OVERVIEW, summary: null }).description).toBe(
+      "Robin Example's AI Engineering Roadmap.",
+    );
+  });
+
+  it("gives each page its canonical address and its own preview image, open to search", () => {
+    for (const facts of [OVERVIEW, DIARY, DIARY_DAY, STATISTICS, EVENTS, READING_GUIDE]) {
+      const path = facts.breadcrumbs.at(-1)?.href ?? "";
+      const metadata = roadmapPageMetadata(ORIGIN, facts);
+      expect(metadata.alternates?.canonical).toBe(`${ORIGIN}${path}`);
+      expect(roadmapOpenGraphImageUrl(ORIGIN, facts)).toBe(`${ORIGIN}/og${path}`);
+      expect(metadata.robots).toBeUndefined();
+    }
+  });
+});
+
+describe("the overview's, diary's, events', statistics' and reading guide's preview cards", () => {
+  it("names each page, its kind and whose roadmap it is on", () => {
+    expect(
+      [OVERVIEW, DIARY, DIARY_DAY, STATISTICS, EVENTS, READING_GUIDE].map((facts) =>
+        roadmapOpenGraphCard(ORIGIN, facts),
+      ),
+    ).toEqual([
+      {
+        site: "site.example.test",
+        label: "Learning roadmap",
+        title: "AI Engineering Roadmap",
+        subtitle: "By Robin Example",
+      },
+      {
+        site: "site.example.test",
+        label: "Learning diary",
+        title: "Learning Diary",
+        subtitle: "Robin Example's AI Engineering Roadmap",
+      },
+      {
+        site: "site.example.test",
+        label: "Diary day",
+        title: "Monday, March 2, 2026",
+        subtitle: "Part of Learning Diary on Robin Example's AI Engineering Roadmap",
+      },
+      {
+        site: "site.example.test",
+        label: "Learning statistics",
+        title: "Learning Statistics",
+        subtitle: "Robin Example's AI Engineering Roadmap",
+      },
+      {
+        site: "site.example.test",
+        label: "Events",
+        title: "Events",
+        subtitle: "Robin Example's AI Engineering Roadmap",
+      },
+      {
+        site: "site.example.test",
+        label: "Reading guide",
+        title: "How to Read Effectively",
+        subtitle: "Robin Example's AI Engineering Roadmap",
+      },
+    ]);
+  });
+});
+
+describe("the overview's, diary's, events', statistics' and reading guide's structured data", () => {
+  it("lists the overview's areas in order, each by its name, page and description", () => {
+    expect(graphOf(OVERVIEW)).toContainEqual({
+      "@type": "ItemList",
+      "@id": "https://site.example.test/ai-roadmap#areas",
+      name: "AI Engineering Roadmap",
+      numberOfItems: 2,
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Signal area",
+          url: "https://site.example.test/ai-roadmap/signal-area",
+          description: "Learns signals.",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Quiet area",
+          url: "https://site.example.test/ai-roadmap/quiet-area",
+        },
+      ],
+    });
+  });
+
+  it("lists the diary's days in its order", () => {
+    expect(graphOf(DIARY)).toContainEqual({
+      "@type": "ItemList",
+      "@id": "https://site.example.test/ai-roadmap/diary#days",
+      name: "Learning Diary",
+      numberOfItems: 2,
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Monday, March 2, 2026",
+          url: "https://site.example.test/ai-roadmap/diary/2026-03-02",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Sunday, March 1, 2026",
+          url: "https://site.example.test/ai-roadmap/diary/2026-03-01",
+        },
+      ],
+    });
+  });
+
+  it("describes a diary day as a post by the person on its date", () => {
+    const url = "https://site.example.test/ai-roadmap/diary/2026-03-02";
+    expect(graphOf(DIARY_DAY)).toContainEqual({
+      "@type": "BlogPosting",
+      "@id": `${url}#entry`,
+      url,
+      headline: "Monday, March 2, 2026",
+      description: "Read about fictional signals.",
+      datePublished: "2026-03-02",
+      inLanguage: "en",
+      author: {
+        "@type": "Person",
+        "@id": "https://site.example.test/#person",
+        name: "Robin Example",
+      },
+      mainEntityOfPage: { "@id": `${url}#webpage` },
+    });
+  });
+
+  it("describes the statistics by the page and its breadcrumbs alone", () => {
+    const graph = graphOf(STATISTICS);
+    expect(graph.map((node) => (node as { "@type": string })["@type"])).toEqual([
+      "WebPage",
+      "BreadcrumbList",
+    ]);
+  });
+
+  it("lists the events with their dates, attendance mode and only the facts they have", () => {
+    expect(graphOf(EVENTS)).toContainEqual({
+      "@type": "ItemList",
+      "@id": "https://site.example.test/ai-roadmap/events#events",
+      name: "Events",
+      numberOfItems: 2,
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          item: {
+            "@type": "Event",
+            name: "Fictional Conf",
+            startDate: "2026-02-26",
+            endDate: "2026-02-28",
+            eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+            url: "https://conf.example.test/",
+            location: { "@type": "Place", name: "Example City" },
+            organizer: { "@type": "Organization", name: "Example Org" },
+          },
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          item: {
+            "@type": "Event",
+            name: "Remote Meetup",
+            startDate: "2026-01-10",
+            endDate: "2026-01-10",
+            eventAttendanceMode: "https://schema.org/OnlineEventAttendanceMode",
+            location: { "@type": "VirtualLocation" },
+          },
+        },
+      ],
+    });
+  });
+
+  it("describes the reading guide as the person's article based on its source", () => {
+    const url = "https://site.example.test/ai-roadmap/how-to-read-effectively";
+    expect(graphOf(READING_GUIDE)).toContainEqual({
+      "@type": "Article",
+      "@id": `${url}#article`,
+      url,
+      headline: "How to Read Effectively",
+      description: "Reading has two phases.",
+      inLanguage: "en",
+      author: {
+        "@type": "Person",
+        "@id": "https://site.example.test/#person",
+        name: "Robin Example",
+      },
+      isBasedOn: {
+        "@type": "CreativeWork",
+        name: "A fictional talk",
+        url: "https://video.example.test/talk",
+      },
+      mainEntityOfPage: { "@id": `${url}#webpage` },
+    });
+  });
+
+  it("serializes an event's name with markup so it can never close the script element", () => {
+    const facts: RoadmapPageFacts = {
+      ...EVENTS,
+      kind: "events",
+      events: [{ ...CONF, name: "</script><script>alert(1)</script>" }],
+    };
+    expect(serializeJsonLd(roadmapStructuredData(ORIGIN, facts))).not.toContain("</script>");
   });
 });

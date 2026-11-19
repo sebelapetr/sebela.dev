@@ -1,16 +1,19 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import { ProseMarkdown } from "../../_shared";
 import type { RoadmapBookshelfContent } from "../../profile";
 import { BookCover, BookStatus } from "../components/book-parts";
 import { RoadmapFrame } from "../components/roadmap-frame";
 import { BOOKSHELF_NAME, toBookshelfPage } from "../data/bookshelf";
+import { READING_GUIDE_PATH } from "../data/reading-guide";
 
 /**
- * The bookshelf under the roadmap's sub-navigation: its name and what it is, then every book in the
- * API's shelf order as an editorial row — its cover (or a plain placeholder), its place on the
- * shelf, its title as the link to its page, its status as the API derived it, its author and a
- * preview of its Markdown description, rendered safely. An empty shelf says so.
+ * The bookshelf under the roadmap's sub-navigation: its name, what it is and the way to the
+ * reading guide, then every book in the API's shelf order as an editorial row — its cover (or a
+ * plain placeholder), its place on the shelf, its title as the link to its page, its status as the
+ * API derived it, its author and a preview of its Markdown description, rendered safely. An empty
+ * shelf says so.
  */
 export function RoadmapBookshelfTemplate({
   content,
@@ -29,6 +32,14 @@ export function RoadmapBookshelfTemplate({
           <p className="type-lead max-w-prose text-muted-foreground">
             Books read along the roadmap, the ones being read now and those still to come.
           </p>
+          <Link
+            href={READING_GUIDE_PATH}
+            prefetch={false}
+            className="inline-flex min-h-11 items-center gap-1 self-start rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            How to read effectively
+            <ArrowRight aria-hidden="true" className="size-3.5" />
+          </Link>
         </header>
         {page.books.length === 0 ? (
           <p className="text-base text-muted-foreground">No books yet.</p>

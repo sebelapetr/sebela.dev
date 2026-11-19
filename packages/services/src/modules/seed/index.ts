@@ -36,7 +36,10 @@ export type SeedKind =
   | "roadmapResources"
   | "roadmapEvents"
   | "roadmapDiary"
-  | "roadmapTimeEntries";
+  | "roadmapTimeEntries"
+  | "roadmapProjectIdeas"
+  | "roadmapFollowedSources"
+  | "roadmapGlossaryTerms";
 
 /** How many records of one kind a load created and how many existing ones it updated. */
 export interface SeedCount {
@@ -68,7 +71,8 @@ export interface SeedReport {
  *   not name are kept. A rerun of the same folder creates nothing new. Books are loaded before
  *   resources, so a resource of type `book` can link a book of the same seed by its slug. Events
  *   are matched by slug and loaded after resources and before the diary, so attendance can name an
- *   event of the same seed.
+ *   event of the same seed. Project ideas, followed sources and glossary terms are matched by
+ *   slug and loaded after events; an idea's topics are replaced by the ones the seed lists.
  * - A diary day is matched by its date and its notes are overwritten; its time entries stay. A
  *   session is matched by its target (a resource or an event) and absolute endpoints, whatever offset they are written
  *   with: one already logged (in one or more diary-day pieces) is left as it is and counted as
@@ -124,6 +128,9 @@ const emptyCounts = (): Counts => ({
   roadmapEvents: { created: 0, updated: 0 },
   roadmapDiary: { created: 0, updated: 0 },
   roadmapTimeEntries: { created: 0, updated: 0 },
+  roadmapProjectIdeas: { created: 0, updated: 0 },
+  roadmapFollowedSources: { created: 0, updated: 0 },
+  roadmapGlossaryTerms: { created: 0, updated: 0 },
 });
 
 const isRefusal = (error: unknown, ...codes: string[]) =>
@@ -146,7 +153,7 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
 
 /**
  * Whether the profile holds no person, no record of any kind and no media, and the roadmap no area,
- * no diary day, no book and no event.
+ * no diary day, no book, no event and no supporting content.
  */
 async function isEmpty(
   profile: ProfileService,
@@ -174,6 +181,9 @@ async function isEmpty(
     async () => (await roadmap.getDiary()).days,
     () => roadmap.listBooks(),
     () => roadmap.listEvents(),
+    () => roadmap.listProjectIdeas(),
+    () => roadmap.listFollowedSources(),
+    () => roadmap.listGlossaryTerms(),
   ];
   for (const list of lists) if ((await list()).length > 0) return false;
   return true;
@@ -263,6 +273,9 @@ async function checkReferences(
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
   for (const { location, value } of data.roadmapEvents) {
+    checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
+  for (const { location, value } of data.roadmapProjectIdeas) {
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
   for (const { location, value } of data.roadmapTimeEntries) {
@@ -539,6 +552,28 @@ export function createSeedService(
           (slug) => roadmap.getEvent(slug),
           (value) => roadmap.createEvent(value),
           (slug, changes) => roadmap.updateEvent(slug, changes),
+        );
+
+        await upsert(
+          "roadmapProjectIdeas",
+          data.roadmapProjectIdeas,
+          (slug) => roadmap.getProjectIdea(slug),
+          (value) => roadmap.createProjectIdea(value),
+          (slug, changes) => roadmap.updateProjectIdea(slug, changes),
+        );
+        await upsert(
+          "roadmapFollowedSources",
+          data.roadmapFollowedSources,
+          (slug) => roadmap.getFollowedSource(slug),
+          (value) => roadmap.createFollowedSource(value),
+          (slug, changes) => roadmap.updateFollowedSource(slug, changes),
+        );
+        await upsert(
+          "roadmapGlossaryTerms",
+          data.roadmapGlossaryTerms,
+          (slug) => roadmap.getGlossaryTerm(slug),
+          (value) => roadmap.createGlossaryTerm(value),
+          (slug, changes) => roadmap.updateGlossaryTerm(slug, changes),
         );
 
         for (const { location, value } of data.roadmapDiary) {

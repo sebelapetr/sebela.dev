@@ -756,6 +756,51 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.components.schemas).toHaveProperty("DiaryEvent");
   });
 
+  it("documents the public supporting-content reads and their private writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    for (const [kind, schema] of [
+      ["project-ideas", "RoadmapProjectIdea"],
+      ["followed-sources", "RoadmapFollowedSource"],
+      ["glossary-terms", "RoadmapGlossaryTerm"],
+    ] as const) {
+      const list = `/v1/roadmap/${kind}`;
+      const item = `/v1/roadmap/${kind}/:slug`;
+      expect(operation("GET", list).security, list).toEqual([]);
+      expect(operation("GET", list).responses["200"]?.content).toEqual(content(`${schema}List`));
+      expect(operation("GET", item).security, item).toEqual([]);
+      expect(operation("GET", item).responses["200"]?.content).toEqual(content(schema));
+      expect(Object.keys(operation("GET", item).responses)).toEqual(
+        expect.arrayContaining(["400", "404"]),
+      );
+
+      const create = operation("POST", list);
+      expect(create.requestBody?.content).toEqual(content(`${schema}Create`));
+      expect(create.responses["201"]?.content).toEqual(content(schema));
+      expect(create.responses["201"]?.headers).toHaveProperty("Location");
+      expect(Object.keys(create.responses)).toEqual(
+        expect.arrayContaining(["201", "400", "401", "409"]),
+      );
+      const update = operation("PATCH", item);
+      expect(update.requestBody?.content).toEqual(content(`${schema}Update`));
+      expect(update.responses["200"]?.content).toEqual(content(schema));
+      expect(Object.keys(update.responses)).toEqual(
+        expect.arrayContaining(["200", "400", "401", "404"]),
+      );
+      const deletion = Object.keys(operation("DELETE", item).responses);
+      expect(deletion).toEqual(expect.arrayContaining(["204", "401", "404"]));
+      expect(deletion).not.toContain("409");
+      for (const [method, path] of [
+        ["POST", list],
+        ["PATCH", item],
+        ["DELETE", item],
+      ] as const) {
+        expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+      }
+    }
+  });
+
   it("documents the learning statistics as one public read without parameters", () => {
     const read = operation("GET", "/v1/roadmap/statistics");
     expect(read.operationId).toBe("getRoadmapStatistics");

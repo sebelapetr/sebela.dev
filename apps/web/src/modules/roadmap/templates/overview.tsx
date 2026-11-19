@@ -10,13 +10,16 @@ import { AreaItem } from "../components/area-item";
 import { LearningApproach } from "../components/learning-approach";
 import { ROADMAP_TIMELINE } from "../components/layout";
 import { RoadmapFrame } from "../components/roadmap-frame";
+import { SupportingSections } from "../components/supporting-sections";
 import { roadmapLead, toRoadmapOverview } from "../data/overview";
+import { toSupportingSections } from "../data/supporting";
 
 /**
  * The AI Roadmap's overview under its sub-navigation: the title, what the roadmap holds (its
  * counts, planned hours and last update), the way to its first area and to who builds it, every
- * area with its modules and resources on the timeline, and the learning approach. Without areas
- * the page says so.
+ * area with its modules and resources on the timeline, the learning approach, then the supporting
+ * sections: the project ideas, the followed sources, the FAQ and the additional terms. Without
+ * areas the page says so and still shows the supporting sections.
  */
 export function RoadmapOverviewTemplate({ content }: { readonly content: RoadmapContent }) {
   const overview = toRoadmapOverview(content.roadmap);
@@ -62,6 +65,9 @@ export function RoadmapOverviewTemplate({ content }: { readonly content: Roadmap
             <LearningApproach />
           </>
         )}
+        <div className="mt-4 flex flex-col gap-12">
+          <SupportingSections sections={toSupportingSections(content)} />
+        </div>
       </div>
     </RoadmapFrame>
   );

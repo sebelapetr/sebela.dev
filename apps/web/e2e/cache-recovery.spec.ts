@@ -4,7 +4,8 @@
 // seconds, a write to the profile, the roadmap, the learning diary, the bookshelf, the events or the
 // logged time behind the learning statistics shows once the interval has elapsed, on the
 // overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
-// leaves its old address; a restarted website reads current content at once; during an outage cached pages keep their last
+// leaves its old address; supporting-content writes reach the overview, and roadmap writes add
+// and remove pages in the sitemap and llms.txt, the same way; a restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
 // again, pages are current without a rebuild.
 import { randomBytes } from "node:crypto";
@@ -348,6 +349,126 @@ test.describe("cached content without invalidation notifications", () => {
     expect(body).toContain("1h 30m");
     expect(body).toContain("Far orbits");
     expect(body).toContain("Tuesday, March 10, 2026");
+  });
+
+  test("supporting-content writes with dropped notifications reach the warmed overview after the interval", async () => {
+    async function write(method: string, path: string, body?: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    const overview = "/ai-roadmap";
+    const headings = ["Portfolio Project Ideas", "Stay Current", "Additional Terms to Explore"];
+    // This fixture has no supporting content: the warmed overview shows only the FAQ.
+    const warmed = (await read(overview)).body;
+    expect(warmed).toContain("Frequently Asked Questions");
+    for (const heading of headings) expect(warmed).not.toContain(heading);
+
+    await write("POST", "/v1/roadmap/project-ideas", {
+      slug: "drift-desk",
+      title: "A fictional drift desk",
+      whyItMatters: "Fictional reasons to build a drift desk.",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/followed-sources", {
+      slug: "drift-digest",
+      title: "Drift Digest",
+      kind: "newsletter",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/glossary-terms", {
+      slug: "slow-orbit",
+      term: "Slow orbit",
+      description: "A fictional term added after the overview was warmed.",
+      position: 0,
+    });
+
+    // Inside the interval the cached overview is still served: no notification arrived.
+    expect((await read(overview)).body).not.toContain("A fictional drift desk");
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    for (const added of ["A fictional drift desk", "Drift Digest", "Slow orbit"]) {
+      await expect.poll(async () => (await read(overview)).body, within).toContain(added);
+    }
+
+    // Deleting them takes their now warmed sections away after the interval too; the FAQ stays.
+    await write("DELETE", "/v1/roadmap/project-ideas/drift-desk");
+    await write("DELETE", "/v1/roadmap/followed-sources/drift-digest");
+    await write("DELETE", "/v1/roadmap/glossary-terms/slow-orbit");
+    expect((await read(overview)).body).toContain("A fictional drift desk");
+    for (const heading of headings) {
+      await expect.poll(async () => (await read(overview)).body, within).not.toContain(heading);
+    }
+    expect((await read(overview)).body).toContain("Frequently Asked Questions");
+  });
+
+  test("roadmap writes with dropped notifications add and remove pages in the warmed sitemap and llms.txt after the interval", async () => {
+    async function write(method: string, path: string, body?: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    const area = "/ai-roadmap/near-orbits";
+    const modulePage = `${area}/quiet-drift`;
+    const book = "/ai-roadmap/bookshelf/near-orbit-primer";
+    const day = "/ai-roadmap/diary/2026-03-05";
+    const sitemap = async () => (await read("/sitemap.xml")).body;
+    const llms = async () => (await read("/llms.txt")).body;
+    // In the sitemap every page is a `<loc>`; in llms.txt every page is a Markdown link target.
+    const inSitemap = (path: string) => `${path}</loc>`;
+    const inLlms = (path: string) => `${path})`;
+
+    // Warm both: the earlier tests' diary day is listed, the new pages are not.
+    expect(await sitemap()).toContain(inSitemap(day));
+    for (const path of [area, modulePage, book]) {
+      expect(await sitemap()).not.toContain(inSitemap(path));
+      expect(await llms()).not.toContain(inLlms(path));
+    }
+
+    await write("POST", "/v1/roadmap/areas", {
+      slug: "near-orbits",
+      name: "Near orbits",
+      weight: 5,
+      position: 2,
+    });
+    await write("POST", "/v1/roadmap/modules", {
+      slug: "quiet-drift",
+      area: "near-orbits",
+      name: "Quiet drift",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/books", {
+      slug: "near-orbit-primer",
+      title: "Near Orbit Primer",
+    });
+    await write("DELETE", "/v1/roadmap/diary/2026-03-05");
+
+    // Inside the interval the cached documents are still served: no notification arrived.
+    expect(await sitemap()).not.toContain(inSitemap(area));
+    expect(await sitemap()).toContain(inSitemap(day));
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    for (const path of [area, modulePage, book]) {
+      await expect.poll(sitemap, within).toContain(inSitemap(path));
+      await expect.poll(llms, within).toContain(inLlms(path));
+    }
+    await expect.poll(sitemap, within).not.toContain(inSitemap(day));
+
+    // Deleting the now listed pages takes them out of both documents after the interval too.
+    await write("DELETE", "/v1/roadmap/modules/quiet-drift");
+    await write("DELETE", "/v1/roadmap/areas/near-orbits");
+    await write("DELETE", "/v1/roadmap/books/near-orbit-primer");
+    expect(await sitemap()).toContain(inSitemap(modulePage));
+    for (const path of [area, modulePage, book]) {
+      await expect.poll(sitemap, within).not.toContain(inSitemap(path));
+      await expect.poll(llms, within).not.toContain(inLlms(path));
+    }
   });
 
   test("a restarted website reads current content at once", async () => {

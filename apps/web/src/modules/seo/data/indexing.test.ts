@@ -13,9 +13,9 @@ describe("indexedPaths", () => {
     expect(indexedPaths).toEqual(["/", "/experience", "/services", "/cv"]);
   });
 
-  it("never include the chat, its conversations, the roadmap pages or the PDF download", () => {
+  it("never include the chat, its conversations or the PDF download", () => {
     for (const path of indexedPaths) {
-      expect(path).not.toMatch(/^\/(?:ask|ai-roadmap|cv\/pdf)/);
+      expect(path).not.toMatch(/^\/(?:ask|cv\/pdf)/);
       expect(path).not.toContain("?");
     }
   });
@@ -31,6 +31,15 @@ describe("sitemapXml", () => {
       "https://site.example.test/experience",
       "https://site.example.test/services",
       "https://site.example.test/cv",
+    ]);
+  });
+
+  it("lists the further pages it is given after the indexed pages, in their order", () => {
+    expect(
+      locations(sitemapXml(ORIGIN, ["/ai-roadmap", "/ai-roadmap/odd%2Fslug"])).slice(4),
+    ).toEqual([
+      "https://site.example.test/ai-roadmap",
+      "https://site.example.test/ai-roadmap/odd%2Fslug",
     ]);
   });
 
