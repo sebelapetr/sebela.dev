@@ -2,113 +2,145 @@
  * The MCP tool catalogue of MCP Admin. A fresh server is built for each MCP request around the
  * content of the verified caller, so no state or key outlives the request.
  *
- * Only implemented tools are registered: `get` reads the person, `describe` explains the project
- * contract from the shared contracts. Both are read-only. Arguments are strict: an unknown key, an
- * entity a tool does not support or a credential in the arguments is refused before any read.
- * Tool errors carry a fixed code and message, never an upstream answer, a key or a stack.
+ * Six tools over the content module's fixed entity registry: `describe`, `list`, `get` and
+ * `recent_changes` only read; `save` creates or changes one record and `delete` removes one.
+ * Arguments are strict: an unknown key, an entity outside the registry or anything but a single
+ * string identifier is refused before any request. Results are JSON text; errors carry a stable
+ * code (`field`, `conflict`, `not_found`, `unavailable`, `uncertain`, `unsupported_operation`) and
+ * a message, never a key, a stack or an unredacted upstream answer.
+ *
+ * The annotations describe the tools honestly; they do not prove that a human approved a call.
+ * Asking for that approval is the client's job.
  */
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
-import { ProjectCreateSchema, ProjectUpdateSchema } from "@sebela/contracts";
 import { z } from "zod";
 
-import type { CallerContent } from "../content/index.js";
-
-const ERRORS = {
-  not_found: "No person is stored yet.",
-  unavailable: "The content API is unavailable; retry later.",
-} as const;
+import { describeEntity, ENTITIES, type CallerContent, type Outcome } from "../content/index.js";
 
 function success(value: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(value) }] };
 }
 
-function failure(code: keyof typeof ERRORS): CallToolResult {
+function result(outcome: Outcome<unknown>): CallToolResult {
+  if (outcome.ok) return success(outcome.value);
   return {
     isError: true,
-    content: [{ type: "text", text: JSON.stringify({ error: { code, message: ERRORS[code] } }) }],
+    content: [{ type: "text", text: JSON.stringify({ error: outcome.error }) }],
   };
 }
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true } as const;
 
-/**
- * The input JSON Schema of a contract with its root object inline. A contract named with `.meta({id})`
- * would otherwise be only a `$ref` into `$defs`; other shared definitions stay in `$defs`.
- */
-function inputSchema(schema: z.ZodType): Record<string, unknown> {
-  const json = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }) as Record<
-    string,
-    unknown
-  >;
-  const ref = json["$ref"];
-  const defs = json["$defs"] as Record<string, Record<string, unknown>> | undefined;
-  if (typeof ref !== "string" || defs === undefined) return json;
-  const name = ref.replace(/^#\/\$defs\//, "");
-  const { [name]: root, ...rest } = defs;
-  if (root === undefined || JSON.stringify(rest).includes(`"#/$defs/${name}"`)) return json;
-  return {
-    $schema: json["$schema"],
-    ...root,
-    ...(Object.keys(rest).length > 0 ? { $defs: rest } : {}),
-  };
-}
-
-/** The project contract and the records it must point at, derived from the shared contracts. */
-const projectDescription = {
-  entity: "project",
-  create: inputSchema(ProjectCreateSchema),
-  update: inputSchema(ProjectUpdateSchema),
-  relationships: [
-    {
-      field: "experience",
-      target: "experience",
-      rule: "Required on create: the slug of one existing experience. On an update it moves the project to that experience.",
-    },
-    {
-      field: "technologies",
-      target: "technology",
-      rule: "Slugs of existing technologies, each at most once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged.",
-    },
-  ],
-};
+const entity = z.enum(ENTITIES).describe("The kind of record. `describe` explains each one.");
+const id = z
+  .string()
+  .describe(
+    "The one record: a slug, a UUID or a date as `describe` states. Leave it out for the person.",
+  );
 
 /** Builds the MCP server for one request of one verified caller. */
 export function createAdminServer(content: CallerContent): McpServer {
   const server = new McpServer({ name: "sebela-mcp-admin", version: "0.0.0" });
 
   server.registerTool(
+    "describe",
+    {
+      title: "Describe a content entity",
+      description:
+        "Explains a kind of record: the operations it supports, how a record is identified, the " +
+        "JSON Schema of its create and update fields and the existing records its fields refer " +
+        "to. Reads no stored content. Use it before a save.",
+      inputSchema: z.strictObject({ entity }),
+      annotations: readOnly,
+    },
+    ({ entity: name }) => success(describeEntity(name)),
+  );
+
+  server.registerTool(
+    "list",
+    {
+      title: "List records",
+      description:
+        "Reads every stored record of an entity as the public site sees them. There are no " +
+        "filters; find the record you mean in the result and ask the owner when several fit.",
+      inputSchema: z.strictObject({ entity }),
+      annotations: readOnly,
+    },
+    async ({ entity: name }) => result(await content.list(name)),
+  );
+
+  server.registerTool(
     "get",
     {
       title: "Get a record",
       description:
-        "Reads a stored record. Supported entity: `person`, the profile of the site's owner. " +
-        "Returns the stored record as JSON, or a `not_found` error when none is stored; it never " +
-        "returns a guessed record.",
-      inputSchema: z.strictObject({
-        entity: z.enum(["person"]).describe("The kind of record to read."),
-      }),
+        "Reads one stored record. Returns it as JSON, or a `not_found` error when there is none; " +
+        "it never returns a guessed record. Read a record before changing or deleting it.",
+      inputSchema: z.strictObject({ entity, id: id.optional() }),
       annotations: readOnly,
     },
-    async () => {
-      const outcome = await content.getPerson();
-      return outcome.ok ? success(outcome.value) : failure(outcome.reason);
-    },
+    async ({ entity: name, id: record }) => result(await content.get(name, record)),
   );
 
   server.registerTool(
-    "describe",
+    "save",
     {
-      title: "Describe a content contract",
+      title: "Create or change a record",
       description:
-        "Explains how a kind of record is written: the JSON Schema of its create and update " +
-        "bodies and the existing records it must refer to. Supported entity: `project`. Reads no " +
-        "stored content.",
+        "`create` stores a new record from complete fields; `update` changes only the fields " +
+        "given and leaves every other field, including other people's edits, as stored. Fields " +
+        "follow the schema `describe` returns; derived and protected fields are refused. The " +
+        "write is sent once and audited under the caller's key. A `field` error names the " +
+        "fields to fix; `uncertain` means the outcome is unknown: read before trying again.",
       inputSchema: z.strictObject({
-        entity: z.enum(["project"]).describe("The kind of record to describe."),
+        entity,
+        action: z.enum(["create", "update"]),
+        id: id.optional(),
+        fields: z
+          .record(z.string(), z.unknown())
+          .describe("Only the fields to write, as `describe` defines them."),
       }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ entity: name, action, id: record, fields }) =>
+      result(await content.save(name, { action, id: record, fields })),
+  );
+
+  server.registerTool(
+    "delete",
+    {
+      title: "Delete one record",
+      description:
+        "Deletes exactly one record named by its id. There is no bulk delete, no filter and no " +
+        "undo; a record other content still depends on is refused with a `conflict` that says " +
+        "why, and nothing else is removed. Ask the owner to approve every delete.",
+      inputSchema: z.strictObject({ entity, id }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ entity: name, id: record }) => result(await content.remove(name, record)),
+  );
+
+  server.registerTool(
+    "recent_changes",
+    {
+      title: "Recent content changes",
+      description:
+        "Reads the newest audited content changes, newest first, at most twenty: who changed " +
+        "what, through which operation and provenance, with the record before and after.",
+      inputSchema: z.strictObject({}),
       annotations: readOnly,
     },
-    () => success(projectDescription),
+    async () => result(await content.recentChanges()),
   );
 
   return server;
