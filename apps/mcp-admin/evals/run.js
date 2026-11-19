@@ -312,6 +312,19 @@ export function totals(runs) {
   };
 }
 
+/**
+ * What one invocation of the runner does, from its command-line options: only check the fixture,
+ * run every implemented case (a full run), or run one implemented case (`--case <id>`, a partial
+ * run). Refuses an unknown option, an unknown or pending case and a missing or repeated case id,
+ * before any fixture starts or model is called.
+ *
+ * @param {readonly string[]} args
+ * @returns {{ checkFixture: boolean, cases: import("./catalogue.js").EvalCase[], partial: { case: string } | null }}
+ */
+export function planRun(args) {
+  throw new Error(`planRun is not implemented (${String(args.length)} options)`);
+}
+
 async function main() {
   // The process environment wins, then this checkout's files, then the documented examples.
   for (const name of [".env.local", ".env", ".env.example"]) {

@@ -1,5 +1,6 @@
 // The deterministic parts of the model evals, tested without a model: the catalogue, the graders
 // on fake transcripts, the gate arithmetic and the redacted summary of a Promptfoo result.
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { evaluateGate, type CaseRun } from "./gate.js";
 import { gradeE01, gradeE02, gradeE29, parseToolOutput, type ToolCall } from "./graders.js";
-import { promptfooEnvironment, removeLeakingFiles, summarize, totals } from "./run.js";
+import { planRun, promptfooEnvironment, removeLeakingFiles, summarize, totals } from "./run.js";
 import generateTests from "./tests.js";
 
 const person = {
@@ -438,5 +439,66 @@ describe("totals", () => {
 
   it("reports no average for an empty run", () => {
     expect(totals([])).toMatchObject({ conversations: 0, cost: 0, costPerConversation: null });
+  });
+});
+
+describe("planRun", () => {
+  it("runs every implemented case as a full run without options", () => {
+    const plan = planRun([]);
+    expect(plan.checkFixture).toBe(false);
+    expect(plan.partial).toBeNull();
+    expect(plan.cases.map((entry) => entry.id)).toEqual(
+      implementedCases().map((entry) => entry.id),
+    );
+  });
+
+  it("runs only the named implemented case and marks the run as partial", () => {
+    const plan = planRun(["--case", "E02"]);
+    expect(plan.cases.map((entry) => entry.id)).toEqual(["E02"]);
+    expect(plan.partial).toEqual({ case: "E02" });
+  });
+
+  it("gates a partial run on the named case's repeats only", () => {
+    const plan = planRun(["--case", "E02"]);
+    const runs = [1, 2, 3].map((repeat) => ({
+      caseId: "E02",
+      repeat,
+      pass: true,
+      reason: "Passed.",
+    }));
+    const result = evaluateGate(runs, { cases: plan.cases });
+    expect(result.pass).toBe(true);
+    expect(result.noncritical).toEqual({ runs: 3, passed: 3, rate: 1 });
+    expect(evaluateGate(runs.slice(0, 2), { cases: plan.cases }).failures).toContain(
+      "E02: 2 of 3 repeats ran.",
+    );
+  });
+
+  it("refuses an unknown case, a pending case and a missing or repeated case id", () => {
+    expect(() => planRun(["--case", "E99"])).toThrow(/E99.*not in the catalogue/);
+    expect(() => planRun(["--case", "E03"])).toThrow(/E03.*not implemented/);
+    expect(() => planRun(["--case"])).toThrow(/--case needs a case id/);
+    expect(() => planRun(["--case", "--check-fixture"])).toThrow(/--case needs a case id/);
+    expect(() => planRun(["--case", "E01", "--case", "E02"])).toThrow(/only one --case/);
+  });
+
+  it("refuses an unknown option", () => {
+    expect(() => planRun(["--cases", "E02"])).toThrow(/Unknown option --cases/);
+  });
+
+  it("checks the fixture only", () => {
+    expect(planRun(["--check-fixture"]).checkFixture).toBe(true);
+  });
+
+  it("stops before any fixture or model call when the case id is invalid", () => {
+    const runner = fileURLToPath(new URL("./run.js", import.meta.url));
+    const result = spawnSync(process.execPath, [runner, "--case", "E99"], {
+      encoding: "utf8",
+      env: { PATH: process.env["PATH"] ?? "" },
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/E99.*not in the catalogue/);
+    expect(result.stderr).not.toMatch(/ANTHROPIC_API_KEY/);
   });
 });
