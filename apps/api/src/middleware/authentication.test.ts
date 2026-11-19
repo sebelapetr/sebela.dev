@@ -188,7 +188,9 @@ describe("authentication of the private routes", () => {
     await app.request(`/v1/${created.key}`, {}, connection());
 
     expect(lines.length).toBeGreaterThanOrEqual(3);
-    const secret = created.key.split("_")[2] ?? created.key;
+    // The key is `sebela_<16 hex public id>_<43 base64url secret>`; the secret itself may contain `_`.
+    const secret = /^sebela_[0-9a-f]{16}_([A-Za-z0-9_-]{43})$/.exec(created.key)?.[1] ?? "";
+    expect(secret).toHaveLength(43);
     for (const line of lines) expect(line).not.toContain(secret);
   });
 });

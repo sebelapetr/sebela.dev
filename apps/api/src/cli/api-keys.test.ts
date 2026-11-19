@@ -62,7 +62,10 @@ describe("the API-key CLI", () => {
     expect(listed.code).toBe(0);
     expect(listed.out).toContain("first agent");
     expect(listed.out).not.toMatch(KEY);
-    expect(listed.out).not.toContain(key.split("_")[2]);
+    // The secret is everything after `sebela_<16 hex public id>_` and may itself contain `_`.
+    const secret = /^sebela_[0-9a-f]{16}_([A-Za-z0-9_-]{43})$/.exec(key)?.[1] ?? "";
+    expect(secret).toHaveLength(43);
+    expect(listed.out).not.toContain(secret);
     const [metadata] = await backend.services.apiKeys.listKeys();
     expect(listed.out).toContain(metadata?.id);
 
