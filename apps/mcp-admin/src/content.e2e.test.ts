@@ -27,6 +27,8 @@ beforeAll(async () => {
     ...process.env,
     MCP_ADMIN_PORT: "0",
     MCP_ADMIN_API_URL: api.url,
+    MCP_ADMIN_RATE_LIMIT_PREAUTH: "1000/60",
+    MCP_ADMIN_RATE_LIMIT_KEY: "1000/60",
   });
   mcp = await startMcpAdminServer({ config, log: () => undefined });
 });
@@ -203,5 +205,49 @@ describe("content management against the real API", () => {
     }
     expect(person.cvPdfId).toBe(cvPdfId);
     expect(JSON.stringify(await listed())).toBe(mediaBefore);
+  });
+
+  it("uploads an organization's logo and attaches the returned ID to that organization", async () => {
+    const client = await connect();
+
+    const uploaded = await call(client, "upload", {
+      fileName: "logo.png",
+      contentBase64: PNG,
+      altText: "A fictional agency logo.",
+    });
+    const logoId = (uploaded.json as { id: string }).id;
+    const saved = await call(client, "save", {
+      entity: "organization",
+      action: "update",
+      id: "early-pixel-agency",
+      fields: { logoId },
+    });
+    const organization = await call(client, "get", {
+      entity: "organization",
+      id: "early-pixel-agency",
+    });
+    const refusedUnknown = await call(client, "save", {
+      entity: "organization",
+      action: "update",
+      id: "early-pixel-agency",
+      fields: { logoId: "not-a-media-id" },
+    });
+    const recent = await call(client, "recent_changes", {});
+    await client.close();
+
+    expect(uploaded.isError).toBe(false);
+    expect(saved.isError).toBe(false);
+    expect(organization.json).toMatchObject({ slug: "early-pixel-agency", logoId });
+    expect(refusedUnknown.isError).toBe(true);
+    const { changes } = recent.json as { changes: AuditChange[] };
+    const updated = changes.find(
+      (change) => change.entity === "organization" && change.record === "early-pixel-agency",
+    );
+    expect(updated).toMatchObject({
+      actor: { keyName: "owner" },
+      action: "updated",
+      after: { logoId },
+    });
+    expect(updated?.provenance).toMatch(/^mcp-admin\/save\/[0-9a-f]{12}$/);
   });
 });
