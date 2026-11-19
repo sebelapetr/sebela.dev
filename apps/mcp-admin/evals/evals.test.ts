@@ -1,11 +1,16 @@
 // The deterministic parts of the model evals, tested without a model: the catalogue, the graders
 // on fake transcripts, the gate arithmetic and the redacted summary of a Promptfoo result.
+import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { evaluateGate, type CaseRun } from "./gate.js";
 import { gradeE01, gradeE02, gradeE29, parseToolOutput, type ToolCall } from "./graders.js";
-import { summarize } from "./run.js";
+import { promptfooEnvironment, removeLeakingFiles, summarize } from "./run.js";
 import generateTests from "./tests.js";
 
 const person = {
@@ -249,6 +254,66 @@ describe("the gate", () => {
   it("refuses runs of pending or unknown cases instead of counting them", () => {
     const result = evaluateGate([...all(() => true), run("E03", 1, true), run("E99", 1, true)]);
     expect(result.failures).toEqual(["E03: pending, cannot be run.", "E99: not in the catalogue."]);
+  });
+});
+
+describe("promptfooEnvironment", () => {
+  const parent = {
+    PATH: "/usr/bin",
+    HOME: "/home/someone",
+    ANTHROPIC_API_KEY: "model-key",
+    DATABASE_USER: "role",
+    DATABASE_PASSWORD: "database-secret",
+    POSTGRES_PASSWORD: "superuser-secret",
+    API_KEY_PEPPER: "pepper",
+    OTHER_SETTING: "anything",
+  };
+
+  it("passes only what Promptfoo needs, the case's values and the hardening settings", () => {
+    const env = promptfooEnvironment(parent, { MCP_ADMIN_EVAL_KEY: "case-key" }, "/state");
+    expect(env).toMatchObject({
+      PATH: "/usr/bin",
+      HOME: "/home/someone",
+      ANTHROPIC_API_KEY: "model-key",
+      MCP_ADMIN_EVAL_KEY: "case-key",
+      PROMPTFOO_LOG_DIR: "/state/logs",
+      PROMPTFOO_CONFIG_DIR: "/state",
+      PROMPTFOO_DISABLE_TELEMETRY: "1",
+      PROMPTFOO_DISABLE_SHARING: "1",
+      TZ: "Europe/Prague",
+    });
+    expect(Object.keys(env)).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^(DATABASE|POSTGRES|API_KEY|OTHER)_/)]),
+    );
+  });
+});
+
+describe("removeLeakingFiles", () => {
+  const scratch = join(fileURLToPath(new URL("../../../.tmp/", import.meta.url)), "evals-test");
+
+  afterEach(async () => {
+    await rm(scratch, { recursive: true, force: true });
+  });
+
+  it("reports a credential found in any file, nested logs included, and removes everything", async () => {
+    await mkdir(join(scratch, "state", "logs"), { recursive: true });
+    await writeFile(join(scratch, "raw.json"), "{}");
+    await writeFile(join(scratch, "state", "logs", "debug.log"), `header ${SENTINEL}`);
+    const leaked = await removeLeakingFiles(
+      [join(scratch, "raw.json"), join(scratch, "state")],
+      [SENTINEL],
+    );
+    expect(leaked).toEqual([join(scratch, "state", "logs", "debug.log")]);
+    expect(existsSync(join(scratch, "raw.json"))).toBe(false);
+    expect(existsSync(join(scratch, "state"))).toBe(false);
+  });
+
+  it("reports nothing for clean or missing paths", async () => {
+    await mkdir(scratch, { recursive: true });
+    await writeFile(join(scratch, "raw.json"), "{}");
+    expect(
+      await removeLeakingFiles([join(scratch, "raw.json"), join(scratch, "missing")], [SENTINEL]),
+    ).toEqual([]);
   });
 });
 

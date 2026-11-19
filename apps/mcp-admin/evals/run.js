@@ -139,6 +139,30 @@ function promptfoo(caseId, output, env) {
 }
 
 /**
+ * @param {NodeJS.ProcessEnv} parent
+ * @param {Record<string, string>} values
+ * @param {string} stateFolder
+ * @returns {Record<string, string>}
+ */
+export function promptfooEnvironment(parent, values, stateFolder) {
+  void parent;
+  void values;
+  void stateFolder;
+  throw new Error("Not implemented.");
+}
+
+/**
+ * @param {string[]} paths
+ * @param {string[]} secrets
+ * @returns {Promise<string[]>}
+ */
+export function removeLeakingFiles(paths, secrets) {
+  void paths;
+  void secrets;
+  return Promise.reject(new Error("Not implemented."));
+}
+
+/**
  * The redacted outcome of one case-run: pass/fail, reasons, executed tool names, latency, tokens
  * and cost. Answers and tool outputs stay out of the report.
  *
