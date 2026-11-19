@@ -5,6 +5,7 @@ import {
   DiaryDaySchema,
   DiaryNotesWriteSchema,
   DiarySchema,
+  RoadmapSessionCreateSchema,
   TimeEntryCreateSchema,
   TimeEntryIdParamsSchema,
   TimeEntryUpdateSchema,
@@ -151,6 +152,40 @@ describe("TimeEntryCreateSchema", () => {
     const result = TimeEntryCreateSchema.safeParse({ ...session, event: "fictional-ai-summit" });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.path).toEqual(["event"]);
+  });
+});
+
+describe("RoadmapSessionCreateSchema", () => {
+  it("accepts a session with or without notes and trims the notes", () => {
+    expect(RoadmapSessionCreateSchema.parse(session)).toEqual(session);
+    expect(RoadmapSessionCreateSchema.parse({ ...session, notes: "  Read chapter two. " })).toEqual(
+      { ...session, notes: "Read chapter two." },
+    );
+  });
+
+  it("refuses empty notes, a local time without an offset and an unknown field", () => {
+    const blank = RoadmapSessionCreateSchema.safeParse({ ...session, notes: "  " });
+    expect(blank.error?.issues[0]?.path).toEqual(["notes"]);
+    const local = RoadmapSessionCreateSchema.safeParse({
+      ...session,
+      startedAt: "2026-10-25T02:30:00",
+    });
+    expect(local.error?.issues[0]?.path).toEqual(["startedAt"]);
+    expect(RoadmapSessionCreateSchema.safeParse({ ...session, minutes: 60 }).success).toBe(false);
+  });
+
+  it("needs exactly one target and an end after the start", () => {
+    const withoutTarget = { startedAt: session.startedAt, endedAt: session.endedAt };
+    expect(RoadmapSessionCreateSchema.safeParse(withoutTarget).error?.issues[0]?.path).toEqual([
+      "resource",
+    ]);
+    const both = RoadmapSessionCreateSchema.safeParse({ ...session, event: "fictional-ai-summit" });
+    expect(both.error?.issues[0]?.path).toEqual(["event"]);
+    const backwards = RoadmapSessionCreateSchema.safeParse({
+      ...session,
+      endedAt: session.startedAt,
+    });
+    expect(backwards.error?.issues[0]?.path).toEqual(["endedAt"]);
   });
 });
 

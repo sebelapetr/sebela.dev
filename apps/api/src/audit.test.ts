@@ -317,6 +317,73 @@ describe("the content audit", () => {
     await roadmap.deleteArea("audit-basics");
   });
 
+  it("audits a logged session per diary day, with the notes and entries before and after", async () => {
+    const { roadmap } = backend.services;
+    await roadmap.createArea({
+      slug: "session-basics",
+      name: "Session basics",
+      description: null,
+      weight: 10,
+      position: 0,
+    });
+    await roadmap.createModule({
+      slug: "session-module",
+      area: "session-basics",
+      name: "Session module",
+      description: null,
+      position: 0,
+    });
+    const resource = { slug: "session-guide", module: "session-module", name: "Guide" };
+    expect(
+      (
+        await send(
+          "/v1/roadmap/resources",
+          "POST",
+          json({ ...resource, type: "link", position: 0 }, auth),
+        )
+      ).status,
+    ).toBe(201);
+    expect(
+      (await send("/v1/roadmap/diary/2026-04-02", "PATCH", json({ notes: "Before." }, auth)))
+        .status,
+    ).toBe(200);
+    const start = await newest();
+
+    const session = {
+      resource: "session-guide",
+      startedAt: "2026-04-02T23:30:00+02:00",
+      endedAt: "2026-04-03T00:30:00+02:00",
+      notes: "After.",
+    };
+    const provenance = { [auditProvenanceHeader]: "mcp-admin/session" };
+    const logged = await send(
+      "/v1/roadmap/sessions",
+      "POST",
+      json(session, { ...auth, ...provenance }),
+    );
+    expect(logged.status).toBe(201);
+
+    const recorded = await since(start);
+    expect(recorded.map(({ entity, record, action }) => [entity, record, action])).toEqual([
+      ["roadmap-diary", "2026-04-02", "updated"],
+      ["roadmap-diary", "2026-04-03", "created"],
+    ]);
+    expect(recorded.every((change) => change.provenance === "mcp-admin/session")).toBe(true);
+    expect(recorded[0]?.before).toMatchObject({ notes: "Before.", entries: [] });
+    expect(recorded[0]?.after).toMatchObject({
+      notes: "Before.\n\nAfter.",
+      entries: [{ resource: { slug: "session-guide" } }],
+    });
+
+    for (const day of (await roadmap.getDiary()).days) {
+      for (const entry of day.entries) await roadmap.deleteTimeEntry(entry.id);
+      if (day.notes !== null) await roadmap.deleteDiaryNotes(day.date);
+    }
+    await roadmap.deleteResource("session-guide");
+    await roadmap.deleteModule("session-module");
+    await roadmap.deleteArea("session-basics");
+  });
+
   it("rolls the content back when its audit cannot be stored", async () => {
     const start = await newest();
     const audit: Services["audit"] = {

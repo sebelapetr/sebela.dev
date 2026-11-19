@@ -264,6 +264,63 @@ describe("learning diary persistence", () => {
     });
   });
 
+  describe("a session with notes", () => {
+    const morning = [piece("2026-03-09", "2026-03-09T08:00:00Z", "2026-03-09T09:00:00Z")];
+
+    it("appends the notes to the day's notes with the entries, keeping what was there", async () => {
+      await roadmap.writeDiaryNotes("2026-03-09", "Earlier notes.");
+      const result = await roadmap.createTimeEntries({ resource: "prompting-notes" }, morning, {
+        date: "2026-03-09",
+        text: "Read chapter two.",
+      });
+      expect(result.ok).toBe(true);
+      const day = await roadmap.findDiaryDay("2026-03-09");
+      expect(day?.notes).toBe("Earlier notes.\n\nRead chapter two.");
+      expect(day?.entries).toHaveLength(1);
+    });
+
+    it("starts the notes of a day that has none", async () => {
+      await roadmap.createTimeEntries({ resource: "prompting-notes" }, acrossMidnight, {
+        date: "2026-03-02",
+        text: "Late session.",
+      });
+      await expect(roadmap.findDiaryDay("2026-03-02")).resolves.toMatchObject({
+        notes: "Late session.",
+      });
+      await expect(roadmap.findDiaryDay("2026-03-03")).resolves.toMatchObject({ notes: null });
+    });
+
+    it("keeps neither the entries nor the notes of a refused session", async () => {
+      await roadmap.writeDiaryNotes("2026-03-09", "Earlier notes.");
+      await roadmap.createTimeEntries({ resource: "intro-video" }, morning);
+      await expect(
+        roadmap.createTimeEntries({ resource: "prompting-notes" }, morning, {
+          date: "2026-03-09",
+          text: "Should not stay.",
+        }),
+      ).resolves.toEqual({ ok: false, reason: "overlap" });
+      const day = await roadmap.findDiaryDay("2026-03-09");
+      expect(day?.notes).toBe("Earlier notes.");
+      expect(day?.entries).toHaveLength(1);
+    });
+
+    it("keeps both notes of concurrent sessions into the same day", async () => {
+      await Promise.all([
+        roadmap.createTimeEntries({ resource: "prompting-notes" }, morning, {
+          date: "2026-03-09",
+          text: "One.",
+        }),
+        roadmap.createTimeEntries(
+          { resource: "intro-video" },
+          [piece("2026-03-09", "2026-03-09T10:00:00Z", "2026-03-09T11:00:00Z")],
+          { date: "2026-03-09", text: "Two." },
+        ),
+      ]);
+      const notes = (await roadmap.findDiaryDay("2026-03-09"))?.notes ?? "";
+      expect(notes.split("\n\n").sort()).toEqual(["One.", "Two."]);
+    });
+  });
+
   describe("replacing and deleting a time entry", () => {
     async function firstEntryId() {
       const [day] = await roadmap.loadDiary();

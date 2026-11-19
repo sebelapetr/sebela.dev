@@ -677,9 +677,16 @@ describe("the OpenAPI document and the reference", () => {
     expect(Object.keys(operation("DELETE", "/v1/roadmap/time-entries/:id").responses)).toEqual(
       expect.arrayContaining(["204", "401", "404"]),
     );
+    const session = operation("POST", "/v1/roadmap/sessions");
+    expect(session.requestBody?.content).toEqual(content("RoadmapSessionCreate"));
+    expect(session.responses["201"]?.content).toEqual(content("TimeEntryWrite"));
+    expect(Object.keys(session.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
     for (const [method, path] of [
       ["PATCH", "/v1/roadmap/diary/:date"],
       ["DELETE", "/v1/roadmap/diary/:date"],
+      ["POST", "/v1/roadmap/sessions"],
       ["POST", "/v1/roadmap/time-entries"],
       ["PATCH", "/v1/roadmap/time-entries/:id"],
       ["DELETE", "/v1/roadmap/time-entries/:id"],

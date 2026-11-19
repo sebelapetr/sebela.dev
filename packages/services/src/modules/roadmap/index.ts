@@ -91,6 +91,7 @@ export interface RoadmapService
 }
 
 export type { Bookshelf } from "./books.js";
+export { sessionDiaryDates } from "./diary.js";
 export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
 export type { EventCalendar } from "./events.js";
 export type { LearningStatistics } from "./statistics.js";

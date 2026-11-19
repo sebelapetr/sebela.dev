@@ -1,0 +1,20 @@
+[
+  {
+    "slug": "harbor-patterns",
+    "title": "Harbor Patterns",
+    "author": "Odile Venn",
+    "description": "A fictional book on message-driven design.",
+    "pages": 212,
+    "year": 2024,
+    "priority": 0
+  },
+  {
+    "slug": "quiet-ledger",
+    "title": "The Quiet Ledger",
+    "author": "Bram Tolle",
+    "description": "A fictional book on bookkeeping systems.",
+    "pages": 180,
+    "year": 2023,
+    "priority": 1
+  }
+]

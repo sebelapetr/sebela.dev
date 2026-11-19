@@ -961,6 +961,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/roadmap/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log a study session with diary notes
+         * @description Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. Optional Markdown `notes` are appended after a blank line to the notes of the session's first diary day, or start them; earlier notes stay. The entries and the notes are written in one transaction: a refused session changes neither. The write is audited per diary day it touches.
+         */
+        post: operations["logRoadmapSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roadmap/time-entries/{id}": {
         parameters: {
             query?: never;
@@ -2030,6 +2050,24 @@ export interface components {
              * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
              */
             endedAt: string;
+        };
+        RoadmapSessionCreate: {
+            /** @description The slug of the resource that was studied; not sent with `event`. */
+            resource?: string;
+            /** @description The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event. */
+            event?: string;
+            /**
+             * Format: date-time
+             * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
+             */
+            startedAt: string;
+            /**
+             * Format: date-time
+             * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
+             */
+            endedAt: string;
+            /** @description Markdown appended to the notes of the session's first day; earlier notes are kept. */
+            notes?: string;
         };
         TimeEntryUpdate: {
             /** @description The slug of the resource that was studied; not sent with `event`. */
@@ -9971,6 +10009,100 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TimeEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description The written entries and the diary days they belong to. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryWrite"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logRoadmapSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`. */
+                "sebela-provenance"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapSessionCreate"];
             };
         };
         responses: {

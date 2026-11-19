@@ -231,6 +231,53 @@ describe("the learning diary API", () => {
     expect(await diary()).toEqual({ days: [] });
   });
 
+  it("logs a session with notes in one write, appending to the start day's notes", async () => {
+    await patch("/v1/roadmap/diary/2026-03-02", { notes: "Earlier notes." });
+
+    const logged = await post("/v1/roadmap/sessions", {
+      ...acrossMidnight,
+      notes: "Late chapter.",
+    });
+    expect(logged.status).toBe(201);
+    const write = TimeEntryWriteSchema.parse(await logged.json());
+    expect(write.dates).toEqual(["2026-03-02", "2026-03-03"]);
+    expect(write.entries.map((entry) => entry.durationSeconds)).toEqual([1800, 1800]);
+    expect(await day("2026-03-02")).toMatchObject({
+      notes: "Earlier notes.\n\nLate chapter.",
+      totalSeconds: 1800,
+    });
+    expect(await day("2026-03-03")).toMatchObject({ notes: null, totalSeconds: 1800 });
+  });
+
+  it("refuses an overlapping session with a conflict and keeps the notes as they were", async () => {
+    await patch("/v1/roadmap/diary/2026-03-02", { notes: "Earlier notes." });
+    expect((await post("/v1/roadmap/time-entries", acrossMidnight)).status).toBe(201);
+
+    const refused = await post("/v1/roadmap/sessions", {
+      resource: "prompting-drills",
+      startedAt: "2026-03-02T23:00:00+01:00",
+      endedAt: "2026-03-02T23:45:00+01:00",
+      notes: "Must not stay.",
+    });
+    expect(refused.status).toBe(409);
+    expect((await errorOf(refused)).code).toBe("conflict");
+    expect(await day("2026-03-02")).toMatchObject({ notes: "Earlier notes.", totalSeconds: 1800 });
+  });
+
+  it("refuses a session on an unknown resource and malformed sessions, naming the field", async () => {
+    const unknown = await post("/v1/roadmap/sessions", { ...acrossMidnight, resource: "missing" });
+    expect(unknown.status).toBe(400);
+    expect((await errorOf(unknown)).fields?.map((field) => field.path)).toEqual(["resource"]);
+    const statuses = [
+      (await post("/v1/roadmap/sessions", { ...acrossMidnight, startedAt: "2026-03-02T23:30:00" }))
+        .status,
+      (await post("/v1/roadmap/sessions", { ...acrossMidnight, notes: " " })).status,
+      (await post("/v1/roadmap/sessions", { ...acrossMidnight, minutes: 60 })).status,
+    ];
+    expect(statuses).toEqual([400, 400, 400]);
+    expect(await diary()).toEqual({ days: [] });
+  });
+
   it("refuses malformed input before the service", async () => {
     const statuses = [
       (await request("/v1/roadmap/diary/2026-02-30")).status,
@@ -267,6 +314,7 @@ describe("the learning diary API", () => {
       ).status,
       (await request(`/v1/roadmap/time-entries/${id}`, "PATCH", json({}))).status,
       (await request(`/v1/roadmap/time-entries/${id}`, "DELETE")).status,
+      (await request("/v1/roadmap/sessions", "POST", json(acrossMidnight))).status,
     ];
     expect(statuses).toEqual(Array<number>(statuses.length).fill(401));
     expect(await diary()).toEqual({ days: [] });

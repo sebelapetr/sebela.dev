@@ -77,12 +77,18 @@ describe("the authenticated read path", () => {
     await client.close();
 
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "add_resource",
       "delete",
       "describe",
+      "find_resource",
       "get",
       "list",
+      "log_session",
       "recent_changes",
       "save",
+      "save_book",
+      "save_event",
+      "set_resource_status",
     ]);
     expect(result.isError).not.toBe(true);
     expect(JSON.parse(toolText(result))).toMatchObject({ name: "Mira Tolland" });
