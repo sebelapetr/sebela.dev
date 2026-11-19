@@ -136,7 +136,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a topic
-         * @description A topic that an exploration still links is not deleted; remove those links first.
+         * @description A topic that an exploration, a current-focus entry, a roadmap resource, an event or a project idea still links is not deleted (`conflict`); remove those links first.
          */
         delete: operations["deleteTopic"];
         options?: never;
