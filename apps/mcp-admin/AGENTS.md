@@ -35,13 +35,13 @@ Rate limits are fixed windows in memory, per process, bounded by `MCP_ADMIN_RATE
 
 ## Commands
 
-| Task                                                                                                                               | Command                                                                                                   |
-| ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Build                                                                                                                              | `pnpm --filter @sebela/mcp-admin build`                                                                   |
-| Start (reads the environment, see below)                                                                                           | `node --env-file-if-exists=../../.env.local dist/server.js` in this folder, or set the variables yourself |
-| Tests (needs the running Postgres and the API build for the end-to-end and eval-harness tests, Docker for the Compose policy test) | `pnpm --filter @sebela/mcp-admin test`                                                                    |
-| Check that the eval fixture starts (free)                                                                                          | `node evals/run.js --check-fixture`                                                                       |
-| Model evals (paid, needs `ANTHROPIC_API_KEY`)                                                                                      | `node evals/run.js`                                                                                       |
+| Task                                                                                           | Command                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Build                                                                                          | `pnpm --filter @sebela/mcp-admin build`                                                                   |
+| Start (reads the environment, see below)                                                       | `node --env-file-if-exists=../../.env.local dist/server.js` in this folder, or set the variables yourself |
+| Tests (needs the running Postgres and the API build for the end-to-end and eval-harness tests) | `pnpm --filter @sebela/mcp-admin test`                                                                    |
+| Check that the eval fixture starts (free)                                                      | `node evals/run.js --check-fixture`                                                                       |
+| Model evals (paid, needs `ANTHROPIC_API_KEY`)                                                  | `node evals/run.js`                                                                                       |
 
 The server logs `MCP Admin listening on <url>` once it listens and stops cleanly on SIGTERM or SIGINT: it ends in-flight MCP exchanges and closes its socket.
 
@@ -66,7 +66,7 @@ Every setting is required and documented in `.env.example`; a missing or invalid
 
 The profile `mcp-admin` of `compose.yaml` adds the service `mcp-admin`, built from `apps/mcp-admin/Dockerfile` (MCP Admin, the API client and the contracts only; unprivileged `node` user; no environment file). Start it with the API: `docker compose --profile api --profile mcp-admin up --detach --wait`. It listens on the container port 8080, reaches the API as `http://api:8080`, is published on `MCP_ADMIN_HOST`:`MCP_ADMIN_PORT` (loopback) and has a health check on `/health`. Its environment holds only `MCP_ADMIN_*` settings.
 
-Networks: `database` joins Postgres, the migration and the API; `content` joins the API and the website; `admin` joins the API and MCP Admin. MCP Admin has no route to Postgres or the website, the website has none to MCP Admin, and the website holds no API key. `src/deployment.test.ts` checks this policy from `docker compose config` with the example settings, without building or starting an image (D22, D23). The public edge (reverse proxy, TLS, which routes it exposes) is phase 10's; it must expose neither MCP Admin nor private API routes.
+Networks: `database` joins Postgres, the migration and the API; `content` joins the API and the website; `admin` joins the API and MCP Admin. MCP Admin has no route to Postgres or the website, the website has none to MCP Admin, and the website holds no API key. The repository check `scripts/checks/compose-policy.test.mjs` verifies this policy from `docker compose config` with the example settings, without building or starting an image (D22, D23); it runs with the root checks on every change, so a change to `compose.yaml`, `.dockerignore` or `.env.example` alone still runs it. The public edge (reverse proxy, TLS, which routes it exposes) is phase 10's; it must expose neither MCP Admin nor private API routes.
 
 ## Connecting a client
 
@@ -112,5 +112,5 @@ Limitations: only clients that send a static `Authorization` header over Streama
 
 - `src/app.test.ts`: the HTTP surface in-process against a fake API (D01, D02, D04–D09, D14, D15).
 - `src/mcp.e2e.test.ts`: SDK client -> MCP Admin -> the real API on a temporary database seeded from `evals/fixtures/s01`, with ephemeral named fixture keys that reach only the client's header (D01–D04, D15).
-- `src/deployment.test.ts`: the Compose policy (D22, D23), statically.
+- `scripts/checks/compose-policy.test.mjs` (repository check, `node --test scripts/checks/`): the Compose policy and image (D22, D23), statically.
 - Evals (`evals/`): read-only baseline E01, E02 and E29 on fixture S01 with a frozen clock; the full catalogue is listed with future write cases pending. Gate: at least 90% of noncritical case-runs and every safety case-run pass across three repeats of each case; a failing gate blocks acceptance. Pinned settings are in `evals/promptfooconfig.yaml`; results go to `.tmp/evals/mcp-admin/`, redacted.
