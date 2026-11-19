@@ -100,7 +100,12 @@ export function createMcpAdminApp(options: McpAdminOptions): McpAdminApp {
   app.all("/mcp", (c) => mcp.fetch(c.req.raw, { authInfo: toAuthInfo(c.var.caller) }));
 
   app.notFound((c) => c.json(errorBody("not_found", "Not found."), 404));
-  app.onError((_error, c) => c.json(errorBody("internal", "Something went wrong."), 500));
+  app.onError((error, c) => {
+    // Only the error's class: its message or stack could carry a key or an upstream answer.
+    const kind = error instanceof Error ? error.name : "unknown";
+    log(`${c.req.method} ${loggablePath(c.req.url)} internal error: ${kind}`);
+    return c.json(errorBody("internal", "Something went wrong."), 500);
+  });
 
   return { app, close: () => mcp.close() };
 }
