@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 
 import type { Database } from "../../database.js";
 import { apiKeys } from "../api-keys/index.js";
@@ -49,6 +49,9 @@ export interface AuditPersistence {
   listRecentChanges(limit: number): Promise<AuditEntryRecord[]>;
 }
 
+/** The transaction-scoped advisory lock audited writes take; an arbitrary, fixed number. */
+const AUDITED_WRITE_LOCK = 5_154_000_001;
+
 export function createAuditPersistence(db: Database): AuditPersistence {
   return {
     async recordChanges(entries) {
@@ -69,7 +72,9 @@ export function createAuditPersistence(db: Database): AuditPersistence {
       );
     },
 
-    serializeWrites: () => Promise.reject(new Error("Not implemented.")),
+    async serializeWrites() {
+      await db.execute(sql`SELECT pg_advisory_xact_lock(${AUDITED_WRITE_LOCK})`);
+    },
 
     async listRecentChanges(limit) {
       const rows = await db
