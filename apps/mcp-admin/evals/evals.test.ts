@@ -6,7 +6,14 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  PersonUpdateSchema,
+  ProjectUpdateSchema,
+  RoadmapBookUpdateSchema,
+  RoadmapResourceUpdateSchema,
+} from "@sebela/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import type { z } from "zod";
 
 import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { evaluateGate, type CaseRun } from "./gate.js";
@@ -1594,3 +1601,32 @@ function loopback(): string {
   }
   throw new Error("No loopback interface");
 }
+
+// The runner applies these edits through the real API before or during a case-run; a body the
+// contract refuses would fail the case before the model is called.
+const EDIT_CONTRACTS: readonly [RegExp, z.ZodType][] = [
+  [/^\/v1\/person$/, PersonUpdateSchema],
+  [/^\/v1\/projects\/[^/]+$/, ProjectUpdateSchema],
+  [/^\/v1\/roadmap\/resources\/[^/]+$/, RoadmapResourceUpdateSchema],
+  [/^\/v1\/roadmap\/books\/[^/]+$/, RoadmapBookUpdateSchema],
+];
+
+describe("the scenarios' API edits", () => {
+  const edits = Object.entries(scenarios).flatMap(([id, scenario]) =>
+    [...(scenario.setup ?? []), ...(scenario.concurrent ? [scenario.concurrent.edit] : [])].map(
+      (edit) => [id, edit] as const,
+    ),
+  );
+
+  it("has edits to check", () => {
+    expect(edits.length).toBeGreaterThan(0);
+  });
+
+  it.each(edits)("%s sends a body its update contract accepts", (_id, edit) => {
+    expect(edit.method).toBe("PATCH");
+    const contract = EDIT_CONTRACTS.find(([path]) => path.test(edit.path))?.[1];
+    expect(contract, edit.path).toBeDefined();
+    const parsed = contract?.safeParse(edit.body);
+    expect(parsed?.error?.issues ?? [], edit.path).toEqual([]);
+  });
+});
