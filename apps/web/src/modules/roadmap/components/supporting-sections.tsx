@@ -220,8 +220,8 @@ function GlossaryTerms({ terms }: { readonly terms: readonly GlossaryTermRow[] }
             {terms.map((term) => (
               <div key={term.slug} className="flex flex-col gap-1">
                 <dt className="text-base font-medium wrap-anywhere">{term.term}</dt>
-                <dd className="text-sm leading-6 wrap-anywhere text-muted-foreground">
-                  {term.description}
+                <dd className="text-sm leading-6 wrap-anywhere text-muted-foreground [&>*+*]:mt-2">
+                  <ProseMarkdown>{term.description}</ProseMarkdown>
                 </dd>
               </div>
             ))}

@@ -36,6 +36,7 @@ export interface FollowedSourceRow {
 export interface GlossaryTermRow {
   readonly slug: string;
   readonly term: string;
+  /** Markdown. */
   readonly description: string;
 }
 
