@@ -10011,6 +10011,1491 @@
         }
       }
     },
+    "/v1/roadmap/project-ideas": {
+      "get": {
+        "operationId": "listRoadmapProjectIdeas",
+        "summary": "Read the project ideas",
+        "description": "Every project idea with its topics in their order. Ordered by position, then slug. None is the valid empty list.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The project ideas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapProjectIdeaList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRoadmapProjectIdea",
+        "summary": "Add a project idea",
+        "description": "The slug is unique and stable; a taken slug is a conflict. An omitted way to start means none and omitted topics none. Every slug in `topics` names an existing shared topic, each once (`validation_failed` on `topics`).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapProjectIdeaCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created project idea.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapProjectIdea"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/project-ideas/{slug}": {
+      "get": {
+        "operationId": "getRoadmapProjectIdea",
+        "summary": "Read a project idea",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project idea.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapProjectIdea"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRoadmapProjectIdea",
+        "summary": "Update a project idea",
+        "description": "Changes only the fields sent; `null` clears an optional field and the slug cannot change. Given `topics` replace every link. Every slug in `topics` names an existing shared topic, each once (`validation_failed` on `topics`).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapProjectIdeaUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated project idea.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapProjectIdea"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRoadmapProjectIdea",
+        "summary": "Delete a project idea",
+        "description": "Deletes the idea with its topic links and keeps the topics. Nothing references it, so it is deleted unless it is missing.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The project idea was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/followed-sources": {
+      "get": {
+        "operationId": "listRoadmapFollowedSources",
+        "summary": "Read the followed sources",
+        "description": "Every source followed to stay current. Ordered by position, then slug. None is the valid empty list.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The followed sources.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapFollowedSourceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRoadmapFollowedSource",
+        "summary": "Add a followed source",
+        "description": "The slug is unique and stable; a taken slug is a conflict. An omitted description or link means none.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapFollowedSourceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created followed source.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapFollowedSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/followed-sources/{slug}": {
+      "get": {
+        "operationId": "getRoadmapFollowedSource",
+        "summary": "Read a followed source",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The followed source.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapFollowedSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRoadmapFollowedSource",
+        "summary": "Update a followed source",
+        "description": "Changes only the fields sent; `null` clears an optional field and the slug cannot change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapFollowedSourceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated followed source.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapFollowedSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRoadmapFollowedSource",
+        "summary": "Delete a followed source",
+        "description": "Nothing references it, so it is deleted unless it is missing.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The followed source was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/glossary-terms": {
+      "get": {
+        "operationId": "listRoadmapGlossaryTerms",
+        "summary": "Read the glossary terms",
+        "description": "Every additional term explained beside the roadmap. Ordered by position, then slug. None is the valid empty list.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The glossary terms.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapGlossaryTermList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRoadmapGlossaryTerm",
+        "summary": "Add a glossary term",
+        "description": "The slug is unique and stable; a taken slug is a conflict.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapGlossaryTermCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created glossary term.",
+            "headers": {
+              "Location": {
+                "description": "The address of the record.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapGlossaryTerm"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the write contradicts existing content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/roadmap/glossary-terms/{slug}": {
+      "get": {
+        "operationId": "getRoadmapGlossaryTerm",
+        "summary": "Read a glossary term",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The glossary term.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapGlossaryTerm"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRoadmapGlossaryTerm",
+        "summary": "Update a glossary term",
+        "description": "Changes only the fields sent; the slug cannot change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoadmapGlossaryTermUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated glossary term.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapGlossaryTerm"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRoadmapGlossaryTerm",
+        "summary": "Delete a glossary term",
+        "description": "Nothing references it, so it is deleted unless it is missing.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "required": true,
+            "description": "The stable, unique address of the record, for example `paldock`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The glossary term was deleted."
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -13154,6 +14639,289 @@
               "description": "The stable, unique address of the record, for example `paldock`."
             },
             "description": "Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoadmapProjectIdeaCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable identity of the record and its anchor on the website."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "whyItMatters": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "Why the project is worth doing, Markdown."
+          },
+          "howToStart": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How to begin, Markdown; `null` when there is no advice yet."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          },
+          "topics": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged."
+          }
+        },
+        "required": [
+          "slug",
+          "title",
+          "whyItMatters",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapProjectIdeaUpdate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "whyItMatters": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "Why the project is worth doing, Markdown."
+          },
+          "howToStart": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How to begin, Markdown; `null` when there is no advice yet."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          },
+          "topics": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "The stable, unique address of the record, for example `paldock`."
+            },
+            "description": "Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoadmapFollowedSourceCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable identity of the record and its anchor on the website."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown; `null` when there is none."
+          },
+          "link": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An absolute `http` or `https` address; `null` when there is none."
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "A short label of what the source is, for example `newsletter`, `podcast` or `blog`; free text, shown as written."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          }
+        },
+        "required": [
+          "slug",
+          "title",
+          "kind",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapFollowedSourceUpdate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown; `null` when there is none."
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An absolute `http` or `https` address; `null` when there is none."
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "A short label of what the source is, for example `newsletter`, `podcast` or `blog`; free text, shown as written."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoadmapGlossaryTermCreate": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable identity of the record and its anchor on the website."
+          },
+          "term": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "What the term means, Markdown."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          }
+        },
+        "required": [
+          "slug",
+          "term",
+          "description",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapGlossaryTermUpdate": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "What the term means, Markdown."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
           }
         },
         "additionalProperties": false
@@ -17181,6 +18949,239 @@
           "startsOn",
           "endsOn",
           "totalSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapProjectIdeaList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoadmapProjectIdea"
+        },
+        "description": "Ordered by position, then slug."
+      },
+      "RoadmapProjectIdea": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable identity of the record and its anchor on the website."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "whyItMatters": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "Why the project is worth doing, Markdown."
+          },
+          "howToStart": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How to begin, Markdown; `null` when there is no advice yet."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            },
+            "description": "The linked topics, in their order."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "whyItMatters",
+          "howToStart",
+          "position",
+          "topics",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapFollowedSourceList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoadmapFollowedSource"
+        },
+        "description": "Ordered by position, then slug."
+      },
+      "RoadmapFollowedSource": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable identity of the record and its anchor on the website."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Markdown; `null` when there is none."
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An absolute `http` or `https` address; `null` when there is none."
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "A short label of what the source is, for example `newsletter`, `podcast` or `blog`; free text, shown as written."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "description",
+          "link",
+          "kind",
+          "position",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RoadmapGlossaryTermList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoadmapGlossaryTerm"
+        },
+        "description": "Ordered by position, then slug."
+      },
+      "RoadmapGlossaryTerm": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "The stable identity of the record and its anchor on the website."
+          },
+          "term": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "What the term means, Markdown."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Ascending order in its list; ties are ordered by slug."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "term",
+          "description",
+          "position",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       }
