@@ -15,7 +15,7 @@ const mcpFolder = fileURLToPath(new URL("../", import.meta.url));
 const scratchRoot = fileURLToPath(new URL("../../../.tmp/", import.meta.url));
 
 /** The fictional seed folders of `evals/fixtures/`. */
-export function fixtureFolder(/** @type {"s01" | "s02"} */ name) {
+export function fixtureFolder(/** @type {import("./scenarios.js").FixtureName} */ name) {
   return fileURLToPath(new URL(`fixtures/${name}`, import.meta.url));
 }
 

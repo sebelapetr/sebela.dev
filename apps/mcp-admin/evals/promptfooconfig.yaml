@@ -9,7 +9,7 @@
 # output tokens per conversation, 120 s per case-run, and the frozen clock in prompt.json. The clock is frozen in the
 # prompt only: the API and MCP Admin run on real time (no case depends on it). The MCP address is
 # the controlled client adapter's (evals/client.js), which asks the scripted owner before writes.
-description: MCP Admin S01 read-only baseline and S02 content management
+description: MCP Admin S01 read-only baseline, S02 content management and S04 media and CV maintenance
 
 prompts:
   - file://prompt.json
