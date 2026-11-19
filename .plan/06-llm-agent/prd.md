@@ -2,11 +2,13 @@
 
 |            |                                                                                                                                   |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Owner-agreed design; documentation review before issue publication                                                                |
+| Status     | Approved by owner; implementation issues published                                                                                |
 | Date       | 2026-11-19                                                                                                                        |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                        |
 | Depends on | Phases 2, 4 and 5                                                                                                                 |
 | Result     | A tested Python library runs a bounded three-stage chat pipeline over structured API read tools; no HTTP server or RAG dependency |
+
+Implementation breakdown: [6 published issues](issues.md), with prerequisites and the final human acceptance gate. Publication starts no implementation or paid run.
 
 ## Problem Statement
 
