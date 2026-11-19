@@ -178,6 +178,33 @@ describe("E02: describe the project contract", () => {
     );
   });
 
+  it("accepts an example the contract quotes in a schema description", () => {
+    const withExample = {
+      ...description,
+      create: {
+        ...description.create,
+        properties: {
+          ...description.create.properties,
+          slug: {
+            type: "string",
+            description: "The stable, unique address of the record, for example `paldock`.",
+          },
+        },
+      },
+    };
+    const answer =
+      "`name`, `summary`, `startedOn` and `slug` (for example `paldock`); a project belongs to an `experience`.";
+    expect(gradeE02(answer, context(call("describe", { entity: "project" }, withExample)))).toEqual(
+      expect.objectContaining({ pass: true }),
+    );
+    expect(
+      gradeE02(
+        `${answer} Also \`budget\`.`,
+        context(call("describe", { entity: "project" }, withExample)),
+      ).reason,
+    ).toMatch(/budget/);
+  });
+
   it("still fails on a guessed field next to schema words", () => {
     const answer =
       "`name` (`string`), `summary`, `startedOn`, `experience` and `budget` (`number`).";
