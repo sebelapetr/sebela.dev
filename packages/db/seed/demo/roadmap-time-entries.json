@@ -95,6 +95,11 @@
     "endedAt": "2025-03-06T08:00:00+01:00"
   },
   {
+    "resource": "evaluation-field-guide-reading",
+    "startedAt": "2025-03-30T01:30:00+01:00",
+    "endedAt": "2025-03-30T03:30:00+02:00"
+  },
+  {
     "event": "year-end-agents-workshop",
     "startedAt": "2024-12-31T10:00:00+01:00",
     "endedAt": "2024-12-31T12:00:00+01:00"
