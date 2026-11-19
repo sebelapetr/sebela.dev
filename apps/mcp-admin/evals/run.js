@@ -4,7 +4,13 @@
 //
 //   node evals/run.js                 every implemented case, the required repeats (paid; run it as
 //                                     `pnpm --filter @sebela/mcp-admin eval`, which supplies the key)
+//   node evals/run.js --case <id>     only that implemented case, the required repeats (paid; through
+//                                     pnpm: `pnpm --filter @sebela/mcp-admin eval --case <id>`); the
+//                                     summary's `scope` marks it partial and its gate covers that case
 //   node evals/run.js --check-fixture start and stop one fixture, no model call (free)
+//
+// An unknown option, an unknown or pending case or a missing case id stops the runner before any
+// setting is read, fixture started or model called.
 //
 // Every case-run gets its own API on a fresh temporary database seeded from `fixtures/s01`, its
 // own ephemeral API key and its own MCP server. The key reaches Promptfoo only through the
@@ -17,7 +23,7 @@
 // the gate fails or a credential would leak.
 //
 // Budget: at most `implemented cases x repeats` model conversations (9 for S01), each limited by
-// max_tokens in promptfooconfig.yaml. Needs ANTHROPIC_API_KEY, the running Postgres and a build
+// max_tokens in promptfooconfig.yaml; a `--case` run at most `repeats` (3). Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -25,7 +31,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { gates, implementedCases } from "./catalogue.js";
+import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { fixtureFolder, startApi, startMcp } from "./fixture.js";
 import { evaluateGate } from "./gate.js";
 
@@ -319,20 +325,42 @@ export function totals(runs) {
  * before any fixture starts or model is called.
  *
  * @param {readonly string[]} args
- * @returns {{ checkFixture: boolean, cases: import("./catalogue.js").EvalCase[], partial: { case: string } | null }}
+ * @returns {{ checkFixture: boolean, cases: readonly import("./catalogue.js").EvalCase[], partial: { case: string } | null }}
  */
 export function planRun(args) {
-  throw new Error(`planRun is not implemented (${String(args.length)} options)`);
+  let checkFixture = false;
+  /** @type {string | undefined} */
+  let caseId;
+  for (let index = 0; index < args.length; index += 1) {
+    const option = args[index];
+    if (option === "--check-fixture") {
+      checkFixture = true;
+    } else if (option === "--case") {
+      const value = args[index + 1];
+      if (value === undefined || value.startsWith("--")) throw new Error("--case needs a case id.");
+      if (caseId !== undefined) throw new Error("Name only one --case per run.");
+      caseId = value;
+      index += 1;
+    } else {
+      throw new Error(`Unknown option ${String(option)}.`);
+    }
+  }
+  if (caseId === undefined) return { checkFixture, cases: implementedCases(), partial: null };
+  const entry = catalogue.find((candidate) => candidate.id === caseId);
+  if (!entry) throw new Error(`${caseId} is not in the catalogue.`);
+  if (entry.status !== "implemented") throw new Error(`${caseId} is not implemented yet.`);
+  return { checkFixture, cases: [entry], partial: { case: entry.id } };
 }
 
 async function main() {
+  // Invalid options stop the runner before any setting is read or fixture started.
+  const plan = planRun(process.argv.slice(2));
   // The process environment wins, then this checkout's files, then the documented examples.
   for (const name of [".env.local", ".env", ".env.example"]) {
     const file = join(repositoryRoot, name);
     if (existsSync(file)) process.loadEnvFile(file);
   }
-  const args = process.argv.slice(2);
-  if (args.includes("--check-fixture")) {
+  if (plan.checkFixture) {
     const api = await startApi({ seedFolder: fixtureFolder("s01"), keyNames: ["eval"] });
     try {
       const mcp = await startMcp({ apiUrl: api.url });
@@ -354,14 +382,16 @@ async function main() {
   const folder = join(reportRoot, startedAt.replaceAll(":", "-"));
   await mkdir(folder, { recursive: true });
   const runs = [];
-  for (const entry of implementedCases()) {
+  for (const entry of plan.cases) {
     for (let repeat = 1; repeat <= gates.repeats; repeat += 1) {
       runs.push(await runCase(entry, repeat, folder));
     }
   }
-  const gate = evaluateGate(runs);
+  // A partial run is gated on its own case only; it never stands in for a full run's gate.
+  const gate = evaluateGate(runs, plan.partial ? { cases: plan.cases } : {});
   const summary = {
     startedAt,
+    scope: plan.partial ? { partial: true, case: plan.partial.case } : { partial: false },
     pinned: {
       promptfoo: PROMPTFOO,
       provider: "anthropic:messages:claude-opus-5-5",
@@ -379,7 +409,7 @@ async function main() {
   };
   await writeFile(join(folder, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   process.stdout.write(
-    `${JSON.stringify({ gate, usage: summary.usage, report: join(folder, "summary.json") }, null, 2)}\n`,
+    `${JSON.stringify({ scope: summary.scope, gate, usage: summary.usage, report: join(folder, "summary.json") }, null, 2)}\n`,
   );
   if (!gate.pass) process.exitCode = 1;
 }
