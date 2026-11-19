@@ -1,7 +1,7 @@
 // The seo module: what search engines and language models read about the profile — each indexed
-// page's metadata and Open Graph preview image, the homepage's structured data, the AI Roadmap
-// area, module, bookshelf and book pages' metadata, breadcrumbs, course, book list and book data
-// and preview images, the sitemap, robots.txt and llms.txt — on the
+// page's metadata and Open Graph preview image, the homepage's structured data, every AI Roadmap
+// page's metadata, breadcrumbs, structured data and preview image, the sitemap, robots.txt and
+// llms.txt with the roadmap's pages — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
 // not published answers 404 and one that cannot be read answers 503, never an empty document.
 // Server-only.
@@ -9,7 +9,7 @@ import "server-only";
 
 import type { Metadata } from "next";
 
-import { getHomepage } from "../profile";
+import { getHomepage, getRoadmap, getRoadmapBookshelf, getRoadmapDiary } from "../profile";
 import { robotsTxt, sitemapXml } from "./data/indexing";
 import { openGraphImage } from "./components/open-graph-image";
 import { llmsTxt } from "./data/llms-txt";
@@ -25,6 +25,7 @@ import {
   roadmapPageMetadata as buildRoadmapPageMetadata,
   type RoadmapPageFacts,
 } from "./data/roadmap-page";
+import { discoveryResult, roadmapPaths, type DiscoveryResult } from "./data/roadmap-discovery";
 import { siteOrigin } from "./data/site-origin";
 
 export { ProfileStructuredData } from "./components/profile-structured-data";
@@ -49,19 +50,37 @@ export function pageMetadata(page: IndexedPage, facts: PageFacts): Metadata {
 }
 
 /**
- * An AI Roadmap area's, module's, the bookshelf's or a book's page metadata on the canonical origin: title from its
- * breadcrumbs, description, canonical address, Open Graph basics with the page's own preview image
- * and a large Twitter card, kept out of search results until the roadmap is indexed as a whole.
+ * An AI Roadmap page's metadata on the canonical origin: title from its breadcrumbs, description,
+ * canonical address, Open Graph basics with the page's own preview image and a large Twitter card.
  */
 export function roadmapPageMetadata(facts: RoadmapPageFacts): Metadata {
   return buildRoadmapPageMetadata(siteOrigin(), facts);
 }
 
-/** The sitemap of the indexed pages; 404 or 503 while the profile is missing or unreadable. */
+/**
+ * The profile and the AI Roadmap's pages, read in parallel (each read once per request and served
+ * from the content cache, so an edit refreshes both documents).
+ */
+async function readDiscovery(): Promise<DiscoveryResult> {
+  const [homepage, roadmap, diary, bookshelf] = await Promise.all([
+    getHomepage(),
+    getRoadmap(),
+    getRoadmapDiary(),
+    getRoadmapBookshelf(),
+  ]);
+  return discoveryResult({ homepage, roadmap, diary, bookshelf });
+}
+
+/**
+ * The sitemap of the indexed pages and every AI Roadmap page; 404 or 503 while the profile or the
+ * roadmap is missing or unreadable, never a sitemap with pages left out.
+ */
 export async function sitemapResponse(): Promise<Response> {
-  const result = await getHomepage();
+  const result = await readDiscovery();
   const origin = siteOrigin();
-  return profileTextResponse(result, "application/xml; charset=utf-8", () => sitemapXml(origin));
+  return profileTextResponse(result, "application/xml; charset=utf-8", ({ roadmap }) =>
+    sitemapXml(origin, roadmapPaths(roadmap)),
+  );
 }
 
 /** robots.txt; it reads no content, so it is served while the API is down. */
@@ -69,12 +88,14 @@ export function robotsResponse(): Response {
   return textResponse(robotsTxt(siteOrigin()), "text/plain; charset=utf-8");
 }
 
-/** llms.txt from the profile; 404 or 503 while the profile is missing or unreadable. */
+/**
+ * llms.txt from the profile and the AI Roadmap; 404 or 503 while either is missing or unreadable.
+ */
 export async function llmsTxtResponse(): Promise<Response> {
-  const result = await getHomepage();
+  const result = await readDiscovery();
   const origin = siteOrigin();
-  return profileTextResponse(result, "text/plain; charset=utf-8", (profile) =>
-    llmsTxt(origin, profile),
+  return profileTextResponse(result, "text/plain; charset=utf-8", ({ profile, roadmap }) =>
+    llmsTxt(origin, profile, roadmap),
   );
 }
 
@@ -92,7 +113,7 @@ export async function openGraphImageResponse(page: IndexedPage): Promise<Respons
 }
 
 /**
- * An AI Roadmap area's, module's, the bookshelf's or a book's Open Graph preview image, a 1200 × 630
+ * An AI Roadmap page's Open Graph preview image, a 1200 × 630
  * PNG: the page's kind and name and whose roadmap it is on, or the site's own roadmap card while the
  * page cannot be read (`facts` is null), so a shared link always has a preview. The page's card is revalidated on every
  * use (`no-cache`); the fallback is never stored. A page that does not exist has no image: its

@@ -1,6 +1,6 @@
 // The one anchor convention of the site (docs/design.md, Anchors): an item on a page is addressed by
 // its kind and its stable slug, never by its position on the page.
-import { routes } from "./site";
+import { roadmapRoutes, routes } from "./site";
 
 /**
  * An item a link can point at. A case study is addressed by the slug of the project it explains,
@@ -92,7 +92,7 @@ export function roadmapHref(target: RoadmapPageTarget): string {
  * `/ai-roadmap/bookshelf/<book>`. The book's slug stays inside its own path segment.
  */
 export function bookshelfHref(book?: string): string {
-  const shelf = `${routes.aiRoadmap}/bookshelf`;
+  const shelf = roadmapRoutes.bookshelf;
   return book === undefined ? shelf : `${shelf}/${encodeURIComponent(book)}`;
 }
 
@@ -101,5 +101,6 @@ export function bookshelfHref(book?: string): string {
  * `/ai-roadmap/diary/<date>`. The date stays inside its own path segment.
  */
 export function diaryHref(date?: string): string {
-  throw new Error("not implemented", { cause: date });
+  const diary = roadmapRoutes.diary;
+  return date === undefined ? diary : `${diary}/${encodeURIComponent(date)}`;
 }

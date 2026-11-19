@@ -27,7 +27,7 @@ export { formatDate, formatPeriod } from "./period";
 export { mailtoHref } from "./mailto";
 export { plainText } from "./plain-text";
 export { mainContentId } from "./navigation";
-export { cvPdfRoutes, routes } from "./site";
+export { cvPdfRoutes, roadmapRoutes, routes } from "./site";
 export {
   TECHNOLOGY_GROUP_KEYS,
   technologyGroupLabel,

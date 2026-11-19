@@ -1,16 +1,20 @@
 // llms.txt (https://llmstxt.org): the profile as Markdown for language models — who the person is,
 // the site's pages and the experience, services, independent R&D and contact the API supplies, each
-// linked to its stable anchor on the configured origin. Text from the API is written as plain words
+// linked to its stable anchor on the configured origin, and the AI Engineering Roadmap's pages with
+// its areas, modules and books. Text from the API is written as plain words
 // on one line with Markdown's link characters escaped, so it can never add a heading, a list item
-// or a link of its own. Nothing is listed that the site does not show: no chat, no conversations and
-// no roadmap pages.
+// or a link of its own. Nothing is listed that the site does not show: no chat and no
+// conversations. The diary's days are left to the sitemap: their titles are only dates.
 import {
   anchorHref,
+  bookshelfHref,
   cvPdfRoutes,
   explorationStatusText,
   formatDate,
   formatPeriod,
   plainText,
+  roadmapHref,
+  roadmapRoutes,
   routes,
 } from "../../_shared";
 import type { HomepageProfile } from "../../profile";
@@ -67,7 +71,6 @@ export function llmsTxt(
   profile: HomepageProfile,
   roadmap: RoadmapDiscovery,
 ): string {
-  if (roadmap.areas.length > 0) throw new Error("Not implemented yet.");
   const at = (path: string) => `${origin}${path}`;
   const bio = plainText(profile.shortBio, BIO_MAX);
 
@@ -114,6 +117,51 @@ export function llmsTxt(
     );
   });
 
+  const roadmapPages = [
+    item(
+      "AI Engineering Roadmap",
+      at(routes.aiRoadmap),
+      "Learning areas and modules with their resources, progress and estimates",
+    ),
+    item("Learning Diary", at(roadmapRoutes.diary), "Study time, sessions and notes, day by day"),
+    item(
+      "Learning Statistics",
+      at(roadmapRoutes.statistics),
+      "Study time by area, module and period",
+    ),
+    item("Events", at(roadmapRoutes.events), "Events attended, with takeaways"),
+    item("Bookshelf", at(roadmapRoutes.bookshelf), "Books read, being read and to read"),
+    item(
+      "How to Read Effectively",
+      at(roadmapRoutes.readingGuide),
+      "How to remember what you read",
+    ),
+  ];
+
+  // An area and its modules nested below it, so the list keeps the roadmap's hierarchy.
+  const areas = roadmap.areas.flatMap((area) => [
+    item(
+      area.name,
+      at(roadmapHref({ area: area.slug })),
+      plainText(area.description ?? "", SUMMARY_MAX),
+    ),
+    ...area.modules.map((module) => {
+      const entry = item(
+        module.name,
+        at(roadmapHref({ area: area.slug, module: module.slug })),
+        plainText(module.description ?? "", SUMMARY_MAX),
+      );
+      return entry === null ? null : `  ${entry}`;
+    }),
+  ]);
+
+  const books = roadmap.books.map((book) =>
+    item(
+      book.author === null ? book.title : `${book.title} by ${book.author}`,
+      at(bookshelfHref(book.slug)),
+    ),
+  );
+
   const email = profile.contact.email;
   const contact = [
     email === null ? null : `- Email: ${line(email.address)}`,
@@ -130,6 +178,9 @@ export function llmsTxt(
     ...section("Experience", experiences),
     ...section("Services", services),
     ...section("Independent R&D", explorations),
+    ...section("AI Engineering Roadmap", roadmapPages),
+    ...section("Learning areas", areas),
+    ...section("Bookshelf", books),
     ...section("Contact", contact),
   ].join("\n");
 }

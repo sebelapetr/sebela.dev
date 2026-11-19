@@ -1,8 +1,9 @@
 import type { RoadmapEvent, RoadmapEventList } from "@sebela/api-client";
 
+import { roadmapRoutes } from "../../_shared";
 import { diaryDayHref, formatStudyTime } from "./diary";
 import { eventKindLabel, formatEventPeriod } from "./event-format";
-import { ROADMAP_PATH, safeLink } from "./overview";
+import { safeLink } from "./overview";
 
 /** One event as the events page shows it. */
 export interface EventRow {
@@ -41,7 +42,7 @@ export interface EventsPage {
 }
 
 /** The events section's own address. */
-export const EVENTS_PATH = `${ROADMAP_PATH}/events`;
+export const EVENTS_PATH = roadmapRoutes.events;
 
 /** The events section's name, as its page and title name it. */
 export const EVENTS_NAME = "Events";

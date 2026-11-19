@@ -1,6 +1,6 @@
 // What crawlers are told: the sitemap lists the profile's real, stable pages on the configured
-// origin, and robots.txt lets every crawler read the site and points at the sitemap. The chat (and
-// its conversations), the AI Roadmap's pages (until their SEO, #115) and the CV PDF's download
+// origin, then the AI Roadmap's pages the caller gathered, and robots.txt lets every crawler read
+// the site and points at the sitemap. The chat (and its conversations) and the CV PDF's download
 // and failure pages are never listed; those pages say `noindex` themselves, which crawlers can only
 // read when robots.txt does not block them.
 import { routes } from "../../_shared";
@@ -25,10 +25,12 @@ function escapeXml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => XML_ESCAPES[char] ?? char);
 }
 
-/** The sitemap of the indexed pages on `origin`, without dates the profile cannot vouch for. */
+/**
+ * The sitemap of the indexed pages on `origin`, followed by `paths` (the roadmap's pages), without
+ * dates the profile cannot vouch for.
+ */
 export function sitemapXml(origin: string, paths: readonly string[] = []): string {
-  if (paths.length > 0) throw new Error("Not implemented yet.");
-  const urls = indexedPaths.map(
+  const urls = [...indexedPaths, ...paths].map(
     (path) => `  <url><loc>${escapeXml(`${origin}${path}`)}</loc></url>`,
   );
   return [
