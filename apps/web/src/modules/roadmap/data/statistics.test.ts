@@ -129,8 +129,8 @@ describe("toStatisticsPage", () => {
     expect(page.empty).toBe(false);
     expect(page.figures).toEqual([
       { label: "Total time", value: "3h" },
-      { label: "Study days", value: "2" },
-      { label: "Avg per day", value: "1h 30m" },
+      { label: "Days with time", value: "2" },
+      { label: "Avg per day with time", value: "1h 30m" },
     ]);
   });
 
@@ -385,8 +385,8 @@ describe("toStatisticsPage", () => {
     expect(page.empty).toBe(true);
     expect(page.figures).toEqual([
       { label: "Total time", value: "0 min" },
-      { label: "Study days", value: "0" },
-      { label: "Avg per day", value: "0 min" },
+      { label: "Days with time", value: "0" },
+      { label: "Avg per day with time", value: "0 min" },
     ]);
     expect(page.categories.map((category) => category.share)).toEqual(["0.0%", "0.0%", "0.0%"]);
     expect(page.studyTime).toBe("0 min");
