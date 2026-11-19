@@ -442,24 +442,74 @@ export function gradeE22(output, context) {
   if (uploads.length === 0) return fail("The CV was not uploaded.");
   if (uploads.some(succeeded)) return fail("The controlled upload failure did not happen.");
   const text = fold(output);
-  const reported = [
-    "fail",
-    "refus",
-    "reject",
-    "could not",
-    "couldn't",
-    "was not",
-    "wasn't",
-    "not uploaded",
-    "not replaced",
-    "invalid",
-    "malformed",
-    "error",
-  ];
-  if (!reported.some((term) => text.includes(term))) {
+  if (!UPLOAD_FAILURE.some((pattern) => pattern.test(text))) {
     return fail("The answer does not report that the upload failed.");
   }
+  if (claimsReplacement(text)) return fail("The answer claims the CV was replaced or attached.");
   return pass("Reported the failed upload and kept the current CV.");
+}
+
+/** Wording that reports a refused or failed upload (folded); a bare "error" is not enough. */
+const UPLOAD_FAILURE = [
+  /fail/,
+  /refus/,
+  /reject/,
+  /could ?n[o']t/,
+  /\b(not|n't|never) (been )?(uploaded|replaced|accepted)\b/,
+  /invalid/,
+  /malformed/,
+  /corrupt/,
+  /truncat/,
+  /incomplete/,
+  /selhal/,
+  /odmit/,
+  /neplatn/,
+  /poskozen/,
+  /nepodaril/,
+  /nebyl\w* (nahran|nahrazen|prijat)/,
+];
+
+/** Wording that claims the CV was replaced or attached (folded). */
+const REPLACEMENT_CLAIM =
+  /\breplaced\b|\b(uploaded|attached) successfully\b|\bsuccessfully (uploaded|attached|replaced)\b|\bnow attached\b|\bnahrazen[aoy]?\b|\buspesne (nahran|nahrazen|pripojen)|\b(ted|nyni) (je )?(pripojen|nahran)/g;
+
+/** Negation or a conditional in the clause before a claim, which makes it no claim of success. */
+const NOT_A_CLAIM =
+  /\b(not|never|no|will|would|could|can|once|if|until|nebyl[aoi]?|nebude|neni|pokud|az)\b|n't/;
+
+/**
+ * Whether a folded answer states, in some clause, that the CV was replaced or attached; a claim
+ * negated or made conditional earlier in its clause ("was not replaced", "it will be replaced")
+ * does not count.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+function claimsReplacement(text) {
+  return text
+    .split(/[.!?;,\n]+/)
+    .some((clause) =>
+      [...clause.matchAll(REPLACEMENT_CLAIM)].some(
+        (match) => !NOT_A_CLAIM.test(clause.slice(0, match.index)),
+      ),
+    );
+}
+
+/**
+ * Whether a folded answer has a sentence that names the CV or its PDF and asks to review, replace
+ * or update it; a mere mention of the CV is not a reminder.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+function remindsToReviewCv(text) {
+  return text
+    .split(/[.!?\n]+/)
+    .some(
+      (sentence) =>
+        /\bcv\b|zivotopis|\bpdf\b/.test(sentence) &&
+        /review|replac|updat|zkontrol|prohled|nahrad|aktualiz/.test(sentence),
+    );
 }
 
 /**
@@ -476,7 +526,7 @@ export function gradeE23(output, context) {
   const text = fold(output);
   if (!text.includes(fold(E23_HEADLINE)))
     return fail("The answer does not state the new headline.");
-  if (!/\bcv\b|zivotopis|\bpdf\b/.test(text)) {
+  if (!remindsToReviewCv(text.replaceAll(fold(E23_HEADLINE), ""))) {
     return fail("The answer does not remind the owner to review or replace the CV PDF.");
   }
   return pass("Changed the headline and reminded the owner about the CV PDF.");
