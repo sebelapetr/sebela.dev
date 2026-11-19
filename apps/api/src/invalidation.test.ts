@@ -553,7 +553,8 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
-  it("names each diary day a notes or time-entry write changed, old and new", async () => {
+  /** An empty diary and one resource to log time on, set up without notifying. */
+  async function emptyDiaryWithResource() {
     const { roadmap } = backend.services;
     for (const day of (await roadmap.getDiary()).days) {
       for (const entry of day.entries) await roadmap.deleteTimeEntry(entry.id);
@@ -581,6 +582,10 @@ describe("notifying the website of committed content writes", () => {
         expect(response.status).toBe(201);
       }
     }
+  }
+
+  it("names each diary day a notes or time-entry write changed, old and new", async () => {
+    await emptyDiaryWithResource();
 
     const notes = json({ notes: "Late reading." }, auth);
     expect((await send("/v1/roadmap/diary/2026-03-02", "PATCH", notes)).status).toBe(200);
@@ -675,6 +680,21 @@ describe("notifying the website of committed content writes", () => {
       [{ domain: "roadmap-diary", record: "2026-04-02", action: "deleted" }],
       [{ domain: "roadmap-event", record: "fictional-summit", action: "deleted" }],
     ]);
+  });
+
+  it("names every diary day a logged session with notes changed", async () => {
+    await emptyDiaryWithResource();
+    const session = {
+      resource: "prompting-guide",
+      startedAt: "2026-03-02T23:30:00+01:00",
+      endedAt: "2026-03-03T00:30:00+01:00",
+      notes: "Late reading.",
+    };
+    expect((await send("/v1/roadmap/sessions", "POST", json(session, auth))).status).toBe(201);
+
+    const day = (record: string) => [{ domain: "roadmap-diary", record, action: "created" }];
+    expect(await delivered()).toEqual([day("2026-03-02"), day("2026-03-03")]);
+    await emptyDiaryWithResource();
   });
 
   it("names the supporting record each project idea, followed source and term write changed", async () => {
