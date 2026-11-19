@@ -154,6 +154,27 @@ Issue #114 adds the learning statistics: a public, read-only view over the diary
 - **Areas and modules.** Area and module totals hold resource and book time through each resource's current module, so moving a resource moves all its logged time from the old module to the new one without losing or repeating any. Event attendance is never part of an area or module; it is shown separately.
 - **Whole seconds.** Every value is summed in whole seconds before any display rounding; rounding is the reader's job. An empty diary gives zero totals and empty lists.
 
+### Supporting content
+
+Issue #115 adds the roadmap's supporting content: project ideas, followed sources ("stay current") and glossary terms ("additional terms"). Each is public content read as one ordered list (`GET /v1/roadmap/project-ideas`, `/followed-sources`, `/glossary-terms`) or one record by slug, and written only through private routes (`apps/api/AGENTS.md`).
+
+| Entity          | Meaning                                                                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project idea    | A suggested practice project: slug, title, Markdown "why it matters", optional Markdown "how to start", existing shared topics in a chosen order and a position. |
+| Followed source | A source followed to stay current: slug, title, optional Markdown description, optional `http`/`https` link, free-text kind and a position.                      |
+| Glossary term   | An additional term: slug, term, Markdown description and a position.                                                                                             |
+
+- **Beside the roadmap, not in it.** None belongs to an area or module, adds time or changes progress. Lists are ordered by position, then slug; an empty list is valid.
+- **Slugs.** The PRD lists no slug for these entities; each has a stable, unique slug for seed identity, the website's anchors and later references (the phase-6 knowledge index and phase-7 chat citations can name a record by its kind and slug). The slug cannot change.
+- **Nothing references them.** A delete is refused only when the record is missing; a project idea's topic links are deleted with it and its topics are kept. A topic linked to a project idea cannot be deleted.
+- The FAQ and the guide on reading effectively are static website text, not records.
+
+### Launch import and later phases
+
+- **Launch import.** The owner's existing roadmap data is imported once through the seed format and command; the interface and the acceptance checklist (counts, relationships, elapsed totals, midnight splits, Prague regrouping, reruns) are in `packages/db/seed/README.md`. The mapper, the owner's data and the import itself stay outside the repository; there is no synchronization or reconciliation.
+- **Phase 5 (admin MCP and the diary-entry replacement).** Every roadmap write the admin MCP server needs already exists as a private, API-key-protected route with an OpenAPI operation and a generated client method: areas, modules, resources, books, events, diary notes, time entries and the supporting content. Recording a diary entry is `PATCH /v1/roadmap/diary/{date}` (its notes) plus `POST /v1/roadmap/time-entries` per session; the API splits a session at Prague midnight itself.
+- **Phases 6 and 7 (knowledge and chat).** The public reads are the source targets: the roadmap tree, each area, module and resource, the diary and each day, the statistics, the bookshelf and each book, the events and each event, and the three supporting lists, every record addressed by its slug (a diary day by its date). The website's sitemap, `llms.txt`, structured data and Open Graph output are built from these same reads; the API has no separate discovery route.
+
 ## Access
 
 Profile and AI Roadmap records are public content shown on the site, without per-record visibility flags. This does not make authentication, audit, visitor conversations or ingest staging public. Extra documents may enrich public answers after approval without becoming website pages or public downloads.
