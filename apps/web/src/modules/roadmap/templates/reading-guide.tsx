@@ -23,7 +23,7 @@ function Section({
 }) {
   return (
     <section aria-labelledby={id} className="flex flex-col gap-4">
-      <h2 id={id} className="type-heading">
+      <h2 id={id} className="type-heading text-foreground">
         {title}
       </h2>
       {children}
@@ -42,7 +42,7 @@ function Category({
 }) {
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-6">
-      <h3 className="type-item">
+      <h3 className="type-item text-foreground">
         <span className="font-mono">{letter}</span> — {name}
       </h3>
       {children}
