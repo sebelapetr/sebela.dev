@@ -239,7 +239,12 @@ describe("add_resource", () => {
 
   it("asks for an explicit slug when the derived one is taken", async () => {
     const api = fakeApi();
-    api.roadmap.resources.set("deep-dive", { slug: "deep-dive", module: "reading-list" });
+    api.roadmap.resources.set("deep-dive", {
+      slug: "deep-dive",
+      module: "reading-list",
+      name: "A Deep Dive",
+      type: "text",
+    });
     const { client } = await open(api);
 
     const outcome = await call(client, "add_resource", {
@@ -283,9 +288,10 @@ describe("set_resource_status", () => {
       method: "PATCH",
       path: "/v1/roadmap/resources/python-async-intro",
     });
+    // The resource contract stores UTC instants, so an offset instant is sent as its UTC form.
     expect(JSON.parse(patch?.body ?? "{}")).toEqual({
       status: "in-progress",
-      startedAt: "2026-11-17T09:00:00+01:00",
+      startedAt: "2026-11-17T08:00:00.000Z",
     });
   });
 

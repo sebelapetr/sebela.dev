@@ -5,7 +5,8 @@
  * Every request goes to the configured base address only, on a route the registry names; nothing a
  * caller sends can choose another address, route, query or operator. Redirects are never followed,
  * so a key cannot be carried to a third host. Reads use the public routes; writes carry the
- * caller's key and a provenance label.
+ * caller's key and a provenance label. A study session or event attendance is logged through the
+ * API's one session action, which writes its time and its diary notes together.
  *
  * A write's identifier and fields are checked against the shared contracts before anything is
  * sent. An update or delete reads its record first and does not write one that is not there. A
@@ -19,6 +20,7 @@ import { randomBytes } from "node:crypto";
 import { createApiClient, type ApiClient } from "@sebela/api-client";
 import {
   auditProvenanceHeader,
+  RoadmapSessionCreateSchema,
   RecentChangesSchema,
   recentChangesLimit,
   type AuditChange,
@@ -51,6 +53,8 @@ export interface ContentError {
   readonly code: ErrorCode;
   readonly message: string;
   readonly fields?: readonly FieldProblem[];
+  /** Stored records the caller may have meant, so a collision can be put to the owner. */
+  readonly candidates?: readonly unknown[];
 }
 
 export type Outcome<T> =
@@ -71,6 +75,24 @@ export interface WriteResult {
   readonly reconciled?: true;
 }
 
+/** One study session on a resource, or attendance at an event: exactly one target. */
+export interface SessionRequest {
+  readonly resource?: string | undefined;
+  readonly event?: string | undefined;
+  /** An absolute instant with `Z` or an offset. */
+  readonly startedAt: string;
+  readonly endedAt: string;
+  /** Markdown appended to the notes of the session's first Prague day. */
+  readonly notes?: string | undefined;
+}
+
+/** A logged session: every Prague diary day it changed, ascending. */
+export interface SessionResult {
+  readonly dates: readonly string[];
+  /** Present when its answer was lost and the audit showed it committed. */
+  readonly reconciled?: true;
+}
+
 /** The content API on behalf of one verified caller, for one MCP request. */
 export interface CallerContent {
   /** Every record of `entity`, read through its public route. */
@@ -81,6 +103,11 @@ export interface CallerContent {
   save(entity: Entity, request: SaveRequest): Promise<Outcome<WriteResult>>;
   /** Deletes exactly the one named record, unless the API protects it. */
   remove(entity: Entity, id: string): Promise<Outcome<WriteResult>>;
+  /**
+   * Logs one session's time and appends its notes in one audited write, split at Prague midnight.
+   * An overlap with any logged interval is a `conflict` and changes nothing.
+   */
+  logSession(request: SessionRequest): Promise<Outcome<SessionResult>>;
   /** The newest audited content changes, newest first, at most twenty, read with the key. */
   recentChanges(): Promise<Outcome<RecentChanges>>;
 }
@@ -337,23 +364,87 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
     return recent ? Math.max(0, ...recent.changes.map((change) => change.id)) : undefined;
   }
 
-  /** This write's own entry in the audit, if it committed. */
-  async function findOwn(
+  /** This write's own entries in the audit, oldest first; `undefined` when the audit is unreadable. */
+  async function ownChanges(
     mark: number,
     provenance: string,
     method: AuditChange["operation"]["method"],
-  ): Promise<AuditChange | undefined> {
+  ): Promise<AuditChange[] | undefined> {
     const recent = await audit();
-    return recent?.changes.find(
-      (change) =>
-        change.id > mark && change.provenance === provenance && change.operation.method === method,
-    );
+    return recent?.changes
+      .filter(
+        (change) =>
+          change.id > mark &&
+          change.provenance === provenance &&
+          change.operation.method === method,
+      )
+      .reverse();
+  }
+
+  interface Sent {
+    readonly mark: number;
+    readonly provenance: string;
+    /** `undefined` when the answer was lost on the way back. */
+    readonly answer: Answer | undefined;
   }
 
   /**
-   * Sends one write exactly once and maps its answer. The audit's high-water mark is taken first,
-   * so a lost answer can be reconciled; without it nothing is written.
+   * Sends one write exactly once under a fresh provenance of `kind`. The audit's high-water mark is
+   * taken first, so a lost answer can be reconciled; without it nothing is sent.
    */
+  async function sendOnce(
+    method: "POST" | "PATCH" | "DELETE",
+    route: string,
+    params: NonNullable<Init["params"]>,
+    body: unknown,
+    kind: "save" | "delete" | "session",
+  ): Promise<Sent | undefined> {
+    const mark = await highWaterMark();
+    if (mark === undefined) return undefined;
+    const provenance = `mcp-admin/${kind}/${randomBytes(6).toString("hex")}`;
+    try {
+      const answer = await http[method](route, {
+        params,
+        ...(body === undefined ? {} : { body }),
+        headers: { [auditProvenanceHeader]: provenance },
+        signal,
+      });
+      return { mark, provenance, answer };
+    } catch {
+      return { mark, provenance, answer: undefined };
+    }
+  }
+
+  /**
+   * The outcome of a documented refusal; `undefined` for a success, a lost answer or one the API
+   * does not document, which only the audit can settle.
+   */
+  function refusal(answer: Answer | undefined, entity: Entity): Outcome<never> | undefined {
+    if (!answer) return undefined;
+    const { status } = answer.response;
+    if (status === 400) {
+      const fields = apiProblems(answer.error);
+      return fail({
+        code: "field",
+        message: apiMessage(answer.error, "The API refused the fields."),
+        ...(fields.length > 0 ? { fields } : {}),
+      });
+    }
+    if (status === 404) return notFound(entity);
+    if (status === 409) {
+      return fail({
+        code: "conflict",
+        message: apiMessage(answer.error, "The change conflicts with stored content."),
+      });
+    }
+    // A refusal before the write (key, size, type, rate): nothing changed.
+    if ([401, 403, 413, 415, 429].includes(status)) return fail(UNAVAILABLE);
+    return undefined;
+  }
+
+  const succeeded = (answer: Answer | undefined): answer is Answer =>
+    answer !== undefined && answer.response.status >= 200 && answer.response.status < 300;
+
   async function write(
     definition: EntityDefinition,
     method: "POST" | "PATCH" | "DELETE",
@@ -363,59 +454,34 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
     action: WriteResult["action"],
     knownId: string | null,
   ): Promise<Outcome<WriteResult>> {
-    const mark = await highWaterMark();
-    if (mark === undefined) return fail(UNAVAILABLE);
-    const provenance = `mcp-admin/${method === "DELETE" ? "delete" : "save"}/${randomBytes(6).toString("hex")}`;
     const entity = definition.entity;
-
-    let answer: Answer | undefined;
-    try {
-      answer = await http[method](route, {
-        params: pathOf(definition, id),
-        ...(body === undefined ? {} : { body }),
-        headers: { [auditProvenanceHeader]: provenance },
-        signal,
-      });
-    } catch {
-      answer = undefined;
+    const sent = await sendOnce(
+      method,
+      route,
+      pathOf(definition, id),
+      body,
+      method === "DELETE" ? "delete" : "save",
+    );
+    if (!sent) return fail(UNAVAILABLE);
+    const { answer } = sent;
+    if (succeeded(answer)) {
+      const record = answer.data;
+      return {
+        ok: true,
+        value: {
+          entity,
+          id: knownId,
+          action,
+          ...(record === undefined || action === "deleted" ? {} : { record }),
+        },
+      };
     }
-
-    if (answer) {
-      const { status } = answer.response;
-      if (status >= 200 && status < 300) {
-        const record = answer.data;
-        return {
-          ok: true,
-          value: {
-            entity,
-            id: knownId,
-            action,
-            ...(record === undefined || action === "deleted" ? {} : { record }),
-          },
-        };
-      }
-      if (status === 400) {
-        const fields = apiProblems(answer.error);
-        return fail({
-          code: "field",
-          message: apiMessage(answer.error, "The API refused the fields."),
-          ...(fields.length > 0 ? { fields } : {}),
-        });
-      }
-      if (status === 404) return notFound(entity);
-      if (status === 409) {
-        return fail({
-          code: "conflict",
-          message: apiMessage(answer.error, "The change conflicts with stored content."),
-        });
-      }
-      // A refusal before the write (key, size, type, rate): nothing changed.
-      if ([401, 403, 413, 415, 429].includes(status)) return fail(UNAVAILABLE);
-    }
+    const refused = refusal(answer, entity);
+    if (refused) return refused;
 
     // The answer was lost or is not one the API documents: never resend; ask the audit.
     if (signal.aborted) return fail(UNCERTAIN);
-    const own = await findOwn(mark, provenance, method);
+    const [own] = (await ownChanges(sent.mark, sent.provenance, method)) ?? [];
     if (!own) return fail(UNCERTAIN);
     return {
       ok: true,
@@ -493,6 +559,33 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
         if (!current.ok) return current;
       }
       return write(definition, "DELETE", definition.delete, id, undefined, "deleted", id);
+    },
+
+    async logSession(request) {
+      const body = Object.fromEntries(
+        Object.entries(request).filter(([, value]) => value !== undefined),
+      );
+      const checked = RoadmapSessionCreateSchema.safeParse(body);
+      if (!checked.success) return fieldProblems(checked.error);
+      const sent = await sendOnce("POST", "/v1/roadmap/sessions", {}, body, "session");
+      if (!sent) return fail(UNAVAILABLE);
+      const { answer } = sent;
+      if (succeeded(answer)) {
+        const dates = (answer.data as { dates?: unknown } | undefined)?.dates;
+        if (Array.isArray(dates) && dates.every((date) => typeof date === "string")) {
+          return { ok: true, value: { dates } };
+        }
+      } else {
+        const refused = refusal(answer, "roadmap-diary");
+        if (refused) return refused;
+      }
+
+      // Lost, undocumented or unreadable: the audit's entries of this session settle it.
+      if (signal.aborted) return fail(UNCERTAIN);
+      const own = await ownChanges(sent.mark, sent.provenance, "POST");
+      const dates = [...new Set((own ?? []).flatMap((change) => change.record ?? []))].sort();
+      if (dates.length === 0) return fail(UNCERTAIN);
+      return { ok: true, value: { dates, reconciled: true } };
     },
 
     async recentChanges() {
