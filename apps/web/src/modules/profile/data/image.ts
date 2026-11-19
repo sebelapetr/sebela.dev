@@ -32,13 +32,17 @@ export async function readImage(
 ): Promise<ImageMedia | null> {
   try {
     const { data } = await client.GET("/v1/media/{id}", { params: { path: { id } }, ...init });
-    return data === undefined ? null : toImage(data, mediaBaseUrl);
+    return data === undefined ? null : imageFromMedia(data, mediaBaseUrl);
   } catch {
     return null;
   }
 }
 
-function toImage(media: Media, mediaBaseUrl: string): ImageMedia | null {
+/**
+ * A media item the API already answered as the site's image, or null when it cannot be shown: not
+ * an image, no image file directly below the media base `mediaBaseUrl`, or no dimensions.
+ */
+export function imageFromMedia(media: Media, mediaBaseUrl: string): ImageMedia | null {
   if (!media.mediaType.startsWith("image/")) return null;
   const name = media.url === null ? null : mediaFileName(media.url, mediaBaseUrl);
   if (name === null || !isImageFileName(name)) return null;

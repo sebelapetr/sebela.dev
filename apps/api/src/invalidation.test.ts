@@ -366,24 +366,23 @@ describe("the website invalidation sender over HTTP", () => {
     answer = "ok";
   });
 
-  it("delivers bytes the website verifies, and gives up on a website that never answers", async () => {
+  it("delivers bytes the website verifies in one attempt", async () => {
     const lines: string[] = [];
+    // A generous timeout: a slow runner must not turn the delivery into a timed-out retry.
     const invalidation = createWebsiteInvalidation({
       url: destination,
       secret: SECRET,
       log: (line) => lines.push(line),
-      timeoutMs: 200,
+      timeoutMs: 30_000,
       retryDelaysMs: [1, 1],
     });
 
     await invalidation.notify({ change });
     await invalidation.idle();
-    answer = "hang";
-    await invalidation.notify({ change });
-    await invalidation.idle();
     await invalidation.close();
 
-    expect(received).toHaveLength(4);
+    expect(received).toHaveLength(1);
+    expect(lines).toEqual([]);
     const [first] = received;
     if (!first) throw new Error("nothing was received");
     const header = (name: string) => {
@@ -398,7 +397,29 @@ describe("the website invalidation sender over HTTP", () => {
       now: Date.now(),
     });
     expect(verification).toMatchObject({ ok: true, notification: { changes: [change] } });
-    expect(lines.join("\n")).toMatch(/gave up/);
+  });
+
+  it("times out every attempt on a website that never answers, then gives up", async () => {
+    answer = "hang";
+    const lines: string[] = [];
+    const invalidation = createWebsiteInvalidation({
+      url: destination,
+      secret: SECRET,
+      log: (line) => lines.push(line),
+      timeoutMs: 1000,
+      retryDelaysMs: [1, 1],
+    });
+
+    await invalidation.notify({ change });
+    await invalidation.idle();
+    await invalidation.close();
+
+    expect(received).toHaveLength(3);
+    expect(lines).toHaveLength(4);
+    expect(lines.slice(0, 3).every((line) => /attempt \d failed: TimeoutError$/.test(line))).toBe(
+      true,
+    );
+    expect(lines[3]).toMatch(/gave up after 3 attempts$/);
   });
 });
 
@@ -528,6 +549,153 @@ describe("notifying the website of committed content writes", () => {
       [{ domain: "media", record: id, action: "created" }],
       [{ domain: "media", record: id, action: "updated" }],
       [{ domain: "media", record: id, action: "deleted" }],
+    ]);
+  });
+
+  it("names each diary day a notes or time-entry write changed, old and new", async () => {
+    const { roadmap } = backend.services;
+    for (const day of (await roadmap.getDiary()).days) {
+      for (const entry of day.entries) await roadmap.deleteTimeEntry(entry.id);
+      if (day.notes !== null) await roadmap.deleteDiaryNotes(day.date);
+    }
+    if ((await roadmap.getRoadmap()).areas.length === 0) {
+      // Set up without notifying.
+      for (const [path, body] of [
+        ["/v1/roadmap/areas", { slug: "basics", name: "Basics", weight: 100, position: 0 }],
+        ["/v1/roadmap/modules", { slug: "prompting", area: "basics", name: "Prompt", position: 0 }],
+        [
+          "/v1/roadmap/resources",
+          {
+            slug: "prompting-guide",
+            module: "prompting",
+            name: "Guide",
+            type: "link",
+            position: 0,
+          },
+        ],
+      ] as const) {
+        const response = await backend
+          .api()
+          .app.request(path, { method: "POST", ...json(body, auth) }, connection());
+        expect(response.status).toBe(201);
+      }
+    }
+
+    const notes = json({ notes: "Late reading." }, auth);
+    expect((await send("/v1/roadmap/diary/2026-03-02", "PATCH", notes)).status).toBe(200);
+    const session = {
+      resource: "prompting-guide",
+      startedAt: "2026-03-02T23:30:00+01:00",
+      endedAt: "2026-03-03T00:30:00+01:00",
+    };
+    const created = await send("/v1/roadmap/time-entries", "POST", json(session, auth));
+    expect(created.status).toBe(201);
+    const { entries } = (await created.json()) as { entries: { id: string }[] };
+    const id = entries[0]?.id ?? "";
+    const moved = { startedAt: "2026-03-05T08:00:00+01:00", endedAt: "2026-03-05T09:00:00+01:00" };
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "PATCH", json(moved, auth))).status).toBe(
+      200,
+    );
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+    expect((await send("/v1/roadmap/diary/2026-03-02", "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+
+    const day = (record: string, action: ContentChange["action"]) => [
+      { domain: "roadmap-diary", record, action },
+    ];
+    expect(await delivered()).toEqual([
+      day("2026-03-02", "updated"),
+      day("2026-03-02", "created"),
+      day("2026-03-03", "created"),
+      day("2026-03-02", "updated"),
+      day("2026-03-05", "updated"),
+      day("2026-03-05", "deleted"),
+      day("2026-03-02", "deleted"),
+    ]);
+  });
+
+  it("names the book each bookshelf write changed", async () => {
+    const book = { slug: "fictional-patterns", title: "Fictional Patterns" };
+    expect((await send("/v1/roadmap/books", "POST", json(book, auth))).status).toBe(201);
+    expect(
+      (
+        await send(
+          "/v1/roadmap/books/fictional-patterns",
+          "PATCH",
+          json({ startedOn: "2026-03-02" }, auth),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await send("/v1/roadmap/books/fictional-patterns", "DELETE", { headers: auth })).status,
+    ).toBe(204);
+
+    expect(await delivered()).toEqual([
+      [{ domain: "roadmap-book", record: "fictional-patterns", action: "created" }],
+      [{ domain: "roadmap-book", record: "fictional-patterns", action: "updated" }],
+      [{ domain: "roadmap-book", record: "fictional-patterns", action: "deleted" }],
+    ]);
+  });
+
+  it("names the event each event write changed and the days attendance on it changed", async () => {
+    const event = {
+      slug: "fictional-summit",
+      name: "Fictional Summit",
+      kind: "conference",
+      startsOn: "2026-04-01",
+      endsOn: "2026-04-02",
+    };
+    expect((await send("/v1/roadmap/events", "POST", json(event, auth))).status).toBe(201);
+    const moved = json({ startsOn: "2026-04-02", endsOn: "2026-04-03" }, auth);
+    expect((await send("/v1/roadmap/events/fictional-summit", "PATCH", moved)).status).toBe(200);
+    const session = {
+      event: "fictional-summit",
+      startedAt: "2026-04-02T09:00:00+02:00",
+      endedAt: "2026-04-02T10:00:00+02:00",
+    };
+    const logged = await send("/v1/roadmap/time-entries", "POST", json(session, auth));
+    expect(logged.status).toBe(201);
+    const { entries } = (await logged.json()) as { entries: { id: string }[] };
+    const id = entries[0]?.id ?? "";
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+    expect(
+      (await send("/v1/roadmap/events/fictional-summit", "DELETE", { headers: auth })).status,
+    ).toBe(204);
+
+    expect(await delivered()).toEqual([
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "created" }],
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "updated" }],
+      [{ domain: "roadmap-diary", record: "2026-04-02", action: "created" }],
+      [{ domain: "roadmap-diary", record: "2026-04-02", action: "deleted" }],
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "deleted" }],
+    ]);
+  });
+
+  it("names the supporting record each project idea, followed source and term write changed", async () => {
+    const writes = [
+      ["project-ideas", { slug: "fictional-idea", title: "Idea", whyItMatters: "Why." }],
+      ["followed-sources", { slug: "example-weekly", title: "Weekly", kind: "newsletter" }],
+      ["glossary-terms", { slug: "context-window", term: "Context", description: "Text." }],
+    ] as const;
+    for (const [kind, body] of writes) {
+      const path = `/v1/roadmap/${kind}`;
+      expect((await send(path, "POST", json({ ...body, position: 0 }, auth))).status).toBe(201);
+      const item = `${path}/${body.slug}`;
+      expect((await send(item, "PATCH", json({ position: 1 }, auth))).status).toBe(200);
+      expect((await send(item, "DELETE", { headers: auth })).status).toBe(204);
+    }
+
+    const change = (domain: string, record: string) =>
+      (["created", "updated", "deleted"] as const).map((action) => [{ domain, record, action }]);
+    expect(await delivered()).toEqual([
+      ...change("roadmap-project-idea", "fictional-idea"),
+      ...change("roadmap-followed-source", "example-weekly"),
+      ...change("roadmap-glossary-term", "context-window"),
     ]);
   });
 

@@ -10,11 +10,20 @@ export const routes = {
   services: "/services",
   experience: "/experience",
   cv: "/cv",
-  /** A short placeholder until the AI Roadmap arrives in phase 4. */
+  /** The AI Engineering Roadmap overview; its areas and sections live below it. */
   aiRoadmap: "/ai-roadmap",
   contact: "/#contact",
   /** The chat; a conversation is `/ask?c=<id>` (the chat module builds it). */
   ask: "/ask",
+} as const;
+
+/** The AI Engineering Roadmap's own pages below the overview, besides its areas, modules and books. */
+export const roadmapRoutes = {
+  diary: `${routes.aiRoadmap}/diary`,
+  statistics: `${routes.aiRoadmap}/diary/stats`,
+  events: `${routes.aiRoadmap}/events`,
+  bookshelf: `${routes.aiRoadmap}/bookshelf`,
+  readingGuide: `${routes.aiRoadmap}/how-to-read-effectively`,
 } as const;
 
 /** The CV PDF's addresses: a download and its failure page, not pages of the site to link to. */

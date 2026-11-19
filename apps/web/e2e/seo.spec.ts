@@ -124,7 +124,19 @@ test.describe("metadata and indexing files on the configured origin", () => {
     expect(response.headers()["content-type"]).toBe("application/xml; charset=utf-8");
     const xml = await response.text();
     const locations = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((match) => match[1]);
-    expect(locations).toEqual([`${SITE}/`, `${SITE}/experience`, `${SITE}/services`, `${SITE}/cv`]);
+    // The profile's pages, then the AI Roadmap's own pages; this fixture has no areas, days or books.
+    expect(locations).toEqual([
+      `${SITE}/`,
+      `${SITE}/experience`,
+      `${SITE}/services`,
+      `${SITE}/cv`,
+      `${SITE}/ai-roadmap`,
+      `${SITE}/ai-roadmap/diary`,
+      `${SITE}/ai-roadmap/diary/stats`,
+      `${SITE}/ai-roadmap/events`,
+      `${SITE}/ai-roadmap/bookshelf`,
+      `${SITE}/ai-roadmap/how-to-read-effectively`,
+    ]);
     for (const location of locations) {
       const path = (location ?? "").slice(SITE.length);
       expect((await request.get(`${website.url}${path}`)).status()).toBe(200);
@@ -152,7 +164,11 @@ test.describe("metadata and indexing files on the configured origin", () => {
     expect(text).toContain(`(${SITE}/experience#experience-fernway-lead-engineer)`);
     expect(text).toContain(`(${SITE}/services#service-process-automation)`);
     expect(text).toContain(`(${SITE}/experience#exploration-answer-checker)`);
-    expect(text).not.toMatch(/\/ask|\/ai-roadmap|\?c=/);
+    expect(text).toContain(`- [AI Engineering Roadmap](${SITE}/ai-roadmap)`);
+    expect(text).toContain(
+      `- [How to Read Effectively](${SITE}/ai-roadmap/how-to-read-effectively)`,
+    );
+    expect(text).not.toMatch(/\/ask|\?c=/);
     expect(text).not.toContain(website.url);
   });
 

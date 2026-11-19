@@ -11,7 +11,7 @@ import {
   type ChatSource,
 } from "@sebela/contracts";
 
-import { anchorHref, routes, technologyGroupLabel } from "../../_shared";
+import { anchorHref, roadmapHref, routes, technologyGroupLabel } from "../../_shared";
 import type { AskEvidence } from "./evidence";
 
 /** The kinds of visitor a suggested question is written for. */
@@ -82,6 +82,8 @@ const SERVICE_CARDS = 2;
 const SOURCED_SERVICES = 3;
 /** The explorations shown as cards. */
 const EXPLORATION_CARDS = 3;
+/** The AI Roadmap modules in progress shown as cards. */
+const ROADMAP_CARDS = 2;
 /** The most web links a contact card holds (the contract's limit). */
 const CONTACT_LINKS = 6;
 
@@ -263,30 +265,61 @@ function generalAnswer(evidence: AskEvidence): PreparedAnswer {
       }),
     )
     .filter(present);
-  if (evidence.explorations.length === 0) {
+  const learning = evidence.learning.slice(0, ROADMAP_CARDS).flatMap((module) => {
+    const href = roadmapHref({ area: module.area, module: module.slug });
+    const progress = `In progress in ${module.areaName}, ${String(module.completed)} of ${String(module.total)} resources completed.`;
+    const card = validBlock({
+      type: "RoadmapCard",
+      title: module.name,
+      summary: module.summary === null ? progress : `${progress} ${module.summary}`,
+      href,
+    });
+    const source = validSource({
+      record: { kind: "roadmap_item", id: module.slug },
+      title: `${module.name}, AI Roadmap`,
+      href,
+    });
+    return card === null || source === null ? [] : [{ module, card, source }];
+  });
+  if (evidence.explorations.length === 0 && learning.length === 0) {
     return insufficientEvidence(
       evidence,
-      `I don't have enough evidence in ${name}'s public profile to say what ${name} is working on now. The site lists no current explorations; to hear about current work, ask ${name} directly.`,
+      `I don't have enough evidence in ${name}'s public profile to say what ${name} is working on now. The site lists no current explorations and nothing on the AI Roadmap is in progress; to hear about current work, ask ${name} directly.`,
       [contactLink],
     );
   }
-  if (sources.length === 0) {
+  if (sources.length === 0 && learning.length === 0) {
     return insufficientEvidence(
       evidence,
-      `I don't have enough evidence in ${name}'s public profile to say what ${name} is working on now. The current explorations on the experience page are designed only and not yet implemented, so they show plans rather than work done; to hear more, ask ${name} directly.`,
+      `I don't have enough evidence in ${name}'s public profile to say what ${name} is working on now. The current explorations on the experience page are designed only and not yet implemented, so they show plans rather than work done, and nothing on the AI Roadmap is in progress; to hear more, ask ${name} directly.`,
       [{ label: "Independent R&D", href: anchorHref({ kind: "independent-rd" }) }],
     );
   }
+  const building =
+    evidence.explorations.length === 0
+      ? ""
+      : `The site keeps what ${name} is building apart from what is being learned. The independent R&D section of the experience page lists the current explorations with their status: built ones work, tested ones were tried hands-on, and designed ones are planned only and not yet implemented. `;
+  const learningText =
+    learning.length === 0
+      ? "Nothing on the AI Roadmap is in progress right now."
+      : `On the AI Roadmap, ${listOf(learning.map(({ module }) => module.name))} ${learning.length === 1 ? "is" : "are"} still being learned: in progress, not finished work.`;
+  const roadmapLink = { label: "AI Roadmap", href: routes.aiRoadmap };
   return {
-    text: `The site keeps what ${name} is building apart from what is being learned. The independent R&D section of the experience page lists the current explorations with their status: built ones work, tested ones were tried hands-on, and designed ones are planned only and not yet implemented. The AI Roadmap will show the learning plan.`,
+    text: `${building}${learningText}`,
     outcome: "answered",
-    blocks: shown.map(({ card }) => card),
-    sources,
-    related: [
-      { label: "Independent R&D", href: anchorHref({ kind: "independent-rd" }) },
-      { label: "AI Roadmap", href: routes.aiRoadmap },
-    ],
+    blocks: [...shown.map(({ card }) => card), ...learning.map(({ card }) => card)],
+    sources: [...sources, ...learning.map(({ source }) => source)],
+    related:
+      evidence.explorations.length === 0
+        ? [roadmapLink]
+        : [{ label: "Independent R&D", href: anchorHref({ kind: "independent-rd" }) }, roadmapLink],
   };
+}
+
+/** Names joined in words: `A`, `A and B`, `A, B and C`. */
+function listOf(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
 }
 
 const ANSWERS: Readonly<Record<AskAudience, (evidence: AskEvidence) => PreparedAnswer>> = {

@@ -7,8 +7,9 @@ import { TextLink, textLinkClass } from "./text-link";
 
 /**
  * The homepage's Now: what is being built (Working on) beside what is being learned (Exploring),
- * each column left out when empty, then the links to the independent R&D and the AI Roadmap. The
- * explorations carry their stored status, so learning never reads as delivered work.
+ * each column left out when empty, then the links to the independent R&D and the AI Roadmap.
+ * Exploring is the AI Roadmap's areas and modules in progress, each linking to its own page and
+ * marked as in progress with the API's completed count, so learning never reads as delivered work.
  */
 export function Now({ now }: { readonly now: NowContent }) {
   return (
@@ -45,10 +46,26 @@ export function Now({ now }: { readonly now: NowContent }) {
                   </Link>
                   <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="type-tag rounded-sm border border-border px-1.5">
-                      {item.status.label}
+                      In progress
                     </span>
-                    <span className="type-label text-balance">{item.status.meaning}</span>
+                    <span className="type-label">{item.progress} resources completed</span>
                   </p>
+                  {item.modules.length === 0 ? null : (
+                    <ul aria-label={`${item.name} modules in progress`} className="flex flex-col">
+                      {item.modules.map((module) => (
+                        <li key={module.slug} className="flex flex-wrap items-center gap-x-3">
+                          <Link
+                            href={module.href}
+                            prefetch={false}
+                            className="inline-flex min-h-11 items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:underline"
+                          >
+                            {module.name}
+                          </Link>
+                          <span className="type-label">{module.progress}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

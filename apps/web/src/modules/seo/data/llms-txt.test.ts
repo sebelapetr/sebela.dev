@@ -4,6 +4,7 @@ import type { Experience, Exploration, Service } from "@sebela/api-client";
 
 import type { HomepageProfile } from "../../profile";
 import { llmsTxt } from "./llms-txt";
+import type { RoadmapDiscovery } from "./roadmap-discovery";
 
 const ORIGIN = "https://site.example.test";
 const STAMP = "2026-01-01T00:00:00.000Z";
@@ -89,15 +90,43 @@ function profile(overrides: Partial<HomepageProfile> = {}): HomepageProfile {
     technologies: [],
     currentFocus: [],
     explorations: [exploration()],
+    currentLearning: [],
     services: [service()],
     cvPdf: { updatedOn: "2026-03-01" },
     ...overrides,
   };
 }
 
+const ROADMAP: RoadmapDiscovery = {
+  areas: [
+    {
+      slug: "signal-area",
+      name: "Signal area",
+      description: "Learns **signals**.\n\nMore later.",
+      modules: [
+        { slug: "signal-basics", name: "Signal basics", description: null },
+        { slug: "odd/slug", name: "Odd", description: "An odd one." },
+      ],
+    },
+    { slug: "quiet-area", name: "Quiet area", description: null, modules: [] },
+  ],
+  diaryDates: ["2026-03-02"],
+  books: [
+    { slug: "quiet-orbit", title: "The Quiet Orbit", author: "Ada Example" },
+    { slug: "notes", title: "Untitled Notes", author: null },
+  ],
+};
+
+const NO_ROADMAP: RoadmapDiscovery = { areas: [], diaryDates: [], books: [] };
+
+/** The profile's llms.txt with a roadmap that has no areas, days or books. */
+function llms(origin: string, homepage: HomepageProfile): string {
+  return llmsTxt(origin, homepage, NO_ROADMAP);
+}
+
 describe("llmsTxt", () => {
   it("writes the profile in the llms.txt layout on the configured origin", () => {
-    expect(llmsTxt(ORIGIN, profile())).toBe(
+    expect(llmsTxt(ORIGIN, profile(), ROADMAP)).toBe(
       [
         "# Robin Example",
         "",
@@ -125,6 +154,27 @@ describe("llmsTxt", () => {
         "",
         "- [Fictional exploration](https://site.example.test/experience#exploration-fictional-exploration): Designed (unimplemented design, planned or architected only). A made-up experiment.",
         "",
+        "## AI Engineering Roadmap",
+        "",
+        "- [AI Engineering Roadmap](https://site.example.test/ai-roadmap): Learning areas and modules with their resources, progress and estimates",
+        "- [Learning Diary](https://site.example.test/ai-roadmap/diary): Study time, sessions and notes, day by day",
+        "- [Learning Statistics](https://site.example.test/ai-roadmap/diary/stats): Study time by area, module and period",
+        "- [Events](https://site.example.test/ai-roadmap/events): Events attended, with takeaways",
+        "- [Bookshelf](https://site.example.test/ai-roadmap/bookshelf): Books read, being read and to read",
+        "- [How to Read Effectively](https://site.example.test/ai-roadmap/how-to-read-effectively): How to remember what you read",
+        "",
+        "## Learning areas",
+        "",
+        "- [Signal area](https://site.example.test/ai-roadmap/signal-area): Learns signals.",
+        "  - [Signal basics](https://site.example.test/ai-roadmap/signal-area/signal-basics)",
+        "  - [Odd](https://site.example.test/ai-roadmap/signal-area/odd%2Fslug): An odd one.",
+        "- [Quiet area](https://site.example.test/ai-roadmap/quiet-area)",
+        "",
+        "## Bookshelf",
+        "",
+        "- [The Quiet Orbit by Ada Example](https://site.example.test/ai-roadmap/bookshelf/quiet-orbit)",
+        "- [Untitled Notes](https://site.example.test/ai-roadmap/bookshelf/notes)",
+        "",
         "## Contact",
         "",
         "- Email: robin@example.test",
@@ -135,13 +185,13 @@ describe("llmsTxt", () => {
   });
 
   it("follows another configured origin", () => {
-    const text = llmsTxt("http://other.example.test", profile());
+    const text = llms("http://other.example.test", profile());
     expect(text).toContain("- [Home](http://other.example.test/)");
     expect(text).not.toContain("site.example.test");
   });
 
   it("leaves out sections and the PDF the profile does not have", () => {
-    const text = llmsTxt(
+    const text = llms(
       ORIGIN,
       profile({
         experiences: [],
@@ -156,13 +206,43 @@ describe("llmsTxt", () => {
     expect(text).toContain("## Pages");
   });
 
-  it("never lists the chat, its conversations or a roadmap page", () => {
-    const text = llmsTxt(ORIGIN, profile());
-    expect(text).not.toMatch(/\/ask|\/ai-roadmap|\?c=/);
+  it("never lists the chat or its conversations", () => {
+    const text = llmsTxt(ORIGIN, profile(), ROADMAP);
+    expect(text).not.toMatch(/\/ask|\?c=/);
+  });
+
+  it("lists the roadmap's own pages without areas or books, and no empty section", () => {
+    const text = llms(ORIGIN, profile());
+    expect(text).toContain("## AI Engineering Roadmap\n");
+    expect(text).toContain(
+      "- [How to Read Effectively](https://site.example.test/ai-roadmap/how-to-read-effectively)",
+    );
+    expect(text).not.toMatch(/## (?:Learning areas|Bookshelf)/);
+  });
+
+  it("keeps a roadmap name from breaking the Markdown structure", () => {
+    const text = llmsTxt(ORIGIN, profile(), {
+      ...NO_ROADMAP,
+      areas: [
+        {
+          slug: "area",
+          name: "Area](https://evil.example.test)\n## Injected",
+          description: "Text\n- not a list item",
+          modules: [{ slug: "module", name: "[Module]", description: null }],
+        },
+      ],
+      books: [{ slug: "book", title: "Book\n# Title", author: "A]uthor" }],
+    });
+    expect(text).not.toMatch(/^## Injected/m);
+    expect(text).not.toMatch(/^# Title/m);
+    expect(text).not.toMatch(/[^\\]\]\(https:\/\/evil/);
+    expect(text).toContain(": Text not a list item\n");
+    expect(text).toContain("  - [\\[Module\\]](");
+    expect(text).toContain("[Book # Title by A\\]uthor](");
   });
 
   it("keeps unsafe text from breaking the Markdown structure", () => {
-    const text = llmsTxt(
+    const text = llms(
       ORIGIN,
       profile({
         name: "Robin\n## Injected",
@@ -186,7 +266,7 @@ describe("llmsTxt", () => {
   });
 
   it("keeps a contact link's address from closing the link", () => {
-    const text = llmsTxt(
+    const text = llms(
       ORIGIN,
       profile({
         contact: {
@@ -199,7 +279,7 @@ describe("llmsTxt", () => {
   });
 
   it("leaves out a contact link that is not a web address", () => {
-    const text = llmsTxt(
+    const text = llms(
       ORIGIN,
       profile({
         contact: { email: null, links: [{ label: "Script", url: "javascript:alert(1)" }] },

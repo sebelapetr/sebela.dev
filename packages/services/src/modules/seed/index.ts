@@ -12,6 +12,7 @@ import {
   type ProfileService,
   type ProfileServiceOptions,
 } from "../profile/index.js";
+import { createRoadmapService, type RoadmapService } from "../roadmap/index.js";
 import type { OpenedStorage } from "../storage/index.js";
 import { readSeedFolder, type Located, type SeedData } from "./folder.js";
 
@@ -28,7 +29,17 @@ export type SeedKind =
   | "services"
   | "education"
   | "testimonials"
-  | "currentFocus";
+  | "currentFocus"
+  | "roadmapAreas"
+  | "roadmapModules"
+  | "roadmapBooks"
+  | "roadmapResources"
+  | "roadmapEvents"
+  | "roadmapDiary"
+  | "roadmapTimeEntries"
+  | "roadmapProjectIdeas"
+  | "roadmapFollowedSources"
+  | "roadmapGlossaryTerms";
 
 /** How many records of one kind a load created and how many existing ones it updated. */
 export interface SeedCount {
@@ -50,13 +61,23 @@ export interface SeedReport {
 }
 
 /**
- * Loads a seed folder (format: `packages/db/seed/README.md`) into the profile through the profile
- * and media services, in-process.
+ * Loads a seed folder (format: `packages/db/seed/README.md`) into the profile and the AI roadmap
+ * through the profile, roadmap and media services, in-process.
  *
  * - Records are matched by slug, the person as the single person and a case study by its project's
- *   slug. A matched record is overwritten with the seed's values, so a rerun undoes edits to the
- *   records the seed names; records and case studies it does not name are kept. A rerun of the same
- *   folder creates nothing new.
+ *   slug. A roadmap module or resource is matched by its own slug, so a rerun moves it to the parent
+ *   the seed names instead of duplicating it. A matched record is overwritten with the seed's
+ *   values, so a rerun undoes edits to the records the seed names; records and case studies it does
+ *   not name are kept. A rerun of the same folder creates nothing new. Books are loaded before
+ *   resources, so a resource of type `book` can link a book of the same seed by its slug. Events
+ *   are matched by slug and loaded after resources and before the diary, so attendance can name an
+ *   event of the same seed. Project ideas, followed sources and glossary terms are matched by
+ *   slug and loaded after events; an idea's topics are replaced by the ones the seed lists.
+ * - A diary day is matched by its date and its notes are overwritten; its time entries stay. A
+ *   session is matched by its target (a resource or an event) and absolute endpoints, whatever offset they are written
+ *   with: one already logged (in one or more diary-day pieces) is left as it is and counted as
+ *   updated, any other one is logged. A session that overlaps logged time, or another session of
+ *   the seed, is refused as `conflict` at its location and the whole load rolls back.
  * - Every data file is optional; an absent one leaves its kind untouched.
  * - Attached files are reused by content, so an unchanged file is never stored twice. Media a seed
  *   record stopped referring to is deleted after the load unless anything still uses it.
@@ -100,6 +121,16 @@ const emptyCounts = (): Counts => ({
   education: { created: 0, updated: 0 },
   testimonials: { created: 0, updated: 0 },
   currentFocus: { created: 0, updated: 0 },
+  roadmapAreas: { created: 0, updated: 0 },
+  roadmapModules: { created: 0, updated: 0 },
+  roadmapBooks: { created: 0, updated: 0 },
+  roadmapResources: { created: 0, updated: 0 },
+  roadmapEvents: { created: 0, updated: 0 },
+  roadmapDiary: { created: 0, updated: 0 },
+  roadmapTimeEntries: { created: 0, updated: 0 },
+  roadmapProjectIdeas: { created: 0, updated: 0 },
+  roadmapFollowedSources: { created: 0, updated: 0 },
+  roadmapGlossaryTerms: { created: 0, updated: 0 },
 });
 
 const isRefusal = (error: unknown, ...codes: string[]) =>
@@ -120,8 +151,15 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Whether the profile holds no person, no record of any kind and no media. */
-async function isEmpty(profile: ProfileService, media: MediaService): Promise<boolean> {
+/**
+ * Whether the profile holds no person, no record of any kind and no media, and the roadmap no area,
+ * no diary day, no book, no event and no supporting content.
+ */
+async function isEmpty(
+  profile: ProfileService,
+  media: MediaService,
+  roadmap: RoadmapService,
+): Promise<boolean> {
   const person = await profile.getPerson().catch((error: unknown) => {
     if (isRefusal(error, "not_found")) return null;
     throw error;
@@ -139,6 +177,13 @@ async function isEmpty(profile: ProfileService, media: MediaService): Promise<bo
     () => profile.listTestimonials(),
     () => profile.listCurrentFocus(),
     () => media.listMedia(),
+    async () => (await roadmap.getRoadmap()).areas,
+    async () => (await roadmap.getDiary()).days,
+    () => roadmap.listBooks(),
+    () => roadmap.listEvents(),
+    () => roadmap.listProjectIdeas(),
+    () => roadmap.listFollowedSources(),
+    () => roadmap.listGlossaryTerms(),
   ];
   for (const list of lists) if ((await list()).length > 0) return false;
   return true;
@@ -150,6 +195,7 @@ async function isEmpty(profile: ProfileService, media: MediaService): Promise<bo
 async function checkReferences(
   data: SeedData,
   profile: ProfileService,
+  roadmap: RoadmapService,
 ): Promise<DomainErrorField[]> {
   const slugs = async (
     seeded: readonly Located<{ slug: string }, string>[],
@@ -162,6 +208,18 @@ async function checkReferences(
   const experiences = await slugs(data.experiences, profile.listExperiences());
   const projects = await slugs(data.projects, profile.listProjects());
   const explorations = await slugs(data.explorations, profile.listExplorations());
+  const tree = (await roadmap.getRoadmap()).areas;
+  const areas = await slugs(data.roadmapAreas, Promise.resolve(tree));
+  const modules = await slugs(
+    data.roadmapModules,
+    Promise.resolve(tree.flatMap((area) => area.modules)),
+  );
+  const books = await slugs(data.roadmapBooks, roadmap.listBooks());
+  const resources = await slugs(
+    data.roadmapResources,
+    Promise.resolve(tree.flatMap((area) => area.modules.flatMap((module) => module.resources))),
+  );
+  const events = await slugs(data.roadmapEvents, roadmap.listEvents());
 
   const issues: DomainErrorField[] = [];
   const check = (known: Set<string>, slug: string | null, path: string, what: string) => {
@@ -206,6 +264,24 @@ async function checkReferences(
     check(projects, value.project, `${location}.project`, "project");
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
+  for (const { location, value } of data.roadmapModules) {
+    check(areas, value.area, `${location}.area`, "roadmap area");
+  }
+  for (const { location, value } of data.roadmapResources) {
+    check(modules, value.module, `${location}.module`, "roadmap module");
+    check(books, value.book, `${location}.book`, "roadmap book");
+    checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
+  for (const { location, value } of data.roadmapEvents) {
+    checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
+  for (const { location, value } of data.roadmapProjectIdeas) {
+    checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
+  for (const { location, value } of data.roadmapTimeEntries) {
+    check(resources, value.resource ?? null, `${location}.resource`, "roadmap resource");
+    check(events, value.event ?? null, `${location}.event`, "roadmap event");
+  }
   return issues;
 }
 
@@ -245,15 +321,16 @@ export function createSeedService(
     let loaded: boolean;
 
     try {
-      loaded = await persistence.transaction(async (tx) => {
+      loaded = await persistence.transaction(async (tx, roadmapTx) => {
         const profile = createProfileService(tx, profileOptions);
         const mediaService = createMediaService(tx, mediaOptions);
+        const roadmap = createRoadmapService(roadmapTx);
 
-        if (onlyIntoEmpty && !(await isEmpty(profile, mediaService))) {
+        if (onlyIntoEmpty && !(await isEmpty(profile, mediaService, roadmap))) {
           return false;
         }
 
-        const problems = await checkReferences(data, profile);
+        const problems = await checkReferences(data, profile, roadmap);
         if (problems.length > 0) {
           throw new DomainError(
             "validation_failed",
@@ -437,6 +514,106 @@ export function createSeedService(
           (value) => profile.createCurrentFocus(value),
           (slug, changes) => profile.updateCurrentFocus(slug, changes),
         );
+        await upsert(
+          "roadmapAreas",
+          data.roadmapAreas,
+          (slug) => roadmap.getArea(slug),
+          (value) => roadmap.createArea(value),
+          (slug, changes) => roadmap.updateArea(slug, changes),
+        );
+        await upsert(
+          "roadmapModules",
+          data.roadmapModules,
+          (slug) => roadmap.getModule(slug),
+          (value) => roadmap.createModule(value),
+          (slug, changes) => roadmap.updateModule(slug, changes),
+        );
+        await upsert(
+          "roadmapBooks",
+          data.roadmapBooks,
+          (slug) => roadmap.getBook(slug),
+          (value) => roadmap.createBook(value),
+          (slug, changes, existing) => {
+            supersede(existing.coverId, changes.coverId);
+            return roadmap.updateBook(slug, changes);
+          },
+          ({ value, files }) => ({ ...value, coverId: mediaId(files.coverId) }),
+        );
+        await upsert(
+          "roadmapResources",
+          data.roadmapResources,
+          (slug) => roadmap.getResource(slug),
+          (value) => roadmap.createResource(value),
+          (slug, changes) => roadmap.updateResource(slug, changes),
+        );
+        await upsert(
+          "roadmapEvents",
+          data.roadmapEvents,
+          (slug) => roadmap.getEvent(slug),
+          (value) => roadmap.createEvent(value),
+          (slug, changes) => roadmap.updateEvent(slug, changes),
+        );
+
+        await upsert(
+          "roadmapProjectIdeas",
+          data.roadmapProjectIdeas,
+          (slug) => roadmap.getProjectIdea(slug),
+          (value) => roadmap.createProjectIdea(value),
+          (slug, changes) => roadmap.updateProjectIdea(slug, changes),
+        );
+        await upsert(
+          "roadmapFollowedSources",
+          data.roadmapFollowedSources,
+          (slug) => roadmap.getFollowedSource(slug),
+          (value) => roadmap.createFollowedSource(value),
+          (slug, changes) => roadmap.updateFollowedSource(slug, changes),
+        );
+        await upsert(
+          "roadmapGlossaryTerms",
+          data.roadmapGlossaryTerms,
+          (slug) => roadmap.getGlossaryTerm(slug),
+          (value) => roadmap.createGlossaryTerm(value),
+          (slug, changes) => roadmap.updateGlossaryTerm(slug, changes),
+        );
+
+        for (const { location, value } of data.roadmapDiary) {
+          await at(location, async () => {
+            const existing = await roadmap.getDiaryDay(value.date).catch((error: unknown) => {
+              if (isRefusal(error, "not_found")) return null;
+              throw error;
+            });
+            await roadmap.writeDiaryNotes(value.date, { notes: value.notes });
+            counts.roadmapDiary[existing?.notes == null ? "created" : "updated"] += 1;
+          });
+        }
+
+        // A session is matched by its target (resource or event) and absolute endpoints. Logged intervals never
+        // overlap, so the session is already logged exactly when the target's entries inside it
+        // fill it completely, however it was split into diary days.
+        const logged =
+          data.roadmapTimeEntries.length === 0
+            ? []
+            : (await roadmap.getDiary()).days.flatMap((day) => day.entries);
+        for (const { location, value } of data.roadmapTimeEntries) {
+          const start = Date.parse(value.startedAt);
+          const end = Date.parse(value.endedAt);
+          const covered = logged
+            .filter(
+              (entry) =>
+                (value.event === undefined
+                  ? entry.resource?.slug === value.resource
+                  : entry.event?.slug === value.event) &&
+                Date.parse(entry.startedAt) >= start &&
+                Date.parse(entry.endedAt) <= end,
+            )
+            .reduce((sum, entry) => sum + entry.durationSeconds * 1000, 0);
+          if (covered === end - start) {
+            counts.roadmapTimeEntries.updated += 1;
+            continue;
+          }
+          await at(location, () => roadmap.createTimeEntry(value));
+          counts.roadmapTimeEntries.created += 1;
+        }
         return true;
       });
     } catch (error) {

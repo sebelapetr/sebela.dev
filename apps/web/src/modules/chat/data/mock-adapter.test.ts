@@ -32,6 +32,7 @@ const EVIDENCE: AskEvidence = {
     { slug: "answer-checker", name: "Answer checker", summary: "Checks.", status: "built" },
     { slug: "tool-scopes", name: "Tool scopes", summary: "Plans.", status: "designed" },
   ],
+  learning: [],
   technologyGroups: ["core", "ai-engineering-focus"],
 };
 

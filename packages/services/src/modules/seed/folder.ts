@@ -10,15 +10,26 @@ import { z } from "zod";
 import {
   CaseStudyCreateSchema,
   CurrentFocusCreateSchema,
+  DiaryDateSchema,
+  DiaryNotesWriteSchema,
   EducationCreateSchema,
   ExperienceCreateSchema,
   ExplorationCreateSchema,
   OrganizationCreateSchema,
   PersonCreateSchema,
   ProjectCreateSchema,
+  RoadmapAreaCreateSchema,
+  RoadmapBookCreateSchema,
+  RoadmapEventCreateSchema,
+  RoadmapFollowedSourceCreateSchema,
+  RoadmapGlossaryTermCreateSchema,
+  RoadmapModuleCreateSchema,
+  RoadmapProjectIdeaCreateSchema,
+  RoadmapResourceCreateSchema,
   ServiceCreateSchema,
   TechnologyCreateSchema,
   TestimonialCreateSchema,
+  TimeEntryCreateSchema,
   TopicCreateSchema,
   type CaseStudyCreate,
   type CurrentFocusCreate,
@@ -28,9 +39,18 @@ import {
   type OrganizationCreate,
   type PersonCreate,
   type ProjectCreate,
+  type RoadmapAreaCreate,
+  type RoadmapBookCreate,
+  type RoadmapEventCreate,
+  type RoadmapFollowedSourceCreate,
+  type RoadmapGlossaryTermCreate,
+  type RoadmapModuleCreate,
+  type RoadmapProjectIdeaCreate,
+  type RoadmapResourceCreate,
   type ServiceCreate,
   type TechnologyCreate,
   type TestimonialCreate,
+  type TimeEntryCreate,
   type TopicCreate,
 } from "@sebela/contracts";
 
@@ -50,7 +70,63 @@ export const dataFiles = {
   education: "education.json",
   testimonials: "testimonials.json",
   currentFocus: "current-focus.json",
+  roadmapAreas: "roadmap-areas.json",
+  roadmapModules: "roadmap-modules.json",
+  roadmapBooks: "roadmap-books.json",
+  roadmapResources: "roadmap-resources.json",
+  roadmapEvents: "roadmap-events.json",
+  roadmapDiary: "roadmap-diary.json",
+  roadmapTimeEntries: "roadmap-time-entries.json",
+  roadmapProjectIdeas: "roadmap-project-ideas.json",
+  roadmapFollowedSources: "roadmap-followed-sources.json",
+  roadmapGlossaryTerms: "roadmap-glossary-terms.json",
 } as const;
+
+/** A diary day of the seed: its date and the notes written for it. */
+export interface SeedDiaryDay {
+  readonly date: string;
+  readonly notes: string;
+}
+
+const SeedDiaryDaySchema = z.strictObject({
+  date: DiaryDateSchema,
+  notes: DiaryNotesWriteSchema.shape.notes,
+});
+
+/**
+ * How the records of a file are told apart: the key of a record, the field a repeated key is
+ * reported on (`null` for the whole record) and the message.
+ */
+interface Identity<T> {
+  key(value: T): string;
+  readonly field: string | null;
+  readonly message: string;
+}
+
+const bySlug: Identity<{ slug: string }> = {
+  key: (value) => value.slug,
+  field: "slug",
+  message: "This slug is already used in this file.",
+};
+const byDate: Identity<SeedDiaryDay> = {
+  key: (value) => value.date,
+  field: "date",
+  message: "This date is already used in this file.",
+};
+/**
+ * A session is its target (a resource or an event) and its absolute endpoints, whatever offset they
+ * are written with.
+ */
+const bySession: Identity<TimeEntryCreate> = {
+  key: (value) =>
+    [
+      value.event === undefined ? `resource:${value.resource ?? ""}` : `event:${value.event}`,
+      Date.parse(value.startedAt),
+      Date.parse(value.endedAt),
+    ].join(" "),
+  field: null,
+  message: "This session is already listed in this file.",
+};
 
 /**
  * A record read from the seed, with where it came from (`experiences.json[2]`) and, for each of its
@@ -87,6 +163,16 @@ export interface SeedData {
   readonly education: readonly Located<EducationCreate>[];
   readonly testimonials: readonly Located<TestimonialCreate, "authorPhotoId">[];
   readonly currentFocus: readonly Located<CurrentFocusCreate>[];
+  readonly roadmapAreas: readonly Located<RoadmapAreaCreate>[];
+  readonly roadmapModules: readonly Located<RoadmapModuleCreate>[];
+  readonly roadmapBooks: readonly Located<RoadmapBookCreate, "coverId">[];
+  readonly roadmapResources: readonly Located<RoadmapResourceCreate>[];
+  readonly roadmapEvents: readonly Located<RoadmapEventCreate>[];
+  readonly roadmapDiary: readonly Located<SeedDiaryDay>[];
+  readonly roadmapTimeEntries: readonly Located<TimeEntryCreate>[];
+  readonly roadmapProjectIdeas: readonly Located<RoadmapProjectIdeaCreate>[];
+  readonly roadmapFollowedSources: readonly Located<RoadmapFollowedSourceCreate>[];
+  readonly roadmapGlossaryTerms: readonly Located<RoadmapGlossaryTermCreate>[];
   /** The attached files by the SHA-256 digest of their content, each once. */
   readonly files: ReadonlyMap<string, SeedFile>;
 }
@@ -242,10 +328,11 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     return failed ? null : { located: { location, value: parsed.data, files }, extras };
   };
 
-  /** Parses an array file; `[]` when the file is absent or broken. */
-  const parseList = async <T extends { slug: string }, Field extends string = never>(
+  /** Parses an array file of records told apart by their identity; `[]` when absent or broken. */
+  const parseRecords = async <T, Field extends string = never>(
     name: string,
     schema: z.ZodType<T>,
+    identity: Identity<T>,
     slots: readonly MediaSlot<Field>[] = [],
     extraKeys: readonly string[] = [],
   ) => {
@@ -261,18 +348,27 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
       const location = `${name}[${String(index)}]`;
       const record = parseRecord(item, location, schema, slots, extraKeys);
       if (record === null) return;
-      if (seen.has(record.located.value.slug)) {
+      const key = identity.key(record.located.value);
+      if (seen.has(key)) {
         issues.push({
-          path: `${location}.slug`,
-          message: "This slug is already used in this file.",
+          path: identity.field === null ? location : `${location}.${identity.field}`,
+          message: identity.message,
         });
         return;
       }
-      seen.add(record.located.value.slug);
+      seen.add(key);
       records.push(record);
     });
     return records;
   };
+
+  /** Parses an array file of records told apart by their slug. */
+  const parseList = <T extends { slug: string }, Field extends string = never>(
+    name: string,
+    schema: z.ZodType<T>,
+    slots: readonly MediaSlot<Field>[] = [],
+    extraKeys: readonly string[] = [],
+  ) => parseRecords<T, Field>(name, schema, bySlug, slots, extraKeys);
 
   const personRaw = await readJson(dataFiles.person);
   let person: Located<PersonCreate, "photoId" | "cvPdfId"> | null = null;
@@ -334,6 +430,34 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     ]),
   );
   const currentFocus = located(await parseList(dataFiles.currentFocus, CurrentFocusCreateSchema));
+  const roadmapAreas = located(await parseList(dataFiles.roadmapAreas, RoadmapAreaCreateSchema));
+  const roadmapModules = located(
+    await parseList(dataFiles.roadmapModules, RoadmapModuleCreateSchema),
+  );
+  const roadmapBooks = located(
+    await parseList(dataFiles.roadmapBooks, RoadmapBookCreateSchema, [
+      { key: "cover", field: "coverId", expects: "image" },
+    ]),
+  );
+  const roadmapResources = located(
+    await parseList(dataFiles.roadmapResources, RoadmapResourceCreateSchema),
+  );
+  const roadmapEvents = located(await parseList(dataFiles.roadmapEvents, RoadmapEventCreateSchema));
+  const roadmapDiary = located(
+    await parseRecords(dataFiles.roadmapDiary, SeedDiaryDaySchema, byDate),
+  );
+  const roadmapTimeEntries = located(
+    await parseRecords(dataFiles.roadmapTimeEntries, TimeEntryCreateSchema, bySession),
+  );
+  const roadmapProjectIdeas = located(
+    await parseList(dataFiles.roadmapProjectIdeas, RoadmapProjectIdeaCreateSchema),
+  );
+  const roadmapFollowedSources = located(
+    await parseList(dataFiles.roadmapFollowedSources, RoadmapFollowedSourceCreateSchema),
+  );
+  const roadmapGlossaryTerms = located(
+    await parseList(dataFiles.roadmapGlossaryTerms, RoadmapGlossaryTermCreateSchema),
+  );
 
   const files = await readDeclaredFiles(root, declarations, limits, issues);
 
@@ -350,6 +474,16 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     education,
     testimonials,
     currentFocus,
+    roadmapAreas,
+    roadmapModules,
+    roadmapBooks,
+    roadmapResources,
+    roadmapEvents,
+    roadmapDiary,
+    roadmapTimeEntries,
+    roadmapProjectIdeas,
+    roadmapFollowedSources,
+    roadmapGlossaryTerms,
     files,
   };
 }

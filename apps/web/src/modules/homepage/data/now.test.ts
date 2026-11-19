@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { CurrentFocus, Exploration, Topic } from "@sebela/api-client";
+import type {
+  CurrentFocus,
+  Exploration,
+  RoadmapCurrentArea,
+  RoadmapCurrentModule,
+  Topic,
+} from "@sebela/api-client";
 
 import { toNow } from "./now";
 
@@ -54,6 +60,54 @@ function exploration(overrides: Partial<Exploration> = {}): Exploration {
   };
 }
 
+type Progress = Pick<RoadmapCurrentArea["progress"], "completed" | "total">;
+
+function currentProgress({ completed, total }: Progress): RoadmapCurrentArea["progress"] {
+  return {
+    completed,
+    total,
+    status: "in-progress",
+    completedAt: null,
+    lastUpdatedAt: STAMP,
+    estimatedMinutes: 0,
+  };
+}
+
+/** A fictional module in progress, as the roadmap's current learning returns it. */
+function currentModule(slug: string, name: string, progress: Progress): RoadmapCurrentModule {
+  return {
+    id: "4d5e6f7a-8b9c-4d0e-8f1a-2b3c4d5e6f70",
+    slug,
+    name,
+    description: null,
+    position: 0,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    progress: currentProgress(progress),
+  };
+}
+
+/** A fictional area in progress, as the roadmap's current learning returns it. */
+function currentArea(
+  slug: string,
+  name: string,
+  progress: Progress,
+  modules: RoadmapCurrentModule[],
+): RoadmapCurrentArea {
+  return {
+    id: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a81",
+    slug,
+    name,
+    description: null,
+    weight: 10,
+    position: 0,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    progress: currentProgress(progress),
+    modules,
+  };
+}
+
 describe("toNow", () => {
   describe("Working on", () => {
     it("shows every current focus in the API's order, with its topics' names", () => {
@@ -66,6 +120,7 @@ describe("toNow", () => {
           }),
           focus({ slug: "second", title: "Second focus" }),
         ],
+        [],
         [],
       );
 
@@ -96,6 +151,7 @@ describe("toNow", () => {
           }),
         ],
         [],
+        [],
       );
 
       expect(now?.workingOn[0]?.link).toEqual({
@@ -106,7 +162,7 @@ describe("toNow", () => {
     });
 
     it("links a focus without a project to its own web link", () => {
-      const now = toNow([focus({ link: "https://notes.example.test/focus" })], []);
+      const now = toNow([focus({ link: "https://notes.example.test/focus" })], [], []);
 
       expect(now?.workingOn[0]?.link).toEqual({
         href: "https://notes.example.test/focus",
@@ -116,68 +172,113 @@ describe("toNow", () => {
     });
 
     it("never links to an address that is not on the web", () => {
-      const now = toNow([focus({ link: "javascript:alert(1)" })], []);
+      const now = toNow([focus({ link: "javascript:alert(1)" })], [], []);
 
       expect(now?.workingOn[0]?.link).toBeNull();
     });
   });
 
   describe("Exploring", () => {
-    it("shows only the ongoing explorations, each with its stored status and its place on the experience page", () => {
+    it("shows the roadmap's areas in progress, each linking to its page with its modules in progress", () => {
       const now = toNow(
         [],
+        [],
         [
-          exploration({ slug: "designed-now", name: "Designed now", status: "designed" }),
-          exploration({ slug: "finished", endedOn: "2026-03-01" }),
-          exploration({ slug: "built-now", name: "Built now", status: "built" }),
+          currentArea("signal-area", "Signal area", { completed: 1, total: 4 }, [
+            currentModule("signal-basics", "Signal basics", { completed: 1, total: 2 }),
+            currentModule("signal-depth", "Signal depth", { completed: 0, total: 1 }),
+          ]),
+          currentArea("queue-area", "Queue area", { completed: 0, total: 3 }, [
+            currentModule("calm-queues", "Calm queues", { completed: 0, total: 3 }),
+          ]),
         ],
       );
 
       expect(now?.exploring).toEqual([
         {
-          slug: "designed-now",
-          name: "Designed now",
-          status: {
-            label: "Designed",
-            meaning: "Unimplemented design, planned or architected only",
-          },
-          href: "/experience#exploration-designed-now",
+          slug: "signal-area",
+          name: "Signal area",
+          href: "/ai-roadmap/signal-area",
+          progress: "1/4",
+          modules: [
+            {
+              slug: "signal-basics",
+              name: "Signal basics",
+              href: "/ai-roadmap/signal-area/signal-basics",
+              progress: "1/2",
+            },
+            {
+              slug: "signal-depth",
+              name: "Signal depth",
+              href: "/ai-roadmap/signal-area/signal-depth",
+              progress: "0/1",
+            },
+          ],
         },
         {
-          slug: "built-now",
-          name: "Built now",
-          status: { label: "Built", meaning: "Implemented and working" },
-          href: "/experience#exploration-built-now",
+          slug: "queue-area",
+          name: "Queue area",
+          href: "/ai-roadmap/queue-area",
+          progress: "0/3",
+          modules: [
+            {
+              slug: "calm-queues",
+              name: "Calm queues",
+              href: "/ai-roadmap/queue-area/calm-queues",
+              progress: "0/3",
+            },
+          ],
         },
       ]);
+    });
+
+    it("no longer shows ongoing explorations, which stay on the experience page", () => {
+      const now = toNow([focus()], [exploration({ slug: "ongoing" })], []);
+
+      expect(now?.exploring).toEqual([]);
+    });
+
+    it("keeps each slug inside its own address segment", () => {
+      const now = toNow(
+        [],
+        [],
+        [
+          currentArea("a/b", "Odd area", { completed: 0, total: 1 }, [
+            currentModule("c?d", "Odd module", { completed: 0, total: 1 }),
+          ]),
+        ],
+      );
+
+      expect(now?.exploring[0]?.href).toBe("/ai-roadmap/a%2Fb");
+      expect(now?.exploring[0]?.modules[0]?.href).toBe("/ai-roadmap/a%2Fb/c%3Fd");
     });
   });
 
   describe("the links", () => {
     it("lead to the independent R&D block and to the AI Roadmap", () => {
-      const now = toNow([focus()], [exploration()]);
+      const now = toNow([focus()], [exploration()], []);
 
       expect(now?.independentRdHref).toBe("/experience#independent-rd");
       expect(now?.roadmapHref).toBe("/ai-roadmap");
     });
 
     it("lead to the independent R&D block while only finished explorations remain", () => {
-      const now = toNow([focus()], [exploration({ endedOn: "2026-03-01" })]);
+      const now = toNow([focus()], [exploration({ endedOn: "2026-03-01" })], []);
 
       expect(now?.exploring).toEqual([]);
       expect(now?.independentRdHref).toBe("/experience#independent-rd");
     });
 
     it("leave the independent R&D block out without any exploration, for it is not on the page", () => {
-      const now = toNow([focus()], []);
+      const now = toNow([focus()], [], []);
 
       expect(now?.independentRdHref).toBeNull();
       expect(now?.roadmapHref).toBe("/ai-roadmap");
     });
   });
 
-  it("is absent with nothing being built or learned now", () => {
-    expect(toNow([], [])).toBeNull();
-    expect(toNow([], [exploration({ endedOn: "2026-03-01" })])).toBeNull();
+  it("is absent with nothing being built and nothing in progress on the roadmap", () => {
+    expect(toNow([], [], [])).toBeNull();
+    expect(toNow([], [exploration()], [])).toBeNull();
   });
 });

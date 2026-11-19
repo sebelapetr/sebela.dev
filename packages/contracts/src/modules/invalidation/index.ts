@@ -5,7 +5,10 @@ import { z } from "zod";
 
 import { SlugParamsSchema } from "../profile/index.js";
 
-/** The records named by slug; a case study is named by its project's slug. */
+/**
+ * The records named by slug; a case study is named by its project's slug, and the roadmap's areas,
+ * modules, resources, books, events and supporting content by their own slugs.
+ */
 const sluggedDomains = [
   "technology",
   "topic",
@@ -18,10 +21,18 @@ const sluggedDomains = [
   "service",
   "education",
   "current-focus",
+  "roadmap-area",
+  "roadmap-module",
+  "roadmap-resource",
+  "roadmap-book",
+  "roadmap-event",
+  "roadmap-project-idea",
+  "roadmap-followed-source",
+  "roadmap-glossary-term",
 ] as const;
 
-/** The content domains a write can change, one per kind of profile record. */
-export const contentDomains = ["person", ...sluggedDomains, "media"] as const;
+/** The content domains a write can change, one per kind of profile or roadmap record. */
+export const contentDomains = ["person", ...sluggedDomains, "roadmap-diary", "media"] as const;
 
 /** What the write did to the record. */
 export const contentChangeActions = ["created", "updated", "deleted"] as const;
@@ -50,12 +61,14 @@ const action = z.enum(contentChangeActions);
 
 /**
  * One changed record. The person is the only one of its kind and names no record; media are named
- * by identifier; every other record by its slug (a case study by its project's slug). It names the
+ * by identifier; a learning diary day by its calendar date (`YYYY-MM-DD`, Europe/Prague), also when
+ * a time entry in it changed; every other record by its slug (a case study by its project's slug). It names the
  * written record only, not the records it was or is related to.
  */
 export const ContentChangeSchema = z
   .union([
     z.strictObject({ domain: z.literal("person"), record: z.null(), action }),
+    z.strictObject({ domain: z.literal("roadmap-diary"), record: z.iso.date(), action }),
     z.strictObject({ domain: z.literal("media"), record: z.uuid(), action }),
     z.strictObject({
       domain: z.enum(sluggedDomains),

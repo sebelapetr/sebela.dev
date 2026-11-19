@@ -159,15 +159,17 @@ apps/api/src/
   cli/                              # maintenance adapters using services: api-keys, seed, storage, openapi
   modules/profile/index.ts          # profile HTTP entry
   modules/media/index.ts            # media HTTP entry
+  modules/roadmap/index.ts          # roadmap HTTP entry
 packages/services/src/
   index.ts                          # explicit package exports
   services.ts                       # composition of the backend services from validated configuration
   modules/profile/index.ts          # profile/CV/domain operations
   modules/media/index.ts            # upload/attachment lifecycle
+  modules/roadmap/index.ts          # roadmap operations; private progress.ts derives progress on read
   modules/storage/index.ts          # driver-independent file operations
   modules/storage/drivers/          # private local and Bunny implementations
   modules/api-keys/index.ts         # generation, verification, revocation
-  modules/seed/index.ts             # loading a seed folder through profile and media
+  modules/seed/index.ts             # loading a seed folder through profile, roadmap and media
 packages/db/src/
   index.ts                          # explicit persistence exports
   testing.ts                        # test support: temporary databases (`@sebela/db/testing`)
@@ -176,11 +178,13 @@ packages/db/src/
   modules/profile/schema.ts         # private schema; private files, mostly one per entity, hold its SQL
   modules/api-keys/index.ts
   modules/api-keys/schema.ts
+  modules/roadmap/index.ts          # roadmap persistence; private schema.ts in schema `ai_roadmap`
 packages/contracts/src/
   index.ts                          # explicit contract exports
   errors.ts
   modules/profile/index.ts
   modules/media/index.ts
+  modules/roadmap/index.ts
 packages/api-client/src/
   index.ts                          # createApiClient and the contract's DTO types
   generated/                        # committed generated code: openapi.json and schema.ts
@@ -225,7 +229,7 @@ apps/web/src/
 ```
 
 - **Routes stay thin.** A file in `src/app/` holds only what Next requires there: the route's metadata, `notFound()`, reading the request, and rendering a module's page template. It imports modules through their entries only. Page content, data reading and state live in modules.
-- **Modules.** A module is `src/modules/<name>/`, named after the page or capability it serves (`homepage`, `experience`, `services`, `cv`, `chat`). Its entry is `index.ts` or `index.tsx` directly in that folder; a deeper `index` file, such as `templates/index.tsx`, is private. Everything in [Backend module layout](#backend-module-layout) about entries, private files, selected exports and cycles applies, and the `sebela/import-boundaries` rule enforces it here exactly as there.
+- **Modules.** A module is `src/modules/<name>/`, named after the page or capability it serves (`homepage`, `experience`, `services`, `cv`, `chat`, `roadmap`). Its entry is `index.ts` or `index.tsx` directly in that folder; a deeper `index` file, such as `templates/index.tsx`, is private. Everything in [Backend module layout](#backend-module-layout) about entries, private files, selected exports and cycles applies, and the `sebela/import-boundaries` rule enforces it here exactly as there.
 - **Folders inside a module.** The names above are the vocabulary: `templates/`, `components/`, `data/`, `types/`, `hooks/`, `stores/`. A folder is created when it has content, never scaffolded empty, and a module with nothing but a template and two components has only those two folders. Tests stay beside the behaviour they exercise.
 - **`data/`, not `services/`.** Code that reads the API lives in `data/`. "Service" is a domain term ([`GLOSSARY.md`](../GLOSSARY.md)) with its own page and module, and `@sebela/services` is a package the website may not import.
 - **`_shared`.** An ordinary module with one entry, for what is specific to this website and used by at least two modules or routes, such as the footer and the site's own addresses. It imports no other module. Code moves there when a second user appears, not before. Tokens, fonts and UI primitives stay in `packages/ui`.
@@ -320,7 +324,7 @@ The profile `api` of `compose.yaml` adds two services built from `apps/api/Docke
 ### Worktree backend setup
 
 - **Stages.** After the database, the role and `.env.local` exist, `create` runs four stages in the worktree, each a package script of the worktree's own checkout started through `pnpm` (`harness/lib/backend.mjs`), so the harness imports no application code: `pnpm install --frozen-lockfile --prefer-offline`; `pnpm --filter @sebela/db db:migrate`; `pnpm --silent --filter @sebela/api storage prepare <worktree>`; `pnpm --silent --filter @sebela/api seed --if-empty`. A stage whose script the checkout does not have yet is skipped with a notice. The stages get the caller's environment without the worktree's own settings (every variable `.env.example` names and the `WORKTREE_`, `WEB_`, `API_`, `MCP_`, `LLM_AGENT_`, `POSTGRES_`, `DATABASE_`, `STORAGE_` and `MEDIA_` prefixes), so they read the worktree's `.env.local`; only `POSTGRES_HOST` and `POSTGRES_PORT`, where the shared Postgres listens, pass through. Their output goes to standard error, so the last line of `create` stays the worktree path.
-- **Rerun.** Setup runs again for an existing worktree: install and migrations apply only what is missing or pending, the storage folder the worktree holds is reused, and the seed is skipped when the profile already holds any content — a person, any profile record or any media — so content an agent edited is never overwritten. The owner refreshes a worktree's content explicitly with `pnpm --silent --filter @sebela/api seed`, which loads the demo seed over the existing records ([`packages/db/seed/README.md`](../packages/db/seed/README.md)).
+- **Rerun.** Setup runs again for an existing worktree: install and migrations apply only what is missing or pending, the storage folder the worktree holds is reused, and the seed is skipped when the profile already holds any content — a person, any profile record, any media or any roadmap area — so content an agent edited is never overwritten. The owner refreshes a worktree's content explicitly with `pnpm --silent --filter @sebela/api seed`, which loads the demo seed over the existing records ([`packages/db/seed/README.md`](../packages/db/seed/README.md)).
 - **Storage folder.** `storageWorktreeName` in `harness/lib/slots.mjs` derives `STORAGE_WORKTREE` from the folder name like `databaseName`: the folder name in lower case with every run of other characters turned into `-`, shortened to fit 63 characters, then `-` and ten hexadecimal characters of the same hash, so no two worktrees share a folder. A generated `.env.local` also sets `STORAGE_PUBLIC_BASE_URL` to the worktree's own API (`http://<API_HOST>:<its API_PORT>/v1/media/files`) and `WEB_API_BASE_URL`, the API the website reads, to the same API's origin (`http://<API_HOST>:<its API_PORT>`), `WEB_SITE_ORIGIN`, the website's canonical origin, to its own website (`http://<WEB_HOST>:<its WEB_PORT>`), and `WEB_MEDIA_BASE_URL`, the only folder the website's image optimizer fetches from, to its own media folder (`http://<API_HOST>:<its API_PORT>/v1/media/files/<STORAGE_ENVIRONMENT>/<STORAGE_WORKTREE>`), `API_WEB_INVALIDATION_URL`, where its API sends signed invalidation notifications, to its own website's receiver (`http://<WEB_HOST>:<its WEB_PORT>/internal/invalidation`), and `API_WEB_INVALIDATION_SECRET` and `WEB_INVALIDATION_SECRET` to one newly generated random secret of its own, so a content write through its API refreshes its own website only. Local storage stays below the worktree's own `STORAGE_LOCAL_ROOT`; with `STORAGE_DRIVER=bunny-s3` the development zone is shared and the folder keeps worktrees apart. `storage prepare` writes an owner marker, `.owner`, naming the worktree into the folder, or reuses a folder whose marker names it; `storage remove` deletes the folder's files, the marker last, only when the marker names the worktree. Both refuse, without touching storage, a configuration without `STORAGE_WORKTREE`, `STORAGE_ENVIRONMENT=production`, a folder another worktree's marker claims, files without a marker and, on local disk, a folder or marker that is a symbolic link.
 - **Failures.** A failing stage stops setup with its name; the worktree, its `.env.local`, its database and its slot are kept, and running `create` again retries. An existing `.env.local` without `STORAGE_WORKTREE` (from before this setup) is never changed: setup stops before the storage stage and says to delete the file and run `create` again, which generates it with a new password. `remove` removes the storage folder after the uncommitted-work check and before the databases; when that fails, nothing else is removed and the removal can be repeated. It needs the worktree's installed tools; without them it refuses unless `--force`, which leaves the storage folder behind with a notice. A worktree folder that is already gone, or one without its `.env.local`, has no settings to find its storage folder by: `remove` goes on and prints a notice naming the folder. With the default `STORAGE_LOCAL_ROOT` inside the worktree its files went with the worktree; with `STORAGE_DRIVER=bunny-s3` or a root outside the worktree the folder is left behind and has to be removed by hand. Each stage has a 30-minute limit, so a hanging stage fails setup instead of blocking it.
 - **End-to-end run.** `node harness/worktree-backend.e2e.mjs` clones this checkout's committed `HEAD` into a temporary folder and, against a disposable Compose project as above, creates two worktrees, checks that each is migrated and seeded, has its own marked storage folder, serves its profile through its own API on a free port and accepts an upload with a key from its own `api-keys` command, that setup again keeps an edit and skips the seed, and that removing one keeps the other's data and files and leaves the clone unchanged. It needs Docker and pnpm, no cloud keys. CI runs it in the job `Worktree backend setup`.

@@ -1,9 +1,13 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write shows once the interval has elapsed; a restarted website reads current content
-// at once; during an outage cached pages keep their last good content while uncached pages say the
-// content is unavailable; and once the API answers again, pages are current without a rebuild.
+// seconds, a write to the profile, the roadmap, the learning diary, the bookshelf, the events or the
+// logged time behind the learning statistics shows once the interval has elapsed, on the
+// overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
+// leaves its old address; supporting-content writes reach the overview, and roadmap writes add
+// and remove pages in the sitemap and llms.txt, the same way; a restarted website reads current content at once; during an outage cached pages keep their last
+// good content while uncached pages say the content is unavailable; and once the API answers
+// again, pages are current without a rebuild.
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -84,6 +88,387 @@ test.describe("cached content without invalidation notifications", () => {
         intervals: [500],
       })
       .toContain(after);
+  });
+
+  test("a roadmap write with a dropped notification shows once the fallback interval has elapsed", async () => {
+    // This fixture has no roadmap: the warmed overview says so until the new area shows.
+    const empty = "No roadmap areas are published yet.";
+    expect((await read("/ai-roadmap")).body).toContain(empty);
+
+    const response = await fetch(`${api.url}/v1/roadmap/areas`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: "late-orbits", name: "Late orbits", weight: 20, position: 0 }),
+    });
+    // The write succeeds although its notification cannot be delivered.
+    expect(response.status, "POST /v1/roadmap/areas").toBe(201);
+
+    // Inside the interval the cached copy is still served: no notification arrived.
+    expect((await read("/ai-roadmap")).body).toContain(empty);
+    await expect
+      .poll(async () => (await read("/ai-roadmap")).body, {
+        timeout: (revalidateSeconds + 5) * 1_000,
+        intervals: [500],
+      })
+      .toContain("Late orbits");
+  });
+
+  test("a diary write with a dropped notification shows once the fallback interval has elapsed", async () => {
+    // This fixture has no diary: the warmed list says so and the day does not exist yet.
+    const empty = "No diary entries yet.";
+    const day = "/ai-roadmap/diary/2026-03-05";
+    expect((await read("/ai-roadmap/diary")).body).toContain(empty);
+    expect((await read(day)).status).toBe(404);
+
+    const response = await fetch(`${api.url}/v1/roadmap/diary/2026-03-05`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: "Fictional notes about late orbits." }),
+    });
+    // The write succeeds although its notification cannot be delivered.
+    expect(response.status, "PATCH /v1/roadmap/diary/2026-03-05").toBe(200);
+
+    // Inside the interval the cached list is still served: no notification arrived.
+    expect((await read("/ai-roadmap/diary")).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read("/ai-roadmap/diary")).body, within)
+      .toContain("Fictional notes about late orbits.");
+    await expect.poll(async () => (await read(day)).status, within).toBe(200);
+  });
+
+  test("book writes with dropped notifications reach the warmed shelf and book page after the interval", async () => {
+    async function write(method: string, path: string, body: unknown, expected: number) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.status, `${method} ${path}`).toBe(expected);
+    }
+    // This fixture has no books: the warmed shelf says so and the book does not exist yet.
+    const empty = "No books yet.";
+    const book = "/ai-roadmap/bookshelf/late-orbit-almanac";
+    expect((await read("/ai-roadmap/bookshelf")).body).toContain(empty);
+    expect((await read(book)).status).toBe(404);
+
+    await write(
+      "POST",
+      "/v1/roadmap/books",
+      { slug: "late-orbit-almanac", title: "Late Orbit Almanac" },
+      201,
+    );
+
+    // Inside the interval the cached shelf is still served: no notification arrived.
+    expect((await read("/ai-roadmap/bookshelf")).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read("/ai-roadmap/bookshelf")).body, within)
+      .toContain("Late Orbit Almanac");
+    await expect.poll(async () => (await read(book)).status, within).toBe(200);
+
+    // A change to the now warmed book page shows there and on the shelf after the interval too.
+    await write(
+      "PATCH",
+      "/v1/roadmap/books/late-orbit-almanac",
+      { title: "Later Orbit Almanac" },
+      200,
+    );
+    expect((await read(book)).body).not.toContain("Later Orbit Almanac");
+    await expect.poll(async () => (await read(book)).body, within).toContain("Later Orbit Almanac");
+    await expect
+      .poll(async () => (await read("/ai-roadmap/bookshelf")).body, within)
+      .toContain("Later Orbit Almanac");
+  });
+
+  test("event writes with dropped notifications reach the warmed events page and old and new days after the interval", async () => {
+    async function write(method: string, path: string, body: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    // This fixture has no events: the warmed page says so and neither day exists yet.
+    const empty = "No events yet.";
+    const events = "/ai-roadmap/events";
+    const oldDay = "/ai-roadmap/diary/2025-11-05";
+    const newDay = "/ai-roadmap/diary/2025-11-07";
+    expect((await read(events)).body).toContain(empty);
+    expect((await read(oldDay)).status).toBe(404);
+    expect((await read(newDay)).status).toBe(404);
+
+    await write("POST", "/v1/roadmap/events", {
+      slug: "late-orbit-evening",
+      name: "Late orbit evening",
+      kind: "meetup",
+      startsOn: "2025-11-05",
+      endsOn: "2025-11-05",
+    });
+
+    // Inside the interval the cached page is still served: no notification arrived.
+    expect((await read(events)).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read(events)).body, within)
+      .toContain("Late orbit evening");
+    await expect.poll(async () => (await read(oldDay)).status, within).toBe(200);
+    expect((await read(oldDay)).body).toContain("Late orbit evening");
+
+    // Moving it leaves the now warmed old day and reaches the new one after the interval too.
+    await write("PATCH", "/v1/roadmap/events/late-orbit-evening", {
+      startsOn: "2025-11-07",
+      endsOn: "2025-11-07",
+    });
+    expect((await read(oldDay)).status).toBe(200);
+    await expect.poll(async () => (await read(oldDay)).status, within).toBe(404);
+    await expect.poll(async () => (await read(newDay)).status, within).toBe(200);
+    expect((await read(newDay)).body).toContain("Late orbit evening");
+    await expect.poll(async () => (await read(events)).body, within).toContain("November 7, 2025");
+  });
+
+  test("a new module and resource reach the warmed area page and homepage Exploring after the interval", async () => {
+    async function create(path: string, body: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(response.status, `POST ${path}`).toBe(201);
+    }
+
+    // Warm the area page and the homepage: the area has no modules, and nothing is in progress.
+    expect((await read("/ai-roadmap/late-orbits")).body).toContain("No modules yet.");
+    expect((await read("/")).body).not.toContain("Exploring");
+
+    await create("/v1/roadmap/modules", {
+      slug: "slow-drift",
+      area: "late-orbits",
+      name: "Slow drift",
+      position: 0,
+    });
+    await create("/v1/roadmap/resources", {
+      slug: "drift-notes",
+      module: "slow-drift",
+      name: "Fictional drift notes",
+      type: "link",
+      status: "in-progress",
+      position: 0,
+    });
+
+    const fallback = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read("/ai-roadmap/late-orbits")).body, fallback)
+      .toContain("Slow drift");
+    // The module's own page was never cached, so it is current at once.
+    expect((await read("/ai-roadmap/late-orbits/slow-drift")).body).toContain(
+      "Fictional drift notes",
+    );
+    await expect
+      .poll(async () => (await read("/")).body, fallback)
+      .toMatch(/Exploring[\s\S]*Late orbits[\s\S]*Slow drift/u);
+  });
+
+  test("a moved and then deleted module leaves its warmed old address after the interval", async () => {
+    async function write(method: string, path: string, body?: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      expect(response.ok, `${method} ${path}`).toBe(true);
+    }
+    const old = "/ai-roadmap/late-orbits/slow-drift";
+    const moved = "/ai-roadmap/far-orbits/slow-drift";
+    await write("POST", "/v1/roadmap/areas", {
+      slug: "far-orbits",
+      name: "Far orbits",
+      weight: 10,
+      position: 1,
+    });
+    // Warm the old address and the new one, which does not exist yet.
+    expect((await read(old)).status).toBe(200);
+    expect((await read(moved)).status).toBe(404);
+
+    await write("PATCH", "/v1/roadmap/modules/slow-drift", { area: "far-orbits" });
+    const fallback = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect.poll(async () => (await read(old)).status, fallback).toBe(404);
+    await expect.poll(async () => (await read(moved)).status, fallback).toBe(200);
+
+    // A module with resources cannot be deleted: its resource goes first.
+    await write("DELETE", "/v1/roadmap/resources/drift-notes");
+    await write("DELETE", "/v1/roadmap/modules/slow-drift");
+    await expect.poll(async () => (await read(moved)).status, fallback).toBe(404);
+  });
+
+  test("logged time with a dropped notification reaches the warmed statistics after the interval", async () => {
+    async function write(method: string, path: string, body: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    const statistics = "/ai-roadmap/diary/stats";
+    await write("POST", "/v1/roadmap/modules", {
+      slug: "tally-drift",
+      area: "far-orbits",
+      name: "Tally drift",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/resources", {
+      slug: "tally-notes",
+      module: "tally-drift",
+      name: "Fictional tally notes",
+      type: "link",
+      position: 0,
+    });
+    // This fixture has no logged time: the warmed statistics say so.
+    const empty = "No time logged yet.";
+    expect((await read(statistics)).body).toContain(empty);
+
+    await write("POST", "/v1/roadmap/time-entries", {
+      resource: "tally-notes",
+      startedAt: "2026-03-10T10:00:00+01:00",
+      endedAt: "2026-03-10T11:30:00+01:00",
+    });
+
+    // Inside the interval the cached statistics are still served: no notification arrived.
+    expect((await read(statistics)).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read(statistics)).body, within)
+      .toContain("Fictional tally notes");
+    const body = (await read(statistics)).body.replaceAll("<!-- -->", "");
+    expect(body).not.toContain(empty);
+    expect(body).toContain("1h 30m");
+    expect(body).toContain("Far orbits");
+    expect(body).toContain("Tuesday, March 10, 2026");
+  });
+
+  test("supporting-content writes with dropped notifications reach the warmed overview after the interval", async () => {
+    async function write(method: string, path: string, body?: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    const overview = "/ai-roadmap";
+    const headings = ["Portfolio Project Ideas", "Stay Current", "Additional Terms to Explore"];
+    // This fixture has no supporting content: the warmed overview shows only the FAQ.
+    const warmed = (await read(overview)).body;
+    expect(warmed).toContain("Frequently Asked Questions");
+    for (const heading of headings) expect(warmed).not.toContain(heading);
+
+    await write("POST", "/v1/roadmap/project-ideas", {
+      slug: "drift-desk",
+      title: "A fictional drift desk",
+      whyItMatters: "Fictional reasons to build a drift desk.",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/followed-sources", {
+      slug: "drift-digest",
+      title: "Drift Digest",
+      kind: "newsletter",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/glossary-terms", {
+      slug: "slow-orbit",
+      term: "Slow orbit",
+      description: "A fictional term added after the overview was warmed.",
+      position: 0,
+    });
+
+    // Inside the interval the cached overview is still served: no notification arrived.
+    expect((await read(overview)).body).not.toContain("A fictional drift desk");
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    for (const added of ["A fictional drift desk", "Drift Digest", "Slow orbit"]) {
+      await expect.poll(async () => (await read(overview)).body, within).toContain(added);
+    }
+
+    // Deleting them takes their now warmed sections away after the interval too; the FAQ stays.
+    await write("DELETE", "/v1/roadmap/project-ideas/drift-desk");
+    await write("DELETE", "/v1/roadmap/followed-sources/drift-digest");
+    await write("DELETE", "/v1/roadmap/glossary-terms/slow-orbit");
+    expect((await read(overview)).body).toContain("A fictional drift desk");
+    for (const heading of headings) {
+      await expect.poll(async () => (await read(overview)).body, within).not.toContain(heading);
+    }
+    expect((await read(overview)).body).toContain("Frequently Asked Questions");
+  });
+
+  test("roadmap writes with dropped notifications add and remove pages in the warmed sitemap and llms.txt after the interval", async () => {
+    async function write(method: string, path: string, body?: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    const area = "/ai-roadmap/near-orbits";
+    const modulePage = `${area}/quiet-drift`;
+    const book = "/ai-roadmap/bookshelf/near-orbit-primer";
+    const day = "/ai-roadmap/diary/2026-03-05";
+    const sitemap = async () => (await read("/sitemap.xml")).body;
+    const llms = async () => (await read("/llms.txt")).body;
+    // In the sitemap every page is a `<loc>`; in llms.txt every page is a Markdown link target.
+    const inSitemap = (path: string) => `${path}</loc>`;
+    const inLlms = (path: string) => `${path})`;
+
+    // Warm both: the earlier tests' diary day is listed, the new pages are not.
+    expect(await sitemap()).toContain(inSitemap(day));
+    for (const path of [area, modulePage, book]) {
+      expect(await sitemap()).not.toContain(inSitemap(path));
+      expect(await llms()).not.toContain(inLlms(path));
+    }
+
+    await write("POST", "/v1/roadmap/areas", {
+      slug: "near-orbits",
+      name: "Near orbits",
+      weight: 5,
+      position: 2,
+    });
+    await write("POST", "/v1/roadmap/modules", {
+      slug: "quiet-drift",
+      area: "near-orbits",
+      name: "Quiet drift",
+      position: 0,
+    });
+    await write("POST", "/v1/roadmap/books", {
+      slug: "near-orbit-primer",
+      title: "Near Orbit Primer",
+    });
+    await write("DELETE", "/v1/roadmap/diary/2026-03-05");
+
+    // Inside the interval the cached documents are still served: no notification arrived.
+    expect(await sitemap()).not.toContain(inSitemap(area));
+    expect(await sitemap()).toContain(inSitemap(day));
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    for (const path of [area, modulePage, book]) {
+      await expect.poll(sitemap, within).toContain(inSitemap(path));
+      await expect.poll(llms, within).toContain(inLlms(path));
+    }
+    await expect.poll(sitemap, within).not.toContain(inSitemap(day));
+
+    // Deleting the now listed pages takes them out of both documents after the interval too.
+    await write("DELETE", "/v1/roadmap/modules/quiet-drift");
+    await write("DELETE", "/v1/roadmap/areas/near-orbits");
+    await write("DELETE", "/v1/roadmap/books/near-orbit-primer");
+    expect(await sitemap()).toContain(inSitemap(modulePage));
+    for (const path of [area, modulePage, book]) {
+      await expect.poll(sitemap, within).not.toContain(inSitemap(path));
+      await expect.poll(llms, within).not.toContain(inLlms(path));
+    }
   });
 
   test("a restarted website reads current content at once", async () => {

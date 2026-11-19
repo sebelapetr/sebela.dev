@@ -1,0 +1,30 @@
+[
+  {
+    "slug": "foundations",
+    "name": "Foundations",
+    "description": "How language models behave and how to talk to them, before building anything on top of them.",
+    "weight": 25,
+    "position": 0
+  },
+  {
+    "slug": "retrieval-systems",
+    "name": "Retrieval systems",
+    "description": "Finding the right passages for a model to answer from, and measuring whether it did.",
+    "weight": 30,
+    "position": 1
+  },
+  {
+    "slug": "agents-in-production",
+    "name": "Agents in production",
+    "description": "Tools, loops and guardrails for agents that run unattended.",
+    "weight": 35,
+    "position": 2
+  },
+  {
+    "slug": "research-frontier",
+    "name": "Research frontier",
+    "description": "A placeholder for papers to follow once the practical areas are done.",
+    "weight": 10,
+    "position": 3
+  }
+]

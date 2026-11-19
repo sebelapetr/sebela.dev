@@ -39,7 +39,7 @@ async function signed(body: Uint8Array, at = NOW, secret = SECRET) {
 }
 
 describe("the content change", () => {
-  it("names every profile domain and the three actions", () => {
+  it("names every profile and roadmap domain and the three actions", () => {
     expect(contentDomains).toEqual([
       "person",
       "technology",
@@ -53,6 +53,15 @@ describe("the content change", () => {
       "service",
       "education",
       "current-focus",
+      "roadmap-area",
+      "roadmap-module",
+      "roadmap-resource",
+      "roadmap-book",
+      "roadmap-event",
+      "roadmap-project-idea",
+      "roadmap-followed-source",
+      "roadmap-glossary-term",
+      "roadmap-diary",
       "media",
     ]);
     expect(contentChangeActions).toEqual(["created", "updated", "deleted"]);
@@ -64,6 +73,12 @@ describe("the content change", () => {
       { domain: "technology", record: "type-script", action: "created" },
       { domain: "case-study", record: "routing-engine", action: "deleted" },
       { domain: "current-focus", record: "agent-evals", action: "updated" },
+      { domain: "roadmap-resource", record: "prompting-notes", action: "deleted" },
+      { domain: "roadmap-event", record: "fictional-ai-summit", action: "updated" },
+      { domain: "roadmap-project-idea", record: "reading-assistant", action: "created" },
+      { domain: "roadmap-followed-source", record: "example-weekly", action: "deleted" },
+      { domain: "roadmap-glossary-term", record: "context-window", action: "updated" },
+      { domain: "roadmap-diary", record: "2026-03-02", action: "updated" },
       { domain: "media", record: MEDIA, action: "deleted" },
     ]) {
       expect(ContentChangeSchema.parse(change)).toEqual(change);
@@ -82,6 +97,9 @@ describe("the content change", () => {
       { domain: "media", record: "not-a-uuid", action: "updated" },
       { domain: "media", record: "northwind-logo", action: "updated" },
       { domain: "media", record: null, action: "deleted" },
+      { domain: "roadmap-diary", record: "prompting-notes", action: "updated" },
+      { domain: "roadmap-diary", record: "2026-02-30", action: "updated" },
+      { domain: "roadmap-diary", record: null, action: "updated" },
       { domain: "experience", record: "northwind-lead", action: "updated", url: "/experience" },
       { domain: "experience", record: "northwind-lead", action: "updated", cacheKey: "all" },
       { domain: "experience", record: "x".repeat(101), action: "updated" },

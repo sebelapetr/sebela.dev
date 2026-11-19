@@ -5,6 +5,7 @@ import { CvSchema, PersonSchema } from "@sebela/contracts";
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
 interface Operation {
+  operationId?: string;
   parameters?: { name: string; in: string; required?: boolean; schema: Record<string, unknown> }[];
   security?: Record<string, string[]>[];
   requestBody?: { content: Record<string, { schema: { $ref?: string } }> };
@@ -555,6 +556,271 @@ describe("the OpenAPI document and the reference", () => {
     );
     expect(document.components.schemas).toHaveProperty("CvExploration");
     expect(document.paths["/v1/cv"]).toEqual({ get: read });
+  });
+
+  it("documents the roadmap tree and its private writes from their contract schemas", () => {
+    const read = operation("GET", "/v1/roadmap");
+    expect(read.security).toEqual([]);
+    expect(read.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/Roadmap" } },
+    });
+    for (const [kind, schema] of [
+      ["areas", "RoadmapArea"],
+      ["modules", "RoadmapModule"],
+      ["resources", "RoadmapResource"],
+    ] as const) {
+      const list = `/v1/roadmap/${kind}`;
+      const item = `/v1/roadmap/${kind}/:slug`;
+      expect(operation("GET", item).security).toEqual([]);
+      expect(operation("GET", item).responses["200"]?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+      });
+      expect(operation("POST", list).requestBody?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}Create` } },
+      });
+      expect(operation("PATCH", item).requestBody?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}Update` } },
+      });
+      expect(operation("POST", list).responses["201"]?.headers).toHaveProperty("Location");
+      expect(Object.keys(operation("POST", list).responses)).toEqual(
+        expect.arrayContaining(["201", "400", "401", "409"]),
+      );
+      expect(Object.keys(operation("PATCH", item).responses)).toEqual(
+        expect.arrayContaining(["200", "400", "401", "404"]),
+      );
+      for (const [method, path] of [
+        ["POST", list],
+        ["PATCH", item],
+        ["DELETE", item],
+      ] as const) {
+        expect(operation(method, path).security).toEqual([{ bearerAuth: [] }]);
+      }
+    }
+    // A parent with children cannot be deleted; a resource has nothing referring to it yet.
+    for (const kind of ["areas", "modules"]) {
+      expect(Object.keys(operation("DELETE", `/v1/roadmap/${kind}/:slug`).responses)).toEqual(
+        expect.arrayContaining(["204", "400", "401", "404", "409"]),
+      );
+    }
+    // Progress is derived and documented as such.
+    expect(document.components.schemas).toHaveProperty("RoadmapProgress");
+    expect(document.components.schemas).toHaveProperty("RoadmapSummary");
+  });
+
+  it("documents the public roadmap detail and current-learning reads", () => {
+    for (const [path, schema, params] of [
+      ["/v1/roadmap/tree/:area", "RoadmapAreaDetail", ["area"]],
+      ["/v1/roadmap/tree/:area/:module", "RoadmapModuleDetail", ["area", "module"]],
+      ["/v1/roadmap/current", "RoadmapCurrent", []],
+    ] as const) {
+      const read = operation("GET", path);
+      expect(read.security, path).toEqual([]);
+      expect(read.responses["200"]?.content).toEqual({
+        "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+      });
+      expect(read.parameters?.map(({ name, in: where }) => [name, where]) ?? []).toEqual(
+        params.map((name) => [name, "path"]),
+      );
+      expect(Object.keys(document.paths[path.replace(/:([a-z]+)/g, "{$1}")] ?? {})).toEqual([
+        "get",
+      ]);
+    }
+    for (const path of ["/v1/roadmap/tree/:area", "/v1/roadmap/tree/:area/:module"]) {
+      expect(Object.keys(operation("GET", path).responses)).toEqual(
+        expect.arrayContaining(["200", "400", "404"]),
+      );
+    }
+    expect(Object.keys(operation("GET", "/v1/roadmap/current").responses)).not.toContain("404");
+    expect(document.components.schemas).toHaveProperty("RoadmapCurrentArea");
+    expect(document.components.schemas).toHaveProperty("RoadmapCurrentModule");
+  });
+
+  it("documents the public diary reads and its private notes and time-entry writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    expect(operation("GET", "/v1/roadmap/diary").security).toEqual([]);
+    expect(operation("GET", "/v1/roadmap/diary").responses["200"]?.content).toEqual(
+      content("Diary"),
+    );
+    const day = operation("GET", "/v1/roadmap/diary/:date");
+    expect(day.security).toEqual([]);
+    expect(day.responses["200"]?.content).toEqual(content("DiaryDay"));
+    expect(Object.keys(day.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+
+    const notes = operation("PATCH", "/v1/roadmap/diary/:date");
+    expect(notes.requestBody?.content).toEqual(content("DiaryNotesWrite"));
+    expect(notes.responses["200"]?.content).toEqual(content("DiaryDay"));
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/diary/:date").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404"]),
+    );
+
+    const create = operation("POST", "/v1/roadmap/time-entries");
+    expect(create.requestBody?.content).toEqual(content("TimeEntryCreate"));
+    expect(create.responses["201"]?.content).toEqual(content("TimeEntryWrite"));
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    const update = operation("PATCH", "/v1/roadmap/time-entries/:id");
+    expect(update.requestBody?.content).toEqual(content("TimeEntryUpdate"));
+    expect(update.responses["200"]?.content).toEqual(content("TimeEntryWrite"));
+    expect(Object.keys(update.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404", "409"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/time-entries/:id").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404"]),
+    );
+    for (const [method, path] of [
+      ["PATCH", "/v1/roadmap/diary/:date"],
+      ["DELETE", "/v1/roadmap/diary/:date"],
+      ["POST", "/v1/roadmap/time-entries"],
+      ["PATCH", "/v1/roadmap/time-entries/:id"],
+      ["DELETE", "/v1/roadmap/time-entries/:id"],
+    ] as const) {
+      expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+  });
+
+  it("documents the public bookshelf reads and its private book writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    const list = operation("GET", "/v1/roadmap/books");
+    expect(list.security).toEqual([]);
+    expect(list.responses["200"]?.content).toEqual(content("RoadmapBookList"));
+    const item = operation("GET", "/v1/roadmap/books/:slug");
+    expect(item.security).toEqual([]);
+    expect(item.responses["200"]?.content).toEqual(content("RoadmapBook"));
+    expect(Object.keys(item.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+
+    const create = operation("POST", "/v1/roadmap/books");
+    expect(create.requestBody?.content).toEqual(content("RoadmapBookCreate"));
+    expect(create.responses["201"]?.content).toEqual(content("RoadmapBook"));
+    expect(create.responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    const update = operation("PATCH", "/v1/roadmap/books/:slug");
+    expect(update.requestBody?.content).toEqual(content("RoadmapBookUpdate"));
+    expect(Object.keys(update.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/books/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404", "409"]),
+    );
+    for (const [method, path] of [
+      ["POST", "/v1/roadmap/books"],
+      ["PATCH", "/v1/roadmap/books/:slug"],
+      ["DELETE", "/v1/roadmap/books/:slug"],
+    ] as const) {
+      expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(document.components.schemas).toHaveProperty("RoadmapBookResource");
+  });
+
+  it("documents the public event reads and its private event writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    const list = operation("GET", "/v1/roadmap/events");
+    expect(list.security).toEqual([]);
+    expect(list.responses["200"]?.content).toEqual(content("RoadmapEventList"));
+    const item = operation("GET", "/v1/roadmap/events/:slug");
+    expect(item.security).toEqual([]);
+    expect(item.responses["200"]?.content).toEqual(content("RoadmapEvent"));
+    expect(Object.keys(item.responses)).toEqual(expect.arrayContaining(["400", "404"]));
+
+    const create = operation("POST", "/v1/roadmap/events");
+    expect(create.requestBody?.content).toEqual(content("RoadmapEventCreate"));
+    expect(create.responses["201"]?.content).toEqual(content("RoadmapEvent"));
+    expect(create.responses["201"]?.headers).toHaveProperty("Location");
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
+    const update = operation("PATCH", "/v1/roadmap/events/:slug");
+    expect(update.requestBody?.content).toEqual(content("RoadmapEventUpdate"));
+    expect(update.responses["200"]?.content).toEqual(content("RoadmapEvent"));
+    expect(Object.keys(update.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "404", "409"]),
+    );
+    expect(Object.keys(operation("DELETE", "/v1/roadmap/events/:slug").responses)).toEqual(
+      expect.arrayContaining(["204", "401", "404", "409"]),
+    );
+    for (const [method, path] of [
+      ["POST", "/v1/roadmap/events"],
+      ["PATCH", "/v1/roadmap/events/:slug"],
+      ["DELETE", "/v1/roadmap/events/:slug"],
+    ] as const) {
+      expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(document.components.schemas).toHaveProperty("DiaryEvent");
+  });
+
+  it("documents the public supporting-content reads and their private writes", () => {
+    const content = (schema: string) => ({
+      "application/json": { schema: { $ref: `#/components/schemas/${schema}` } },
+    });
+    for (const [kind, schema] of [
+      ["project-ideas", "RoadmapProjectIdea"],
+      ["followed-sources", "RoadmapFollowedSource"],
+      ["glossary-terms", "RoadmapGlossaryTerm"],
+    ] as const) {
+      const list = `/v1/roadmap/${kind}`;
+      const item = `/v1/roadmap/${kind}/:slug`;
+      expect(operation("GET", list).security, list).toEqual([]);
+      expect(operation("GET", list).responses["200"]?.content).toEqual(content(`${schema}List`));
+      expect(operation("GET", item).security, item).toEqual([]);
+      expect(operation("GET", item).responses["200"]?.content).toEqual(content(schema));
+      expect(Object.keys(operation("GET", item).responses)).toEqual(
+        expect.arrayContaining(["400", "404"]),
+      );
+
+      const create = operation("POST", list);
+      expect(create.requestBody?.content).toEqual(content(`${schema}Create`));
+      expect(create.responses["201"]?.content).toEqual(content(schema));
+      expect(create.responses["201"]?.headers).toHaveProperty("Location");
+      expect(Object.keys(create.responses)).toEqual(
+        expect.arrayContaining(["201", "400", "401", "409"]),
+      );
+      const update = operation("PATCH", item);
+      expect(update.requestBody?.content).toEqual(content(`${schema}Update`));
+      expect(update.responses["200"]?.content).toEqual(content(schema));
+      expect(Object.keys(update.responses)).toEqual(
+        expect.arrayContaining(["200", "400", "401", "404"]),
+      );
+      const deletion = Object.keys(operation("DELETE", item).responses);
+      expect(deletion).toEqual(expect.arrayContaining(["204", "401", "404"]));
+      expect(deletion).not.toContain("409");
+      for (const [method, path] of [
+        ["POST", list],
+        ["PATCH", item],
+        ["DELETE", item],
+      ] as const) {
+        expect(operation(method, path).security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+      }
+    }
+  });
+
+  it("documents the learning statistics as one public read without parameters", () => {
+    const read = operation("GET", "/v1/roadmap/statistics");
+    expect(read.operationId).toBe("getRoadmapStatistics");
+    expect(read.security).toEqual([]);
+    expect(read.parameters ?? []).toEqual([]);
+    expect(read.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/RoadmapStatistics" } },
+    });
+    for (const component of [
+      "LearningTimeTotals",
+      "LearningTimeDay",
+      "LearningTimeWeek",
+      "LearningTimeMonth",
+      "LearningTimeArea",
+      "LearningTimeModule",
+      "LearningTimeResource",
+      "LearningTimeEvent",
+    ]) {
+      expect(document.components.schemas, component).toHaveProperty(component);
+    }
   });
 
   it("documents the health route", () => {

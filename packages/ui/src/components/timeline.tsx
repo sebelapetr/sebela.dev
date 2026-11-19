@@ -78,12 +78,23 @@ function TimelineItem({
   );
 }
 
+const MARKER =
+  "absolute top-1.5 left-0 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground";
+
+interface TimelineTriggerProps extends Collapsible.Trigger.Props {
+  /**
+   * Classes for the marker on the rail, after its own, so a caller can colour it by state (for
+   * example a roadmap item's status). Hover and open variants given here win over the defaults.
+   */
+  readonly markerClassName?: string;
+}
+
 /**
  * The item's heading row and its disclosure control: a button that opens and closes the content,
  * with the item's marker on the rail. Put it in a heading of the right level; its children are
  * phrasing content (text, spans).
  */
-function TimelineTrigger({ className, children, ...props }: Collapsible.Trigger.Props) {
+function TimelineTrigger({ className, markerClassName, children, ...props }: TimelineTriggerProps) {
   const id = use(TriggerIdContext);
   return (
     <Collapsible.Trigger
@@ -99,12 +110,31 @@ function TimelineTrigger({ className, children, ...props }: Collapsible.Trigger.
       <span
         aria-hidden="true"
         data-slot="timeline-marker"
-        className="absolute top-1.5 left-0 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors group-hover/timeline-trigger:border-foreground group-hover/timeline-trigger:text-foreground group-data-[panel-open]/timeline-trigger:border-foreground group-data-[panel-open]/timeline-trigger:text-foreground"
+        className={cn(
+          MARKER,
+          "transition-colors group-hover/timeline-trigger:border-foreground group-hover/timeline-trigger:text-foreground group-data-[panel-open]/timeline-trigger:border-foreground group-data-[panel-open]/timeline-trigger:text-foreground",
+          markerClassName,
+        )}
       >
         <ChevronRight className="size-4 group-data-[panel-open]/timeline-trigger:rotate-90" />
       </span>
       {children}
     </Collapsible.Trigger>
+  );
+}
+
+/**
+ * A marker on the rail for an item that does not expand: put it first inside a plain
+ * `<li className="relative pl-12">` of the timeline. Decorative; its children are an icon.
+ */
+function TimelineMarker({ className, ...props }: ComponentProps<"span">) {
+  return (
+    <span
+      aria-hidden="true"
+      data-slot="timeline-marker"
+      className={cn(MARKER, className)}
+      {...props}
+    />
   );
 }
 
@@ -130,5 +160,5 @@ function TimelineContent({ className, children, ...props }: Collapsible.Panel.Pr
   );
 }
 
-export { Timeline, TimelineContent, TimelineItem, TimelineTrigger };
-export type { TimelineItemProps };
+export { Timeline, TimelineContent, TimelineItem, TimelineMarker, TimelineTrigger };
+export type { TimelineItemProps, TimelineTriggerProps };

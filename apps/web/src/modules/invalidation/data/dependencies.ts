@@ -29,6 +29,30 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   education: ["profile"],
   "current-focus": ["profile"],
   media: ["profile"],
+  // The AI Roadmap's pages (the overview, an area's address) and their metadata read the whole
+  // tree with its derived progress and totals in one call, so a change of an area, a module or a
+  // resource (or of a topic it uses) refreshes them with the rest of the profile.
+  "roadmap-area": ["profile"],
+  "roadmap-module": ["profile"],
+  "roadmap-resource": ["profile"],
+  // A diary change names the Prague calendar days it touched (a moved time entry its old and new
+  // day). The diary's list, every day's page and the roadmap read through the same cache, so
+  // invalidating it as a whole refreshes the list and the old and new days alike.
+  "roadmap-diary": ["profile"],
+  // A book change names the book. The bookshelf, each book's page and the roadmap pages that
+  // navigate to a book read through the same cache; a resource's link to a book is a
+  // `roadmap-resource` change, so former and new links refresh with it.
+  "roadmap-book": ["profile"],
+  // An event change names the event. The Events page and the diary's list and days read through
+  // the same cache, so invalidating it as a whole refreshes the old and the new days of a moved
+  // event; attendance on it is a `roadmap-diary` change naming its days.
+  "roadmap-event": ["profile"],
+  // A project idea, followed source or glossary term change names the record. The roadmap overview
+  // shows them as its supporting sections and reads through the same cache, so a change or
+  // deletion refreshes the overview with the rest of the profile.
+  "roadmap-project-idea": ["profile"],
+  "roadmap-followed-source": ["profile"],
+  "roadmap-glossary-term": ["profile"],
 };
 
 /**

@@ -1,6 +1,6 @@
 # Seed folders
 
-A seed folder holds profile content as JSON files plus the files they attach. One command loads it
+A seed folder holds profile and AI roadmap content as JSON files plus the files they attach. One command loads it
 into a migrated database:
 
 ```sh
@@ -17,40 +17,104 @@ folder's path. The exit code is 0 for a load or a skipped `--if-empty` load, 1 f
 The repository contains only the fictional demo seed in `demo/`. Its records double as an example
 of every file below. Its attached files are generated placeholders: logos, covers and illustrated
 avatars for testimonial authors, never a photo of a real person. The owner's real content,
-testimonial photos included, stays in the owner's private seed folder.
+testimonial photos included, stays in the owner's private seed folder. Its sessions give the
+learning statistics all three categories (resource, book and event time), quiet weeks, a session
+across Prague midnight and one on the spring daylight-saving night (2025-03-30, 01:30 to 03:30 on
+the clock, one hour of elapsed time).
 
 ## Data files
 
 Every data file is optional; an absent file leaves its kind of record untouched. Any other `.json`
 file in the folder is refused, so a misspelt name does not silently load nothing.
 
-| File                 | Holds                                                   | Identity                              |
-| -------------------- | ------------------------------------------------------- | ------------------------------------- |
-| `person.json`        | one object: the person                                  | the single person                     |
-| `technologies.json`  | an array of technologies                                | `slug`                                |
-| `topics.json`        | an array of topics                                      | `slug`                                |
-| `organizations.json` | an array of organizations                               | `slug`                                |
-| `experiences.json`   | an array of experiences                                 | `slug`                                |
-| `projects.json`      | an array of projects, each with an optional `caseStudy` | `slug`; the case study by its project |
-| `explorations.json`  | an array of explorations                                | `slug`                                |
-| `services.json`      | an array of services with their evidence                | `slug`                                |
-| `education.json`     | an array of education records                           | `slug`                                |
-| `testimonials.json`  | an array of testimonials                                | `slug`                                |
-| `current-focus.json` | an array of current-focus entries                       | `slug`                                |
+| File                            | Holds                                                                | Identity                                          |
+| ------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
+| `person.json`                   | one object: the person                                               | the single person                                 |
+| `technologies.json`             | an array of technologies                                             | `slug`                                            |
+| `topics.json`                   | an array of topics                                                   | `slug`                                            |
+| `organizations.json`            | an array of organizations                                            | `slug`                                            |
+| `experiences.json`              | an array of experiences                                              | `slug`                                            |
+| `projects.json`                 | an array of projects, each with an optional `caseStudy`              | `slug`; the case study by its project             |
+| `explorations.json`             | an array of explorations                                             | `slug`                                            |
+| `services.json`                 | an array of services with their evidence                             | `slug`                                            |
+| `education.json`                | an array of education records                                        | `slug`                                            |
+| `testimonials.json`             | an array of testimonials                                             | `slug`                                            |
+| `current-focus.json`            | an array of current-focus entries                                    | `slug`                                            |
+| `roadmap-areas.json`            | an array of roadmap areas                                            | `slug`                                            |
+| `roadmap-modules.json`          | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules                 |
+| `roadmap-books.json`            | an array of bookshelf books, each with an optional `cover`           | `slug`                                            |
+| `roadmap-resources.json`        | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources               |
+| `roadmap-events.json`           | an array of attended events, each naming its `topics`                | `slug`                                            |
+| `roadmap-diary.json`            | an array of learning diary days, each `{ "date", "notes" }`          | `date`                                            |
+| `roadmap-time-entries.json`     | an array of sessions, each naming its `resource` or its `event`      | the target, `startedAt` and `endedAt` as instants |
+| `roadmap-project-ideas.json`    | an array of project ideas, each naming its `topics`                  | `slug`                                            |
+| `roadmap-followed-sources.json` | an array of followed sources                                         | `slug`                                            |
+| `roadmap-glossary-terms.json`   | an array of additional glossary terms                                | `slug`                                            |
 
 Each record has exactly the fields of the API's create request for its kind (the Zod schemas in
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
 
 - **Media are declared as files, not identifiers.** Instead of `photoId` and `cvPdfId` (person),
-  `logoId` (organization), `coverId` (project) and `authorPhotoId` (testimonial), a record declares
+  `logoId` (organization), `coverId` (project and book) and `authorPhotoId` (testimonial), a record declares
   `photo`, `cvPdf`, `logo`, `cover` or `authorPhoto` as `{ "file": "files/portrait.jpg", "altText": "…" }` or `null`. `altText` is optional. An absent key behaves exactly like `null`: the record has no such attachment, so loading it clears one that is set (see superseded media below).
   A media identifier in a seed record is refused.
 - **A project may carry its case study** as `caseStudy: { "role": "…", "body": "…" }`.
 - **References are slugs**, as in the API: an experience names its `organization` and
-  `technologies`, a project its `experience`, a service its evidence projects and explorations, and
-  so on. A reference may name a record of the same folder or one already in the database.
+  `technologies`, a project its `experience`, a service its evidence projects and explorations, a roadmap
+  module its `area`, a roadmap resource its `module`, `topics` and optional `book`, an event its `topics`, and so on. A reference may name a record of the same folder or one already in the database.
 
 A slug is unique within its file.
+
+### Bookshelf
+
+- **A book** has the fields of the API's book create request: `slug`, `title` and the optional
+  `author`, `description`, `pages`, `year`, `isbn`, `priority` (default `0`), `startedOn`,
+  `endedOn` (calendar dates) and Markdown `summary`. Its status is never written; it follows from the
+  dates. Its cover is a local image file declared as `cover`, like a project cover; covers are never
+  fetched from a publisher at load or render time.
+- **A book never names its resource.** A roadmap resource of type `book` links it with
+  `"book": "<book slug>"`; each book is linked by at most one resource. Books load before resources,
+  so the link may name a book of the same folder or one already in the database.
+- **Reading time is logged on the linking resource** in `roadmap-time-entries.json`; a book has no
+  time entries of its own.
+
+### Events
+
+- **An event** has the fields of the API's event create request: `slug`, `name`, `kind`
+  (`conference`, `meetup`, `workshop` or `lecture`), `startsOn` and `endsOn` (inclusive
+  Europe/Prague calendar dates, the end never before the start and equal to it for a single day),
+  and the optional `organizer`, `place`, `online` (default `false`), `link`, Markdown `takeaways`
+  and `topics` (existing topic slugs, each once). Events load after resources and before the diary.
+- **An event adds no time.** It shows on every diary day of its range, also on days without notes
+  or sessions, and no diary day is written for it. Attendance is a session in
+  `roadmap-time-entries.json` that names the `event` instead of a `resource`; every piece of it
+  must fall on the event's days.
+
+### Learning diary and time entries
+
+- **A diary day** is `{ "date": "2025-02-10", "notes": "…" }`: a calendar date in Europe/Prague
+  and its Markdown notes, as in the API's notes write. A date is unique within its file. A day
+  with notes and no session is allowed; time entries need no notes.
+- **A session** is exactly the API's time entry create request: `{ "resource", "startedAt",
+"endedAt" }` for study time or `{ "event", "startedAt", "endedAt" }` for attendance. Both instants carry `Z` or a UTC offset (`2025-02-12T22:30:00+01:00`), are whole
+  seconds, and the end lies after the start. The resource is a roadmap resource slug, the event an
+  event slug, of the folder or the database. A session across Prague midnight is split into one time entry per diary day,
+  exactly as through the API.
+- **Sessions have no slug.** A session is identified by its target (resource or event) and its absolute endpoints, so
+  `2025-02-12T22:30:00+01:00` and `2025-02-12T21:30:00Z` are the same instant. The same session is
+  listed once per file. Sessions may not overlap each other or time already logged, whatever the
+  resource or event; adjacent sessions are allowed.
+
+### Supporting content
+
+- **A project idea** has the fields of the API's project idea create request: `slug`, `title`,
+  Markdown `whyItMatters`, the optional Markdown `howToStart`, `topics` (existing topic slugs, each
+  once, in display order) and `position`.
+- **A followed source** has `slug`, `title`, `kind` (free text such as `newsletter` or `podcast`),
+  `position` and the optional Markdown `description` and safe `link`.
+- **A glossary term** has `slug`, `term`, Markdown `description` and `position`.
+- They load after events and before the diary, are matched by slug on a rerun (topic links
+  replaced) and are never referenced by other records.
 
 ## Attached files
 
@@ -58,7 +122,7 @@ A slug is unique within its file.
   links are resolved it must still lie inside the folder.
 - Each file passes the same checks as an upload through the API: its content must be PNG, JPEG,
   WebP or PDF, within the configured size limit, and match its field (an image for `photo`, `logo`,
-  `cover` and `authorPhoto`, a PDF for `cvPdf`).
+  `cover` (project and book) and `authorPhoto`, a PDF for `cvPdf`).
 - Files are recognised by content (SHA-256). A file already stored with identical content is
   reused instead of stored again, so a rerun uploads nothing. Two declarations of the same content
   must give the same alt text.
@@ -69,13 +133,29 @@ A slug is unique within its file.
   project) already exists is updated to the seed's values, links included; its link lists are
   replaced, never appended. Edits made through the admin to such a record are therefore undone by a
   rerun. Records the seed does not name are kept, never deleted.
-- **A rerun of an unchanged folder changes nothing**: no new records, links or media.
+- **Roadmap modules and resources are matched by their own slug**, not by their parent. A rerun
+  in which a module names another area, or a resource another module, moves the existing record
+  there instead of creating a second one. Its topic links are replaced by the seed's list.
+- **Books are matched by slug.** A rerun overwrites a book with the seed's values. A resource's
+  `book` link is written with the resource, so moving a link from one resource to another within one
+  rerun must list the resource that gives the book up first; otherwise the load is refused because
+  the book is still linked.
+- **Events are matched by slug.** A rerun overwrites an event with the seed's values and replaces
+  its topic links. New dates that would leave logged attendance outside the event are refused, and
+  the load rolls back.
+- **Diary days are matched by date.** Their notes are overwritten; their time entries are kept.
+- **Sessions are matched by target and instants.** A session whose whole interval is already
+  logged on its resource or event, in one or more diary-day pieces, is left as it is and counted as updated;
+  any other session is logged. There is no reconciliation beyond that: a session removed from the
+  seed or moved to other instants is not deleted, and a moved one that overlaps the old one is
+  refused as an overlap.
+- **A rerun of an unchanged folder changes nothing**: no new records, links, media or time entries.
 - **Changing a record in the seed** and loading again updates that record only.
 - **Superseded media are removed.** When a seed record stops referring to a file (it declares
   another one, `null` or omits the key), the media it referred to before are deleted after the
   load, together with their stored files, unless anything still refers to them. This also applies
   to media attached by hand to a record the seed names: a rerun clears a photo, CV PDF, logo,
-  cover or author photo the seed does not declare and deletes that media if nothing else uses it.
+  cover (project or book) or author photo the seed does not declare and deletes that media if nothing else uses it.
 - **Reuse ignores the storage prefix.** A file is reused when any media record has identical
   content, even one stored under another environment or worktree prefix; such a record keeps its
   key, so its public address stays `null` in this environment.
@@ -84,7 +164,7 @@ A slug is unique within its file.
 
 - **Worktree setup seeds only an empty profile.** `node harness/worktree.mjs create` runs
   `seed --if-empty` (`SeedService.loadSeedIntoEmpty`): it loads the demo seed only when the
-  worktree's database holds no person, no record of any kind and no media, and otherwise prints that
+  worktree's database holds no person, no record of any kind, no media, no roadmap area, no diary day, no book and no event, and otherwise prints that
   the seed was skipped and writes nothing. Running setup again on an existing worktree therefore
   applies pending migrations but never overwrites content an agent has edited. The folder is still
   read and validated, so an invalid seed fails setup either way.
@@ -100,9 +180,56 @@ A slug is unique within its file.
   example `experiences.json[0].technologies[1]`. Nothing is written.
 - A folder, data file or attached file that cannot be read (missing permissions, for example) is
   refused the same way, without the path the file system named.
+- A session that overlaps logged time or another session of the seed is refused as a conflict at
+  its location, for example `roadmap-time-entries.json[3]`, and nothing is kept.
 - A failure during the load itself (for example a constraint the database refuses) rolls back every
   record written by this load and removes the files it stored. A file that cannot be removed is
   reported on the error output by its storage key.
+
+## Launch import
+
+The owner's existing roadmap data is imported once, at launch, through this same seed format. There
+is no import service, synchronization or reconciliation in the repository.
+
+- **Interface.** An external mapper, kept outside the repository with the owner's data and reports,
+  converts the old application's export into a seed folder as described above. The owner loads it
+  once with `pnpm --silent --filter @sebela/api seed <folder>` into a fresh or disposable migrated
+  database first, checks it, then into the target database. The loader's checks, refusals and
+  rerun rules apply unchanged; a refused folder writes nothing.
+- **Out of scope.** Ongoing synchronization, conflict or deletion reconciliation, a migration
+  service and the old application's cached totals. A session removed from the folder after a load
+  is not deleted (see "Loading and reruns").
+
+### Acceptance checklist
+
+Compare the source report with the public API reads of the loaded database:
+
+1. **Counts per kind**: areas, modules, resources, books, events, diary days with notes, project
+   ideas, followed sources and glossary terms equal the source (`GET /v1/roadmap`,
+   `/v1/roadmap/books`, `/v1/roadmap/events`, `/v1/roadmap/diary` and the supporting lists). The
+   command's output gives the created and updated count of every kind.
+2. **Relationships**: every resource sits in its source module and area, every book is linked from
+   its source resource (`resource` on the book), and resources, events and project ideas carry their
+   source topics.
+3. **Elapsed totals**: the sum of the source sessions' elapsed seconds (end minus start as
+   instants) equals `totals.totalSeconds` of `GET /v1/roadmap/statistics`, split into
+   `resourceSeconds`, `bookSeconds` (sessions on resources of type `book`) and `eventSeconds`. Each
+   book's `readingSeconds` and each event's `attendanceSeconds` equal its sessions. The old
+   application's stored totals are not authoritative; recompute from sessions.
+4. **Midnight splits**: the number of time entries in the diary equals the number of source
+   sessions plus one for every Prague midnight a session crosses, and their durations still sum to
+   the source total. The command counts sessions, not entries.
+5. **Prague regrouping**: diary days and statistics days are Europe/Prague dates. A session can
+   move to another date than the one the source shows in UTC, and a daylight-saving night lasts 23
+   or 25 hours, so compare daily totals after converting the source to Prague dates.
+   `totals.activeDays` is the number of Prague days with time.
+6. **Rerun**: loading the same folder again reports 0 created for every kind and leaves every count,
+   relationship and total above unchanged.
+
+The CLI test `apps/api/src/cli/seed.test.ts` ("as the launch import's acceptance check") runs this
+checklist against a small fictional source with a midnight split, a UTC/Prague date difference and
+the spring daylight-saving night. The owner's data, the mapper, real reports and the actual import
+stay outside the repository.
 
 ## Private seed
 

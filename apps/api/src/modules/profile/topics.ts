@@ -84,7 +84,8 @@ export function topicRoutes(profile: ProfileService): RouteDefinition[] {
       access: "private",
       summary: "Delete a topic",
       description:
-        "A topic that an exploration still links is not deleted; remove those links first.",
+        "A topic that an exploration, a current-focus entry, a roadmap resource, an event or a " +
+        "project idea still links is not deleted (`conflict`); remove those links first.",
       params: SlugParamsSchema,
       response: { status: 204, description: "The topic was deleted." },
       errors: ["not_found", "conflict"],

@@ -1,7 +1,8 @@
-// The profile module: the website's read of the API's public profile, experience, services and CV
-// routes (and the records the Ask page's answers rest on), of the current CV PDF's file and of the
-// stored images the site serves on its own media path, with the process-local content cache those
-// reads share and its invalidation. Server-only.
+// The profile module: the website's read of the API's public profile, experience, services, CV
+// and AI Roadmap routes, the learning diary, its statistics, the bookshelf and the events included (and the
+// records the Ask page's answers rest on), of the current CV PDF's file and of the stored images
+// the site serves on its own media path, with the process-local content cache those reads share
+// and its invalidation. Server-only.
 import "server-only";
 
 import { cache } from "react";
@@ -14,6 +15,34 @@ import { loadAsk, type AskResult } from "./data/load-ask";
 import { loadCv, type CvResult } from "./data/load-cv";
 import { loadExperience, type ExperienceResult } from "./data/load-experience";
 import { loadHomepage, type HomepageResult } from "./data/load-homepage";
+import { loadRoadmap, type RoadmapResult } from "./data/load-roadmap";
+import {
+  loadRoadmapArea,
+  loadRoadmapModule,
+  type RoadmapAreaResult,
+  type RoadmapModuleResult,
+} from "./data/load-roadmap-detail";
+import {
+  loadRoadmapBook,
+  loadRoadmapBookshelf,
+  type RoadmapBookResult,
+  type RoadmapBookshelfResult,
+} from "./data/load-roadmap-books";
+import {
+  loadRoadmapDiary,
+  loadRoadmapDiaryDay,
+  type RoadmapDiaryDayResult,
+  type RoadmapDiaryResult,
+} from "./data/load-roadmap-diary";
+import { loadRoadmapEvents, type RoadmapEventsResult } from "./data/load-roadmap-events";
+import {
+  loadRoadmapReadingGuide,
+  type RoadmapReadingGuideResult,
+} from "./data/load-roadmap-reading-guide";
+import {
+  loadRoadmapStatistics,
+  type RoadmapStatisticsResult,
+} from "./data/load-roadmap-statistics";
 import { loadServices, type ServicesResult } from "./data/load-services";
 import { readCvPdfFile, type CvPdfFile } from "./data/read-cv-pdf-file";
 import { readMediaFile } from "./data/read-media-file";
@@ -31,6 +60,44 @@ export type { ExperienceContent, ExperienceResult } from "./data/load-experience
 export type { ImageMedia } from "./data/image";
 
 export type { HomepagePhoto, HomepageProfile, HomepageResult } from "./data/load-homepage";
+
+export type { RoadmapContent, RoadmapResult } from "./data/load-roadmap";
+
+export type {
+  RoadmapAreaContent,
+  RoadmapAreaResult,
+  RoadmapModuleContent,
+  RoadmapModuleResult,
+} from "./data/load-roadmap-detail";
+
+export type {
+  RoadmapBookContent,
+  RoadmapBookResult,
+  RoadmapBookshelfContent,
+  RoadmapBookshelfResult,
+  RoadmapShelfBook,
+} from "./data/load-roadmap-books";
+
+export type {
+  RoadmapDiaryAreaName,
+  RoadmapDiaryBookLink,
+  RoadmapDiaryContent,
+  RoadmapDiaryDayContent,
+  RoadmapDiaryDayResult,
+  RoadmapDiaryModuleName,
+  RoadmapDiaryResult,
+} from "./data/load-roadmap-diary";
+
+export type { RoadmapEventsContent, RoadmapEventsResult } from "./data/load-roadmap-events";
+
+export type {
+  RoadmapReadingGuideContent,
+  RoadmapReadingGuideResult,
+} from "./data/load-roadmap-reading-guide";
+export type {
+  RoadmapStatisticsContent,
+  RoadmapStatisticsResult,
+} from "./data/load-roadmap-statistics";
 
 export type { ServicesContent, ServicesResult } from "./data/load-services";
 
@@ -118,6 +185,98 @@ export const getExperience = cache((): Promise<ExperienceResult> =>
  * prose and the services, read once per request (React `cache`), from the content cache.
  */
 export const getServices = cache((): Promise<ServicesResult> => loadServices(apiClient()));
+
+/**
+ * The AI Roadmap pages' content for the current request: the person's header facts and the whole
+ * roadmap tree with the API's derived progress and totals, read once per request (React `cache`),
+ * from the content cache.
+ */
+export const getRoadmap = cache((): Promise<RoadmapResult> => loadRoadmap(apiClient()));
+
+/**
+ * An AI Roadmap area's page for the current request: the person's header facts and the area with
+ * its modules, resources and the API's derived progress, read once per request and slug (React
+ * `cache`), from the content cache. A missing area or an address that is not a slug is missing.
+ */
+export const getRoadmapArea = cache((area: string): Promise<RoadmapAreaResult> =>
+  loadRoadmapArea(apiClient(), area),
+);
+
+/**
+ * An AI Roadmap module's page for the current request: the person's header facts and the module
+ * with its area, resources and the API's derived progress, read once per request and slugs (React
+ * `cache`), from the content cache. A module under another area is missing, as is a missing one.
+ */
+export const getRoadmapModule = cache(
+  (area: string, module: string): Promise<RoadmapModuleResult> =>
+    loadRoadmapModule(apiClient(), area, module),
+);
+
+/**
+ * The learning diary's list for the current request: the person's header facts and every diary day
+ * with its notes, time entries and the API's derived totals, newest first, read once per request
+ * (React `cache`), from the content cache. An empty diary is ready with no days.
+ */
+export const getRoadmapDiary = cache((): Promise<RoadmapDiaryResult> =>
+  loadRoadmapDiary(apiClient()),
+);
+
+/**
+ * A diary day's page for the current request: the person's header facts, the day with its notes,
+ * time entries and the API's derived total, and the roadmap's areas and modules in order for the
+ * entries' grouping, read once per request and date (React `cache`), from the content cache. A day
+ * without a diary record or an address that is not a calendar day is missing.
+ */
+export const getRoadmapDiaryDay = cache((date: string): Promise<RoadmapDiaryDayResult> =>
+  loadRoadmapDiaryDay(apiClient(), date),
+);
+
+/**
+ * The roadmap's events for the current request: the person's header facts and every event with its
+ * topics and the API's derived attendance, newest first, read once per request (React `cache`),
+ * from the content cache. No events is ready with none.
+ */
+export const getRoadmapEvents = cache((): Promise<RoadmapEventsResult> =>
+  loadRoadmapEvents(apiClient()),
+);
+
+/**
+ * What the reading guide reads for the current request: only the person's name, read once per
+ * request (React `cache`), from the content cache. The guide's text is the site's own, so a failed
+ * roadmap or supporting-content read never takes it down; a failed person read is unavailable.
+ */
+export const getRoadmapReadingGuide = cache((): Promise<RoadmapReadingGuideResult> =>
+  loadRoadmapReadingGuide(apiClient()),
+);
+
+/**
+ * The learning statistics for the current request: the person's header facts and the time logged
+ * in the diary as the API aggregates it (totals by category, days, weeks, months, areas with their
+ * modules, resources and events), read once per request (React `cache`), from the content cache.
+ * No logged time is ready with zero totals; a failed read is unavailable and never kept.
+ */
+export const getRoadmapStatistics = cache((): Promise<RoadmapStatisticsResult> =>
+  loadRoadmapStatistics(apiClient()),
+);
+
+/**
+ * The bookshelf for the current request: the person's header facts and every book in the API's
+ * shelf order with its derived status, reading time, linked resource and cover as the site's image,
+ * read once per request (React `cache`), from the content cache. An empty shelf is ready.
+ */
+export const getRoadmapBookshelf = cache((): Promise<RoadmapBookshelfResult> =>
+  loadRoadmapBookshelf(apiClient(), { mediaBaseUrl: mediaBaseUrl() }),
+);
+
+/**
+ * A book's page for the current request: the person's header facts and the book with its derived
+ * status, reading time, linked resource and cover as the site's image, read once per request and
+ * slug (React `cache`), from the content cache. A missing book or an address that is not a slug is
+ * missing.
+ */
+export const getRoadmapBook = cache((slug: string): Promise<RoadmapBookResult> =>
+  loadRoadmapBook(apiClient(), slug, { mediaBaseUrl: mediaBaseUrl() }),
+);
 
 /**
  * The Ask page's content for the current request: the person's name the assistant speaks about,

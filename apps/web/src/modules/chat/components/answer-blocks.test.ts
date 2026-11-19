@@ -26,7 +26,7 @@ const roadmapCard: ChatBlock = {
   type: "RoadmapCard",
   title: "Fictional roadmap item",
   summary: "A made-up step for the renderer's test.",
-  href: "/ai-roadmap",
+  href: "/ai-roadmap/fictional-area/fictional-module",
 };
 
 describe("AnswerBlock", () => {
@@ -81,12 +81,12 @@ describe("AnswerBlock", () => {
     expect(html).toContain("Code");
   });
 
-  it("renders the reserved roadmap card from its contract fixture", () => {
+  it("renders a roadmap card leading to the module's page", () => {
     expect(ChatBlockSchema.parse(roadmapCard)).toEqual(roadmapCard);
     const html = render(roadmapCard);
     expect(html).toContain("AI Roadmap");
     expect(html).toContain("Fictional roadmap item");
-    expect(html).toContain('href="/ai-roadmap"');
+    expect(html).toContain('href="/ai-roadmap/fictional-area/fictional-module"');
   });
 
   it("escapes markup in a block's text, never rendering it as HTML", () => {

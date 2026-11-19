@@ -22,7 +22,7 @@ import { toServicesSummary } from "../data/services-summary";
 export function HomepageTemplate({ profile }: { readonly profile: HomepageProfile }) {
   const selectedWork = toSelectedWork(profile.projects);
   const snapshot = toExperienceSnapshot(profile, new Date());
-  const now = toNow(profile.currentFocus, profile.explorations);
+  const now = toNow(profile.currentFocus, profile.explorations, profile.currentLearning);
   const services = toServicesSummary(profile.services);
   return (
     <>

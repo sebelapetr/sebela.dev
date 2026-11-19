@@ -13,10 +13,16 @@ const apiFolder = fileURLToPath(new URL("../../api", import.meta.url));
 
 /** The fictional seed folders of `e2e/fixtures/`. */
 export type Fixture =
+  | "with-bookshelf"
+  | "with-diary"
+  | "with-events"
   | "with-experience"
   | "with-long-content"
   | "with-photo"
+  | "with-roadmap"
   | "with-sparse-content"
+  | "with-statistics"
+  | "with-supporting-content"
   | "with-unsafe-text"
   | "without-photo"
   | "without-profile";

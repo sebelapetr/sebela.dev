@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "orbit-foundations",
+    "name": "Orbit foundations",
+    "description": "How the fictional orbit models behave.",
+    "weight": 60,
+    "position": 0
+  },
+  {
+    "slug": "queue-craft",
+    "name": "Queue craft",
+    "description": "Fictional queues that stay calm.",
+    "weight": 40,
+    "position": 1
+  }
+]

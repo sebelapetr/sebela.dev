@@ -12,12 +12,15 @@ import {
   type MediaService,
 } from "./modules/media/index.js";
 import { createProfileService, type ProfileService } from "./modules/profile/index.js";
+import { createRoadmapService, type RoadmapService } from "./modules/roadmap/index.js";
 import { createSeedService, type SeedService } from "./modules/seed/index.js";
 import { openStorage } from "./modules/storage/index.js";
 
 /** Every domain operation of the backend over one database connection pool. */
 export interface Services {
   readonly profile: ProfileService;
+  /** The AI roadmap: areas, modules and resources, and the whole tree with derived progress. */
+  readonly roadmap: RoadmapService;
   readonly apiKeys: ApiKeyService;
   readonly media: MediaService;
   /** Loads a seed folder through the services above; needs media to be configured. */
@@ -60,7 +63,8 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
   const persistence = createPersistence(config);
   const { media } = options;
   const opened = media === undefined ? undefined : openStorage(media.config.storage);
-  // The assembled CV addresses its PDF through the same storage the media service uses.
+  // The assembled CV addresses its PDF, and the bookshelf its covers, through the same storage the
+  // media service uses.
   const profileOptions =
     opened === undefined
       ? {}
@@ -77,6 +81,7 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
         };
   return {
     profile: createProfileService(persistence.profile, profileOptions),
+    roadmap: createRoadmapService(persistence.roadmap, profileOptions),
     apiKeys: createApiKeyService(persistence.apiKeys, options.apiKeys),
     media:
       mediaOptions === undefined

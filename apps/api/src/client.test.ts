@@ -7,8 +7,31 @@ import {
   createApiClient,
   type ApiClient,
   type Cv,
+  type Diary,
+  type DiaryDay,
+  type DiaryEvent,
   type ErrorResponse,
+  type LearningTimeResource,
+  type LearningTimeResourceCategory,
   type MediaUpload,
+  type Roadmap,
+  type RoadmapAreaDetail,
+  type RoadmapBook,
+  type RoadmapBookList,
+  type RoadmapBookStatus,
+  type RoadmapCurrent,
+  type RoadmapEvent,
+  type RoadmapEventKind,
+  type RoadmapEventList,
+  type RoadmapFollowedSource,
+  type RoadmapFollowedSourceList,
+  type RoadmapGlossaryTerm,
+  type RoadmapGlossaryTermList,
+  type RoadmapProjectIdea,
+  type RoadmapProjectIdeaList,
+  type RoadmapModuleDetail,
+  type RoadmapStatistics,
+  type TimeEntryWrite,
 } from "@sebela/api-client";
 import { samplePdf, samplePng } from "@sebela/services/testing";
 
@@ -1136,5 +1159,548 @@ describe("the generated API client", () => {
       null,
       ...Array<string>(2).fill(bearer),
     ]);
+  });
+
+  it("manages the roadmap: one-call tree with progress, keyed writes, refusals and protected parents", async () => {
+    const { client, authorizations } = consumer(key);
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await backend.services.profile.createTopic({
+      slug: "orbit-agents",
+      name: "Agents",
+      position: 0,
+    });
+
+    const area = await client.POST("/v1/roadmap/areas", {
+      body: { slug: "orbit-basics", name: "Orbit basics", weight: 50, position: 0 },
+    });
+    expect(area.response.status).toBe(201);
+    expect(area.response.headers.get("location")).toBe("/v1/roadmap/areas/orbit-basics");
+    const reserved = await client.POST("/v1/roadmap/areas", {
+      body: { slug: "diary", name: "Diary", weight: 1, position: 1 },
+    });
+    expect(reserved.error?.error.fields?.map(({ path }) => path)).toEqual(["slug"]);
+    const module = await client.POST("/v1/roadmap/modules", {
+      body: { slug: "orbit-prompts", area: "orbit-basics", name: "Prompts", position: 0 },
+    });
+    expect(module.data?.area).toBe("orbit-basics");
+    const orphan = await client.POST("/v1/roadmap/modules", {
+      body: { slug: "orbit-orphan", area: "orbit-missing", name: "Orphan", position: 1 },
+    });
+    expect(orphan.error?.error.fields?.map(({ path }) => path)).toEqual(["area"]);
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "orbit-guide",
+        module: "orbit-prompts",
+        name: "A fictional guide",
+        type: "link",
+        status: "completed",
+        estimatedMinutes: 90,
+        startedAt: "2025-03-01T10:00:00.000Z",
+        finishedAt: "2025-03-02T10:00:00.000Z",
+        link: "https://learn.example.test/orbit-guide",
+        position: 0,
+        topics: ["orbit-agents"],
+      },
+    });
+    expect(resource.data?.topics.map(({ slug }) => slug)).toEqual(["orbit-agents"]);
+    const skipped = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "orbit-drills",
+        module: "orbit-prompts",
+        name: "Drills",
+        type: "project",
+        status: "skipped",
+        position: 1,
+      },
+    });
+    expect(skipped.data).toMatchObject({ estimatedMinutes: null, link: null, topics: [] });
+    const duplicate = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "orbit-drills",
+        module: "orbit-prompts",
+        name: "Drills",
+        type: "project",
+        position: 2,
+      },
+    });
+    expect(duplicate.error?.error.code).toBe("conflict");
+
+    const tree = await client.GET("/v1/roadmap");
+    const roadmap: Roadmap | undefined = tree.data;
+    expect(roadmap?.summary).toMatchObject({
+      areaCount: 1,
+      moduleCount: 1,
+      resourceCount: 2,
+      completed: 1,
+      total: 2,
+      estimatedHours: 2,
+    });
+    expect(roadmap?.areas[0]?.modules[0]?.progress).toMatchObject({
+      status: "completed",
+      completedAt: "2025-03-02T10:00:00.000Z",
+    });
+    expect(roadmap?.areas[0]?.modules[0]?.resources.map(({ slug }) => slug)).toEqual([
+      "orbit-guide",
+      "orbit-drills",
+    ]);
+
+    const areaDetail = await client.GET("/v1/roadmap/tree/{area}", {
+      params: { path: { area: "orbit-basics" } },
+    });
+    const areaNode: RoadmapAreaDetail | undefined = areaDetail.data;
+    expect(areaNode).toEqual({ area: roadmap?.areas[0] });
+    const moduleDetail = await client.GET("/v1/roadmap/tree/{area}/{module}", {
+      params: { path: { area: "orbit-basics", module: "orbit-prompts" } },
+    });
+    const moduleNode: RoadmapModuleDetail | undefined = moduleDetail.data;
+    expect(moduleNode?.module).toEqual(roadmap?.areas[0]?.modules[0]);
+    expect(moduleNode?.area.slug).toBe("orbit-basics");
+    const unrelated = await client.GET("/v1/roadmap/tree/{area}/{module}", {
+      params: { path: { area: "orbit-elsewhere", module: "orbit-prompts" } },
+    });
+    expect(unrelated.error?.error.code).toBe("not_found");
+    const nothingCurrent = await client.GET("/v1/roadmap/current");
+    const current: RoadmapCurrent | undefined = nothingCurrent.data;
+    expect(current).toEqual({ areas: [] });
+
+    const replanned = await client.PATCH("/v1/roadmap/resources/{slug}", {
+      ...at("orbit-drills"),
+      body: { status: "planned", estimatedMinutes: 30 },
+    });
+    expect(replanned.data).toMatchObject({ status: "planned", estimatedMinutes: 30 });
+    const protectedArea = await client.DELETE("/v1/roadmap/areas/{slug}", at("orbit-basics"));
+    expect(protectedArea.error?.error.code).toBe("conflict");
+    for (const slug of ["orbit-guide", "orbit-drills"]) {
+      const removed = await client.DELETE("/v1/roadmap/resources/{slug}", at(slug));
+      expect(removed.response.status).toBe(204);
+    }
+    expect(
+      (await client.DELETE("/v1/roadmap/modules/{slug}", at("orbit-prompts"))).response.status,
+    ).toBe(204);
+    expect(
+      (await client.DELETE("/v1/roadmap/areas/{slug}", at("orbit-basics"))).response.status,
+    ).toBe(204);
+    const missing = await client.GET("/v1/roadmap/areas/{slug}", at("orbit-basics"));
+    expect(missing.error?.error.code).toBe("not_found");
+    await backend.services.profile.deleteTopic("orbit-agents");
+
+    const bearer = `Bearer ${key}`;
+    expect(authorizations).toEqual([
+      ...Array<string>(7).fill(bearer),
+      ...Array<null>(5).fill(null),
+      ...Array<string>(6).fill(bearer),
+      null,
+    ]);
+  });
+
+  it("keeps the learning diary: public day reads, keyed notes and time entries, overlap refused", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const day = (date: string) => ({ params: { path: { date } } });
+    await backend.services.roadmap.createArea({
+      slug: "diary-basics",
+      name: "Diary basics",
+      description: null,
+      weight: 10,
+      position: 9,
+    });
+    await backend.services.roadmap.createModule({
+      slug: "diary-module",
+      area: "diary-basics",
+      name: "Diary module",
+      description: null,
+      position: 0,
+    });
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "diary-guide",
+        module: "diary-module",
+        name: "Diary guide",
+        type: "link",
+        position: 0,
+      },
+    });
+    expect(resource.response.status).toBe(201);
+
+    const empty = await visitor.GET("/v1/roadmap/diary/{date}", day("2026-03-02"));
+    expect(empty.error?.error.code).toBe("not_found");
+    const notes = await client.PATCH("/v1/roadmap/diary/{date}", {
+      ...day("2026-03-02"),
+      body: { notes: "A *fictional* evening." },
+    });
+    const notesDay: DiaryDay | undefined = notes.data;
+    expect(notesDay).toEqual({
+      date: "2026-03-02",
+      notes: "A *fictional* evening.",
+      entries: [],
+      totalSeconds: 0,
+      events: [],
+    });
+
+    const session = {
+      resource: "diary-guide",
+      startedAt: "2026-03-02T23:30:00+01:00",
+      endedAt: "2026-03-03T00:30:00+01:00",
+    };
+    const created = await client.POST("/v1/roadmap/time-entries", { body: session });
+    const write: TimeEntryWrite | undefined = created.data;
+    expect(created.response.status).toBe(201);
+    expect(write?.dates).toEqual(["2026-03-02", "2026-03-03"]);
+    const overlap = await client.POST("/v1/roadmap/time-entries", { body: session });
+    expect(overlap.error?.error.code).toBe("conflict");
+    const unknown = await client.POST("/v1/roadmap/time-entries", {
+      body: { ...session, resource: "no-such-guide" },
+    });
+    expect(unknown.error?.error.fields?.map(({ path }) => path)).toEqual(["resource"]);
+
+    const read = await visitor.GET("/v1/roadmap/diary");
+    const diary: Diary | undefined = read.data;
+    expect(diary?.days.map(({ date, totalSeconds }) => [date, totalSeconds])).toEqual([
+      ["2026-03-03", 1800],
+      ["2026-03-02", 1800],
+    ]);
+
+    const [first, second] = write?.entries ?? [];
+    const moved = await client.PATCH("/v1/roadmap/time-entries/{id}", {
+      params: { path: { id: first?.id ?? "" } },
+      body: { startedAt: "2026-03-02T22:30:00+01:00" },
+    });
+    expect(moved.data?.entries.map(({ durationSeconds }) => durationSeconds)).toEqual([5400]);
+    for (const entry of [first, second]) {
+      const removed = await client.DELETE("/v1/roadmap/time-entries/{id}", {
+        params: { path: { id: entry?.id ?? "" } },
+      });
+      expect(removed.response.status).toBe(204);
+    }
+    expect(
+      (await client.DELETE("/v1/roadmap/diary/{date}", day("2026-03-02"))).response.status,
+    ).toBe(204);
+    expect((await visitor.GET("/v1/roadmap/diary")).data).toEqual({ days: [] });
+    expect(
+      (
+        await client.DELETE("/v1/roadmap/resources/{slug}", {
+          params: { path: { slug: "diary-guide" } },
+        })
+      ).response.status,
+    ).toBe(204);
+    await backend.services.roadmap.deleteModule("diary-module");
+    await backend.services.roadmap.deleteArea("diary-basics");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+
+  it("reads the learning statistics publicly, split by category and Prague period", async () => {
+    const { client } = consumer(key);
+    const { client: visitor, authorizations } = consumer();
+    await backend.services.roadmap.createArea({
+      slug: "statistics-basics",
+      name: "Statistics basics",
+      description: null,
+      weight: 10,
+      position: 9,
+    });
+    await backend.services.roadmap.createModule({
+      slug: "statistics-module",
+      area: "statistics-basics",
+      name: "Statistics module",
+      description: null,
+      position: 0,
+    });
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "statistics-guide",
+        module: "statistics-module",
+        name: "Statistics guide",
+        type: "link",
+        position: 0,
+      },
+    });
+    expect(resource.response.status).toBe(201);
+    const empty = await visitor.GET("/v1/roadmap/statistics");
+    const none: RoadmapStatistics | undefined = empty.data;
+    expect(none?.totals.totalSeconds).toBe(0);
+    expect(none?.days).toEqual([]);
+
+    const created = await client.POST("/v1/roadmap/time-entries", {
+      body: {
+        resource: "statistics-guide",
+        startedAt: "2026-03-01T23:30:00+01:00",
+        endedAt: "2026-03-02T00:30:00+01:00",
+      },
+    });
+    expect(created.response.status).toBe(201);
+
+    const read = await visitor.GET("/v1/roadmap/statistics");
+    const statistics: RoadmapStatistics | undefined = read.data;
+    expect(statistics?.totals).toEqual({
+      totalSeconds: 3600,
+      resourceSeconds: 3600,
+      bookSeconds: 0,
+      eventSeconds: 0,
+      activeDays: 2,
+    });
+    expect(statistics?.weeks.map(({ startsOn, totalSeconds }) => [startsOn, totalSeconds])).toEqual(
+      [
+        ["2026-02-23", 1800],
+        ["2026-03-02", 1800],
+      ],
+    );
+    const shown: LearningTimeResource[] | undefined = statistics?.resources;
+    const category: LearningTimeResourceCategory | undefined = shown?.[0]?.category;
+    expect(category).toBe("resource");
+    expect(statistics?.areas.map(({ slug, totalSeconds }) => [slug, totalSeconds])).toEqual([
+      ["statistics-basics", 3600],
+    ]);
+
+    for (const entry of created.data?.entries ?? []) {
+      await backend.services.roadmap.deleteTimeEntry(entry.id);
+    }
+    await backend.services.roadmap.deleteResource("statistics-guide");
+    await backend.services.roadmap.deleteModule("statistics-module");
+    await backend.services.roadmap.deleteArea("statistics-basics");
+    expect(authorizations).toEqual([null, null]);
+  });
+
+  it("keeps the bookshelf: public reads, keyed writes, the resource link and its refusals", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await backend.services.roadmap.createArea({
+      slug: "shelf-basics",
+      name: "Shelf basics",
+      description: null,
+      weight: 10,
+      position: 8,
+    });
+    await backend.services.roadmap.createModule({
+      slug: "shelf-module",
+      area: "shelf-basics",
+      name: "Shelf module",
+      description: null,
+      position: 0,
+    });
+
+    const created = await client.POST("/v1/roadmap/books", {
+      body: { slug: "shelf-patterns", title: "Fictional shelf patterns", startedOn: "2026-03-01" },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe("/v1/roadmap/books/shelf-patterns");
+    const status: RoadmapBookStatus | undefined = created.data?.status;
+    expect(status).toBe("reading");
+    const taken = await client.POST("/v1/roadmap/books", {
+      body: { slug: "shelf-patterns", title: "Again" },
+    });
+    expect(taken.error?.error.code).toBe("conflict");
+
+    const resource = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "shelf-reading",
+        module: "shelf-module",
+        name: "Reading shelf patterns",
+        type: "book",
+        position: 0,
+        book: "shelf-patterns",
+      },
+    });
+    expect(resource.data?.book).toBe("shelf-patterns");
+    const wrongType = await client.POST("/v1/roadmap/resources", {
+      body: {
+        slug: "shelf-link",
+        module: "shelf-module",
+        name: "Not a book",
+        type: "link",
+        position: 1,
+        book: "shelf-patterns",
+      },
+    });
+    expect(wrongType.error?.error.fields?.map(({ path }) => path)).toContain("book");
+
+    const list = await visitor.GET("/v1/roadmap/books");
+    const shelf: RoadmapBookList | undefined = list.data;
+    expect(shelf?.map(({ slug, resource: link }) => [slug, link?.slug])).toEqual([
+      ["shelf-patterns", "shelf-reading"],
+    ]);
+    const finished = await client.PATCH("/v1/roadmap/books/{slug}", {
+      ...at("shelf-patterns"),
+      body: { endedOn: "2026-03-09" },
+    });
+    expect(finished.data?.status).toBe("completed");
+    const read = await visitor.GET("/v1/roadmap/books/{slug}", at("shelf-patterns"));
+    const book: RoadmapBook | undefined = read.data;
+    expect(book).toMatchObject({ status: "completed", readingSeconds: 0, cover: null });
+
+    const linked = await client.DELETE("/v1/roadmap/books/{slug}", at("shelf-patterns"));
+    expect(linked.error?.error.code).toBe("conflict");
+    expect(
+      (await client.DELETE("/v1/roadmap/resources/{slug}", at("shelf-reading"))).response.status,
+    ).toBe(204);
+    expect(
+      (await client.DELETE("/v1/roadmap/books/{slug}", at("shelf-patterns"))).response.status,
+    ).toBe(204);
+    const missing = await visitor.GET("/v1/roadmap/books/{slug}", at("shelf-patterns"));
+    expect(missing.error?.error.code).toBe("not_found");
+    await backend.services.roadmap.deleteModule("shelf-module");
+    await backend.services.roadmap.deleteArea("shelf-basics");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+  it("keeps the events: public reads, keyed writes, attendance and its refusals", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const at = (slug: string) => ({ params: { path: { slug } } });
+
+    const created = await client.POST("/v1/roadmap/events", {
+      body: {
+        slug: "calendar-summit",
+        name: "Fictional calendar summit",
+        kind: "conference",
+        startsOn: "2026-12-31",
+        endsOn: "2027-01-01",
+      },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("location")).toBe("/v1/roadmap/events/calendar-summit");
+    const kind: RoadmapEventKind | undefined = created.data?.kind;
+    expect(kind).toBe("conference");
+    const reversed = await client.POST("/v1/roadmap/events", {
+      body: {
+        slug: "calendar-reversed",
+        name: "Reversed",
+        kind: "meetup",
+        startsOn: "2026-05-02",
+        endsOn: "2026-05-01",
+      },
+    });
+    expect(reversed.error?.error.fields?.map(({ path }) => path)).toContain("endsOn");
+    const anonymous = await visitor.DELETE("/v1/roadmap/events/{slug}", at("calendar-summit"));
+    expect(anonymous.response.status).toBe(401);
+
+    const day = await visitor.GET("/v1/roadmap/diary/{date}", {
+      params: { path: { date: "2027-01-01" } },
+    });
+    const shown: DiaryEvent[] | undefined = day.data?.events;
+    expect(shown?.map(({ slug }) => slug)).toEqual(["calendar-summit"]);
+    expect(day.data?.totalSeconds).toBe(0);
+
+    const attended = await client.POST("/v1/roadmap/time-entries", {
+      body: {
+        event: "calendar-summit",
+        startedAt: "2026-12-31T10:00:00+01:00",
+        endedAt: "2026-12-31T11:00:00+01:00",
+      },
+    });
+    expect(attended.data?.entries[0]?.event?.slug).toBe("calendar-summit");
+    const stranding = await client.PATCH("/v1/roadmap/events/{slug}", {
+      ...at("calendar-summit"),
+      body: { startsOn: "2027-01-01" },
+    });
+    expect(stranding.error?.error.code).toBe("conflict");
+    const list = await visitor.GET("/v1/roadmap/events");
+    const events: RoadmapEventList | undefined = list.data;
+    expect(events?.map(({ slug, attendanceSeconds }) => [slug, attendanceSeconds])).toEqual([
+      ["calendar-summit", 3600],
+    ]);
+
+    for (const entry of attended.data?.entries ?? []) {
+      const removed = await client.DELETE("/v1/roadmap/time-entries/{id}", {
+        params: { path: { id: entry.id } },
+      });
+      expect(removed.response.status).toBe(204);
+    }
+    const renamed = await client.PATCH("/v1/roadmap/events/{slug}", {
+      ...at("calendar-summit"),
+      body: { name: "Renamed summit", online: true },
+    });
+    const event: RoadmapEvent | undefined = renamed.data;
+    expect(event).toMatchObject({ name: "Renamed summit", online: true, attendanceSeconds: 0 });
+    expect(
+      (await client.DELETE("/v1/roadmap/events/{slug}", at("calendar-summit"))).response.status,
+    ).toBe(204);
+    const missing = await visitor.GET("/v1/roadmap/events/{slug}", at("calendar-summit"));
+    expect(missing.error?.error.code).toBe("not_found");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+
+  it("keeps the supporting content: public ordered reads, keyed writes and their refusals", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+    const at = (slug: string) => ({ params: { path: { slug } } });
+    await backend.services.profile.createTopic({
+      slug: "client-agents",
+      name: "Agents",
+      position: 0,
+    });
+
+    const idea = await client.POST("/v1/roadmap/project-ideas", {
+      body: {
+        slug: "client-idea",
+        title: "A fictional idea",
+        whyItMatters: "It practises **retrieval**.",
+        topics: ["client-agents"],
+        position: 0,
+      },
+    });
+    expect(idea.response.status).toBe(201);
+    expect(idea.response.headers.get("location")).toBe("/v1/roadmap/project-ideas/client-idea");
+    const created: RoadmapProjectIdea | undefined = idea.data;
+    expect(created).toMatchObject({ howToStart: null, topics: [{ slug: "client-agents" }] });
+    const unknown = await client.POST("/v1/roadmap/project-ideas", {
+      body: {
+        slug: "client-other",
+        title: "Other",
+        whyItMatters: "Why.",
+        topics: ["nope"],
+        position: 1,
+      },
+    });
+    expect(unknown.error?.error.fields?.map(({ path }) => path)).toContain("topics");
+    const ideas: RoadmapProjectIdeaList | undefined = (
+      await visitor.GET("/v1/roadmap/project-ideas")
+    ).data;
+    expect(ideas?.map(({ slug }) => slug)).toEqual(["client-idea"]);
+
+    const source = await client.POST("/v1/roadmap/followed-sources", {
+      body: { slug: "client-weekly", title: "Example Weekly", kind: "newsletter", position: 0 },
+    });
+    const followed: RoadmapFollowedSource | undefined = source.data;
+    expect(followed).toMatchObject({ link: null, description: null });
+    const relinked = await client.PATCH("/v1/roadmap/followed-sources/{slug}", {
+      ...at("client-weekly"),
+      body: { link: "https://example.com/weekly" },
+    });
+    expect(relinked.data?.link).toBe("https://example.com/weekly");
+    const sources: RoadmapFollowedSourceList | undefined = (
+      await visitor.GET("/v1/roadmap/followed-sources")
+    ).data;
+    expect(sources?.map(({ slug }) => slug)).toEqual(["client-weekly"]);
+
+    const term = await client.POST("/v1/roadmap/glossary-terms", {
+      body: { slug: "client-term", term: "Context window", description: "Text.", position: 0 },
+    });
+    const explained: RoadmapGlossaryTerm | undefined = term.data;
+    expect(explained?.term).toBe("Context window");
+    const taken = await client.POST("/v1/roadmap/glossary-terms", {
+      body: { slug: "client-term", term: "Again", description: "Text.", position: 1 },
+    });
+    expect(taken.error?.error.code).toBe("conflict");
+    const terms: RoadmapGlossaryTermList | undefined = (
+      await visitor.GET("/v1/roadmap/glossary-terms")
+    ).data;
+    expect(terms?.map(({ slug }) => slug)).toEqual(["client-term"]);
+
+    const anonymous = await visitor.DELETE("/v1/roadmap/glossary-terms/{slug}", at("client-term"));
+    expect(anonymous.response.status).toBe(401);
+    for (const [path, slug] of [
+      ["/v1/roadmap/project-ideas/{slug}", "client-idea"],
+      ["/v1/roadmap/followed-sources/{slug}", "client-weekly"],
+      ["/v1/roadmap/glossary-terms/{slug}", "client-term"],
+    ] as const) {
+      expect((await client.DELETE(path, at(slug))).response.status, path).toBe(204);
+      expect((await visitor.GET(path, at(slug))).error?.error.code, path).toBe("not_found");
+    }
+    await backend.services.profile.deleteTopic("client-agents");
+
+    expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
   });
 });

@@ -11,7 +11,15 @@ export { MediaImage, type MediaImageSource } from "./components/media-image";
 export { SiteHeader } from "./components/site-header";
 export { ProseMarkdown, proseComponents } from "./components/markdown";
 export { careerYears } from "./career";
-export { anchorHref, anchorId, type AnchorTarget } from "./anchors";
+export {
+  anchorHref,
+  anchorId,
+  bookshelfHref,
+  diaryHref,
+  roadmapHref,
+  type AnchorTarget,
+  type RoadmapPageTarget,
+} from "./anchors";
 export { toEducationRows, type EducationRow } from "./education";
 export { experienceKindLabel } from "./experience-kind";
 export { explorationStatusText, type ExplorationStatusText } from "./exploration-status";
@@ -19,7 +27,7 @@ export { formatDate, formatPeriod } from "./period";
 export { mailtoHref } from "./mailto";
 export { plainText } from "./plain-text";
 export { mainContentId } from "./navigation";
-export { cvPdfRoutes, routes } from "./site";
+export { cvPdfRoutes, roadmapRoutes, routes } from "./site";
 export {
   TECHNOLOGY_GROUP_KEYS,
   technologyGroupLabel,

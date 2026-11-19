@@ -31,6 +31,24 @@ export function openGraphImageUrl(origin: string, page: IndexedPage): string {
   return `${origin}/og/${page}`;
 }
 
+/**
+ * A card with the given texts, shortened to fit: `title` and `subtitle` on the card of `origin`'s
+ * host under `label`.
+ */
+export function textCard(
+  origin: string,
+  label: string,
+  title: string,
+  subtitle: string | null,
+): OpenGraphCard {
+  return {
+    site: new URL(origin).host,
+    label,
+    title: shorten(title, TITLE_MAX),
+    subtitle: subtitle === null ? null : shorten(subtitle, SUBTITLE_MAX),
+  };
+}
+
 /** Cuts text to at most `max` characters, ending with an ellipsis when it was cut. */
 function shorten(text: string, max: number): string {
   const trimmed = text.trim();

@@ -1,0 +1,26 @@
+[
+  {
+    "slug": "notes-question-answering",
+    "title": "Question answering over your own notes",
+    "whyItMatters": "A small **retrieval** project teaches chunking, ranking and grounding on text you know well, so wrong answers are easy to spot.",
+    "howToStart": "1. Export a handful of fictional notes as Markdown.\n2. Split them into passages and index them with keyword search first.\n3. Add vectors only where keyword search misses.",
+    "topics": ["retrieval", "evaluation"],
+    "position": 0
+  },
+  {
+    "slug": "tool-using-calendar-agent",
+    "title": "A calendar agent with two tools",
+    "whyItMatters": "Two tools are enough to practise tool selection, argument validation and recovering from a failed call.",
+    "howToStart": "Start with a read-only `list_events` tool and add `create_event` behind a confirmation step.",
+    "topics": ["agents", "tool-use", "guardrails"],
+    "position": 1
+  },
+  {
+    "slug": "prompt-regression-suite",
+    "title": "A regression suite for one prompt",
+    "whyItMatters": "Twenty labelled examples and a pass threshold turn prompt changes from guesswork into measurements.",
+    "howToStart": null,
+    "topics": ["evaluation"],
+    "position": 2
+  }
+]

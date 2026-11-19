@@ -19,7 +19,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Website stage.** This checkout contains the specifications, architecture decisions and agent instructions, the development harness, the foundation (a pnpm and Turborepo workspace with shared lint, TypeScript and Prettier configuration, a local PostgreSQL with pgvector and a separate database and role per worktree, Git hooks, guardrail checks and CI) and the backend: the Hono content API with its profile domain, API-key authentication, media uploads, the assembled CV data, OpenAPI, the generated TypeScript client and a fictional demo seed, and the website: every presentation page, the CV and a chat interface that answers from prepared, deterministic scenarios instead of a model. The AI Roadmap, the real assistant, retrieval and both MCP servers are **planned** and arrive in later phases; sections describing them say what they are designed to do, not what runs today. The replacement for sebelapetr.cz will launch after all delivery phases are complete.
+> **Website stage.** This checkout contains the specifications, architecture decisions and agent instructions, the development harness, the foundation (a pnpm and Turborepo workspace with shared lint, TypeScript and Prettier configuration, a local PostgreSQL with pgvector and a separate database and role per worktree, Git hooks, guardrail checks and CI) and the backend: the Hono content API with its profile domain, API-key authentication, media uploads, the assembled CV data, OpenAPI, the generated TypeScript client and a fictional demo seed, and the website: every presentation page, the CV and a chat interface that answers from prepared, deterministic scenarios instead of a model. The rest of the AI Roadmap (the overview exists), the real assistant, retrieval and both MCP servers are **planned** and arrive in later phases; sections describing them say what they are designed to do, not what runs today. The replacement for sebelapetr.cz will launch after all delivery phases are complete.
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -284,7 +284,7 @@ The website reads content only through the public API routes and never holds an 
 Known limits of this stage:
 
 - **The chat is a mock.** Ask streams prepared answers from deterministic scenarios in the browser; no model, conversation storage or rate limit exists until phase 7 replaces the adapter ([extension points](apps/web/AGENTS.md#extension-points)).
-- **The AI Roadmap is a placeholder.** `/ai-roadmap` explains what is coming; its pages and the roadmap answer card arrive in phase 4.
+- **The AI Roadmap is partly built.** `/ai-roadmap` shows the overview of areas, modules and resources from the API, each area and module has its own page, `/ai-roadmap/diary` shows the learning diary by Prague calendar day, `/ai-roadmap/diary/stats` shows the learning statistics, and `/ai-roadmap/bookshelf` shows the books read, each with its own page; events and the roadmap answer card arrive later in phase 4.
 - **Analytics are optional.** Without the analytics settings the website sends nothing.
 - **Not deployed.** Production deployment, backups and the launch are phase 10.
 

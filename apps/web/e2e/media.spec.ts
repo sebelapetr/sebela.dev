@@ -427,7 +427,7 @@ test.describe("Open Graph previews", () => {
   }
 
   test("pages without a preview answer 404", async ({ request }) => {
-    for (const page of ["ask", "ai-roadmap", "unknown", "toString", "home.png"]) {
+    for (const page of ["ask", "unknown", "toString", "home.png", "ai-roadmap/diary/not-a-date"]) {
       const response = await request.get(`${website.url}/og/${page}`);
       expect({ page, status: response.status() }).toEqual({ page, status: 404 });
     }

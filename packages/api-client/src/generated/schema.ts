@@ -136,7 +136,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a topic
-         * @description A topic that an exploration still links is not deleted; remove those links first.
+         * @description A topic that an exploration, a current-focus entry, a roadmap resource, an event or a project idea still links is not deleted (`conflict`); remove those links first.
          */
         delete: operations["deleteTopic"];
         options?: never;
@@ -656,6 +656,578 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the whole roadmap
+         * @description Every area, its modules and their resources in position order, with each resource's topics. Progress of each area and module and the totals are derived on every read from the resource statuses and are never stored: `completed` counts completed resources and `total` counts all of them, so a skipped resource only enlarges the denominator. Estimates are planned effort, never logged time or completed work.
+         */
+        get: operations["getRoadmap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/tree/{area}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one area of the roadmap tree
+         * @description The area exactly as it appears in the whole roadmap: its modules and their resources in position order, with the same derived progress. A missing area is not found.
+         */
+        get: operations["getRoadmapAreaDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/tree/{area}/{module}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one module of the roadmap tree
+         * @description The module exactly as it appears in the whole roadmap, with its resources in position order and its derived progress, and the area it belongs to without its modules. A missing area or module, or a module that belongs to another area, is not found.
+         */
+        get: operations["getRoadmapModuleDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read what is currently being learned
+         * @description The areas whose derived status is `in-progress`, each with only its `in-progress` modules, in roadmap order, with the same progress as the whole roadmap and without resources. Nothing in progress is the valid empty `areas` list.
+         */
+        get: operations["getRoadmapCurrent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/areas/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a roadmap area */
+        get: operations["getRoadmapArea"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a roadmap area
+         * @description An area that still has modules is not deleted; move or delete them first.
+         */
+        delete: operations["deleteRoadmapArea"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a roadmap area
+         * @description Changes only the fields sent; the slug cannot change.
+         */
+        patch: operations["updateRoadmapArea"];
+        trace?: never;
+    };
+    "/v1/roadmap/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a roadmap area
+         * @description The slug is unique and stable; a taken slug is a conflict. The slugs of the roadmap's own pages (`diary`, `bookshelf`, `events`, `how-to-read-effectively`) are refused.
+         */
+        post: operations["createRoadmapArea"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/modules/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a roadmap module */
+        get: operations["getRoadmapModule"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a roadmap module
+         * @description A module that still has resources is not deleted; move or delete them first.
+         */
+        delete: operations["deleteRoadmapModule"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a roadmap module
+         * @description Changes only the fields sent; a given `area` moves the module. The slug cannot change.
+         */
+        patch: operations["updateRoadmapModule"];
+        trace?: never;
+    };
+    "/v1/roadmap/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a roadmap module
+         * @description The module belongs to the area named by `area`, which must exist. The slug is unique across all modules; a taken slug is a conflict.
+         */
+        post: operations["createRoadmapModule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/resources/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a roadmap resource */
+        get: operations["getRoadmapResource"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a roadmap resource
+         * @description Deletes the resource with its topic links.
+         */
+        delete: operations["deleteRoadmapResource"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a roadmap resource
+         * @description Changes only the fields sent; a given `module` moves the resource and given `topics` replace its topic links. The finish cannot be before the start, including a stored one. A `book` links one book to a resource of type `book` only; `null` clears it.
+         */
+        patch: operations["updateRoadmapResource"];
+        trace?: never;
+    };
+    "/v1/roadmap/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a roadmap resource
+         * @description The resource belongs to the module named by `module`, and every slug in `topics` must name an existing topic. Omitted fields make a planned resource without an estimate, dates, link, book or topics. The slug is unique across all resources. A `book` names an existing book that no other resource links, and only a resource of type `book` may name one (`validation_failed` on `book`).
+         */
+        post: operations["createRoadmapResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/diary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the learning diary
+         * @description Every Europe/Prague calendar day with notes, time entries or an event covering it, newest first, each with its entries in time order and their resource or event, and the events whose dates cover it. An event's days add no time. Durations and day totals are derived from the stored endpoints on every read, in actual elapsed seconds and before any rounding. An empty diary is the valid empty `days` list.
+         */
+        get: operations["getRoadmapDiary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/diary/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one day of the learning diary
+         * @description The day's notes, its time entries, their derived total and the events covering it, as in the whole diary. A day without notes, time entries or a covering event is not found.
+         */
+        get: operations["getRoadmapDiaryDay"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a diary day's notes
+         * @description Clears the notes and keeps the day's time entries; a day without notes is not found.
+         */
+        delete: operations["deleteRoadmapDiaryNotes"];
+        options?: never;
+        head?: never;
+        /**
+         * Write a diary day's notes
+         * @description Creates the day or replaces its Markdown notes, one entry per calendar day; the day's time entries stay.
+         */
+        patch: operations["writeRoadmapDiaryNotes"];
+        trace?: never;
+    };
+    "/v1/roadmap/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log a study session
+         * @description Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. All of its entries are written or none.
+         */
+        post: operations["createRoadmapTimeEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/time-entries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a time entry
+         * @description Deletes one entry; the notes of its day stay.
+         */
+        delete: operations["deleteRoadmapTimeEntry"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a time entry
+         * @description Changes only the fields sent and judges the merged interval by the same rules. Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. The first entry keeps the identifier; the result names the old and the new days, whose notes stay.
+         */
+        patch: operations["updateRoadmapTimeEntry"];
+        trace?: never;
+    };
+    "/v1/roadmap/books": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the bookshelf
+         * @description Every book by ascending priority, then slug, with its cover, the status derived from its dates, the resource of type `book` that links it and the time logged on that resource. An empty bookshelf is the valid empty list.
+         */
+        get: operations["listRoadmapBooks"];
+        put?: never;
+        /**
+         * Add a book to the bookshelf
+         * @description The slug is unique and stable; a taken slug is a conflict. Omitted optional fields mean none and an omitted priority means `0`. A `coverId` must name an uploaded image (`validation_failed` on `coverId` otherwise); the end cannot be before the start (`validation_failed` on `endedOn`). A book is linked by giving its slug as the `book` of a resource of type `book`.
+         */
+        post: operations["createRoadmapBook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/books/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a book */
+        get: operations["getRoadmapBook"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a book
+         * @description A book that a resource still links is not deleted (`409`); clear the resource's `book` first. The cover media stays.
+         */
+        delete: operations["deleteRoadmapBook"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a book
+         * @description Changes only the fields sent; `null` clears an optional field and the slug cannot change. A `coverId` must name an uploaded image (`validation_failed` on `coverId` otherwise); the end cannot be before the start (`validation_failed` on `endedOn`). The period is judged with the stored dates.
+         */
+        patch: operations["updateRoadmapBook"];
+        trace?: never;
+    };
+    "/v1/roadmap/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the attended events
+         * @description Every event, newest start first, with its topics and the attendance time logged on it, derived from its time entries alone. No events is the valid empty list.
+         */
+        get: operations["listRoadmapEvents"];
+        put?: never;
+        /**
+         * Add an attended event
+         * @description The slug is unique and stable; a taken slug is a conflict. Omitted optional fields mean none, in person and without topics. The dates are inclusive Europe/Prague calendar days; the end cannot be before the start (`validation_failed` on `endsOn`) and equals it for a single-day event. Every slug in `topics` names an existing topic, each once (`validation_failed` on `topics`). The event shows on every diary day of its range without adding time.
+         */
+        post: operations["createRoadmapEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/events/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an event */
+        get: operations["getRoadmapEvent"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an event
+         * @description An event with logged attendance is not deleted (`409`), so its history is never erased silently; move or delete that time first. Its diary days without notes or time go with it.
+         */
+        delete: operations["deleteRoadmapEvent"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an event
+         * @description Changes only the fields sent; `null` clears an optional field, given `topics` replace every link and the slug cannot change. The dates are inclusive Europe/Prague calendar days; the end cannot be before the start (`validation_failed` on `endsOn`) and equals it for a single-day event. Every slug in `topics` names an existing topic, each once (`validation_failed` on `topics`). The event shows on every diary day of its range without adding time. The period is judged with the stored dates. New dates that would leave logged attendance outside the event are refused (`409`, naming those days) and nothing changes.
+         */
+        patch: operations["updateRoadmapEvent"];
+        trace?: never;
+    };
+    "/v1/roadmap/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the learning statistics
+         * @description Every time entry of the learning diary counted exactly once in each view, in whole seconds aggregated before any rounding: as resource time, book time (a resource of type `book`) or event attendance, which always sum to the total. Days, Monday-start weeks and months are Europe/Prague calendar periods; an interval crossing midnight is already split into its days and a daylight-saving day keeps its actual length. Areas and modules hold study time through each resource's current module, never event attendance. An empty diary is zero totals and empty lists.
+         */
+        get: operations["getRoadmapStatistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/project-ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the project ideas
+         * @description Every project idea with its topics in their order. Ordered by position, then slug. None is the valid empty list.
+         */
+        get: operations["listRoadmapProjectIdeas"];
+        put?: never;
+        /**
+         * Add a project idea
+         * @description The slug is unique and stable; a taken slug is a conflict. An omitted way to start means none and omitted topics none. Every slug in `topics` names an existing shared topic, each once (`validation_failed` on `topics`).
+         */
+        post: operations["createRoadmapProjectIdea"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/project-ideas/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a project idea */
+        get: operations["getRoadmapProjectIdea"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a project idea
+         * @description Deletes the idea with its topic links and keeps the topics. Nothing references it, so it is deleted unless it is missing.
+         */
+        delete: operations["deleteRoadmapProjectIdea"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a project idea
+         * @description Changes only the fields sent; `null` clears an optional field and the slug cannot change. Given `topics` replace every link. Every slug in `topics` names an existing shared topic, each once (`validation_failed` on `topics`).
+         */
+        patch: operations["updateRoadmapProjectIdea"];
+        trace?: never;
+    };
+    "/v1/roadmap/followed-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the followed sources
+         * @description Every source followed to stay current. Ordered by position, then slug. None is the valid empty list.
+         */
+        get: operations["listRoadmapFollowedSources"];
+        put?: never;
+        /**
+         * Add a followed source
+         * @description The slug is unique and stable; a taken slug is a conflict. An omitted description or link means none.
+         */
+        post: operations["createRoadmapFollowedSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/followed-sources/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a followed source */
+        get: operations["getRoadmapFollowedSource"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a followed source
+         * @description Nothing references it, so it is deleted unless it is missing.
+         */
+        delete: operations["deleteRoadmapFollowedSource"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a followed source
+         * @description Changes only the fields sent; `null` clears an optional field and the slug cannot change.
+         */
+        patch: operations["updateRoadmapFollowedSource"];
+        trace?: never;
+    };
+    "/v1/roadmap/glossary-terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the glossary terms
+         * @description Every additional term explained beside the roadmap. Ordered by position, then slug. None is the valid empty list.
+         */
+        get: operations["listRoadmapGlossaryTerms"];
+        put?: never;
+        /**
+         * Add a glossary term
+         * @description The slug is unique and stable; a taken slug is a conflict.
+         */
+        post: operations["createRoadmapGlossaryTerm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/glossary-terms/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a glossary term */
+        get: operations["getRoadmapGlossaryTerm"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a glossary term
+         * @description Nothing references it, so it is deleted unless it is missing.
+         */
+        delete: operations["deleteRoadmapGlossaryTerm"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a glossary term
+         * @description Changes only the fields sent; the slug cannot change.
+         */
+        patch: operations["updateRoadmapGlossaryTerm"];
         trace?: never;
     };
     "/openapi.json": {
@@ -1272,6 +1844,397 @@ export interface components {
             /** @description Text that describes an image for people who cannot see it. */
             altText?: string | null;
         };
+        RoadmapAreaUpdate: {
+            name?: string;
+            /** @description Markdown; `null` when there is none. */
+            description?: string | null;
+            /** @description The recommended share of learning effort, 1 to 100. It is not progress and not logged time. */
+            weight?: number;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position?: number;
+        };
+        RoadmapAreaCreate: {
+            /** @description The stable address of the area; never diary, bookshelf, events, how-to-read-effectively. */
+            slug: string;
+            name: string;
+            /**
+             * @description Markdown; `null` when there is none.
+             * @default null
+             */
+            description?: string | null;
+            /** @description The recommended share of learning effort, 1 to 100. It is not progress and not logged time. */
+            weight: number;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+        };
+        RoadmapModuleUpdate: {
+            /** @description The slug of an existing area. */
+            area?: string;
+            name?: string;
+            /** @description Markdown; `null` when there is none. */
+            description?: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position?: number;
+        };
+        RoadmapModuleCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of an existing area. */
+            area: string;
+            name: string;
+            /**
+             * @description Markdown; `null` when there is none.
+             * @default null
+             */
+            description?: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+        };
+        RoadmapResourceUpdate: {
+            /** @description The slug of an existing module. */
+            module?: string;
+            name?: string;
+            /** @description Markdown; `null` when there is none. */
+            description?: string | null;
+            /** @enum {string} */
+            type?: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /** @enum {string} */
+            status?: "planned" | "in-progress" | "completed" | "paused" | "skipped";
+            /** @description Planned effort in minutes; `null` when unknown. It is not logged time. */
+            estimatedMinutes?: number | null;
+            /** @description When studying started, if it did. */
+            startedAt?: string | null;
+            /** @description When studying finished, if it did; not before `startedAt`. */
+            finishedAt?: string | null;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link?: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position?: number;
+            /** @description The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none. */
+            book?: string | null;
+            /** @description Slugs of existing topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged. */
+            topics?: string[];
+        };
+        RoadmapResourceCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of an existing module. */
+            module: string;
+            name: string;
+            /**
+             * @description Markdown; `null` when there is none.
+             * @default null
+             */
+            description?: string | null;
+            /** @enum {string} */
+            type: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /**
+             * @default planned
+             * @enum {string}
+             */
+            status?: "planned" | "in-progress" | "completed" | "paused" | "skipped";
+            /**
+             * @description Planned effort in minutes; `null` when unknown. It is not logged time.
+             * @default null
+             */
+            estimatedMinutes?: number | null;
+            /**
+             * @description When studying started, if it did.
+             * @default null
+             */
+            startedAt?: string | null;
+            /**
+             * @description When studying finished, if it did; not before `startedAt`.
+             * @default null
+             */
+            finishedAt?: string | null;
+            /**
+             * @description An absolute `http` or `https` address; `null` when there is none.
+             * @default null
+             */
+            link?: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /**
+             * @description The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none.
+             * @default null
+             */
+            book?: string | null;
+            /**
+             * @description Slugs of existing topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged.
+             * @default []
+             */
+            topics?: string[];
+        };
+        /**
+         * Format: date
+         * @description A calendar day in Europe/Prague, `YYYY-MM-DD`.
+         */
+        DiaryDate: string;
+        DiaryNotesWrite: {
+            /** @description Markdown. */
+            notes: string;
+        };
+        TimeEntryCreate: {
+            /** @description The slug of the resource that was studied; not sent with `event`. */
+            resource?: string;
+            /** @description The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event. */
+            event?: string;
+            /**
+             * Format: date-time
+             * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
+             */
+            startedAt: string;
+            /**
+             * Format: date-time
+             * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
+             */
+            endedAt: string;
+        };
+        TimeEntryUpdate: {
+            /** @description The slug of the resource that was studied; not sent with `event`. */
+            resource?: string;
+            /** @description The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event. */
+            event?: string;
+            /**
+             * Format: date-time
+             * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
+             */
+            startedAt?: string;
+            /**
+             * Format: date-time
+             * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
+             */
+            endedAt?: string;
+        };
+        RoadmapBookCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            title: string;
+            /**
+             * @description `null` when unknown.
+             * @default null
+             */
+            author?: string | null;
+            /**
+             * @description A short Markdown introduction; `null` when there is none.
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * @description `null` when unknown.
+             * @default null
+             */
+            pages?: number | null;
+            /**
+             * @description The publication year; `null` when unknown.
+             * @default null
+             */
+            year?: number | null;
+            /**
+             * @description An ISBN-10 or ISBN-13 as printed; `null` when unknown.
+             * @default null
+             */
+            isbn?: string | null;
+            /**
+             * @description Shelf order: books are listed by ascending priority, then by slug.
+             * @default 0
+             */
+            priority?: number;
+            /**
+             * @description The day reading started, `YYYY-MM-DD`; `null` when it has not.
+             * @default null
+             */
+            startedOn?: string | null;
+            /**
+             * @description The day reading ended, `YYYY-MM-DD`, not before `startedOn`; `null` when it has not.
+             * @default null
+             */
+            endedOn?: string | null;
+            /**
+             * @description The reading summary in Markdown; `null` when there is none.
+             * @default null
+             */
+            summary?: string | null;
+            /**
+             * @description The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written.
+             * @default null
+             */
+            coverId?: string | null;
+        };
+        RoadmapBookUpdate: {
+            title?: string;
+            /** @description `null` when unknown. */
+            author?: string | null;
+            /** @description A short Markdown introduction; `null` when there is none. */
+            description?: string | null;
+            /** @description `null` when unknown. */
+            pages?: number | null;
+            /** @description The publication year; `null` when unknown. */
+            year?: number | null;
+            /** @description An ISBN-10 or ISBN-13 as printed; `null` when unknown. */
+            isbn?: string | null;
+            /** @description Shelf order: books are listed by ascending priority, then by slug. */
+            priority?: number;
+            /** @description The day reading started, `YYYY-MM-DD`; `null` when it has not. */
+            startedOn?: string | null;
+            /** @description The day reading ended, `YYYY-MM-DD`, not before `startedOn`; `null` when it has not. */
+            endedOn?: string | null;
+            /** @description The reading summary in Markdown; `null` when there is none. */
+            summary?: string | null;
+            /** @description The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written. */
+            coverId?: string | null;
+        };
+        RoadmapEventCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /**
+             * @description Who organised it; `null` when unknown.
+             * @default null
+             */
+            organizer?: string | null;
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn: string;
+            /**
+             * @description Where it took place; `null` for an online event or when unknown.
+             * @default null
+             */
+            place?: string | null;
+            /**
+             * @description Whether it was attended online.
+             * @default false
+             */
+            online?: boolean;
+            /**
+             * @description An absolute `http` or `https` address; `null` when there is none.
+             * @default null
+             */
+            link?: string | null;
+            /**
+             * @description What was taken away, in Markdown; `null` when there is nothing yet.
+             * @default null
+             */
+            takeaways?: string | null;
+            /**
+             * @description Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged.
+             * @default []
+             */
+            topics?: string[];
+        };
+        RoadmapEventUpdate: {
+            name?: string;
+            /** @enum {string} */
+            kind?: "conference" | "meetup" | "workshop" | "lecture";
+            /** @description Who organised it; `null` when unknown. */
+            organizer?: string | null;
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn?: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn?: string;
+            /** @description Where it took place; `null` for an online event or when unknown. */
+            place?: string | null;
+            /** @description Whether it was attended online. */
+            online?: boolean;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link?: string | null;
+            /** @description What was taken away, in Markdown; `null` when there is nothing yet. */
+            takeaways?: string | null;
+            /** @description Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged. */
+            topics?: string[];
+        };
+        RoadmapProjectIdeaCreate: {
+            /** @description The stable identity of the record and its anchor on the website. */
+            slug: string;
+            title: string;
+            /** @description Why the project is worth doing, Markdown. */
+            whyItMatters: string;
+            /**
+             * @description How to begin, Markdown; `null` when there is no advice yet.
+             * @default null
+             */
+            howToStart?: string | null;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position: number;
+            /**
+             * @description Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged.
+             * @default []
+             */
+            topics?: string[];
+        };
+        RoadmapProjectIdeaUpdate: {
+            title?: string;
+            /** @description Why the project is worth doing, Markdown. */
+            whyItMatters?: string;
+            /** @description How to begin, Markdown; `null` when there is no advice yet. */
+            howToStart?: string | null;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position?: number;
+            /** @description Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged. */
+            topics?: string[];
+        };
+        RoadmapFollowedSourceCreate: {
+            /** @description The stable identity of the record and its anchor on the website. */
+            slug: string;
+            title: string;
+            /**
+             * @description Markdown; `null` when there is none.
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * @description An absolute `http` or `https` address; `null` when there is none.
+             * @default null
+             */
+            link?: string | null;
+            /** @description A short label of what the source is, for example `newsletter`, `podcast` or `blog`; free text, shown as written. */
+            kind: string;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position: number;
+        };
+        RoadmapFollowedSourceUpdate: {
+            title?: string;
+            /** @description Markdown; `null` when there is none. */
+            description?: string | null;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link?: string | null;
+            /** @description A short label of what the source is, for example `newsletter`, `podcast` or `blog`; free text, shown as written. */
+            kind?: string;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position?: number;
+        };
+        RoadmapGlossaryTermCreate: {
+            /** @description The stable identity of the record and its anchor on the website. */
+            slug: string;
+            term: string;
+            /** @description What the term means, Markdown. */
+            description: string;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position: number;
+        };
+        RoadmapGlossaryTermUpdate: {
+            term?: string;
+            /** @description What the term means, Markdown. */
+            description?: string;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position?: number;
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -1726,6 +2689,612 @@ export interface components {
         };
         /** @description Ordered by creation, newest first, then by identifier. */
         MediaList: components["schemas"]["Media"][];
+        /** @description Every level is ordered by position, then slug. */
+        Roadmap: {
+            summary: components["schemas"]["RoadmapSummary"];
+            areas: components["schemas"]["RoadmapTreeArea"][];
+        };
+        RoadmapSummary: {
+            areaCount: number;
+            moduleCount: number;
+            resourceCount: number;
+            /** @description Resources with the status `completed`. */
+            completed: number;
+            /** @description All resources, whatever their status. */
+            total: number;
+            /** @description The sum of every resource estimate; a missing estimate counts as zero. */
+            estimatedMinutes: number;
+            /** @description `estimatedMinutes` divided by 60, rounded to the nearest whole hour. */
+            estimatedHours: number;
+            /** @description The latest change of any resource; `null` when there are none. */
+            lastUpdatedAt: string | null;
+        };
+        RoadmapTreeArea: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description The recommended share of learning effort, 1 to 100. It is not progress and not logged time. */
+            weight: number;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            progress: components["schemas"]["RoadmapProgress"];
+            modules: components["schemas"]["RoadmapTreeModule"][];
+        };
+        RoadmapProgress: {
+            /** @description Resources with the status `completed`. */
+            completed: number;
+            /** @description All resources, whatever their status. */
+            total: number;
+            /**
+             * @description `planned` when empty; `completed` when every resource is completed or skipped; `in-progress` when any is in progress; otherwise `planned`. `in-progress` marks it current.
+             * @enum {string}
+             */
+            status: "planned" | "in-progress" | "completed";
+            /** @description The latest finish among completed resources once the whole container is completed; `null` otherwise or when no completed resource has a finish. */
+            completedAt: string | null;
+            /** @description The latest change of any of its resources; `null` when it has none. */
+            lastUpdatedAt: string | null;
+            /** @description The sum of every resource estimate; a missing estimate counts as zero. */
+            estimatedMinutes: number;
+        };
+        RoadmapTreeModule: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            progress: components["schemas"]["RoadmapProgress"];
+            resources: components["schemas"]["RoadmapTreeResource"][];
+        };
+        RoadmapTreeResource: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @enum {string} */
+            type: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /** @enum {string} */
+            status: "planned" | "in-progress" | "completed" | "paused" | "skipped";
+            /** @description Planned effort in minutes; `null` when unknown. It is not logged time. */
+            estimatedMinutes: number | null;
+            /** @description When studying started, if it did. */
+            startedAt: string | null;
+            /** @description When studying finished, if it did; not before `startedAt`. */
+            finishedAt: string | null;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** @description The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none. */
+            book: string | null;
+            /** @description The linked topics, in their order. */
+            topics: components["schemas"]["Topic"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description The area node of the roadmap tree, with its modules and their resources. */
+        RoadmapAreaDetail: {
+            area: components["schemas"]["RoadmapTreeArea"];
+        };
+        /** @description The module node of the roadmap tree and the area that holds it. */
+        RoadmapModuleDetail: {
+            area: components["schemas"]["RoadmapArea"];
+            module: components["schemas"]["RoadmapTreeModule"];
+        };
+        RoadmapArea: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description The recommended share of learning effort, 1 to 100. It is not progress and not logged time. */
+            weight: number;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description The areas and modules whose derived status is `in-progress`, in the order of the roadmap; empty when nothing is. */
+        RoadmapCurrent: {
+            areas: components["schemas"]["RoadmapCurrentArea"][];
+        };
+        RoadmapCurrentArea: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description The recommended share of learning effort, 1 to 100. It is not progress and not logged time. */
+            weight: number;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            progress: {
+                /** @description Resources with the status `completed`. */
+                completed: number;
+                /** @description All resources, whatever their status. */
+                total: number;
+                /**
+                 * @description Always `in-progress` here.
+                 * @constant
+                 */
+                status: "in-progress";
+                /** @description The latest finish among completed resources once the whole container is completed; `null` otherwise or when no completed resource has a finish. */
+                completedAt: string | null;
+                /** @description The latest change of any of its resources; `null` when it has none. */
+                lastUpdatedAt: string | null;
+                /** @description The sum of every resource estimate; a missing estimate counts as zero. */
+                estimatedMinutes: number;
+            };
+            modules: components["schemas"]["RoadmapCurrentModule"][];
+        };
+        RoadmapCurrentModule: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            progress: {
+                /** @description Resources with the status `completed`. */
+                completed: number;
+                /** @description All resources, whatever their status. */
+                total: number;
+                /**
+                 * @description Always `in-progress` here.
+                 * @constant
+                 */
+                status: "in-progress";
+                /** @description The latest finish among completed resources once the whole container is completed; `null` otherwise or when no completed resource has a finish. */
+                completedAt: string | null;
+                /** @description The latest change of any of its resources; `null` when it has none. */
+                lastUpdatedAt: string | null;
+                /** @description The sum of every resource estimate; a missing estimate counts as zero. */
+                estimatedMinutes: number;
+            };
+        };
+        RoadmapModule: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of the area it belongs to. */
+            area: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        RoadmapResource: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            /** @description The slug of the module it belongs to. */
+            module: string;
+            name: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @enum {string} */
+            type: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /** @enum {string} */
+            status: "planned" | "in-progress" | "completed" | "paused" | "skipped";
+            /** @description Planned effort in minutes; `null` when unknown. It is not logged time. */
+            estimatedMinutes: number | null;
+            /** @description When studying started, if it did. */
+            startedAt: string | null;
+            /** @description When studying finished, if it did; not before `startedAt`. */
+            finishedAt: string | null;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link: string | null;
+            /** @description Ascending order among its siblings; ties are ordered by slug. */
+            position: number;
+            /** @description The slug of the existing book this resource reads; only a resource of type `book` can link one, and each book is linked by at most one resource. `null` when none. */
+            book: string | null;
+            /** @description The linked topics, in their order. */
+            topics: components["schemas"]["Topic"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Diary: {
+            days: components["schemas"]["DiaryDay"][];
+        };
+        DiaryDay: {
+            date: components["schemas"]["DiaryDate"];
+            /** @description Markdown; `null` when there are none. */
+            notes: string | null;
+            entries: components["schemas"]["TimeEntry"][];
+            /** @description The events whose inclusive date range covers the day, by start date, then slug; they add no time. */
+            events: components["schemas"]["DiaryEvent"][];
+            /** @description The sum of the entries' elapsed seconds, derived on read and never rounded. */
+            totalSeconds: number;
+        };
+        TimeEntry: {
+            /** Format: uuid */
+            id: string;
+            date: components["schemas"]["DiaryDate"];
+            /** @description The resource studied; `null` for attendance at an event. */
+            resource: components["schemas"]["DiaryResource"] | null;
+            /** @description The event attended; `null` for a study session on a resource. */
+            event: components["schemas"]["DiaryEvent"] | null;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt: string;
+            /** @description The actual elapsed seconds between the endpoints, derived on read. */
+            durationSeconds: number;
+        };
+        DiaryResource: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            type: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /** @description `null` when the resource has no link. */
+            link: string | null;
+            /** @description The slug of its module. */
+            module: string;
+            /** @description The slug of its module's area. */
+            area: string;
+        };
+        DiaryEvent: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn: string;
+            /** @description `null` when the event has no link. */
+            link: string | null;
+        };
+        TimeEntryWrite: {
+            entries: components["schemas"]["TimeEntry"][];
+            /** @description Every changed day, old and new, in ascending order. */
+            dates: components["schemas"]["DiaryDate"][];
+        };
+        /** @description Ordered by priority, then slug. */
+        RoadmapBookList: components["schemas"]["RoadmapBook"][];
+        RoadmapBook: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            title: string;
+            /** @description `null` when unknown. */
+            author: string | null;
+            /** @description A short Markdown introduction; `null` when there is none. */
+            description: string | null;
+            /** @description `null` when unknown. */
+            pages: number | null;
+            /** @description The publication year; `null` when unknown. */
+            year: number | null;
+            /** @description An ISBN-10 or ISBN-13 as printed; `null` when unknown. */
+            isbn: string | null;
+            /** @description Shelf order: books are listed by ascending priority, then by slug. */
+            priority: number;
+            /** @description The day reading started, `YYYY-MM-DD`; `null` when it has not. */
+            startedOn: string | null;
+            /** @description The day reading ended, `YYYY-MM-DD`, not before `startedOn`; `null` when it has not. */
+            endedOn: string | null;
+            /** @description The reading summary in Markdown; `null` when there is none. */
+            summary: string | null;
+            /** @description The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written. */
+            coverId: string | null;
+            /** @description The cover image; `null` when none. */
+            cover: components["schemas"]["Media"] | null;
+            /**
+             * @description Derived on read: `completed` when `endedOn` is set, otherwise `reading` when `startedOn` is set, otherwise `to-read`.
+             * @enum {string}
+             */
+            status: "to-read" | "reading" | "completed";
+            /** @description The resource of type `book` that links this book; `null` when none does. */
+            resource: components["schemas"]["RoadmapBookResource"] | null;
+            /** @description The elapsed seconds of every time entry logged on the linking resource; `0` without one. Derived on read; the book has no time of its own. */
+            readingSeconds: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        RoadmapBookResource: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description The slug of its module. */
+            module: string;
+            /** @description The slug of its module's area. */
+            area: string;
+        };
+        /** @description Ordered by start date, newest first, then by end date (newest first) and slug. */
+        RoadmapEventList: components["schemas"]["RoadmapEvent"][];
+        RoadmapEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /** @description Who organised it; `null` when unknown. */
+            organizer: string | null;
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn: string;
+            /** @description Where it took place; `null` for an online event or when unknown. */
+            place: string | null;
+            /** @description Whether it was attended online. */
+            online: boolean;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link: string | null;
+            /** @description What was taken away, in Markdown; `null` when there is nothing yet. */
+            takeaways: string | null;
+            /** @description The linked topics, in their order. */
+            topics: components["schemas"]["Topic"][];
+            /** @description The elapsed seconds of the time entries logged on the event, derived on read. The date range alone contributes nothing. */
+            attendanceSeconds: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        RoadmapStatistics: {
+            totals: components["schemas"]["LearningTimeTotals"];
+            /** @description Every diary day with logged time, oldest first. */
+            days: components["schemas"]["LearningTimeDay"][];
+            /** @description Every Monday-start week from the first to the last with logged time, oldest first; a week between them without time is present with zero seconds. */
+            weeks: components["schemas"]["LearningTimeWeek"][];
+            /** @description Every calendar month from the first to the last with logged time, oldest first; a month between them without time is present with zero seconds. */
+            months: components["schemas"]["LearningTimeMonth"][];
+            /** @description The areas with study time, by total (largest first), then slug. Resource and book time counts in the current module and area of its resource; event attendance is never part of an area. */
+            areas: components["schemas"]["LearningTimeArea"][];
+            /** @description The resources with logged time, by total (largest first), then slug. */
+            resources: components["schemas"]["LearningTimeResource"][];
+            /** @description The events with attendance, by total (largest first), then slug. */
+            events: components["schemas"]["LearningTimeEvent"][];
+        };
+        LearningTimeTotals: {
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+            /** @description The number of diary days with logged time. */
+            activeDays: number;
+        };
+        /** @description One diary day with logged time; its total equals the diary day's total. */
+        LearningTimeDay: {
+            /**
+             * Format: date
+             * @description The diary day, `YYYY-MM-DD` in Europe/Prague.
+             */
+            date: string;
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+        };
+        LearningTimeWeek: {
+            /**
+             * Format: date
+             * @description The Monday that starts the week, `YYYY-MM-DD` in Europe/Prague.
+             */
+            startsOn: string;
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+        };
+        LearningTimeMonth: {
+            /** @description The calendar month, `YYYY-MM` in Europe/Prague. */
+            month: string;
+            /** @description All logged time: the sum of the three categories. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description Attendance logged on events. */
+            eventSeconds: number;
+        };
+        LearningTimeArea: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Study time: resource and book time together, never event attendance. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+            /** @description The area's modules with study time, by total (largest first), then slug. Their totals sum to the area's. */
+            modules: components["schemas"]["LearningTimeModule"][];
+        };
+        LearningTimeModule: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @description Study time: resource and book time together, never event attendance. */
+            totalSeconds: number;
+            /** @description Time logged on resources whose type is not `book`. */
+            resourceSeconds: number;
+            /** @description Time logged on resources of type `book`, counted once. */
+            bookSeconds: number;
+        };
+        LearningTimeResource: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            type: "youtube-video" | "youtube-playlist" | "google-drive" | "video" | "link" | "text" | "project" | "book";
+            /**
+             * @description `book` for a resource of type `book`, otherwise `resource`.
+             * @enum {string}
+             */
+            category: "resource" | "book";
+            /** @description The module the resource is in now. */
+            module: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+                name: string;
+            };
+            /** @description The area of that module. */
+            area: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+                name: string;
+            };
+            /** @description The book the resource reads; `null` when it links none. */
+            book: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+                title: string;
+            } | null;
+            /** @description Time logged on the resource. */
+            totalSeconds: number;
+        };
+        LearningTimeEvent: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            /** @description Attendance logged on the event. */
+            totalSeconds: number;
+        };
+        /** @description Ordered by position, then slug. */
+        RoadmapProjectIdeaList: components["schemas"]["RoadmapProjectIdea"][];
+        RoadmapProjectIdea: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable identity of the record and its anchor on the website. */
+            slug: string;
+            title: string;
+            /** @description Why the project is worth doing, Markdown. */
+            whyItMatters: string;
+            /** @description How to begin, Markdown; `null` when there is no advice yet. */
+            howToStart: string | null;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position: number;
+            /** @description The linked topics, in their order. */
+            topics: components["schemas"]["Topic"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Ordered by position, then slug. */
+        RoadmapFollowedSourceList: components["schemas"]["RoadmapFollowedSource"][];
+        RoadmapFollowedSource: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable identity of the record and its anchor on the website. */
+            slug: string;
+            title: string;
+            /** @description Markdown; `null` when there is none. */
+            description: string | null;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link: string | null;
+            /** @description A short label of what the source is, for example `newsletter`, `podcast` or `blog`; free text, shown as written. */
+            kind: string;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Ordered by position, then slug. */
+        RoadmapGlossaryTermList: components["schemas"]["RoadmapGlossaryTerm"][];
+        RoadmapGlossaryTerm: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable identity of the record and its anchor on the website. */
+            slug: string;
+            term: string;
+            /** @description What the term means, Markdown. */
+            description: string;
+            /** @description Ascending order in its list; ties are ordered by slug. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -6607,6 +8176,3647 @@ export interface operations {
             };
             /** @description `not_found`: the record does not exist. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The roadmap tree. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Roadmap"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapAreaDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The slug of the area. */
+                area: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The area with its modules and resources. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapAreaDetail"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapModuleDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The slug of the area the module belongs to. */
+                area: string;
+                /** @description The slug of the module. */
+                module: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The module with its resources and its area. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapModuleDetail"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapCurrent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The areas and modules in progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapCurrent"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The area. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapArea"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The area was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapAreaUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated area. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapArea"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapAreaCreate"];
+            };
+        };
+        responses: {
+            /** @description The created area. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapArea"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The module. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapModule"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The module was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapModuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated module. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapModule"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapModuleCreate"];
+            };
+        };
+        responses: {
+            /** @description The created module. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapModule"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapResource"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapResourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated resource. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapResource"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapResourceCreate"];
+            };
+        };
+        responses: {
+            /** @description The created resource. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapResource"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapDiary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diary days. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diary"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapDiaryDay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A calendar day in Europe/Prague, `YYYY-MM-DD`. */
+                date: components["schemas"]["DiaryDate"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diary day. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryDay"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapDiaryNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A calendar day in Europe/Prague, `YYYY-MM-DD`. */
+                date: components["schemas"]["DiaryDate"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The notes were deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    writeRoadmapDiaryNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A calendar day in Europe/Prague, `YYYY-MM-DD`. */
+                date: components["schemas"]["DiaryDate"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiaryNotesWrite"];
+            };
+        };
+        responses: {
+            /** @description The diary day. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryDay"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description The written entries and the diary days they belong to. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryWrite"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The time entry was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description The written entries and every diary day the change touched. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryWrite"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRoadmapBooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The books. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapBookList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapBookCreate"];
+            };
+        };
+        responses: {
+            /** @description The created book. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapBook"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The book. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapBook"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The book was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapBookUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated book. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapBook"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRoadmapEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEventList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapEventCreate"];
+            };
+        };
+        responses: {
+            /** @description The created event. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEvent"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEvent"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapEventUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEvent"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapStatistics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The learning statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapStatistics"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRoadmapProjectIdeas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project ideas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapProjectIdeaList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapProjectIdea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapProjectIdeaCreate"];
+            };
+        };
+        responses: {
+            /** @description The created project idea. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapProjectIdea"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapProjectIdea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project idea. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapProjectIdea"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapProjectIdea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project idea was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapProjectIdea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapProjectIdeaUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated project idea. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapProjectIdea"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRoadmapFollowedSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The followed sources. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapFollowedSourceList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapFollowedSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapFollowedSourceCreate"];
+            };
+        };
+        responses: {
+            /** @description The created followed source. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapFollowedSource"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapFollowedSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The followed source. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapFollowedSource"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapFollowedSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The followed source was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapFollowedSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapFollowedSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated followed source. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapFollowedSource"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRoadmapGlossaryTerms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The glossary terms. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapGlossaryTermList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapGlossaryTerm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapGlossaryTermCreate"];
+            };
+        };
+        responses: {
+            /** @description The created glossary term. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapGlossaryTerm"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapGlossaryTerm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The glossary term. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapGlossaryTerm"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapGlossaryTerm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The glossary term was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapGlossaryTerm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapGlossaryTermUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated glossary term. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapGlossaryTerm"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

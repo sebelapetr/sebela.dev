@@ -14,6 +14,15 @@ describe("dependencyMap", () => {
 });
 
 describe("scopesFor", () => {
+  it.each(["roadmap-area", "roadmap-module", "roadmap-resource"] as const)(
+    "refreshes the AI Roadmap's pages after a change of a %s",
+    (domain) => {
+      expect(
+        scopesFor([{ domain, record: "fictional-roadmap-record", action: "updated" }]),
+      ).toEqual(["profile"]);
+    },
+  );
+
   it("gives each affected scope once, however many changes name it", () => {
     const changes: ContentChange[] = [
       { domain: "person", record: null, action: "updated" },

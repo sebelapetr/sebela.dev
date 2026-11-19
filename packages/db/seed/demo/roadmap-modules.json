@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "llm-basics",
+    "area": "foundations",
+    "name": "How language models work",
+    "description": "What a **fictional** learner needs before anything else: tokens, attention and why sampling settings change an answer.",
+    "position": 0
+  },
+  {
+    "slug": "prompt-design",
+    "area": "foundations",
+    "name": "Prompt design",
+    "position": 1
+  },
+  {
+    "slug": "embeddings",
+    "area": "foundations",
+    "name": "Embeddings",
+    "description": "Turning text into vectors and reading the space they live in.\n\n- Distance and similarity\n- Where embeddings mislead",
+    "position": 2
+  },
+  {
+    "slug": "search-fundamentals",
+    "area": "retrieval-systems",
+    "name": "Search fundamentals",
+    "description": "Keyword and vector search side by side, before any retrieval pipeline is built on top of them.",
+    "position": 0
+  },
+  {
+    "slug": "chunking-strategies",
+    "area": "retrieval-systems",
+    "name": "Chunking strategies",
+    "position": 1
+  },
+  {
+    "slug": "rag-evaluation",
+    "area": "retrieval-systems",
+    "name": "Evaluating retrieval",
+    "position": 2
+  },
+  {
+    "slug": "reranking",
+    "area": "retrieval-systems",
+    "name": "Reranking",
+    "position": 3,
+    "description": "Nothing planned here yet."
+  },
+  {
+    "slug": "tool-calling",
+    "area": "agents-in-production",
+    "name": "Tool calling",
+    "position": 0
+  },
+  {
+    "slug": "agent-loops",
+    "area": "agents-in-production",
+    "name": "Agent loops",
+    "description": "Planning, acting and checking in a loop, and knowing when to stop.",
+    "position": 1
+  },
+  {
+    "slug": "guardrails-basics",
+    "area": "agents-in-production",
+    "name": "Guardrails",
+    "position": 2
+  },
+  {
+    "slug": "agent-observability",
+    "area": "agents-in-production",
+    "name": "Observability",
+    "position": 3,
+    "description": "Nothing planned here yet."
+  }
+]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { anchorHref, anchorId } from "./anchors";
+import { anchorHref, anchorId, bookshelfHref, diaryHref, roadmapHref } from "./anchors";
 
 describe("anchorId", () => {
   it("names each kind of item by its stable slug", () => {
@@ -34,6 +34,17 @@ describe("anchorId", () => {
     );
   });
 
+  it("names a roadmap resource by its slug", () => {
+    expect(
+      anchorId({
+        kind: "roadmap-resource",
+        area: "orbit-foundations",
+        module: "signal-basics",
+        slug: "signal-notes",
+      }),
+    ).toBe("resource-signal-notes");
+  });
+
   it("gives a project and its case study different anchors", () => {
     expect(anchorId({ kind: "project", slug: "route-planner" })).not.toBe(
       anchorId({ kind: "case-study", project: "route-planner" }),
@@ -65,5 +76,54 @@ describe("anchorHref", () => {
     expect(anchorHref({ kind: "service", slug: "process-automation" })).toBe(
       "/services#service-process-automation",
     );
+  });
+});
+
+describe("roadmap addresses", () => {
+  it("points at a roadmap resource on its module's page", () => {
+    expect(
+      anchorHref({
+        kind: "roadmap-resource",
+        area: "orbit-foundations",
+        module: "signal-basics",
+        slug: "signal-notes",
+      }),
+    ).toBe("/ai-roadmap/orbit-foundations/signal-basics#resource-signal-notes");
+  });
+
+  it("addresses an area and a module by their nested pages", () => {
+    expect(roadmapHref({ area: "orbit-foundations" })).toBe("/ai-roadmap/orbit-foundations");
+    expect(roadmapHref({ area: "orbit-foundations", module: "signal-basics" })).toBe(
+      "/ai-roadmap/orbit-foundations/signal-basics",
+    );
+  });
+
+  it("never lets a slug leave the roadmap's pages", () => {
+    expect(roadmapHref({ area: "../cv" })).toBe("/ai-roadmap/..%2Fcv");
+    expect(roadmapHref({ area: "a", module: "b?c#d" })).toBe("/ai-roadmap/a/b%3Fc%23d");
+    expect(anchorHref({ kind: "roadmap-resource", area: "a/b", module: "c", slug: "d" })).toBe(
+      "/ai-roadmap/a%2Fb/c#resource-d",
+    );
+  });
+
+  it("addresses the bookshelf and a book on it", () => {
+    expect(bookshelfHref()).toBe("/ai-roadmap/bookshelf");
+    expect(bookshelfHref("quiet-orbit")).toBe("/ai-roadmap/bookshelf/quiet-orbit");
+  });
+
+  it("never lets a book's slug leave the bookshelf", () => {
+    expect(bookshelfHref("../cv")).toBe("/ai-roadmap/bookshelf/..%2Fcv");
+    expect(bookshelfHref("a?b#c")).toBe("/ai-roadmap/bookshelf/a%3Fb%23c");
+  });
+});
+
+describe("diaryHref", () => {
+  it("addresses the learning diary and a day on it", () => {
+    expect(diaryHref()).toBe("/ai-roadmap/diary");
+    expect(diaryHref("2026-03-02")).toBe("/ai-roadmap/diary/2026-03-02");
+  });
+
+  it("never lets a date leave the diary", () => {
+    expect(diaryHref("../cv")).toBe("/ai-roadmap/diary/..%2Fcv");
   });
 });

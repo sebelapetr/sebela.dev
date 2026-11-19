@@ -76,7 +76,8 @@ export interface CatalogPersistence {
   updateTopic(slug: string, changes: Partial<TopicFields>): Promise<TopicRecord | null>;
   /**
    * Deletes the topic; `not_found` when there is none, `referenced` (and nothing deleted) while
-   * an exploration, a current-focus entry or another record still links to it.
+   * an exploration, a current-focus entry, a roadmap resource, an event or a project idea still
+   * links to it.
    */
   deleteTopic(slug: string): Promise<DeleteTopicResult>;
 }

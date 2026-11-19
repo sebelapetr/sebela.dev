@@ -6,7 +6,7 @@ import { startApi, startWebsite, type Started } from "./stack";
 // Fixture values (e2e/fixtures/with-experience/): a fictional career that exists only for these
 // tests. Two current-focus entries (one on the route planner, one with its own web link), one
 // ongoing exploration (Tool scopes, designed only) beside two finished ones, two current roles and
-// three services.
+// three services, and no AI Roadmap, so Now has no Exploring column.
 const workingOn = [
   {
     title: "Taking the route planner to every depot",
@@ -143,7 +143,9 @@ test.describe("the homepage's narrative read from the API", () => {
     await page.goto(website.url);
     const section = region(page, "Now");
     const columns = section.getByRole("heading", { level: 3 });
-    await expect(columns).toHaveText(["Working on", "Exploring"]);
+    // Exploring is the AI Roadmap's learning in progress; this fixture has no roadmap, so the column
+    // is left out rather than filled with explorations or made-up activity.
+    await expect(columns).toHaveText(["Working on"]);
     for (const item of workingOn) {
       await expect(section.getByRole("heading", { level: 4, name: item.title })).toBeVisible();
       await expect(section.getByRole("list", { name: `${item.title} topics` })).toHaveText(
@@ -156,11 +158,8 @@ test.describe("the homepage's narrative read from the API", () => {
     }
     // The focus's Markdown renders as inline elements, never as raw syntax.
     await expect(section.locator("strong").first()).toHaveText("fictional");
-    // Only the ongoing exploration, with its stored status in words.
-    const exploring = section.getByRole("link", { name: "Tool scopes" });
-    await expect(exploring).toHaveAttribute("href", "/experience#exploration-tool-scopes");
-    await expect(section).toContainText("Designed");
-    await expect(section).toContainText("Unimplemented design, planned or architected only");
+    // Explorations are delivered or designed work, never current learning.
+    await expect(section).not.toContainText("Tool scopes");
     await expect(section).not.toContainText("Answer checker");
     await expect(section).not.toContainText("Chunk comparison");
   });
@@ -173,21 +172,19 @@ test.describe("the homepage's narrative read from the API", () => {
     await expect(page.locator("#independent-rd")).toBeInViewport();
   });
 
-  test("leads from Now to the AI Roadmap's placeholder and back to the site", async ({ page }) => {
+  test("leads from Now to the AI Roadmap and back to the site", async ({ page }) => {
     await page.goto(website.url);
     await hydrated(page);
     await region(page, "Now").getByRole("link", { name: "AI Roadmap" }).click();
     await expect(page).toHaveURL(/\/ai-roadmap$/u);
-    await expect(page).toHaveTitle("AI Roadmap");
+    await expect(page).toHaveTitle("AI Engineering Roadmap — Casey Morrow");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "The AI Roadmap is not published yet.",
+      "AI Engineering Roadmap for Experienced Developers",
     );
-    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/u);
-    await expect(page.getByRole("link", { name: "View my experience" })).toHaveAttribute(
-      "href",
-      "/experience",
-    );
-    await page.getByRole("link", { name: "Back to the homepage" }).click();
+    // The fixture has no roadmap areas: the overview says so instead of an empty tree.
+    await expect(page.getByRole("main")).toContainText("No roadmap areas are published yet.");
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+    await page.getByRole("banner").getByRole("link", { name: "Casey Morrow" }).click();
     await expect(page).toHaveURL(`${website.url}/`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
