@@ -248,6 +248,25 @@ test("the password is not part of the result and the file is readable only by it
   assert.equal(fs.statSync(envPath).mode & 0o077, 0);
 });
 
+test("nothing from the owner's .env or .env.secrets reaches a new worktree", (t) => {
+  const mainRoot = mainCheckout(t);
+  fs.writeFileSync(path.join(mainRoot, ".env"), "POSTGRES_PASSWORD=superuser-secret\n");
+  fs.writeFileSync(path.join(mainRoot, ".env.secrets"), "ANTHROPIC_API_KEY=sk-ant-owner\n");
+  const databases = fakeDatabases();
+  const worktree = createWorktree({
+    mainRoot,
+    branch: "feat/evals",
+    env: {},
+    databases,
+    backend: fakeBackend(databases),
+  });
+
+  const written = fs.readFileSync(path.join(worktree.path, ".env.local"), "utf8");
+  assert.equal(written.includes("superuser-secret"), false);
+  assert.equal(written.includes("sk-ant-owner"), false);
+  assert.equal(fs.existsSync(path.join(worktree.path, ".env.secrets")), false);
+});
+
 test("worktrees get different passwords", (t) => {
   const { databases, create, worktree } = fixture(t);
   const other = create("feat/other");

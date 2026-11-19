@@ -8,16 +8,16 @@ Free hands inside a worktree, hard limits at the boundaries. An agent should fin
 
 ## Allowed without asking
 
-| Action                                                                                                                      | Why                                                                                  |
-| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Package manager and task runner commands, tests, lint, typecheck, build                                                     | Normal development                                                                   |
-| Reading git state; committing on the agent's own branch                                                                     | Normal development                                                                   |
-| Compose commands for the local Postgres                                                                                     | Needed to run and test                                                               |
-| Worktree setup and cleanup scripts                                                                                          | Part of the flow                                                                     |
-| Reading, creating and editing `.env.local` inside the session's own worktree; editing `.env.example` with placeholders only | Agents need to configure their development environment                               |
-| Reading issues and pull requests                                                                                            | Context                                                                              |
-| Creating a pull request                                                                                                     | The orchestrator does this on its own                                                |
-| Squash-merging a reviewed issue pull request into the phase branch (orchestrator only)                                      | Lets a phase run unattended; the owner still reviews the whole phase before `master` |
+| Action                                                                                                                                                 | Why                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Package manager and task runner commands, tests, lint, typecheck, build                                                                                | Normal development                                                                   |
+| Reading git state; committing on the agent's own branch                                                                                                | Normal development                                                                   |
+| Compose commands for the local Postgres                                                                                                                | Needed to run and test                                                               |
+| Worktree setup and cleanup scripts                                                                                                                     | Part of the flow                                                                     |
+| Reading, creating and editing `.env.local` inside the session's own worktree; editing `.env.example` and `.env.secrets.example` with placeholders only | Agents need to configure their development environment                               |
+| Reading issues and pull requests                                                                                                                       | Context                                                                              |
+| Creating a pull request                                                                                                                                | The orchestrator does this on its own                                                |
+| Squash-merging a reviewed issue pull request into the phase branch (orchestrator only)                                                                 | Lets a phase run unattended; the owner still reviews the whole phase before `master` |
 
 ## Needs the owner's confirmation
 
@@ -29,17 +29,26 @@ Free hands inside a worktree, hard limits at the boundaries. An agent should fin
 
 ## Denied
 
-| Action                                                                                                        | Why                                                                            |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Reading or editing environment files except `.env.example` and `.env.local` inside the session's own worktree | Other worktrees, the main checkout and production configuration remain private |
-| Reading `.context/` (subagents)                                                                               | Raw private notes; the repository is public                                    |
-| Merging into `master`, pushing to `master`, force-pushing a shared branch                                     | The owner is the only gate to `master`                                         |
-| Editing outside the agent's own worktree                                                                      | Parallel agents must not collide                                               |
-| Editing app or package code in the main checkout                                                              | All code goes through a worktree and a pull request                            |
+| Action                                                                                                                                                          | Why                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Reading or editing environment files except `.env.example`, `.env.secrets.example` and `.env.local` inside the session's own worktree; above all `.env.secrets` | Other worktrees, the main checkout, the owner's secrets and production configuration remain private |
+| Reading `.context/` (subagents)                                                                                                                                 | Raw private notes; the repository is public                                                         |
+| Merging into `master`, pushing to `master`, force-pushing a shared branch                                                                                       | The owner is the only gate to `master`                                                              |
+| Editing outside the agent's own worktree                                                                                                                        | Parallel agents must not collide                                                                    |
+| Editing app or package code in the main checkout                                                                                                                | All code goes through a worktree and a pull request                                                 |
 
 ## Hooks
 
 The local environment exception requires a session running inside a Git-confirmed worktree of this repository. It covers `.env.local` at the worktree root and in its app folders. Both the written path and the resolved path must remain in that worktree; symbolic links do not grant access elsewhere. Exact file paths work with file tools and simple shell commands. Shell expressions with expansions, wildcards or directory changes are refused when they name environment files; broad searches for environment files are refused too.
+
+### Environment files
+
+Two documented examples split what agents may see from what they may not:
+
+- **Settings** — `.env.example`: ports, addresses, limits, storage folders and the local passwords of the development database. The main checkout copies it to `.env` (Compose reads it); each worktree gets its own generated `.env.local`, which its agents read and change. The main checkout's `.env` stays private because it holds the Postgres superuser password.
+- **The owner's secrets** — `.env.secrets.example`: keys for paid outside services, today `ANTHROPIC_API_KEY` for the model evals. The owner copies it to `.env.secrets` in the main checkout only (mode `600`); Git ignores it, no worktree ever gets a copy, and agents may not read, edit or name it: the guard refuses it in every tool and shell command, and `.claude/settings.json` denies `Read`, `Edit` and `Write` of it. A command that needs a secret runs through `node harness/with-secrets.mjs -- <command>`, which finds the main checkout from the worktree, reads its `.env.secrets` and gives the values to that one process; a variable already set wins, so CI passes its repository secret the same way. Package scripts wrap their paid commands with it (for example an `eval` script), so agents run them without seeing the key.
+
+This keeps a key out of the files, transcripts, logs and pull requests agents produce. It does not hide it from a process an agent deliberately writes to print its environment, so the key is a separate development key with a low spend limit, and agents never print, log or pass a secret on. Never export a secret in the shell that runs Claude Code or the phase loop: an `ANTHROPIC_API_KEY` there would bill the agent sessions to it instead of the owner's subscription.
 
 Development environment files stay ignored by Git. Production credentials are kept outside development worktrees. A worktree's `.env.local` holds the credentials of that worktree's own database role, generated by the worktree script; they open only that worktree's databases. The Postgres superuser password stays in the main checkout's `.env` and never reaches a worktree. Never copy environment values into commits, documentation, pull requests or public logs. The guard checks paths, not whether a value is a production credential.
 

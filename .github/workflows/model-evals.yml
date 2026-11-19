@@ -1,0 +1,68 @@
+# Paid model evals, once per phase: on pull requests into the main branch, and by hand. Issue pull
+# requests into a phase branch do not run them; developers run them locally, where the eval command
+# reads the key from the main checkout's .env.secrets (docs/testing.md, Evals-driven development).
+# The key comes from the repository secret ANTHROPIC_API_KEY and is given only to the step that
+# runs the evals.
+name: Model evals
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-admin:
+    name: MCP Admin model evals
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      POSTGRES_PASSWORD: ci-only-disposable-password
+      DATABASE_PASSWORD: ci-only-disposable-password
+    steps:
+      - uses: actions/checkout@v7
+      - name: Eval runner present
+        id: runner
+        run: |
+          if [ -f apps/mcp-admin/evals/run.js ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "apps/mcp-admin/evals/run.js does not exist on this revision; nothing to run."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.runner.outputs.present == 'true'
+        uses: pnpm/action-setup@v6
+      - if: steps.runner.outputs.present == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.runner.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.runner.outputs.present == 'true'
+        name: Postgres for the evals' API
+        run: docker compose --env-file .env.example up --detach --wait
+      - if: steps.runner.outputs.present == 'true'
+        name: Build MCP Admin and what it depends on
+        run: pnpm --filter "@sebela/mcp-admin..." build
+      - if: steps.runner.outputs.present == 'true'
+        name: Model evals and their gate
+        working-directory: apps/mcp-admin
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::The repository secret ANTHROPIC_API_KEY is not set."
+            exit 1
+          fi
+          node evals/run.js
+      - name: Redacted eval summary
+        if: ${{ !cancelled() && steps.runner.outputs.present == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-admin-evals
+          path: .tmp/evals/mcp-admin/
+          if-no-files-found: ignore

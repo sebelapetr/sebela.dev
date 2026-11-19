@@ -179,7 +179,10 @@ Installation needs no configuration. It installs exactly what `pnpm-lock.yaml` r
 
 ```sh
 cp .env.example .env
+cp .env.secrets.example .env.secrets && chmod 600 .env.secrets   # only when you run the paid model evals
 ```
+
+There are two files because agents may see one and never the other. `.env` holds the **settings**: ports, addresses, limits and the local database passwords; worktrees get their own generated `.env.local` from the same example, which their agents read and change. `.env.secrets` holds the **owner's keys for paid outside services**, today `ANTHROPIC_API_KEY` for the model evals (use a separate key with a low spend limit). It exists only in the main checkout: no worktree gets a copy, agents may not read it, and the commands that need a key load it themselves through `node harness/with-secrets.mjs -- <command>` ([environment files](docs/permissions.md#environment-files)). Never export the key in the shell that runs Claude Code or the phase loop: it would bill the agent sessions to it.
 
 Then replace the placeholder `POSTGRES_PASSWORD` in `.env` with a local password of your own, and set `DATABASE_USER` and `DATABASE_PASSWORD` to the role the main checkout's code connects as: no script creates one for it, so it uses `POSTGRES_USER` and that password. `.env.example` documents every setting; its other values are the main checkout's ports, the Postgres address and port and the user and database names. Compose reads `.env` next to `compose.yaml`; a variable set in your shell takes precedence. Environment files are ignored by Git — never commit them.
 
