@@ -1,9 +1,9 @@
 // The container policy of MCP Admin, validated locally without building or starting an image
 // (D22, D23): Compose renders its configuration with the documented example settings, and the
 // test reads which networks, settings and published addresses each service gets. The public edge
-// in front of the website is phase 10; here it is enough that only the API and the website share a
-// network with MCP Admin, that nothing reaches it from outside the host's loopback interface, and
-// that it holds no database or storage setting and no route to Postgres.
+// in front of the website is phase 10; here it is enough that MCP Admin shares a network with the
+// API only (not with the website or Postgres), that nothing reaches it from outside the host's
+// loopback interface, and that it holds no database or storage setting.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
@@ -99,12 +99,19 @@ describe("the MCP Admin container (D22, D23)", () => {
     expect(service("mcp-admin").volumes ?? []).toEqual([]);
   });
 
-  it("shares a network with the API only, never with Postgres", () => {
-    expect(networksOf("mcp-admin")).toEqual(["content"]);
+  it("shares a network with the API only, never with the website or Postgres", () => {
+    expect(networksOf("mcp-admin")).toEqual(["admin"]);
     expect(networksOf("postgres")).toEqual(["database"]);
     expect(networksOf("migrate")).toEqual(["database"]);
-    expect(networksOf("api")).toEqual(["content", "database"]);
+    expect(networksOf("api")).toEqual(["admin", "content", "database"]);
     expect(networksOf("web")).toEqual(["content"]);
+    const others = Object.keys(rendered.services).filter((name) => name !== "mcp-admin");
+    for (const name of others) {
+      const shared = networksOf(name).filter((network) =>
+        networksOf("mcp-admin").includes(network),
+      );
+      expect(shared, name).toEqual(name === "api" ? ["admin"] : []);
+    }
   });
 
   it("is published on the host's loopback interface only, like the API", () => {
@@ -116,7 +123,7 @@ describe("the MCP Admin container (D22, D23)", () => {
     }
   });
 
-  it("gives the public website no API key and no route to MCP Admin's port", () => {
+  it("gives the public website no API key and no MCP Admin setting", () => {
     const environment = service("web").environment ?? {};
     for (const name of Object.keys(environment)) {
       expect(name).not.toMatch(/API_KEY|MCP_ADMIN/);
