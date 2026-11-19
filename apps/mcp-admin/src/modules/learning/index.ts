@@ -74,7 +74,7 @@ export interface RecordChange {
 }
 
 export interface LearningTasks {
-  /** Resources whose name contains the query, or whose stored link equals a link query. */
+  /** Resources whose name or slug contains the query, or whose stored link equals a link query. */
   findResource(query: string): Promise<Outcome<FoundResources>>;
   /** Creates a resource at the end of an existing module. */
   addResource(resource: NewResource): Promise<Outcome<WriteResult>>;
@@ -224,7 +224,10 @@ export function createLearningTasks(content: CallerContent): LearningTasks {
           )
         : fold(wanted).length === 0
           ? []
-          : all.filter((resource) => fold(resource.name).includes(fold(wanted)));
+          : all.filter(
+              (resource) =>
+                fold(resource.name).includes(fold(wanted)) || resource.slug.includes(fold(wanted)),
+            );
       return {
         ok: true,
         value: {

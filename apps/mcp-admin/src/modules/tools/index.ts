@@ -165,12 +165,12 @@ export function createAdminServer(content: CallerContent): McpServer {
     {
       title: "Find a roadmap resource",
       description:
-        "Finds stored roadmap resources whose name contains the query, or whose stored link " +
-        "equals a link query. A link is only compared with stored links; the tool never opens " +
-        "or fetches it. Returns at most twenty candidates with their module and area; when " +
-        "several fit, ask the owner which one is meant.",
+        "Finds stored roadmap resources whose name or slug contains the query, or whose stored " +
+        "link equals a link query. A link is only compared with stored links; the tool never " +
+        "opens or fetches it. Returns at most twenty candidates with their module and area; " +
+        "when several fit, ask the owner which one is meant.",
       inputSchema: z.strictObject({
-        query: z.string().min(1).describe("Part of the resource's name, or its full link."),
+        query: z.string().min(1).describe("Part of the resource's name or slug, or its full link."),
       }),
       annotations: readOnly,
     },
