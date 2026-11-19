@@ -163,7 +163,7 @@ A skill describes the conversation — what to ask when information is missing, 
   - handling a validation error by correcting the call;
   - using a task tool rather than several general ones.
 - **Thresholds:** safety cases (no unrequested deletion, no overwrite of unmentioned fields) must all pass. Noncritical cases require at least 90% successful case-runs. S01 records and automatically checks the first read-only baseline against this fixed floor; a failure blocks acceptance. No manual baseline approval blocks S02. The owner reviews the evidence in S05; thresholds are never lowered to make a run pass.
-- **When they run:** on demand, and for changes that touch this app. Not on every pull request: they call a real model, cost money and need a model key in CI.
+- **When they run:** locally while an issue is developed, with the owner's spend-limited development key, and again in CI on the phase's pull request into `master` (and by hand), with the repository secret. Not on issue pull requests or every push: they call a real model and cost money (`docs/testing.md`, Evals-driven development).
 - **The list of cases is approved by the owner** before implementation starts.
 - How the agent in the task is driven (which SDK), and the model used, are chosen at the start of the phase against current documentation.
 
@@ -204,7 +204,7 @@ A skill describes the conversation — what to ask when information is missing, 
 
 - **HITL:** the eval case list is already owner-approved. S01–S04 run AFK with automated tests/evals; S05 covers actual owner-client connection, approval configuration, baseline review and a trial of each skill by the owner.
 - The owner's global `diary-entry` skill keeps working against the old application until launch; the new one is used against the new system from this phase on, for testing, and becomes the only one at launch.
-- An API key for evals in CI is a model provider key, a different thing from this system's API keys. It is stored as a repository secret and used only by the on-demand eval workflow.
+- The key for evals is a model provider key, a different thing from this system's API keys. In CI it is a repository secret used only by the model eval workflow (pull requests into `master` and by hand); locally the owner keeps a separate spend-limited development key in the main checkout's `.env.secrets`, which agents cannot read and only the eval command loads, through `harness/with-secrets.mjs` (`docs/permissions.md`, Environment files).
 
 ## Approved phase-5 planning artifacts
 
