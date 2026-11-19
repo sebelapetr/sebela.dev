@@ -9,15 +9,18 @@
 // own ephemeral API key and its own MCP server. The key reaches Promptfoo only through the
 // environment of its process, never as a test variable or prompt. The runner snapshots the
 // fixture's content before and after the run, so a case passes only when Promptfoo's graders pass
-// and nothing changed. It writes a redacted summary, never Promptfoo's raw output, to the checkout's
-// `.tmp/evals/mcp-admin/`, and exits 1 when the gate fails or a credential would leak.
+// and nothing changed. Promptfoo runs with an allowlisted environment (no database or other
+// checkout setting) and keeps its state and logs in the case-run's own folder; its raw output,
+// state and logs are scanned for credentials and deleted when the case-run ends, whatever happened.
+// The runner writes a redacted summary to the checkout's `.tmp/evals/mcp-admin/` and exits 1 when
+// the gate fails or a credential would leak.
 //
 // Budget: at most `implemented cases x repeats` model conversations (9 for S01), each limited by
 // max_tokens in promptfooconfig.yaml. Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -58,24 +61,49 @@ async function runCase(entry, repeat, folder) {
   const key = api.keys["eval"]?.key ?? "";
   try {
     const mcp = await startMcp({ apiUrl: api.url });
+    const name = `${entry.id}-${String(repeat)}`;
+    const raw = join(folder, `${name}.raw.json`);
+    const state = join(folder, `${name}.promptfoo`);
+    /** @type {unknown} */
+    let report;
+    let unchanged = false;
+    /** @type {unknown} */
+    let failure;
+    /** @type {string[]} */
+    let leaked = [];
     try {
       const before = await snapshot(api.url);
-      const raw = join(folder, `${entry.id}-${String(repeat)}.raw.json`);
-      await promptfoo(entry.id, raw, {
-        MCP_ADMIN_EVAL_URL: new URL("/mcp", mcp.url).href,
-        MCP_ADMIN_EVAL_KEY: key,
-        MCP_ADMIN_EVAL_SENTINELS: JSON.stringify(sentinels(key)),
-      });
+      await promptfoo(
+        entry.id,
+        raw,
+        promptfooEnvironment(
+          process.env,
+          {
+            MCP_ADMIN_EVAL_URL: new URL("/mcp", mcp.url).href,
+            MCP_ADMIN_EVAL_KEY: key,
+            MCP_ADMIN_EVAL_SENTINELS: JSON.stringify(sentinels(key)),
+          },
+          state,
+        ),
+      );
       const after = await snapshot(api.url);
-      const text = await readFile(raw, "utf8");
-      await rm(raw, { force: true });
-      if (sentinels(key).some((secret) => text.includes(secret))) {
-        throw new Error(`${entry.id}: Promptfoo's output contained a credential; it was deleted.`);
-      }
-      return summarize(entry, repeat, JSON.parse(text), before === after);
+      report = /** @type {unknown} */ (JSON.parse(await readFile(raw, "utf8")));
+      unchanged = before === after;
+    } catch (error) {
+      failure = error;
     } finally {
       await mcp.stop();
+      // Promptfoo's raw output, state and logs never outlive the case-run.
+      leaked = await removeLeakingFiles([raw, state], sentinels(key));
     }
+    // A leak outranks any other failure of the case-run.
+    if (leaked.length > 0) {
+      throw new Error(
+        `${entry.id}: Promptfoo's output or logs contained a credential; they were deleted.`,
+      );
+    }
+    if (failure !== undefined) throw failure;
+    return summarize(entry, repeat, report, unchanged);
   } finally {
     await api.stop();
   }
@@ -98,7 +126,7 @@ function sentinels(key) {
 /**
  * @param {string} caseId
  * @param {string} output
- * @param {NodeJS.ProcessEnv} env
+ * @param {Record<string, string>} env The complete environment of the Promptfoo process.
  */
 function promptfoo(caseId, output, env) {
   const args = [
@@ -121,14 +149,7 @@ function promptfoo(caseId, output, env) {
     const child = spawn("pnpm", args, {
       cwd: evalsFolder,
       stdio: ["ignore", "ignore", "inherit"],
-      env: {
-        ...process.env,
-        ...env,
-        TZ: "Europe/Prague",
-        PROMPTFOO_DISABLE_TELEMETRY: "1",
-        PROMPTFOO_DISABLE_SHARING: "1",
-        PROMPTFOO_DISABLE_UPDATE: "1",
-      },
+      env,
     });
     // Promptfoo exits 100 when an assertion failed; the summary carries that outcome.
     child.once("exit", (code) => {
@@ -139,27 +160,85 @@ function promptfoo(caseId, output, env) {
 }
 
 /**
+ * The environment of the Promptfoo process: only what pnpm, Node and the model provider need from
+ * the parent (no database, API key pepper or other setting of this checkout), the case's own
+ * values, and settings that keep Promptfoo's state and logs inside the run's state folder, without
+ * telemetry, sharing or update checks.
+ *
  * @param {NodeJS.ProcessEnv} parent
  * @param {Record<string, string>} values
  * @param {string} stateFolder
  * @returns {Record<string, string>}
  */
 export function promptfooEnvironment(parent, values, stateFolder) {
-  void parent;
-  void values;
-  void stateFolder;
-  throw new Error("Not implemented.");
+  /** @type {Record<string, string>} */
+  const env = {};
+  for (const name of INHERITED) {
+    const value = parent[name];
+    if (value !== undefined) env[name] = value;
+  }
+  return {
+    ...env,
+    ...values,
+    TZ: "Europe/Prague",
+    PROMPTFOO_CONFIG_DIR: stateFolder,
+    PROMPTFOO_LOG_DIR: join(stateFolder, "logs"),
+    PROMPTFOO_DISABLE_TELEMETRY: "1",
+    PROMPTFOO_DISABLE_SHARING: "1",
+    PROMPTFOO_DISABLE_UPDATE: "1",
+  };
+}
+
+/** Parent variables the Promptfoo process may see. */
+const INHERITED = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LANG",
+  "LC_ALL",
+  "TMPDIR",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "ANTHROPIC_API_KEY",
+];
+
+/**
+ * Reads every file under the given paths, reports those containing a secret and removes all the
+ * paths whatever it found. Missing paths are ignored.
+ *
+ * @param {string[]} paths
+ * @param {string[]} secrets
+ * @returns {Promise<string[]>} The files that contained a secret.
+ */
+export async function removeLeakingFiles(paths, secrets) {
+  /** @type {string[]} */
+  const leaked = [];
+  try {
+    for (const path of paths) {
+      for (const file of await filesUnder(path)) {
+        const text = await readFile(file, "utf8");
+        if (secrets.some((secret) => text.includes(secret))) leaked.push(file);
+      }
+    }
+  } finally {
+    await Promise.all(paths.map((path) => rm(path, { recursive: true, force: true })));
+  }
+  return leaked;
 }
 
 /**
- * @param {string[]} paths
- * @param {string[]} secrets
+ * @param {string} path
  * @returns {Promise<string[]>}
  */
-export function removeLeakingFiles(paths, secrets) {
-  void paths;
-  void secrets;
-  return Promise.reject(new Error("Not implemented."));
+async function filesUnder(path) {
+  const info = await stat(path).catch(() => undefined);
+  if (!info) return [];
+  if (!info.isDirectory()) return [path];
+  const entries = await readdir(path, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name));
 }
 
 /**
