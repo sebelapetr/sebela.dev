@@ -36,7 +36,8 @@ function call(name: string, input: unknown, output: unknown, isError = false): T
   return {
     name,
     input,
-    output: [{ type: "text", text: JSON.stringify(output) }],
+    // Promptfoo 0.126.0 records an MCP result as the JSON text of its content blocks.
+    output: JSON.stringify([{ type: "text", text: JSON.stringify(output) }]),
     is_error: isError,
   };
 }
@@ -81,6 +82,14 @@ describe("parseToolOutput", () => {
     expect(parseToolOutput([{ type: "text", text: '{"a":1}' }])).toEqual({ a: 1 });
     expect(parseToolOutput({ content: [{ type: "text", text: '{"a":1}' }] })).toEqual({ a: 1 });
     expect(parseToolOutput("plain")).toBe("plain");
+  });
+
+  it("reads JSON from the serialized content blocks Promptfoo records for an MCP result", () => {
+    expect(parseToolOutput(JSON.stringify([{ type: "text", text: '{"a":1}' }]))).toEqual({ a: 1 });
+    expect(
+      parseToolOutput(JSON.stringify({ content: [{ type: "text", text: '{"a":1}' }] })),
+    ).toEqual({ a: 1 });
+    expect(parseToolOutput(JSON.stringify([{ type: "text", text: "plain" }]))).toBe("plain");
   });
 });
 
