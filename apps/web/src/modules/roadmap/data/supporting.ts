@@ -4,6 +4,8 @@ import type {
   RoadmapProjectIdea,
 } from "@sebela/api-client";
 
+import { safeLink } from "./overview";
+
 /** A project idea as the overview lists it. */
 export interface ProjectIdeaRow {
   readonly slug: string;
@@ -51,6 +53,33 @@ export interface SupportingContent {
   readonly glossaryTerms: readonly RoadmapGlossaryTerm[];
 }
 
+/**
+ * The overview's supporting sections from the API's supporting content, each in the API's order:
+ * the project ideas numbered by it with their topics' names, the followed sources with a link only
+ * when it is safe to follow and their kind only when it names one, and the additional terms.
+ * Markdown is passed on as it is, for the page's safe prose to render.
+ */
 export function toSupportingSections(content: SupportingContent): SupportingSections {
-  throw new Error("not implemented", { cause: content });
+  return {
+    projectIdeas: content.projectIdeas.map((idea, index) => ({
+      slug: idea.slug,
+      order: `${String(index + 1)}.`,
+      title: idea.title,
+      whyItMatters: idea.whyItMatters,
+      howToStart: idea.howToStart,
+      topics: idea.topics.map((topic) => topic.name),
+    })),
+    followedSources: content.followedSources.map((source) => ({
+      slug: source.slug,
+      title: source.title,
+      kind: source.kind.trim() === "" ? null : source.kind.trim(),
+      description: source.description,
+      href: safeLink(source.link),
+    })),
+    glossaryTerms: content.glossaryTerms.map((term) => ({
+      slug: term.slug,
+      term: term.term,
+      description: term.description,
+    })),
+  };
 }
