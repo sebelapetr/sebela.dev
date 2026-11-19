@@ -19,11 +19,11 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.8",
+    "@hono/node-server": "catalog:",
     "@scalar/hono-api-reference": "0.12.20",
     "@sebela/contracts": "workspace:*",
     "@sebela/services": "workspace:*",
-    "hono": "4.13.18",
+    "hono": "catalog:",
     "zod": "catalog:",
     "zod-openapi": "6.0.2"
   },

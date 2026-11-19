@@ -176,6 +176,9 @@ catalogs:
     '@eslint/js':
       specifier: 10.0.1
       version: 10.0.1
+    '@hono/node-server':
+      specifier: 2.1.8
+      version: 2.1.8
     '@types/node':
       specifier: 26.6.6
       version: 26.6.6
@@ -191,6 +194,9 @@ catalogs:
     globals:
       specifier: 17.14.0
       version: 17.14.0
+    hono:
+      specifier: 4.13.18
+      version: 4.13.18
     lucide-react:
       specifier: 1.73.0
       version: 1.73.0
@@ -248,7 +254,7 @@ importers:
   apps/api:
     dependencies:
       '@hono/node-server':
-        specifier: 2.1.8
+        specifier: 'catalog:'
         version: 2.1.8(hono@4.13.18)
       '@scalar/hono-api-reference':
         specifier: 0.12.20
@@ -260,7 +266,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/services
       hono:
-        specifier: 4.13.18
+        specifier: 'catalog:'
         version: 4.13.18
       zod:
         specifier: 'catalog:'
@@ -294,7 +300,7 @@ importers:
   apps/mcp-admin:
     dependencies:
       '@hono/node-server':
-        specifier: 2.1.8
+        specifier: 'catalog:'
         version: 2.1.8(hono@4.13.18)
       '@modelcontextprotocol/hono':
         specifier: 2.0.2
@@ -309,7 +315,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
       hono:
-        specifier: 4.13.18
+        specifier: 'catalog:'
         version: 4.13.18
       zod:
         specifier: 'catalog:'

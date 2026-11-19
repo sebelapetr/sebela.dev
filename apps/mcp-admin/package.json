@@ -12,12 +12,12 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.8",
+    "@hono/node-server": "catalog:",
     "@modelcontextprotocol/hono": "2.0.2",
     "@modelcontextprotocol/server": "2.4.0",
     "@sebela/api-client": "workspace:*",
     "@sebela/contracts": "workspace:*",
-    "hono": "4.13.18",
+    "hono": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
