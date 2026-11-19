@@ -287,6 +287,12 @@ function describedNames(description) {
       const named = node[key];
       if (isRecord(named)) for (const name of Object.keys(named)) names.add(name);
     }
+    // `true` and `false` are the values of a boolean field the contract describes, not guesses.
+    const types = Array.isArray(node["type"]) ? node["type"] : [node["type"]];
+    if (types.includes("boolean")) {
+      names.add("true");
+      names.add("false");
+    }
     const values = [...(Array.isArray(node["enum"]) ? node["enum"] : []), node["const"]];
     for (const value of values) if (typeof value === "string") names.add(value);
     // An example the contract quotes itself, such as "for example `paldock`", is not a guess.
