@@ -132,4 +132,29 @@ describe("persistence transactions", () => {
       { record: "audited", keyName: "fixture-admin" },
     ]);
   });
+
+  it("serializes audited writes: a second waits for the first to commit", async () => {
+    const order: string[] = [];
+    const hold = Promise.withResolvers<undefined>();
+    const locked = Promise.withResolvers<undefined>();
+
+    const first = persistence.transaction(async (_profile, _roadmap, audit) => {
+      await audit.serializeWrites();
+      locked.resolve(undefined);
+      await hold.promise;
+      order.push("first commits");
+    });
+    // A first transaction that fails fails the test at once instead of waiting forever.
+    await Promise.race([locked.promise, first]);
+    const second = persistence.transaction(async (_profile, _roadmap, audit) => {
+      await audit.serializeWrites();
+      order.push("second runs");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    order.push("first released");
+    hold.resolve(undefined);
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(["first released", "first commits", "second runs"]);
+  });
 });

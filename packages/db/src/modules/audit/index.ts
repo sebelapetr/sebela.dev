@@ -39,6 +39,12 @@ export interface AuditPersistence {
    * transaction rolls back.
    */
   recordChanges(entries: readonly AuditEntryInput[]): Promise<void>;
+  /**
+   * Waits until no other audited write is running, then holds that position until the caller's
+   * transaction ends, so the before and after an audited write reads are exactly its own. Call it
+   * first inside the transaction; outside one it holds nothing.
+   */
+  serializeWrites(): Promise<void>;
   /** The newest changes first, at most `limit`. */
   listRecentChanges(limit: number): Promise<AuditEntryRecord[]>;
 }
@@ -62,6 +68,8 @@ export function createAuditPersistence(db: Database): AuditPersistence {
         })),
       );
     },
+
+    serializeWrites: () => Promise.reject(new Error("Not implemented.")),
 
     async listRecentChanges(limit) {
       const rows = await db
