@@ -248,6 +248,49 @@ test("the password is not part of the result and the file is readable only by it
   assert.equal(fs.statSync(envPath).mode & 0o077, 0);
 });
 
+// A main checkout whose owner's `.env` holds the given text, and a worktree created from it.
+function withOwnerEnv(t, ownerEnv) {
+  const mainRoot = mainCheckout(t);
+  if (ownerEnv !== null) fs.writeFileSync(path.join(mainRoot, ".env"), ownerEnv);
+  const databases = fakeDatabases();
+  const worktree = createWorktree({
+    mainRoot,
+    branch: "feat/evals",
+    env: {},
+    databases,
+    backend: fakeBackend(databases),
+  });
+  return parseEnv(fs.readFileSync(path.join(worktree.path, ".env.local"), "utf8"));
+}
+
+test("a new worktree gets the owner's model eval key from the main checkout's .env", (t) => {
+  const settings = withOwnerEnv(
+    t,
+    "POSTGRES_PASSWORD=superuser-secret\nANTHROPIC_API_KEY=sk-ant-fixture-eval-key\n",
+  );
+
+  assert.equal(settings.ANTHROPIC_API_KEY, "sk-ant-fixture-eval-key");
+});
+
+test("nothing else from the main checkout's .env reaches a worktree", (t) => {
+  const settings = withOwnerEnv(
+    t,
+    "POSTGRES_PASSWORD=superuser-secret\nANTHROPIC_API_KEY=sk-ant-fixture-eval-key\nOTHER_SECRET=x\n",
+  );
+
+  assert.equal(settings.POSTGRES_PASSWORD, undefined);
+  assert.equal(settings.OTHER_SECRET, undefined);
+});
+
+test("without a key in the main checkout's .env, or without that file, a worktree has none", (t) => {
+  assert.equal(
+    withOwnerEnv(t, "POSTGRES_PASSWORD=superuser-secret\n").ANTHROPIC_API_KEY,
+    undefined,
+  );
+  assert.equal(withOwnerEnv(t, "ANTHROPIC_API_KEY=\n").ANTHROPIC_API_KEY, undefined);
+  assert.equal(withOwnerEnv(t, null).ANTHROPIC_API_KEY, undefined);
+});
+
 test("worktrees get different passwords", (t) => {
   const { databases, create, worktree } = fixture(t);
   const other = create("feat/other");
