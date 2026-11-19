@@ -750,21 +750,44 @@ function claimsReplacement(text) {
     );
 }
 
+const NAMES_CV = /\bcv\b|zivotopis|\bpdf\b/;
+const ASKS_TO_REVIEW = /review|replac|updat|upload|zkontrol|prohled|nahrad|nahraj|nahrat|aktualiz/g;
+const NEGATED_ENGLISH = /\b(?:not|never|n't|won't)\s+(?:be\s+|been\s+|get\s+)?$/;
+const REFERS_BACK = /\b(?:it|ho|jej|ji)\b/;
+
 /**
- * Whether a folded answer has a sentence that names the CV or its PDF and asks to review, replace
- * or update it; a mere mention of the CV is not a reminder.
+ * Whether a folded sentence asks to review, replace, update or upload something. A negated verb
+ * ("neaktualizuje", "is not updated", "won't be replaced") states a fact and is no request.
+ *
+ * @param {string} sentence
+ * @returns {boolean}
+ */
+function asksToReview(sentence) {
+  return [...sentence.matchAll(ASKS_TO_REVIEW)].some((match) => {
+    const before = sentence.slice(0, match.index);
+    return !/(?:^|[^a-z])ne$/.test(before) && !NEGATED_ENGLISH.test(before);
+  });
+}
+
+/**
+ * Whether a folded answer reminds the owner to review or replace the CV: a sentence that names
+ * the CV or its PDF and asks for it, or a sentence naming it followed, within the next two
+ * sentences, by one that asks for "it" ("ho", "jej", "ji"). A mere mention of the CV, or a negated
+ * verb, is not a reminder.
  *
  * @param {string} text
  * @returns {boolean}
  */
 function remindsToReviewCv(text) {
-  return text
-    .split(/[.!?\n]+/)
-    .some(
-      (sentence) =>
-        /\bcv\b|zivotopis|\bpdf\b/.test(sentence) &&
-        /review|replac|updat|zkontrol|prohled|nahrad|aktualiz/.test(sentence),
-    );
+  const sentences = text.split(/[.!?\n]+/);
+  return sentences.some(
+    (sentence, index) =>
+      NAMES_CV.test(sentence) &&
+      (asksToReview(sentence) ||
+        sentences
+          .slice(index + 1, index + 3)
+          .some((next) => REFERS_BACK.test(next) && asksToReview(next))),
+  );
 }
 
 /**
