@@ -20,7 +20,7 @@ The website's CV facts are the owner's structured content: the person (name, hea
 2. **Apply exactly the intended change.** Put only the fields the owner asked to change into `fields`, with the exact text the owner gave. Never resend unchanged fields, fill in other fields or invent facts (roles, employers, dates, numbers). When the owner gives a direction rather than a value, propose concrete wording from stored facts and ask the owner to confirm it before saving.
 3. **State the change, then save.** Before the `save`, tell the owner the record, each field you will change and its old and new value. The owner's client shows the `save` for review; a `declined` result means it was not approved: do not retry it.
 4. **Report what happened.** After a successful `save`, say which fields changed, with the new value.
-5. **Remind the owner about the CV PDF.** The CV PDF is not derived from the content and does not change with it. After a change to a fact the CV shows, remind the owner that the attached CV PDF may now be out of date and that they should review it and, if needed, replace it with an updated PDF they prepare.
+5. **Remind the owner about the CV PDF.** The CV PDF is not derived from the content and does not change with it. After a change to a fact the CV shows, remind the owner that the attached CV PDF may now be out of date and that they should review it and, if needed, replace it with an updated PDF they prepare. Put the reminder in one sentence that names the CV PDF and says to review or replace it, for example "Review the CV PDF and replace it if it no longer matches." (in the owner's language), so it cannot be read as a loose remark.
 
 ## The CV PDF
 
