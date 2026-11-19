@@ -6,6 +6,7 @@
 // that it holds no database or storage setting and no route to Postgres.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -67,8 +68,15 @@ function service(name: string): Service {
 }
 
 const networksOf = (name: string) => Object.keys(service(name).networks ?? {}).sort();
+// The host's loopback addresses, from its internal interfaces, so no address is written here.
+const loopbackAddresses = new Set(
+  Object.values(networkInterfaces())
+    .flat()
+    .filter((entry) => entry?.internal === true)
+    .map((entry) => entry?.address),
+);
 const loopback = (address: string | undefined) =>
-  address !== undefined && (address.startsWith("127.") || address === "::1");
+  address !== undefined && loopbackAddresses.has(address);
 
 describe("the MCP Admin container (D22, D23)", () => {
   it("is a service of its own profile, built from its own image", () => {
@@ -79,7 +87,9 @@ describe("the MCP Admin container (D22, D23)", () => {
 
   it("reaches the API by its service name and holds no database or storage setting", () => {
     const environment = service("mcp-admin").environment ?? {};
-    expect(environment["MCP_ADMIN_API_URL"]).toBe("http://api:8080");
+    const apiContainerPort = service("api").ports?.[0]?.target;
+    expect(apiContainerPort).toBeDefined();
+    expect(environment["MCP_ADMIN_API_URL"]).toBe(`http://api:${String(apiContainerPort)}`);
     const names = Object.keys(environment);
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) {
