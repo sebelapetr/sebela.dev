@@ -366,24 +366,23 @@ describe("the website invalidation sender over HTTP", () => {
     answer = "ok";
   });
 
-  it("delivers bytes the website verifies, and gives up on a website that never answers", async () => {
+  it("delivers bytes the website verifies in one attempt", async () => {
     const lines: string[] = [];
+    // A generous timeout: a slow runner must not turn the delivery into a timed-out retry.
     const invalidation = createWebsiteInvalidation({
       url: destination,
       secret: SECRET,
       log: (line) => lines.push(line),
-      timeoutMs: 200,
+      timeoutMs: 30_000,
       retryDelaysMs: [1, 1],
     });
 
     await invalidation.notify({ change });
     await invalidation.idle();
-    answer = "hang";
-    await invalidation.notify({ change });
-    await invalidation.idle();
     await invalidation.close();
 
-    expect(received).toHaveLength(4);
+    expect(received).toHaveLength(1);
+    expect(lines).toEqual([]);
     const [first] = received;
     if (!first) throw new Error("nothing was received");
     const header = (name: string) => {
@@ -398,7 +397,29 @@ describe("the website invalidation sender over HTTP", () => {
       now: Date.now(),
     });
     expect(verification).toMatchObject({ ok: true, notification: { changes: [change] } });
-    expect(lines.join("\n")).toMatch(/gave up/);
+  });
+
+  it("times out every attempt on a website that never answers, then gives up", async () => {
+    answer = "hang";
+    const lines: string[] = [];
+    const invalidation = createWebsiteInvalidation({
+      url: destination,
+      secret: SECRET,
+      log: (line) => lines.push(line),
+      timeoutMs: 1000,
+      retryDelaysMs: [1, 1],
+    });
+
+    await invalidation.notify({ change });
+    await invalidation.idle();
+    await invalidation.close();
+
+    expect(received).toHaveLength(3);
+    expect(lines).toHaveLength(4);
+    expect(lines.slice(0, 3).every((line) => /attempt \d failed: TimeoutError$/.test(line))).toBe(
+      true,
+    );
+    expect(lines[3]).toMatch(/gave up after 3 attempts$/);
   });
 });
 
