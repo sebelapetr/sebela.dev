@@ -284,6 +284,18 @@ export function summarize(entry, repeat, report, unchanged) {
   };
 }
 
+/**
+ * The provider usage of a whole evaluation: case-runs, prompt/completion/total tokens and cost as
+ * Promptfoo reported them per case-run, and the average cost per conversation. Case-runs without a
+ * usage report still count as conversations and are counted in `unreported`.
+ *
+ * @param {readonly { tokens?: { prompt?: number, completion?: number, total?: number } | null, cost?: number | null }[]} runs
+ * @returns {{ conversations: number, unreported: number, tokens: { prompt: number, completion: number, total: number }, cost: number, costPerConversation: number | null }}
+ */
+export function totals(runs) {
+  throw new Error(`totals is not implemented (${String(runs.length)} runs)`);
+}
+
 async function main() {
   // The process environment wins, then this checkout's files, then the documented examples.
   for (const name of [".env.local", ".env", ".env.example"]) {

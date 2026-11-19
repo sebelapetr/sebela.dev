@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { evaluateGate, type CaseRun } from "./gate.js";
 import { gradeE01, gradeE02, gradeE29, parseToolOutput, type ToolCall } from "./graders.js";
-import { promptfooEnvironment, removeLeakingFiles, summarize } from "./run.js";
+import { promptfooEnvironment, removeLeakingFiles, summarize, totals } from "./run.js";
 import generateTests from "./tests.js";
 
 const person = {
@@ -395,5 +395,32 @@ describe("summarize", () => {
 
   it("fails when Promptfoo produced no single result", () => {
     expect(summarize(entry, 1, { results: { results: [] } }, true).pass).toBe(false);
+  });
+});
+
+describe("totals", () => {
+  it("adds up the provider tokens and cost of every case-run as Promptfoo reported them", () => {
+    const result = totals([
+      { tokens: { prompt: 1000, completion: 200, total: 1200 }, cost: 0.02 },
+      { tokens: { prompt: 500, completion: 100, total: 600 }, cost: 0.01 },
+    ]);
+    expect(result.conversations).toBe(2);
+    expect(result.tokens).toEqual({ prompt: 1500, completion: 300, total: 1800 });
+    expect(result.cost).toBeCloseTo(0.03, 10);
+    expect(result.costPerConversation).toBeCloseTo(0.015, 10);
+  });
+
+  it("counts case-runs without a usage report and says how many lacked one", () => {
+    const result = totals([
+      { tokens: { prompt: 10, completion: 5, total: 15 }, cost: 0.001 },
+      { caseId: "E01", pass: false },
+    ]);
+    expect(result.conversations).toBe(2);
+    expect(result.unreported).toBe(1);
+    expect(result.tokens).toEqual({ prompt: 10, completion: 5, total: 15 });
+  });
+
+  it("reports no average for an empty run", () => {
+    expect(totals([])).toMatchObject({ conversations: 0, cost: 0, costPerConversation: null });
   });
 });
