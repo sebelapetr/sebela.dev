@@ -293,7 +293,23 @@ export function summarize(entry, repeat, report, unchanged) {
  * @returns {{ conversations: number, unreported: number, tokens: { prompt: number, completion: number, total: number }, cost: number, costPerConversation: number | null }}
  */
 export function totals(runs) {
-  throw new Error(`totals is not implemented (${String(runs.length)} runs)`);
+  const tokens = { prompt: 0, completion: 0, total: 0 };
+  let cost = 0;
+  let unreported = 0;
+  for (const run of runs) {
+    if (!run.tokens && typeof run.cost !== "number") unreported += 1;
+    tokens.prompt += run.tokens?.prompt ?? 0;
+    tokens.completion += run.tokens?.completion ?? 0;
+    tokens.total += run.tokens?.total ?? 0;
+    cost += run.cost ?? 0;
+  }
+  return {
+    conversations: runs.length,
+    unreported,
+    tokens,
+    cost,
+    costPerConversation: runs.length === 0 ? null : cost / runs.length,
+  };
 }
 
 async function main() {
@@ -345,11 +361,12 @@ async function main() {
       noncriticalFloor: gates.noncriticalFloor,
     },
     gate,
+    usage: totals(runs),
     runs,
   };
   await writeFile(join(folder, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   process.stdout.write(
-    `${JSON.stringify({ gate, report: join(folder, "summary.json") }, null, 2)}\n`,
+    `${JSON.stringify({ gate, usage: summary.usage, report: join(folder, "summary.json") }, null, 2)}\n`,
   );
   if (!gate.pass) process.exitCode = 1;
 }

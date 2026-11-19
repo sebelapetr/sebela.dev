@@ -413,7 +413,7 @@ describe("totals", () => {
   it("counts case-runs without a usage report and says how many lacked one", () => {
     const result = totals([
       { tokens: { prompt: 10, completion: 5, total: 15 }, cost: 0.001 },
-      { caseId: "E01", pass: false },
+      { tokens: null, cost: null },
     ]);
     expect(result.conversations).toBe(2);
     expect(result.unreported).toBe(1);
