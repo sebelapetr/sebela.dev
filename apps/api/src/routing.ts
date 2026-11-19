@@ -85,10 +85,13 @@ export interface FileResponse {
  * is audited as its content domain, for the person or the record its `slug`, `id` or `date` path
  * parameter names, or else the record the result's `slug` or `id` names.
  */
-export interface RouteAudit<Params = unknown, Result = unknown> {
+export interface RouteAudit<Params = unknown, Result = unknown, Body = unknown> {
   readonly entity: AuditEntity;
-  /** The records the write addresses before it runs; none for a create. */
-  records(params: Params): readonly (string | null)[];
+  /**
+   * The records the write addresses before it runs, from its path parameters or its validated body
+   * (such as the diary days a session will write); none for a create.
+   */
+  records(params: Params, body: Body): readonly (string | null)[];
   /** Further records only the result names, such as the entries a write created. */
   recordsOf?(result: Result): readonly (string | null)[];
 }
@@ -118,7 +121,7 @@ export function defineRoute<Body = undefined, Params = undefined, Result = unkno
     readonly params?: z.ZodObject & z.ZodType<Params>;
     handle(input: { readonly body: Body; readonly params: Params }): Promise<Result>;
     records?(input: { readonly params: Params; readonly result: Result }): readonly string[];
-    readonly audit?: RouteAudit<NoInfer<Params>, NoInfer<Result>>;
+    readonly audit?: RouteAudit<NoInfer<Params>, NoInfer<Result>, NoInfer<Body>>;
   },
 ): RouteDefinition {
   return route;

@@ -111,6 +111,26 @@ export const TimeEntryUpdateSchema = z
   .superRefine(endFollowsStart)
   .meta({ id: "TimeEntryUpdate" });
 
+/**
+ * Body of logging a session in one write: the fields of a time entry and optional Markdown notes.
+ * The time is split at local midnight as for a time entry; the notes are appended to the notes of
+ * the session's first Prague day, after a blank line, and the day's earlier notes stay. Either the
+ * time and the notes are both written, or neither is.
+ */
+export const RoadmapSessionCreateSchema = z
+  .strictObject({
+    ...timeEntryFields,
+    resource: timeEntryFields.resource.optional(),
+    event: timeEntryFields.event.optional(),
+    notes: z.string().trim().min(1).max(50_000).optional().meta({
+      description:
+        "Markdown appended to the notes of the session's first day; earlier notes are kept.",
+    }),
+  })
+  .superRefine(oneTarget(true))
+  .superRefine(endFollowsStart)
+  .meta({ id: "RoadmapSessionCreate" });
+
 /** Body of writing a day's notes; it replaces the notes and keeps the day's time entries. */
 export const DiaryNotesWriteSchema = z
   .strictObject({
@@ -190,6 +210,7 @@ export type DiaryDateParams = z.infer<typeof DiaryDateParamsSchema>;
 export type TimeEntryIdParams = z.infer<typeof TimeEntryIdParamsSchema>;
 export type TimeEntryCreate = z.output<typeof TimeEntryCreateSchema>;
 export type TimeEntryUpdate = z.output<typeof TimeEntryUpdateSchema>;
+export type RoadmapSessionCreate = z.output<typeof RoadmapSessionCreateSchema>;
 export type DiaryNotesWrite = z.output<typeof DiaryNotesWriteSchema>;
 export type DiaryResource = z.infer<typeof DiaryResourceSchema>;
 export type TimeEntry = z.infer<typeof TimeEntrySchema>;

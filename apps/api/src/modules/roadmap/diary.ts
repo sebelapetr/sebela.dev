@@ -1,19 +1,21 @@
 // The learning diary's HTTP routes, private to the roadmap module and part of its routes: public
 // reads of the diary and of one Prague calendar day, and authenticated writes of a day's notes and
-// of time entries on a resource or an event. Each write reports every diary day it changed, so the
-// website refreshes the old and the new day; a time-entry write is audited per time entry.
+// of time entries on a resource or an event, and a session that logs time and appends notes in one
+// write. Each write reports every diary day it changed, so the website refreshes the old and the new
+// day; a time-entry write is audited per time entry, a session per diary day.
 import {
   DiaryDateParamsSchema,
   DiaryDaySchema,
   DiaryNotesWriteSchema,
   DiarySchema,
+  RoadmapSessionCreateSchema,
   TimeEntryCreateSchema,
   TimeEntryIdParamsSchema,
   TimeEntryUpdateSchema,
   TimeEntryWriteSchema,
   type TimeEntryWrite,
 } from "@sebela/contracts";
-import type { RoadmapService } from "@sebela/services";
+import { sessionDiaryDates, type RoadmapService } from "@sebela/services";
 
 import { defineRoute, type RouteDefinition } from "../../routing.js";
 
@@ -21,6 +23,7 @@ const DIARY = "/v1/roadmap/diary";
 const DAY = "/v1/roadmap/diary/:date";
 const TIME_ENTRIES = "/v1/roadmap/time-entries";
 const TIME_ENTRY = "/v1/roadmap/time-entries/:id";
+const SESSIONS = "/v1/roadmap/sessions";
 
 const SESSION_RULES =
   "Give both endpoints as absolute instants with an offset, in whole seconds, the end after the " +
@@ -128,6 +131,33 @@ export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
       handle: ({ body }) => roadmap.createTimeEntry(body),
       records: writtenDays,
       audit: { entity: TIME_ENTRY_AUDIT, records: () => [], recordsOf: writtenEntries },
+    }),
+    defineRoute({
+      operationId: "logRoadmapSession",
+      method: "POST",
+      content: "roadmap-diary",
+      path: SESSIONS,
+      access: "private",
+      summary: "Log a study session with diary notes",
+      description:
+        `${SESSION_RULES} Optional Markdown \`notes\` are appended after a blank line to the ` +
+        "notes of the session's first diary day, or start them; earlier notes stay. The entries " +
+        "and the notes are written in one transaction: a refused session changes neither. The " +
+        "write is audited per diary day it touches.",
+      body: RoadmapSessionCreateSchema,
+      response: {
+        status: 201,
+        description: "The written entries and the diary days they belong to.",
+        schema: TimeEntryWriteSchema,
+      },
+      errors: ["conflict"],
+      handle: ({ body }) => roadmap.logSession(body),
+      records: writtenDays,
+      audit: {
+        entity: "roadmap-diary",
+        records: (_params, body) => sessionDiaryDates(body.startedAt, body.endedAt),
+        recordsOf: (result) => result.dates,
+      },
     }),
     defineRoute({
       operationId: "updateRoadmapTimeEntry",

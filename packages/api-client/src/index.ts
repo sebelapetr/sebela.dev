@@ -118,6 +118,7 @@ export type DiaryResource = Schemas["DiaryResource"];
 export type DiaryEvent = Schemas["DiaryEvent"];
 export type DiaryNotesWrite = Schemas["DiaryNotesWrite"];
 export type TimeEntry = Schemas["TimeEntry"];
+export type RoadmapSessionCreate = Schemas["RoadmapSessionCreate"];
 export type TimeEntryCreate = Schemas["TimeEntryCreate"];
 export type TimeEntryUpdate = Schemas["TimeEntryUpdate"];
 export type TimeEntryWrite = Schemas["TimeEntryWrite"];

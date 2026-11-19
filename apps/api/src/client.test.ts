@@ -1375,6 +1375,27 @@ describe("the generated API client", () => {
     });
     expect(unknown.error?.error.fields?.map(({ path }) => path)).toEqual(["resource"]);
 
+    const evening = {
+      resource: "diary-guide",
+      startedAt: "2026-03-02T20:00:00+01:00",
+      endedAt: "2026-03-02T21:00:00+01:00",
+      notes: "Then the *exercises*.",
+    };
+    const logged = await client.POST("/v1/roadmap/sessions", { body: evening });
+    const loggedWrite: TimeEntryWrite | undefined = logged.data;
+    expect(logged.response.status).toBe(201);
+    expect(loggedWrite?.dates).toEqual(["2026-03-02"]);
+    const repeated = await client.POST("/v1/roadmap/sessions", { body: evening });
+    expect(repeated.error?.error.code).toBe("conflict");
+    const withNotes = await visitor.GET("/v1/roadmap/diary/{date}", day("2026-03-02"));
+    expect(withNotes.data?.notes).toBe("A *fictional* evening.\n\nThen the *exercises*.");
+    for (const entry of loggedWrite?.entries ?? []) {
+      const removed = await client.DELETE("/v1/roadmap/time-entries/{id}", {
+        params: { path: { id: entry.id } },
+      });
+      expect(removed.response.status).toBe(204);
+    }
+
     const read = await visitor.GET("/v1/roadmap/diary");
     const diary: Diary | undefined = read.data;
     expect(diary?.days.map(({ date, totalSeconds }) => [date, totalSeconds])).toEqual([
