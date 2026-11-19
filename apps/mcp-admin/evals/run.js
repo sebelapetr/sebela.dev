@@ -2,7 +2,8 @@
 
 // Runs the implemented model evals of the administrative MCP server and applies their gates.
 //
-//   node evals/run.js                 every implemented case, the required repeats (paid)
+//   node evals/run.js                 every implemented case, the required repeats (paid; run it as
+//                                     `pnpm --filter @sebela/mcp-admin eval`, which supplies the key)
 //   node evals/run.js --check-fixture start and stop one fixture, no model call (free)
 //
 // Every case-run gets its own API on a fresh temporary database seeded from `fixtures/s01`, its

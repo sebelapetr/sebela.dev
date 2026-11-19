@@ -41,7 +41,7 @@ Rate limits are fixed windows in memory, per process, bounded by `MCP_ADMIN_RATE
 | Start (reads the environment, see below)                                                       | `node --env-file-if-exists=../../.env.local dist/server.js` in this folder, or set the variables yourself |
 | Tests (needs the running Postgres and the API build for the end-to-end and eval-harness tests) | `pnpm --filter @sebela/mcp-admin test`                                                                    |
 | Check that the eval fixture starts (free)                                                      | `node evals/run.js --check-fixture`                                                                       |
-| Model evals (paid, needs `ANTHROPIC_API_KEY`)                                                  | `node evals/run.js`                                                                                       |
+| Model evals (paid; the owner's model key comes only through `harness/with-secrets.mjs`)        | `pnpm --filter @sebela/mcp-admin eval`                                                                    |
 
 The server logs `MCP Admin listening on <url>` once it listens and stops cleanly on SIGTERM or SIGINT: it ends in-flight MCP exchanges and closes its socket.
 
