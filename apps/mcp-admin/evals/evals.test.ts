@@ -1326,6 +1326,12 @@ describe("S04 graders", () => {
     );
     expect(grade(`${changed} Nahraj prosím nový životopis v PDF.`)).toBe(true);
     expect(
+      grade(`${changed} CV PDF se nemění. Může být zastaralé. Zkontroluj ho a nahraj nové.`),
+    ).toBe(true);
+    expect(grade(`${changed} The CV PDF shows it too. That is all. I updated the profile.`)).toBe(
+      false,
+    );
+    expect(
       grade(`${changed} Your CV PDF still shows the old one. Review it and upload a new one.`),
     ).toBe(true);
 
