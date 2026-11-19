@@ -661,4 +661,21 @@ describe("secrets stay out of answers and logs (D15)", () => {
       }
     }
   });
+
+  it("answers an unexpected failure with a fixed 500 and logs a redacted line about it", async () => {
+    const { fetch, lines } = open({
+      now: () => {
+        throw new TypeError(`clock broke for ${KEY_A}`);
+      },
+    });
+
+    const response = await send(fetch, "/mcp", rpc(initialize, bearer(KEY_A)));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: { code: "internal", message: "Something went wrong." },
+    });
+    expect(lines).toContain("POST /mcp internal error: TypeError");
+    for (const line of lines) expect(line).not.toContain(KEY_A.split("_")[2]);
+  });
 });
