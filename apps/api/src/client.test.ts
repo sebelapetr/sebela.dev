@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createApiClient,
   type ApiClient,
+  type AuditChange,
   type AuthenticationCheck,
   type Cv,
   type Diary,
@@ -15,6 +16,7 @@ import {
   type LearningTimeResource,
   type LearningTimeResourceCategory,
   type MediaUpload,
+  type RecentChanges,
   type Roadmap,
   type RoadmapAreaDetail,
   type RoadmapBook,
@@ -1722,5 +1724,49 @@ describe("the generated API client", () => {
     await backend.services.profile.deleteTopic("client-agents");
 
     expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+
+  it("states provenance on a write and reads the audited change back with the key", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+
+    const created = await client.POST("/v1/technologies", {
+      params: { header: { "sebela-provenance": "mcp-admin/create_technology" } },
+      body: { slug: "client-audited", name: "Audited", tier: "secondary", position: 0 },
+    });
+    expect(created.response.status).toBe(201);
+
+    const invalid = await client.DELETE("/v1/technologies/{slug}", {
+      params: { path: { slug: "client-audited" }, header: { "sebela-provenance": "Not Valid" } },
+    });
+    expect(invalid.error?.error.fields?.map(({ path }) => path)).toContain("provenance");
+
+    const read = await client.GET("/v1/audit/changes");
+    expect(read.response.status).toBe(200);
+    const recent: RecentChanges | undefined = read.data;
+    const newest: AuditChange | undefined = recent?.changes[0];
+    expect(newest).toMatchObject({
+      actor: { keyName: "consumer contract" },
+      operation: { operationId: "createTechnology", method: "POST", route: "/v1/technologies" },
+      provenance: "mcp-admin/create_technology",
+      entity: "technology",
+      record: "client-audited",
+      action: "created",
+      before: null,
+      after: { slug: "client-audited", name: "Audited" },
+    });
+    expect(authorizations).toEqual([`Bearer ${key}`, `Bearer ${key}`, `Bearer ${key}`]);
+
+    const refused = await visitor.GET("/v1/audit/changes");
+    expect(refused.response.status).toBe(401);
+    expect(refused.data).toBeUndefined();
+
+    expect(
+      (
+        await client.DELETE("/v1/technologies/{slug}", {
+          params: { path: { slug: "client-audited" } },
+        })
+      ).response.status,
+    ).toBe(204);
   });
 });

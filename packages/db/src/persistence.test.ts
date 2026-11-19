@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readDatabaseConfig } from "./config.js";
@@ -92,5 +94,67 @@ describe("persistence transactions", () => {
     await expect(persistence.roadmap.findRoadmapArea("basics")).resolves.toBeNull();
     await expect(persistence.roadmap.findRoadmapModule("retrieval")).resolves.toBeNull();
     await expect(persistence.profile.findTopic("rag")).resolves.toBeNull();
+  });
+
+  it("gives the work audit persistence, so a refused audit entry rolls the content back", async () => {
+    const key = await persistence.apiKeys.insertKey({
+      name: "fixture-admin",
+      publicId: "pubtransaction",
+      secretHash: "hash",
+    });
+    const change = {
+      keyId: key.id,
+      operationId: "createTopic",
+      method: "POST",
+      route: "/v1/topics",
+      provenance: null,
+      entity: "topic",
+      record: "audited",
+      action: "created",
+      before: null,
+      after: { slug: "audited" },
+    } as const;
+
+    await persistence.transaction(async (profile, _roadmap, audit) => {
+      await profile.createTopic({ slug: "audited", name: "Audited", position: 5 });
+      await audit.recordChanges([change]);
+    });
+    await expect(
+      persistence.transaction(async (profile, _roadmap, audit) => {
+        await profile.createTopic({ slug: "unaudited", name: "Unaudited", position: 6 });
+        await audit.recordChanges([{ ...change, record: "unaudited", keyId: randomUUID() }]);
+      }),
+    ).rejects.toThrow();
+
+    await expect(persistence.profile.findTopic("audited")).resolves.not.toBeNull();
+    await expect(persistence.profile.findTopic("unaudited")).resolves.toBeNull();
+    await expect(persistence.audit.listRecentChanges(10)).resolves.toMatchObject([
+      { record: "audited", keyName: "fixture-admin" },
+    ]);
+  });
+
+  it("serializes audited writes: a second waits for the first to commit", async () => {
+    const order: string[] = [];
+    const hold = Promise.withResolvers<undefined>();
+    const locked = Promise.withResolvers<undefined>();
+
+    const first = persistence.transaction(async (_profile, _roadmap, audit) => {
+      await audit.serializeWrites();
+      locked.resolve(undefined);
+      await hold.promise;
+      order.push("first commits");
+    });
+    // A first transaction that fails fails the test at once instead of waiting forever.
+    await Promise.race([locked.promise, first]);
+    const second = persistence.transaction(async (_profile, _roadmap, audit) => {
+      await audit.serializeWrites();
+      order.push("second runs");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    order.push("first released");
+    hold.resolve(undefined);
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(["first released", "first commits", "second runs"]);
   });
 });

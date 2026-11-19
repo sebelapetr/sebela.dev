@@ -295,6 +295,16 @@ export type {
   InvalidationVerification,
 } from "./modules/invalidation/index.js";
 export {
+  AuditChangeSchema,
+  AuditProvenanceSchema,
+  RecentChangesSchema,
+  auditEntities,
+  auditProvenanceHeader,
+  auditProvenanceMaxLength,
+  recentChangesLimit,
+} from "./modules/audit/index.js";
+export type { AuditChange, AuditEntity, RecentChanges } from "./modules/audit/index.js";
+export {
   ChatBlockSchema,
   ChatRelatedLinkSchema,
   ChatSourceSchema,

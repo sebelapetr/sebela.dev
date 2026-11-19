@@ -69,14 +69,21 @@ describe("the authenticated read path", () => {
     await expect(connect(`sebela_${"0".repeat(16)}_${"Z".repeat(43)}`)).rejects.toThrow();
   });
 
-  it("lists only the read tools and reads the fixture's person", async () => {
+  it("lists the content tools and reads the fixture's person", async () => {
     const client = await connect(keyOf("owner"));
 
     const { tools } = await client.listTools();
     const result = await client.callTool({ name: "get", arguments: { entity: "person" } });
     await client.close();
 
-    expect(tools.map((tool) => tool.name).sort()).toEqual(["describe", "get"]);
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "delete",
+      "describe",
+      "get",
+      "list",
+      "recent_changes",
+      "save",
+    ]);
     expect(result.isError).not.toBe(true);
     expect(JSON.parse(toolText(result))).toMatchObject({ name: "Mira Tolland" });
   });
@@ -93,7 +100,12 @@ describe("the authenticated read path", () => {
       relationships: unknown[];
     };
     expect(description.entity).toBe("project");
-    expect(description.relationships).toHaveLength(2);
+    expect(description.relationships).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "experience", target: "experience" }),
+        expect.objectContaining({ field: "technologies", target: "technology" }),
+      ]),
+    );
   });
 
   it("serves two keys at once", async () => {

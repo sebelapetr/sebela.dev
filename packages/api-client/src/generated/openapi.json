@@ -219,6 +219,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -249,7 +262,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -345,6 +358,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -367,7 +393,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -462,12 +488,25 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "responses": {
           "204": {
             "description": "The person was deleted."
           },
           "400": {
-            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -601,6 +640,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -631,7 +683,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -822,6 +874,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -846,7 +909,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -955,6 +1018,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -962,7 +1036,7 @@
             "description": "The technology was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1106,6 +1180,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1136,7 +1223,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1327,6 +1414,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -1351,7 +1449,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1460,6 +1558,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -1467,7 +1576,7 @@
             "description": "The topic was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1611,6 +1720,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1641,7 +1763,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1832,6 +1954,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -1856,7 +1989,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1965,6 +2098,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -1972,7 +2116,7 @@
             "description": "The organization was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2116,6 +2260,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2146,7 +2303,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2337,6 +2494,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -2361,7 +2529,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2470,6 +2638,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -2477,7 +2656,7 @@
             "description": "The experience was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2621,6 +2800,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2651,7 +2843,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2842,6 +3034,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -2866,7 +3069,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2975,6 +3178,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -2982,7 +3196,7 @@
             "description": "The project was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3126,6 +3340,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -3156,7 +3383,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3347,6 +3574,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -3371,7 +3609,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3480,6 +3718,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -3487,7 +3736,7 @@
             "description": "The testimonial was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3659,6 +3908,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -3691,7 +3951,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3810,6 +4070,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -3834,7 +4105,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3943,6 +4214,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -3950,7 +4232,7 @@
             "description": "The case study was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4084,6 +4366,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -4114,7 +4409,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4305,6 +4600,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -4329,7 +4635,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4438,6 +4744,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -4445,7 +4762,7 @@
             "description": "The exploration was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4589,6 +4906,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -4619,7 +4949,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4810,6 +5140,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -4834,7 +5175,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4943,6 +5284,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -4950,7 +5302,7 @@
             "description": "The service was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5084,6 +5436,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -5114,7 +5479,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5305,6 +5670,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -5329,7 +5705,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5437,6 +5813,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -5444,7 +5831,7 @@
             "description": "The education record was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5578,6 +5965,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -5608,7 +6008,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5799,6 +6199,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -5823,7 +6234,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5932,6 +6343,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -5939,7 +6361,7 @@
             "description": "The focus entry was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6141,6 +6563,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -6171,7 +6606,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` (an invalid form, a malformed file or an image over the size limit, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (an invalid form, a malformed file or an image over the size limit or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6350,6 +6785,17 @@
             },
             "required": true,
             "description": "The identifier of the media."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -6374,7 +6820,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6482,6 +6928,17 @@
             },
             "required": true,
             "description": "The identifier of the media."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -6489,7 +6946,7 @@
             "description": "The media was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7066,6 +7523,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -7090,7 +7558,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7199,6 +7667,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -7206,7 +7685,7 @@
             "description": "The area was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7294,6 +7773,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7324,7 +7816,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7515,6 +8007,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -7539,7 +8042,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7648,6 +8151,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -7655,7 +8169,7 @@
             "description": "The module was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7743,6 +8257,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7773,7 +8300,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7964,6 +8491,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -7988,7 +8526,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8097,6 +8635,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -8104,7 +8653,7 @@
             "description": "The resource was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8192,6 +8741,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -8222,7 +8784,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8464,6 +9026,17 @@
             },
             "required": true,
             "description": "A calendar day in Europe/Prague, `YYYY-MM-DD`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -8488,7 +9061,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8583,6 +9156,17 @@
             },
             "required": true,
             "description": "A calendar day in Europe/Prague, `YYYY-MM-DD`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -8590,7 +9174,7 @@
             "description": "The notes were deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8668,6 +9252,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -8690,7 +9287,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8798,6 +9395,17 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "required": true
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -8822,7 +9430,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8938,6 +9546,17 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "required": true
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -8945,7 +9564,7 @@
             "description": "The time entry was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9079,6 +9698,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -9109,7 +9741,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9300,6 +9932,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -9324,7 +9967,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9433,6 +10076,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -9440,7 +10094,7 @@
             "description": "The book was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9584,6 +10238,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -9614,7 +10281,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9805,6 +10472,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -9829,7 +10507,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9948,6 +10626,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -9955,7 +10644,7 @@
             "description": "The event was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10157,6 +10846,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -10187,7 +10889,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10378,6 +11080,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -10402,7 +11115,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10511,6 +11224,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -10518,7 +11242,7 @@
             "description": "The project idea was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10652,6 +11376,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -10682,7 +11419,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10873,6 +11610,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -10897,7 +11645,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11006,6 +11754,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -11013,7 +11772,7 @@
             "description": "The followed source was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11147,6 +11906,19 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -11177,7 +11949,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11368,6 +12140,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "requestBody": {
@@ -11392,7 +12175,7 @@
             }
           },
           "400": {
-            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11501,6 +12284,17 @@
             },
             "required": true,
             "description": "The stable, unique address of the record, for example `paldock`."
+          },
+          {
+            "in": "header",
+            "name": "sebela-provenance",
+            "schema": {
+              "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._:/-]*$"
+            },
+            "description": "A short label of the tool or client making the write, such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never proof of who acted or that a human approved. A label outside the pattern is refused with `validation_failed` on `provenance`."
           }
         ],
         "responses": {
@@ -11508,7 +12302,7 @@
             "description": "The glossary term was deleted."
           },
           "400": {
-            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "description": "`validation_failed` (a malformed path parameter or an invalid `sebela-provenance` header, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11537,6 +12331,86 @@
           },
           "404": {
             "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit/changes": {
+      "get": {
+        "operationId": "listRecentChanges",
+        "summary": "Read the newest content changes",
+        "description": "The newest 20 audited content changes, newest first: one per record a committed write changed, with the verified API key that made it, the operation and route, the provenance label the caller stated, and the record's public read before and after. A refused or failed write records nothing. A caller that lost the response to a write reads this to learn whether the write committed before it tries again. The provenance label is what a caller stated, never proof of who acted or that a human approved.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The newest changes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentChanges"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -19275,6 +20149,177 @@
           "position",
           "createdAt",
           "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RecentChanges": {
+        "type": "object",
+        "properties": {
+          "changes": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditChange"
+            }
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "additionalProperties": false
+      },
+      "AuditChange": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "actor": {
+            "type": "object",
+            "properties": {
+              "keyId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "keyName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "keyId",
+              "keyName"
+            ],
+            "additionalProperties": false
+          },
+          "operation": {
+            "type": "object",
+            "properties": {
+              "operationId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "POST",
+                  "PATCH",
+                  "DELETE"
+                ]
+              },
+              "route": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "operationId",
+              "method",
+              "route"
+            ],
+            "additionalProperties": false
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9._:/-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entity": {
+            "type": "string",
+            "enum": [
+              "person",
+              "technology",
+              "topic",
+              "organization",
+              "experience",
+              "project",
+              "case-study",
+              "testimonial",
+              "exploration",
+              "service",
+              "education",
+              "current-focus",
+              "roadmap-area",
+              "roadmap-module",
+              "roadmap-resource",
+              "roadmap-book",
+              "roadmap-event",
+              "roadmap-project-idea",
+              "roadmap-followed-source",
+              "roadmap-glossary-term",
+              "roadmap-diary",
+              "media",
+              "roadmap-time-entry"
+            ]
+          },
+          "record": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "deleted"
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "occurredAt",
+          "actor",
+          "operation",
+          "provenance",
+          "entity",
+          "record",
+          "action",
+          "before",
+          "after"
         ],
         "additionalProperties": false
       }

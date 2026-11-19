@@ -1,0 +1,11 @@
+[
+  {
+    "slug": "billing-review",
+    "name": "Billing review",
+    "summary": "A **fictional** review of a billing flow.",
+    "audience": "Small studios.",
+    "deliverable": "A written review.",
+    "position": 0,
+    "evidence": [{ "kind": "project", "project": "cedar-portal-billing" }]
+  }
+]

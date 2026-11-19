@@ -5,11 +5,13 @@ import {
   type ApiKeyService,
   type ApiKeyServiceOptions,
 } from "./modules/api-keys/index.js";
+import { createAuditService, type AuditService } from "./modules/audit/index.js";
 import {
   createMediaService,
   type CleanupFailure,
   type MediaConfig,
   type MediaService,
+  unconfiguredMedia,
 } from "./modules/media/index.js";
 import { createProfileService, type ProfileService } from "./modules/profile/index.js";
 import { createRoadmapService, type RoadmapService } from "./modules/roadmap/index.js";
@@ -23,6 +25,8 @@ export interface Services {
   readonly roadmap: RoadmapService;
   readonly apiKeys: ApiKeyService;
   readonly media: MediaService;
+  /** Content writes with their audit in one transaction, and the newest changes. */
+  readonly audit: AuditService;
   /** Loads a seed folder through the services above; needs media to be configured. */
   readonly seed: SeedService;
   /** Ends the connection pool. Call once, at shutdown. */
@@ -44,16 +48,6 @@ export interface ServicesOptions {
 
 const unconfigured = (): never => {
   throw new Error("Media storage is not configured.");
-};
-
-const unconfiguredMedia: MediaService = {
-  listMedia: unconfigured,
-  getMedia: unconfigured,
-  uploadMedia: unconfigured,
-  ensureMedia: unconfigured,
-  updateMedia: unconfigured,
-  deleteMedia: unconfigured,
-  readMediaFile: unconfigured,
 };
 
 const unconfiguredSeed: SeedService = { loadSeed: unconfigured, loadSeedIntoEmpty: unconfigured };
@@ -87,6 +81,10 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
       mediaOptions === undefined
         ? unconfiguredMedia
         : createMediaService(persistence.profile, mediaOptions),
+    audit: createAuditService(
+      persistence,
+      mediaOptions === undefined ? profileOptions : { ...profileOptions, media: mediaOptions },
+    ),
     seed:
       mediaOptions === undefined
         ? unconfiguredSeed

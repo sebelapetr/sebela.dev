@@ -141,6 +141,21 @@ export function checkMediaUpload(input: MediaUploadInput, limits: MediaLimits): 
 
 const digestOf = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
+const unconfigured = (): never => {
+  throw new Error("Media storage is not configured.");
+};
+
+/** The media service of a process without storage configuration: every operation throws. */
+export const unconfiguredMedia: MediaService = {
+  listMedia: unconfigured,
+  getMedia: unconfigured,
+  uploadMedia: unconfigured,
+  ensureMedia: unconfigured,
+  updateMedia: unconfigured,
+  deleteMedia: unconfigured,
+  readMediaFile: unconfigured,
+};
+
 export function createMediaService(
   persistence: MediaPersistence,
   options: MediaServiceOptions,

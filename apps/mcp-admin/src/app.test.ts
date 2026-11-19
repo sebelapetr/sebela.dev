@@ -53,7 +53,7 @@ async function expectUniformRefusal(response: Response) {
   expect(JSON.parse(body)).toEqual({
     error: { code: "unauthorized", message: "A valid API key is required." },
   });
-  for (const hidden of ["get", "describe", "sebela_", "inputSchema"]) {
+  for (const hidden of ["get", "describe", "save", "delete", "sebela_", "inputSchema"]) {
     expect(body).not.toContain(`"${hidden}"`);
   }
 }
@@ -151,18 +151,22 @@ describe("authentication (D01, D02)", () => {
     expect(api.calls).toEqual([]);
   });
 
-  it("checks the presented key with the content API and lists only the read tools", async () => {
+  it("checks the presented key with the content API and lists the content tools", async () => {
     const { fetch, api } = open();
 
     const client = await connectClient(fetch, KEY_A);
     const { tools } = await client.listTools();
     await client.close();
 
-    expect(tools.map((tool) => tool.name).sort()).toEqual(["describe", "get"]);
-    for (const tool of tools) {
-      expect(tool.annotations?.readOnlyHint).toBe(true);
-      expect(tool.annotations?.destructiveHint).toBe(false);
-    }
+    // Their annotations and arguments are covered in content-tools.test.ts.
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "delete",
+      "describe",
+      "get",
+      "list",
+      "recent_changes",
+      "save",
+    ]);
     const checks = api.calls.filter((call) => call.url === `${API_BASE}/v1/authentication`);
     expect(checks.length).toBeGreaterThanOrEqual(2);
     for (const check of checks) expect(check.authorization).toBe(`Bearer ${KEY_A}`);
@@ -249,10 +253,12 @@ describe("the read tools", () => {
     expect(description.create.required).toEqual(expect.arrayContaining(["slug", "experience"]));
     expect(description.update.properties).not.toHaveProperty("slug");
     expect(description.update.properties).not.toHaveProperty("caseStudy");
-    expect(description.relationships.map(({ field, target }) => ({ field, target }))).toEqual([
-      { field: "experience", target: "experience" },
-      { field: "technologies", target: "technology" },
-    ]);
+    expect(description.relationships.map(({ field, target }) => ({ field, target }))).toEqual(
+      expect.arrayContaining([
+        { field: "experience", target: "experience" },
+        { field: "technologies", target: "technology" },
+      ]),
+    );
     for (const rule of description.relationships) expect(rule.rule.length).toBeGreaterThan(10);
     // Describing reads no content: only the authentication check reached the API.
     expect(api.calls.slice(before).every((call) => call.url.endsWith("/v1/authentication"))).toBe(

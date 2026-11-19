@@ -23,19 +23,23 @@
 // written only after the credential scan found nothing), so a grader fix is checked with
 // `--regrade` instead of a new paid run. The redacted `summary.json` never holds them.
 //
-// Every case-run gets its own API on a fresh temporary database seeded from `fixtures/s01`, its
-// own ephemeral API key and its own MCP server. The key reaches Promptfoo only through the
-// environment of its process, never as a test variable or prompt. The runner snapshots the
-// fixture's content before and after the run, so a case passes only when Promptfoo's graders pass
-// and nothing changed. Promptfoo runs with an allowlisted environment (no database or other
-// checkout setting) and keeps its state and logs in the case-run's own folder; its raw output,
-// state and logs are scanned for credentials and deleted when the case-run ends, whatever happened.
-// The runner writes a redacted summary to the checkout's `.tmp/evals/mcp-admin/` and exits 1 when
-// the gate fails or a credential would leak.
+// Every case-run gets its own API on a fresh temporary database seeded from the case's fixture
+// (`fixtures/s01` or `fixtures/s02`), two ephemeral API keys (`eval` for the model's client and
+// `studio-desktop` for another of the owner's clients) and its own MCP server. Between Promptfoo
+// and MCP Admin sits the controlled client adapter (`client.js`): it asks the scripted owner before
+// every `save` and `delete` and plays the case's controlled events. Setup edits and concurrent
+// edits go through the API with the other key. The keys reach Promptfoo only through the
+// environment of its process, never as a test variable or prompt. The runner reads the content
+// state through the API before and after the run, so a case passes only when Promptfoo's graders
+// pass and the final state is the scenario's expected state (`scenarios.js`). Promptfoo runs with
+// an allowlisted environment (no database or other checkout setting) and keeps its state and logs
+// in the case-run's own folder; its raw output, state and logs are scanned for credentials and
+// deleted when the case-run ends, whatever happened. The runner writes a redacted summary to the
+// checkout's `.tmp/evals/mcp-admin/` and exits 1 when the gate fails or a credential would leak.
 //
-// Budget: at most `implemented cases x repeats` model conversations (9 for S01), each limited by
-// max_tokens in promptfooconfig.yaml; a `--case` run at most `repeats` (3) per named case; a
-// regrade none. Needs ANTHROPIC_API_KEY, the running Postgres and a build
+// Budget: at most `implemented cases x repeats` model conversations (45 for S01 and S02), each
+// limited by max_tokens and max_tool_calls in promptfooconfig.yaml; a `--case` run at most
+// `repeats` (3) per named case; a regrade none. Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -44,9 +48,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { catalogue, gates, implementedCases } from "./catalogue.js";
+import { startClientAdapter } from "./client.js";
 import { fixtureFolder, startApi, startMcp } from "./fixture.js";
 import { evaluateGate } from "./gate.js";
 import * as graders from "./graders.js";
+import { EVAL_CLIENT, OTHER_CLIENT, scenarios } from "./scenarios.js";
+import { captureState } from "./state.js";
 
 const PROMPTFOO = "promptfoo@0.126.0";
 /** The pinned model of every eval; `promptfooconfig.yaml` names the same one. */
@@ -55,20 +62,31 @@ const evalsFolder = fileURLToPath(new URL("./", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const reportRoot = join(repositoryRoot, ".tmp", "evals", "mcp-admin");
 
+/** The provenance of the edits the runner makes as another client. */
+const RUNNER_PROVENANCE = "evals/other-client";
+
 /**
- * The content a case could change, read through the public API: the person and the projects.
+ * Makes an edit through the API as another caller, the way another of the owner's clients would.
  *
  * @param {string} apiUrl
- * @returns {Promise<string>}
+ * @param {string} key
+ * @param {import("./scenarios.js").ApiEdit} edit
  */
-export async function snapshot(apiUrl) {
-  const [person, projects] = await Promise.all(
-    ["/v1/person", "/v1/projects"].map(async (path) => {
-      const response = await fetch(new URL(path, apiUrl), { redirect: "error" });
-      return { status: response.status, body: await response.text() };
-    }),
-  );
-  return JSON.stringify({ person, projects });
+export async function applyEdit(apiUrl, key, edit) {
+  const response = await fetch(new URL(edit.path, apiUrl), {
+    method: edit.method,
+    redirect: "error",
+    headers: {
+      authorization: `Bearer ${key}`,
+      "sebela-provenance": RUNNER_PROVENANCE,
+      ...(edit.body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(edit.body === undefined ? {} : { body: JSON.stringify(edit.body) }),
+  });
+  await response.body?.cancel();
+  if (!response.ok) {
+    throw new Error(`${edit.method} ${edit.path} answered ${String(response.status)}.`);
+  }
 }
 
 /**
@@ -79,44 +97,73 @@ export async function snapshot(apiUrl) {
  * @param {string} folder The run's report folder.
  */
 async function runCase(entry, repeat, folder) {
-  const api = await startApi({ seedFolder: fixtureFolder("s01"), keyNames: ["eval"] });
-  const key = api.keys["eval"]?.key ?? "";
+  const scenario = scenarios[entry.id];
+  if (!scenario) throw new Error(`${entry.id} has no scenario.`);
+  const api = await startApi({
+    seedFolder: fixtureFolder(scenario.fixture),
+    keyNames: [EVAL_CLIENT, OTHER_CLIENT],
+  });
+  const key = api.keys[EVAL_CLIENT]?.key ?? "";
+  const otherKey = api.keys[OTHER_CLIENT]?.key ?? "";
+  const secrets = sentinels([key, otherKey]);
+  /** @type {(() => Promise<void>)[]} */
+  const stops = [];
   try {
+    for (const edit of scenario.setup ?? []) await applyEdit(api.url, otherKey, edit);
     const mcp = await startMcp({ apiUrl: api.url });
+    stops.push(mcp.stop);
+    const { concurrent } = scenario;
+    const client = await startClientAdapter({
+      target: new URL("/mcp", mcp.url).href,
+      approvals: scenario.approvals,
+      ...(scenario.inject ? { inject: scenario.inject } : {}),
+      ...(concurrent
+        ? {
+            concurrent: {
+              after: concurrent.after,
+              run: () => applyEdit(api.url, otherKey, concurrent.edit),
+            },
+          }
+        : {}),
+    });
+    stops.push(client.stop);
     const name = `${entry.id}-${String(repeat)}`;
     const raw = join(folder, `${name}.raw.json`);
     const state = join(folder, `${name}.promptfoo`);
     /** @type {unknown} */
     let report;
-    let unchanged = false;
+    /** @type {string | null} */
+    let stateFailure = null;
+    /** @type {StoredAnswer["states"]} */
+    let states = null;
     /** @type {unknown} */
     let failure;
     /** @type {string[]} */
     let leaked = [];
     try {
-      const before = await snapshot(api.url);
+      const before = await captureState(api.url, key);
       await promptfoo(
         entry.id,
         raw,
         promptfooEnvironment(
           process.env,
           {
-            MCP_ADMIN_EVAL_URL: new URL("/mcp", mcp.url).href,
+            MCP_ADMIN_EVAL_URL: client.url,
             MCP_ADMIN_EVAL_KEY: key,
-            MCP_ADMIN_EVAL_SENTINELS: JSON.stringify(sentinels(key)),
+            MCP_ADMIN_EVAL_SENTINELS: JSON.stringify(secrets),
           },
           state,
         ),
       );
-      const after = await snapshot(api.url);
+      const after = await captureState(api.url, key);
       report = /** @type {unknown} */ (JSON.parse(await readFile(raw, "utf8")));
-      unchanged = before === after;
+      states = { before, after };
+      stateFailure = scenario.expect(before, after);
     } catch (error) {
       failure = error;
     } finally {
-      await mcp.stop();
       // Promptfoo's raw output, state and logs never outlive the case-run.
-      leaked = await removeLeakingFiles([raw, state], sentinels(key));
+      leaked = await removeLeakingFiles([raw, state], secrets);
     }
     // A leak outranks any other failure of the case-run.
     if (leaked.length > 0) {
@@ -125,7 +172,7 @@ async function runCase(entry, repeat, folder) {
       );
     }
     if (failure !== undefined) throw failure;
-    const answer = answerRecord(entry, repeat, report, unchanged);
+    const answer = answerRecord(entry, repeat, report, stateFailure, states);
     if (answer) {
       await mkdir(join(folder, "answers"), { recursive: true });
       await writeFile(
@@ -133,21 +180,22 @@ async function runCase(entry, repeat, folder) {
         `${JSON.stringify(answer, null, 2)}\n`,
       );
     }
-    return summarize(entry, repeat, report, unchanged);
+    return summarize(entry, repeat, report, stateFailure);
   } finally {
+    for (const stop of stops.reverse()) await stop();
     await api.stop();
   }
 }
 
 /**
- * Values that must never appear in an answer, a tool argument or a report: the case's key and the
- * database password of this checkout.
+ * Values that must never appear in an answer, a tool argument or a report: the case's keys and
+ * the database password of this checkout.
  *
- * @param {string} key
+ * @param {readonly string[]} keys
  */
-function sentinels(key) {
+function sentinels(keys) {
   return [
-    key,
+    ...keys,
     process.env["DATABASE_PASSWORD"] ?? "",
     process.env["POSTGRES_PASSWORD"] ?? "",
   ].filter((value) => value.length >= 8);
@@ -278,9 +326,10 @@ async function filesUnder(path) {
  * @param {import("./catalogue.js").EvalCase} entry
  * @param {number} repeat
  * @param {any} report Promptfoo's JSON output.
- * @param {boolean} unchanged
+ * @param {string | null} stateFailure How the final content differs from the expected state.
  */
-export function summarize(entry, repeat, report, unchanged) {
+export function summarize(entry, repeat, report, stateFailure) {
+  const expectedState = stateFailure === null;
   /** @type {any[]} */
   const results = report?.results?.results ?? [];
   const result = results[0];
@@ -290,7 +339,7 @@ export function summarize(entry, repeat, report, unchanged) {
       repeat,
       pass: false,
       reason: "Promptfoo ran no single result.",
-      unchanged,
+      expectedState,
     };
   }
   /** @type {{ name: string, is_error?: boolean }[]} */
@@ -299,13 +348,13 @@ export function summarize(entry, repeat, report, unchanged) {
   const reasons = [];
   if (!graded)
     reasons.push(String(result.gradingResult?.reason ?? result.error ?? "Grading failed."));
-  if (!unchanged) reasons.push("The fixture's content changed.");
+  if (stateFailure !== null) reasons.push(`Unexpected final state: ${stateFailure}`);
   return {
     caseId: entry.id,
     repeat,
-    pass: graded && unchanged,
+    pass: graded && expectedState,
     reason: reasons.join(" ") || "Passed.",
-    unchanged,
+    expectedState,
     toolCalls: calls.map((call) => ({ name: call.name, error: Boolean(call.is_error) })),
     latencyMs: result.latencyMs ?? null,
     tokens: result.response?.tokenUsage ?? null,
@@ -315,17 +364,19 @@ export function summarize(entry, repeat, report, unchanged) {
 
 /**
  * What a grader needs to grade one case-run again: the final answer and the executed tool calls
- * as Promptfoo recorded them, whether the fixture's content stayed unchanged, and the model that
- * answered. Kept only in the local run folder, never in the redacted summary. Null when Promptfoo
- * produced no single result.
+ * as Promptfoo recorded them, how the final content differed from the scenario's expected state
+ * (null when it matched), the fictional fixture content read before and after the run, and the
+ * model that answered. Kept only in the local run folder, never in the redacted summary. Null when
+ * Promptfoo produced no single result.
  *
  * @param {import("./catalogue.js").EvalCase} entry
  * @param {number} repeat
  * @param {any} report Promptfoo's JSON output.
- * @param {boolean} unchanged
- * @returns {{ caseId: string, repeat: number, model: string, output: string, toolCalls: unknown[], unchanged: boolean } | null}
+ * @param {string | null} stateFailure
+ * @param {StoredAnswer["states"]} [states]
+ * @returns {StoredAnswer | null}
  */
-export function answerRecord(entry, repeat, report, unchanged) {
+export function answerRecord(entry, repeat, report, stateFailure, states = null) {
   /** @type {any[]} */
   const results = report?.results?.results ?? [];
   const result = results[0];
@@ -336,20 +387,35 @@ export function answerRecord(entry, repeat, report, unchanged) {
     model: MODEL,
     output: String(result.response?.output ?? ""),
     toolCalls: result.response?.metadata?.toolCalls ?? [],
-    unchanged,
+    stateFailure,
+    ...(states ? { states } : {}),
   };
 }
 
 /**
+ * @typedef {object} StoredAnswer
+ * @property {string} caseId
+ * @property {number} repeat
+ * @property {string} model
+ * @property {string} output
+ * @property {unknown[]} toolCalls
+ * @property {string | null} stateFailure How the final content differed from the expected state.
+ * @property {{ before: import("./state.js").ContentState, after: import("./state.js").ContentState } | null} [states]
+ *   The content read before and after the run, so a fixed expected state is checked again.
+ */
+
+/**
  * Grades stored answers again with the current graders, without calling a model: a grader fix is
  * checked on the very answers it failed. A stored answer of another model, or of a case that is
- * unknown or pending, is refused; content that changed still fails the case-run. The safety grader
+ * unknown or pending, is refused. The stored content before and after the run is checked again
+ * with the scenario's current expected state; an answer stored without it keeps its recorded
+ * outcome (the fixture is gone, so the state is never read again). The safety grader
  * still refuses key- and connection-string-shaped answers; the sentinel values (the original run's
- * ephemeral key and the database passwords) were checked when the answers were stored, which
+ * ephemeral keys and the database passwords) were checked when the answers were stored, which
  * happens only after the run's credential scan found none.
  *
- * @param {readonly { caseId: string, repeat: number, model: string, output: string, toolCalls: unknown[], unchanged: boolean }[]} answers
- * @returns {{ caseId: string, repeat: number, pass: boolean, reason: string, unchanged: boolean }[]}
+ * @param {readonly StoredAnswer[]} answers
+ * @returns {{ caseId: string, repeat: number, pass: boolean, reason: string, expectedState: boolean }[]}
  */
 export function regradeRuns(answers) {
   return answers.map((answer) => {
@@ -366,15 +432,21 @@ export function regradeRuns(answers) {
     const graded = grader(answer.output, {
       metadata: { toolCalls: /** @type {import("./graders.js").ToolCall[]} */ (answer.toolCalls) },
     });
+    const scenario = scenarios[entry.id];
+    const stateFailure =
+      answer.states && scenario
+        ? scenario.expect(answer.states.before, answer.states.after)
+        : answer.stateFailure;
+    const expectedState = stateFailure === null;
     const reasons = [];
     if (!graded.pass) reasons.push(String(graded.reason));
-    if (!answer.unchanged) reasons.push("The fixture's content changed.");
+    if (!expectedState) reasons.push(`Unexpected final state: ${String(stateFailure)}`);
     return {
       caseId: entry.id,
       repeat: answer.repeat,
-      pass: Boolean(graded.pass) && answer.unchanged,
+      pass: Boolean(graded.pass) && expectedState,
       reason: reasons.join(" ") || "Passed.",
-      unchanged: answer.unchanged,
+      expectedState,
     };
   });
 }
@@ -508,15 +580,25 @@ async function main() {
     if (existsSync(file)) process.loadEnvFile(file);
   }
   if (plan.checkFixture) {
-    const api = await startApi({ seedFolder: fixtureFolder("s01"), keyNames: ["eval"] });
-    try {
-      const mcp = await startMcp({ apiUrl: api.url });
-      await mcp.stop();
-      await snapshot(api.url);
-    } finally {
-      await api.stop();
+    for (const fixture of /** @type {const} */ (["s01", "s02"])) {
+      const api = await startApi({
+        seedFolder: fixtureFolder(fixture),
+        keyNames: [EVAL_CLIENT, OTHER_CLIENT],
+      });
+      try {
+        const mcp = await startMcp({ apiUrl: api.url });
+        const client = await startClientAdapter({
+          target: new URL("/mcp", mcp.url).href,
+          approvals: [],
+        });
+        await client.stop();
+        await mcp.stop();
+        await captureState(api.url, api.keys[EVAL_CLIENT]?.key ?? "");
+      } finally {
+        await api.stop();
+      }
     }
-    process.stdout.write("The eval fixture started and stopped cleanly.\n");
+    process.stdout.write("The eval fixtures started and stopped cleanly.\n");
     return;
   }
   if (!process.env["ANTHROPIC_API_KEY"]) {
@@ -545,10 +627,10 @@ async function main() {
       effort: "medium",
       promptCaching: true,
       maxTokens: 4096,
-      maxToolCalls: 4,
+      maxToolCalls: 6,
       timeoutMs: 120000,
       clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
-      dataset: "fixtures/s01",
+      dataset: "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases)",
       repeats: gates.repeats,
       noncriticalFloor: gates.noncriticalFloor,
     },

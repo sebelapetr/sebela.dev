@@ -5,10 +5,18 @@ import { z } from "zod";
 
 import {
   ContentChangeSchema,
+  auditProvenanceHeader,
+  type AuditEntity,
   type ContentChange,
   type ContentChangeAction,
 } from "@sebela/contracts";
-import type { MediaService, ProfileService, RoadmapService, Services } from "@sebela/services";
+import type {
+  AuditService,
+  MediaService,
+  ProfileService,
+  RoadmapService,
+  Services,
+} from "@sebela/services";
 
 import type { ApiConfig } from "./config.js";
 import { authenticate, refuseCredentialsInUrl } from "./middleware/authentication.js";
@@ -19,6 +27,7 @@ import { multipartBody } from "./middleware/multipart-body.js";
 import { pathParams } from "./middleware/path-params.js";
 import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
+import { auditRoutes } from "./modules/audit/index.js";
 import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { roadmapRoutes } from "./modules/roadmap/index.js";
@@ -26,6 +35,7 @@ import { createOpenApiDocument } from "./openapi.js";
 import {
   fillLocation,
   type FileResponse,
+  type RouteAudit,
   type RouteDefinition,
   type RouteDocumentation,
 } from "./routing.js";
@@ -54,6 +64,37 @@ const ACTIONS: Record<Exclude<RouteDocumentation["method"], "GET">, ContentChang
 
 const property = (value: unknown, name: string): unknown =>
   typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
+
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+/**
+ * How a write route is audited: its own `audit`, or else as its content domain, for the person or
+ * the record its `slug`, `id` or `date` path parameter names, or for a create the record its
+ * result's `slug` or `id` names. `null` for a read.
+ */
+function auditOf(route: Pick<RouteDefinition, "method" | "content" | "audit">): RouteAudit | null {
+  if (route.method === "GET" || !route.content) return null;
+  if (route.audit) return route.audit;
+  const entity = route.content;
+  const addressed = (params: unknown) => {
+    if (entity === "person") return [null];
+    const record =
+      text(property(params, "slug")) ??
+      text(property(params, "id")) ??
+      text(property(params, "date"));
+    return record === undefined ? [] : [record];
+  };
+  return {
+    entity,
+    records: addressed,
+    recordsOf: (result) => {
+      if (entity === "person") return [];
+      const record = text(property(result, "slug")) ?? text(property(result, "id"));
+      return record === undefined ? [] : [record];
+    },
+  };
+}
 
 /**
  * The content changes a committed write made: its route's domain and action, and each record the
@@ -91,7 +132,7 @@ function changesOf(
 }
 
 export interface AppDependencies {
-  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap">;
+  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap" | "audit">;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
@@ -110,6 +151,8 @@ export interface RouteSummary {
   readonly access: "public" | "private";
   /** Whether the route reads a body, JSON or a multipart upload. */
   readonly hasBody: boolean;
+  /** The entity a write route audits its changes as; `null` for a read. */
+  readonly audit: AuditEntity | null;
 }
 
 export interface Api {
@@ -172,11 +215,12 @@ type OpenApiDocument = ReturnType<typeof createOpenApiDocument>;
 
 /** The module routes, in registration and documentation order. */
 const moduleRoutes = (
-  services: Pick<Services, "profile" | "media" | "roadmap">,
+  services: Pick<Services, "profile" | "media" | "roadmap" | "audit">,
 ): RouteDefinition[] => [
   ...profileRoutes(services.profile),
   ...mediaRoutes(services.media),
   ...roadmapRoutes(services.roadmap),
+  ...auditRoutes(services.audit),
 ];
 
 /** Every documented route, in the order of the OpenAPI document. */
@@ -286,6 +330,7 @@ const describingRoadmap: RoadmapService = {
   deleteResource: documentationOnly,
   getDiary: documentationOnly,
   getDiaryDay: documentationOnly,
+  getTimeEntry: documentationOnly,
   writeDiaryNotes: documentationOnly,
   deleteDiaryNotes: documentationOnly,
   createTimeEntry: documentationOnly,
@@ -318,6 +363,12 @@ const describingRoadmap: RoadmapService = {
   deleteGlossaryTerm: documentationOnly,
 };
 
+/** An audit service for describing routes; describing never calls it. */
+const describingAudit: AuditService = {
+  write: documentationOnly,
+  recentChanges: documentationOnly,
+};
+
 /**
  * The OpenAPI document that `createApp` serves at `/openapi.json`, built without services,
  * configuration or a database. Deterministic: the same routes and schemas give the same document.
@@ -329,6 +380,7 @@ export function describeApi(): OpenApiDocument {
         profile: describingProfile,
         media: describingMedia,
         roadmap: describingRoadmap,
+        audit: describingAudit,
       }),
     ),
   );
@@ -388,14 +440,38 @@ export function createApp(dependencies: AppDependencies): Api {
     }
   };
 
-  const register = (route: RouteDefinition) => {
+  const register = (route: RouteDefinition, index: number) => {
     if (route.method !== "GET" && !route.content) {
       throw new Error(`The write route ${route.operationId} declares no content domain.`);
     }
+    const audit = auditOf(route);
     app.on(route.method, route.path, guard(route), async (c) => {
       const params = c.get("params");
-      const result = await route.handle({ body: c.get("body"), params });
-      // Reached only once the service has committed; a failed write throws before it.
+      const body: unknown = c.get("body");
+      const { method } = route;
+      const result =
+        method === "GET" || audit === null
+          ? await route.handle({ body, params })
+          : // The write and its audit commit together: the route runs over the services of the
+            // audited write's transaction, as the actor the key verification established.
+            await services.audit.write({
+              actor: { keyId: c.get("keyId") },
+              operation: { operationId: route.operationId, method, route: route.path },
+              provenance: c.req.header(auditProvenanceHeader) ?? null,
+              entity: audit.entity,
+              records: audit.records(params),
+              run: (content) => {
+                const bound = moduleRoutes({ ...content, audit: services.audit })[index];
+                if (bound?.operationId !== route.operationId) {
+                  throw new Error(
+                    `The route ${route.operationId} is not bound in its transaction.`,
+                  );
+                }
+                return bound.handle({ body, params });
+              },
+              recordsOf: (done) => audit.recordsOf?.(done) ?? [],
+            });
+      // Reached only once the write and its audit have committed; a failed write throws before it.
       if (route.method !== "GET") {
         const changes = changesOf(route, params, result);
         if (changes) {
@@ -432,10 +508,13 @@ export function createApp(dependencies: AppDependencies): Api {
     c.json({ status: "authenticated" as const }),
   );
 
-  for (const route of modules) register(route);
+  modules.forEach(register);
 
-  const document: OpenApiDocument = createOpenApiDocument(documented);
-  app.get("/openapi.json", guard(systemRoutes.openapi), (c) => c.json(document));
+  // Built on the first request and kept: building it costs more than the rest of the app.
+  let document: OpenApiDocument | undefined;
+  app.get("/openapi.json", guard(systemRoutes.openapi), (c) =>
+    c.json((document ??= createOpenApiDocument(documented))),
+  );
   app.get(
     "/reference",
     guard(systemRoutes.reference),
@@ -448,11 +527,12 @@ export function createApp(dependencies: AppDependencies): Api {
 
   return {
     app,
-    routes: documented.map(({ method, path, access, body, upload }) => ({
-      method,
-      path,
-      access,
-      hasBody: body !== undefined || upload !== undefined,
+    routes: documented.map((route) => ({
+      method: route.method,
+      path: route.path,
+      access: route.access,
+      hasBody: route.body !== undefined || route.upload !== undefined,
+      audit: auditOf(route)?.entity ?? null,
     })),
   };
 }

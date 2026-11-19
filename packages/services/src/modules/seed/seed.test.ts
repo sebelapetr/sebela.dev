@@ -1729,11 +1729,16 @@ describe("seed service", () => {
         profile: persistence.profile,
         roadmap: persistence.roadmap,
         transaction: (work) =>
-          persistence.transaction((profileInTransaction, roadmapInTransaction) =>
-            work(profileInTransaction, {
-              ...roadmapInTransaction,
-              createRoadmapResource: () => Promise.reject(new Error("A fictional failure.")),
-            }),
+          persistence.transaction(
+            (profileInTransaction, roadmapInTransaction, auditInTransaction) =>
+              work(
+                profileInTransaction,
+                {
+                  ...roadmapInTransaction,
+                  createRoadmapResource: () => Promise.reject(new Error("A fictional failure.")),
+                },
+                auditInTransaction,
+              ),
           ),
       };
       const folder = await writeSeed(await mkdtemp(join(seedFolder, "failing-")), fixture());
@@ -1753,11 +1758,16 @@ describe("seed service", () => {
         profile: persistence.profile,
         roadmap: persistence.roadmap,
         transaction: (work) =>
-          persistence.transaction((profileInTransaction, roadmapInTransaction) =>
-            work(profileInTransaction, {
-              ...roadmapInTransaction,
-              updateRoadmapResource: () => Promise.reject(new Error("A fictional failure.")),
-            }),
+          persistence.transaction(
+            (profileInTransaction, roadmapInTransaction, auditInTransaction) =>
+              work(
+                profileInTransaction,
+                {
+                  ...roadmapInTransaction,
+                  updateRoadmapResource: () => Promise.reject(new Error("A fictional failure.")),
+                },
+                auditInTransaction,
+              ),
           ),
       };
       const folder = await writeSeed(await mkdtemp(join(seedFolder, "failing-")), changed);

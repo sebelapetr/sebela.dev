@@ -10,6 +10,7 @@ import {
   type ContentChange,
   type InvalidationVerification,
 } from "@sebela/contracts";
+import type { Services } from "@sebela/services";
 import { samplePng } from "@sebela/services/testing";
 
 import { createApp } from "./app.js";
@@ -765,21 +766,19 @@ describe("notifying the website of committed content writes", () => {
 
   it("sends nothing when the write's transaction fails", async () => {
     const failure = new Error("fictional failed transaction");
-    const services = new Proxy(backend.services, {
-      get(target, property, receiver) {
-        const value: unknown = Reflect.get(target, property, receiver);
-        if (property !== "profile") return value;
-        return new Proxy(target.profile, {
-          get(profile, name) {
-            if (name === "createTechnology") return () => Promise.reject(failure);
-            const method: unknown = Reflect.get(profile, name);
-            return typeof method === "function"
-              ? (...args: unknown[]): unknown => Reflect.apply(method, profile, args)
-              : method;
+    // The write itself succeeds inside the transaction, then the transaction fails and rolls back.
+    const audit: Services["audit"] = {
+      recentChanges: () => backend.services.audit.recentChanges(),
+      write: (write) =>
+        backend.services.audit.write({
+          ...write,
+          run: async (content) => {
+            await write.run(content);
+            throw failure;
           },
-        });
-      },
-    });
+        }),
+    };
+    const services: Services = { ...backend.services, audit };
     const { app: failing } = createApp({
       services,
       config: testConfig(),
@@ -794,6 +793,7 @@ describe("notifying the website of committed content writes", () => {
     );
 
     expect(response.status).toBe(500);
+    expect((await send("/v1/technologies/postgres", "GET")).status).toBe(404);
     expect(await delivered()).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 // The learning diary's HTTP routes, private to the roadmap module and part of its routes: public
 // reads of the diary and of one Prague calendar day, and authenticated writes of a day's notes and
 // of time entries on a resource or an event. Each write reports every diary day it changed, so the
-// website refreshes the old and the new day.
+// website refreshes the old and the new day; a time-entry write is audited per time entry.
 import {
   DiaryDateParamsSchema,
   DiaryDaySchema,
@@ -11,6 +11,7 @@ import {
   TimeEntryIdParamsSchema,
   TimeEntryUpdateSchema,
   TimeEntryWriteSchema,
+  type TimeEntryWrite,
 } from "@sebela/contracts";
 import type { RoadmapService } from "@sebela/services";
 
@@ -33,6 +34,13 @@ const SESSION_RULES =
 /** The diary days in a write result. */
 const changedDays = ({ result }: { readonly result: { readonly dates: readonly string[] } }) =>
   result.dates;
+
+/** A time-entry write is audited per time entry: the one its path names and each one it wrote. */
+const TIME_ENTRY_AUDIT = "roadmap-time-entry";
+const addressedEntry = (params: { readonly id: string }) => [params.id];
+const writtenEntries = (result: TimeEntryWrite) => result.entries.map((entry) => entry.id);
+/** The diary days a time-entry write wrote to or left. */
+const writtenDays = ({ result }: { readonly result: TimeEntryWrite }) => result.dates;
 
 /** The routes of the learning diary over the roadmap service. */
 export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
@@ -118,7 +126,8 @@ export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
       },
       errors: ["conflict"],
       handle: ({ body }) => roadmap.createTimeEntry(body),
-      records: changedDays,
+      records: writtenDays,
+      audit: { entity: TIME_ENTRY_AUDIT, records: () => [], recordsOf: writtenEntries },
     }),
     defineRoute({
       operationId: "updateRoadmapTimeEntry",
@@ -140,7 +149,8 @@ export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
       },
       errors: ["not_found", "conflict"],
       handle: ({ params, body }) => roadmap.updateTimeEntry(params.id, body),
-      records: changedDays,
+      records: writtenDays,
+      audit: { entity: TIME_ENTRY_AUDIT, records: addressedEntry, recordsOf: writtenEntries },
     }),
     defineRoute({
       operationId: "deleteRoadmapTimeEntry",
@@ -155,6 +165,7 @@ export function diaryRoutes(roadmap: RoadmapService): RouteDefinition[] {
       errors: ["not_found"],
       handle: ({ params }) => roadmap.deleteTimeEntry(params.id),
       records: changedDays,
+      audit: { entity: TIME_ENTRY_AUDIT, records: addressedEntry },
     }),
   ];
 }
