@@ -304,7 +304,8 @@ describe("the content audit", () => {
       ["roadmap-time-entry", second, "created"],
       ["roadmap-time-entry", first, "updated"],
       ["roadmap-time-entry", first, "deleted"],
-      ["roadmap-diary", "2026-03-02", "updated"],
+      // Its only entry moved away, so clearing the notes leaves no day.
+      ["roadmap-diary", "2026-03-02", "deleted"],
     ]);
     expect(recorded[3]?.after).toMatchObject({
       id: first,

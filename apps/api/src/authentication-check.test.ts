@@ -54,6 +54,7 @@ describe("GET /v1/authentication", () => {
       path: "/v1/authentication",
       access: "private",
       hasBody: false,
+      audit: null,
     });
   });
 });
