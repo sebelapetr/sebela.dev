@@ -327,6 +327,74 @@ export type DeleteTimeEntryResult = { ok: true; date: string } | { ok: false; re
 
 export type ClearDiaryNotesResult = { ok: true } | { ok: false; reason: "not_found" };
 
+/** Logged time split into its three categories, in whole seconds; they sum to `totalSeconds`. */
+export interface LearningTimeSplitRecord {
+  totalSeconds: number;
+  /** Time on resources whose type is not `book`. */
+  resourceSeconds: number;
+  /** Time on resources of type `book`. */
+  bookSeconds: number;
+  /** Attendance on events. */
+  eventSeconds: number;
+}
+
+/** Study time of an area or module: resource and book time, never event attendance. */
+export interface LearningStudyTimeRecord {
+  slug: string;
+  name: string;
+  /** `resourceSeconds` plus `bookSeconds`. */
+  totalSeconds: number;
+  resourceSeconds: number;
+  bookSeconds: number;
+}
+
+export interface LearningTimeAreaRecord extends LearningStudyTimeRecord {
+  /** Its modules with study time, by total (largest first), then slug. */
+  modules: LearningStudyTimeRecord[];
+}
+
+/** A resource with logged time, in its current module and area. */
+export interface LearningTimeResourceRecord {
+  slug: string;
+  name: string;
+  type: RoadmapResourceType;
+  module: { slug: string; name: string };
+  area: { slug: string; name: string };
+  /** The book it reads, or `null`. */
+  book: { slug: string; title: string } | null;
+  totalSeconds: number;
+}
+
+/** An event with attendance. */
+export interface LearningTimeEventRecord {
+  slug: string;
+  name: string;
+  kind: RoadmapEventKind;
+  startsOn: string;
+  endsOn: string;
+  totalSeconds: number;
+}
+
+/**
+ * The learning statistics, aggregated in one consistent snapshot. Every time entry counts exactly
+ * once in each view: its Europe/Prague diary day, that day's Monday-start week and its month.
+ */
+export interface LearningStatisticsRecord {
+  totals: LearningTimeSplitRecord & { activeDays: number };
+  /** Every diary day with logged time, oldest first. */
+  days: (LearningTimeSplitRecord & { date: string })[];
+  /** Every week from the first to the last with time, oldest first; a gap week has zeros. */
+  weeks: (LearningTimeSplitRecord & { startsOn: string })[];
+  /** Every month (`YYYY-MM`) from the first to the last with time, oldest first; gaps have zeros. */
+  months: (LearningTimeSplitRecord & { month: string })[];
+  /** The areas with study time, by total (largest first), then slug. */
+  areas: LearningTimeAreaRecord[];
+  /** The resources with logged time, by total (largest first), then slug. */
+  resources: LearningTimeResourceRecord[];
+  /** The events with attendance, by total (largest first), then slug. */
+  events: LearningTimeEventRecord[];
+}
+
 /**
  * Persistence of the AI roadmap: areas, their modules and the resources in them, with ordered
  * topic links to the profile's shared topics. Parents are real foreign keys without a cascade, so a
@@ -458,4 +526,10 @@ export interface RoadmapPersistence {
   ): Promise<ReplaceTimeEntryResult<Refusal>>;
   /** Deletes the time entry and returns its day, whose notes stay. */
   deleteTimeEntry(id: string): Promise<DeleteTimeEntryResult>;
+
+  /**
+   * The learning statistics over every time entry, aggregated in the database in one read-only,
+   * consistent snapshot. An empty diary gives zero totals and empty lists.
+   */
+  loadLearningStatistics(): Promise<LearningStatisticsRecord>;
 }
