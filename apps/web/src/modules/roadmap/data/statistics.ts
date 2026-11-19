@@ -90,7 +90,7 @@ export interface StatisticsEvent {
 export interface StatisticsPage {
   /** True when no time has been logged at all. */
   readonly empty: boolean;
-  /** Total time, study days and the average per study day. */
+  /** Total time, the days with time and the average per such day. */
   readonly figures: readonly StatisticsFigure[];
   /** Resources, books and events, which together make the total. */
   readonly categories: readonly StatisticsCategory[];
@@ -294,8 +294,8 @@ export function toStatisticsPage(statistics: RoadmapStatistics): StatisticsPage 
     empty: totals.totalSeconds === 0,
     figures: [
       { label: "Total time", value: formatStudyTime(totals.totalSeconds) },
-      { label: "Study days", value: String(totals.activeDays) },
-      { label: "Avg per day", value: formatStudyTime(average) },
+      { label: "Days with time", value: String(totals.activeDays) },
+      { label: "Avg per day with time", value: formatStudyTime(average) },
     ],
     categories: [
       category("Resources", totals.resourceSeconds),

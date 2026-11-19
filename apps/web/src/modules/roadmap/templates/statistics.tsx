@@ -24,7 +24,7 @@ const ROW = "flex flex-col gap-1 border-t border-border py-4 first:border-t-0 fi
 
 /**
  * The learning statistics under the roadmap's sub-navigation: the way from the overview through the
- * diary, then the API's totals — total time, study days and the average per day — and the total
+ * diary, then the API's totals — total time, the days with time and the average per such day — and the total
  * split into resources, books and events; the study time by area and module, each with a bar of its
  * share of study time, saying that event attendance belongs to no area; the most recent days (each
  * leading to its diary day), weeks and every month; the resources with time (each leading to its
