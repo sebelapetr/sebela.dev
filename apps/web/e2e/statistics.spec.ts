@@ -85,8 +85,9 @@ async function expectTouchTargets(page: Page) {
   for (const { target, height } of heights) expect(height, target).toBeGreaterThanOrEqual(44);
 }
 
+// The page's robots tag; roadmap pages are indexed, so it is absent.
 function robots(page: Page) {
-  return page.locator('meta[name="robots"]').getAttribute("content");
+  return page.locator('meta[name="robots"]');
 }
 
 interface Split {
@@ -248,8 +249,10 @@ test.describe("the learning statistics", () => {
   test("the areas and modules show study time only; events stand apart", async ({ page }) => {
     const response = await page.goto(`${website.url}${statistics}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Learning Statistics — Learning Diary — AI Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(page).toHaveTitle(
+      `Learning Statistics — Learning Diary — AI Engineering Roadmap — ${name}`,
+    );
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Learning Statistics");
     await expect(
       page.getByRole("navigation", { name: "AI Roadmap" }).locator('[aria-current="page"]'),

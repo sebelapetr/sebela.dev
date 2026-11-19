@@ -63,8 +63,9 @@ async function expectTouchTargets(page: Page) {
   for (const { target, height } of heights) expect(height, target).toBeGreaterThanOrEqual(44);
 }
 
+// The page's robots tag; roadmap pages are indexed, so it is absent.
 function robots(page: Page) {
-  return page.locator('meta[name="robots"]').getAttribute("content");
+  return page.locator('meta[name="robots"]');
 }
 
 function days(page: Page) {
@@ -127,13 +128,13 @@ test.describe("the learning diary", () => {
     return response.status;
   }
 
-  test("lists every day newest first with its study time, sessions and notes, kept out of search results", async ({
+  test("lists every day newest first with its study time, sessions and notes, open to search engines", async ({
     page,
   }) => {
     const response = await page.goto(`${website.url}/ai-roadmap/diary`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Learning Diary — AI Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(page).toHaveTitle(`Learning Diary — AI Engineering Roadmap — ${name}`);
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Learning Diary");
     await expect(
       page.getByRole("navigation", { name: "AI Roadmap" }).locator('[aria-current="page"]'),
@@ -164,8 +165,10 @@ test.describe("the learning diary", () => {
   }) => {
     const response = await page.goto(`${website.url}${busyDay}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Monday, March 2, 2026 — Learning Diary — AI Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(page).toHaveTitle(
+      `Monday, March 2, 2026 — Learning Diary — AI Engineering Roadmap — ${name}`,
+    );
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Monday, March 2, 2026");
     await expect(page.locator("main")).toContainText("3h 5m · 4 sessions");
     await expect(page.locator("main strong")).toHaveText("fictional signals");

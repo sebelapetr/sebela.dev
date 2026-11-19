@@ -1,0 +1,18 @@
+[
+  {
+    "slug": "orbit-weekly",
+    "title": "Orbit Weekly",
+    "description": "A *fictional* newsletter. <b>Raw markup</b> stays text and [a trap](javascript:window.__supportInjected=true) is no link.",
+    "link": "https://example.com/orbit-weekly",
+    "kind": "newsletter",
+    "position": 0
+  },
+  {
+    "slug": "testville-study-circle",
+    "title": "The Testville study circle",
+    "description": null,
+    "link": null,
+    "kind": "community",
+    "position": 1
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "signal-window",
+    "term": "Signal window",
+    "description": "How much of a fictional signal fits into one reading, measured in **ticks**.",
+    "position": 0
+  },
+  {
+    "slug": "quiet-grounding",
+    "term": "Quiet grounding",
+    "description": "Answering only from the supplied orbit notes.",
+    "position": 1
+  }
+]

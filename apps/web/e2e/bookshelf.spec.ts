@@ -69,8 +69,9 @@ async function expectTouchTargets(page: Page) {
   for (const { target, height } of heights) expect(height, target).toBeGreaterThanOrEqual(44);
 }
 
+// The page's robots tag; roadmap pages are indexed, so it is absent.
 function robots(page: Page) {
-  return page.locator('meta[name="robots"]').getAttribute("content");
+  return page.locator('meta[name="robots"]');
 }
 
 function books(page: Page) {
@@ -148,13 +149,13 @@ test.describe("the bookshelf", () => {
     return response.status;
   }
 
-  test("lists every book in shelf order with its status, author and cover, kept out of search results", async ({
+  test("lists every book in shelf order with its status, author and cover, open to search engines", async ({
     page,
   }) => {
     const response = await page.goto(`${website.url}${shelf}`);
     expect(response?.status()).toBe(200);
     await expect(page).toHaveTitle(`Bookshelf — AI Engineering Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bookshelf");
     await expect(
       page.getByRole("navigation", { name: "AI Roadmap" }).locator('[aria-current="page"]'),
@@ -209,7 +210,7 @@ test.describe("the bookshelf", () => {
     await expect(page).toHaveTitle(
       `The Quiet Orbit Handbook — Bookshelf — AI Engineering Roadmap — ${name}`,
     );
-    expect(await robots(page)).toContain("noindex");
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("The Quiet Orbit Handbook");
     await expect(
       page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("listitem"),

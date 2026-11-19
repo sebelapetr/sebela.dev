@@ -67,8 +67,9 @@ async function expectTouchTargets(page: Page) {
   for (const { target, height } of heights) expect(height, target).toBeGreaterThanOrEqual(44);
 }
 
+// The page's robots tag; roadmap pages are indexed, so it is absent.
 function robots(page: Page) {
-  return page.locator('meta[name="robots"]').getAttribute("content");
+  return page.locator('meta[name="robots"]');
 }
 
 test.describe.configure({ mode: "serial" });
@@ -127,13 +128,13 @@ test.describe("the roadmap's events", () => {
     return response.status;
   }
 
-  test("lists every event newest first, grouped by the year it starts in, kept out of search results", async ({
+  test("lists every event newest first, grouped by the year it starts in, open to search engines", async ({
     page,
   }) => {
     const response = await page.goto(`${website.url}${eventsPage}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Events — AI Roadmap — ${name}`);
-    expect(await robots(page)).toContain("noindex");
+    await expect(page).toHaveTitle(`Events — AI Engineering Roadmap — ${name}`);
+    await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Events");
     await expect(
       page.getByRole("navigation", { name: "AI Roadmap" }).locator('[aria-current="page"]'),
@@ -222,7 +223,7 @@ test.describe("the roadmap's events", () => {
     const response = await page.goto(`${website.url}${eventOnlyDay}`);
     expect(response?.status()).toBe(200);
     await expect(page).toHaveTitle(
-      `Thursday, January 1, 2026 — Learning Diary — AI Roadmap — ${name}`,
+      `Thursday, January 1, 2026 — Learning Diary — AI Engineering Roadmap — ${name}`,
     );
     await expect(page.getByRole("heading", { level: 2 })).toHaveText("Events");
     await expect(page.locator("main")).not.toContainText("What I worked on");

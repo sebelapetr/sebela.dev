@@ -183,7 +183,7 @@ test.describe("the homepage's narrative read from the API", () => {
     );
     // The fixture has no roadmap areas: the overview says so instead of an empty tree.
     await expect(page.getByRole("main")).toContainText("No roadmap areas are published yet.");
-    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/u);
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
     await page.getByRole("banner").getByRole("link", { name: "Casey Morrow" }).click();
     await expect(page).toHaveURL(`${website.url}/`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
