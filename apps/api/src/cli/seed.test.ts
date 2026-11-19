@@ -24,6 +24,9 @@ import {
   RoadmapBookListSchema,
   RoadmapCurrentSchema,
   RoadmapEventListSchema,
+  RoadmapFollowedSourceListSchema,
+  RoadmapGlossaryTermListSchema,
+  RoadmapProjectIdeaListSchema,
   RoadmapSchema,
   RoadmapStatisticsSchema,
   ServiceListSchema,
@@ -132,6 +135,21 @@ describe("the seed CLI", () => {
       resource: book.resource?.slug ?? null,
       readingSeconds: book.readingSeconds,
     })),
+    events: (await read("/v1/roadmap/events", RoadmapEventListSchema)).map((event) => ({
+      slug: event.slug,
+      topics: event.topics.map((topic) => topic.slug),
+      attendanceSeconds: event.attendanceSeconds,
+    })),
+    statistics: (await read("/v1/roadmap/statistics", RoadmapStatisticsSchema)).totals,
+    projectIdeas: (await read("/v1/roadmap/project-ideas", RoadmapProjectIdeaListSchema)).map(
+      (idea) => [idea.slug, idea.topics.map((topic) => topic.slug)],
+    ),
+    followedSources: (
+      await read("/v1/roadmap/followed-sources", RoadmapFollowedSourceListSchema)
+    ).map((source) => source.slug),
+    glossaryTerms: (await read("/v1/roadmap/glossary-terms", RoadmapGlossaryTermListSchema)).map(
+      (term) => term.slug,
+    ),
   });
 
   describe("with the demo seed", () => {
@@ -231,6 +249,22 @@ describe("the seed CLI", () => {
           .map(({ date, totalSeconds }) => [date, totalSeconds])
           .reverse(),
       );
+
+      // Supporting content beside the roadmap: ideas with and without topics or a way to start,
+      // followed sources with and without a link, and glossary terms.
+      const ideas = await read("/v1/roadmap/project-ideas", RoadmapProjectIdeaListSchema);
+      expect(ideas.length).toBeGreaterThanOrEqual(2);
+      expect(ideas.some(({ topics }) => topics.length > 0)).toBe(true);
+      expect(ideas.some(({ howToStart }) => howToStart === null)).toBe(true);
+      const sources = await read("/v1/roadmap/followed-sources", RoadmapFollowedSourceListSchema);
+      expect(sources.length).toBeGreaterThanOrEqual(2);
+      expect(sources.some(({ link }) => link === null)).toBe(true);
+      expect(sources.some(({ link }) => link !== null)).toBe(true);
+      const terms = await read("/v1/roadmap/glossary-terms", RoadmapGlossaryTermListSchema);
+      expect(terms.length).toBeGreaterThanOrEqual(2);
+      expect(result.out).toMatch(/project ideas: \d+ created, 0 updated/);
+      expect(result.out).toMatch(/followed sources: \d+ created, 0 updated/);
+      expect(result.out).toMatch(/glossary terms: \d+ created, 0 updated/);
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();
