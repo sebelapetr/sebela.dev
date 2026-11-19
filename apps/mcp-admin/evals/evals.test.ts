@@ -205,6 +205,22 @@ describe("E02: describe the project contract", () => {
     ).toMatch(/budget/);
   });
 
+  it("accepts the values of a boolean field the contract describes, and only then", () => {
+    const withFlag = {
+      ...description,
+      create: {
+        ...description.create,
+        properties: { ...description.create.properties, selectedForHomepage: { type: "boolean" } },
+      },
+    };
+    const answer =
+      "`name`, `summary`, `startedOn` and `selectedForHomepage` (`true` or `false`); a project belongs to an `experience`.";
+    expect(gradeE02(answer, context(call("describe", { entity: "project" }, withFlag)))).toEqual(
+      expect.objectContaining({ pass: true }),
+    );
+    expect(gradeE02(answer, context(described)).reason).toMatch(/true, false/);
+  });
+
   it("still fails on a guessed field next to schema words", () => {
     const answer =
       "`name` (`string`), `summary`, `startedOn`, `experience` and `budget` (`number`).";
