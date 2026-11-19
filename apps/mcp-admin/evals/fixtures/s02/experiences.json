@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "early-pixel-developer",
+    "title": "Junior web developer",
+    "kind": "main_job",
+    "organization": "early-pixel-agency",
+    "startedOn": "2012-09-01",
+    "endedOn": "2014-06-30",
+    "summary": "Built small **fictional** marketing sites. An old entry of the eval fixture.",
+    "responsibilities": ["Build landing pages"],
+    "inCv": false,
+    "technologies": []
+  },
+  {
+    "slug": "harbor-logistics-engineer",
+    "title": "Software engineer",
+    "kind": "main_job",
+    "organization": "harbor-logistics",
+    "startedOn": "2017-02-01",
+    "endedOn": "2022-12-31",
+    "summary": "Worked on the **fictional** freight booking platform.",
+    "responsibilities": ["Build the booking intake", "Run the on-call rotation"],
+    "inCv": true,
+    "technologies": ["typescript", "postgresql"]
+  },
+  {
+    "slug": "quill-studio-platform",
+    "title": "Platform engineer",
+    "kind": "main_job",
+    "organization": "quill-studio",
+    "startedOn": "2023-01-01",
+    "summary": "Runs the platform of a **fictional** design studio.",
+    "responsibilities": ["Own the billing platform"],
+    "inCv": true,
+    "technologies": ["typescript"]
+  }
+]

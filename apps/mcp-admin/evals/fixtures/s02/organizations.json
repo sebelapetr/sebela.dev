@@ -1,0 +1,9 @@
+[
+  {
+    "slug": "harbor-logistics",
+    "name": "Harbor Logistics",
+    "website": "https://harbor.example.test/"
+  },
+  { "slug": "quill-studio", "name": "Quill Studio", "website": null },
+  { "slug": "early-pixel-agency", "name": "Early Pixel Agency" }
+]

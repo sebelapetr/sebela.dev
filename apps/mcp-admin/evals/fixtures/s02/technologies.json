@@ -1,0 +1,4 @@
+[
+  { "slug": "typescript", "name": "TypeScript", "tier": "primary", "group": "core", "position": 0 },
+  { "slug": "postgresql", "name": "PostgreSQL", "tier": "primary", "group": "core", "position": 1 }
+]
