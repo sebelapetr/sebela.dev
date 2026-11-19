@@ -1,0 +1,28 @@
+# Model evals of the administrative MCP server (.plan/05-mcp-admin/evals.md).
+#
+# Do not run this file directly: `node evals/run.js` starts a clean API and MCP server for every
+# case-run, passes the address and an ephemeral key through the environment and applies the gates.
+# Pinned settings: Promptfoo 0.126.0 (run through `pnpm dlx`), the provider and model below,
+# @modelcontextprotocol/server 2.4.0 and the frozen clock in prompt.json.
+description: MCP Admin S01 read-only baseline
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: anthropic:messages:claude-opus-5-5
+    label: claude-opus-5-5
+    config:
+      max_tokens: 4096
+      mcp:
+        enabled: true
+        server:
+          name: sebela-admin
+          url: "{{ env.MCP_ADMIN_EVAL_URL }}"
+          headers:
+            Authorization: "Bearer {{ env.MCP_ADMIN_EVAL_KEY }}"
+
+tests: file://tests.js
+
+evaluateOptions:
+  maxConcurrency: 1
