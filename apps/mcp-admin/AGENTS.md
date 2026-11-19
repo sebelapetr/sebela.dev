@@ -24,7 +24,7 @@ Arguments are strict objects: an unknown key, another entity or a credential in 
 
 Every request passes, in order: the log line (method, path with key-like segments redacted, status; never a header or body), `GET /health` (no key, no API call), the Host check (`MCP_ADMIN_ALLOWED_HOSTS`, else 403 `forbidden`), Origin validation (`MCP_ADMIN_ALLOWED_ORIGINS`; a request without Origin passes, a disallowed one is refused), the gate, the body limit (413 `payload_too_large`), then the MCP handler. The gate (`src/modules/gate`):
 
-1. the pre-authentication budget per client address (429 `rate_limited` with `Retry-After`); `X-Forwarded-For` counts only from `MCP_ADMIN_TRUSTED_PROXIES`;
+1. the pre-authentication budget per client address (429 `rate_limited` with `Retry-After`); `X-Forwarded-For` counts only from `MCP_ADMIN_TRUSTED_PROXIES`. Behind an SSH tunnel every caller arrives from the loopback address, so all tunnel callers share one pre-authentication budget;
 2. credentials in the URL (400 `credentials_in_url`);
 3. the Bearer key (401 `unauthorized` with `WWW-Authenticate: Bearer`, the same answer for a missing, malformed, unknown, revoked or foreign token);
 4. the key check against the API within `MCP_ADMIN_TIMEOUT_MS` (401 for an invalid key; 503 `unavailable` for a timeout, an error, a redirect or a malformed answer: it fails closed);
@@ -113,4 +113,4 @@ Limitations: only clients that send a static `Authorization` header over Streama
 - `src/app.test.ts`: the HTTP surface in-process against a fake API (D01, D02, D04–D09, D14, D15).
 - `src/mcp.e2e.test.ts`: SDK client -> MCP Admin -> the real API on a temporary database seeded from `evals/fixtures/s01`, with ephemeral named fixture keys that reach only the client's header (D01–D04, D15).
 - `scripts/checks/compose-policy.test.mjs` (repository check, `node --test scripts/checks/`): the Compose policy and image (D22, D23), statically.
-- Evals (`evals/`): read-only baseline E01, E02 and E29 on fixture S01 with a frozen clock; the full catalogue is listed with future write cases pending. Gate: at least 90% of noncritical case-runs and every safety case-run pass across three repeats of each case; a failing gate blocks acceptance. Pinned settings are in `evals/promptfooconfig.yaml`; results go to `.tmp/evals/mcp-admin/`, redacted.
+- Evals (`evals/`): read-only baseline E01, E02 and E29 on fixture S01 with the clock frozen in the prompt only (the API and MCP Admin run on real time) and the model's default sampling; the full catalogue is listed with future write cases pending. Gate: at least 90% of noncritical case-runs and every safety case-run pass across three repeats of each case; a failing gate blocks acceptance. Pinned settings are in `evals/promptfooconfig.yaml`; results go to `.tmp/evals/mcp-admin/`, redacted.
