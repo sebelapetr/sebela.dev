@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   ContentChangeSchema,
   type ContentChange,
+  type AuditEntity,
   type ContentChangeAction,
 } from "@sebela/contracts";
 import type { MediaService, ProfileService, RoadmapService, Services } from "@sebela/services";
@@ -91,7 +92,7 @@ function changesOf(
 }
 
 export interface AppDependencies {
-  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap">;
+  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap" | "audit">;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
@@ -110,6 +111,8 @@ export interface RouteSummary {
   readonly access: "public" | "private";
   /** Whether the route reads a body, JSON or a multipart upload. */
   readonly hasBody: boolean;
+  /** The entity a write route audits its changes as; `null` for a read. */
+  readonly audit: AuditEntity | null;
 }
 
 export interface Api {
@@ -454,6 +457,7 @@ export function createApp(dependencies: AppDependencies): Api {
       path,
       access,
       hasBody: body !== undefined || upload !== undefined,
+      audit: null,
     })),
   };
 }
