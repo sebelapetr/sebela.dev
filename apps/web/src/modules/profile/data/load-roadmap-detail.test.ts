@@ -134,9 +134,18 @@ const failures: [string, Route][] = [
   ],
 ];
 
+/**
+ * Requests a route leaves hanging. Held here so that garbage collection cannot drop them: once the
+ * loader awaits them, a request is otherwise reachable only through the weak link from the timeout
+ * signal to the request's own signal, and a collected request would never see its timeout.
+ */
+const pending = new Set<Request>();
+
 const hang: Route = (request) =>
   new Promise<Response>((_resolve, reject) => {
+    pending.add(request);
     request.signal.addEventListener("abort", () => {
+      pending.delete(request);
       reject(request.signal.reason as Error);
     });
   });
