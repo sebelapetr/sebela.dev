@@ -2,8 +2,9 @@
  * The content API as MCP Admin uses it: one fixed base address, the caller's own key, a fixed
  * registry of content entities and outcomes instead of HTTP details.
  *
- * Every request goes to the configured base address only, on a route the registry names; nothing a
- * caller sends can choose another address, route, query or operator. Redirects are never followed,
+ * Every request goes to the configured base address only, on a route the registry names or the
+ * API's session action (`POST /v1/roadmap/sessions`); nothing a caller sends can choose another
+ * address, route, query or operator. Redirects are never followed,
  * so a key cannot be carried to a third host. Reads use the public routes; writes carry the
  * caller's key and a provenance label. A study session or event attendance is logged through the
  * API's one session action, which writes its time and its diary notes together.
