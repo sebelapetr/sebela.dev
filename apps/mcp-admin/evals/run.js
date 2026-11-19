@@ -4,13 +4,24 @@
 //
 //   node evals/run.js                 every implemented case, the required repeats (paid; run it as
 //                                     `pnpm --filter @sebela/mcp-admin eval`, which supplies the key)
-//   node evals/run.js --case <id>     only that implemented case, the required repeats (paid; through
-//                                     pnpm: `pnpm --filter @sebela/mcp-admin eval --case <id>`); the
-//                                     summary's `scope` marks it partial and its gate covers that case
+//   node evals/run.js --case <id> [--case <id>...]
+//                                     only those implemented cases, the required repeats (paid;
+//                                     through pnpm: `pnpm --filter @sebela/mcp-admin eval --case <id>`);
+//                                     the summary's `scope` marks it partial and its gate covers
+//                                     those cases. Issues run the cases their change affects.
+//   node evals/run.js --regrade <run-folder>
+//                                     grade a stored run's answers again with the current graders,
+//                                     no model call (free); for a grader fix
 //   node evals/run.js --check-fixture start and stop one fixture, no model call (free)
 //
-// An unknown option, an unknown or pending case or a missing case id stops the runner before any
-// setting is read, fixture started or model called.
+// An unknown option, an unknown or pending case, a missing or repeated case id or a regrade with
+// another option stops the runner before any setting is read, fixture started or model called.
+//
+// The model is pinned: Claude Sonnet 5.5 at medium effort with prompt caching
+// (`promptfooconfig.yaml`, the owner's decision in .plan/05-mcp-admin/evals.md). Every case-run
+// keeps its answer and executed tool calls in the run folder's `answers/` (local, git-ignored,
+// written only after the credential scan found nothing), so a grader fix is checked with
+// `--regrade` instead of a new paid run. The redacted `summary.json` never holds them.
 //
 // Every case-run gets its own API on a fresh temporary database seeded from `fixtures/s01`, its
 // own ephemeral API key and its own MCP server. The key reaches Promptfoo only through the
@@ -23,7 +34,8 @@
 // the gate fails or a credential would leak.
 //
 // Budget: at most `implemented cases x repeats` model conversations (9 for S01), each limited by
-// max_tokens in promptfooconfig.yaml; a `--case` run at most `repeats` (3). Needs ANTHROPIC_API_KEY, the running Postgres and a build
+// max_tokens in promptfooconfig.yaml; a `--case` run at most `repeats` (3) per named case; a
+// regrade none. Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -34,8 +46,11 @@ import { fileURLToPath } from "node:url";
 import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { fixtureFolder, startApi, startMcp } from "./fixture.js";
 import { evaluateGate } from "./gate.js";
+import * as graders from "./graders.js";
 
 const PROMPTFOO = "promptfoo@0.126.0";
+/** The pinned model of every eval; `promptfooconfig.yaml` names the same one. */
+export const MODEL = "claude-sonnet-5-5";
 const evalsFolder = fileURLToPath(new URL("./", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const reportRoot = join(repositoryRoot, ".tmp", "evals", "mcp-admin");
@@ -110,6 +125,14 @@ async function runCase(entry, repeat, folder) {
       );
     }
     if (failure !== undefined) throw failure;
+    const answer = answerRecord(entry, repeat, report, unchanged);
+    if (answer) {
+      await mkdir(join(folder, "answers"), { recursive: true });
+      await writeFile(
+        join(folder, "answers", `${name}.json`),
+        `${JSON.stringify(answer, null, 2)}\n`,
+      );
+    }
     return summarize(entry, repeat, report, unchanged);
   } finally {
     await api.stop();
@@ -291,6 +314,72 @@ export function summarize(entry, repeat, report, unchanged) {
 }
 
 /**
+ * What a grader needs to grade one case-run again: the final answer and the executed tool calls
+ * as Promptfoo recorded them, whether the fixture's content stayed unchanged, and the model that
+ * answered. Kept only in the local run folder, never in the redacted summary. Null when Promptfoo
+ * produced no single result.
+ *
+ * @param {import("./catalogue.js").EvalCase} entry
+ * @param {number} repeat
+ * @param {any} report Promptfoo's JSON output.
+ * @param {boolean} unchanged
+ * @returns {{ caseId: string, repeat: number, model: string, output: string, toolCalls: unknown[], unchanged: boolean } | null}
+ */
+export function answerRecord(entry, repeat, report, unchanged) {
+  /** @type {any[]} */
+  const results = report?.results?.results ?? [];
+  const result = results[0];
+  if (results.length !== 1 || !result) return null;
+  return {
+    caseId: entry.id,
+    repeat,
+    model: MODEL,
+    output: String(result.response?.output ?? ""),
+    toolCalls: result.response?.metadata?.toolCalls ?? [],
+    unchanged,
+  };
+}
+
+/**
+ * Grades stored answers again with the current graders, without calling a model: a grader fix is
+ * checked on the very answers it failed. A stored answer of another model, or of a case that is
+ * unknown or pending, is refused; content that changed still fails the case-run. The safety grader
+ * still refuses key- and connection-string-shaped answers; the sentinel values (the original run's
+ * ephemeral key and the database passwords) were checked when the answers were stored, which
+ * happens only after the run's credential scan found none.
+ *
+ * @param {readonly { caseId: string, repeat: number, model: string, output: string, toolCalls: unknown[], unchanged: boolean }[]} answers
+ * @returns {{ caseId: string, repeat: number, pass: boolean, reason: string, unchanged: boolean }[]}
+ */
+export function regradeRuns(answers) {
+  return answers.map((answer) => {
+    if (answer.model !== MODEL) {
+      throw new Error(
+        `${answer.caseId} repeat ${String(answer.repeat)}: answered by ${answer.model}, not the pinned model ${MODEL}.`,
+      );
+    }
+    const entry = catalogue.find((candidate) => candidate.id === answer.caseId);
+    if (!entry) throw new Error(`${answer.caseId} is not in the catalogue.`);
+    if (entry.status !== "implemented") throw new Error(`${answer.caseId} is not implemented yet.`);
+    const grader = /** @type {Record<string, unknown>} */ (graders)[`grade${entry.id}`];
+    if (typeof grader !== "function") throw new Error(`${entry.id} has no grader.`);
+    const graded = grader(answer.output, {
+      metadata: { toolCalls: /** @type {import("./graders.js").ToolCall[]} */ (answer.toolCalls) },
+    });
+    const reasons = [];
+    if (!graded.pass) reasons.push(String(graded.reason));
+    if (!answer.unchanged) reasons.push("The fixture's content changed.");
+    return {
+      caseId: entry.id,
+      repeat: answer.repeat,
+      pass: Boolean(graded.pass) && answer.unchanged,
+      reason: reasons.join(" ") || "Passed.",
+      unchanged: answer.unchanged,
+    };
+  });
+}
+
+/**
  * The provider usage of a whole evaluation: case-runs, prompt/completion/total tokens and cost as
  * Promptfoo reported them per case-run, and the average cost per conversation. Case-runs without a
  * usage report still count as conversations and are counted in `unreported`.
@@ -320,17 +409,20 @@ export function totals(runs) {
 
 /**
  * What one invocation of the runner does, from its command-line options: only check the fixture,
- * run every implemented case (a full run), or run one implemented case (`--case <id>`, a partial
- * run). Refuses an unknown option, an unknown or pending case and a missing or repeated case id,
- * before any fixture starts or model is called.
+ * grade a stored run again (`--regrade <folder>`, no model call), run every implemented case (a
+ * full run), or run the named implemented cases (`--case <id>`, repeatable, a partial run).
+ * Refuses an unknown option, an unknown or pending case, a missing or repeated case id and a
+ * regrade combined with another option, before any fixture starts or model is called.
  *
  * @param {readonly string[]} args
- * @returns {{ checkFixture: boolean, cases: readonly import("./catalogue.js").EvalCase[], partial: { case: string } | null }}
+ * @returns {{ checkFixture: boolean, regrade: string | null, cases: readonly import("./catalogue.js").EvalCase[], partial: { cases: string[] } | null }}
  */
 export function planRun(args) {
   let checkFixture = false;
-  /** @type {string | undefined} */
-  let caseId;
+  /** @type {string | null} */
+  let regrade = null;
+  /** @type {string[]} */
+  const caseIds = [];
   for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
     if (option === "--check-fixture") {
@@ -338,23 +430,78 @@ export function planRun(args) {
     } else if (option === "--case") {
       const value = args[index + 1];
       if (value === undefined || value.startsWith("--")) throw new Error("--case needs a case id.");
-      if (caseId !== undefined) throw new Error("Name only one --case per run.");
-      caseId = value;
+      if (caseIds.includes(value)) throw new Error(`${value} is named twice.`);
+      caseIds.push(value);
+      index += 1;
+    } else if (option === "--regrade") {
+      const value = args[index + 1];
+      if (value === undefined || value.startsWith("--"))
+        throw new Error("--regrade needs a run folder.");
+      regrade = value;
       index += 1;
     } else {
       throw new Error(`Unknown option ${String(option)}.`);
     }
   }
-  if (caseId === undefined) return { checkFixture, cases: implementedCases(), partial: null };
-  const entry = catalogue.find((candidate) => candidate.id === caseId);
-  if (!entry) throw new Error(`${caseId} is not in the catalogue.`);
-  if (entry.status !== "implemented") throw new Error(`${caseId} is not implemented yet.`);
-  return { checkFixture, cases: [entry], partial: { case: entry.id } };
+  if (regrade !== null) {
+    if (checkFixture || caseIds.length > 0) throw new Error("--regrade takes no other option.");
+    return { checkFixture: false, regrade, cases: [], partial: null };
+  }
+  if (caseIds.length === 0) {
+    return { checkFixture, regrade: null, cases: implementedCases(), partial: null };
+  }
+  const cases = caseIds.map((caseId) => {
+    const entry = catalogue.find((candidate) => candidate.id === caseId);
+    if (!entry) throw new Error(`${caseId} is not in the catalogue.`);
+    if (entry.status !== "implemented") throw new Error(`${caseId} is not implemented yet.`);
+    return entry;
+  });
+  return { checkFixture, regrade: null, cases, partial: { cases: caseIds } };
+}
+
+/**
+ * Grades the stored answers of a run folder again and writes `regraded-<time>.json` next to its
+ * summary: the gate over the cases of the original run, with no model call and no cost.
+ *
+ * @param {string} folder
+ */
+async function regradeFolder(folder) {
+  const original = JSON.parse(await readFile(join(folder, "summary.json"), "utf8"));
+  const answersFolder = join(folder, "answers");
+  const files = (await readdir(answersFolder)).filter((file) => file.endsWith(".json")).sort();
+  const answers = await Promise.all(
+    files.map(async (file) => JSON.parse(await readFile(join(answersFolder, file), "utf8"))),
+  );
+  const runs = regradeRuns(answers);
+  /** @type {string[]} */
+  const scopeCases = original?.scope?.partial ? (original.scope.cases ?? []) : [];
+  const cases =
+    scopeCases.length > 0 ? catalogue.filter((entry) => scopeCases.includes(entry.id)) : undefined;
+  const gate = evaluateGate(runs, cases ? { cases } : {});
+  const regradedAt = new Date().toISOString();
+  const result = {
+    regradedAt,
+    of: original.startedAt,
+    scope: original.scope,
+    model: MODEL,
+    gate,
+    runs,
+  };
+  const report = join(folder, `regraded-${regradedAt.replaceAll(":", "-")}.json`);
+  await writeFile(report, `${JSON.stringify(result, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ scope: original.scope, gate, cost: 0, report }, null, 2)}\n`,
+  );
+  if (!gate.pass) process.exitCode = 1;
 }
 
 async function main() {
   // Invalid options stop the runner before any setting is read or fixture started.
   const plan = planRun(process.argv.slice(2));
+  if (plan.regrade !== null) {
+    await regradeFolder(plan.regrade);
+    return;
+  }
   // The process environment wins, then this checkout's files, then the documented examples.
   for (const name of [".env.local", ".env", ".env.example"]) {
     const file = join(repositoryRoot, name);
@@ -391,10 +538,12 @@ async function main() {
   const gate = evaluateGate(runs, plan.partial ? { cases: plan.cases } : {});
   const summary = {
     startedAt,
-    scope: plan.partial ? { partial: true, case: plan.partial.case } : { partial: false },
+    scope: plan.partial ? { partial: true, cases: plan.partial.cases } : { partial: false },
     pinned: {
       promptfoo: PROMPTFOO,
-      provider: "anthropic:messages:claude-opus-5-5",
+      provider: `anthropic:messages:${MODEL}`,
+      effort: "medium",
+      promptCaching: true,
       maxTokens: 4096,
       maxToolCalls: 4,
       timeoutMs: 120000,
