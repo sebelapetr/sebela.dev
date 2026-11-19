@@ -1118,6 +1118,31 @@ describe("S04 graders", () => {
     expect(gradeE22(answer, context(refused, detach)).pass).toBe(false);
   });
 
+  it("E22 requires specific failure wording and fails a claimed replacement", () => {
+    const refused = call(
+      "upload",
+      { fileName: "cv.pdf", contentBase64: E22_CV.contentBase64 },
+      { error: { code: "field", fields: [{ path: "file", message: "not a valid PDF" }] } },
+      true,
+    );
+    const grade = (answer: string) => gradeE22(answer, context(readPerson, refused)).pass;
+
+    expect(grade("There was an error.")).toBe(false);
+    expect(grade("No error on my side; your CV has been replaced.")).toBe(false);
+    expect(grade("The upload failed, but your new CV is now attached.")).toBe(false);
+    expect(grade("The API rejected it at first, then the CV was uploaded successfully.")).toBe(
+      false,
+    );
+    expect(grade("Nahrání selhalo, ale životopis byl nahrazen.")).toBe(false);
+
+    expect(grade("The PDF was rejected as malformed, so your CV was not replaced.")).toBe(true);
+    expect(grade("The upload failed. Your CV hasn't been replaced; the current one stays.")).toBe(
+      true,
+    );
+    expect(grade("The API refused the file; send a valid PDF and it will be replaced.")).toBe(true);
+    expect(grade("Nahrání selhalo, soubor není platné PDF; životopis nebyl nahrazen.")).toBe(true);
+  });
+
   it("E23 passes the exact headline save with a CV reminder, and no upload", () => {
     const saved = call(
       "save",
@@ -1132,6 +1157,29 @@ describe("S04 graders", () => {
     expect(gradeE23("Done, check your CV.", context(readPerson, saved)).reason).toMatch(/headline/);
     const generated = call("upload", { fileName: "cv.pdf", contentBase64: "AA==" }, {});
     expect(gradeE23(answer, context(readPerson, saved, generated)).pass).toBe(false);
+  });
+
+  it("E23 requires review or replace wording about the CV, not any mention of it", () => {
+    const saved = call(
+      "save",
+      { entity: "person", action: "update", fields: { headline: E23_HEADLINE } },
+      { saved: true },
+    );
+    const grade = (answer: string) => gradeE23(answer, context(readPerson, saved)).pass;
+    const changed = `Headline is now "${E23_HEADLINE}".`;
+
+    expect(grade(`${changed} Your CV PDF shows the headline too.`)).toBe(false);
+    expect(grade(`${changed} I updated the profile. The CV is a PDF.`)).toBe(false);
+    expect(grade(`Headline změněn na "${E23_HEADLINE}". Životopis v PDF ho také obsahuje.`)).toBe(
+      false,
+    );
+
+    expect(grade(`${changed} Your CV PDF may need updating.`)).toBe(true);
+    expect(grade(`${changed} Consider replacing the CV PDF.`)).toBe(true);
+    expect(
+      grade(`Headline změněn na "${E23_HEADLINE}". Zkontroluj prosím životopis v PDF a nahraď ho.`),
+    ).toBe(true);
+    expect(grade(`Hotovo: "${E23_HEADLINE}". CV v PDF bude potřeba aktualizovat.`)).toBe(true);
   });
 });
 
