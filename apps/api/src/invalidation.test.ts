@@ -366,24 +366,23 @@ describe("the website invalidation sender over HTTP", () => {
     answer = "ok";
   });
 
-  it("delivers bytes the website verifies, and gives up on a website that never answers", async () => {
+  it("delivers bytes the website verifies in one attempt", async () => {
     const lines: string[] = [];
+    // A generous timeout: a slow runner must not turn the delivery into a timed-out retry.
     const invalidation = createWebsiteInvalidation({
       url: destination,
       secret: SECRET,
       log: (line) => lines.push(line),
-      timeoutMs: 200,
+      timeoutMs: 30_000,
       retryDelaysMs: [1, 1],
     });
 
     await invalidation.notify({ change });
     await invalidation.idle();
-    answer = "hang";
-    await invalidation.notify({ change });
-    await invalidation.idle();
     await invalidation.close();
 
-    expect(received).toHaveLength(4);
+    expect(received).toHaveLength(1);
+    expect(lines).toEqual([]);
     const [first] = received;
     if (!first) throw new Error("nothing was received");
     const header = (name: string) => {
@@ -398,7 +397,29 @@ describe("the website invalidation sender over HTTP", () => {
       now: Date.now(),
     });
     expect(verification).toMatchObject({ ok: true, notification: { changes: [change] } });
-    expect(lines.join("\n")).toMatch(/gave up/);
+  });
+
+  it("times out every attempt on a website that never answers, then gives up", async () => {
+    answer = "hang";
+    const lines: string[] = [];
+    const invalidation = createWebsiteInvalidation({
+      url: destination,
+      secret: SECRET,
+      log: (line) => lines.push(line),
+      timeoutMs: 1000,
+      retryDelaysMs: [1, 1],
+    });
+
+    await invalidation.notify({ change });
+    await invalidation.idle();
+    await invalidation.close();
+
+    expect(received).toHaveLength(3);
+    expect(lines).toHaveLength(4);
+    expect(lines.slice(0, 3).every((line) => /attempt \d failed: TimeoutError$/.test(line))).toBe(
+      true,
+    );
+    expect(lines[3]).toMatch(/gave up after 3 attempts$/);
   });
 });
 
@@ -616,6 +637,42 @@ describe("notifying the website of committed content writes", () => {
       [{ domain: "roadmap-book", record: "fictional-patterns", action: "created" }],
       [{ domain: "roadmap-book", record: "fictional-patterns", action: "updated" }],
       [{ domain: "roadmap-book", record: "fictional-patterns", action: "deleted" }],
+    ]);
+  });
+
+  it("names the event each event write changed and the days attendance on it changed", async () => {
+    const event = {
+      slug: "fictional-summit",
+      name: "Fictional Summit",
+      kind: "conference",
+      startsOn: "2026-04-01",
+      endsOn: "2026-04-02",
+    };
+    expect((await send("/v1/roadmap/events", "POST", json(event, auth))).status).toBe(201);
+    const moved = json({ startsOn: "2026-04-02", endsOn: "2026-04-03" }, auth);
+    expect((await send("/v1/roadmap/events/fictional-summit", "PATCH", moved)).status).toBe(200);
+    const session = {
+      event: "fictional-summit",
+      startedAt: "2026-04-02T09:00:00+02:00",
+      endedAt: "2026-04-02T10:00:00+02:00",
+    };
+    const logged = await send("/v1/roadmap/time-entries", "POST", json(session, auth));
+    expect(logged.status).toBe(201);
+    const { entries } = (await logged.json()) as { entries: { id: string }[] };
+    const id = entries[0]?.id ?? "";
+    expect((await send(`/v1/roadmap/time-entries/${id}`, "DELETE", { headers: auth })).status).toBe(
+      204,
+    );
+    expect(
+      (await send("/v1/roadmap/events/fictional-summit", "DELETE", { headers: auth })).status,
+    ).toBe(204);
+
+    expect(await delivered()).toEqual([
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "created" }],
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "updated" }],
+      [{ domain: "roadmap-diary", record: "2026-04-02", action: "created" }],
+      [{ domain: "roadmap-diary", record: "2026-04-02", action: "deleted" }],
+      [{ domain: "roadmap-event", record: "fictional-summit", action: "deleted" }],
     ]);
   });
 

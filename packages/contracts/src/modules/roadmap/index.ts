@@ -419,3 +419,19 @@ export type {
   RoadmapBookStatus,
   RoadmapBookUpdate,
 } from "./books.js";
+export {
+  DiaryEventSchema,
+  RoadmapEventCreateSchema,
+  RoadmapEventListSchema,
+  RoadmapEventSchema,
+  RoadmapEventUpdateSchema,
+  roadmapEventKinds,
+} from "./events.js";
+export type {
+  DiaryEvent,
+  RoadmapEvent,
+  RoadmapEventCreate,
+  RoadmapEventKind,
+  RoadmapEventList,
+  RoadmapEventUpdate,
+} from "./events.js";

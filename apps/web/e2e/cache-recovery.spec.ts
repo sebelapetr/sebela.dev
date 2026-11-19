@@ -1,7 +1,7 @@
 // The website's cached content recovers without invalidation notifications. The API here sends its
 // signed notifications to an address nobody listens on, so every callback is dropped, and the
 // website reads the API through a proxy the test can take down. With a fallback interval of five
-// seconds, a write to the profile, the roadmap, the learning diary or the bookshelf shows once the interval has elapsed, on the
+// seconds, a write to the profile, the roadmap, the learning diary, the bookshelf or the events shows once the interval has elapsed, on the
 // overview, an area's page and the homepage's Exploring alike, and a moved or deleted module
 // leaves its old address; a restarted website reads current content at once; during an outage cached pages keep their last
 // good content while uncached pages say the content is unavailable; and once the API answers
@@ -178,6 +178,54 @@ test.describe("cached content without invalidation notifications", () => {
     await expect
       .poll(async () => (await read("/ai-roadmap/bookshelf")).body, within)
       .toContain("Later Orbit Almanac");
+  });
+
+  test("event writes with dropped notifications reach the warmed events page and old and new days after the interval", async () => {
+    async function write(method: string, path: string, body: unknown) {
+      const response = await fetch(`${api.url}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // The write succeeds although its notification cannot be delivered.
+      expect(response.ok, `${method} ${path} answers ${String(response.status)}`).toBe(true);
+    }
+    // This fixture has no events: the warmed page says so and neither day exists yet.
+    const empty = "No events yet.";
+    const events = "/ai-roadmap/events";
+    const oldDay = "/ai-roadmap/diary/2025-11-05";
+    const newDay = "/ai-roadmap/diary/2025-11-07";
+    expect((await read(events)).body).toContain(empty);
+    expect((await read(oldDay)).status).toBe(404);
+    expect((await read(newDay)).status).toBe(404);
+
+    await write("POST", "/v1/roadmap/events", {
+      slug: "late-orbit-evening",
+      name: "Late orbit evening",
+      kind: "meetup",
+      startsOn: "2025-11-05",
+      endsOn: "2025-11-05",
+    });
+
+    // Inside the interval the cached page is still served: no notification arrived.
+    expect((await read(events)).body).toContain(empty);
+    const within = { timeout: (revalidateSeconds + 5) * 1_000, intervals: [500] };
+    await expect
+      .poll(async () => (await read(events)).body, within)
+      .toContain("Late orbit evening");
+    await expect.poll(async () => (await read(oldDay)).status, within).toBe(200);
+    expect((await read(oldDay)).body).toContain("Late orbit evening");
+
+    // Moving it leaves the now warmed old day and reaches the new one after the interval too.
+    await write("PATCH", "/v1/roadmap/events/late-orbit-evening", {
+      startsOn: "2025-11-07",
+      endsOn: "2025-11-07",
+    });
+    expect((await read(oldDay)).status).toBe(200);
+    await expect.poll(async () => (await read(oldDay)).status, within).toBe(404);
+    await expect.poll(async () => (await read(newDay)).status, within).toBe(200);
+    expect((await read(newDay)).body).toContain("Late orbit evening");
+    await expect.poll(async () => (await read(events)).body, within).toContain("November 7, 2025");
   });
 
   test("a new module and resource reach the warmed area page and homepage Exploring after the interval", async () => {

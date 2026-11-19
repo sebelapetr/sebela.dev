@@ -1,0 +1,13 @@
+[
+  {
+    "slug": "signal-explainer",
+    "module": "signal-basics",
+    "name": "A fictional signal explainer",
+    "type": "youtube-video",
+    "status": "in-progress",
+    "estimatedMinutes": 90,
+    "startedAt": "2026-01-02T08:00:00.000Z",
+    "link": "https://learn.example.test/signal-explainer",
+    "position": 0
+  }
+]

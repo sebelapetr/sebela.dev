@@ -6,7 +6,13 @@ import { TypeBadge } from "../components/badges";
 import { BookLink } from "../components/book-parts";
 import { Breadcrumbs } from "../components/breadcrumbs";
 import { RoadmapFrame } from "../components/roadmap-frame";
-import { DIARY_NAME, toDiaryDayPage, type DiarySession } from "../data/diary";
+import {
+  DIARY_NAME,
+  toDiaryDayPage,
+  type DiaryAttendance,
+  type DiaryEventGroup,
+  type DiarySession,
+} from "../data/diary";
 
 const HEADING_LINK =
   "inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
@@ -16,7 +22,9 @@ const HEADING_LINK =
  * diary, the day in words, its study time and sessions, its Markdown notes (rendered safely), then
  * what was studied when — grouped by area, then module, in the roadmap's order, each session with
  * its Prague start and end, its duration and its resource, which leads to the book it reads on the
- * bookshelf. A day with notes only shows its notes.
+ * bookshelf — then the events covering the day, each with its kind, which day of it this is, its
+ * period and the time spent at it that day. A day with notes only shows its notes; a day covered
+ * only by an event shows the event.
  */
 export function RoadmapDiaryDayTemplate({ content }: { readonly content: RoadmapDiaryDayContent }) {
   const page = toDiaryDayPage(content.day, content.areas, content.books);
@@ -72,6 +80,16 @@ export function RoadmapDiaryDayTemplate({ content }: { readonly content: Roadmap
             ))}
           </section>
         )}
+        {page.events.length === 0 ? null : (
+          <section aria-labelledby="diary-events-heading" className="flex flex-col gap-8">
+            <h2 id="diary-events-heading" className="type-heading">
+              Events
+            </h2>
+            {page.events.map((event) => (
+              <EventGroup key={event.slug} event={event} />
+            ))}
+          </section>
+        )}
       </article>
     </RoadmapFrame>
   );
@@ -89,6 +107,62 @@ function MaybeLink({
     <Link href={href} prefetch={false} className={HEADING_LINK}>
       {children}
     </Link>
+  );
+}
+
+/** An event covering the day: its name, kind, day and period, then the time spent at it. */
+function EventGroup({ event }: { readonly event: DiaryEventGroup }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h3 className="type-item wrap-anywhere">
+            {event.href === null ? (
+              <span className="inline-flex min-h-11 items-center">{event.name}</span>
+            ) : (
+              <a
+                href={event.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={HEADING_LINK}
+              >
+                <span>
+                  {event.name}
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </span>
+              </a>
+            )}
+          </h3>
+          <TypeBadge label={event.kindLabel} />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {event.dayOf === null ? event.period : `${event.dayOf} · ${event.period}`}
+        </p>
+      </div>
+      {event.sessions.length === 0 ? null : (
+        <ul
+          aria-label={`Time at ${event.name}`}
+          className="flex flex-col gap-2 border-l border-border pl-4"
+        >
+          {event.sessions.map((session) => (
+            <Attendance key={session.id} session={session} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Time spent at an event: its Prague start and end and its duration. */
+function Attendance({ session }: { readonly session: DiaryAttendance }) {
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <span className="font-mono tabular-nums">
+        <time dateTime={session.startedAt}>{session.start}</time> –{" "}
+        <time dateTime={session.endedAt}>{session.end}</time>
+      </span>
+      <span>({session.duration})</span>
+    </li>
   );
 }
 

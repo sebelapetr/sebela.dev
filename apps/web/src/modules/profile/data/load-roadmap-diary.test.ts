@@ -52,16 +52,21 @@ const day: DiaryDay = {
         module: "fictional-module",
         area: "fictional-area",
       },
+      event: null,
       startedAt: "2026-03-02T08:00:00.000Z",
       endedAt: "2026-03-02T09:30:00.000Z",
       durationSeconds: 5400,
     },
   ],
   totalSeconds: 5400,
+  events: [],
 };
 
 const diary: Diary = {
-  days: [day, { date: "2026-03-01", notes: "Notes only.", entries: [], totalSeconds: 0 }],
+  days: [
+    day,
+    { date: "2026-03-01", notes: "Notes only.", entries: [], totalSeconds: 0, events: [] },
+  ],
 };
 
 const progress = {

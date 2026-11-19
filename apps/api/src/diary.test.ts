@@ -103,6 +103,7 @@ describe("the learning diary API", () => {
       notes: "Read **chapter 1**.",
       entries: [],
       totalSeconds: 0,
+      events: [],
     });
 
     const replaced = await patch("/v1/roadmap/diary/2026-03-02", { notes: "Read chapter 2." });
@@ -168,7 +169,7 @@ describe("the learning diary API", () => {
     expect(write.entries[0]).toMatchObject({ id, date: "2026-03-05", durationSeconds: 2700 });
 
     expect(await day("2026-03-02")).toMatchObject({ notes: "Kept.", entries: [], totalSeconds: 0 });
-    expect((await day("2026-03-05")).entries[0]?.resource.slug).toBe("prompting-drills");
+    expect((await day("2026-03-05")).entries[0]?.resource?.slug).toBe("prompting-drills");
 
     expect((await remove(`/v1/roadmap/time-entries/${id}`)).status).toBe(204);
     expect((await request("/v1/roadmap/diary/2026-03-05")).status).toBe(404);
@@ -212,7 +213,7 @@ describe("the learning diary API", () => {
       ["2026-03-03", 1800],
       ["2026-03-02", 1800],
     ]);
-    expect(new Set(days.flatMap((d) => d.entries.map((e) => e.resource.slug))).size).toBe(1);
+    expect(new Set(days.flatMap((d) => d.entries.map((e) => e.resource?.slug))).size).toBe(1);
   });
 
   it("refuses an unknown resource, an end not after the start and a fraction of a second, naming the field", async () => {

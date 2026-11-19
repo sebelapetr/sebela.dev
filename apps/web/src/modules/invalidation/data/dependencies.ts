@@ -43,6 +43,10 @@ export const dependencyMap: Readonly<Record<ContentDomain, readonly CacheScope[]
   // navigate to a book read through the same cache; a resource's link to a book is a
   // `roadmap-resource` change, so former and new links refresh with it.
   "roadmap-book": ["profile"],
+  // An event change names the event. The Events page and the diary's list and days read through
+  // the same cache, so invalidating it as a whole refreshes the old and the new days of a moved
+  // event; attendance on it is a `roadmap-diary` change naming its days.
+  "roadmap-event": ["profile"],
 };
 
 /**

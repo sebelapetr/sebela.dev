@@ -882,7 +882,7 @@ export interface paths {
         };
         /**
          * Read the learning diary
-         * @description Every Europe/Prague calendar day with notes or time entries, newest first, each with its entries in time order and their resources. Durations and day totals are derived from the stored endpoints on every read, in actual elapsed seconds and before any rounding. An empty diary is the valid empty `days` list.
+         * @description Every Europe/Prague calendar day with notes, time entries or an event covering it, newest first, each with its entries in time order and their resource or event, and the events whose dates cover it. An event's days add no time. Durations and day totals are derived from the stored endpoints on every read, in actual elapsed seconds and before any rounding. An empty diary is the valid empty `days` list.
          */
         get: operations["getRoadmapDiary"];
         put?: never;
@@ -902,7 +902,7 @@ export interface paths {
         };
         /**
          * Read one day of the learning diary
-         * @description The day's notes, its time entries and their derived total, as in the whole diary. A day without notes or time entries is not found.
+         * @description The day's notes, its time entries, their derived total and the events covering it, as in the whole diary. A day without notes, time entries or a covering event is not found.
          */
         get: operations["getRoadmapDiaryDay"];
         put?: never;
@@ -932,7 +932,7 @@ export interface paths {
         put?: never;
         /**
          * Log a study session
-         * @description Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` is refused naming the field. All of its entries are written or none.
+         * @description Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. All of its entries are written or none.
          */
         post: operations["createRoadmapTimeEntry"];
         delete?: never;
@@ -960,7 +960,7 @@ export interface paths {
         head?: never;
         /**
          * Update a time entry
-         * @description Changes only the fields sent and judges the merged interval by the same rules. Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` is refused naming the field. The first entry keeps the identifier; the result names the old and the new days, whose notes stay.
+         * @description Changes only the fields sent and judges the merged interval by the same rules. Give both endpoints as absolute instants with an offset, in whole seconds, the end after the start; an offset tells a repeated local hour apart. The target is exactly one `resource` (study time) or `event` (attendance), and attendance must fall on the event's days. The session is split at each Europe/Prague midnight into one entry per diary day without changing its elapsed time. It must not overlap any logged interval on any resource or event, also one written at the same time (`409`); adjacent intervals are allowed. An unknown `resource` or `event`, or attendance outside the event, is refused naming the field. The first entry keeps the identifier; the result names the old and the new days, whose notes stay.
          */
         patch: operations["updateRoadmapTimeEntry"];
         trace?: never;
@@ -1012,6 +1012,55 @@ export interface paths {
          * @description Changes only the fields sent; `null` clears an optional field and the slug cannot change. A `coverId` must name an uploaded image (`validation_failed` on `coverId` otherwise); the end cannot be before the start (`validation_failed` on `endedOn`). The period is judged with the stored dates.
          */
         patch: operations["updateRoadmapBook"];
+        trace?: never;
+    };
+    "/v1/roadmap/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the attended events
+         * @description Every event, newest start first, with its topics and the attendance time logged on it, derived from its time entries alone. No events is the valid empty list.
+         */
+        get: operations["listRoadmapEvents"];
+        put?: never;
+        /**
+         * Add an attended event
+         * @description The slug is unique and stable; a taken slug is a conflict. Omitted optional fields mean none, in person and without topics. The dates are inclusive Europe/Prague calendar days; the end cannot be before the start (`validation_failed` on `endsOn`) and equals it for a single-day event. Every slug in `topics` names an existing topic, each once (`validation_failed` on `topics`). The event shows on every diary day of its range without adding time.
+         */
+        post: operations["createRoadmapEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap/events/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an event */
+        get: operations["getRoadmapEvent"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an event
+         * @description An event with logged attendance is not deleted (`409`), so its history is never erased silently; move or delete that time first. Its diary days without notes or time go with it.
+         */
+        delete: operations["deleteRoadmapEvent"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an event
+         * @description Changes only the fields sent; `null` clears an optional field, given `topics` replace every link and the slug cannot change. The dates are inclusive Europe/Prague calendar days; the end cannot be before the start (`validation_failed` on `endsOn`) and equals it for a single-day event. Every slug in `topics` names an existing topic, each once (`validation_failed` on `topics`). The event shows on every diary day of its range without adding time. The period is judged with the stored dates. New dates that would leave logged attendance outside the event are refused (`409`, naming those days) and nothing changes.
+         */
+        patch: operations["updateRoadmapEvent"];
         trace?: never;
     };
     "/openapi.json": {
@@ -1760,8 +1809,10 @@ export interface components {
             notes: string;
         };
         TimeEntryCreate: {
-            /** @description The slug of the resource that was studied. */
-            resource: string;
+            /** @description The slug of the resource that was studied; not sent with `event`. */
+            resource?: string;
+            /** @description The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event. */
+            event?: string;
             /**
              * Format: date-time
              * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
@@ -1774,8 +1825,10 @@ export interface components {
             endedAt: string;
         };
         TimeEntryUpdate: {
-            /** @description The slug of the resource that was studied. */
+            /** @description The slug of the resource that was studied; not sent with `event`. */
             resource?: string;
+            /** @description The slug of the event that was attended; not sent with `resource`. Every piece of the session must fall on a day of the event. */
+            event?: string;
             /**
              * Format: date-time
              * @description An absolute instant with `Z` or a UTC offset, for example `2026-03-02T23:30:00+01:00`. A local time without an offset is refused.
@@ -1864,6 +1917,80 @@ export interface components {
             summary?: string | null;
             /** @description The identifier of an uploaded image used as the cover; `null` when there is none. It must exist and be an image when written. */
             coverId?: string | null;
+        };
+        RoadmapEventCreate: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /**
+             * @description Who organised it; `null` when unknown.
+             * @default null
+             */
+            organizer?: string | null;
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn: string;
+            /**
+             * @description Where it took place; `null` for an online event or when unknown.
+             * @default null
+             */
+            place?: string | null;
+            /**
+             * @description Whether it was attended online.
+             * @default false
+             */
+            online?: boolean;
+            /**
+             * @description An absolute `http` or `https` address; `null` when there is none.
+             * @default null
+             */
+            link?: string | null;
+            /**
+             * @description What was taken away, in Markdown; `null` when there is nothing yet.
+             * @default null
+             */
+            takeaways?: string | null;
+            /**
+             * @description Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged.
+             * @default []
+             */
+            topics?: string[];
+        };
+        RoadmapEventUpdate: {
+            name?: string;
+            /** @enum {string} */
+            kind?: "conference" | "meetup" | "workshop" | "lecture";
+            /** @description Who organised it; `null` when unknown. */
+            organizer?: string | null;
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn?: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn?: string;
+            /** @description Where it took place; `null` for an online event or when unknown. */
+            place?: string | null;
+            /** @description Whether it was attended online. */
+            online?: boolean;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link?: string | null;
+            /** @description What was taken away, in Markdown; `null` when there is nothing yet. */
+            takeaways?: string | null;
+            /** @description Slugs of existing shared topics, each once, in their intended order. On an update the list replaces every link; an omitted list leaves them unchanged. */
+            topics?: string[];
         };
         Health: {
             /** @constant */
@@ -2578,6 +2705,8 @@ export interface components {
             /** @description Markdown; `null` when there are none. */
             notes: string | null;
             entries: components["schemas"]["TimeEntry"][];
+            /** @description The events whose inclusive date range covers the day, by start date, then slug; they add no time. */
+            events: components["schemas"]["DiaryEvent"][];
             /** @description The sum of the entries' elapsed seconds, derived on read and never rounded. */
             totalSeconds: number;
         };
@@ -2585,7 +2714,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             date: components["schemas"]["DiaryDate"];
-            resource: components["schemas"]["DiaryResource"];
+            /** @description The resource studied; `null` for attendance at an event. */
+            resource: components["schemas"]["DiaryResource"] | null;
+            /** @description The event attended; `null` for a study session on a resource. */
+            event: components["schemas"]["DiaryEvent"] | null;
             /** Format: date-time */
             startedAt: string;
             /** Format: date-time */
@@ -2605,6 +2737,25 @@ export interface components {
             module: string;
             /** @description The slug of its module's area. */
             area: string;
+        };
+        DiaryEvent: {
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn: string;
+            /** @description `null` when the event has no link. */
+            link: string | null;
         };
         TimeEntryWrite: {
             entries: components["schemas"]["TimeEntry"][];
@@ -2663,6 +2814,45 @@ export interface components {
             module: string;
             /** @description The slug of its module's area. */
             area: string;
+        };
+        /** @description Ordered by start date, newest first, then by end date (newest first) and slug. */
+        RoadmapEventList: components["schemas"]["RoadmapEvent"][];
+        RoadmapEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @description The stable, unique address of the record, for example `paldock`. */
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            kind: "conference" | "meetup" | "workshop" | "lecture";
+            /** @description Who organised it; `null` when unknown. */
+            organizer: string | null;
+            /**
+             * Format: date
+             * @description The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.
+             */
+            startsOn: string;
+            /**
+             * Format: date
+             * @description The last day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive and not before `startsOn`; equal to it for a single-day event.
+             */
+            endsOn: string;
+            /** @description Where it took place; `null` for an online event or when unknown. */
+            place: string | null;
+            /** @description Whether it was attended online. */
+            online: boolean;
+            /** @description An absolute `http` or `https` address; `null` when there is none. */
+            link: string | null;
+            /** @description What was taken away, in Markdown; `null` when there is nothing yet. */
+            takeaways: string | null;
+            /** @description The linked topics, in their order. */
+            topics: components["schemas"]["Topic"][];
+            /** @description The elapsed seconds of the time entries logged on the event, derived on read. The date range alone contributes nothing. */
+            attendanceSeconds: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
     };
     responses: never;
@@ -9633,6 +9823,391 @@ export interface operations {
             };
             /** @description `not_found`: the record does not exist. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRoadmapEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEventList"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapEventCreate"];
+            };
+        };
+        responses: {
+            /** @description The created event. */
+            201: {
+                headers: {
+                    /** @description The address of the record. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEvent"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEvent"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRoadmapEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stable, unique address of the record, for example `paldock`. */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapEventUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapEvent"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the write contradicts existing content. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

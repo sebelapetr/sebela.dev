@@ -278,14 +278,14 @@ describe("bookshelf persistence", () => {
         ...reading("patterns-reading", "patterns"),
         topics: ["agents", "rag", "evals"],
       });
-      await roadmap.createTimeEntries("patterns-reading", [
+      await roadmap.createTimeEntries({ resource: "patterns-reading" }, [
         {
           date: "2026-03-02",
           startedAt: new Date("2026-03-02T09:00:00Z"),
           endedAt: new Date("2026-03-02T09:30:00Z"),
         },
       ]);
-      await roadmap.createTimeEntries("patterns-reading", [
+      await roadmap.createTimeEntries({ resource: "patterns-reading" }, [
         {
           date: "2026-03-03",
           startedAt: new Date("2026-03-03T18:00:00Z"),

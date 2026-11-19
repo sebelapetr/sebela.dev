@@ -5,11 +5,14 @@ import { z } from "zod";
 
 import { SlugParamsSchema } from "../profile/index.js";
 import { roadmapResourceTypes } from "./catalogs.js";
+import { DiaryEventSchema } from "./events.js";
 
 /** The time zone in which the diary groups and shows its days, whatever the server's or browser's. */
 export const diaryTimeZone = "Europe/Prague";
 
 const ORDER_RULE = "The end must be after the start.";
+const NO_TARGET = "Name the resource that was studied or the event that was attended.";
+const BOTH_TARGETS = "Name a resource or an event, not both.";
 const NON_EMPTY = { message: "Change at least one field." };
 
 const SlugSchema = SlugParamsSchema.shape.slug;
@@ -52,30 +55,59 @@ function endFollowsStart(
   }
 }
 
+/** A write names at most one target; `required` also refuses naming none. */
+function oneTarget(required: boolean) {
+  return (
+    value: { resource?: string | undefined; event?: string | undefined },
+    context: z.core.$RefinementCtx,
+  ) => {
+    if (value.resource !== undefined && value.event !== undefined) {
+      context.addIssue({ code: "custom", path: ["event"], message: BOTH_TARGETS });
+    } else if (required && value.resource === undefined && value.event === undefined) {
+      context.addIssue({ code: "custom", path: ["resource"], message: NO_TARGET });
+    }
+  };
+}
+
 const timeEntryFields = {
-  resource: SlugSchema.meta({ description: "The slug of the resource that was studied." }),
+  resource: SlugSchema.meta({
+    description: "The slug of the resource that was studied; not sent with `event`.",
+  }),
+  event: SlugSchema.meta({
+    description:
+      "The slug of the event that was attended; not sent with `resource`. Every piece of the " +
+      "session must fall on a day of the event.",
+  }),
   startedAt: WrittenInstantSchema,
   endedAt: WrittenInstantSchema,
 };
 
 /**
- * Body of logging a study session on one resource. A session across local midnight is split into
- * one time entry per affected diary day; it may not overlap any other logged interval, while
- * adjacent intervals are allowed.
+ * Body of logging a study session on one resource or attendance at one event: exactly one of
+ * `resource` and `event`. A session across local midnight is split into one time entry per
+ * affected diary day; it may not overlap any other logged interval of either kind, while adjacent
+ * intervals are allowed.
  */
 export const TimeEntryCreateSchema = z
-  .strictObject(timeEntryFields)
+  .strictObject({
+    ...timeEntryFields,
+    resource: timeEntryFields.resource.optional(),
+    event: timeEntryFields.event.optional(),
+  })
+  .superRefine(oneTarget(true))
   .superRefine(endFollowsStart)
   .meta({ id: "TimeEntryCreate" });
 
 /**
- * Body of changing a time entry: at least one field. The changed session is split at local
- * midnight again and its old and new days both change; their notes stay.
+ * Body of changing a time entry: at least one field. Sending `resource` or `event` (never both)
+ * moves the entry to that target. The changed session is split at local midnight again and its
+ * old and new days both change; their notes stay.
  */
 export const TimeEntryUpdateSchema = z
   .strictObject(timeEntryFields)
   .partial()
   .refine((change) => Object.keys(change).length > 0, NON_EMPTY)
+  .superRefine(oneTarget(false))
   .superRefine(endFollowsStart)
   .meta({ id: "TimeEntryUpdate" });
 
@@ -98,33 +130,50 @@ export const DiaryResourceSchema = z
   })
   .meta({ id: "DiaryResource" });
 
-/** One logged interval within one diary day. */
+/** One logged interval within one diary day, on exactly one resource or event. */
 export const TimeEntrySchema = z
   .object({
     id: z.uuid(),
     date: DiaryDateSchema,
-    resource: DiaryResourceSchema,
+    resource: DiaryResourceSchema.nullable().meta({
+      description: "The resource studied; `null` for attendance at an event.",
+    }),
+    event: DiaryEventSchema.nullable().meta({
+      description: "The event attended; `null` for a study session on a resource.",
+    }),
     startedAt: InstantSchema,
     endedAt: InstantSchema,
     durationSeconds: z.int().positive().meta({
       description: "The actual elapsed seconds between the endpoints, derived on read.",
     }),
   })
+  .refine((entry) => (entry.resource === null) !== (entry.event === null), {
+    message: "A time entry belongs to exactly one resource or event.",
+    path: ["event"],
+  })
   .meta({ id: "TimeEntry" });
 
-/** One diary day: its notes and its time entries in start order. */
+/**
+ * One diary day: its notes, its time entries in start order and the events whose date range
+ * covers it. A day may show only events; an event's dates add no time.
+ */
 export const DiaryDaySchema = z
   .object({
     date: DiaryDateSchema,
     notes: z.string().nullable().meta({ description: "Markdown; `null` when there are none." }),
     entries: z.array(TimeEntrySchema),
+    events: z.array(DiaryEventSchema).meta({
+      description:
+        "The events whose inclusive date range covers the day, by start date, then slug; they " +
+        "add no time.",
+    }),
     totalSeconds: z.int().min(0).meta({
       description: "The sum of the entries' elapsed seconds, derived on read and never rounded.",
     }),
   })
   .meta({ id: "DiaryDay" });
 
-/** The whole diary: every day with notes or time entries, newest first. */
+/** The whole diary: every day with notes, time entries or a covering event, newest first. */
 export const DiarySchema = z.object({ days: z.array(DiaryDaySchema) }).meta({ id: "Diary" });
 
 /** The result of a time-entry write: the entries it wrote and every diary day it changed. */

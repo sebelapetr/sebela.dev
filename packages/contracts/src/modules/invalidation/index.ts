@@ -25,6 +25,7 @@ const sluggedDomains = [
   "roadmap-module",
   "roadmap-resource",
   "roadmap-book",
+  "roadmap-event",
 ] as const;
 
 /** The content domains a write can change, one per kind of profile or roadmap record. */

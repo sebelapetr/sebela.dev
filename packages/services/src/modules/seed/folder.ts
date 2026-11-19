@@ -20,6 +20,7 @@ import {
   ProjectCreateSchema,
   RoadmapAreaCreateSchema,
   RoadmapBookCreateSchema,
+  RoadmapEventCreateSchema,
   RoadmapModuleCreateSchema,
   RoadmapResourceCreateSchema,
   ServiceCreateSchema,
@@ -37,6 +38,7 @@ import {
   type ProjectCreate,
   type RoadmapAreaCreate,
   type RoadmapBookCreate,
+  type RoadmapEventCreate,
   type RoadmapModuleCreate,
   type RoadmapResourceCreate,
   type ServiceCreate,
@@ -66,6 +68,7 @@ export const dataFiles = {
   roadmapModules: "roadmap-modules.json",
   roadmapBooks: "roadmap-books.json",
   roadmapResources: "roadmap-resources.json",
+  roadmapEvents: "roadmap-events.json",
   roadmapDiary: "roadmap-diary.json",
   roadmapTimeEntries: "roadmap-time-entries.json",
 } as const;
@@ -101,10 +104,17 @@ const byDate: Identity<SeedDiaryDay> = {
   field: "date",
   message: "This date is already used in this file.",
 };
-/** A session is its resource and its absolute endpoints, whatever offset they are written with. */
+/**
+ * A session is its target (a resource or an event) and its absolute endpoints, whatever offset they
+ * are written with.
+ */
 const bySession: Identity<TimeEntryCreate> = {
   key: (value) =>
-    [value.resource, Date.parse(value.startedAt), Date.parse(value.endedAt)].join(" "),
+    [
+      value.event === undefined ? `resource:${value.resource ?? ""}` : `event:${value.event}`,
+      Date.parse(value.startedAt),
+      Date.parse(value.endedAt),
+    ].join(" "),
   field: null,
   message: "This session is already listed in this file.",
 };
@@ -148,6 +158,7 @@ export interface SeedData {
   readonly roadmapModules: readonly Located<RoadmapModuleCreate>[];
   readonly roadmapBooks: readonly Located<RoadmapBookCreate, "coverId">[];
   readonly roadmapResources: readonly Located<RoadmapResourceCreate>[];
+  readonly roadmapEvents: readonly Located<RoadmapEventCreate>[];
   readonly roadmapDiary: readonly Located<SeedDiaryDay>[];
   readonly roadmapTimeEntries: readonly Located<TimeEntryCreate>[];
   /** The attached files by the SHA-256 digest of their content, each once. */
@@ -419,6 +430,7 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
   const roadmapResources = located(
     await parseList(dataFiles.roadmapResources, RoadmapResourceCreateSchema),
   );
+  const roadmapEvents = located(await parseList(dataFiles.roadmapEvents, RoadmapEventCreateSchema));
   const roadmapDiary = located(
     await parseRecords(dataFiles.roadmapDiary, SeedDiaryDaySchema, byDate),
   );
@@ -445,6 +457,7 @@ export async function readSeedFolder(folder: string | URL, limits: MediaLimits):
     roadmapModules,
     roadmapBooks,
     roadmapResources,
+    roadmapEvents,
     roadmapDiary,
     roadmapTimeEntries,
     files,

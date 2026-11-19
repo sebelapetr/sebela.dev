@@ -12,8 +12,8 @@ export function RoadmapFrame({
   section,
   children,
 }: {
-  /** The person's name, or null on a page that reads no profile (a placeholder). */
-  readonly name: string | null;
+  /** The person's name. */
+  readonly name: string;
   readonly section: RoadmapSection;
   readonly children: ReactNode;
 }) {

@@ -1,8 +1,9 @@
-import type { Diary, DiaryDay, TimeEntry } from "@sebela/api-client";
+import type { Diary, DiaryDay, DiaryEvent, TimeEntry } from "@sebela/api-client";
 
 import { bookshelfHref, roadmapHref } from "../../_shared";
 import type { RoadmapDiaryAreaName, RoadmapDiaryBookLink } from "../../profile";
 import type { RoadmapCrumb } from "./detail";
+import { eventDayOf, eventKindLabel, formatEventPeriod } from "./event-format";
 import { resourceTypeLabel, ROADMAP_PATH, safeLink } from "./overview";
 
 /** One day as the diary's list shows it. */
@@ -17,6 +18,17 @@ export interface DiaryListDay {
   readonly sessions: string | null;
   /** The day's Markdown notes, or null. */
   readonly notes: string | null;
+  /** The events whose date range covers the day, in the API's order. */
+  readonly events: readonly DiaryListEvent[];
+}
+
+/** An event covering a day, as the diary's list names it. */
+export interface DiaryListEvent {
+  readonly slug: string;
+  readonly name: string;
+  readonly kindLabel: string;
+  /** Which day of the event this is, for example `Day 2 of 3`, or null on an event of one day. */
+  readonly dayOf: string | null;
 }
 
 export interface DiaryList {
@@ -59,6 +71,27 @@ export interface DiaryAreaGroup {
   readonly modules: readonly DiaryModuleGroup[];
 }
 
+/** Time spent at an event on its day's page. */
+export interface DiaryAttendance {
+  readonly id: string;
+  /** Its start and end as Prague wall-clock times, `HH:mm`. */
+  readonly start: string;
+  readonly end: string;
+  /** Its start and end as the API's instants, for `<time dateTime>`. */
+  readonly startedAt: string;
+  readonly endedAt: string;
+  readonly duration: string;
+}
+
+/** An event on a diary day's page, with the time spent at it that day. */
+export interface DiaryEventGroup extends DiaryListEvent {
+  /** The event's whole date range in words. */
+  readonly period: string;
+  /** A safe absolute `http(s)` address, or null. */
+  readonly href: string | null;
+  readonly sessions: readonly DiaryAttendance[];
+}
+
 /** A diary day's own page. */
 export interface DiaryDayPage {
   readonly date: string;
@@ -67,6 +100,7 @@ export interface DiaryDayPage {
   readonly sessions: string | null;
   readonly notes: string | null;
   readonly areas: readonly DiaryAreaGroup[];
+  readonly events: readonly DiaryEventGroup[];
   readonly breadcrumbs: readonly RoadmapCrumb[];
 }
 
@@ -137,7 +171,8 @@ function totalLabel(day: DiaryDay): string | null {
 /**
  * The diary's list as the page shows it: every day in the API's order (newest first), its date in
  * words and the way to its page, its study time and sessions (none on a day with notes only) and
- * its Markdown notes. Totals are the API's derived seconds, rounded only for display.
+ * its Markdown notes, and the events covering it (a day may have nothing else). Totals are the API's
+ * derived seconds, rounded only for display; attendance at an event counts in them.
  */
 export function toDiaryList(diary: Diary): DiaryList {
   return {
@@ -148,6 +183,7 @@ export function toDiaryList(diary: Diary): DiaryList {
       total: totalLabel(day),
       sessions: sessionCount(day.entries),
       notes: day.notes,
+      events: day.events.map((event) => toListEvent(event, day.date)),
     })),
   };
 }
@@ -159,6 +195,10 @@ export function toDiaryList(diary: Diary): DiaryList {
  * resource's link is kept only when it is safe. An area or module the roadmap does not name keeps
  * its slug as its name, has no link and follows the named ones in the order it first appears. A
  * session on a resource that reads a book (`books`) links to the book's page on the bookshelf.
+ * Attendance at an event counts in the day's total and sessions but has no area group: it is shown
+ * under its event instead. The day's events follow the API's order, each with its period, a link
+ * only when it is safe and its attendance by start; attendance at an event the day does not list
+ * still shows, under that event after the listed ones.
  */
 export function toDiaryDayPage(
   day: DiaryDay,
@@ -174,6 +214,7 @@ export function toDiaryDayPage(
     sessions: sessionCount(day.entries),
     notes: day.notes,
     areas: groupSessions(day.entries, areas, bookOf),
+    events: groupAttendance(day),
     breadcrumbs: [
       { name: "AI Engineering Roadmap", href: ROADMAP_PATH },
       { name: DIARY_NAME, href: DIARY_PATH },
@@ -182,7 +223,52 @@ export function toDiaryDayPage(
   };
 }
 
-function toSession(entry: TimeEntry, bookOf: ReadonlyMap<string, string>): DiarySession {
+function toListEvent(event: DiaryEvent, date: string): DiaryListEvent {
+  return {
+    slug: event.slug,
+    name: event.name,
+    kindLabel: eventKindLabel(event.kind),
+    dayOf: eventDayOf(date, event.startsOn, event.endsOn),
+  };
+}
+
+function toAttendance(entry: TimeEntry): DiaryAttendance {
+  return {
+    id: entry.id,
+    start: pragueTime(entry.startedAt),
+    end: pragueTime(entry.endedAt),
+    startedAt: entry.startedAt,
+    endedAt: entry.endedAt,
+    duration: formatStudyTime(entry.durationSeconds),
+  };
+}
+
+function groupAttendance(day: DiaryDay): DiaryEventGroup[] {
+  const events = new Map(day.events.map((event) => [event.slug, event]));
+  const byEvent = new Map<string, TimeEntry[]>(day.events.map((event) => [event.slug, []]));
+  for (const entry of day.entries) {
+    if (entry.event === null) continue;
+    if (!events.has(entry.event.slug)) events.set(entry.event.slug, entry.event);
+    byEvent.set(entry.event.slug, [...(byEvent.get(entry.event.slug) ?? []), entry]);
+  }
+  return [...events.values()].map((event) => ({
+    ...toListEvent(event, day.date),
+    period: formatEventPeriod(event.startsOn, event.endsOn),
+    href: safeLink(event.link),
+    sessions: [...(byEvent.get(event.slug) ?? [])]
+      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+      .map(toAttendance),
+  }));
+}
+
+/** A time entry on a resource; attendance at an event has no area or module to group under. */
+type ResourceEntry = TimeEntry & { readonly resource: NonNullable<TimeEntry["resource"]> };
+
+function onResource(entry: TimeEntry): entry is ResourceEntry {
+  return entry.resource !== null;
+}
+
+function toSession(entry: ResourceEntry, bookOf: ReadonlyMap<string, string>): DiarySession {
   const book = bookOf.get(entry.resource.slug);
   return {
     id: entry.id,
@@ -211,10 +297,10 @@ function groupSessions(
   areas: readonly RoadmapDiaryAreaName[],
   bookOf: ReadonlyMap<string, string>,
 ): DiaryAreaGroup[] {
-  const byArea = new Map<string, Map<string, TimeEntry[]>>();
-  for (const entry of entries) {
+  const byArea = new Map<string, Map<string, ResourceEntry[]>>();
+  for (const entry of entries.filter(onResource)) {
     const { area, module } = entry.resource;
-    const modules = byArea.get(area) ?? new Map<string, TimeEntry[]>();
+    const modules = byArea.get(area) ?? new Map<string, ResourceEntry[]>();
     byArea.set(area, modules);
     modules.set(module, [...(modules.get(module) ?? []), entry]);
   }

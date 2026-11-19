@@ -40,19 +40,21 @@ import { DomainError } from "../../errors.js";
 import type { MediaAddress } from "../profile/index.js";
 import { createBookshelf, type Bookshelf } from "./books.js";
 import { createLearningDiary, type LearningDiary } from "./diary.js";
+import { createEventCalendar, type EventCalendar } from "./events.js";
 import { areaProgress, moduleProgress, roadmapSummary } from "./progress.js";
 
 /**
  * The AI roadmap: its areas, their modules and the resources in them, and the learning diary of
  * time spent on those resources (see `LearningDiary`), and the bookshelf of books that resources of
- * type `book` read (see `Bookshelf`). Reads return contract
+ * type `book` read (see `Bookshelf`), and the attended events, which are not resources and show
+ * on their diary days without adding time (see `EventCalendar`). Reads return contract
  * records; the whole tree carries progress derived on every read and is never stored. Expected
  * refusals are `DomainError`s: `not_found` for a missing slug, `conflict` for a taken slug or a
  * record that still has children or links, and `validation_failed` naming the offending field for
  * a reserved area slug, an unknown parent or topic, a repeated topic, a finish before the start or
  * an unusable book link (an unknown book, one another resource links, or a type other than `book`).
  */
-export interface RoadmapService extends LearningDiary, Bookshelf {
+export interface RoadmapService extends LearningDiary, Bookshelf, EventCalendar {
   /** The whole roadmap in one consistent read, with derived progress and totals. */
   getRoadmap(): Promise<Roadmap>;
   /** One area node of the whole roadmap, unchanged; a missing area is `not_found`. */
@@ -85,6 +87,7 @@ export interface RoadmapService extends LearningDiary, Bookshelf {
 
 export type { Bookshelf } from "./books.js";
 export type { LearningDiary, TimeEntryDeletion } from "./diary.js";
+export type { EventCalendar } from "./events.js";
 
 export interface RoadmapServiceOptions {
   /**
@@ -390,5 +393,6 @@ export function createRoadmapService(
 
     ...createLearningDiary(persistence),
     ...createBookshelf(persistence, options.mediaAddress ?? (() => null)),
+    ...createEventCalendar(persistence),
   };
 }

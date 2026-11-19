@@ -6,7 +6,7 @@
 // adjacent areas, way back to the full roadmap, titles, structured data and preview images, a
 // module only under its own area, a resource's anchor, the chat's roadmap card
 // and source, the homepage's Exploring, safe rendering, the sub-navigation that only roadmap pages
-// show, the static placeholder (events), the empty and the unavailable state, and roadmap writes reaching
+// show, unknown pages, the empty and the unavailable state, and roadmap writes reaching
 // the warmed overview, old and new detail pages and the homepage through the signed invalidation.
 // Widths, themes, axe and touch targets are checked on the overview with its first area open and
 // on the area and module pages.
@@ -27,10 +27,6 @@ const title = "AI Engineering Roadmap for Experienced Developers";
 const unavailable = "This page could not be loaded right now.";
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
-
-// The sections still published as placeholders; the diary (diary.spec.ts) and the bookshelf
-// (bookshelf.spec.ts) have their own pages.
-const sections = [{ path: "/ai-roadmap/events", label: "Events" }] as const;
 
 async function expectNoHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(
@@ -309,7 +305,7 @@ test.describe("the roadmap overview", () => {
       { path: "/ai-roadmap/orbit-foundations/signal-basics", current: "Roadmap" },
       { path: "/ai-roadmap/diary", current: "Learning Diary" },
       { path: "/ai-roadmap/bookshelf", current: "Bookshelf" },
-      ...sections.map(({ path, label }) => ({ path, current: label })),
+      { path: "/ai-roadmap/events", current: "Events" },
     ]) {
       await page.goto(`${website.url}${path}`);
       const nav = subNavigation(page);
@@ -338,21 +334,7 @@ test.describe("the roadmap overview", () => {
     }
   });
 
-  test("the static sections are explicit placeholders; unknown and unrelated pages are not found", async ({
-    page,
-  }) => {
-    for (const { path, label } of sections) {
-      const response = await page.goto(`${website.url}${path}`);
-      expect(response?.status()).toBe(200);
-      await expect(page.getByRole("heading", { level: 1 })).toContainText(label);
-      await expect(page.locator("main")).toContainText("is not published yet");
-      expect(await robots(page)).toContain("noindex");
-      await expect(page.getByRole("link", { name: /Back to the roadmap/u })).toHaveAttribute(
-        "href",
-        "/ai-roadmap",
-      );
-    }
-
+  test("unknown and unrelated pages are not found", async ({ page }) => {
     for (const path of [
       "/ai-roadmap/no-such-area",
       "/ai-roadmap/orbit-foundations/no-such-module",
@@ -799,7 +781,7 @@ test.describe("an unreachable API", () => {
     await website.stop();
   });
 
-  test("the overview and detail pages show the unavailable state, never not found; the static placeholders still load", async ({
+  test("the overview and detail pages show the unavailable state, never not found", async ({
     page,
   }) => {
     for (const path of [
@@ -812,10 +794,5 @@ test.describe("an unreachable API", () => {
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(unavailable);
     }
     await expectAccessible(page);
-    for (const { path } of sections) {
-      const placeholder = await page.goto(`${website.url}${path}`);
-      expect(placeholder?.status(), path).toBe(200);
-      await expect(subNavigation(page)).toBeVisible();
-    }
   });
 });

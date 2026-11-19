@@ -11,7 +11,7 @@ const name = "Casey Morrow";
 
 /**
  * Every current route, the navigation entry it marks as current, and the name that leads home:
- * pages that read no profile (placeholders, not found) say "Home".
+ * pages that read no profile (not found) say "Home".
  */
 const pages = [
   { path: "/", current: name, home: name },

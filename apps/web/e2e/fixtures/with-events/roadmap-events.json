@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "spring-signals-lecture",
+    "name": "Spring signals lecture",
+    "kind": "lecture",
+    "organizer": "The fictional Orbit Society",
+    "startsOn": "2026-03-04",
+    "endsOn": "2026-03-04",
+    "online": true,
+    "link": "https://events.example.test/spring-signals-lecture",
+    "topics": ["orbit-signals"]
+  },
+  {
+    "slug": "new-year-orbit-summit",
+    "name": "New Year Orbit Summit",
+    "kind": "conference",
+    "organizer": "A fictional guild of orbit engineers",
+    "startsOn": "2025-12-30",
+    "endsOn": "2026-01-02",
+    "place": "Testville Congress Hall",
+    "link": "https://events.example.test/new-year-orbit-summit",
+    "takeaways": "Four days on **orbit signals** across the turn of the year:\n\n- measure before tuning\n- retry calmly",
+    "topics": ["orbit-signals", "calm-retries"]
+  },
+  {
+    "slug": "unsafe-retry-workshop",
+    "name": "Unsafe retry workshop",
+    "kind": "workshop",
+    "startsOn": "2025-06-10",
+    "endsOn": "2025-06-10",
+    "place": "Testville Library",
+    "takeaways": "Takeaways </script><script>window.__eventsInjected = true</script> with <b>raw</b> markup, <img src=\"x\" onerror=\"window.__eventsInjected = true\"> and [a trap](javascript:window.__eventsInjected=true). A long word: averyveryverylongfictionalidentifierthatkeepsgoingwithoutanyspacesatallsoitmustbreakinsteadofwideningthepage.",
+    "topics": ["calm-retries"]
+  },
+  {
+    "slug": "quiet-queue-meetup",
+    "name": "Quiet queue meetup",
+    "kind": "meetup",
+    "startsOn": "2024-05-14",
+    "endsOn": "2024-05-14"
+  }
+]

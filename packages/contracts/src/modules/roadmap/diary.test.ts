@@ -29,12 +29,38 @@ const entry = {
     module: "prompting-basics",
     area: "foundations",
   },
+  event: null,
   startedAt: "2026-03-02T22:30:00.000Z",
   endedAt: "2026-03-02T23:00:00.000Z",
   durationSeconds: 1800,
 };
 
-const day = { date: "2026-03-02", notes: "Read about **fictional** prompts.", entries: [entry] };
+const shownEvent = {
+  slug: "fictional-ai-summit",
+  name: "Fictional AI Summit",
+  kind: "conference",
+  startsOn: "2026-03-02",
+  endsOn: "2026-03-04",
+  link: null,
+};
+
+/** Attendance at an event: the entry names the event and no resource. */
+const attendance = {
+  ...entry,
+  id: "5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+  resource: null,
+  event: shownEvent,
+  startedAt: "2026-03-02T08:00:00.000Z",
+  endedAt: "2026-03-02T09:00:00.000Z",
+  durationSeconds: 3600,
+};
+
+const day = {
+  date: "2026-03-02",
+  notes: "Read about **fictional** prompts.",
+  entries: [entry],
+  events: [],
+};
 
 describe("the diary time zone", () => {
   it("is Europe/Prague", () => {
@@ -104,10 +130,27 @@ describe("TimeEntryCreateSchema", () => {
     expect(result.error?.issues[0]?.path).toEqual(["endedAt"]);
   });
 
-  it("refuses a missing resource and an unknown field", () => {
-    const withoutResource = { startedAt: session.startedAt, endedAt: session.endedAt };
-    expect(TimeEntryCreateSchema.safeParse(withoutResource).success).toBe(false);
+  it("refuses a missing target and an unknown field", () => {
+    const withoutTarget = { startedAt: session.startedAt, endedAt: session.endedAt };
+    const result = TimeEntryCreateSchema.safeParse(withoutTarget);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["resource"]);
     expect(TimeEntryCreateSchema.safeParse({ ...session, minutes: 60 }).success).toBe(false);
+  });
+
+  it("accepts attendance at an event instead of a resource", () => {
+    const atEvent = {
+      event: "fictional-ai-summit",
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+    };
+    expect(TimeEntryCreateSchema.parse(atEvent)).toEqual(atEvent);
+  });
+
+  it("refuses both a resource and an event", () => {
+    const result = TimeEntryCreateSchema.safeParse({ ...session, event: "fictional-ai-summit" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["event"]);
   });
 });
 
@@ -120,6 +163,17 @@ describe("TimeEntryUpdateSchema", () => {
       endedAt: session.endedAt,
     });
     expect(TimeEntryUpdateSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("moves an entry to an event or a resource, never to both", () => {
+    expect(TimeEntryUpdateSchema.parse({ event: "fictional-ai-summit" })).toEqual({
+      event: "fictional-ai-summit",
+    });
+    const both = TimeEntryUpdateSchema.safeParse({
+      resource: "intro-video",
+      event: "fictional-ai-summit",
+    });
+    expect(both.error?.issues[0]?.path).toEqual(["event"]);
   });
 
   it("refuses an end not after the start when both are sent", () => {
@@ -145,11 +199,46 @@ describe("DiaryNotesWriteSchema", () => {
 describe("the diary reads", () => {
   it("describes a day with its notes, its entries and their total", () => {
     const parsed = DiaryDaySchema.parse({ ...day, totalSeconds: 1800 });
-    expect(parsed.entries[0]?.resource.area).toBe("foundations");
+    expect(parsed.entries[0]).toMatchObject({ resource: { area: "foundations" }, event: null });
+  });
+
+  it("describes attendance at an event and a day that only shows an event", () => {
+    const attended = DiaryDaySchema.parse({
+      ...day,
+      entries: [attendance],
+      events: [shownEvent],
+      totalSeconds: 3600,
+    });
+    expect(attended.entries[0]).toMatchObject({ resource: null, event: shownEvent });
+    const eventOnly = {
+      date: "2026-03-03",
+      notes: null,
+      entries: [],
+      events: [shownEvent],
+      totalSeconds: 0,
+    };
+    expect(DiaryDaySchema.parse(eventOnly)).toEqual(eventOnly);
+  });
+
+  it("refuses an entry with neither or both targets", () => {
+    const neither = { ...entry, resource: null, event: null };
+    expect(
+      DiaryDaySchema.safeParse({ ...day, entries: [neither], totalSeconds: 1800 }).success,
+    ).toBe(false);
+    const both = { ...entry, event: shownEvent };
+    expect(DiaryDaySchema.safeParse({ ...day, entries: [both], totalSeconds: 1800 }).success).toBe(
+      false,
+    );
   });
 
   it("describes a notes-only day and the diary newest first", () => {
-    const notesOnly = { date: "2026-03-01", notes: "Planning.", entries: [], totalSeconds: 0 };
+    const notesOnly = {
+      date: "2026-03-01",
+      notes: "Planning.",
+      entries: [],
+      events: [],
+      totalSeconds: 0,
+    };
     expect(
       DiarySchema.parse({ days: [{ ...day, totalSeconds: 1800 }, notesOnly] }).days,
     ).toHaveLength(2);

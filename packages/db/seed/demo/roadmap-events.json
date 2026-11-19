@@ -1,0 +1,36 @@
+[
+  {
+    "slug": "retrieval-summit",
+    "name": "Fictional Retrieval Summit",
+    "kind": "conference",
+    "organizer": "The fictional Search Guild",
+    "startsOn": "2025-02-26",
+    "endsOn": "2025-02-28",
+    "place": "Northgate Congress Centre",
+    "link": "https://example.com/retrieval-summit",
+    "takeaways": "Three days on **hybrid search** and ranking:\n\n- start with keyword search and add vectors where recall drops\n- measure retrieval before tuning prompts",
+    "topics": ["retrieval", "evaluation"]
+  },
+  {
+    "slug": "year-end-agents-workshop",
+    "name": "Year-end agents workshop",
+    "kind": "workshop",
+    "organizer": "A fictional study group",
+    "startsOn": "2024-12-30",
+    "endsOn": "2025-01-02",
+    "place": "Harbour Library",
+    "takeaways": "Built a small tool-using agent across the turn of the year.",
+    "topics": ["agents", "tool-use"]
+  },
+  {
+    "slug": "evaluation-evening",
+    "name": "Evaluation evening",
+    "kind": "meetup",
+    "organizer": "The fictional Evals Circle",
+    "startsOn": "2025-03-03",
+    "endsOn": "2025-03-03",
+    "online": true,
+    "link": "https://example.com/evaluation-evening",
+    "topics": ["evaluation", "guardrails"]
+  }
+]

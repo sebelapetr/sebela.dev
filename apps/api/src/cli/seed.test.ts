@@ -23,6 +23,7 @@ import {
   ProjectListSchema,
   RoadmapBookListSchema,
   RoadmapCurrentSchema,
+  RoadmapEventListSchema,
   RoadmapSchema,
   ServiceListSchema,
   TechnologyListSchema,
@@ -116,8 +117,8 @@ describe("the seed CLI", () => {
     diary: (await read("/v1/roadmap/diary", DiarySchema)).days.map((day) => ({
       date: day.date,
       notes: day.notes,
-      entries: day.entries.map(({ resource, startedAt, endedAt }) => [
-        resource.slug,
+      entries: day.entries.map(({ resource, event, startedAt, endedAt }) => [
+        resource?.slug ?? event?.slug,
         startedAt,
         endedAt,
       ]),
@@ -202,6 +203,18 @@ describe("the seed CLI", () => {
       const linking = resources.filter(({ book }) => book !== null);
       expect(linking.length).toBeGreaterThanOrEqual(1);
       expect(linking.every(({ type }) => type === "book")).toBe(true);
+
+      // Attended events: a single day, a multi-day one across a year boundary, attendance on them.
+      const events = await read("/v1/roadmap/events", RoadmapEventListSchema);
+      expect(events.some(({ startsOn, endsOn }) => startsOn === endsOn)).toBe(true);
+      expect(
+        events.some(({ startsOn, endsOn }) => startsOn.slice(0, 4) !== endsOn.slice(0, 4)),
+      ).toBe(true);
+      expect(events.some(({ attendanceSeconds }) => attendanceSeconds > 0)).toBe(true);
+      expect(
+        diary.days.some(({ events: on, entries }) => on.length > 0 && entries.length === 0),
+      ).toBe(true);
+      expect(result.out).toMatch(/roadmap events: \d+ created, 0 updated/);
 
       const person = await read("/v1/person", PersonSchema);
       expect(person.photoId).not.toBeNull();

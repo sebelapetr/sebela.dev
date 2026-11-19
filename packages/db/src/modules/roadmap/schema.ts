@@ -8,6 +8,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  boolean,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -29,6 +30,9 @@ export const TIME_ENTRY_OVERLAP_EXCLUSION = "time_entries_do_not_overlap";
 
 /** A book ends no earlier than it starts. */
 export const BOOK_PERIOD_CHECK = "books_period_is_ordered";
+/** An event ends no earlier than it starts. */
+export const EVENT_PERIOD_CHECK = "events_period_is_ordered";
+
 /** At most one resource links a book. */
 export const BOOK_LINK_UNIQUE = "resources_book_id_unique";
 /** Only a resource of type `book` links a book. */
@@ -43,6 +47,13 @@ export const resourceType = roadmapSchema.enum("resource_type", [
   "text",
   "project",
   "book",
+]);
+
+export const eventKind = roadmapSchema.enum("event_kind", [
+  "conference",
+  "meetup",
+  "workshop",
+  "lecture",
 ]);
 
 export const resourceStatus = roadmapSchema.enum("resource_status", [
@@ -205,8 +216,58 @@ export const diaryEntries = roadmapSchema.table("diary_entries", {
 });
 
 /**
+ * Attended events. They are not resources and belong to no module. Their dates are inclusive
+ * calendar dates in Europe/Prague; attendance time comes only from the time entries logged on them,
+ * which keep an event from being deleted.
+ */
+export const events = roadmapSchema.table(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    kind: eventKind("kind").notNull(),
+    organizer: text("organizer"),
+    startsOn: date("starts_on", { mode: "string" }).notNull(),
+    endsOn: date("ends_on", { mode: "string" }).notNull(),
+    place: text("place"),
+    online: boolean("online").notNull().default(false),
+    link: text("link"),
+    takeaways: text("takeaways"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(EVENT_PERIOD_CHECK, sql`${table.endsOn} >= ${table.startsOn}`),
+    index("events_period_index").on(table.startsOn, table.endsOn),
+  ],
+);
+
+/**
+ * The ordered topic links of an event: pure link rows. They disappear with their event; a linked
+ * topic cannot be deleted. Each topic is linked once.
+ */
+export const eventTopics = roadmapSchema.table(
+  "event_topics",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.topicId] }),
+    unique("event_topics_position_unique").on(table.eventId, table.position),
+  ],
+);
+
+/**
  * Logged study intervals, each within one diary day: it starts on that Prague date and ends no
- * later than the next Prague midnight. Its resource cannot be deleted while it exists. Durations
+ * later than the next Prague midnight. It is logged on exactly one resource (study) or one event
+ * (attendance), which cannot be deleted while it exists; attendance falls on the event's days. Durations
  * are derived from the endpoints, never stored.
  */
 export const timeEntries = roadmapSchema.table(
@@ -216,9 +277,8 @@ export const timeEntries = roadmapSchema.table(
     diaryDate: date("diary_date", { mode: "string" })
       .notNull()
       .references(() => diaryEntries.date),
-    resourceId: uuid("resource_id")
-      .notNull()
-      .references(() => resources.id),
+    resourceId: uuid("resource_id").references(() => resources.id),
+    eventId: uuid("event_id").references(() => events.id),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -227,6 +287,8 @@ export const timeEntries = roadmapSchema.table(
   (table) => [
     index("time_entries_diary_date_index").on(table.diaryDate),
     index("time_entries_resource_id_index").on(table.resourceId),
+    index("time_entries_event_id_index").on(table.eventId),
+    check("time_entries_one_target", sql`num_nonnulls(${table.resourceId}, ${table.eventId}) = 1`),
     check("time_entries_period_is_ordered", sql`${table.endedAt} > ${table.startedAt}`),
     check(
       "time_entries_within_diary_day",

@@ -100,10 +100,12 @@ describe("the learning diary", () => {
       ]);
       const [latest] = diary.days;
       expect(latest?.notes).toBeNull();
-      expect(latest?.entries.map((entry) => [entry.resource.slug, entry.durationSeconds])).toEqual([
-        ["prompt-guide", 2400],
-        ["agents-video", 1200],
-      ]);
+      expect(latest?.entries.map((entry) => [entry.resource?.slug, entry.durationSeconds])).toEqual(
+        [
+          ["prompt-guide", 2400],
+          ["agents-video", 1200],
+        ],
+      );
       expect(latest?.entries[0]).toMatchObject({
         date: "2026-03-04",
         startedAt: "2026-03-04T07:00:00.000Z",
@@ -131,7 +133,13 @@ describe("the learning diary", () => {
       const day = await roadmap.getDiaryDay("2026-03-01");
 
       expect(DiaryDaySchema.parse(day)).toEqual(day);
-      expect(day).toEqual({ date: "2026-03-01", notes: "Planning.", entries: [], totalSeconds: 0 });
+      expect(day).toEqual({
+        date: "2026-03-01",
+        notes: "Planning.",
+        entries: [],
+        events: [],
+        totalSeconds: 0,
+      });
       expect(written).toEqual(day);
     });
   });
@@ -287,6 +295,7 @@ describe("the learning diary", () => {
         date: "2026-03-04",
         notes: "Old day.",
         entries: [],
+        events: [],
         totalSeconds: 0,
       });
       await expect(roadmap.getDiaryDay("2026-03-02")).resolves.toMatchObject({
@@ -361,6 +370,7 @@ describe("the learning diary", () => {
         date: "2026-03-03",
         notes: "Kept.",
         entries: [],
+        events: [],
         totalSeconds: 0,
       });
       await expect(roadmap.getDiaryDay("2026-03-02")).resolves.toMatchObject({

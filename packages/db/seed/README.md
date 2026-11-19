@@ -41,8 +41,9 @@ file in the folder is refused, so a misspelt name does not silently load nothing
 | `roadmap-modules.json`      | an array of roadmap modules, each naming its `area`                  | `slug`, unique across all modules                 |
 | `roadmap-books.json`        | an array of bookshelf books, each with an optional `cover`           | `slug`                                            |
 | `roadmap-resources.json`    | an array of roadmap resources, each naming its `module` and `topics` | `slug`, unique across all resources               |
+| `roadmap-events.json`       | an array of attended events, each naming its `topics`                | `slug`                                            |
 | `roadmap-diary.json`        | an array of learning diary days, each `{ "date", "notes" }`          | `date`                                            |
-| `roadmap-time-entries.json` | an array of study sessions, each naming its `resource`               | `resource`, `startedAt` and `endedAt` as instants |
+| `roadmap-time-entries.json` | an array of sessions, each naming its `resource` or its `event`      | the target, `startedAt` and `endedAt` as instants |
 
 Each record has exactly the fields of the API's create request for its kind (the Zod schemas in
 `@sebela/contracts`, documented in the OpenAPI document), with three differences:
@@ -54,7 +55,7 @@ Each record has exactly the fields of the API's create request for its kind (the
 - **A project may carry its case study** as `caseStudy: { "role": "…", "body": "…" }`.
 - **References are slugs**, as in the API: an experience names its `organization` and
   `technologies`, a project its `experience`, a service its evidence projects and explorations, a roadmap
-  module its `area`, a roadmap resource its `module`, `topics` and optional `book`, and so on. A reference may name a record of the same folder or one already in the database.
+  module its `area`, a roadmap resource its `module`, `topics` and optional `book`, an event its `topics`, and so on. A reference may name a record of the same folder or one already in the database.
 
 A slug is unique within its file.
 
@@ -71,20 +72,32 @@ A slug is unique within its file.
 - **Reading time is logged on the linking resource** in `roadmap-time-entries.json`; a book has no
   time entries of its own.
 
+### Events
+
+- **An event** has the fields of the API's event create request: `slug`, `name`, `kind`
+  (`conference`, `meetup`, `workshop` or `lecture`), `startsOn` and `endsOn` (inclusive
+  Europe/Prague calendar dates, the end never before the start and equal to it for a single day),
+  and the optional `organizer`, `place`, `online` (default `false`), `link`, Markdown `takeaways`
+  and `topics` (existing topic slugs, each once). Events load after resources and before the diary.
+- **An event adds no time.** It shows on every diary day of its range, also on days without notes
+  or sessions, and no diary day is written for it. Attendance is a session in
+  `roadmap-time-entries.json` that names the `event` instead of a `resource`; every piece of it
+  must fall on the event's days.
+
 ### Learning diary and time entries
 
 - **A diary day** is `{ "date": "2025-02-10", "notes": "…" }`: a calendar date in Europe/Prague
   and its Markdown notes, as in the API's notes write. A date is unique within its file. A day
   with notes and no session is allowed; time entries need no notes.
 - **A session** is exactly the API's time entry create request: `{ "resource", "startedAt",
-"endedAt" }`. Both instants carry `Z` or a UTC offset (`2025-02-12T22:30:00+01:00`), are whole
-  seconds, and the end lies after the start. The resource is a roadmap resource slug of the folder
-  or the database. A session across Prague midnight is split into one time entry per diary day,
+"endedAt" }` for study time or `{ "event", "startedAt", "endedAt" }` for attendance. Both instants carry `Z` or a UTC offset (`2025-02-12T22:30:00+01:00`), are whole
+  seconds, and the end lies after the start. The resource is a roadmap resource slug, the event an
+  event slug, of the folder or the database. A session across Prague midnight is split into one time entry per diary day,
   exactly as through the API.
-- **Sessions have no slug.** A session is identified by its resource and its absolute endpoints, so
+- **Sessions have no slug.** A session is identified by its target (resource or event) and its absolute endpoints, so
   `2025-02-12T22:30:00+01:00` and `2025-02-12T21:30:00Z` are the same instant. The same session is
   listed once per file. Sessions may not overlap each other or time already logged, whatever the
-  resource; adjacent sessions are allowed.
+  resource or event; adjacent sessions are allowed.
 
 ## Attached files
 
@@ -110,9 +123,12 @@ A slug is unique within its file.
   `book` link is written with the resource, so moving a link from one resource to another within one
   rerun must list the resource that gives the book up first; otherwise the load is refused because
   the book is still linked.
+- **Events are matched by slug.** A rerun overwrites an event with the seed's values and replaces
+  its topic links. New dates that would leave logged attendance outside the event are refused, and
+  the load rolls back.
 - **Diary days are matched by date.** Their notes are overwritten; their time entries are kept.
-- **Sessions are matched by resource and instants.** A session whose whole interval is already
-  logged on its resource, in one or more diary-day pieces, is left as it is and counted as updated;
+- **Sessions are matched by target and instants.** A session whose whole interval is already
+  logged on its resource or event, in one or more diary-day pieces, is left as it is and counted as updated;
   any other session is logged. There is no reconciliation beyond that: a session removed from the
   seed or moved to other instants is not deleted, and a moved one that overlaps the old one is
   refused as an overlap.
@@ -131,7 +147,7 @@ A slug is unique within its file.
 
 - **Worktree setup seeds only an empty profile.** `node harness/worktree.mjs create` runs
   `seed --if-empty` (`SeedService.loadSeedIntoEmpty`): it loads the demo seed only when the
-  worktree's database holds no person, no record of any kind, no media, no roadmap area, no diary day and no book, and otherwise prints that
+  worktree's database holds no person, no record of any kind, no media, no roadmap area, no diary day, no book and no event, and otherwise prints that
   the seed was skipped and writes nothing. Running setup again on an existing worktree therefore
   applies pending migrations but never overwrites content an agent has edited. The folder is still
   read and validated, so an invalid seed fails setup either way.

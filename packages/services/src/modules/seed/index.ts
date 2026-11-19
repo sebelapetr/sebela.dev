@@ -34,6 +34,7 @@ export type SeedKind =
   | "roadmapModules"
   | "roadmapBooks"
   | "roadmapResources"
+  | "roadmapEvents"
   | "roadmapDiary"
   | "roadmapTimeEntries";
 
@@ -65,9 +66,11 @@ export interface SeedReport {
  *   the seed names instead of duplicating it. A matched record is overwritten with the seed's
  *   values, so a rerun undoes edits to the records the seed names; records and case studies it does
  *   not name are kept. A rerun of the same folder creates nothing new. Books are loaded before
- *   resources, so a resource of type `book` can link a book of the same seed by its slug.
+ *   resources, so a resource of type `book` can link a book of the same seed by its slug. Events
+ *   are matched by slug and loaded after resources and before the diary, so attendance can name an
+ *   event of the same seed.
  * - A diary day is matched by its date and its notes are overwritten; its time entries stay. A
- *   session is matched by its resource and absolute endpoints, whatever offset they are written
+ *   session is matched by its target (a resource or an event) and absolute endpoints, whatever offset they are written
  *   with: one already logged (in one or more diary-day pieces) is left as it is and counted as
  *   updated, any other one is logged. A session that overlaps logged time, or another session of
  *   the seed, is refused as `conflict` at its location and the whole load rolls back.
@@ -118,6 +121,7 @@ const emptyCounts = (): Counts => ({
   roadmapModules: { created: 0, updated: 0 },
   roadmapBooks: { created: 0, updated: 0 },
   roadmapResources: { created: 0, updated: 0 },
+  roadmapEvents: { created: 0, updated: 0 },
   roadmapDiary: { created: 0, updated: 0 },
   roadmapTimeEntries: { created: 0, updated: 0 },
 });
@@ -142,7 +146,7 @@ async function at<T>(location: string, work: () => Promise<T>): Promise<T> {
 
 /**
  * Whether the profile holds no person, no record of any kind and no media, and the roadmap no area,
- * no diary day and no book.
+ * no diary day, no book and no event.
  */
 async function isEmpty(
   profile: ProfileService,
@@ -169,6 +173,7 @@ async function isEmpty(
     async () => (await roadmap.getRoadmap()).areas,
     async () => (await roadmap.getDiary()).days,
     () => roadmap.listBooks(),
+    () => roadmap.listEvents(),
   ];
   for (const list of lists) if ((await list()).length > 0) return false;
   return true;
@@ -204,6 +209,7 @@ async function checkReferences(
     data.roadmapResources,
     Promise.resolve(tree.flatMap((area) => area.modules.flatMap((module) => module.resources))),
   );
+  const events = await slugs(data.roadmapEvents, roadmap.listEvents());
 
   const issues: DomainErrorField[] = [];
   const check = (known: Set<string>, slug: string | null, path: string, what: string) => {
@@ -256,8 +262,12 @@ async function checkReferences(
     check(books, value.book, `${location}.book`, "roadmap book");
     checkAll(topics, value.topics, `${location}.topics`, "topic");
   }
+  for (const { location, value } of data.roadmapEvents) {
+    checkAll(topics, value.topics, `${location}.topics`, "topic");
+  }
   for (const { location, value } of data.roadmapTimeEntries) {
-    check(resources, value.resource, `${location}.resource`, "roadmap resource");
+    check(resources, value.resource ?? null, `${location}.resource`, "roadmap resource");
+    check(events, value.event ?? null, `${location}.event`, "roadmap event");
   }
   return issues;
 }
@@ -523,6 +533,13 @@ export function createSeedService(
           (value) => roadmap.createResource(value),
           (slug, changes) => roadmap.updateResource(slug, changes),
         );
+        await upsert(
+          "roadmapEvents",
+          data.roadmapEvents,
+          (slug) => roadmap.getEvent(slug),
+          (value) => roadmap.createEvent(value),
+          (slug, changes) => roadmap.updateEvent(slug, changes),
+        );
 
         for (const { location, value } of data.roadmapDiary) {
           await at(location, async () => {
@@ -535,8 +552,8 @@ export function createSeedService(
           });
         }
 
-        // A session is matched by its resource and absolute endpoints. Logged intervals never
-        // overlap, so the session is already logged exactly when the resource's entries inside it
+        // A session is matched by its target (resource or event) and absolute endpoints. Logged intervals never
+        // overlap, so the session is already logged exactly when the target's entries inside it
         // fill it completely, however it was split into diary days.
         const logged =
           data.roadmapTimeEntries.length === 0
@@ -548,7 +565,9 @@ export function createSeedService(
           const covered = logged
             .filter(
               (entry) =>
-                entry.resource.slug === value.resource &&
+                (value.event === undefined
+                  ? entry.resource?.slug === value.resource
+                  : entry.event?.slug === value.event) &&
                 Date.parse(entry.startedAt) >= start &&
                 Date.parse(entry.endedAt) <= end,
             )

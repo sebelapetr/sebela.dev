@@ -12,11 +12,13 @@ import {
 import { bookId, createBookPersistence, linkedBookSlug } from "./books.js";
 import { breaksCheck, breaksUnique, isStillReferenced } from "./database-errors.js";
 import { createDiaryPersistence } from "./diary.js";
+import { createEventPersistence } from "./events.js";
 import {
   areas,
   BOOK_LINK_TYPE_CHECK,
   BOOK_LINK_UNIQUE,
   books,
+  events,
   modules,
   PERIOD_CHECK,
   RESERVED_SLUG_CHECK,
@@ -217,7 +219,7 @@ async function refusable<T, Failure>(write: () => Promise<T>): Promise<T | Failu
 /** Deletes the row with the slug; `referenced` while a foreign key still points to it. */
 async function deleteBySlug(
   db: Database,
-  table: typeof areas | typeof modules | typeof resources | typeof books,
+  table: typeof areas | typeof modules | typeof resources | typeof books | typeof events,
   slug: string,
 ): Promise<DeleteRoadmapRecordResult> {
   try {
@@ -391,6 +393,11 @@ export function createRoadmapPersistence(db: Database): RoadmapPersistence {
     ...createBookPersistence(db),
     deleteRoadmapBook(slug) {
       return deleteBySlug(db, books, slug);
+    },
+
+    ...createEventPersistence(db),
+    deleteRoadmapEvent(slug) {
+      return deleteBySlug(db, events, slug);
     },
   };
 }
