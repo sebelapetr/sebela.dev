@@ -5,6 +5,7 @@ import {
   type ApiKeyService,
   type ApiKeyServiceOptions,
 } from "./modules/api-keys/index.js";
+import { createAuditService, type AuditService } from "./modules/audit/index.js";
 import {
   createMediaService,
   type CleanupFailure,
@@ -23,6 +24,8 @@ export interface Services {
   readonly roadmap: RoadmapService;
   readonly apiKeys: ApiKeyService;
   readonly media: MediaService;
+  /** Content writes with their audit in one transaction, and the newest changes. */
+  readonly audit: AuditService;
   /** Loads a seed folder through the services above; needs media to be configured. */
   readonly seed: SeedService;
   /** Ends the connection pool. Call once, at shutdown. */
@@ -87,6 +90,10 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
       mediaOptions === undefined
         ? unconfiguredMedia
         : createMediaService(persistence.profile, mediaOptions),
+    audit: createAuditService(
+      persistence,
+      mediaOptions === undefined ? profileOptions : { ...profileOptions, media: mediaOptions },
+    ),
     seed:
       mediaOptions === undefined
         ? unconfiguredSeed

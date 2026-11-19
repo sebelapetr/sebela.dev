@@ -142,6 +142,17 @@ describe("the learning diary", () => {
       });
       expect(written).toEqual(day);
     });
+
+    it("returns one time entry as the diary shows it, and refuses a missing one", async () => {
+      const { entries } = await roadmap.createTimeEntry(lateSession);
+      const [first] = entries;
+      if (first === undefined) throw new Error("Expected a written entry.");
+
+      await expect(roadmap.getTimeEntry(first.id)).resolves.toEqual(first);
+      await expect(
+        roadmap.getTimeEntry("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toMatchObject({ code: "not_found" });
+    });
   });
 
   describe("notes", () => {

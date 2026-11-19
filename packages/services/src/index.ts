@@ -15,6 +15,13 @@ export type {
   MediaUploadInput,
 } from "./modules/media/index.js";
 export type {
+  AuditOperation,
+  AuditService,
+  AuditServiceOptions,
+  AuditedWrite,
+  ContentServices,
+} from "./modules/audit/index.js";
+export type {
   SeedCount,
   SeedKind,
   SeedReport,

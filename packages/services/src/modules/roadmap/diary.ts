@@ -44,6 +44,8 @@ export interface LearningDiary {
   getDiary(): Promise<Diary>;
   /** One diary day; a date without notes, time entries or a covering event is `not_found`. */
   getDiaryDay(date: string): Promise<DiaryDay>;
+  /** One time entry as the diary shows it; `not_found` when missing. */
+  getTimeEntry(id: string): Promise<TimeEntry>;
   /** Creates the day or replaces its notes; its time entries stay. */
   writeDiaryNotes(date: string, input: DiaryNotesWrite): Promise<DiaryDay>;
   /** Clears the day's notes and keeps its time entries; `not_found` when it has no notes. */
@@ -187,6 +189,7 @@ export function createLearningDiary(persistence: RoadmapPersistence): LearningDi
       if (!day) throw noDay(date);
       return toDiaryDay(day);
     },
+    getTimeEntry: () => Promise.reject(new Error("Not implemented.")),
     async writeDiaryNotes(date, input) {
       return toDiaryDay(await persistence.writeDiaryNotes(date, input.notes));
     },

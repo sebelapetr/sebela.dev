@@ -286,6 +286,7 @@ const describingRoadmap: RoadmapService = {
   deleteResource: documentationOnly,
   getDiary: documentationOnly,
   getDiaryDay: documentationOnly,
+  getTimeEntry: documentationOnly,
   writeDiaryNotes: documentationOnly,
   deleteDiaryNotes: documentationOnly,
   createTimeEntry: documentationOnly,
