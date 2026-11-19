@@ -116,7 +116,7 @@ The learning diary records what was studied when ([decision 0020](decisions/0020
 - **No overlap.** No two time entries overlap, whatever their targets, resources and events alike; adjacent intervals are allowed. The database refuses an overlap at the write itself, so of two concurrent overlapping writes one loses. Attendance on an event is a time entry in the same table under the same constraint, not a separate check.
 - **Durations.** A duration is the actual elapsed time between the endpoints, so a day with a daylight-saving change counts the real hours. Durations and a day's total are derived on every read, summed before any display rounding, and never stored.
 - **Seed identity.** A diary day is identified by its date, a seed session by its target (resource or event) and absolute endpoints; a rerun adds nothing (`packages/db/seed/README.md`).
-- Statistics over logged time and the diary-entry skill belong to later issues.
+- Statistics over logged time are described under Learning statistics; the diary-entry skill belongs to a later issue.
 
 ### Bookshelf
 
@@ -143,7 +143,16 @@ Issue #113 adds the attended events: conferences, meetups, workshops and lecture
 - **Dates add no time.** An event shows on every Prague calendar day of its range in the diary, also on days without notes or time entries. Those days are derived from the dates on every read and never stored, so moving or deleting an event changes its old and new days with no artificial notes or entries left behind.
 - **Attendance.** Time spent at an event is a time entry whose target is the event, logged through the same operation as study time with the same midnight splitting, elapsed-time and overlap rules. Every piece must fall on a day of the event. An event's attendance time is the sum of those entries alone.
 - **Date edits and deletion keep history.** New dates that would leave logged attendance outside the event are refused, naming those days, and nothing changes; the edit is judged while the event is locked, so a concurrent attendance write cannot slip past it. An event with attendance cannot be deleted; move or delete that time first.
-- Statistics across resources and events belong to the Statistics slice.
+- Event attendance appears in the learning statistics as its own category, never inside an area or module.
+
+### Learning statistics
+
+Issue #114 adds the learning statistics: a public, read-only view over the diary's time entries, read through `GET /v1/roadmap/statistics` (`apps/api/AGENTS.md`). Nothing is stored for them; PostgreSQL aggregates every view on each read in one consistent snapshot.
+
+- **Three categories, exactly once.** Every time entry is classified once: a resource of type `book` (book time), any other resource (resource time) or an event (attendance). A book adds no second duration, and topics or other links are never joined into the sums, so they cannot multiply an entry. In every period the three categories sum to the total.
+- **Prague periods.** Days are the diary's Europe/Prague days, weeks start on Monday and months are Prague calendar months. Because a session is already split at each Prague midnight, an interval crossing a period boundary contributes only its time within each period, and a daylight-saving day keeps its actual duration. Days list only those with time; weeks and months are listed without gaps from the first to the last with time, quiet ones as zero. A day's total equals the diary's total for it.
+- **Areas and modules.** Area and module totals hold resource and book time through each resource's current module, so moving a resource moves all its logged time from the old module to the new one without losing or repeating any. Event attendance is never part of an area or module; it is shown separately.
+- **Whole seconds.** Every value is summed in whole seconds before any display rounding; rounding is the reader's job. An empty diary gives zero totals and empty lists.
 
 ## Access
 
