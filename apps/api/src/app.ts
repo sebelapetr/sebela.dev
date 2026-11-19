@@ -334,6 +334,7 @@ const describingRoadmap: RoadmapService = {
   writeDiaryNotes: documentationOnly,
   deleteDiaryNotes: documentationOnly,
   createTimeEntry: documentationOnly,
+  logSession: documentationOnly,
   updateTimeEntry: documentationOnly,
   deleteTimeEntry: documentationOnly,
   listBooks: documentationOnly,
@@ -459,7 +460,7 @@ export function createApp(dependencies: AppDependencies): Api {
               operation: { operationId: route.operationId, method, route: route.path },
               provenance: c.req.header(auditProvenanceHeader) ?? null,
               entity: audit.entity,
-              records: audit.records(params),
+              records: audit.records(params, body),
               run: (content) => {
                 const bound = moduleRoutes({ ...content, audit: services.audit })[index];
                 if (bound?.operationId !== route.operationId) {

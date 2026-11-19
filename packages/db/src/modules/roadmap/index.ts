@@ -13,6 +13,7 @@ export type {
   LearningTimeResourceRecord,
   LearningTimeSplitRecord,
   ReplaceTimeEntryResult,
+  SessionNotes,
   TimeEntryPiece,
   TimeEntryRecord,
   TimeEntryReplacement,

@@ -91,7 +91,7 @@ describe("the upload tool", () => {
     const { tools } = await client.listTools();
     const upload = tools.find((tool) => tool.name === "upload");
 
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(13);
     expect(upload?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,

@@ -82,12 +82,18 @@ describe("the tool catalogue", () => {
     const { tools } = await client.listTools();
 
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "add_resource",
       "delete",
       "describe",
+      "find_resource",
       "get",
       "list",
+      "log_session",
       "recent_changes",
       "save",
+      "save_book",
+      "save_event",
+      "set_resource_status",
       "upload",
     ]);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));

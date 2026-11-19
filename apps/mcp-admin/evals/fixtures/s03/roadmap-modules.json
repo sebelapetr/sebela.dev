@@ -1,0 +1,23 @@
+[
+  {
+    "slug": "async-basics",
+    "area": "foundations",
+    "name": "Async Basics",
+    "description": "Fictional first steps with coroutines and event loops.",
+    "position": 0
+  },
+  {
+    "slug": "concurrency-lab",
+    "area": "foundations",
+    "name": "Concurrency Lab",
+    "description": "Fictional hands-on concurrency exercises.",
+    "position": 1
+  },
+  {
+    "slug": "reading-list",
+    "area": "reading",
+    "name": "Reading List",
+    "description": "Fictional books on the roadmap.",
+    "position": 0
+  }
+]

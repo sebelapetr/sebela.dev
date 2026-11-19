@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "foundations",
+    "name": "Foundations",
+    "description": "Fictional groundwork on asynchronous programming.",
+    "weight": 60,
+    "position": 0
+  },
+  {
+    "slug": "reading",
+    "name": "Reading",
+    "description": "Fictional books read alongside the roadmap.",
+    "weight": 40,
+    "position": 1
+  }
+]

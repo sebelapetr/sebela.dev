@@ -356,6 +356,13 @@ export interface DiaryEventRecord {
   link: string | null;
 }
 
+/** Markdown appended to one diary day's notes together with a session's time entries. */
+export interface SessionNotes {
+  /** A diary day the session's pieces write; its notes get the text after a blank line. */
+  date: string;
+  text: string;
+}
+
 /** What a time entry is logged on: one resource by slug or one event by slug. */
 export type TimeEntryTarget = { resource: string } | { event: string };
 
@@ -642,11 +649,14 @@ export interface RoadmapPersistence {
    * judged against the event locked against a concurrent date edit. The database refuses a piece
    * that overlaps any stored interval of either target, including one committed concurrently, as
    * `overlap`; touching endpoints do not overlap. Each piece must lie within its diary day and end
-   * after it starts, or the write throws.
+   * after it starts, or the write throws. With `notes`, the text is appended to that day's notes
+   * after a blank line (or starts them) in the same transaction, so a refused session keeps the
+   * notes as they were and concurrent appends both stay.
    */
   createTimeEntries(
     target: TimeEntryTarget,
     pieces: TimeEntryPiece[],
+    notes?: SessionNotes,
   ): Promise<CreateTimeEntriesResult>;
   /**
    * Replaces the time entry, locked against concurrent writes, with what `plan` derives from its

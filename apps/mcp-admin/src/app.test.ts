@@ -160,12 +160,18 @@ describe("authentication (D01, D02)", () => {
 
     // Their annotations and arguments are covered in content-tools.test.ts.
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "add_resource",
       "delete",
       "describe",
+      "find_resource",
       "get",
       "list",
+      "log_session",
       "recent_changes",
       "save",
+      "save_book",
+      "save_event",
+      "set_resource_status",
       "upload",
     ]);
     const checks = api.calls.filter((call) => call.url === `${API_BASE}/v1/authentication`);
@@ -331,6 +337,8 @@ describe("an unavailable authentication check fails closed (D05)", () => {
       "a timeout",
       (request) =>
         new Promise<Response>((_, reject) => {
+          // Like fetch: a request whose signal already fired under load is rejected at once.
+          if (request.signal.aborted) reject(request.signal.reason as Error);
           request.signal.addEventListener("abort", () => {
             reject(request.signal.reason as Error);
           });
@@ -450,6 +458,8 @@ describe("limits (D08)", () => {
       "/v1/person",
       (request) =>
         new Promise<Response>((_, reject) => {
+          // Like fetch: a request whose signal already fired under load is rejected at once.
+          if (request.signal.aborted) reject(request.signal.reason as Error);
           request.signal.addEventListener("abort", () => {
             reject(request.signal.reason as Error);
           });

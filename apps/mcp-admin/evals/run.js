@@ -24,10 +24,10 @@
 // `--regrade` instead of a new paid run. The redacted `summary.json` never holds them.
 //
 // Every case-run gets its own API on a fresh temporary database seeded from the case's fixture
-// (`fixtures/s01`, `fixtures/s02` or `fixtures/s04`), two ephemeral API keys (`eval` for the model's client and
-// `studio-desktop` for another of the owner's clients) and its own MCP server. Between Promptfoo
-// and MCP Admin sits the controlled client adapter (`client.js`): it asks the scripted owner before
-// every `save`, `delete` and `upload` and plays the case's controlled events. Setup edits and concurrent
+// (`fixtures/s01`, `fixtures/s02`, `fixtures/s03` or `fixtures/s04`), two ephemeral API keys (`eval` for the
+// model's client and `studio-desktop` for another of the owner's clients) and its own MCP server.
+// Between Promptfoo and MCP Admin sits the controlled client adapter (`client.js`): it asks the
+// scripted owner before every write tool call and plays the case's controlled events. Setup edits and concurrent
 // edits go through the API with the other key. The keys reach Promptfoo only through the
 // environment of its process, never as a test variable or prompt. The runner reads the content
 // state through the API before and after the run, so a case passes only when Promptfoo's graders
@@ -37,7 +37,7 @@
 // deleted when the case-run ends, whatever happened. The runner writes a redacted summary to the
 // checkout's `.tmp/evals/mcp-admin/` and exits 1 when the gate fails or a credential would leak.
 //
-// Budget: at most `implemented cases x repeats` model conversations (54 for S01, S02 and S04), each
+// Budget: at most `implemented cases x repeats` model conversations (96 for S01, S02, S03 and S04), each
 // limited by max_tokens and max_tool_calls in promptfooconfig.yaml; a `--case` run at most
 // `repeats` (3) per named case; a regrade none. Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
@@ -47,7 +47,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { catalogue, gates, implementedCases } from "./catalogue.js";
+import { catalogue, gates } from "./catalogue.js";
 import { startClientAdapter } from "./client.js";
 import { fixtureFolder, startApi, startMcp } from "./fixture.js";
 import { evaluateGate } from "./gate.js";
@@ -415,16 +415,17 @@ export function answerRecord(entry, repeat, report, stateFailure, states = null)
  * happens only after the run's credential scan found none.
  *
  * @param {readonly StoredAnswer[]} answers
+ * @param {readonly import("./catalogue.js").EvalCase[]} [cases] The catalogue; replaced only in tests.
  * @returns {{ caseId: string, repeat: number, pass: boolean, reason: string, expectedState: boolean }[]}
  */
-export function regradeRuns(answers) {
+export function regradeRuns(answers, cases = catalogue) {
   return answers.map((answer) => {
     if (answer.model !== MODEL) {
       throw new Error(
         `${answer.caseId} repeat ${String(answer.repeat)}: answered by ${answer.model}, not the pinned model ${MODEL}.`,
       );
     }
-    const entry = catalogue.find((candidate) => candidate.id === answer.caseId);
+    const entry = cases.find((candidate) => candidate.id === answer.caseId);
     if (!entry) throw new Error(`${answer.caseId} is not in the catalogue.`);
     if (entry.status !== "implemented") throw new Error(`${answer.caseId} is not implemented yet.`);
     const grader = /** @type {Record<string, unknown>} */ (graders)[`grade${entry.id}`];
@@ -487,9 +488,10 @@ export function totals(runs) {
  * regrade combined with another option, before any fixture starts or model is called.
  *
  * @param {readonly string[]} args
+ * @param {readonly import("./catalogue.js").EvalCase[]} [catalogueCases] The catalogue; replaced only in tests.
  * @returns {{ checkFixture: boolean, regrade: string | null, cases: readonly import("./catalogue.js").EvalCase[], partial: { cases: string[] } | null }}
  */
-export function planRun(args) {
+export function planRun(args, catalogueCases = catalogue) {
   let checkFixture = false;
   /** @type {string | null} */
   let regrade = null;
@@ -520,10 +522,15 @@ export function planRun(args) {
     return { checkFixture: false, regrade, cases: [], partial: null };
   }
   if (caseIds.length === 0) {
-    return { checkFixture, regrade: null, cases: implementedCases(), partial: null };
+    return {
+      checkFixture,
+      regrade: null,
+      cases: catalogueCases.filter((entry) => entry.status === "implemented"),
+      partial: null,
+    };
   }
   const cases = caseIds.map((caseId) => {
-    const entry = catalogue.find((candidate) => candidate.id === caseId);
+    const entry = catalogueCases.find((candidate) => candidate.id === caseId);
     if (!entry) throw new Error(`${caseId} is not in the catalogue.`);
     if (entry.status !== "implemented") throw new Error(`${caseId} is not implemented yet.`);
     return entry;
@@ -580,7 +587,7 @@ async function main() {
     if (existsSync(file)) process.loadEnvFile(file);
   }
   if (plan.checkFixture) {
-    for (const fixture of /** @type {const} */ (["s01", "s02", "s04"])) {
+    for (const fixture of /** @type {const} */ (["s01", "s02", "s03", "s04"])) {
       const api = await startApi({
         seedFolder: fixtureFolder(fixture),
         keyNames: [EVAL_CLIENT, OTHER_CLIENT],
@@ -630,7 +637,8 @@ async function main() {
       maxToolCalls: 6,
       timeoutMs: 120000,
       clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
-      dataset: "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s04 (S04 cases)",
+      dataset:
+        "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases), fixtures/s04 (S04 cases)",
       repeats: gates.repeats,
       noncriticalFloor: gates.noncriticalFloor,
     },

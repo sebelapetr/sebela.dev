@@ -96,6 +96,93 @@ export const fictionalProjects: readonly FakeProject[] = [
   },
 ];
 
+/** A fictional record of the fake roadmap: a resource, a book or an event, keyed by slug. */
+export type FakeRecord = Record<string, unknown> & { slug: string };
+
+/** The fictional roadmap areas and modules; resources name their module by slug. */
+export const fictionalAreas = [
+  {
+    slug: "foundations",
+    name: "Foundations",
+    modules: [
+      { slug: "async-basics", name: "Async Basics" },
+      { slug: "concurrency-lab", name: "Concurrency Lab" },
+    ],
+  },
+  { slug: "reading", name: "Reading", modules: [{ slug: "reading-list", name: "Reading List" }] },
+] as const;
+
+const STAMP = "2026-01-01T00:00:00.000Z";
+
+/** Two resources share the name "Python Async" in different modules; one resource reads a book. */
+export const fictionalResources: readonly FakeRecord[] = [
+  {
+    slug: "python-async-intro",
+    module: "async-basics",
+    name: "Python Async",
+    type: "video",
+    status: "planned",
+    link: "https://videos.example.test/python-async",
+    book: null,
+  },
+  {
+    slug: "python-async-lab",
+    module: "concurrency-lab",
+    name: "Python Async",
+    type: "project",
+    status: "in-progress",
+    link: "https://lab.example.test/async",
+    book: null,
+  },
+  {
+    slug: "harbor-patterns-book",
+    module: "reading-list",
+    name: "Harbor Patterns",
+    type: "book",
+    status: "in-progress",
+    link: null,
+    book: "harbor-patterns",
+  },
+];
+
+/** A book linked by `harbor-patterns-book` and one no resource links. */
+export const fictionalBooks: readonly FakeRecord[] = [
+  { slug: "harbor-patterns", title: "Harbor Patterns", author: "Odile Venn", startedOn: null },
+  { slug: "quiet-ledger", title: "The Quiet Ledger", author: "Bram Tolle", startedOn: null },
+];
+
+export const fictionalEvents: readonly FakeRecord[] = [
+  {
+    slug: "fictional-ml-summit-2026",
+    name: "Fictional ML Summit",
+    kind: "conference",
+    startsOn: "2026-11-16",
+    endsOn: "2026-11-17",
+  },
+];
+
+/** One logged interval of the fake diary. */
+export interface FakeInterval {
+  readonly target: { resource: string } | { event: string };
+  readonly startedAt: number;
+  readonly endedAt: number;
+}
+
+/** The fake roadmap's stored state; tests read and change it directly. */
+export interface FakeRoadmap {
+  readonly resources: Map<string, FakeRecord>;
+  readonly books: Map<string, FakeRecord>;
+  readonly events: Map<string, FakeRecord>;
+  readonly intervals: FakeInterval[];
+  /** The notes of each diary day by its Prague date. */
+  readonly notes: Map<string, string>;
+}
+
+/** The Europe/Prague calendar date of an instant in milliseconds. */
+export function pragueDate(instant: number): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague" }).format(instant);
+}
+
 /** One audited change of the fake API, in the shape of `GET /v1/audit/changes`. */
 export interface FakeChange {
   id: number;
@@ -145,6 +232,8 @@ export interface FakeApi {
   readonly files: Map<string, { bytes: Uint8Array; name: string; type: string }>;
   /** The stored person, as `GET /v1/person` returns it. */
   person(): Record<string, unknown>;
+  /** The fictional roadmap, books, events and diary. */
+  readonly roadmap: FakeRoadmap;
   /**
    * Replaces the answer of one path (`/v1/authentication`, `/v1/person`), for every method or only
    * `method`.
@@ -441,6 +530,264 @@ export function fakeApi(): FakeApi {
     return c.json(record, 201);
   });
 
+  // The roadmap: a tree read, resources, books and events written like the real API, and the
+  // session action that logs time on a resource or event and appends diary notes atomically.
+  const roadmap: FakeRoadmap = {
+    resources: new Map(fictionalResources.map((record) => [record.slug, { ...record }])),
+    books: new Map(fictionalBooks.map((record) => [record.slug, { ...record }])),
+    events: new Map(fictionalEvents.map((record) => [record.slug, { ...record }])),
+    intervals: [],
+    notes: new Map(),
+  };
+  const RESOURCE_DEFAULTS = {
+    description: null,
+    status: "planned",
+    estimatedMinutes: null,
+    startedAt: null,
+    finishedAt: null,
+    link: null,
+    book: null,
+    position: 0,
+  };
+  const resourceRead = (record: FakeRecord) => ({
+    id: "00000000-0000-4000-8000-000000000100",
+    ...RESOURCE_DEFAULTS,
+    ...record,
+    topics: [],
+    createdAt: STAMP,
+    updatedAt: STAMP,
+  });
+  const secondsOn = (target: "resource" | "event", slug: string) =>
+    roadmap.intervals
+      .filter((interval) => (interval.target as Record<string, string>)[target] === slug)
+      .reduce((total, interval) => total + (interval.endedAt - interval.startedAt) / 1000, 0);
+  const bookRead = (record: FakeRecord) => {
+    const linking = [...roadmap.resources.values()].find(
+      (resource) => resource["book"] === record.slug,
+    );
+    const module = fictionalAreas
+      .flatMap((area) => area.modules.map((entry) => ({ ...entry, area: area.slug })))
+      .find((entry) => entry.slug === linking?.["module"]);
+    return {
+      id: "00000000-0000-4000-8000-000000000200",
+      author: null,
+      description: null,
+      pages: null,
+      year: null,
+      isbn: null,
+      priority: 0,
+      startedOn: null,
+      endedOn: null,
+      summary: null,
+      coverId: null,
+      cover: null,
+      ...record,
+      status: record["endedOn"] ? "completed" : record["startedOn"] ? "reading" : "to-read",
+      resource:
+        linking && module
+          ? { slug: linking.slug, name: linking["name"], module: module.slug, area: module.area }
+          : null,
+      readingSeconds: linking ? secondsOn("resource", linking.slug) : 0,
+      createdAt: STAMP,
+      updatedAt: STAMP,
+    };
+  };
+  const eventRead = (record: FakeRecord) => ({
+    id: "00000000-0000-4000-8000-000000000300",
+    organizer: null,
+    place: null,
+    online: false,
+    link: null,
+    takeaways: null,
+    ...record,
+    topics: [],
+    attendanceSeconds: secondsOn("event", record.slug),
+    createdAt: STAMP,
+    updatedAt: STAMP,
+  });
+
+  app.get("/v1/roadmap", (c) =>
+    c.json({
+      summary: {},
+      areas: fictionalAreas.map((area) => ({
+        slug: area.slug,
+        name: area.name,
+        modules: area.modules.map((module) => ({
+          slug: module.slug,
+          name: module.name,
+          resources: [...roadmap.resources.values()]
+            .filter((resource) => resource["module"] === module.slug)
+            .map((resource) =>
+              Object.fromEntries(
+                Object.entries(resourceRead(resource)).filter(([key]) => key !== "module"),
+              ),
+            ),
+        })),
+      })),
+    }),
+  );
+
+  /** Get, create and update of one roadmap collection, audited under `entity`. */
+  const collection = (options: {
+    path: string;
+    store: Map<string, FakeRecord>;
+    fields: readonly string[];
+    entity: string;
+    name: string;
+    read: (record: FakeRecord) => Record<string, unknown>;
+    list?: boolean;
+  }) => {
+    const { path, store, fields, entity, name, read } = options;
+    const missing = () => refusal("not_found", `No such ${entity}.`);
+    if (options.list) app.get(path, (c) => c.json([...store.values()].map(read)));
+    app.get(`${path}/:slug`, (c) => {
+      const record = store.get(c.req.param("slug"));
+      return record ? c.json(read(record)) : c.json(missing(), 404);
+    });
+    app.post(path, async (c) => {
+      const body = await c.req.json<Record<string, unknown>>();
+      const unknown = unknownFields(body, ["slug", ...fields]);
+      if (unknown.length > 0) return c.json(refusal("validation_failed", "Invalid.", unknown), 400);
+      const slug = String(body["slug"]);
+      if (store.has(slug)) return c.json(refusal("conflict", `"${slug}" exists.`), 409);
+      const record = { ...body, slug } as FakeRecord;
+      store.set(slug, record);
+      audit(c, {
+        operation: { operationId: `create${name}`, method: "POST", route: path },
+        entity,
+        record: slug,
+        action: "created",
+        before: null,
+        after: read(record),
+      });
+      return c.json(read(record), 201);
+    });
+    app.patch(`${path}/:slug`, async (c) => {
+      const slug = c.req.param("slug");
+      const before = store.get(slug);
+      if (!before) return c.json(missing(), 404);
+      const body = await c.req.json<Record<string, unknown>>();
+      const unknown = unknownFields(body, fields);
+      if (unknown.length > 0) return c.json(refusal("validation_failed", "Invalid.", unknown), 400);
+      const after = { ...before, ...body };
+      store.set(slug, after);
+      audit(c, {
+        operation: { operationId: `update${name}`, method: "PATCH", route: `${path}/{slug}` },
+        entity,
+        record: slug,
+        action: "updated",
+        before: read(before),
+        after: read(after),
+      });
+      return c.json(read(after));
+    });
+  };
+  collection({
+    path: "/v1/roadmap/resources",
+    store: roadmap.resources,
+    fields: ["module", "name", "type", "topics", ...Object.keys(RESOURCE_DEFAULTS)],
+    entity: "roadmap-resource",
+    name: "RoadmapResource",
+    read: resourceRead,
+  });
+  collection({
+    path: "/v1/roadmap/books",
+    store: roadmap.books,
+    fields: [
+      "title",
+      "author",
+      "description",
+      "pages",
+      "year",
+      "isbn",
+      "priority",
+      "startedOn",
+      "endedOn",
+      "summary",
+      "coverId",
+    ],
+    entity: "roadmap-book",
+    name: "RoadmapBook",
+    read: bookRead,
+    list: true,
+  });
+  collection({
+    path: "/v1/roadmap/events",
+    store: roadmap.events,
+    fields: [
+      "name",
+      "kind",
+      "organizer",
+      "startsOn",
+      "endsOn",
+      "place",
+      "online",
+      "link",
+      "takeaways",
+      "topics",
+    ],
+    entity: "roadmap-event",
+    name: "RoadmapEvent",
+    read: eventRead,
+    list: true,
+  });
+
+  app.post("/v1/roadmap/sessions", async (c) => {
+    const body = await c.req.json<Record<string, unknown>>();
+    const unknown = unknownFields(body, ["resource", "event", "startedAt", "endedAt", "notes"]);
+    if (unknown.length > 0) return c.json(refusal("validation_failed", "Invalid.", unknown), 400);
+    const startedAt = Date.parse(String(body["startedAt"]));
+    const endedAt = Date.parse(String(body["endedAt"]));
+    const invalid = (path: string, message: string) =>
+      c.json(refusal("validation_failed", message, [{ path, message }]), 400);
+    let target: FakeInterval["target"];
+    if (typeof body["resource"] === "string") {
+      if (!roadmap.resources.has(body["resource"])) {
+        return invalid("resource", `There is no roadmap resource "${body["resource"]}".`);
+      }
+      target = { resource: body["resource"] };
+    } else {
+      const event = roadmap.events.get(String(body["event"]));
+      if (!event) return invalid("event", `There is no event "${String(body["event"])}".`);
+      const outside = (date: string) =>
+        date < String(event["startsOn"]) || date > String(event["endsOn"]);
+      if (outside(pragueDate(startedAt))) return invalid("startedAt", "Outside the event.");
+      if (outside(pragueDate(endedAt - 1000))) return invalid("endedAt", "Outside the event.");
+      target = { event: event.slug };
+    }
+    if (!(endedAt > startedAt)) return invalid("endedAt", "The end must be after the start.");
+    const overlaps = roadmap.intervals.some(
+      (interval) => interval.startedAt < endedAt && startedAt < interval.endedAt,
+    );
+    if (overlaps) return c.json(refusal("conflict", "The time overlaps a logged interval."), 409);
+
+    const dates = [...new Set([pragueDate(startedAt), pragueDate(endedAt - 1000)])].sort();
+    const before = new Map(dates.map((date) => [date, roadmap.notes.get(date) ?? null]));
+    roadmap.intervals.push({ target, startedAt, endedAt });
+    const notes = body["notes"];
+    const [first] = dates;
+    if (typeof notes === "string" && first !== undefined) {
+      const earlier = roadmap.notes.get(first);
+      roadmap.notes.set(first, earlier === undefined ? notes : `${earlier}\n\n${notes}`);
+    }
+    for (const date of dates) {
+      audit(c, {
+        operation: {
+          operationId: "logRoadmapSession",
+          method: "POST",
+          route: "/v1/roadmap/sessions",
+        },
+        entity: "roadmap-diary",
+        record: date,
+        action: "updated",
+        before: { date, notes: before.get(date) ?? null },
+        after: { date, notes: roadmap.notes.get(date) ?? null },
+      });
+    }
+    const entries = dates.map((date) => ({ date, ...target }));
+    return c.json({ entries, dates }, 201);
+  });
+
   app.get("/v1/audit/changes", (c) => c.json({ changes: [...changes].reverse().slice(0, 20) }));
 
   return {
@@ -450,6 +797,7 @@ export function fakeApi(): FakeApi {
     media,
     files,
     person: () => person,
+    roadmap,
     fetch: async (request) => {
       const url = new URL(request.url);
       const body = request.body === null ? null : await request.clone().text();
