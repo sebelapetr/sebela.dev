@@ -2,9 +2,11 @@
 #
 # Do not run this file directly: `node evals/run.js` starts a clean API and MCP server for every
 # case-run, passes the address and an ephemeral key through the environment and applies the gates.
-# Pinned settings: Promptfoo 0.126.0 (run through `pnpm dlx`), the provider and model below,
-# @modelcontextprotocol/server 2.4.0, the model's default sampling, at most 6 tool calls and 4096 output tokens per
-# conversation, 120 s per case-run, and the frozen clock in prompt.json. The clock is frozen in the
+# Pinned settings: Promptfoo 0.126.0 (run through `pnpm dlx`), the provider and model below
+# (Claude Sonnet 5.5 at medium effort, the model the owner's client uses; the owner's decision in
+# .plan/05-mcp-admin/evals.md), prompt caching of the repeated prefix,
+# @modelcontextprotocol/server 2.4.0, the model's default sampling, at most 6 tool calls and 4096
+# output tokens per conversation, 120 s per case-run, and the frozen clock in prompt.json. The clock is frozen in the
 # prompt only: the API and MCP Admin run on real time (no case depends on it). The MCP address is
 # the controlled client adapter's (evals/client.js), which asks the scripted owner before writes.
 description: MCP Admin S01 read-only baseline and S02 content management
@@ -13,11 +15,17 @@ prompts:
   - file://prompt.json
 
 providers:
-  - id: anthropic:messages:claude-opus-5-5
-    label: claude-opus-5-5
+  - id: anthropic:messages:claude-sonnet-5-5
+    label: claude-sonnet-5-5
     config:
       max_tokens: 4096
-      # No temperature: Claude Opus 5.5 refuses sampling parameters, so repeats carry the variance.
+      effort: medium
+      # The system prompt and tool definitions repeat in every turn and case-run: read them from
+      # the prompt cache instead of paying for them again.
+      cache_control:
+        type: ephemeral
+      # No temperature: Claude Sonnet 5.5 refuses non-default sampling parameters, so repeats carry
+      # the variance.
       # Enforced by Promptfoo, not sent to the model: a read-only case needs one or two calls, a
       # change needs a lookup, a read and a save, and a corrected field error one more save.
       max_tool_calls: 6
