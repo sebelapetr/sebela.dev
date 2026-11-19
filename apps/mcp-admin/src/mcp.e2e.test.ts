@@ -13,8 +13,8 @@ import { toolText } from "./test-support/index.js";
 
 type RunningApi = Awaited<ReturnType<typeof startApi>>;
 
-let api: RunningApi;
-let mcp: { url: string; close: () => Promise<void> };
+let api: RunningApi | undefined;
+let mcp: { url: string; close: () => Promise<void> } | undefined;
 const lines: string[] = [];
 
 beforeAll(async () => {
@@ -33,12 +33,22 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await mcp.close();
-  await api.stop();
+  // beforeAll may have failed part-way: whatever started is stopped, the API (and its temporary
+  // database) always.
+  try {
+    await mcp?.close();
+  } finally {
+    await api?.stop();
+  }
 });
 
+function running() {
+  if (!api || !mcp) throw new Error("The fixture did not start.");
+  return { api, mcp };
+}
+
 function keyOf(name: string): string {
-  const entry = api.keys[name];
+  const entry = running().api.keys[name];
   if (!entry) throw new Error(`No fixture key named ${name}`);
   return entry.key;
 }
@@ -46,7 +56,7 @@ function keyOf(name: string): string {
 async function connect(key: string | null): Promise<Client> {
   const client = new Client({ name: "mcp-admin-e2e", version: "0.0.0" });
   await client.connect(
-    new StreamableHTTPClientTransport(new URL(`${mcp.url}/mcp`), {
+    new StreamableHTTPClientTransport(new URL(`${running().mcp.url}/mcp`), {
       requestInit: key === null ? {} : { headers: { Authorization: `Bearer ${key}` } },
     }),
   );
@@ -102,7 +112,7 @@ describe("the authenticated read path", () => {
     const client = await connect(keyOf("revoked"));
     await client.listTools();
 
-    await revokeKey(api, "revoked");
+    await revokeKey(running().api, "revoked");
 
     await expect(
       client.callTool({ name: "get", arguments: { entity: "person" } }),

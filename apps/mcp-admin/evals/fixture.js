@@ -40,8 +40,10 @@ export async function startApi({ seedFolder, keyNames, env = {} }) {
   await mkdir(scratchRoot, { recursive: true });
   const scratch = await mkdtemp(join(scratchRoot, "mcp-admin-fixture-"));
   const keysFile = join(scratch, "keys.json");
+  /** @type {RunningProcess | undefined} */
+  let process_;
   try {
-    const process_ = await startProcess({
+    process_ = await startProcess({
       command: process.execPath,
       args: ["--import", "tsx", "src/cli/e2e-server.ts", seedFolder],
       cwd: apiFolder,
@@ -61,16 +63,19 @@ export async function startApi({ seedFolder, keyNames, env = {} }) {
     /** @type {{ database: string, keys: { name: string, id: string, key: string }[] }} */
     const written = JSON.parse(await readFile(keysFile, "utf8"));
     const keys = Object.fromEntries(written.keys.map(({ name, id, key }) => [name, { id, key }]));
+    const started = process_;
     return {
-      url: process_.url,
+      url: started.url,
       keys,
       database: written.database,
       stop: async () => {
-        await process_.stop();
+        await started.stop();
         await rm(scratch, { recursive: true, force: true });
       },
     };
   } catch (error) {
+    // A started API (and its temporary database) must not outlive a failed start.
+    await process_?.stop();
     await rm(scratch, { recursive: true, force: true });
     throw error;
   }
