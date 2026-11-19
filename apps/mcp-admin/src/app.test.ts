@@ -280,7 +280,8 @@ describe("revocation and two callers (D03, D04)", () => {
   });
 
   it("checks each concurrent caller with its own key and shares none", async () => {
-    const { fetch, api } = open();
+    // Room for all six calls at once: this case is about keys, the limit itself is D08's.
+    const { fetch, api } = open({ overrides: { MCP_ADMIN_MAX_CONCURRENT: "8" } });
     const [first, second] = await Promise.all([
       connectClient(fetch, KEY_A),
       connectClient(fetch, KEY_B),

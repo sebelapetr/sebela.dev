@@ -15,6 +15,8 @@
 # the main checkout (apps/api/AGENTS.md, "Container stack"): the one-off migration service and the
 # API, both from the image of apps/api/Dockerfile. The profile `web` adds the website from the
 # image of apps/web/Dockerfile (apps/web/AGENTS.md, "Container"); `pnpm stack:up` starts both.
+# The profile `mcp-admin` adds MCP Admin from apps/mcp-admin/Dockerfile (apps/mcp-admin/AGENTS.md,
+# "Container"); start it with `--profile api --profile mcp-admin`.
 # Worktrees run the API and the website on the host instead; a disposable complete stack of its own
 # (another project name, ports, password and storage folder) is what `pnpm test:web-stack` starts.
 #
@@ -51,6 +53,7 @@ services:
       - "${POSTGRES_HOST:?set POSTGRES_HOST (documented in .env.example)}:${POSTGRES_PORT:?set POSTGRES_PORT (documented in .env.example)}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
+    networks: [database]
     # Healthy once the server accepts queries over TCP — not only the temporary server of the first
     # initialisation — and the pgvector extension is available to create.
     healthcheck:
@@ -76,6 +79,7 @@ services:
     build: *api-build
     command: [node, /app/packages/db/dist/cli/migrate.js]
     environment: *database-environment
+    networks: [database]
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,6 +128,8 @@ services:
       - "${API_HOST:-}:${API_PORT:-}:8080"
     volumes:
       - api-media:/var/lib/sebela/media
+    # The only service on both networks: Postgres on one, its clients on the other.
+    networks: [content, database]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -170,6 +176,7 @@ services:
       WEB_ANALYTICS_WEBSITE_ID: ${WEB_ANALYTICS_WEBSITE_ID:-}
     ports:
       - "${WEB_HOST:-}:${WEB_PORT:-}:8080"
+    networks: [content]
     depends_on:
       api:
         condition: service_healthy
@@ -190,6 +197,61 @@ services:
       start_period: 30s
       start_interval: 1s
     restart: unless-stopped
+
+  # MCP Admin (apps/mcp-admin/AGENTS.md, "Container"): the private administrative MCP server. It
+  # holds no API key and no database or storage setting; each caller sends its own key, which it
+  # passes to the API by the API's service name. It shares the content network with the API only
+  # and has no route to Postgres. Published on the host's loopback interface; reach it from another
+  # machine through an SSH tunnel, never a public address.
+  mcp-admin:
+    profiles: [mcp-admin]
+    build:
+      context: .
+      dockerfile: apps/mcp-admin/Dockerfile
+    environment:
+      # The container listens on every interface on its own declared port; the host publishes it
+      # on MCP_ADMIN_HOST and MCP_ADMIN_PORT only.
+      MCP_ADMIN_HOST: 0.0.0.0
+      MCP_ADMIN_PORT: "8080"
+      MCP_ADMIN_API_URL: http://api:8080
+      MCP_ADMIN_ALLOWED_HOSTS: ${MCP_ADMIN_ALLOWED_HOSTS:-}
+      MCP_ADMIN_ALLOWED_ORIGINS: ${MCP_ADMIN_ALLOWED_ORIGINS:-}
+      MCP_ADMIN_TRUSTED_PROXIES: ${MCP_ADMIN_TRUSTED_PROXIES:-}
+      MCP_ADMIN_BODY_LIMIT_BYTES: ${MCP_ADMIN_BODY_LIMIT_BYTES:-}
+      MCP_ADMIN_TIMEOUT_MS: ${MCP_ADMIN_TIMEOUT_MS:-}
+      MCP_ADMIN_MAX_CONCURRENT: ${MCP_ADMIN_MAX_CONCURRENT:-}
+      MCP_ADMIN_RATE_LIMIT_PREAUTH: ${MCP_ADMIN_RATE_LIMIT_PREAUTH:-}
+      MCP_ADMIN_RATE_LIMIT_KEY: ${MCP_ADMIN_RATE_LIMIT_KEY:-}
+      MCP_ADMIN_RATE_LIMIT_MAX_TRACKED: ${MCP_ADMIN_RATE_LIMIT_MAX_TRACKED:-}
+    ports:
+      - "${MCP_ADMIN_HOST:-}:${MCP_ADMIN_PORT:-}:8080"
+    networks: [content]
+    depends_on:
+      api:
+        condition: service_healthy
+    # Healthy once it answers its health route, which needs no key and calls no API.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --eval
+        - >-
+          fetch("http://127.0.0.1:" + process.env.MCP_ADMIN_PORT + "/health")
+          .then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+    # Stopped with SIGTERM: it ends in-flight MCP exchanges and closes its socket.
+    restart: unless-stopped
+
+# Postgres and its clients (the migration and the API) share `database`; the API's clients (the
+# website and MCP Admin) share `content`. Only the API is on both, so nothing but the API and the
+# migration can reach Postgres inside Compose.
+networks:
+  database:
+  content:
 
 volumes:
   postgres-data:
