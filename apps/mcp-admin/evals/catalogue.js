@@ -108,14 +108,14 @@ export const catalogue = [
   ),
   case_("E19", "cs", false, "S03", "implemented", "B1 jsem dočetl včera."),
   case_("E20", "en", false, "S03", "implemented", "I began B1 today."),
-  case_("E21", "cs", false, "S04", "pending", "Nahraj přiloženou fotku a nastav ji u profilu."),
-  case_("E22", "en", true, "S04", "pending", "Replace my CV with this PDF. (upload fails)"),
+  case_("E21", "cs", false, "S04", "implemented", "Nahraj přiloženou fotku a nastav ji u profilu."),
+  case_("E22", "en", true, "S04", "implemented", "Replace my CV with this PDF. (upload fails)"),
   case_(
     "E23",
     "cs",
     false,
     "S04",
-    "pending",
+    "implemented",
     "Uprav headline. (exact replacement supplied and approved)",
   ),
   case_(

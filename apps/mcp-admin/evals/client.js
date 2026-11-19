@@ -4,7 +4,7 @@
  * The controlled client adapter of the evals: the part of a supported MCP client that asks the
  * owner before a change. It sits between Promptfoo's MCP client and MCP Admin and forwards every
  * request unchanged, the caller's `Authorization` header included, except `tools/call` requests of
- * the write tools (`save`, `delete` and the learning task tools): those are forwarded only when the
+ * the write tools (`save`, `delete`, `upload` and the learning task tools): those are forwarded only when the
  * case's scripted owner decision approves them. A declined call returns a `declined` tool error and
  * never reaches MCP Admin, so it makes no API call.
  *
@@ -23,6 +23,7 @@ import { matchesRule } from "./scenarios.js";
 export const WRITE_TOOLS = Object.freeze([
   "save",
   "delete",
+  "upload",
   "add_resource",
   "set_resource_status",
   "log_session",

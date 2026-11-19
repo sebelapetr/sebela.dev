@@ -89,6 +89,7 @@ describe("the authenticated read path", () => {
       "save_book",
       "save_event",
       "set_resource_status",
+      "upload",
     ]);
     expect(result.isError).not.toBe(true);
     expect(JSON.parse(toolText(result))).toMatchObject({ name: "Mira Tolland" });

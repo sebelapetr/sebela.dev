@@ -28,6 +28,8 @@
  * @property {ContentRecord | null} person
  * @property {Record<string, Record<string, ContentRecord>>} collections Records by entity, then slug.
  * @property {Record<string, ContentRecord | null>} caseStudies By project slug.
+ * @property {Record<string, ContentRecord>} [media] The uploaded files' metadata by id; absent in a
+ *   state stored before uploads were graded, which compares as no media.
  * @property {Record<string, DiaryDayState>} [diary] By Prague date; days with only a covering
  *   event are left out, because an event's dates add nothing to the diary.
  * @property {AuditEntry[]} audit Newest first, as the API returns it.
@@ -68,12 +70,23 @@ export async function captureState(apiUrl, key) {
   for (const slug of Object.keys(collections["project"] ?? {})) {
     caseStudies[slug] = await read(apiUrl, `/v1/projects/${slug}/case-study`);
   }
+  const files = await read(apiUrl, "/v1/media");
+  if (!Array.isArray(files)) throw new Error("/v1/media returned no list.");
+  /** @type {Record<string, ContentRecord>} */
+  const media = Object.fromEntries(files.map((record) => [String(record["id"]), record]));
   const recent = await read(apiUrl, "/v1/audit/changes", key);
   const audit = Array.isArray(recent?.["changes"])
     ? /** @type {AuditEntry[]} */ (recent["changes"])
     : [];
   const diary = diaryDays(await read(apiUrl, "/v1/roadmap/diary"));
-  return { person: isRecord(person) ? person : null, collections, caseStudies, diary, audit };
+  return {
+    person: isRecord(person) ? person : null,
+    collections,
+    caseStudies,
+    media,
+    diary,
+    audit,
+  };
 }
 
 /**
@@ -237,21 +250,33 @@ export function unchanged(before, after) {
 /**
  * The expected state is the state before with exactly the listed changes: field values of the
  * person, field values of slug-keyed records (or `null` for a deleted record), the number of
- * records of an entity the case creates, and the diary days the case may change. The scenario
- * checks created records and changed days itself. Changed records may carry a new `updatedAt`;
- * everything else must be identical.
+ * records of an entity the case creates, the number of newly uploaded files and the diary days the
+ * case may change. The scenario checks created records and changed days itself. Changed records
+ * may carry a new `updatedAt`; everything else, existing media included, must be identical.
  *
  * @param {ContentState} before
  * @param {ContentState} after
  * @param {{ person?: Record<string, unknown> } & Record<string, Record<string, unknown> | undefined>} expected
- * @param {{ diary?: readonly string[], created?: Readonly<Record<string, number>> }} [also]
- *   Diary dates that may change, and how many records of an entity the case creates.
+ * @param {{ diary?: readonly string[], created?: Readonly<Record<string, number>>, newMedia?: number }} [also]
+ *   Diary dates that may change, how many records of an entity the case creates and how many
+ *   files it uploads (none by default).
  * @returns {string | null} the first difference, or null
  */
 export function unchangedExcept(before, after, expected, also = {}) {
   const { person: personChange, ...recordChanges } = expected;
   const personFailure = compareRecord("person", before.person, after.person, personChange);
   if (personFailure) return personFailure;
+  const was = before.media ?? {};
+  const is = after.media ?? {};
+  for (const id of Object.keys(was)) {
+    if (is[id] === undefined) return `The media ${id} was deleted.`;
+    if (!sameJson(was[id], is[id])) return `The media ${id} changed.`;
+  }
+  const uploads = also.newMedia ?? 0;
+  const created = newMedia(before, after).length;
+  if (created !== uploads) {
+    return `Expected ${String(uploads)} uploaded file(s), found ${String(created)}.`;
+  }
   for (const entity of new Set([
     ...Object.keys(before.collections),
     ...Object.keys(after.collections),
@@ -327,6 +352,20 @@ function compareRecord(label, was, is, change) {
     }
   }
   return null;
+}
+
+/**
+ * The media records a case-run created, in no particular order.
+ *
+ * @param {ContentState} before
+ * @param {ContentState} after
+ * @returns {ContentRecord[]}
+ */
+export function newMedia(before, after) {
+  const was = before.media ?? {};
+  return Object.entries(after.media ?? {})
+    .filter(([id]) => was[id] === undefined)
+    .map(([, record]) => record);
 }
 
 /**

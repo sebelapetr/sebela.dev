@@ -15,6 +15,11 @@
  * from the API's audit (an entry after the write began with this write's own provenance) or
  * reported as `uncertain`. Upstream text reaches a caller only as a field error or conflict
  * message of the API, with key-shaped text removed and its length bounded.
+ *
+ * An upload sends only the bytes its caller passed, once, as the API's multipart media upload
+ * under a plain file name; it never reads a path, fetches an address or reaches storage. The API
+ * inspects, stores and audits the file; a refused file is a field error on `file` and nothing is
+ * stored, so a reference to earlier media stays as it was.
  */
 import { randomBytes } from "node:crypto";
 
@@ -76,6 +81,13 @@ export interface WriteResult {
   readonly reconciled?: true;
 }
 
+export interface UploadRequest {
+  /** A plain file name whose extension names the type, such as `portrait.png`; never a path. */
+  readonly fileName: string;
+  readonly bytes: Uint8Array;
+  readonly altText?: string | undefined;
+}
+
 /** One study session on a resource, or attendance at an event: exactly one target. */
 export interface SessionRequest {
   readonly resource?: string | undefined;
@@ -104,6 +116,11 @@ export interface CallerContent {
   save(entity: Entity, request: SaveRequest): Promise<Outcome<WriteResult>>;
   /** Deletes exactly the one named record, unless the API protects it. */
   remove(entity: Entity, id: string): Promise<Outcome<WriteResult>>;
+  /**
+   * Uploads the caller's file as new media; the result's `id` is the stored media's UUID, which
+   * can then be attached. A refused file stores nothing.
+   */
+  upload(request: UploadRequest): Promise<Outcome<WriteResult>>;
   /**
    * Logs one session's time and appends its notes in one audited write, split at Prague midnight.
    * An overlap with any logged interval is a `conflict` and changes nothing.
@@ -259,6 +276,7 @@ function apiMessage(body: unknown, fallback: string): string {
 interface Init {
   params?: { path?: Record<string, string> };
   body?: unknown;
+  bodySerializer?: (body: unknown) => FormData;
   headers?: Record<string, string>;
   signal: AbortSignal;
 }
@@ -389,6 +407,19 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
     readonly answer: Answer | undefined;
   }
 
+  interface WriteSpec {
+    readonly definition: EntityDefinition;
+    readonly method: "POST" | "PATCH" | "DELETE";
+    readonly route: string;
+    readonly id: string | undefined;
+    /** JSON fields, or the multipart form of an upload. */
+    readonly body: unknown;
+    readonly action: WriteResult["action"];
+    /** The written record's id when known before the write; an upload takes it from the answer. */
+    readonly knownId: string | null;
+    readonly upload?: boolean;
+  }
+
   /**
    * Sends one write exactly once under a fresh provenance of `kind`. The audit's high-water mark is
    * taken first, so a lost answer can be reconciled; without it nothing is sent.
@@ -398,7 +429,7 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
     route: string,
     params: NonNullable<Init["params"]>,
     body: unknown,
-    kind: "save" | "delete" | "session",
+    kind: "save" | "delete" | "upload" | "session",
   ): Promise<Sent | undefined> {
     const mark = await highWaterMark();
     if (mark === undefined) return undefined;
@@ -407,6 +438,7 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
       const answer = await http[method](route, {
         params,
         ...(body === undefined ? {} : { body }),
+        ...(kind === "upload" ? { bodySerializer: (form: unknown) => form as FormData } : {}),
         headers: { [auditProvenanceHeader]: provenance },
         signal,
       });
@@ -418,11 +450,30 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
 
   /**
    * The outcome of a documented refusal; `undefined` for a success, a lost answer or one the API
-   * does not document, which only the audit can settle.
+   * does not document, which only the audit can settle. An upload's refused file (too large, an
+   * unsupported type, empty or malformed) is a field error on `file`: the API stored nothing.
    */
-  function refusal(answer: Answer | undefined, entity: Entity): Outcome<never> | undefined {
+  function refusal(
+    answer: Answer | undefined,
+    entity: Entity,
+    upload = false,
+  ): Outcome<never> | undefined {
     if (!answer) return undefined;
     const { status } = answer.response;
+    if (upload && (status === 413 || status === 415)) {
+      return fileProblem(
+        "file",
+        status === 413
+          ? "The file is larger than the API accepts."
+          : apiMessage(
+              answer.error,
+              "The file's type is not supported or its name contradicts it.",
+            ),
+      );
+    }
+    if (upload && status === 400 && apiProblems(answer.error).length === 0) {
+      return fileProblem("file", apiMessage(answer.error, "The file is empty or malformed."));
+    }
     if (status === 400) {
       const fields = apiProblems(answer.error);
       return fail({
@@ -446,38 +497,40 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
   const succeeded = (answer: Answer | undefined): answer is Answer =>
     answer !== undefined && answer.response.status >= 200 && answer.response.status < 300;
 
-  async function write(
-    definition: EntityDefinition,
-    method: "POST" | "PATCH" | "DELETE",
-    route: string,
-    id: string | undefined,
-    body: unknown,
-    action: WriteResult["action"],
-    knownId: string | null,
-  ): Promise<Outcome<WriteResult>> {
+  async function write({
+    definition,
+    method,
+    route,
+    id,
+    body,
+    action,
+    knownId,
+    upload = false,
+  }: WriteSpec): Promise<Outcome<WriteResult>> {
     const entity = definition.entity;
     const sent = await sendOnce(
       method,
       route,
       pathOf(definition, id),
       body,
-      method === "DELETE" ? "delete" : "save",
+      upload ? "upload" : method === "DELETE" ? "delete" : "save",
     );
     if (!sent) return fail(UNAVAILABLE);
     const { answer } = sent;
     if (succeeded(answer)) {
       const record = answer.data;
+      const createdId = upload ? (record as { id?: unknown } | undefined)?.id : knownId;
       return {
         ok: true,
         value: {
           entity,
-          id: knownId,
+          id: typeof createdId === "string" ? createdId : knownId,
           action,
           ...(record === undefined || action === "deleted" ? {} : { record }),
         },
       };
     }
-    const refused = refusal(answer, entity);
+    const refused = refusal(answer, entity, upload);
     if (refused) return refused;
 
     // The answer was lost or is not one the API documents: never resend; ask the audit.
@@ -534,7 +587,15 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
             : create.idFrom === "id"
               ? (id ?? null)
               : null;
-        return write(definition, "POST", create.route, id, fields, "created", newId);
+        return write({
+          definition,
+          method: "POST",
+          route: create.route,
+          id,
+          body: fields,
+          action: "created",
+          knownId: newId,
+        });
       }
 
       const update = definition.update;
@@ -547,7 +608,15 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
         const current = await read(definition.get, definition, id);
         if (!current.ok) return current;
       }
-      return write(definition, "PATCH", update.route, id, fields, "updated", id ?? null);
+      return write({
+        definition,
+        method: "PATCH",
+        route: update.route,
+        id,
+        body: fields,
+        action: "updated",
+        knownId: id ?? null,
+      });
     },
 
     async remove(entity, id) {
@@ -559,7 +628,46 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
         const current = await read(definition.get, definition, id);
         if (!current.ok) return current;
       }
-      return write(definition, "DELETE", definition.delete, id, undefined, "deleted", id);
+      return write({
+        definition,
+        method: "DELETE",
+        route: definition.delete,
+        id,
+        body: undefined,
+        action: "deleted",
+        knownId: id,
+      });
+    },
+
+    async upload({ fileName, bytes, altText }) {
+      if (!isPlainFileName(fileName)) {
+        return fileProblem(
+          "fileName",
+          "A plain file name such as `portrait.png`: no folders, drive, address or hidden name.",
+          "The file name is not a plain file name; nothing was sent.",
+        );
+      }
+      if (bytes.byteLength === 0) {
+        return fileProblem("file", "The file is empty.", "The file is empty; nothing was sent.");
+      }
+      const form = new FormData();
+      // The API proves the type from the content; the declared type stays generic.
+      form.set(
+        "file",
+        new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" }),
+        fileName,
+      );
+      if (altText !== undefined) form.set("altText", altText);
+      return write({
+        definition: definitionOf("media"),
+        method: "POST",
+        route: "/v1/media",
+        id: undefined,
+        body: form,
+        action: "created",
+        knownId: null,
+        upload: true,
+      });
     },
 
     async logSession(request) {
@@ -596,6 +704,27 @@ function callerContent(api: ApiClient, signal: AbortSignal): CallerContent {
         : fail(UNAVAILABLE);
     },
   };
+}
+
+/**
+ * A file name with nothing that could name a place: no separator, drive, scheme or control
+ * character, not hidden, with a name before its extension.
+ */
+function isPlainFileName(name: string): boolean {
+  if (name.length === 0 || name.length > 255 || name.startsWith(".")) return false;
+  for (let index = 0; index < name.length; index += 1) {
+    const code = name.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f || "/\\:".includes(name.charAt(index))) return false;
+  }
+  return true;
+}
+
+function fileProblem<T>(path: "file" | "fileName", message: string, summary?: string): Outcome<T> {
+  return fail({
+    code: "field",
+    message: summary ?? "The file was refused; nothing was stored.",
+    fields: [{ path, message }],
+  });
 }
 
 function fieldProblems<T>(error: z.ZodError): Outcome<T> {

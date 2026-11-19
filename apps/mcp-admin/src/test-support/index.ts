@@ -33,8 +33,8 @@ export const fictionalPerson = {
   servicesIntro: "None.",
   collaborationSteps: [],
   servicesNote: "None.",
-  photo: null,
-  cvPdf: null,
+  photoId: null,
+  cvPdfId: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -197,6 +197,23 @@ export interface FakeChange {
   after: Record<string, unknown> | null;
 }
 
+/** One stored file of the fake API, in the shape of the media contract. */
+export interface FakeMedia {
+  id: string;
+  key: string;
+  mediaType: "image/png" | "application/pdf";
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+  altText: string | null;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The largest file the fake API accepts, like the API's `MEDIA_MAX_BYTES`. */
+export const FAKE_MEDIA_MAX_BYTES = 4096;
+
 /** When a write's answer goes missing: before the change is committed, or after it. */
 export type LostResponse = "before-commit" | "after-commit";
 
@@ -209,6 +226,12 @@ export interface FakeApi {
   readonly projects: Map<string, FakeProject>;
   /** The audited changes, oldest first. */
   readonly changes: FakeChange[];
+  /** The stored media by id. */
+  readonly media: Map<string, FakeMedia>;
+  /** The bytes, file name and declared type of every upload the API stored, by media id. */
+  readonly files: Map<string, { bytes: Uint8Array; name: string; type: string }>;
+  /** The stored person, as `GET /v1/person` returns it. */
+  person(): Record<string, unknown>;
   /** The fictional roadmap, books, events and diary. */
   readonly roadmap: FakeRoadmap;
   /**
@@ -226,6 +249,8 @@ export interface FakeApi {
   protect(slug: string): void;
   /** Removes a key from the accepted ones, like a revocation. */
   revoke(key: string): void;
+  /** Makes storing the next upload fail: the API removes the file and answers 500. */
+  failStorage(): void;
 }
 
 /** The fixed fictional key names and identifiers the fake API's audit records. */
@@ -254,6 +279,9 @@ export function fakeApi(): FakeApi {
   const projects = new Map(fictionalProjects.map((project) => [project.slug, { ...project }]));
   let person: Record<string, unknown> = { ...fictionalPerson };
   const changes: FakeChange[] = [];
+  const media = new Map<string, FakeMedia>();
+  const files = new Map<string, { bytes: Uint8Array; name: string; type: string }>();
+  let storageFails = false;
   const app = new Hono<{ Variables: { actor: { keyId: string; keyName: string } } }>();
 
   const presentedKey = (header: string | undefined) => /^Bearer (\S+)$/.exec(header ?? "")?.[1];
@@ -312,6 +340,22 @@ export function fakeApi(): FakeApi {
     const body = await c.req.json<Record<string, unknown>>();
     const unknown = unknownFields(body, Object.keys(fictionalPerson));
     if (unknown.length > 0) return c.json(refusal("validation_failed", "Invalid.", unknown), 400);
+    // Like the API: a photo must name stored image media and a CV stored PDF media.
+    const wrongMedia = (
+      [
+        ["photoId", "image/png"],
+        ["cvPdfId", "application/pdf"],
+      ] as const
+    ).flatMap(([field, type]) => {
+      const value = body[field];
+      if (value === undefined || value === null) return [];
+      return typeof value === "string" && media.get(value)?.mediaType === type
+        ? []
+        : [{ path: field, message: "Name existing media of the right kind." }];
+    });
+    if (wrongMedia.length > 0) {
+      return c.json(refusal("validation_failed", "Invalid.", wrongMedia), 400);
+    }
     const before = person;
     person = { ...person, ...body, updatedAt: "2026-02-01T00:00:00.000Z" };
     audit(c, {
@@ -409,6 +453,81 @@ export function fakeApi(): FakeApi {
       after: null,
     });
     return c.body(null, 204);
+  });
+
+  // Media: the content proves the type, like the API's inspection, within FAKE_MEDIA_MAX_BYTES.
+  app.get("/v1/media", (c) => c.json([...media.values()].reverse()));
+  app.get("/v1/media/:id", (c) => {
+    const record = media.get(c.req.param("id"));
+    return record ? c.json(record) : c.json(refusal("not_found", "No such media."), 404);
+  });
+  app.post("/v1/media", async (c) => {
+    const type = c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase();
+    if (type !== "multipart/form-data") {
+      return c.json(refusal("unsupported_media_type", "Send multipart/form-data."), 415);
+    }
+    const form = await c.req.formData();
+    const file = form.get("file");
+    const unknown = [...form.keys()].filter((key) => key !== "file" && key !== "altText");
+    if (!(file instanceof File) || unknown.length > 0) {
+      return c.json(
+        refusal("validation_failed", "Some fields are invalid.", [
+          { path: unknown[0] ?? "file", message: "Send exactly one file and an optional altText." },
+        ]),
+        400,
+      );
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length > FAKE_MEDIA_MAX_BYTES) {
+      return c.json(refusal("payload_too_large", "The file is larger than the limit."), 413);
+    }
+    const text = Buffer.from(bytes).toString("latin1");
+    const mediaType = text.startsWith("\x89PNG\r\n\x1a\n")
+      ? "image/png"
+      : text.startsWith("%PDF-")
+        ? "application/pdf"
+        : null;
+    if (mediaType === null) {
+      return c.json(refusal("unsupported_media_type", "Upload a PNG image or a PDF."), 415);
+    }
+    const extension = file.name.slice(file.name.lastIndexOf(".") + 1).toLowerCase();
+    if (extension !== (mediaType === "image/png" ? "png" : "pdf")) {
+      return c.json(refusal("unsupported_media_type", "The extension does not match."), 415);
+    }
+    const malformed = mediaType === "image/png" ? !text.includes("IEND") : !text.includes("%%EOF");
+    if (malformed) {
+      const message = "The file is malformed.";
+      return c.json(refusal("validation_failed", message, [{ path: "file", message }]), 400);
+    }
+    if (storageFails) {
+      storageFails = false;
+      return c.json(refusal("internal_error", "The file could not be stored."), 500);
+    }
+    const id = `00000000-0000-4000-9000-${String(media.size + 1).padStart(12, "0")}`;
+    const altText = form.get("altText");
+    const record: FakeMedia = {
+      id,
+      key: `fixture/${id}.${extension}`,
+      mediaType,
+      byteSize: bytes.length,
+      width: mediaType === "image/png" ? 2 : null,
+      height: mediaType === "image/png" ? 2 : null,
+      altText: typeof altText === "string" ? altText : null,
+      url: `${API_BASE}/v1/media/files/fixture/${id}.${extension}`,
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    };
+    media.set(id, record);
+    files.set(id, { bytes, name: file.name, type: file.type });
+    audit(c, {
+      operation: { operationId: "uploadMedia", method: "POST", route: "/v1/media" },
+      entity: "media",
+      record: id,
+      action: "created",
+      before: null,
+      after: { ...record },
+    });
+    return c.json(record, 201);
   });
 
   // The roadmap: a tree read, resources, books and events written like the real API, and the
@@ -675,6 +794,9 @@ export function fakeApi(): FakeApi {
     calls,
     projects,
     changes,
+    media,
+    files,
+    person: () => person,
     roadmap,
     fetch: async (request) => {
       const url = new URL(request.url);
@@ -710,6 +832,9 @@ export function fakeApi(): FakeApi {
     },
     revoke: (key) => {
       accepted.delete(key);
+    },
+    failStorage: () => {
+      storageFails = true;
     },
   };
 }
