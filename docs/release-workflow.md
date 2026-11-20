@@ -26,10 +26,22 @@ Defined in `infra/` (details and server preparation: `infra/README.md`).
 - **Health.** The website's `/health` answers 200 only when the API and Postgres (through the API's `/health/ready`) answer, otherwise 503 with the failing part.
 - **Verified in CI** by the production composition policy (`scripts/checks/production-stack.test.mjs`) and the production stack smoke check (`pnpm test:production-stack`, `docs/testing.md`, CI).
 
+## Images
+
+Built, verified and published by `.github/workflows/release.yml` on every push to `master`; the decisions are `scripts/release/images.mjs`, tested with fixtures (`docs/testing.md`, CI).
+
+- **Affected services.** The services are `api`, `web` and `mcp-admin`. A service is affected when Turborepo's affected packages between the commit before the push and the pushed commit include its app, the selection CI uses, so a change to a shared package rebuilds every service that depends on it. A change to `.dockerignore`, or a push with no comparison base, affects every service. A push that affects none (documentation, `.plan/`, a workflow alone) builds, publishes and deploys nothing.
+- **Tags.** Each image built is tagged with the full commit SHA and labelled with it (`org.opencontainers.image.revision`) and with the repository (`org.opencontainers.image.source`). The tag `current` names the last verified image of each service published from `master`.
+- **Unchanged services.** They keep their `current` image, by the commit SHA in its revision label. A service with no current image, or one whose label names no published commit tag, is built with the others.
+- **Built natively** on GitHub's arm64 runners, the server's architecture; nothing is built on the server.
+- **Verified before publishing.** The new images and the current images of the unchanged services start as the production composition with the demo seed, and the production stack smoke check and the complete-stack browser tests run against it, with the model faked (the mock Ask page). Images that fail are never pushed.
+- **Published** to GHCR as public packages: the commit SHA tags first, then `current`. The workflow's only credential is its `GITHUB_TOKEN`, with `packages: write` only in that job. The tag set of every service is the job's output `tags` (JSON, service to tag) for the deployment.
+- **One release at a time,** in push order; a later push waits rather than cancelling an earlier one.
+
 ## To be defined in phase 10
 
 - Versioning and tagging
-- Pipelines that build images and deploy them
+- The pipeline that deploys the published images
 - How MCP Admin is reached through the SSH tunnel, and how nginx learns the visitor's address from Bunny CDN (`infra/README.md`, Open points)
 - Database backups and restore procedure
 - Rollback
