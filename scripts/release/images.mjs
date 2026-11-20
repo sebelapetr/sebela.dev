@@ -104,6 +104,14 @@ export function releasePlan({ sha, affected, current }) {
   return { build, reuse, tags };
 }
 
+export function staleServices() {
+  throw new Error("not implemented");
+}
+
+export function revisionLabel() {
+  throw new Error("not implemented");
+}
+
 /** `key=value` lines for $GITHUB_OUTPUT, every value as JSON. */
 export function formatOutputs(outputs) {
   return Object.entries(outputs)

@@ -1,5 +1,6 @@
-// Behaviour of the release decisions (docs/release-workflow.md, "Images"): which services a push
-// to master affects, and which images a release builds and which current images it reuses. The
+// Behaviour of the release decisions (docs/release-workflow.md, "Images"): which services a change
+// affects, and which images a release builds and which current images it reuses, judged for each
+// service against the commit of its current image. The
 // fixtures hold real `turbo query affected --packages` output, captured on synthetic commits of
 // this repository, with the files each commit changed and the services it must select. The command
 // line around these decisions (Turborepo, git, docker) is exercised by the release workflow.
@@ -13,9 +14,10 @@ import {
   SERVICES,
   affectedPackages,
   affectedServices,
-  comparisonBase,
   formatOutputs,
   releasePlan,
+  revisionLabel,
+  staleServices,
 } from "./images.mjs";
 
 const FIXTURES = path.join(import.meta.dirname, "fixtures", "affected-services");
@@ -23,10 +25,6 @@ const fixtures = fs
   .readdirSync(FIXTURES)
   .filter((name) => name.endsWith(".json"))
   .map((name) => ({ name, ...JSON.parse(fs.readFileSync(path.join(FIXTURES, name), "utf8")) }));
-
-const SHA = "0123456789abcdef0123456789abcdef01234567";
-const API_SHA = "1111111111111111111111111111111111111111";
-const MCP_SHA = "2222222222222222222222222222222222222222";
 
 describe("affected services", () => {
   it("has the fixtures the issue names", () => {
@@ -48,12 +46,6 @@ describe("affected services", () => {
     });
   }
 
-  it("selects every service when there is no comparison base", () => {
-    assert.deepEqual(affectedServices({ packages: null, changedFiles: null }), SERVICES);
-    assert.deepEqual(affectedServices({ packages: [], changedFiles: null }), SERVICES);
-    assert.deepEqual(affectedServices({ packages: null, changedFiles: [] }), SERVICES);
-  });
-
   it("lists the services in a fixed order", () => {
     assert.deepEqual(SERVICES, ["api", "web", "mcp-admin"]);
     assert.deepEqual(
@@ -69,80 +61,185 @@ describe("affected services", () => {
   });
 });
 
-describe("comparison base", () => {
-  it("is the commit before the push", () => {
-    assert.equal(comparisonBase(SHA), SHA);
-  });
+// A history A - B - C - D on master. `ancestors` lists, for the release commit, the commits that
+// are its ancestors (or itself); `changes` maps a current image's commit to the services affected
+// between it and the release commit.
+const A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const C = "cccccccccccccccccccccccccccccccccccccccc";
+const D = "dddddddddddddddddddddddddddddddddddddddd";
 
-  it("is missing for a new branch or an empty value", () => {
-    assert.equal(comparisonBase("0000000000000000000000000000000000000000"), null);
-    assert.equal(comparisonBase(""), null);
-    assert.equal(comparisonBase(undefined), null);
-  });
-
-  it("refuses anything but a commit SHA", () => {
-    assert.throws(() => comparisonBase("HEAD~1"), /commit SHA/);
-    assert.throws(() => comparisonBase("--output=x"), /commit SHA/);
-  });
-});
+function history({ ancestors, changes = {} }) {
+  const asked = [];
+  return {
+    asked,
+    isAncestor: (revision) => ancestors.includes(revision),
+    affectedSince: (revision) => {
+      asked.push(revision);
+      if (!(revision in changes)) throw new Error(`no changes recorded since ${revision}`);
+      return changes[revision];
+    },
+  };
+}
 
 describe("release plan", () => {
-  it("builds the affected services and reuses the current images of the others", () => {
+  it("builds what changed since each service's current image and reuses the rest", () => {
+    const git = history({ ancestors: [A, B, C], changes: { [B]: ["web"] } });
     assert.deepEqual(
-      releasePlan({ sha: SHA, affected: ["web"], current: { api: API_SHA, "mcp-admin": MCP_SHA } }),
+      releasePlan({
+        sha: C,
+        current: { api: B, web: B, "mcp-admin": B },
+        isAncestor: git.isAncestor,
+        affectedSince: git.affectedSince,
+      }),
       {
         build: ["web"],
         reuse: ["api", "mcp-admin"],
-        tags: { api: API_SHA, web: SHA, "mcp-admin": MCP_SHA },
+        tags: { api: B, web: C, "mcp-admin": B },
       },
     );
   });
 
-  it("builds an unchanged service that has no current image yet", () => {
-    assert.deepEqual(
-      releasePlan({ sha: SHA, affected: ["web"], current: { api: null, "mcp-admin": MCP_SHA } }),
-      {
-        build: ["api", "web"],
-        reuse: ["mcp-admin"],
-        tags: { api: SHA, web: SHA, "mcp-admin": MCP_SHA },
-      },
-    );
-    assert.deepEqual(releasePlan({ sha: SHA, affected: ["api"], current: {} }).build, SERVICES);
-  });
-
-  it("builds an unchanged service whose current image names no commit", () => {
+  it("still builds a change whose own release failed, on the next push that changes nothing of it", () => {
+    // B changed the API and its release failed verification, so api:current is still A. C changes
+    // only the documentation, yet the API has changed since its current image.
+    const git = history({ ancestors: [A, B, C], changes: { [A]: ["api"] } });
     assert.deepEqual(
       releasePlan({
-        sha: SHA,
-        affected: ["api"],
-        current: { web: "latest", "mcp-admin": `${MCP_SHA}\n` },
+        sha: C,
+        current: { api: A, web: A, "mcp-admin": A },
+        isAncestor: git.isAncestor,
+        affectedSince: git.affectedSince,
+      }),
+      {
+        build: ["api"],
+        reuse: ["web", "mcp-admin"],
+        tags: { api: C, web: A, "mcp-admin": A },
+      },
+    );
+  });
+
+  it("asks once per current commit", () => {
+    const git = history({ ancestors: [A, B, C], changes: { [A]: [], [B]: [] } });
+    releasePlan({
+      sha: C,
+      current: { api: A, web: B, "mcp-admin": A },
+      isAncestor: git.isAncestor,
+      affectedSince: git.affectedSince,
+    });
+    assert.deepEqual(git.asked.sort(), [A, B]);
+  });
+
+  it("reuses every image of a release that was already published", () => {
+    const git = history({ ancestors: [A, B, C], changes: { [C]: [] } });
+    assert.deepEqual(
+      releasePlan({
+        sha: C,
+        current: { api: C, web: C, "mcp-admin": C },
+        isAncestor: git.isAncestor,
+        affectedSince: git.affectedSince,
+      }),
+      {
+        build: [],
+        reuse: SERVICES,
+        tags: { api: C, web: C, "mcp-admin": C },
+      },
+    );
+  });
+
+  it("builds a service that has no current image, or one that names no commit", () => {
+    const git = history({ ancestors: [A, B, C], changes: { [A]: [] } });
+    assert.deepEqual(
+      releasePlan({
+        sha: C,
+        current: { api: null, web: "latest", "mcp-admin": A },
+        isAncestor: git.isAncestor,
+        affectedSince: git.affectedSince,
+      }),
+      { build: ["api", "web"], reuse: ["mcp-admin"], tags: { api: C, web: C, "mcp-admin": A } },
+    );
+    assert.deepEqual(
+      releasePlan({
+        sha: C,
+        current: {},
+        isAncestor: git.isAncestor,
+        affectedSince: git.affectedSince,
       }).build,
       SERVICES,
     );
   });
 
-  it("builds every service when all are affected, whatever is current", () => {
-    assert.deepEqual(releasePlan({ sha: SHA, affected: SERVICES, current: { api: API_SHA } }), {
-      build: SERVICES,
-      reuse: [],
-      tags: { api: SHA, web: SHA, "mcp-admin": SHA },
-    });
+  it("refuses a release older than a current image: a rerun must not go backwards", () => {
+    // D was released after B; rerunning B's release would move api:current back to B.
+    const git = history({ ancestors: [A, B], changes: { [A]: ["api"] } });
+    assert.throws(
+      () =>
+        releasePlan({
+          sha: B,
+          current: { api: D, web: A, "mcp-admin": A },
+          isAncestor: git.isAncestor,
+          affectedSince: git.affectedSince,
+        }),
+      /api.*dddddddd.*not an ancestor/s,
+    );
   });
 
-  it("refuses a malformed commit or an unknown service", () => {
-    assert.throws(() => releasePlan({ sha: "main", affected: ["api"], current: {} }), /commit/);
+  it("refuses a malformed release commit", () => {
+    const git = history({ ancestors: [] });
     assert.throws(
-      () => releasePlan({ sha: SHA, affected: ["ai-service"], current: {} }),
-      /unknown service/,
+      () =>
+        releasePlan({
+          sha: "main",
+          current: {},
+          isAncestor: git.isAncestor,
+          affectedSince: git.affectedSince,
+        }),
+      /commit/,
     );
+  });
+});
+
+describe("stale services", () => {
+  it("are those whose current image is not an ancestor of the release commit", () => {
+    const { isAncestor } = history({ ancestors: [A, B, C] });
+    assert.deepEqual(
+      staleServices({ current: { api: D, web: B, "mcp-admin": null }, isAncestor }),
+      ["api"],
+    );
+    assert.deepEqual(staleServices({ current: { api: A }, isAncestor }), []);
+  });
+});
+
+describe("revision label", () => {
+  const labels = { "org.opencontainers.image.revision": A };
+
+  it("reads the label of a single-platform image", () => {
+    assert.equal(revisionLabel({ architecture: "arm64", config: { Labels: labels } }), A);
+  });
+
+  it("reads the arm64 image of an index", () => {
+    assert.equal(
+      revisionLabel({
+        "linux/amd64": { config: { Labels: { "org.opencontainers.image.revision": B } } },
+        "linux/arm64": { config: { Labels: labels } },
+      }),
+      A,
+    );
+  });
+
+  it("is null when there is no such label or no arm64 image", () => {
+    assert.equal(revisionLabel({ config: {} }), null);
+    assert.equal(revisionLabel({ config: { Labels: null } }), null);
+    assert.equal(revisionLabel({ "linux/amd64": { config: { Labels: labels } } }), null);
+    assert.equal(revisionLabel(null), null);
   });
 });
 
 describe("workflow outputs", () => {
   it("writes one key=value line per output, values as JSON", () => {
     assert.equal(
-      formatOutputs({ services: ["web"], build: true, tags: { web: SHA } }),
-      `services=["web"]\nbuild=true\ntags={"web":"${SHA}"}\n`,
+      formatOutputs({ build: ["web"], release: true, tags: { web: C } }),
+      `build=["web"]\nrelease=true\ntags={"web":"${C}"}\n`,
     );
   });
 });
