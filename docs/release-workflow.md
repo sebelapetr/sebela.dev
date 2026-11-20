@@ -21,8 +21,8 @@ Defined in `infra/` (details and server preparation: `infra/README.md`).
 - **Images.** `ghcr.io/sebelapetr/sebela-api`, `sebela-web` and `sebela-mcp-admin`, each with its own tag (`API_IMAGE_TAG`, `WEB_IMAGE_TAG`, `MCP_ADMIN_IMAGE_TAG`). Nothing is built on the server. Every image runs unprivileged with a `HEALTHCHECK`, and contains only the fictional demo seed and no environment file other than the example; `scripts/checks/image-content.mjs` refuses one that does not.
 - **Addresses.** Only the website is published, on the host's loopback interface (`WEB_HOST:WEB_PORT`). Postgres, the API and MCP Admin have no host port, so the public edge cannot reach the private content-write routes or MCP Admin, with or without a key.
 - **Operation.** Long-running services restart unless stopped; logs are `json-file`, rotated at 10 MB, five files.
-- **Reverse proxy and TLS.** The server's Ploi-managed nginx terminates TLS with Let's Encrypt and proxies to the website; its reference configuration (redirects, request limits, security headers, compression) is `infra/nginx/sebela.dev.conf`.
-- **Website switches.** `WEB_INDEXING=on` allows indexing; by default every page sends `noindex`. Umami Cloud's script loads only when `WEB_ANALYTICS_WEBSITE_ID` is set.
+- **Reverse proxy and TLS.** The server's Ploi-managed nginx terminates TLS with Let's Encrypt and proxies to the website; its reference configuration (redirects, the visitor's address behind Bunny CDN, request limits, security headers, compression) is `infra/nginx/sebela.dev.conf`.
+- **Website switches.** `WEB_INDEXING=on` allows indexing; by default every page sends `noindex`. Analytics use the website's existing Umami settings (`WEB_ANALYTICS_SCRIPT_URL`, `WEB_ANALYTICS_WEBSITE_ID`), passed through unchanged and off while empty; their production values are set in the server preparation.
 - **Health.** The website's `/health` answers 200 only when the API and Postgres (through the API's `/health/ready`) answer, otherwise 503 with the failing part.
 - **Verified in CI** by the production composition policy (`scripts/checks/production-stack.test.mjs`) and the production stack smoke check (`pnpm test:production-stack`, `docs/testing.md`, CI).
 
@@ -30,7 +30,7 @@ Defined in `infra/` (details and server preparation: `infra/README.md`).
 
 - Versioning and tagging
 - Pipelines that build images and deploy them
-- How MCP Admin is reached through the SSH tunnel (`infra/README.md`, Open question)
+- How MCP Admin is reached through the SSH tunnel, and how nginx learns the visitor's address from Bunny CDN (`infra/README.md`, Open points)
 - Database backups and restore procedure
 - Rollback
 - The domain switch
