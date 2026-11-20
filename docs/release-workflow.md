@@ -13,11 +13,24 @@ Skeleton. The content is defined in phase 10 (`.plan/10-delivery/prd.md`).
 - A failed deployment rolls back to the previous version. Because migrations are forward-only, **a release that changes the schema must keep the previous version working** against the new schema.
 - Backups: before every deployment and nightly, stored away from the server; a restore is rehearsed before launch.
 
+## Production stack
+
+Defined in `infra/` (details and server preparation: `infra/README.md`).
+
+- **Composition.** The root `compose.yaml` with the overrides of `infra/production/compose.yaml`, started with the server's production environment file, created from `infra/production/.env.example`. Phase 10 runs Postgres, the one-off migration, the API, the website and MCP Admin.
+- **Images.** `ghcr.io/sebelapetr/sebela-api`, `sebela-web` and `sebela-mcp-admin`, each with its own tag (`API_IMAGE_TAG`, `WEB_IMAGE_TAG`, `MCP_ADMIN_IMAGE_TAG`). Nothing is built on the server. Every image runs unprivileged with a `HEALTHCHECK`, and contains only the fictional demo seed and no environment file other than the example; `scripts/checks/image-content.mjs` refuses one that does not.
+- **Addresses.** Only the website is published, on the host's loopback interface (`WEB_HOST:WEB_PORT`). Postgres, the API and MCP Admin have no host port, so the public edge cannot reach the private content-write routes or MCP Admin, with or without a key.
+- **Operation.** Long-running services restart unless stopped; logs are `json-file`, rotated at 10 MB, five files.
+- **Reverse proxy and TLS.** The server's Ploi-managed nginx terminates TLS with Let's Encrypt and proxies to the website; its reference configuration (redirects, the visitor's address behind Bunny CDN, request limits, security headers, compression) is `infra/nginx/sebela.dev.conf`.
+- **Website switches.** `WEB_INDEXING=on` allows indexing; by default every page sends `noindex`. Analytics use the website's existing Umami settings (`WEB_ANALYTICS_SCRIPT_URL`, `WEB_ANALYTICS_WEBSITE_ID`), passed through unchanged and off while empty; their production values are set in the server preparation.
+- **Health.** The website's `/health` answers 200 only when the API and Postgres (through the API's `/health/ready`) answer, otherwise 503 with the failing part.
+- **Verified in CI** by the production composition policy (`scripts/checks/production-stack.test.mjs`) and the production stack smoke check (`pnpm test:production-stack`, `docs/testing.md`, CI).
+
 ## To be defined in phase 10
 
 - Versioning and tagging
 - Pipelines that build images and deploy them
-- Production Compose overrides, reverse proxy and TLS
+- How MCP Admin is reached through the SSH tunnel, and how nginx learns the visitor's address from Bunny CDN (`infra/README.md`, Open points)
 - Database backups and restore procedure
 - Rollback
 - The domain switch

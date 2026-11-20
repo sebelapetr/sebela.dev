@@ -39,7 +39,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API and website stack smoke checks — plain Node, no dependencies [1, 2]
+│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy and the image-content check — plain Node, no dependencies [1, 2, 10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
@@ -49,7 +49,9 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI [1]
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
-├── compose.prod.yaml        production overrides [10]
+├── infra/                   production definition, see infra/README.md [10]
+│   ├── production/          Compose production overrides and the production example settings
+│   └── nginx/               reference configuration of the server's nginx site
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
 ├── pnpm-lock.yaml           committed lockfile [1]
@@ -58,7 +60,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
-├── .dockerignore            allowlist of the image build context: manifests, apps/api, packages [2]
+├── .dockerignore            allowlist of the image build context: manifests, apps, packages; of the seeds only the demo seed [2, 10]
 ├── .env.example             every setting with a comment and an example value; placeholders only [1]
 ├── .env.secrets.example     the owner's secrets for paid outside services, as placeholders; the real file stays in the main checkout [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
@@ -126,9 +128,10 @@ Run from the repository root. Turborepo runs a task in every package that define
 | `pnpm stack:down`                | Stops and removes the website, API and migration containers; the shared Postgres keeps running                                                                                                                                                                                            |
 | `pnpm test:api-stack`            | The [API stack smoke check](testing.md#ci), `node scripts/checks/api-stack.e2e.mjs`; needs Docker and is not part of `pnpm test`                                                                                                                                                          |
 | `pnpm test:web-stack`            | The [website stack smoke check](testing.md#ci), `node scripts/checks/web-stack.e2e.mjs`: two disposable complete stacks side by side, then the complete-stack browser tests of `apps/web`; needs Docker and Chromium and is not part of `pnpm test`                                       |
+| `pnpm test:production-stack`     | The [production stack smoke check](testing.md#ci), `node scripts/checks/production-stack.e2e.mjs`: the images built, checked for forbidden files and started as the production composition with the demo seed; needs Docker and is not part of `pnpm test`                                |
 | `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                                                                                   |
 
-The harness (`harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. One repository check, MCP Admin's Compose policy (`compose-policy.test.mjs`), also needs the Docker CLI, which renders `compose.yaml` without contacting a daemon; it lives here because it reads root files only, which select no package. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
+The harness (`harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. Two repository checks, MCP Admin's Compose policy (`compose-policy.test.mjs`) and the production composition policy (`production-stack.test.mjs`, rendering `compose.yaml` with `infra/production/compose.yaml`), also need the Docker CLI, which renders the files without contacting a daemon; they live here because they read root files only, which select no package. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
 

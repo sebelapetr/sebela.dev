@@ -246,3 +246,18 @@ export function readAnalyticsConfig(
   }
   return { scriptUrl: new URL(scriptUrl).href, websiteId: websiteId.toLowerCase() };
 }
+
+/**
+ * Whether search engines may index the site (`WEB_INDEXING`): true only for `on`; unset, empty or
+ * `off` keep every page `noindex`, so a worktree, a test stack or a not yet launched production
+ * never asks to be indexed. Separate from `readWebConfig`, so pages render whatever it says. Throws
+ * an error naming the variable, never its value, for anything else.
+ */
+export function readIndexingConfig(env: Readonly<Record<string, string | undefined>>): boolean {
+  const value = env["WEB_INDEXING"] ?? "";
+  if (value === "on") return true;
+  if (value === "" || value === "off") return false;
+  throw new Error(
+    "Invalid website configuration (documented in .env.example): WEB_INDEXING must be on or off",
+  );
+}

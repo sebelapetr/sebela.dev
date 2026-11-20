@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+
 import type { DatabaseConfig } from "./config.js";
 import { openConnection } from "./connection.js";
 import { createApiKeyPersistence, type ApiKeyPersistence } from "./modules/api-keys/index.js";
@@ -24,6 +26,11 @@ export interface Persistence {
       audit: AuditPersistence,
     ) => Promise<T>,
   ): Promise<T>;
+  /**
+   * Runs the cheapest query the database can answer. Resolves when it answers; rejects when it
+   * cannot be reached or refuses the connection. Reads and changes no data.
+   */
+  ping(): Promise<void>;
   /** Ends the pool. Call once, at shutdown. */
   close(): Promise<void>;
 }
@@ -44,6 +51,9 @@ export function createPersistence(config: DatabaseConfig): Persistence {
           createAuditPersistence(tx),
         ),
       ),
+    ping: async () => {
+      await connection.db.execute(sql`select 1`);
+    },
     close: () => connection.close(),
   };
 }

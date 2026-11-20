@@ -132,7 +132,10 @@ function changesOf(
 }
 
 export interface AppDependencies {
-  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap" | "audit">;
+  readonly services: Pick<
+    Services,
+    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "health"
+  >;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
@@ -161,6 +164,7 @@ export interface Api {
 }
 
 const HealthSchema = z.object({ status: z.literal("ok") }).meta({ id: "Health" });
+const ReadinessSchema = z.object({ status: z.literal("ready") }).meta({ id: "Readiness" });
 const AuthenticationCheckSchema = z
   .object({ status: z.literal("authenticated") })
   .meta({ id: "AuthenticationCheck" });
@@ -176,6 +180,24 @@ const systemRoutes = {
     description: "Answers while the process runs; it does not check the database. Its own budget.",
     response: { status: 200, description: "The API is running.", schema: HealthSchema },
     errors: [],
+  },
+  readiness: {
+    operationId: "getReadiness",
+    method: "GET",
+    path: "/health/ready",
+    access: "public",
+    summary: "Readiness",
+    budget: "health",
+    description:
+      "Answers whether the API can serve content now: it checks that the database answers within " +
+      "a short time. For uptime monitoring and the website's health check; never cached. Shares " +
+      "the health budget.",
+    response: {
+      status: 200,
+      description: "The API and its database answer.",
+      schema: ReadinessSchema,
+    },
+    errors: ["unavailable"],
   },
   authentication: {
     operationId: "checkAuthentication",
@@ -226,6 +248,7 @@ const moduleRoutes = (
 /** Every documented route, in the order of the OpenAPI document. */
 const documentedRoutes = (modules: readonly RouteDefinition[]): RouteDocumentation[] => [
   systemRoutes.health,
+  systemRoutes.readiness,
   systemRoutes.authentication,
   ...modules,
   systemRoutes.openapi,
@@ -505,6 +528,15 @@ export function createApp(dependencies: AppDependencies): Api {
   };
 
   app.get("/health", guard(systemRoutes.health), (c) => c.json({ status: "ok" as const }));
+  app.get(systemRoutes.readiness.path, guard(systemRoutes.readiness), async (c) => {
+    c.header("Cache-Control", "no-store");
+    if (!(await services.health.databaseReachable())) {
+      throw new ApiError(503, "unavailable", "The database cannot be reached now.", undefined, {
+        "Cache-Control": "no-store",
+      });
+    }
+    return c.json({ status: "ready" as const });
+  });
   app.get(systemRoutes.authentication.path, guard(systemRoutes.authentication), (c) =>
     c.json({ status: "authenticated" as const }),
   );
