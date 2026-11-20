@@ -126,25 +126,26 @@ Folder names below are the `.plan/` folders; a phase merged into `master` is arc
 
 Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1–10 to the first public release, then phases 11–13 as separate improvements. Each phase is processed by the loop and merged by the owner.
 
-| #   | Folder                 | Phase                           | Result                                                                                                |
-| --- | ---------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 0   | `00-overview`          | Overview and harness            | Planning, binding docs and the unattended development harness                                         |
-| 0   | `00-trial`             | Trial                           | Disposable harness verification, closed without merging                                               |
-| 1   | `01-foundation`        | Foundation                      | Workspace, tooling, checks, Compose/Postgres and CI                                                   |
-| 2   | `02-api-db`            | API and database                | Profile domain, authenticated writes, generated contracts and demo seed                               |
-| 3   | `03-web`               | Website                         | Presentation pages and chat UI behind a mock adapter                                                  |
-| 4   | `04-ai-roadmap`        | AI Roadmap                      | Learning domain, API, pages and the one-time launch import contract                                   |
-| 5   | `05-mcp-admin`         | Complete content administration | TypeScript MCP over the private API, internal/SSH-tunnel access, skills and security gates            |
-| 6   | `06-llm-agent`         | Reusable LLM agent              | Three-stage Python package and structured API tools, tested without an HTTP server                    |
-| 7   | `07-ai-service`        | AI service and real web chat    | FastAPI, conversation/identity/spend controls and live chat over structured API data                  |
-| 8   | `08-mcp-public`        | Public MCP                      | Python read-only adapter, structured/text results and `/mcp` setup page                               |
-| 9   | `09-rag`               | RAG knowledge base              | Portfolio + approved extra documents, private originals, embeddings and a private search route        |
-| 9.1 | `09.1-rag-integration` | RAG integration                 | Public search with budget admission, agent tool and skill, public MCP search, Sources contract        |
-| 9.2 | `09.2-rag-upgrades`    | RAG upgrades                    | BM25 ranking in Postgres, parent-child and neighbour retrieval, kept only where evals show a gain     |
-| 10  | `10-delivery`          | Continuous delivery             | Affected-image builds on merge, VPS deployment with rollback, backups/restore, monitoring, sebela.dev |
-| 11  | `11-knowledge-graph`   | Knowledge graph                 | Evidence-backed entities/relations and measured graph-assisted retrieval after launch                 |
-| 12  | `12-ontology`          | Ontology                        | Reviewed semantic definitions and a bounded Auto Ontology suitability experiment                      |
-| 13  | `13-mcp-apps`          | External MCP UI                 | Optional interactive views in verified clients, with structured/text fallback                         |
+| #   | Folder                 | Phase                           | Result                                                                                                       |
+| --- | ---------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 0   | `00-overview`          | Overview and harness            | Planning, binding docs and the unattended development harness                                                |
+| 0   | `00-trial`             | Trial                           | Disposable harness verification, closed without merging                                                      |
+| 1   | `01-foundation`        | Foundation                      | Workspace, tooling, checks, Compose/Postgres and CI                                                          |
+| 2   | `02-api-db`            | API and database                | Profile domain, authenticated writes, generated contracts and demo seed                                      |
+| 3   | `03-web`               | Website                         | Presentation pages and chat UI behind a mock adapter                                                         |
+| 4   | `04-ai-roadmap`        | AI Roadmap                      | Learning domain, API, pages and the one-time launch import contract                                          |
+| 5   | `05-mcp-admin`         | Complete content administration | TypeScript MCP over the private API, internal/SSH-tunnel access, skills and security gates                   |
+| 6   | `06-llm-agent`         | Reusable LLM agent              | Three-stage Python package and structured API tools, tested without an HTTP server                           |
+| 7   | `07-ai-service`        | AI service and real web chat    | FastAPI, conversation/identity/spend controls and live chat over structured API data                         |
+| 7.1 | `07.1-jev-gateway`     | Jev Security Gateway            | Measure TypeSafe AI's Jev against Haiku as the Security Gateway classifier; switch only if every gate passes |
+| 8   | `08-mcp-public`        | Public MCP                      | Python read-only adapter, structured/text results and `/mcp` setup page                                      |
+| 9   | `09-rag`               | RAG knowledge base              | Portfolio + approved extra documents, private originals, embeddings and a private search route               |
+| 9.1 | `09.1-rag-integration` | RAG integration                 | Public search with budget admission, agent tool and skill, public MCP search, Sources contract               |
+| 9.2 | `09.2-rag-upgrades`    | RAG upgrades                    | BM25 ranking in Postgres, parent-child and neighbour retrieval, kept only where evals show a gain            |
+| 10  | `10-delivery`          | Continuous delivery             | Affected-image builds on merge, VPS deployment with rollback, backups/restore, monitoring, sebela.dev        |
+| 11  | `11-knowledge-graph`   | Knowledge graph                 | Evidence-backed entities/relations and measured graph-assisted retrieval after launch                        |
+| 12  | `12-ontology`          | Ontology                        | Reviewed semantic definitions and a bounded Auto Ontology suitability experiment                             |
+| 13  | `13-mcp-apps`          | External MCP UI                 | Optional interactive views in verified clients, with structured/text fallback                                |
 
 ### Phase boundaries
 
@@ -165,6 +166,8 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 **6 — Reusable LLM agent.** `packages/llm-agent`, a Python library with responsibility folders and exactly three stages: Security Gateway (cheap classifier), Main Agent (bounded tool loop) and Output Guard (no LLM). Structured API read tools and component/full-pipeline evals work through a runner before any server is built. Context, token/call/cost limits and cancellation are part of the package contract from the start.
 
 **7 — AI service and real web chat.** FastAPI wraps the package; the API owns one conversation per anonymous browser identity, ownership, durable idempotency, limits and spend reservations. Replace the website mock and restore the same conversation on direct `/ask` visits. The chatbot is useful over structured data before RAG. No public MCP or retrieval prerequisite.
+
+**7.1 — Jev Security Gateway.** After phase 6: a switchable Jev adapter behind the Security Gateway's classifier contract, compared with Haiku on the phase-6 English/Czech catalogue and gates (latency, cost, calibration, false blocks). Haiku stays configured until Jev passes every gate and the owner records the switch.
 
 **8 — Public MCP.** A separate Python adapter calls FastAPI read capabilities backed by the same tools. External agents bring their model: no generation, admin or raw-file tool. Add `/mcp` with verified remote setup examples and discovery links. Return structured results and text, without interactive UI.
 
