@@ -320,7 +320,21 @@ export function createSeedService(
       return report;
     },
     loadSeedIntoEmpty: (folder) => load(folder, true),
-    clearContent: () => Promise.reject(new Error("not implemented")),
+    async clearContent() {
+      const keys = await persistence.maintenance.clearContent();
+      let failed = 0;
+      // The rows are gone once the clear committed; each file is removed on its own, so one
+      // failure leaves only that file behind.
+      for (const key of keys) {
+        try {
+          await options.storage.storage.delete(key);
+        } catch (error) {
+          failed += 1;
+          options.onCleanupFailure({ operation: "delete", key, error });
+        }
+      }
+      return { media: { removed: keys.length - failed, failed } };
+    },
   };
 
   /** Loads the folder; with `onlyIntoEmpty`, returns `null` without a write unless it is empty. */
