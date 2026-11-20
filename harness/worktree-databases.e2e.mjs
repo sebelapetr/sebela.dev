@@ -263,6 +263,16 @@ try {
     sqlIn(first, `CREATE DATABASE "${LEFTOVER}";`);
   });
 
+  await step("a worktree role uses pgvector in its own and in temporary databases", () => {
+    const vectors =
+      "CREATE EXTENSION IF NOT EXISTS vector; CREATE TABLE embedding (v vector(3)); INSERT INTO embedding VALUES ('[1,2,3]'); SELECT v <=> '[1,2,3]' FROM embedding; DROP TABLE embedding;";
+    assert.equal(sqlIn(first, vectors), "0");
+    const temporary = `${first.database}_tmp_vector`;
+    sqlIn(first, `CREATE DATABASE "${temporary}";`);
+    assert.equal(sqlAs(settingsOf(first), temporary, vectors), "0");
+    sqlIn(first, `DROP DATABASE "${temporary}";`);
+  });
+
   await step("creating a worktree again reuses its database and keeps its credentials", () => {
     const settings = fs.readFileSync(envFile(first), "utf8");
     assert.deepEqual(create("feat/1-first"), first);
