@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+// A stand-in for the docker command line, put first on PATH by backup.test.mjs, restore.test.mjs
+// and clear-demo.test.mjs to exercise the scripts of infra/scripts/ without a Docker daemon. It
+// accepts only `docker compose --env-file <file> exec -T <service> <command...>`, records each call
+// as a JSON line in FAKE_TOOLS_LOG (with what it read on standard input for pg_restore), and
+// answers from the JSON scenario in FAKE_TOOLS_SCENARIO:
+//
+//   dump         what pg_dump writes (default: a fictional dump)
+//   failDump     pg_dump fails after writing part of the dump
+//   databases    the databases that exist
+//   counts       database -> the row counts it reports, one `schema.table count` line each
+//   failRestore  pg_restore fails
+//   failClear    the API's clear-content command fails
+//
+// Any other call fails, so the script under test cannot do anything the tests do not expect.
+
+import fs from "node:fs";
+
+const scenario = JSON.parse(fs.readFileSync(process.env.FAKE_TOOLS_SCENARIO ?? "", "utf8"));
+const args = process.argv.slice(2);
+
+function record(entry) {
+  fs.appendFileSync(
+    process.env.FAKE_TOOLS_LOG ?? "",
+    `${JSON.stringify({ tool: "docker", ...entry })}\n`,
+  );
+}
+
+function fail(message) {
+  process.stderr.write(`fake docker: ${message}\n`);
+  process.exit(1);
+}
+
+const option = (list, name) => {
+  const index = list.indexOf(name);
+  return index === -1 ? undefined : list[index + 1];
+};
+
+if (args[0] !== "compose" || args[1] !== "--env-file" || args[3] !== "exec" || args[4] !== "-T") {
+  record({ args });
+  fail(`unexpected call: ${args.join(" ")}`);
+}
+const service = args[5];
+const command = args.slice(6);
+
+if (service === "postgres" && command[0] === "pg_dump") {
+  record({ args });
+  process.stdout.write(scenario.dump ?? "fictional dump\n");
+  if (scenario.failDump) fail("pg_dump: the connection was lost");
+  process.exit(0);
+}
+
+if (service === "postgres" && command[0] === "pg_restore") {
+  const stdin = fs.readFileSync(0, "utf8");
+  record({ args, stdin });
+  if (scenario.failRestore) fail("pg_restore: the restore failed");
+  process.exit(0);
+}
+
+if (service === "postgres" && command[0] === "psql") {
+  record({ args });
+  const database = option(command, "--dbname");
+  const sql = option(command, "--command") ?? "";
+  if (/pg_database/.test(sql)) {
+    const name = /datname = '([^']*)'/.exec(sql)?.[1];
+    if ((scenario.databases ?? []).includes(name)) process.stdout.write("1\n");
+    process.exit(0);
+  }
+  if (/query_to_xml/.test(sql)) {
+    const counts = scenario.counts?.[database];
+    if (counts === undefined) fail(`database "${database}" does not exist`);
+    process.stdout.write(counts);
+    process.exit(0);
+  }
+  if (/^(?:CREATE|DROP) (?:DATABASE|EXTENSION)/.test(sql)) process.exit(0);
+  fail(`unexpected SQL: ${sql}`);
+}
+
+if (service === "api" && command[0] === "node" && command[1] === "dist/cli/clear-content.js") {
+  record({ args });
+  if (scenario.failClear) fail("clear-content: the database could not be reached");
+  process.stdout.write("Cleared the profile and the roadmap.\n");
+  process.exit(0);
+}
+
+record({ args });
+fail(`unexpected call: ${args.join(" ")}`);

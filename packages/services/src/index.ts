@@ -24,6 +24,7 @@ export type {
   ContentServices,
 } from "./modules/audit/index.js";
 export type {
+  ClearContentReport,
   SeedCount,
   SeedKind,
   SeedReport,

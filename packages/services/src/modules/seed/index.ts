@@ -97,6 +97,20 @@ export interface SeedService {
    * either way. Two loads started at the same moment into one empty profile are not serialised.
    */
   loadSeedIntoEmpty(folder: string | URL): Promise<SeedReport | null>;
+  /**
+   * Empties the profile and the AI roadmap in one transaction, all or nothing, then deletes the
+   * stored file of every media record it removed. API keys and the audit of earlier changes stay
+   * and the migrations stay applied, so the database is ready for a seed or the owner's content. A
+   * file that cannot be removed is reported through `onCleanupFailure` (`operation: "delete"`) and
+   * counted as `failed`; the clear itself still succeeds. A failure of the clear rethrows and
+   * leaves the content as it was.
+   */
+  clearContent(): Promise<ClearContentReport>;
+}
+
+/** What `clearContent` removed: stored media files deleted and those that could not be. */
+export interface ClearContentReport {
+  readonly media: { readonly removed: number; readonly failed: number };
 }
 
 export interface SeedServiceOptions {
@@ -286,7 +300,7 @@ async function checkReferences(
 }
 
 export function createSeedService(
-  persistence: Pick<Persistence, "profile" | "transaction">,
+  persistence: Pick<Persistence, "profile" | "transaction" | "maintenance">,
   options: SeedServiceOptions,
 ): SeedService {
   const mediaOptions = {
@@ -306,6 +320,7 @@ export function createSeedService(
       return report;
     },
     loadSeedIntoEmpty: (folder) => load(folder, true),
+    clearContent: () => Promise.reject(new Error("not implemented")),
   };
 
   /** Loads the folder; with `onlyIntoEmpty`, returns `null` without a write unless it is empty. */
