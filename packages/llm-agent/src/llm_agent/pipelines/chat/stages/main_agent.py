@@ -101,9 +101,11 @@ async def _loop(execution: Execution, *, uncertain: bool) -> Draft | None:
         if executed + len(calls) > tool_cap:
             raise LimitReached("tool_calls")
         messages.append(reply)
-        for call in calls:
-            content = await execution.tools.call(call["name"], call.get("args") or {})
-            executed += 1
+        contents = await execution.tools.call_many(
+            [(call["name"], call.get("args") or {}) for call in calls]
+        )
+        executed += len(calls)
+        for call, content in zip(calls, contents, strict=True):
             messages.append(ToolMessage(content=content, tool_call_id=str(call.get("id") or "")))
     raise LimitReached("main_decisions")  # pragma: no cover - the loop returns or raises
 

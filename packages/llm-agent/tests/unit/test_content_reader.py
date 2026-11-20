@@ -224,7 +224,9 @@ EDUCATION_JSON: dict[str, Any] = {
 def routes(seen: list[httpx2.Request], **bodies: tuple[int, object]) -> httpx2.MockTransport:
     def handle(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
-        status, body = bodies.get(request.url.path, (404, {"error": {"code": "not_found"}}))
+        status, body = bodies.get(
+            request.url.path, (404, {"error": {"code": "not_found", "message": "Not found."}})
+        )
         return httpx2.Response(status, content=json.dumps(body).encode())
 
     return httpx2.MockTransport(handle)
@@ -324,7 +326,10 @@ async def test_a_malformed_list_is_unavailable(path: str, body: object) -> None:
 
 async def test_a_failed_career_read_is_unavailable() -> None:
     seen: list[httpx2.Request] = []
-    failing = {path: (500, {"error": {"code": "internal"}}) for path in CAREER_ROUTES}
+    failing = {
+        path: (500, {"error": {"code": "internal_error", "message": "Failed."}})
+        for path in CAREER_ROUTES
+    }
     async with ApiContentReader(BASE_URL, transport=routes(seen, **failing)) as reader:
         for read in (
             reader.read_experiences,

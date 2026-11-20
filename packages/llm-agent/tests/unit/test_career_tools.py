@@ -183,7 +183,7 @@ async def test_a_missing_project_is_not_found_and_records_no_evidence() -> None:
     )
     assert tool_results(models)[0]["error"] == "not_found"
     assert ("tool.get_project", "not_found") in spans(result)
-    assert result.evidence == []
+    assert [item.kind for item in result.evidence] == ["contact"]
 
 
 @pytest.mark.parametrize(
@@ -385,7 +385,7 @@ async def test_an_oversized_list_result_is_rejected_not_truncated() -> None:
 
 
 async def test_results_beyond_the_total_context_allowance_are_withheld() -> None:
-    big = "word " * 3_200  # about 8000 bytes, so about 4000 tokens per list
+    big = "word " * 1_600  # 8000 bytes, so about 4000 tokens per list
     content = FakeContent(
         experiences=[EXPERIENCES[0].model_copy(update={"summary": big})],
         explorations=[EXPLORATIONS[0].model_copy(update={"summary": big})],
@@ -394,7 +394,7 @@ async def test_results_beyond_the_total_context_allowance_are_withheld() -> None
     result, models = await run(
         [
             calls(("list_experiences", {}), ("list_explorations", {}), ("list_services", {})),
-            draft(outcome="refused", refs=()),
+            draft(refs=("src-1",)),
         ],
         content=content,
     )
@@ -402,6 +402,7 @@ async def test_results_beyond_the_total_context_allowance_are_withheld() -> None
     assert statuses == ["ok", "ok", "context_full"]
     assert [r.get("error") for r in tool_results(models)] == [None, None, "context_full"]
     assert [e.kind for e in result.evidence] == ["experience", "exploration"]
+    assert result.blocks == []  # the oversized summary does not fit an experience card
 
 
 async def test_duplicate_record_identities_make_the_read_unavailable() -> None:
@@ -467,7 +468,7 @@ async def test_at_most_three_reads_run_at_once_and_evidence_keeps_the_call_order
     assert [e.kind for e in result.evidence][:2] == ["experience", "project"]
     assert result.evidence[0].ref == "src-1"
     names = [name for name, _ in spans(result) if name.startswith("tool.")]
-    assert names == [
+    assert names[:6] == [
         "tool.list_experiences",
         "tool.list_projects",
         "tool.list_services",

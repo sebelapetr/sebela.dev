@@ -5,6 +5,8 @@ deterministically: it passes, is repaired by dropping sources that are not this 
 is replaced as a whole by the fixed insufficient-evidence response. Whenever the visitor should ask
 directly, the contact card is built from a trusted `get_contact` read, never from model text; if
 that read fails the result is `unavailable`, so a draft is never shown without its required card.
+An answered draft carries the typed blocks of the experiences, services and explorations it cites,
+built from their evidence records; no other result carries blocks.
 """
 
 from __future__ import annotations
@@ -92,6 +94,7 @@ async def _reviewed(execution: Execution, draft: Draft) -> tuple[ChatResult, str
         text=body,
         contact=contact,
         sources=sources,
+        blocks=tools.blocks(refs) if outcome == "answered" else [],
         evidence=list(tools.evidence),
         usage=execution.budget.usage(),
         trace=[],

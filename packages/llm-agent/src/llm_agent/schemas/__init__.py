@@ -2,12 +2,16 @@
 
 from llm_agent.schemas.requests import ChatRequest, ExecutionLimits
 from llm_agent.schemas.responses import (
+    Block,
     ChatResult,
     ContactCard,
     ContactLink,
     Evidence,
+    ExperienceCard,
+    ExplorationCard,
     Language,
     Outcome,
+    ServiceCard,
     Source,
     SourceKind,
     Span,
@@ -17,14 +21,18 @@ from llm_agent.schemas.responses import (
 )
 
 __all__ = [
+    "Block",
     "ChatRequest",
     "ChatResult",
     "ContactCard",
     "ContactLink",
     "Evidence",
     "ExecutionLimits",
+    "ExperienceCard",
+    "ExplorationCard",
     "Language",
     "Outcome",
+    "ServiceCard",
     "Source",
     "SourceKind",
     "Span",
