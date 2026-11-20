@@ -187,6 +187,10 @@ test.describe("navigation and theme", () => {
           "/ask",
         );
         await expect(themeToggle(page)).toBeVisible();
+        // The site's own code, apart from the person's profile links.
+        await expect(
+          header(page).getByRole("link", { name: "Source code on GitHub" }),
+        ).toHaveAttribute("href", "https://github.com/sebelapetr/sebela.dev");
 
         await expectContent(page);
         // The open menu's copy of the links is hidden on a wide screen.
@@ -302,6 +306,7 @@ test.describe("navigation and theme", () => {
         "AI Roadmap",
         "Contact",
         "Ask AI",
+        "Source code on GitHub",
         "Dark theme",
       ]);
     });
@@ -454,6 +459,7 @@ test.describe("navigation and theme", () => {
       await expect(header(page).getByRole("link", { name: "Ask AI" })).toBeVisible();
       await expect(header(page).getByRole("navigation")).toBeHidden();
       await expect(themeToggle(page)).toBeHidden();
+      await expect(header(page).getByRole("link", { name: "Source code on GitHub" })).toBeHidden();
       await expect(menuButton(page)).toHaveAttribute("aria-expanded", "false");
       await expect(menuButton(page)).toHaveAttribute("aria-haspopup", "dialog");
       await expect(menu(page)).toBeHidden();
@@ -483,6 +489,10 @@ test.describe("navigation and theme", () => {
         "page",
       );
       await expect(menu(page).getByRole("button", { name: "Dark theme" })).toBeVisible();
+      await expect(menu(page).getByRole("link", { name: "Source code on GitHub" })).toHaveAttribute(
+        "href",
+        "https://github.com/sebelapetr/sebela.dev",
+      );
 
       // Tab and Shift+Tab never leave the menu.
       for (let step = 0; step < 12; step += 1) {
@@ -543,6 +553,39 @@ test.describe("navigation and theme", () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-pressed", "true");
       await expect.poll(() => bodyBackground(page)).toBe(background.dark);
+    });
+
+    test("puts the footer's links first as full-width rows and the copyright line last", async ({
+      page,
+    }) => {
+      await page.goto(`${website.url}/services`);
+      await hydrated(page);
+      const footer = page.getByRole("contentinfo");
+      const repository = footer.getByRole("link", {
+        name: "Built in public with an agentic engineering workflow",
+      });
+      const cv = footer.getByRole("link", { name: "CV" });
+      const copyright = footer.getByText(`© ${String(new Date().getFullYear())} ${name}`);
+      // The GitHub mark is drawn, and hidden from assistive technology.
+      await expect(repository.locator("svg").first()).toHaveAttribute("aria-hidden", "true");
+      await expect(cv.locator("svg")).toHaveAttribute("aria-hidden", "true");
+      const [repositoryBox, cvBox, copyrightBox] = await Promise.all([
+        repository.boundingBox(),
+        cv.boundingBox(),
+        copyright.boundingBox(),
+      ]);
+      if (repositoryBox === null || cvBox === null || copyrightBox === null) {
+        throw new Error("footer not laid out");
+      }
+      // Both links span the content width, as the copyright line does, and are 44 px tall at least.
+      for (const box of [repositoryBox, cvBox]) {
+        expect(box.width).toBeGreaterThanOrEqual(copyrightBox.width - 1);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+      expect(cvBox.y).toBeGreaterThanOrEqual(repositoryBox.y + repositoryBox.height);
+      expect(copyrightBox.y).toBeGreaterThan(cvBox.y + cvBox.height);
+      expect(copyrightBox.x).toBeLessThanOrEqual(repositoryBox.x + 1);
+      await expectNoHorizontalScroll(page);
     });
 
     test("closes the menu when the screen becomes wide enough for the navigation", async ({

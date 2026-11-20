@@ -301,6 +301,80 @@ test.describe("the Ask page", () => {
     await expect(composer(page)).toBeInViewport();
     await expectNoHorizontalScroll(page);
   });
+
+  test("keeps the profile note out of the composer, below the chat and above the footer", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    const note = page.getByText(
+      `Answers are generated from ${name}'s public profile and may be incomplete.`,
+    );
+    const form = page.getByRole("form", { name: "Ask a question" });
+    // Not part of the sticky composer: it scrolls with the page.
+    expect(
+      await form.evaluate(
+        (element) => element.parentElement?.textContent.includes("Answers are generated") ?? true,
+      ),
+    ).toBe(false);
+    await composer(page).fill(unknownQuestion);
+    await composer(page).press("Enter");
+    await answered(page);
+    await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    });
+    await expect(note).toBeInViewport();
+    const [formBox, noteBox, footerBox] = await Promise.all([
+      form.boundingBox(),
+      note.boundingBox(),
+      page.getByRole("contentinfo").boundingBox(),
+    ]);
+    if (formBox === null || noteBox === null || footerBox === null) throw new Error("not laid out");
+    expect(noteBox.y).toBeGreaterThanOrEqual(formBox.y + formBox.height);
+    expect(footerBox.y).toBeGreaterThanOrEqual(noteBox.y + noteBox.height);
+  });
+
+  test("a long question on a phone wraps, and the latest answer and the composer stay reachable", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    const long = `${"A rather long fictional question about the weather on the planet ".repeat(6)}?`;
+    await composer(page).fill(long);
+    await composer(page).press("Enter");
+    await answered(page);
+    await expectNoHorizontalScroll(page);
+    await expect(turns(page).last()).toContainText("A rather long fictional question");
+    // The composer keeps the focus after sending, ready for the next question.
+    await expect(composer(page)).toBeFocused();
+    // An open on-screen keyboard shrinks the visible height; the composer stays in view.
+    await page.setViewportSize({ width: 360, height: 320 });
+    await expect(composer(page)).toBeInViewport();
+    await expectNoHorizontalScroll(page);
+  });
+
+  test("spaces the page tighter on a phone than on a wide screen", async ({ page }) => {
+    const spacing = async () =>
+      page.evaluate(() => {
+        const main = document.querySelector("main");
+        const intro = document.querySelector("main header p");
+        const title = document.querySelector("main h1 span:last-child");
+        if (main === null || intro === null || title === null) throw new Error("not rendered");
+        return {
+          padding: getComputedStyle(main).paddingTop,
+          intro: getComputedStyle(intro).fontSize,
+          title: getComputedStyle(title).fontSize,
+        };
+      });
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    expect(await spacing()).toEqual({ padding: "20px", intro: "16px", title: "24px" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    expect(await spacing()).toEqual({ padding: "80px", intro: "18px", title: "36px" });
+  });
 });
 
 /** The element of the page with this anchor. */
@@ -515,6 +589,13 @@ test.describe("the chat's layout", () => {
         for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
         await page.screenshot({
           path: testInfo.outputPath(`ask-answered-${String(width)}-${scheme}.png`),
+        });
+        // Scrolled to its end, the page shows the profile note below the composer.
+        await page.evaluate(() => {
+          window.scrollTo(0, document.documentElement.scrollHeight);
+        });
+        await page.screenshot({
+          path: testInfo.outputPath(`ask-end-${String(width)}-${scheme}.png`),
         });
 
         // Every kind of card and the sources, in one conversation: the services, the
