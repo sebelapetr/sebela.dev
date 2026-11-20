@@ -122,8 +122,9 @@ services:
       STORAGE_BUNNY_PASSWORD: ${STORAGE_BUNNY_PASSWORD:-}
       MEDIA_MAX_BYTES: ${MEDIA_MAX_BYTES:-}
       MEDIA_MAX_IMAGE_DIMENSION: ${MEDIA_MAX_IMAGE_DIMENSION:-}
-      # Retrieval: all empty switches it off. The provider key is a secret and reaches the stack
-      # only from the starting process's environment, never from a file Compose reads.
+      # Retrieval: all empty switches it off. The provider key is a secret: do not put
+      # VOYAGE_API_KEY in .env or any other file Compose reads; export it in the environment of
+      # the process that starts the stack.
       RETRIEVAL_EMBEDDING_MODEL: ${RETRIEVAL_EMBEDDING_MODEL:-}
       RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD: ${RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD:-}
       RETRIEVAL_EMBEDDING_BATCH_SIZE: ${RETRIEVAL_EMBEDDING_BATCH_SIZE:-}
