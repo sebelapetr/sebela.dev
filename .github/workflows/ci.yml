@@ -72,6 +72,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The Python members (packages/llm-agent): the uv version pinned in the root pyproject.toml,
+      # the Python minor of .python-version and exactly what uv.lock records. Their pnpm task
+      # wrappers run through Turborepo like every other package; the drift check below regenerates
+      # the Python content client too.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version-file: pyproject.toml
+      - run: uv sync --locked --all-packages
       - name: Postgres for the integration tests
         run: docker compose --env-file .env.example up --detach --wait
       - name: Affected packages and why
