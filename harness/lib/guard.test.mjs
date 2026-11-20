@@ -700,3 +700,51 @@ test("ordinary commands pass", () => {
   assert.equal(bash("git status"), null);
   assert.equal(call("WebFetch", { url: "https://example.com" }), null);
 });
+
+// --- the shared Compose stack -------------------------------------------------
+
+test("agents cannot start, stop or rebuild the shared Compose stack", () => {
+  for (const command of [
+    "pnpm stack:up",
+    "pnpm --silent stack:down",
+    "pnpm run stack:seed",
+    "docker compose up --detach --wait",
+    "docker compose --profile api up --build --detach",
+    "docker compose -f compose.yaml down",
+    "docker-compose restart postgres",
+    "docker compose stop postgres",
+    "docker compose rm -f api",
+    "docker compose build api",
+    "docker compose run --rm migrate",
+    "docker compose -p sebela up -d",
+    "docker compose --project-name=sebela down",
+    "cd /repo && docker compose up -d",
+    "COMPOSE_PROJECT_NAME=sebela docker compose up -d",
+  ]) {
+    assert.ok(bash(command, own), command);
+    assert.ok(bash(command, { isSubagent: true }), command);
+  }
+});
+
+test("agents may inspect the shared stack and use their own Compose project", () => {
+  for (const command of [
+    "docker compose ps",
+    "docker compose logs postgres",
+    "docker compose exec -T postgres psql -c 'select 1'",
+    "docker compose config",
+    "docker compose -p feat-232-check up -d",
+    "docker compose --project-name feat-232-check down -v",
+    "docker compose --project-name=feat-232-check build web",
+    "COMPOSE_PROJECT_NAME=feat-232-check docker compose up -d",
+    "pnpm test:api-stack",
+    "pnpm --silent stack:api-keys create reviewer",
+    "pnpm stack:logs",
+  ]) {
+    assert.equal(bash(command, own), null, command);
+  }
+});
+
+test("the owner's interactive session may manage the shared stack", () => {
+  assert.equal(bash("pnpm stack:up"), null);
+  assert.equal(bash("docker compose up --detach --wait"), null);
+});
