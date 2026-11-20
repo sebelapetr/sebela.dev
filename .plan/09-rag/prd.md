@@ -3,7 +3,7 @@
 |            |                                                                                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Status     | Draft, revised after the owner's architecture discussion; awaiting document approval                                                                         |
-| Date       | 2026-11-17                                                                                                                                                   |
+| Date       | 2026-11-20                                                                                                                                                   |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                                                   |
 | Depends on | Phases 2, 4, 7 and 8                                                                                                                                         |
 | Result     | Chat and public MCP search the portfolio and owner-approved supplemental documents, with private originals and measured retrieval in the existing PostgreSQL |
@@ -26,6 +26,7 @@ Keep the existing planned TypeScript `packages/memory` boundary for retrieval/in
 4. The owner can replace, withdraw or delete a source and rebuild the index from retained originals.
 5. Neither a visitor nor public MCP can list pending imports or download source originals.
 6. A reviewer can compare measured structured-tools-only, full-text, vector and hybrid retrieval quality.
+7. A visitor understands why connecting their own AI to the public knowledge MCP is useful, discovers it prominently on the website and reaches verified setup and source-backed search examples.
 
 ## Implementation Decisions
 
@@ -84,6 +85,12 @@ Keep the existing planned TypeScript `packages/memory` boundary for retrieval/in
 - The API exposes the bounded public search projection. Shared Python tools call it over HTTP; chat invokes them in-process and public MCP reaches them through FastAPI. Do not expose raw vectors as the agent interface or duplicate the search implementation in Python.
 - Preserve structured tools for exact facts. The agent's system policy and evidence ledger apply API precedence to supplemental evidence; retrieved instructions remain untrusted data.
 
+### Website discovery of the public knowledge MCP
+
+- Extend phase 8's basic discovery links with a prominent explanation and "Connect your AI" action near the homepage's AI entry point, a visible option on `/ask` and a persistent footer link. Keep the existing main/mobile navigation and one canonical `/mcp` setup page.
+- On `/mcp`, explain the benefit of structured reads and RAG over public portfolio/learning content and approved supplemental passages, with concrete source-backed examples and the existing verified, copyable remote-client setup. Describe capabilities only after their MCP/search integration is delivered; do not imply visitor-memory storage, public ingest or access to private originals. Rendering setup guidance invokes no paid AI/search operation.
+- Keep page metadata, `llms.txt` and README guidance consistent. This is the owner-requested presentation slice [#218](https://github.com/sebelapetr/sebela.dev/issues/218), recorded in [issues.md](issues.md); it consumes the existing MCP/search interfaces and introduces no new server or retrieval implementation.
+
 ### Evals and measurement
 
 - Evals-first, with an owner-approved fictional question set (about forty initial questions), expected sources and no-answer cases. Cover exact names, paraphrases, cross-record questions, roadmap/diary, extra sources, API conflicts and injected document instructions.
@@ -99,6 +106,7 @@ Keep the existing planned TypeScript `packages/memory` boundary for retrieval/in
 - Private storage contract tests for both drivers: no unauthenticated download through media/API/CDN paths, generated keys, private-root traversal resistance and failure cleanup. Optional live Bunny checks require dedicated development keys; CI uses local storage only.
 - Test API facts winning over contradictory extra material and invalid source URLs being rejected by Output Guard.
 - Integration/end-to-end parity: search from the web chatbot and public MCP returns only approved current evidence; pending/rejected/original content and credentials are inaccessible.
+- Website discovery: Playwright journeys from homepage and `/ask` to `/mcp` and copyable setup, keyboard access and screenshots at 360, 768 and 1280 px in both themes. Use fictional fixtures and verify setup guidance makes no model/search calls; this presentation slice reuses the accepted MCP/RAG contracts and evals.
 
 ## Out of Scope
 
