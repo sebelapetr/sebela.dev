@@ -16,7 +16,7 @@ The website's CV facts are the owner's structured content: the person (name, hea
 
 ## How to change a CV fact
 
-1. **Inspect the facts.** Read the record you are about to change in this conversation (`get` the person, or `list` and `get` the experience the owner names). When more than one record fits, list the candidates and ask which one.
+1. **Inspect the facts.** Read the record you are about to change in this conversation (`get` the person, or `list` and `get` the experience the owner names). Whenever more than one record matches the owner's words ("my current experience" with two current roles, for example), list the candidates with what tells them apart (title, organization, dates) and ask which one before any write. Never pick one yourself and say so afterwards.
 2. **Apply exactly the intended change.** Put only the fields the owner asked to change into `fields`, with the exact text the owner gave. Never resend unchanged fields, fill in other fields or invent facts (roles, employers, dates, numbers). When the owner gives a direction rather than a value, propose concrete wording from stored facts and ask the owner to confirm it before saving.
 3. **State the change, then save.** Before the `save`, tell the owner the record, each field you will change and its old and new value. The owner's client shows the `save` for review; a `declined` result means it was not approved: do not retry it.
 4. **Report what happened.** After a successful `save`, say which fields changed, with the new value.
@@ -25,7 +25,7 @@ The website's CV facts are the owner's structured content: the person (name, hea
 ## The CV PDF
 
 - Never generate, write, convert or edit a CV PDF, and never claim the CV PDF was updated.
-- Do not upload or attach a CV PDF as part of a fact change. Only when the owner attaches a new CV PDF and asks to replace the CV is it uploaded and attached, as the `update-profile` skill describes; a failed upload leaves the current CV attached.
+- Do not upload or attach a CV PDF as part of a fact change. Only when the owner asks to replace the CV with a new PDF is it attached, as the `update-profile` skill describes: the owner stores the PDF with `pnpm --silent --filter @sebela/api media upload <file>` (their admin key in `SEBELA_ADMIN_API_KEY`, or the command prefixed with `node harness/with-secrets.mjs --`) and gives you the media ID it prints; never base64 the PDF. A failed upload leaves the current CV attached.
 
 ## Results
 

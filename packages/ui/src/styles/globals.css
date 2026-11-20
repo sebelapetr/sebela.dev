@@ -223,10 +223,15 @@
 }
 
 @utility type-intro {
-  /* A short muted sentence that opens a block (contact, content states); no measure of its own. */
-  font-size: var(--text-lg);
-  line-height: var(--text-lg--line-height);
+  /* A short muted sentence that opens a block (contact, content states); no measure of its own.
+     Body size on phones, a step larger from sm up. */
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
   color: var(--muted-foreground);
+  @variant sm {
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+  }
 }
 
 @utility type-label {

@@ -42,7 +42,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy and the image-content check — plain Node, no dependencies [1, 2, 10]
 │   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version and release notes; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
-├── .plan/                   PRDs and issue overviews, one folder per phase
+├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
 ├── .claude/
 │   ├── skills/              grill-me, to-prd, to-issues, later content skills
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]

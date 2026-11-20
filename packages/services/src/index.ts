@@ -5,7 +5,7 @@ export type { DomainErrorCode, DomainErrorField } from "./errors.js";
 export { openServices } from "./services.js";
 export type { Services, ServicesOptions } from "./services.js";
 export type { HealthService, HealthServiceOptions } from "./modules/health/index.js";
-export { readMediaConfig } from "./modules/media/index.js";
+export { checkMediaUpload, readMediaConfig, readMediaLimits } from "./modules/media/index.js";
 export { sessionDiaryDates } from "./modules/roadmap/index.js";
 export type {
   CleanupFailure,

@@ -5,3 +5,6 @@ packages/db/migrations/
 
 # Generated from the API's OpenAPI document and committed as generated; the drift check compares it.
 packages/api-client/src/generated/
+
+# Archived phase plans are frozen as they were merged; moving them must not reformat them.
+.plan/done/

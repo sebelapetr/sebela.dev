@@ -23,6 +23,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 - `<type>` is a Conventional Commits type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 - An issue branch is cut from the phase branch and its pull request targets the phase branch.
+- A sub-phase `NN.M-<name>` (`.plan/00-overview/prd.md`, Phases) is a phase in every respect: branch `phase/NN.M-<name>`, label `phase:NN.M-<name>`, its own phase pull request.
 - Phase 0 (planning, docs, agent configuration and the harness) has no issues. It is done directly on `phase/00-overview` and reaches `master` through the same kind of phase pull request, after the trial has passed.
 - The trial is the one phase whose base is not `master`: `phase/00-trial` is cut from `phase/00-overview`, and its phase pull request targets that branch and is closed without merging.
 - Other work without an issue uses `<type>/<short-slug>`, for example `docs/fix-testing-guide`, and targets `master` through a pull request the owner merges.
@@ -103,6 +104,7 @@ Orchestrated by: <agent>
 
 - Opened by the orchestrator from the phase branch to `master` **as a draft** when no ready issue of the phase remains; HITL issues may still be open.
 - When the phase is complete, the owner marks it **ready for review**. That runs the model evals of the affected suites once on the final state (`docs/testing.md`, Evals-driven development); a draft runs none.
+- It also moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, so merging the phase into `master` archives its PRD and issue overview. The orchestrator does this once, on a short-lived branch merged into the phase branch, when it first opens the pull request; a phase already in `.plan/done/` is left there.
 - The description lists the issues of the phase with their pull requests, and anything skipped or failed.
 - The owner reviews the phase as a whole and is the only one who merges it. It is merged with a **merge commit**, so `master` keeps one commit per issue plus one commit marking the phase.
 - CI must be green on the phase branch.

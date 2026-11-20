@@ -1,5 +1,5 @@
 // The MCP Admin HTTP surface in-process, against a fake content API: the deterministic security
-// cases of .plan/05-mcp-admin/security.md that do not need the real API (D01, D02, D05–D09, D14,
+// cases of .plan/done/05-mcp-admin/security.md that do not need the real API (D01, D02, D05–D09, D14,
 // D15). The real API path, revocation on a live key and two real keys are in mcp.e2e.test.ts.
 import { afterEach, describe, expect, it } from "vitest";
 
