@@ -267,6 +267,14 @@ Below the timeline on `/experience`, in this order: Independent R&D, Technologie
 - **Announcements.** One polite live region: "Answering…" when an answer starts, then the answer (or why it failed, with "You can try again." where a retry is offered) once when it ends; never each streamed piece. A retry is announced the same way. An answer restored from the tab is not announced. The open answer is `aria-busy`.
 - **Focus after a retry.** "Try again" goes with the failed answer, so pressing it moves focus to the answer itself (focusable by script only; its outline shows only when the retry came from the keyboard), and the next Tab continues to the answer's links. "New chat" moves focus to the composer.
 
+### Phase 7 extension — planned
+
+The phase-7 PRD extends this mock-based Ask design with real server restoration and progress, explicit Stop, Clear conversation (deletes the current history after confirmation), read-only actual model/effort, an expandable personal usage panel and a leading-slash command menu with `/compact`. These are planned product controls, not an implemented model selector or debug console.
+
+Keep the existing single-column composer and typography; extend it with compact labelled usage rows for the rolling two-hour quota, UTC-day quota and explicitly labelled last-request context. Numbers use tabular figures. Above 70% use an accessible orange warning; above 90% use red; labels/counts convey the state without relying on colour. Exact tokens and estimates are distinguished, missing measurements are unavailable, and restriction/reset text comes from server policy. Do not show a hypothetical native model window or another visitor's/global spending balance. On mobile the detail panel wraps without covering the composer or keyboard.
+
+Leading `/` opens a keyboard/touch-accessible filtered popup; `/compact` describes summarizing working context while keeping the visible conversation. Show command progress/completion without a new visitor question. An active operation disables another chat/compact across tabs; browser disconnect alone leaves it running. Clear and Stop are explicit actions. Verify the extension at 360, 768 and 1280 px in both themes and with keyboard/screen-reader interaction.
+
 ## Process
 
 Implementation → browser screenshot → visual review → iteration. Screenshots are attached to the pull request.
