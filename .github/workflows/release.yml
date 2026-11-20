@@ -169,7 +169,6 @@ jobs:
       contents: read
     env:
       TAGS: ${{ needs.images.outputs.tags }}
-      SSH_DIR: ${{ runner.temp }}/ssh
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -179,7 +178,11 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        # The runner context is not available in a job's env, so the folder is set here for the
+        # steps that follow.
         run: |
+          SSH_DIR="$RUNNER_TEMP/ssh"
+          echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
           install -d -m 700 "$SSH_DIR"
           (umask 077 && printf '%s\n' "$SSH_KEY" > "$SSH_DIR/key")
           printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
@@ -212,7 +215,6 @@ jobs:
     env:
       SHA: ${{ github.sha }}
       TAGS: ${{ needs.images.outputs.tags }}
-      NOTES_FILE: ${{ runner.temp }}/release-notes.md
     steps:
       - uses: actions/checkout@v7
         with:
@@ -223,9 +225,12 @@ jobs:
           node-version-file: .nvmrc
       - name: Version and changelog
         id: notes
+        env:
+          NOTES_FILE: ${{ runner.temp }}/release-notes.md
         run: node scripts/release/deployment.mjs notes >> "$GITHUB_OUTPUT"
       - name: Tag and publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.notes.outputs.version }}
+          NOTES_FILE: ${{ runner.temp }}/release-notes.md
         run: gh release create "$VERSION" --target "$SHA" --title "$VERSION" --notes-file "$NOTES_FILE"
