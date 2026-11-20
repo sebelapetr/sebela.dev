@@ -126,6 +126,51 @@ describe("retrieval persistence", () => {
     ).toEqual(["diary"]);
   });
 
+  it("finds a narrow content kind behind more nearer chunks of another kind than one index scan visits", async () => {
+    // More off-kind chunks lie nearer the query than the default hnsw.ef_search (40) visits.
+    const nearer: [string, number[]][] = Array.from({ length: 200 }, (_, index) => [
+      `Book passage ${String(index)}`,
+      vector(0, index + 1),
+    ]);
+    await retrieval.replaceSource(source("crowded-book", { texts: nearer }));
+    // Most sources are of the wanted kind, so the filter does not look selective to the planner,
+    // yet every one of their chunks is farther from the query than all the book passages.
+    for (let day = 0; day < 100; day += 1) {
+      await retrieval.replaceSource(
+        source(`diary-${String(day)}`, {
+          contentKind: "diary_day",
+          path: `/ai-roadmap/diary/${String(day)}`,
+          texts: [[`Diary passage ${String(day)}`, vector(0, 300 + 2 * day, 301 + 2 * day)]],
+        }),
+      );
+    }
+
+    // A table this small is read and sorted directly; a production-sized one is read through
+    // the HNSW index in distance order. Sessions opened now take that index path.
+    const name = sql.identifier(database.config.name);
+    await connection.db.execute(
+      sql`ANALYZE retrieval.chunks, retrieval.versions, retrieval.sources`,
+    );
+    await connection.db.execute(sql`ALTER DATABASE ${name} SET enable_seqscan = off`);
+    await connection.db.execute(sql`ALTER DATABASE ${name} SET enable_sort = off`);
+    const indexed = openConnection(database.config, { max: 1 });
+    try {
+      const found = await createRetrievalPersistence(indexed.db).nearest({
+        vector: vector(0),
+        model: MODEL,
+        modelVersion: "1",
+        kinds: ["diary_day"],
+        limit: 3,
+      });
+      expect(found).toHaveLength(3);
+      expect(found.every((chunk) => chunk.contentKind === "diary_day")).toBe(true);
+    } finally {
+      await indexed.close();
+      await connection.db.execute(sql`ALTER DATABASE ${name} RESET enable_seqscan`);
+      await connection.db.execute(sql`ALTER DATABASE ${name} RESET enable_sort`);
+    }
+  });
+
   it("replaces a source's chunks and reuses vectors by text hash", async () => {
     await retrieval.replaceSource(
       source("handbook", {
