@@ -1,5 +1,5 @@
 // The content-management tools in-process, against the fake content API: the deterministic cases
-// of .plan/05-mcp-admin/security.md for slice S02 that need no real API (D10–D12, D15, D16, D20,
+// of .plan/done/05-mcp-admin/security.md for slice S02 that need no real API (D10–D12, D15, D16, D20,
 // D21, D24). The real API's audit, actor and dependency protection are in mcp.e2e.test.ts (D18).
 import type { Client } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vitest";

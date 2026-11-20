@@ -1,5 +1,5 @@
 // The `upload` tool and media attachment in-process, against the fake content API: the
-// deterministic cases of .plan/05-mcp-admin/security.md for slice S04 that need no real API
+// deterministic cases of .plan/done/05-mcp-admin/security.md for slice S04 that need no real API
 // (D12, D13, D15, D17, D20). The real API's inspection, storage and audit are in
 // content.e2e.test.ts (D17, D18).
 import type { Client } from "@modelcontextprotocol/client";

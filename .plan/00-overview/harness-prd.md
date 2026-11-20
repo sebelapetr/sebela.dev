@@ -2,7 +2,7 @@
 
 |        |                                                                                          |
 | ------ | ---------------------------------------------------------------------------------------- |
-| Status | Done — tried in `.plan/00-trial/result.md`                                               |
+| Status | Done — tried in `.plan/done/00-trial/result.md`                                          |
 | Date   | 2026-11-15                                                                               |
 | Parent | `.plan/00-overview/prd.md`                                                               |
 | Built  | By hand, in an interactive session on `phase/00-overview` — the loop cannot build itself |
@@ -14,7 +14,7 @@ Every phase from 1 on is meant to be processed by agents without the owner prese
 
 ## Solution
 
-Build the harness by hand as the last part of phase 0, then prove it in a trial phase (`.plan/00-trial/prd.md`) before any real code is written.
+Build the harness by hand as the last part of phase 0, then prove it in a trial phase (`.plan/done/00-trial/prd.md`) before any real code is written.
 
 The harness is: the phase loop, worktree isolation, agent definitions, hooks, permissions, GitHub labels and branch rules, and a minimal CI. The written rules it relies on — `AGENTS.md`, `docs/`, `.claude/rules/`, the agents — already exist.
 

@@ -360,7 +360,7 @@ Keyboard operation, sufficient contrast in both themes, alt text from the media 
 
 ## Further Notes
 
-- **Personal navigation prototype:** `.plan/03-web/prototype/` is a lightweight, owner-only HTML/CSS aid for exploring page structure and links. It is incomplete and illustrative; it is not an approved visual design, a product requirement, or an implementation reference. Follow this PRD and `docs/design.md` instead. In particular, absence of an element from the prototype does not remove a PRD requirement.
+- **Personal navigation prototype:** `.plan/done/03-web/prototype/` is a lightweight, owner-only HTML/CSS aid for exploring page structure and links. It is incomplete and illustrative; it is not an approved visual design, a product requirement, or an implementation reference. Follow this PRD and `docs/design.md` instead. In particular, absence of an element from the prototype does not remove a PRD requirement.
 - **HITL issues in this phase:** the visual direction of the hero and of the Experience timeline is reviewed by the owner before the remaining pages are built on it, so that a wrong direction is caught once and not on every page.
 - **Wording still to be settled with the owner:** the Paldock role title. Paldock content is limited to public product information, roles and technologies; internal use cases and implementation details are excluded.
 - **Content:** much of the wording for experiences comes from the current sebelapetr.cz and is revised, not rewritten. Raw material is in `.context/profile-notes.md`.

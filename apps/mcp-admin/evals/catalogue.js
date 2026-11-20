@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * The approved phase-5 model eval catalogue (`.plan/05-mcp-admin/evals.md`): 32 cases, 16 Czech
+ * The approved phase-5 model eval catalogue (`.plan/done/05-mcp-admin/evals.md`): 32 cases, 16 Czech
  * and 16 English. A case is `implemented` once its capability exists and its grader is written;
  * every other case stays visibly `pending` and is never counted as passing.
  *
