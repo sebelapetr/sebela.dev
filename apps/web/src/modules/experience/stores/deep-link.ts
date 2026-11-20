@@ -68,3 +68,25 @@ export function resolveDeepLink(hash: string, index: DeepLinkIndex): DeepLink | 
   const open = index[anchor];
   return open === undefined ? null : { anchor, open };
 }
+
+/** What made the page follow a link: its load (also after a page change) or a step within it. */
+export type DeepLinkTrigger = "load" | "navigation";
+
+/**
+ * How the target comes into view: at once when the page loads with the link (a page change stays a
+ * jump), smoothly when the visitor moves within the page, and at once again with reduced motion.
+ */
+export function deepLinkScrollBehavior(
+  trigger: DeepLinkTrigger,
+  reducedMotion: boolean,
+): "instant" | "smooth" {
+  throw new Error("not implemented", { cause: { trigger, reducedMotion } });
+}
+
+/**
+ * The hash (`#…`) a link's address points to when it stays on the current document (same origin,
+ * path and query), or null for another page, another address or a link without a hash.
+ */
+export function inPageHash(href: string, current: string): string | null {
+  throw new Error("not implemented", { cause: { href, current } });
+}
