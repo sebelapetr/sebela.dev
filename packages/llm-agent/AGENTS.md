@@ -134,7 +134,7 @@ Policy:
   - Every paid command declares the remaining allowance. The local ledger (`.tmp/evals/llm-agent/ledger.json`) also caps it.
   - Unmeasured cost consumes its whole reservation.
   - A missing key or an exhausted allowance is a visible block (exit 2), never a pass.
-- **CI.** The job `Python agent model evals` of `model-evals.yml` runs `--all` on the phase pull request into `master`, or on manual dispatch. Its allowance comes from the dispatch input or the repository variable `LLM_AGENT_EVAL_ALLOWANCE_USD`. It uploads only the redacted `summary.json`.
+- **CI.** The job `Python agent model evals` of `model-evals.yml` runs `--all` on the phase pull request into `master`, or on manual dispatch. Its allowance comes from the dispatch input or the repository variable `LLM_AGENT_EVAL_ALLOWANCE_USD`. A CI runner has no ledger, so after every run the owner sets that variable to the remainder the job log names (the notice `llm-agent eval allowance`), or the next run could spend the same allowance again. It uploads only the redacted `summary.json`, which also reports the latency p50 and p95 of the case-runs.
 - **Storage.** Answers stay in the git-ignored `.tmp/evals/llm-agent/`, written only after a credential scan.
 
 ### Baseline (issue #178, 2026-11-20)

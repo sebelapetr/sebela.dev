@@ -116,7 +116,8 @@ jobs:
   # gates. Cases still pending are listed in the report and never pass. The run spends at most the
   # declared remaining campaign allowance: the manual run's `allowance` input, or the repository
   # variable LLM_AGENT_EVAL_ALLOWANCE_USD on a pull request. A fresh CI runner has no ledger, so
-  # without a declared allowance the job is a visible block, never a fresh USD 10.
+  # without a declared allowance the job is a visible block, never a fresh USD 10, and the job log
+  # names the new remainder the owner must store in the variable after the run.
   llm-agent:
     name: Python agent model evals
     needs: changes
@@ -157,6 +158,18 @@ jobs:
             exit 1
           fi
           uv run --locked python -m evals.run --all --allowance "$ALLOWANCE"
+      # The runner has no ledger here, so the declared allowance is the only record of what remains.
+      # The owner sets LLM_AGENT_EVAL_ALLOWANCE_USD to this value after every run (or passes it as
+      # the next dispatch input); otherwise the next run could spend the same allowance again.
+      - name: Remaining campaign allowance for the next run
+        if: ${{ !cancelled() }}
+        run: |
+          shopt -s nullglob
+          for summary in .tmp/evals/llm-agent/*/summary.json; do
+            python3 -c 'import json, sys
+          cost = json.load(open(sys.argv[1])).get("cost") or {}
+          print("::notice title=llm-agent eval allowance::spent {} USD (uncertain {}); set LLM_AGENT_EVAL_ALLOWANCE_USD to {} before the next run".format(cost.get("spent_usd", "unknown"), cost.get("uncertain_usd", "unknown"), cost.get("remaining_usd", "unknown")))' "$summary"
+          done
       - name: Redacted eval summary
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

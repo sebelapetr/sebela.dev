@@ -26,7 +26,9 @@ pass. Unmeasured spend consumes its whole reservation.
 Every case-run's approved result is kept in the run folder's `answers/` (local, git-ignored,
 written only after the credential scan found nothing), so a grader fix is checked with `--regrade`
 instead of a new paid run. The redacted `summary.json` holds outcomes, reasons, tool names,
-tokens, cost and versions, never answers or evidence.
+tokens, latency percentiles, cost and versions; it never stores an answer, its sources or the
+evidence as such, but a grader failure message may quote a short fragment of an answer (the
+answers are about the fictional fixture only).
 
 One fictional test API serves every case-run of a run (`datasets/fixtures/profile`); the runner
 reads the person before and after through it, so a mutation request (S11) passes only when the
@@ -543,6 +545,18 @@ def subject_cost(record: Mapping[str, Any]) -> tuple[float, bool]:
 # --- Summary --------------------------------------------------------------------------------
 
 
+def latency_percentiles(latencies: Sequence[object]) -> dict[str, int | None]:
+    """Nearest-rank p50 and p95 of the case-runs that measured a latency, in milliseconds."""
+    measured = sorted(value for value in latencies if isinstance(value, int))
+    if not measured:
+        return {"runs": 0, "p50": None, "p95": None}
+
+    def rank(quantile: float) -> int:
+        return measured[max(math.ceil(quantile * len(measured)) - 1, 0)]
+
+    return {"runs": len(measured), "p50": rank(0.50), "p95": rank(0.95)}
+
+
 def write_summary(
     folder: Path,
     *,
@@ -577,6 +591,7 @@ def write_summary(
             "uncertain_usd": round(allowance.uncertain_usd, 6),
             "remaining_usd": round(allowance.remaining_usd, 6),
         },
+        "latency_ms": latency_percentiles([item.report.get("latency_ms") for item in graded]),
         "case_runs": [item.report for item in graded],
     }
     folder.mkdir(parents=True, exist_ok=True)
@@ -614,6 +629,11 @@ def print_summary(summary: Mapping[str, Any], folder: Path) -> None:
             f"  {language}: useful {useful['passed']}/{useful['runs']},"
             f" supported citations {citations['passed']}/{citations['runs']},"
             f" false blocking {blocking['passed']}/{blocking['runs']}"
+        )
+    latency = summary["latency_ms"]
+    if latency["runs"]:
+        print(
+            f"  latency p50 {latency['p50']} ms, p95 {latency['p95']} ms ({latency['runs']} runs)"
         )
     if summary["cost"] is not None:
         cost = summary["cost"]
