@@ -22,6 +22,24 @@ function vector(...axes: number[]): number[] {
   return values;
 }
 
+/**
+ * A deterministic unit vector near the given direction, the way real embeddings of one topic
+ * scatter around it: the direction plus seeded noise of a fixed size (relative norm 0.75).
+ */
+function scattered(seed: number, direction: Record<number, number>): number[] {
+  let state = seed;
+  const next = () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return (state / 4294967296) * 2 - 1;
+  };
+  const values = Array.from({ length: DIMENSION }, () => next() * 0.0406);
+  for (const [axis, weight] of Object.entries(direction)) {
+    values[Number(axis)] = (values[Number(axis)] ?? 0) + weight;
+  }
+  const norm = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0));
+  return values.map((value) => value / norm);
+}
+
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
 function source(
@@ -130,7 +148,7 @@ describe("retrieval persistence", () => {
     // More off-kind chunks lie nearer the query than the default hnsw.ef_search (40) visits.
     const nearer: [string, number[]][] = Array.from({ length: 200 }, (_, index) => [
       `Book passage ${String(index)}`,
-      vector(0, index + 1),
+      scattered(index + 1, { 0: 1 }),
     ]);
     await retrieval.replaceSource(source("crowded-book", { texts: nearer }));
     // Most sources are of the wanted kind, so the filter does not look selective to the planner,
@@ -140,7 +158,7 @@ describe("retrieval persistence", () => {
         source(`diary-${String(day)}`, {
           contentKind: "diary_day",
           path: `/ai-roadmap/diary/${String(day)}`,
-          texts: [[`Diary passage ${String(day)}`, vector(0, 300 + 2 * day, 301 + 2 * day)]],
+          texts: [[`Diary passage ${String(day)}`, scattered(1000 + day, { 0: 0.6, 1: 0.8 })]],
         }),
       );
     }
