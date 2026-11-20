@@ -19,6 +19,14 @@ describe("ErrorResponseSchema", () => {
     expect(ErrorResponseSchema.parse(body)).toEqual(body);
   });
 
+  it.each(["provider_unavailable", "budget_exhausted"])(
+    "accepts the retrieval failure %s, which is never a missing result",
+    (code) => {
+      const body = { error: { code, message: "Search is unavailable." } };
+      expect(ErrorResponseSchema.safeParse(body).success).toBe(true);
+    },
+  );
+
   it("rejects a code outside the documented list", () => {
     expect(
       ErrorResponseSchema.safeParse({ error: { code: "teapot", message: "I am a teapot." } })

@@ -132,7 +132,10 @@ function changesOf(
 }
 
 export interface AppDependencies {
-  readonly services: Pick<Services, "profile" | "apiKeys" | "media" | "roadmap" | "audit">;
+  readonly services: Pick<
+    Services,
+    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "knowledge"
+  >;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;

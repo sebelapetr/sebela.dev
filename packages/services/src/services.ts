@@ -13,6 +13,11 @@ import {
   type MediaService,
   unconfiguredMedia,
 } from "./modules/media/index.js";
+import {
+  createKnowledgeService,
+  type KnowledgeService,
+  type KnowledgeServiceOptions,
+} from "./modules/retrieval/index.js";
 import { createProfileService, type ProfileService } from "./modules/profile/index.js";
 import { createRoadmapService, type RoadmapService } from "./modules/roadmap/index.js";
 import { createSeedService, type SeedService } from "./modules/seed/index.js";
@@ -27,6 +32,8 @@ export interface Services {
   readonly media: MediaService;
   /** Content writes with their audit in one transaction, and the newest changes. */
   readonly audit: AuditService;
+  /** Indexing and searching the public portfolio; private, server-side only. */
+  readonly knowledge: KnowledgeService;
   /** Loads a seed folder through the services above; needs media to be configured. */
   readonly seed: SeedService;
   /** Ends the connection pool. Call once, at shutdown. */
@@ -44,6 +51,11 @@ export interface ServicesOptions {
     /** Called for a stored file that could not be removed; log the key, never file contents. */
     onCleanupFailure(failure: CleanupFailure): void;
   };
+  /**
+   * Retrieval settings and the embedding provider. Without them every knowledge operation that
+   * needs the provider fails as unavailable.
+   */
+  readonly retrieval?: KnowledgeServiceOptions;
 }
 
 const unconfigured = (): never => {
@@ -73,9 +85,15 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
             media.onCleanupFailure(failure);
           },
         };
+  const profile = createProfileService(persistence.profile, profileOptions);
+  const roadmap = createRoadmapService(persistence.roadmap, profileOptions);
   return {
-    profile: createProfileService(persistence.profile, profileOptions),
-    roadmap: createRoadmapService(persistence.roadmap, profileOptions),
+    profile,
+    roadmap,
+    knowledge: createKnowledgeService(
+      { store: persistence.retrieval, profile, roadmap },
+      options.retrieval ?? { config: null },
+    ),
     apiKeys: createApiKeyService(persistence.apiKeys, options.apiKeys),
     media:
       mediaOptions === undefined

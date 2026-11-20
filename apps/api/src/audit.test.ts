@@ -30,6 +30,12 @@ const KEY_NAME = "audit routes";
 const topic = { slug: "agents", name: "Agents", position: 0 };
 
 /**
+ * The reviewed routes that take a body through a write method but change no content: a search
+ * whose query is too large for an address. They are never audited and never announced.
+ */
+const READ_ONLY = new Set(["POST /v1/retrieval/search"]);
+
+/**
  * The mutations a Hono app answers that no audited route accounts for: every route registered for
  * a write method, or for every method, that is not a write route the API documents as audited. The
  * catch-all 404 and the middleware every request passes are the reviewed exceptions.
@@ -40,7 +46,7 @@ function unauditedMutations(api: Api): string[] {
       .filter((route) => route.method !== "GET" && route.audit !== null)
       .map((route) => `${route.method} ${route.path}`),
   );
-  const reviewed = new Set(["ALL *", "ALL /*"]);
+  const reviewed = new Set(["ALL *", "ALL /*", ...READ_ONLY]);
   const found = new Set<string>();
   for (const { method, path } of api.app.routes) {
     if (method === "GET" || method === "HEAD" || method === "OPTIONS") continue;
@@ -429,9 +435,15 @@ describe("the content audit", () => {
     const api = backend.api();
 
     for (const route of api.routes) {
-      if (route.method === "GET") expect(route.audit, route.path).toBeNull();
-      else expect(route.audit, `${route.method} ${route.path}`).not.toBeNull();
+      const name = `${route.method} ${route.path}`;
+      if (route.method === "GET" || READ_ONLY.has(name)) expect(route.audit, name).toBeNull();
+      else expect(route.audit, name).not.toBeNull();
     }
+    expect(
+      api.routes
+        .filter((route) => route.method !== "GET" && route.audit === null)
+        .map((route) => `${route.method} ${route.path}`),
+    ).toEqual([...READ_ONLY]);
     expect(unauditedMutations(api)).toEqual([]);
 
     api.app.post("/v1/unaudited", (c) => c.body(null, 204));

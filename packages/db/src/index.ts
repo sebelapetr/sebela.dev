@@ -9,6 +9,19 @@ export type {
   ApiKeyMetadata,
   ApiKeyPersistence,
 } from "./modules/api-keys/index.js";
+export type {
+  RetrievalChunkRecord,
+  RetrievalIndexedSource,
+  RetrievalNearestChunk,
+  RetrievalNearestQuery,
+  RetrievalPersistence,
+  RetrievalSectionRecord,
+  RetrievalSourceKind,
+  RetrievalSourceVersion,
+  RetrievalUsageOperation,
+  RetrievalUsageRecord,
+  RetrievalUsageTotals,
+} from "./modules/retrieval/index.js";
 export type { AuditEntryInput, AuditEntryRecord, AuditPersistence } from "./modules/audit/index.js";
 export type {
   CaseStudyFields,

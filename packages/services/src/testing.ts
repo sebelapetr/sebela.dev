@@ -95,3 +95,6 @@ export function samplePdf(): Buffer {
     "latin1",
   );
 }
+
+export { createFakeEmbedder } from "@sebela/memory";
+export type { FakeEmbedderOptions } from "@sebela/memory";
