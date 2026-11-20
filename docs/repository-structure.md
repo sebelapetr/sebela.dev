@@ -40,7 +40,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
 │   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy and the image-content check — plain Node, no dependencies [1, 2, 10]
-│   └── release/             the release decisions: affected services, images to build and reuse, with fixtures [10]
+│   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version and release notes; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase
 ├── .claude/
@@ -48,11 +48,12 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
-├── .github/workflows/       CI and the image release [1, 10]
+├── .github/workflows/       CI, the image release and the deployment [1, 10]
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
 ├── infra/                   production definition, see infra/README.md [10]
 │   ├── production/          Compose production overrides and the production example settings
-│   └── nginx/               reference configuration of the server's nginx site
+│   ├── nginx/               reference configuration of the server's nginx site
+│   └── scripts/             server scripts: deploy.sh, the deployment and rollback run as the deploy user's forced SSH command
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
 ├── pnpm-lock.yaml           committed lockfile [1]

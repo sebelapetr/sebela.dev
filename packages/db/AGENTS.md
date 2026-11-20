@@ -33,6 +33,7 @@ Files outside modules: `config.ts` (environment validation), `connection.ts` (th
 - What drizzle-kit cannot express (the exclusion constraint `time_entries_do_not_overlap`) is appended by hand, with a comment, to the newly generated migration before it is committed, and its name is a constant in `schema.ts`. drizzle-kit does not see it, so it never generates a statement that drops it.
 - Apply: `pnpm --filter @sebela/db db:migrate`. It builds the package and runs `dist/cli/migrate.js` with the settings of the process environment, then `.env.local`, `.env` and `.env.example` of the checkout (the earlier source wins). It migrates an empty database and does nothing on an up-to-date one. The API never runs migrations when it starts. In the container stack of the main checkout the same `dist/cli/migrate.js` is the one-off service `migrate` of `compose.yaml`, which the API waits for (`apps/api/AGENTS.md`, "Container stack"); the image therefore carries `migrations/` and `seed/demo/` beside `dist/`.
 - Each domain gets its own PostgreSQL schema (`profile`, `auth`, `ai_roadmap`). Drizzle records applied migrations in the `drizzle` schema.
+- Every migration keeps the previous release working, because a rollback or a failed deployment runs it on the new schema: expand first, contract in a later release. The reviewer checks this on every migration (`docs/release-workflow.md`, Migration compatibility rule).
 
 ## Adding an entity end to end
 
