@@ -55,7 +55,7 @@ All issues carry the labels `phase:00-trial` and `trial`.
 
 - The owner inspects the phase pull request and the individual issue pull requests, then closes the phase pull request without merging.
 - The phase branch is deleted; issues stay closed with the `trial` label as a visible record of the dry run.
-- A short result is written to `.plan/00-trial/result.md`: what worked, what failed, what was changed in the harness because of it.
+- A short result is written to `.plan/done/00-trial/result.md`: what worked, what failed, what was changed in the harness because of it.
 - Fixes to the harness are made on `phase/00-overview`. If a fix is substantial, the trial is run again.
 - When the trial has passed, the phase 0 pull request to the main branch is opened for the owner.
 

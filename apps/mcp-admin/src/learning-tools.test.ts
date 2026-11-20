@@ -1,5 +1,5 @@
 // The learning task tools in-process, against the fake content API: the deterministic cases of
-// .plan/05-mcp-admin/security.md for slice S03 that need no real API (D08, D10–D13, D15, D16, D20).
+// .plan/done/05-mcp-admin/security.md for slice S03 that need no real API (D08, D10–D13, D15, D16, D20).
 // A session's atomic write and its audit are proven against the real API in the API's own tests.
 import type { Client } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vitest";

@@ -85,7 +85,7 @@ For each issue of a phase:
 8. When CI is green, the orchestrator squash-merges it into the phase branch. The issue closes.
 9. The orchestrator runs the docs-keeper on the merged change and removes the worktree.
 
-When no ready issue of the phase remains, the orchestrator opens the phase pull request to the phase's base branch — `master`, except for the trial — as a draft, and stops. HITL issues may still be open then. When the phase is complete, the owner marks the pull request ready for review, which runs the model evals of the affected suites once on the final state (`docs/testing.md`), and merges it when they pass.
+When no ready issue of the phase remains, the orchestrator archives the phase's plan (it moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, once, through a short-lived branch merged into the phase branch), opens the phase pull request to the phase's base branch — `master`, except for the trial — as a draft, and stops. HITL issues may still be open then. When the phase is complete, the owner marks the pull request ready for review, which runs the model evals of the affected suites once on the final state (`docs/testing.md`), and merges it when they pass.
 
 ## The phase loop
 

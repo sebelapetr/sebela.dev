@@ -1,4 +1,4 @@
-// The site's own words for the three kinds of work (.plan/03-web/prd.md, Homepage): no profile
+// The site's own words for the three kinds of work (.plan/done/03-web/prd.md, Homepage): no profile
 // record holds them. They describe kinds of work only, never results, numbers or clients, and the
 // AI engineering column says it is the current focus rather than a delivered track record.
 const AREAS = [

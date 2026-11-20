@@ -18,7 +18,7 @@
 // another option stops the runner before any setting is read, fixture started or model called.
 //
 // The model is pinned: Claude Sonnet 5.5 at medium effort with prompt caching
-// (`promptfooconfig.yaml`, the owner's decision in .plan/05-mcp-admin/evals.md). Every case-run
+// (`promptfooconfig.yaml`, the owner's decision in .plan/done/05-mcp-admin/evals.md). Every case-run
 // keeps its answer and executed tool calls in the run folder's `answers/` (local, git-ignored,
 // written only after the credential scan found nothing), so a grader fix is checked with
 // `--regrade` instead of a new paid run. The redacted `summary.json` never holds them.

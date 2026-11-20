@@ -122,7 +122,7 @@ Delivery runs from phase 10 onwards on sebela.dev; the public launch with real d
 
 ## Phases
 
-Folder names below are the `.plan/` folders. Each phase has its own PRD — all of them are written before implementation starts — and gets its own set of GitHub issues when its turn comes.
+Folder names below are the `.plan/` folders; a phase merged into `master` is archived in `.plan/done/` by its phase pull request. Each phase has its own PRD — all of them are written before implementation starts — and gets its own set of GitHub issues when its turn comes.
 
 Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1–10 to the first public release, then phases 11–13 as separate improvements. Each phase is processed by the loop and merged by the owner.
 

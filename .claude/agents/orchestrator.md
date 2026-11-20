@@ -34,7 +34,7 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 
 ## When the phase is done
 
-When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists; never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
+When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists. Before opening it the first time, archive the phase's plan: on a short-lived branch `chore/<phase>-plan-done` from the phase branch, `git mv .plan/<phase> .plan/done/<phase>`, update every reference to the old path (`git grep`), commit (`docs(plan): archive the <phase> plan`) and squash-merge it into the phase branch; skip this when the folder is already in `.plan/done/`. A plan folder may therefore be at `.plan/<phase>/` or `.plan/done/<phase>/`. never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
 
 ## When an issue fails
 

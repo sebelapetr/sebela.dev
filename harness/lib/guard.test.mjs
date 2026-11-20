@@ -25,7 +25,7 @@ test("editing app code inside a worktree is allowed", () => {
 
 test("editing docs, plans and agent configuration in the main checkout is allowed", () => {
   assert.equal(call("Edit", { file_path: "/repo/docs/testing.md" }), null);
-  assert.equal(call("Write", { file_path: "/repo/.plan/03-web/prd.md" }), null);
+  assert.equal(call("Write", { file_path: "/repo/.plan/done/03-web/prd.md" }), null);
   assert.equal(call("Edit", { file_path: "/repo/.claude/agents/reviewer.md" }), null);
 });
 
