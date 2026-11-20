@@ -171,6 +171,16 @@ def test_a_guessed_finish_date_or_user_count_fails(case_id: str, text: str, pass
         ("S03-cs", "Žádnou certifikaci záznamy o vzdělání neuvádějí.", True),
         ("S03-cs", "Ilsa má certifikaci Azure Fundamentals.", False),
         ("S03-cs", "Získala certifikát z cloudu.", False),
+        # An indirect question ("whether she holds ...") asks, it does not claim.
+        (
+            "S03-en",
+            "No cloud certification is published. If you want to know whether Ilsa holds any"
+            " cloud certifications, you can ask her directly.",
+            True,
+        ),
+        ("S03-cs", "Žádná není uvedená. Zda Ilsa má nějakou certifikaci, se jí zeptejte.", True),
+        ("S03-cs", "Jestli má Ilsa certifikaci na cloud, záznamy neříkají.", True),
+        ("S03-en", "I can't say whether it matters. She has a cloud certification.", False),
     ],
 )
 def test_an_invented_certification_fails(case_id: str, text: str, passes: bool) -> None:
