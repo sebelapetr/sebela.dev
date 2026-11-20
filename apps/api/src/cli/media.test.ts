@@ -22,6 +22,11 @@ function capture() {
   };
 }
 
+// The API's address comes from the environment the Vitest configuration loads; the requests never
+// leave the process, because the context's fetch hands them to the API app directly.
+const apiPort = process.env["API_PORT"] ?? "";
+const mediaUrl = `http://api.example.test:${apiPort}/v1/media`;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The last printed line: the stored media id, so the owner can copy it alone. */
@@ -57,7 +62,7 @@ function context(overrides: Partial<MediaCommandContext> = {}): MediaCommandCont
     env: {
       SEBELA_ADMIN_API_KEY: key,
       API_HOST: "api.example.test",
-      API_PORT: "4100",
+      API_PORT: apiPort,
       MEDIA_MAX_BYTES: String(64 * 1024),
       MEDIA_MAX_IMAGE_DIMENSION: "2000",
     },
@@ -85,9 +90,7 @@ describe("media upload", () => {
     expect(code).toBe(0);
     const id = lastLine(io.out());
     expect(id).toMatch(UUID);
-    expect(requests).toEqual([
-      { url: "http://api.example.test:4100/v1/media", authorization: `Bearer ${key}` },
-    ]);
+    expect(requests).toEqual([{ url: mediaUrl, authorization: `Bearer ${key}` }]);
     const stored = await backend.services.media.getMedia(id);
     expect(stored).toMatchObject({
       id,
@@ -127,7 +130,7 @@ describe("media upload", () => {
 
     const code = await runMediaCommand(["upload", "portrait.png"], context({ env }), io.output);
 
-    expect(_port).toBe("4100");
+    expect(_port).toBe(apiPort);
     expect(code).toBe(1);
     expect(io.err()).toMatch(/API_PORT/);
     expect(requests).toEqual([]);
@@ -186,7 +189,7 @@ describe("media upload", () => {
     const code = await runMediaCommand(["upload", "portrait.png"], unreachable, io.output);
 
     expect(code).toBe(1);
-    expect(io.err()).toContain("http://api.example.test:4100/v1/media");
+    expect(io.err()).toContain(mediaUrl);
     expect(io.err()).not.toContain(key);
   });
 

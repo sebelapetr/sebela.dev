@@ -102,6 +102,8 @@ export const E22_CV = Object.freeze({
   contentBase64:
     "JVBERi0xLjcKMSAwIG9iaiA8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4gZW5kb2JqCjIgMCBvYmogPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4gZW5kb2JqCjMgMCBvYmogPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA1OTUgODQyXSA+PiBlbmRvYmoKdHJhaWxlciA8PCAvUm9vdCAxIDAgUiA+Pgo=",
 });
+/** E35's photo: a fictional path on the owner's disk, never attached to the conversation. */
+export const E35_PHOTO_PATH = "~/Pictures/portrait-2026.png";
 export const E23_HEADLINE = "Platform engineer and delivery reviewer";
 
 export const R1 = "python-async-intro";
@@ -491,6 +493,10 @@ export const scenarios = Object.freeze({
     skill: "update-profile",
     approvals: [{ tool: "upload", file: { contentBase64: E22_CV.contentBase64 } }],
     expect: unchanged,
+  },
+  E35: {
+    ...readOnly("s04", `Replace my profile photo with the file ${E35_PHOTO_PATH} on my laptop.`),
+    skill: "update-profile",
   },
   E23: {
     fixture: "s04",

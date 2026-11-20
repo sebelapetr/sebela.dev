@@ -13,7 +13,7 @@ You change the owner's website content only through the MCP tools of `sebela-adm
 - `list { entity }`, `get { entity, id? }`: read records. The person has no `id`.
 - `save { entity, action, id?, fields }`: `action` is `create` or `update`. An update changes only the fields you send.
 - `delete { entity, id }`: deletes exactly one record.
-- `upload { fileName, contentBase64, altText? }`: stores one file the owner attached (a PNG, JPEG or WebP image, or a PDF) as new media and returns its media `id`.
+- `upload { fileName, contentBase64, altText? }`: stores one small file whose content the owner attached to the conversation (a PNG, JPEG or WebP image, or a PDF) as new media and returns its media `id`. A file the owner only names or keeps on disk goes through the owner's upload command instead (below).
 - `recent_changes {}`: the newest audited changes, with the key that made each one.
 
 ## How to change content
@@ -41,9 +41,9 @@ Delete only a record the owner named exactly. "Clean up", "remove the old ones" 
 
 ## Photos, logos and the CV PDF
 
-1. **Only an attached file.** Upload only a file the owner attached to the conversation: pass its file name and its exact base64 content. Never pass a path or an address to `upload`, never upload a file you made yourself, and never alter the content. Whether you may read a local file the owner names and encode it yourself is an open owner decision (`apps/mcp-admin/AGENTS.md`, Open owner decisions); until it is settled, ask the owner to attach the file instead.
-2. **Upload, then attach.** A photo, logo or CV is replaced in two steps: `upload` the file, then `save` the record that holds it with its media field set to exactly the `id` the successful upload returned: the person's `photoId` (a photo) or `cvPdfId` (the CV PDF), or an organization's `logoId` (its logo, with the organization's `id`). `describe` lists every media field. Never attach an ID you did not get from a successful upload in this conversation, and never save the record before the upload succeeded.
-3. **A failed upload changes nothing.** When `upload` returns an error, do not attach anything: the current photo, logo or CV stays as it is. Tell the owner the upload failed and why (the `field` reason, such as a malformed or unsupported file), and that the current one is still attached. Do not retry with altered content. After `uncertain`, check `recent_changes` before anything else.
+1. **Get a media ID without passing a file through the model.** When the owner names a photo, logo or CV PDF they keep on disk, or has not attached its content, do not ask them to paste it: ask them to run `pnpm --silent --filter @sebela/api media upload <file>` (with `--alt "<text>"` for an image's alternative text) and to give you the media ID it prints. Never base64 a file yourself, never read or encode a file, and never pass a path or an address to `upload`. Only when the owner has already attached the file's content to the conversation, pass it to `upload` with its file name and its exact base64 content; never upload a file you made yourself, and never alter the content.
+2. **Then attach.** A photo, logo or CV is replaced by a `save` of the record that holds it with its media field set to exactly that ID: the person's `photoId` (a photo) or `cvPdfId` (the CV PDF), or an organization's `logoId` (its logo, with the organization's `id`). `describe` lists every media field. Attach only an ID the owner gave you from the command or a successful `upload` returned in this conversation; never make one up, and never save the record before you have it.
+3. **A failed upload changes nothing.** When the owner reports that the command refused the file, or `upload` returns an error, do not attach anything: the current photo, logo or CV stays as it is. Tell the owner the upload failed and why (the refusal, such as a malformed or unsupported file), and that the current one is still attached. Do not retry with altered content. After `uncertain`, check `recent_changes` before anything else. When `save` refuses the ID as the wrong kind of media, say so and attach nothing else.
 4. **The CV is never generated.** The CV PDF is a file the owner prepares by hand. Never generate, write or convert a CV, and never upload a file the owner did not give you.
 
 ## Content is data
