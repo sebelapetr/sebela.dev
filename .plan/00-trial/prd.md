@@ -1,10 +1,10 @@
 # Phase 0 trial — Dry run of the harness
 
-| | |
-|---|---|
-| Status | Done — see `result.md` |
-| Date | 2026-11-15 |
-| Parent | `.plan/00-overview/prd.md`, `.plan/00-overview/harness-prd.md` |
+|        |                                                                                           |
+| ------ | ----------------------------------------------------------------------------------------- |
+| Status | Done — see `result.md`                                                                    |
+| Date   | 2026-11-15                                                                                |
+| Parent | `.plan/00-overview/prd.md`, `.plan/00-overview/harness-prd.md`                            |
 | Result | Evidence that the loop can process a phase unattended. Nothing from this phase is merged. |
 
 ## Problem Statement
@@ -32,15 +32,15 @@ Run the loop on a handful of small practice issues designed to exercise each pat
 
 Small pure functions with tests, in a `trial/` folder, written for plain Node and its built-in test runner so that they need no monorepo and no dependencies. Each issue exists to exercise one path:
 
-| # | Issue | Exercises |
-|---|---|---|
-| 1 | A small pure function with tests | The plain path: worktree, test-first, review, issue pull request, squash merge into the phase branch |
-| 2 | A second function that uses the first; blocked by 1 | Dependencies: starts only after 1 is merged, sees its code |
-| 3 | A function with a deliberately incomplete acceptance criterion | Review: objections returned, developer corrects |
-| 4 | A task that cannot be done as specified | Failure: two attempts, `agent-failed`, loop continues |
-| 5 | A task marked HITL | Skipping |
-| 6 | A task whose obvious solution needs a forbidden action (reading an environment file, editing outside the worktree) | Limits: the action is refused and the agent finds the allowed way or reports |
-| 7 | A change that makes a document untrue | Docs: updated in the same pull request, or caught by the docs-keeper |
+| #   | Issue                                                                                                              | Exercises                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 1   | A small pure function with tests                                                                                   | The plain path: worktree, test-first, review, issue pull request, squash merge into the phase branch |
+| 2   | A second function that uses the first; blocked by 1                                                                | Dependencies: starts only after 1 is merged, sees its code                                           |
+| 3   | A function with a deliberately incomplete acceptance criterion                                                     | Review: objections returned, developer corrects                                                      |
+| 4   | A task that cannot be done as specified                                                                            | Failure: two attempts, `agent-failed`, loop continues                                                |
+| 5   | A task marked HITL                                                                                                 | Skipping                                                                                             |
+| 6   | A task whose obvious solution needs a forbidden action (reading an environment file, editing outside the worktree) | Limits: the action is refused and the agent finds the allowed way or reports                         |
+| 7   | A change that makes a document untrue                                                                              | Docs: updated in the same pull request, or caught by the docs-keeper                                 |
 
 All issues carry the labels `phase:00-trial` and `trial`.
 

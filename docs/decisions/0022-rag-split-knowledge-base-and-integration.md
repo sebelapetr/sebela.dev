@@ -7,6 +7,7 @@ Date: 2026-11-20
 
 - Phase 9 builds the knowledge base only: ingest, private originals, approval, chunking, embeddings, index, measured retrieval and an authenticated private search route, all in the TypeScript API backend. It depends on phases 2 and 4, not on 6, 7 or 8, and runs in a second phase loop alongside phase 7.
 - Phase 9.1 connects it after phases 7, 8 and 9: public search with retrieval and overall-AI budget admission on phase 7's ledger, the agent's `search_knowledge` tool and skill, public MCP search and the supplemental-source Sources contract.
+- Phase 9.2 follows with BM25 ranking inside Postgres and parent-child/neighbour retrieval, which phase 9's data model prepares for. It does not block phase 10.
 - The agent reaches retrieval through a tool that calls the API over HTTP, like its other reads. It decides when to search; retrieval is not run before every answer.
 - The initial embeddings model is Voyage AI `voyage-4`, behind the replaceable embedder of 0010. Phase 9 evals use no LLM judge, need no owner stop inside the loop and have a USD 3 cap.
 

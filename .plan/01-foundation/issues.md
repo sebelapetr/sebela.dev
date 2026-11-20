@@ -6,15 +6,15 @@ Published on 2026-11-15. All issues are AFK and carry `phase:01-foundation`, `af
 
 Prerequisite: phase 0 must be merged into `master`, including the passed trial and its harness fixes, before this phase starts.
 
-| Issue | Title | Type | Blocked by | Phase 1 user stories |
-| --- | --- | --- | --- | --- |
-| [#15](https://github.com/sebelapetr/sebela.dev/issues/15) | Bootstrap the monorepo with shared tooling and passing CI | AFK | None | 1, 2, 10 |
-| [#16](https://github.com/sebelapetr/sebela.dev/issues/16) | Enforce repository import boundaries through lint | AFK | [#15](https://github.com/sebelapetr/sebela.dev/issues/15) | 8 |
-| [#17](https://github.com/sebelapetr/sebela.dev/issues/17) | Reject hard-coded runtime endpoints and database names | AFK | [#15](https://github.com/sebelapetr/sebela.dev/issues/15) | 9 |
-| [#18](https://github.com/sebelapetr/sebela.dev/issues/18) | Start Postgres and isolate each worktree in its own database | AFK | [#15](https://github.com/sebelapetr/sebela.dev/issues/15), [#17](https://github.com/sebelapetr/sebela.dev/issues/17) | 1, 4, 5 |
-| [#19](https://github.com/sebelapetr/sebela.dev/issues/19) | Apply formatting and quality checks at developer handoffs | AFK | [#15](https://github.com/sebelapetr/sebela.dev/issues/15), [#16](https://github.com/sebelapetr/sebela.dev/issues/16), [#17](https://github.com/sebelapetr/sebela.dev/issues/17) | 3, 6, 7, 10 |
-| [#20](https://github.com/sebelapetr/sebela.dev/issues/20) | Gate pull requests with the complete affected-task pipeline | AFK | [#16](https://github.com/sebelapetr/sebela.dev/issues/16), [#17](https://github.com/sebelapetr/sebela.dev/issues/17), [#18](https://github.com/sebelapetr/sebela.dev/issues/18), [#19](https://github.com/sebelapetr/sebela.dev/issues/19) | 2, 3 |
-| [#21](https://github.com/sebelapetr/sebela.dev/issues/21) | Document and verify the contributor setup from a clean checkout | AFK | [#20](https://github.com/sebelapetr/sebela.dev/issues/20) | 1, 11, 12 |
+| Issue                                                     | Title                                                           | Type | Blocked by                                                                                                                                                                                                                                 | Phase 1 user stories |
+| --------------------------------------------------------- | --------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| [#15](https://github.com/sebelapetr/sebela.dev/issues/15) | Bootstrap the monorepo with shared tooling and passing CI       | AFK  | None                                                                                                                                                                                                                                       | 1, 2, 10             |
+| [#16](https://github.com/sebelapetr/sebela.dev/issues/16) | Enforce repository import boundaries through lint               | AFK  | [#15](https://github.com/sebelapetr/sebela.dev/issues/15)                                                                                                                                                                                  | 8                    |
+| [#17](https://github.com/sebelapetr/sebela.dev/issues/17) | Reject hard-coded runtime endpoints and database names          | AFK  | [#15](https://github.com/sebelapetr/sebela.dev/issues/15)                                                                                                                                                                                  | 9                    |
+| [#18](https://github.com/sebelapetr/sebela.dev/issues/18) | Start Postgres and isolate each worktree in its own database    | AFK  | [#15](https://github.com/sebelapetr/sebela.dev/issues/15), [#17](https://github.com/sebelapetr/sebela.dev/issues/17)                                                                                                                       | 1, 4, 5              |
+| [#19](https://github.com/sebelapetr/sebela.dev/issues/19) | Apply formatting and quality checks at developer handoffs       | AFK  | [#15](https://github.com/sebelapetr/sebela.dev/issues/15), [#16](https://github.com/sebelapetr/sebela.dev/issues/16), [#17](https://github.com/sebelapetr/sebela.dev/issues/17)                                                            | 3, 6, 7, 10          |
+| [#20](https://github.com/sebelapetr/sebela.dev/issues/20) | Gate pull requests with the complete affected-task pipeline     | AFK  | [#16](https://github.com/sebelapetr/sebela.dev/issues/16), [#17](https://github.com/sebelapetr/sebela.dev/issues/17), [#18](https://github.com/sebelapetr/sebela.dev/issues/18), [#19](https://github.com/sebelapetr/sebela.dev/issues/19) | 2, 3                 |
+| [#21](https://github.com/sebelapetr/sebela.dev/issues/21) | Document and verify the contributor setup from a clean checkout | AFK  | [#20](https://github.com/sebelapetr/sebela.dev/issues/20)                                                                                                                                                                                  | 1, 11, 12            |
 
 ## Execution notes
 
@@ -25,7 +25,6 @@ Prerequisite: phase 0 must be merged into `master`, including the passed trial a
 - Read configuration through the process environment or an authorised runtime loader. Agents may read and edit `.env.local` only inside their assigned worktree, with the session running there, as permitted by the current root `AGENTS.md`; other environment files and the main checkout's environment files remain off limits. Use `.env.example` and command results where direct access is unnecessary.
 - A new behaviour or structure is documented in its own issue pull request. [#21](https://github.com/sebelapetr/sebela.dev/issues/21) verifies onboarding and updates the README; it is not a reason to defer earlier documentation updates.
 - No UI or AI work is included, so screenshots and model evals are not acceptance requirements for these issues.
-
 
 ## Running the phase
 
