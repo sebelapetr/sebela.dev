@@ -123,6 +123,14 @@ function steps(calls) {
 
 const ups = (calls) => calls.filter(({ args }) => args[0] === "compose" && args.includes("up"));
 
+/** The services a `compose up` call names; the migration is never one of them. */
+const LONG_RUNNING = ["postgres", "api", "web", "mcp-admin"];
+function assertStartsWithoutMigration(up) {
+  assert.ok(up.args.includes("--no-deps"), "up does not start dependencies such as migrate");
+  assert.deepEqual(up.args.slice(-LONG_RUNNING.length), LONG_RUNNING, "up names the services");
+  assert.equal(up.args.includes("migrate"), false, "up does not start the migration");
+}
+
 const MIGRATIONS = { [A]: ["0001_a.sql"], [B]: ["0001_a.sql"], [C]: ["0001_a.sql", "0002_c.sql"] };
 
 describe("input validation", () => {
@@ -221,6 +229,7 @@ describe("a deployment", () => {
       ["pull", "migrate", "up"],
     );
     const [up] = ups(result.calls);
+    assertStartsWithoutMigration(up);
     assert.deepEqual(up.tags, { api: B, web: A, "mcp-admin": B });
     assert.ok(up.args.includes("--wait"));
     assert.ok(up.args.includes("--detach"));
@@ -327,6 +336,7 @@ describe("rollback on failure", () => {
         { api: B, web: B, "mcp-admin": B },
       ],
     );
+    ups(result.calls).forEach(assertStartsWithoutMigration);
     assert.deepEqual(releases(), [line(A), line(B)], "the failed release is not recorded");
   });
 
@@ -374,6 +384,7 @@ describe("the rollback command", () => {
         ups(result.calls).map(({ tags }) => tags),
         [{ api: B, web: B, "mcp-admin": B }],
       );
+      ups(result.calls).forEach(assertStartsWithoutMigration);
       assert.deepEqual(releases(), [line(A), line(B)]);
     });
   }
