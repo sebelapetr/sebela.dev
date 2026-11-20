@@ -23,6 +23,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 - `<type>` is a Conventional Commits type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 - An issue branch is cut from the phase branch and its pull request targets the phase branch.
+- A sub-phase `NN.M-<name>` (`.plan/00-overview/prd.md`, Phases) is a phase in every respect: branch `phase/NN.M-<name>`, label `phase:NN.M-<name>`, its own phase pull request.
 - Phase 0 (planning, docs, agent configuration and the harness) has no issues. It is done directly on `phase/00-overview` and reaches `master` through the same kind of phase pull request, after the trial has passed.
 - The trial is the one phase whose base is not `master`: `phase/00-trial` is cut from `phase/00-overview`, and its phase pull request targets that branch and is closed without merging.
 - Other work without an issue uses `<type>/<short-slug>`, for example `docs/fix-testing-guide`, and targets `master` through a pull request the owner merges.

@@ -124,6 +124,8 @@ Delivery runs from phase 10 onwards on sebela.dev; the public launch with real d
 
 Folder names below are the `.plan/` folders; a phase merged into `master` is archived in `.plan/done/` by its phase pull request. Each phase has its own PRD — all of them are written before implementation starts — and gets its own set of GitHub issues when its turn comes.
 
+A **sub-phase** `NN.M-<name>` (for example `09.1-rag-integration`, `07.1-jev-gateway`) holds independently deliverable work that builds on phase NN but should neither block nor bloat it: connecting a finished capability, improvements after measurement, or an experiment that swaps a component. It is a phase like any other — its own PRD, issues, label `phase:NN.M-<name>`, phase branch, phase pull request and archive in `.plan/done/` — listed in the table right after its parent and naming what it depends on. Work of a few issues that belongs to a running phase is added to that phase instead.
+
 Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1–10 to the first public release, then phases 11–13 as separate improvements. Each phase is processed by the loop and merged by the owner.
 
 | #   | Folder                 | Phase                           | Result                                                                                                       |
