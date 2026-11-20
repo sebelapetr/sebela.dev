@@ -125,7 +125,12 @@ use_set() {
   export MCP_ADMIN_IMAGE_TAG="${tags[mcp-admin]}"
 }
 
-start() { compose up --detach --wait --wait-timeout "$WAIT_TIMEOUT"; }
+# Starts the long-running services of the exported tag set and waits until they are healthy. They
+# are named, with --no-deps, so `up` never starts the one-off migration: a deployment runs it
+# exactly once, before this, and a rollback never runs it.
+start() {
+  compose up --detach --wait --wait-timeout "$WAIT_TIMEOUT" --no-deps postgres "${SERVICES[@]}"
+}
 
 # recorded <n>: the n-th last verified release (1 is the current one); empty when there is none.
 recorded() {

@@ -39,7 +39,9 @@ const state = path.join(dir, "state");
 const envFile = path.join(dir, "production.env");
 const backup = path.join(dir, "backup.sh");
 const backupLog = path.join(dir, "backups");
+const runs = path.join(dir, "runs");
 fs.mkdirSync(state);
+fs.mkdirSync(runs);
 fs.writeFileSync(envFile, "# The fixture composition needs no settings.\n");
 fs.writeFileSync(backup, `#!/bin/sh\necho backup >> "${backupLog}"\n`, { mode: 0o755 });
 
@@ -48,6 +50,7 @@ const environment = {
   COMPOSE_PROJECT_NAME: PROJECT,
   COMPOSE_FILE,
   DEPLOY_E2E_BASE_IMAGE: BASE_IMAGE,
+  DEPLOY_E2E_RUNS_DIR: runs,
   DEPLOY_REGISTRY: REGISTRY,
   DEPLOY_ENV_FILE: envFile,
   DEPLOY_STATE_DIR: state,
@@ -114,10 +117,11 @@ function running() {
 const all = (tag) => Object.fromEntries(SERVICES.map((service) => [service, tag]));
 const recorded = () =>
   fs.readFileSync(path.join(state, "releases"), "utf8").split("\n").filter(Boolean);
-const backups = () =>
-  fs.existsSync(backupLog)
-    ? fs.readFileSync(backupLog, "utf8").split("\n").filter(Boolean).length
-    : 0;
+const lines = (file) =>
+  fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n").filter(Boolean).length : 0;
+const backups = () => lines(backupLog);
+/** How often the migration has run so far. */
+const migrations = () => lines(path.join(runs, "migrations"));
 
 const exists = (image) =>
   spawnSync("docker", ["image", "inspect", image], { stdio: "ignore" }).status === 0;
@@ -136,6 +140,7 @@ try {
   assert.deepEqual(running(), all(RELEASES.first.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag)]);
   assert.equal(backups(), 1, "the first release was backed up");
+  assert.equal(migrations(), 1, "the first release migrated once");
 
   // The second release has the same migrations: no backup.
   commitRelease(RELEASES.second);
@@ -144,6 +149,7 @@ try {
   assert.deepEqual(running(), all(RELEASES.second.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag), line(RELEASES.second.tag)]);
   assert.equal(backups(), 1, "no backup without a new migration");
+  assert.equal(migrations(), 2, "the second release migrated once");
 
   // A deliberately unhealthy release ends with the second release running again.
   commitRelease(RELEASES.unhealthy);
@@ -152,6 +158,7 @@ try {
   assert.match(result.stderr, /previous release is running again/);
   assert.deepEqual(running(), all(RELEASES.second.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag), line(RELEASES.second.tag)]);
+  assert.equal(migrations(), 3, "the unhealthy release migrated once; its fallback did not");
 
   // A new migration without a backup script is refused before anything changes.
   commitRelease(RELEASES.migrating);
@@ -167,6 +174,7 @@ try {
   assert.equal(result.status, 0, "the rollback succeeds");
   assert.deepEqual(running(), all(RELEASES.first.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag)]);
+  assert.equal(migrations(), 3, "neither the refused release nor the rollback migrated");
   for (const service of SERVICES) {
     const image = `${REGISTRY}/sebela-${service}:${RELEASES.first.tag}`;
     assert.ok(exists(image), `${image} is kept`);

@@ -28,7 +28,11 @@ services:
 
   migrate:
     image: ${DEPLOY_REGISTRY:?set DEPLOY_REGISTRY}/sebela-api:${API_IMAGE_TAG:?set API_IMAGE_TAG}
-    command: ["ls", "/app/packages/db/migrations"]
+    # Lists the migrations and counts its own runs in the test's folder, so the test can check
+    # that a deployment migrates exactly once and a rollback never does.
+    command: ["sh", "-c", "ls /app/packages/db/migrations && echo run >> /runs/migrations"]
+    volumes:
+      - ${DEPLOY_E2E_RUNS_DIR:?set DEPLOY_E2E_RUNS_DIR}:/runs
     depends_on:
       postgres:
         condition: service_healthy
