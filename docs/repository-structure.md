@@ -149,6 +149,8 @@ A task with no package defining it, such as `build` before the first package wit
 - The root depends on `@sebela/config`, so a change to the shared configuration selects every package, its consumers included.
 - A base Turborepo cannot resolve in the checkout — a new branch, a rewritten history, a shallow clone — selects every package.
 
+- The root Python files (`uv.lock`, `.python-version` and the root `pyproject.toml`) belong to the root in Turborepo's view, so `--affected` does not select the Python member for them. CI adds a step after `pnpm ci:affected` that runs the lint, typecheck, test and build tasks of `@sebela/llm-agent` whenever one of them changed; locally, run `pnpm exec turbo run lint typecheck test build --filter=@sebela/llm-agent` after changing them.
+
 Root files that belong to no package (the harness, the repository checks, docs) select no package; the root tasks cover them, and CI runs those on every change (`pnpm ci:root`). `pnpm exec turbo query affected --packages` lists the selection with the reason for each package.
 
 ## Backend module layout
