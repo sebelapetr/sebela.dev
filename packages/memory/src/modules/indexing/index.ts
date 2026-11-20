@@ -9,6 +9,7 @@ import {
   type RetrievalConfig,
   type RetrievalStore,
   type UsageTotals,
+  type WorkCounts,
 } from "../ports/index.js";
 import { createSpend } from "../spend/index.js";
 
@@ -36,13 +37,51 @@ export interface IndexReport {
   readonly costUsd: number;
 }
 
+/** What one run over the queued work did. */
+export interface QueueReport extends IndexReport {
+  /** Queued items the run finished. */
+  readonly completed: number;
+  /** Work still queued after the run. */
+  readonly remaining: WorkCounts;
+}
+
+export interface ProcessOptions {
+  /** Most queued items one run takes; `workBatchLimit` when absent. */
+  readonly limit?: number;
+  /** Takes failed items too, as an explicit re-index does. */
+  readonly retryFailed?: boolean;
+}
+
+/** Failed runs after which a queued item waits for an explicit re-index. */
+export const maxWorkAttempts = 5;
+
+/** Most queued items one run takes by default. */
+export const workBatchLimit = 500;
+
 export interface Indexer {
   /**
    * Indexes the portfolio. Throws `BudgetExhaustedError` before a batch the ceiling no longer
    * allows and `ProviderUnavailableError` when the provider fails; sources stored before either
-   * stay stored, the rest stay as they were.
+   * stay stored, the rest stay as they were. Every vector the provider returned is kept, so a
+   * later run never embeds it again.
    */
   reindexPortfolio(snapshot: PortfolioSnapshot): Promise<IndexReport>;
+  /**
+   * Stores every portfolio source again from the snapshot, as after an embedding model or version
+   * change; vectors come from the embedding cache where it has them, so each text is embedded at
+   * most once per model. Fails like `reindexPortfolio`.
+   */
+  rebuildPortfolio(snapshot: PortfolioSnapshot): Promise<IndexReport>;
+  /**
+   * Takes the oldest queued items, reads the snapshot after them and reconciles the portfolio
+   * with it. Finished items are dropped. When the provider is unavailable each item counts a
+   * failed attempt (failed at `maxWorkAttempts`) and `ProviderUnavailableError` is thrown; at the
+   * ceiling `BudgetExhaustedError` is thrown and the items stay as they were.
+   */
+  processPending(
+    read: () => Promise<PortfolioSnapshot>,
+    options?: ProcessOptions,
+  ): Promise<QueueReport>;
   /** Recorded provider usage this calendar month (UTC). */
   usage(): Promise<UsageTotals>;
 }
@@ -124,7 +163,12 @@ export function createIndexer(options: IndexerOptions): Indexer {
     };
   }
 
-  return { reindexPortfolio, usage: () => spend.thisMonth() };
+  return {
+    reindexPortfolio,
+    rebuildPortfolio: () => Promise.reject(new Error("not implemented")),
+    processPending: () => Promise.reject(new Error("not implemented")),
+    usage: () => spend.thisMonth(),
+  };
 }
 
 function toVersion(

@@ -88,14 +88,20 @@ describe("retrieval persistence", () => {
 
   beforeEach(async () => {
     await connection.db.execute(
-      sql`TRUNCATE retrieval.sources, retrieval.provider_usage, retrieval.work_items CASCADE`,
+      sql`TRUNCATE retrieval.sources, retrieval.provider_usage, retrieval.work_items, retrieval.embeddings CASCADE`,
     );
   });
 
   it("stores a source version and reports it as indexed with its model", async () => {
     await retrieval.replaceSource(source("handbook"));
     expect(await retrieval.indexedSources()).toEqual([
-      { sourceId: "handbook", version: hash("handbook"), model: MODEL, modelVersion: "1" },
+      {
+        sourceId: "handbook",
+        version: hash("handbook"),
+        model: MODEL,
+        modelVersion: "1",
+        stale: false,
+      },
     ]);
   });
 
@@ -189,7 +195,7 @@ describe("retrieval persistence", () => {
     }
   });
 
-  it("replaces a source's chunks and reuses vectors by text hash", async () => {
+  it("replaces a source's chunks and keeps every stored vector by text hash", async () => {
     await retrieval.replaceSource(
       source("handbook", {
         texts: [
@@ -216,8 +222,9 @@ describe("retrieval persistence", () => {
       MODEL,
       "1",
     );
-    expect([...vectors.keys()]).toEqual([hash("Kept text")]);
+    expect([...vectors.keys()].sort()).toEqual([hash("Kept text"), hash("Old text")].sort());
     expect(vectors.get(hash("Kept text"))?.[4]).toBeCloseTo(1, 6);
+    expect(vectors.get(hash("Old text"))?.[3]).toBeCloseTo(1, 6);
     expect((await retrieval.vectorsByHash([hash("Kept text")], MODEL, "2")).size).toBe(0);
   });
 
@@ -262,5 +269,97 @@ describe("retrieval persistence", () => {
     expect(totals.byOperation.index.costUsd).toBeCloseTo(0.002, 10);
     expect(totals.byOperation.search.tokens).toBe(10);
     expect(totals.byOperation.candidates).toEqual({ tokens: 0, costUsd: 0 });
+  });
+
+  it("caches vectors per model version and keeps the first vector of a text", async () => {
+    await retrieval.storeVectors(new Map([[hash("Cached"), vector(5)]]), MODEL, "1");
+    await retrieval.storeVectors(new Map([[hash("Cached"), vector(6)]]), MODEL, "1");
+    await retrieval.storeVectors(new Map([[hash("Cached"), vector(7)]]), MODEL, "2");
+
+    const first = await retrieval.vectorsByHash([hash("Cached"), hash("Unknown")], MODEL, "1");
+    expect([...first.keys()]).toEqual([hash("Cached")]);
+    expect(first.get(hash("Cached"))?.[5]).toBeCloseTo(1, 6);
+    const second = await retrieval.vectorsByHash([hash("Cached")], MODEL, "2");
+    expect(second.get(hash("Cached"))?.[7]).toBeCloseTo(1, 6);
+    expect((await retrieval.vectorsByHash([hash("Cached")], "another-model", "1")).size).toBe(0);
+  });
+
+  it("removes and hides scheduled sources at once and queues their work", async () => {
+    await retrieval.replaceSource(source("deleted"));
+    await retrieval.replaceSource(source("changed"));
+    await retrieval.replaceSource(source("untouched"));
+
+    await retrieval.scheduleWork({
+      removeSourceIds: ["deleted"],
+      staleSourceIds: ["changed", "never-indexed"],
+      items: [
+        { sourceId: "deleted", operation: "remove" },
+        { sourceId: "changed", operation: "index" },
+      ],
+    });
+
+    const query = { vector: vector(0), model: MODEL, modelVersion: "1", limit: 10 };
+    expect((await retrieval.nearest(query)).map((chunk) => chunk.sourceId)).toEqual(["untouched"]);
+    expect(
+      (await retrieval.indexedSources()).map(({ sourceId, stale }) => ({ sourceId, stale })),
+    ).toEqual([
+      { sourceId: "changed", stale: true },
+      { sourceId: "untouched", stale: false },
+    ]);
+    const work = await retrieval.pendingWork(10, false);
+    expect(
+      work
+        .map(({ sourceId, operation, attempts, failed }) => [sourceId, operation, attempts, failed])
+        .sort(),
+    ).toEqual([
+      ["changed", "index", 0, false],
+      ["deleted", "remove", 0, false],
+    ]);
+    expect(await retrieval.workCounts()).toEqual({ pending: 2, failed: 0 });
+
+    await retrieval.replaceSource(source("changed", { version: hash("v2") }));
+    expect((await retrieval.nearest(query)).map((chunk) => chunk.sourceId).sort()).toEqual([
+      "changed",
+      "untouched",
+    ]);
+  });
+
+  it("takes the oldest work first, at most the limit, and drops finished items", async () => {
+    for (const sourceId of ["first", "second", "third"]) {
+      await retrieval.scheduleWork({
+        removeSourceIds: [],
+        staleSourceIds: [],
+        items: [{ sourceId, operation: "index" }],
+      });
+    }
+    const taken = await retrieval.pendingWork(2, false);
+    expect(taken.map((item) => item.sourceId)).toEqual(["first", "second"]);
+
+    await retrieval.completeWork(taken.map((item) => item.id));
+    expect((await retrieval.pendingWork(10, false)).map((item) => item.sourceId)).toEqual([
+      "third",
+    ]);
+    expect(await retrieval.workCounts()).toEqual({ pending: 1, failed: 0 });
+  });
+
+  it("counts failed attempts and fails an item at the most attempts", async () => {
+    await retrieval.scheduleWork({
+      removeSourceIds: [],
+      staleSourceIds: [],
+      items: [{ sourceId: "flaky", operation: "index" }],
+    });
+    const [item] = await retrieval.pendingWork(10, false);
+    if (item === undefined) throw new Error("No work was queued.");
+
+    await retrieval.failWork([item.id], "provider_unavailable", 2);
+    expect(await retrieval.pendingWork(10, false)).toMatchObject([
+      { id: item.id, attempts: 1, failed: false },
+    ]);
+    await retrieval.failWork([item.id], "provider_unavailable", 2);
+    expect(await retrieval.pendingWork(10, false)).toEqual([]);
+    expect(await retrieval.pendingWork(10, true)).toMatchObject([
+      { id: item.id, attempts: 2, failed: true },
+    ]);
+    expect(await retrieval.workCounts()).toEqual({ pending: 0, failed: 1 });
   });
 });

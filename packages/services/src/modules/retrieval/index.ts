@@ -2,6 +2,7 @@
 // public portfolio reads and the configured embedding provider.
 import {
   retrievalContentKinds,
+  type ContentChange,
   type RetrievalContentKind,
   type SearchRequest,
   type SearchResult,
@@ -17,10 +18,13 @@ import {
   type Embedder,
   type IndexReport,
   type PortfolioSnapshot,
+  type ProcessOptions,
+  type QueueReport,
   type CandidateQuestion,
   type RetrievalConfig,
   type RetrievalStore,
   type UsageTotals,
+  type WorkCounts,
 } from "@sebela/memory";
 
 import { DomainError } from "../../errors.js";
@@ -35,6 +39,23 @@ import type { RoadmapService } from "../roadmap/index.js";
 export interface KnowledgeService {
   /** Brings the index in step with the portfolio, embedding only what changed. */
   reindexPortfolio(): Promise<IndexReport>;
+  /**
+   * Stores every portfolio source again, as after an embedding model or version change; each text
+   * is embedded at most once per model, the rest comes from stored vectors.
+   */
+  rebuildPortfolio(): Promise<IndexReport>;
+  /**
+   * Queues indexing for committed content changes. A deleted record's passages leave search at
+   * once and a changed record's until it is indexed again. Needs no provider or settings.
+   */
+  schedule(changes: readonly ContentChange[]): Promise<void>;
+  /**
+   * Runs one bounded batch of queued work against the current portfolio. When the provider is
+   * unavailable the batch counts a failed attempt; at the ceiling it stays as it was.
+   */
+  processPending(options?: ProcessOptions): Promise<QueueReport>;
+  /** How much queued work waits, and how much gave up after the most attempts. */
+  pending(): Promise<WorkCounts>;
   /** The passages answering the query, or no evidence below the relevance floor. */
   search(request: SearchRequest): Promise<SearchResult>;
   /**
@@ -83,6 +104,10 @@ export function createKnowledgeService(
   return {
     reindexPortfolio: () =>
       provider(async () => ready().indexer.reindexPortfolio(await snapshot(sources))),
+    rebuildPortfolio: () => Promise.reject(new Error("not implemented")),
+    schedule: () => Promise.reject(new Error("not implemented")),
+    processPending: () => Promise.reject(new Error("not implemented")),
+    pending: () => Promise.reject(new Error("not implemented")),
     search: (request) => provider(() => ready().retriever.search(request)),
     candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
@@ -140,6 +165,8 @@ function narrowStore(persistence: RetrievalPersistence): RetrievalStore {
     indexedSources: () => persistence.indexedSources(),
     vectorsByHash: (hashes, model, modelVersion) =>
       persistence.vectorsByHash(hashes, model, modelVersion),
+    storeVectors: (vectors, model, modelVersion) =>
+      persistence.storeVectors(vectors, model, modelVersion),
     replaceSource: (source) => persistence.replaceSource(source),
     removeSourcesExcept: (sourceKind, sourceIds) =>
       persistence.removeSourcesExcept(sourceKind, sourceIds),
@@ -150,6 +177,11 @@ function narrowStore(persistence: RetrievalPersistence): RetrievalStore {
         ...chunk,
         contentKind: contentKindOf(chunk.contentKind),
       })),
+    scheduleWork: (work) => persistence.scheduleWork(work),
+    pendingWork: (limit, includeFailed) => persistence.pendingWork(limit, includeFailed),
+    completeWork: (ids) => persistence.completeWork(ids),
+    failWork: (ids, error, maxAttempts) => persistence.failWork(ids, error, maxAttempts),
+    workCounts: () => persistence.workCounts(),
   };
 }
 

@@ -75,6 +75,28 @@ describe("the knowledge command", () => {
     expect(second.json()).toMatchObject({ updated: 0, embedded: 0, tokens: 0, costUsd: 0 });
   });
 
+  it("works through queued work on demand and reports what is still queued", async () => {
+    await backend.services.knowledge.schedule([
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+    ]);
+    const queued = await run(["pending"]);
+    expect(queued.code).toBe(0);
+    expect(queued.json()).toEqual({ pending: 1, failed: 0 });
+
+    const processed = await run(["reindex"]);
+    expect(processed.code).toBe(0);
+    expect(processed.json()).toMatchObject({ completed: 1, remaining: { pending: 0, failed: 0 } });
+    expect((await run(["pending"])).json()).toEqual({ pending: 0, failed: 0 });
+  });
+
+  it("rebuilds the portfolio from the embedding cache without embedding again", async () => {
+    const { code, json } = await run(["rebuild"]);
+    expect(code).toBe(0);
+    const report = json() as { sources: number; updated: number; embedded: number };
+    expect(report.updated).toBe(report.sources);
+    expect(report.embedded).toBe(0);
+  });
+
   it("prints each question's candidate pool by its ID", async () => {
     const questions = join(folder, "questions.json");
     await writeFile(
@@ -107,7 +129,14 @@ describe("the knowledge command", () => {
     // The status class tells a rate limit from an outage; nothing else of the answer is printed.
     expect(unavailable.err()).toContain("HTTP 429 (4xx, rate limited)");
 
-    for (const args of [[], ["unknown"], ["candidates"], ["usage", "extra"]]) {
+    for (const args of [
+      [],
+      ["unknown"],
+      ["candidates"],
+      ["usage", "extra"],
+      ["rebuild", "x"],
+      ["pending", "x"],
+    ]) {
       const { code, err } = await run(args);
       expect(code, args.join(" ")).toBe(2);
       expect(err()).toMatch(/^Usage: knowledge/);

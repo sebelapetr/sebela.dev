@@ -387,6 +387,10 @@ const describingAudit: AuditService = {
 /** A knowledge service for describing routes; describing never calls it. */
 const describingKnowledge: KnowledgeService = {
   reindexPortfolio: documentationOnly,
+  rebuildPortfolio: documentationOnly,
+  schedule: documentationOnly,
+  processPending: documentationOnly,
+  pending: documentationOnly,
   search: documentationOnly,
   candidates: documentationOnly,
   usage: documentationOnly,

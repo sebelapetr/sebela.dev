@@ -22,14 +22,25 @@ export type {
   UsageOperation,
   UsageRecord,
   UsageTotals,
+  ScheduledWork,
+  WorkCounts,
+  WorkItem,
+  WorkOperation,
 } from "./modules/ports/index.js";
+export { scheduleChanges } from "./modules/scheduling/index.js";
 export {
   createFakeEmbedder,
   createVoyageEmbedder,
   fakeEmbeddingModel,
 } from "./modules/providers/index.js";
 export type { FakeEmbedderOptions, VoyageEmbedderOptions } from "./modules/providers/index.js";
-export { createIndexer } from "./modules/indexing/index.js";
-export type { IndexReport, Indexer, IndexerOptions } from "./modules/indexing/index.js";
+export { createIndexer, maxWorkAttempts, workBatchLimit } from "./modules/indexing/index.js";
+export type {
+  IndexReport,
+  Indexer,
+  IndexerOptions,
+  ProcessOptions,
+  QueueReport,
+} from "./modules/indexing/index.js";
 export { createRetriever } from "./modules/retrieval/index.js";
 export type { CandidateQuestion, Retriever, RetrieverOptions } from "./modules/retrieval/index.js";

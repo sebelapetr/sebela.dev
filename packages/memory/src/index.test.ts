@@ -6,6 +6,8 @@ import {
   ProviderUnavailableError,
   createFakeEmbedder,
   createIndexer,
+  maxWorkAttempts,
+  scheduleChanges,
   createRetriever,
   type Embedder,
   type IndexedSource,
@@ -18,6 +20,7 @@ import {
   type SourceVersion,
   type UsageRecord,
   type UsageTotals,
+  type WorkItem,
 } from "./index.js";
 
 // The knowledge base through its package interface, over an in-memory store and the fake
@@ -159,7 +162,13 @@ const cosine = (a: readonly number[], b: readonly number[]) => {
 /** An in-memory `RetrievalStore` with the same observable behaviour as the Postgres one. */
 function memoryStore() {
   const sources = new Map<string, SourceVersion>();
+  const stale = new Set<string>();
+  const cache = new Map<string, readonly number[]>();
   const usage: UsageRecord[] = [];
+  const work: (WorkItem & { error: string | null })[] = [];
+  let nextId = 0;
+  const cacheKey = (hash: string, model: string, modelVersion: string) =>
+    `${model}\u0000${modelVersion}\u0000${hash}`;
   const store: RetrievalStore = {
     indexedSources: () =>
       Promise.resolve(
@@ -168,20 +177,31 @@ function memoryStore() {
           version: source.version,
           model: source.model,
           modelVersion: source.modelVersion,
+          stale: stale.has(source.sourceId),
         })),
       ),
     vectorsByHash: (hashes, model, modelVersion) => {
       const found = new Map<string, readonly number[]>();
-      for (const source of sources.values()) {
-        if (source.model !== model || source.modelVersion !== modelVersion) continue;
-        for (const chunk of source.chunks) {
-          if (hashes.includes(chunk.textHash)) found.set(chunk.textHash, chunk.vector);
-        }
+      for (const hash of hashes) {
+        const vector = cache.get(cacheKey(hash, model, modelVersion));
+        if (vector !== undefined) found.set(hash, vector);
       }
       return Promise.resolve(found);
     },
+    storeVectors: (vectors, model, modelVersion) => {
+      for (const [hash, vector] of vectors) {
+        const key = cacheKey(hash, model, modelVersion);
+        if (!cache.has(key)) cache.set(key, vector);
+      }
+      return Promise.resolve();
+    },
     replaceSource: (source) => {
       sources.set(source.sourceId, source);
+      stale.delete(source.sourceId);
+      for (const chunk of source.chunks) {
+        const key = cacheKey(chunk.textHash, source.model, source.modelVersion);
+        if (!cache.has(key)) cache.set(key, chunk.vector);
+      }
       return Promise.resolve();
     },
     removeSourcesExcept: (sourceKind: SourceKind, sourceIds) => {
@@ -219,6 +239,7 @@ function memoryStore() {
       const found: NearestChunk[] = [];
       for (const source of sources.values()) {
         if (source.model !== query.model || source.modelVersion !== query.modelVersion) continue;
+        if (stale.has(source.sourceId)) continue;
         if (query.kinds !== undefined && !query.kinds.includes(source.contentKind)) continue;
         for (const chunk of source.chunks) {
           const section = source.sections.find((each) => each.ordinal === chunk.sectionOrdinal);
@@ -239,12 +260,64 @@ function memoryStore() {
       found.sort((a, b) => b.similarity - a.similarity);
       return Promise.resolve(found.slice(0, query.limit));
     },
+    scheduleWork: (scheduled) => {
+      for (const id of scheduled.removeSourceIds) {
+        sources.delete(id);
+        stale.delete(id);
+      }
+      for (const id of scheduled.staleSourceIds) if (sources.has(id)) stale.add(id);
+      for (const item of scheduled.items) {
+        nextId += 1;
+        work.push({ ...item, id: String(nextId), attempts: 0, failed: false, error: null });
+      }
+      return Promise.resolve();
+    },
+    pendingWork: (limit, includeFailed) =>
+      Promise.resolve(
+        work
+          .filter((item) => includeFailed || !item.failed)
+          .slice(0, limit)
+          .map(({ id, sourceId, operation, attempts, failed }) => ({
+            id,
+            sourceId,
+            operation,
+            attempts,
+            failed,
+          })),
+      ),
+    completeWork: (ids) => {
+      for (let index = work.length - 1; index >= 0; index -= 1) {
+        const item = work[index];
+        if (item !== undefined && ids.includes(item.id)) work.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+    failWork: (ids, error, maxAttempts) => {
+      work.forEach((item, index) => {
+        if (!ids.includes(item.id)) return;
+        const attempts = item.attempts + 1;
+        work[index] = { ...item, attempts, failed: attempts >= maxAttempts, error };
+      });
+      return Promise.resolve();
+    },
+    workCounts: () =>
+      Promise.resolve({
+        pending: work.filter((item) => !item.failed).length,
+        failed: work.filter((item) => item.failed).length,
+      }),
   };
-  return { store, sources, usage };
+  return { store, sources, stale, cache, usage, work };
 }
 
-function knowledgeBase(options: { embedder?: Embedder; config?: Partial<RetrievalConfig> } = {}) {
-  const memory = memoryStore();
+function knowledgeBase(
+  options: {
+    embedder?: Embedder;
+    config?: Partial<RetrievalConfig>;
+    /** The store of an earlier knowledge base, as a restarted process finds it. */
+    memory?: ReturnType<typeof memoryStore>;
+  } = {},
+) {
+  const memory = options.memory ?? memoryStore();
   const embedder = options.embedder ?? createFakeEmbedder();
   const settings = { ...config, ...options.config };
   const parts = { store: memory.store, embedder, config: settings, now: () => NOW };
@@ -354,6 +427,238 @@ describe("indexing the portfolio", () => {
       sources: 10,
       updated: 10,
     });
+  });
+});
+
+/** An embedder that records every text it embeds and fails every call after the first `ok`. */
+function countingEmbedder(options: { ok?: number; version?: string } = {}) {
+  const fake = createFakeEmbedder();
+  const texts: string[] = [];
+  let calls = 0;
+  const embedder: Embedder = {
+    model: fake.model,
+    version: options.version ?? fake.version,
+    dimension: fake.dimension,
+    embed: (batch, input, signal) => {
+      calls += 1;
+      if (options.ok !== undefined && calls > options.ok) {
+        return Promise.reject(new ProviderUnavailableError("The provider is down.", 503));
+      }
+      texts.push(...batch);
+      return fake.embed(batch, input, signal);
+    },
+  };
+  return { embedder, texts, calls: () => calls };
+}
+
+/** The fictional snapshot with the service's deliverable rewritten. */
+function withDeliverable(deliverable: string): PortfolioSnapshot {
+  const base = snapshot();
+  const service = base.services[0];
+  if (service === undefined) throw new Error("fixture");
+  return { ...base, services: [{ ...service, deliverable }] };
+}
+
+const uniqueTexts = (texts: readonly string[]) => new Set(texts).size;
+
+describe("keeping the index current after content writes", () => {
+  it("drops a deleted record's passages and hides a changed record's at once", async () => {
+    const { indexer, retriever, store, work } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+
+    await scheduleChanges(store, [
+      { domain: "service", record: "evaluation-setup", action: "deleted" },
+      { domain: "project", record: "reading-assistant", action: "updated" },
+    ]);
+
+    const service = await retriever.search({ query: "evaluation setup question set metrics" });
+    expect(service.passages.map((passage) => passage.sourceId)).not.toContain(
+      "portfolio:service:evaluation-setup",
+    );
+    const project = await retriever.search({ query: "hybrid search reranker archive" });
+    const ids = project.passages.map((passage) => passage.sourceId);
+    expect(ids).not.toContain("portfolio:project:reading-assistant");
+    expect(ids).not.toContain("portfolio:case_study:reading-assistant");
+    expect(work.map((item) => item.operation)).toEqual(["remove", "index"]);
+  });
+
+  it("queues every change, also one that maps to no single source", async () => {
+    const { store, work } = knowledgeBase();
+    await scheduleChanges(store, [
+      { domain: "technology", record: "typescript", action: "updated" },
+      { domain: "person", record: null, action: "updated" },
+      { domain: "roadmap-diary", record: "2025-02-10", action: "created" },
+    ]);
+    expect(work.map((item) => item.sourceId)).toEqual([
+      "portfolio",
+      "portfolio:profile:person",
+      "portfolio:diary_day:2025-02-10",
+    ]);
+  });
+
+  it("makes a change searchable once the queued work runs", async () => {
+    const { indexer, retriever, store } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    await scheduleChanges(store, [
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+    ]);
+
+    const report = await indexer.processPending(() =>
+      Promise.resolve(withDeliverable("A quarterly zebra audit of the assistant.")),
+    );
+    expect(report).toMatchObject({
+      completed: 1,
+      updated: 1,
+      remaining: { pending: 0, failed: 0 },
+    });
+    const result = await retriever.search({ query: "quarterly zebra audit" });
+    expect(result.passages[0]?.sourceId).toBe("portfolio:service:evaluation-setup");
+  });
+
+  it("keeps the work queued while the provider fails and finishes it after a restart", async () => {
+    const memory = memoryStore();
+    const first = knowledgeBase({ memory, embedder: createFakeEmbedder({ failing: true }) });
+    await knowledgeBase({ memory }).indexer.reindexPortfolio(snapshot());
+    await scheduleChanges(memory.store, [
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+    ]);
+    const changed = () => Promise.resolve(withDeliverable("A quarterly zebra audit."));
+
+    await expect(first.indexer.processPending(changed)).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+    expect(memory.work).toMatchObject([{ attempts: 1, failed: false }]);
+    expect(memory.stale.has("portfolio:service:evaluation-setup")).toBe(true);
+
+    const restarted = knowledgeBase({ memory });
+    await expect(restarted.indexer.processPending(changed)).resolves.toMatchObject({
+      completed: 1,
+      remaining: { pending: 0, failed: 0 },
+    });
+    const result = await restarted.retriever.search({ query: "quarterly zebra audit" });
+    expect(result.passages[0]?.sourceId).toBe("portfolio:service:evaluation-setup");
+  });
+
+  it("restores an unchanged record from stored vectors without the provider", async () => {
+    const memory = memoryStore();
+    await knowledgeBase({ memory }).indexer.reindexPortfolio(snapshot());
+    await scheduleChanges(memory.store, [
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+    ]);
+    const offline = knowledgeBase({ memory, embedder: createFakeEmbedder({ failing: true }) });
+
+    await expect(
+      offline.indexer.processPending(() => Promise.resolve(snapshot())),
+    ).resolves.toMatchObject({ completed: 1, embedded: 0 });
+    expect(memory.stale.size).toBe(0);
+  });
+
+  it("gives up on an item after the most attempts until it is retried explicitly", async () => {
+    const memory = memoryStore();
+    await knowledgeBase({ memory }).indexer.reindexPortfolio(snapshot());
+    await scheduleChanges(memory.store, [
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+    ]);
+    const offline = knowledgeBase({ memory, embedder: createFakeEmbedder({ failing: true }) });
+    const changed = () => Promise.resolve(withDeliverable("A quarterly zebra audit."));
+    for (let attempt = 0; attempt < maxWorkAttempts; attempt += 1) {
+      await expect(offline.indexer.processPending(changed)).rejects.toBeInstanceOf(
+        ProviderUnavailableError,
+      );
+    }
+    expect(memory.work).toMatchObject([{ attempts: maxWorkAttempts, failed: true }]);
+
+    const online = knowledgeBase({ memory });
+    await expect(online.indexer.processPending(changed)).resolves.toMatchObject({
+      completed: 0,
+      remaining: { pending: 0, failed: 1 },
+    });
+    await expect(
+      online.indexer.processPending(changed, { retryFailed: true }),
+    ).resolves.toMatchObject({ completed: 1, remaining: { pending: 0, failed: 0 } });
+  });
+
+  it("takes at most the given number of queued items in one run", async () => {
+    const { indexer, store } = knowledgeBase();
+    await scheduleChanges(store, [
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+      { domain: "project", record: "reading-assistant", action: "updated" },
+    ]);
+    await expect(
+      indexer.processPending(() => Promise.resolve(snapshot()), { limit: 1 }),
+    ).resolves.toMatchObject({ completed: 1, remaining: { pending: 1, failed: 0 } });
+  });
+
+  it("stops at the ceiling and keeps the work exactly as it was", async () => {
+    const { indexer, store, work } = knowledgeBase();
+    await scheduleChanges(store, [
+      { domain: "service", record: "evaluation-setup", action: "updated" },
+    ]);
+    await store.recordUsage({
+      operation: "index",
+      model: config.embeddingModel,
+      tokens: 1,
+      costUsd: config.monthlyCeilingUsd,
+      occurredAt: NOW,
+    });
+    await expect(indexer.processPending(() => Promise.resolve(snapshot()))).rejects.toBeInstanceOf(
+      BudgetExhaustedError,
+    );
+    expect(work).toMatchObject([{ attempts: 0, failed: false }]);
+  });
+
+  it("never embeds a text twice across an interrupted run and records each call once", async () => {
+    const memory = memoryStore();
+    const interrupted = countingEmbedder({ ok: 1 });
+    await expect(
+      knowledgeBase({ memory, embedder: interrupted.embedder }).indexer.reindexPortfolio(
+        snapshot(),
+      ),
+    ).rejects.toBeInstanceOf(ProviderUnavailableError);
+    expect(memory.usage).toHaveLength(1);
+
+    const resumed = countingEmbedder();
+    await knowledgeBase({ memory, embedder: resumed.embedder }).indexer.reindexPortfolio(
+      snapshot(),
+    );
+    const embedded = [...interrupted.texts, ...resumed.texts];
+    expect(embedded.length).toBe(uniqueTexts(embedded));
+    expect(memory.usage).toHaveLength(1 + resumed.calls());
+  });
+
+  it("re-embeds everything once after a model version change, searching one model throughout", async () => {
+    const memory = memoryStore();
+    const before = countingEmbedder();
+    await knowledgeBase({ memory, embedder: before.embedder }).indexer.reindexPortfolio(snapshot());
+
+    const interrupted = countingEmbedder({ ok: 1, version: "2" });
+    const partial = knowledgeBase({ memory, embedder: interrupted.embedder });
+    await expect(partial.indexer.rebuildPortfolio(snapshot())).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+    const during = await knowledgeBase({
+      memory,
+      embedder: countingEmbedder({ version: "2" }).embedder,
+    }).retriever.search({ query: "hybrid search reranker archive" });
+    for (const passage of during.passages) {
+      expect(memory.sources.get(passage.sourceId)?.modelVersion).toBe("2");
+    }
+
+    const resumed = countingEmbedder({ version: "2" });
+    const after = knowledgeBase({ memory, embedder: resumed.embedder });
+    const report = await after.indexer.rebuildPortfolio(snapshot());
+    expect(report.updated).toBe(report.sources);
+    expect([...memory.sources.values()].every((source) => source.modelVersion === "2")).toBe(true);
+    const embedded = [...interrupted.texts, ...resumed.texts];
+    expect(embedded.length).toBe(uniqueTexts(embedded));
+    expect(uniqueTexts(embedded)).toBe(uniqueTexts(before.texts));
+
+    await expect(after.indexer.rebuildPortfolio(snapshot())).resolves.toMatchObject({
+      embedded: 0,
+      updated: report.sources,
+    });
+    const found = await after.retriever.search({ query: "hybrid search reranker archive" });
+    expect(found.passages[0]?.sourceId).toBe("portfolio:project:reading-assistant");
   });
 });
 

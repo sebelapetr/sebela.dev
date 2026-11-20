@@ -17,6 +17,36 @@ export interface RetrievalIndexedSource {
   readonly version: string;
   readonly model: string;
   readonly modelVersion: string;
+  /** A content write superseded it; search leaves it out until it is stored again. */
+  readonly stale: boolean;
+}
+
+/** What queued work asks for: index a changed source again, or drop a deleted one. */
+export type RetrievalWorkOperation = "index" | "remove";
+
+/** One queued piece of indexing work. */
+export interface RetrievalWorkItem {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly operation: RetrievalWorkOperation;
+  readonly attempts: number;
+  readonly failed: boolean;
+}
+
+/** Work to queue, with the sources it removes or hides from search at once. */
+export interface RetrievalScheduledWork {
+  readonly removeSourceIds: readonly string[];
+  readonly staleSourceIds: readonly string[];
+  readonly items: readonly {
+    readonly sourceId: string;
+    readonly operation: RetrievalWorkOperation;
+  }[];
+}
+
+/** How much work waits. */
+export interface RetrievalWorkCounts {
+  readonly pending: number;
+  readonly failed: number;
 }
 
 /** A section of a source version: its heading path and its span in the version's text. */
@@ -102,13 +132,22 @@ export interface RetrievalUsageTotals {
 export interface RetrievalPersistence {
   /** Every indexed source with its current version and embedding model. */
   indexedSources(): Promise<RetrievalIndexedSource[]>;
-  /** Stored vectors of chunks with these text hashes, embedded with this model and version. */
+  /** Cached vectors of these text hashes, embedded with this model and version. */
   vectorsByHash(
     hashes: readonly string[],
     model: string,
     modelVersion: string,
   ): Promise<Map<string, readonly number[]>>;
-  /** Stores a source version, its sections and chunks in one transaction, replacing the earlier. */
+  /** Adds vectors to the embedding cache; a vector already cached is kept. */
+  storeVectors(
+    vectors: ReadonlyMap<string, readonly number[]>,
+    model: string,
+    modelVersion: string,
+  ): Promise<void>;
+  /**
+   * Stores a source version, its sections and chunks in one transaction, replacing the earlier
+   * and clearing its stale mark; its chunks' vectors join the embedding cache.
+   */
   replaceSource(source: RetrievalSourceVersion): Promise<void>;
   /** Removes every source of this kind that is not named; returns how many it removed. */
   removeSourcesExcept(
@@ -118,8 +157,17 @@ export interface RetrievalPersistence {
   recordUsage(usage: RetrievalUsageRecord): Promise<void>;
   /** Usage recorded at or after `since`. */
   usageSince(since: Date): Promise<RetrievalUsageTotals>;
-  /** The nearest chunks by cosine distance, nearest first. */
+  /** The nearest chunks of non-stale versions by cosine distance, nearest first. */
   nearest(query: RetrievalNearestQuery): Promise<RetrievalNearestChunk[]>;
+  /** Removes and marks stale the named sources and queues the items, in one transaction. */
+  scheduleWork(work: RetrievalScheduledWork): Promise<void>;
+  /** The oldest queued items, at most `limit`; failed ones only with `includeFailed`. */
+  pendingWork(limit: number, includeFailed: boolean): Promise<RetrievalWorkItem[]>;
+  /** Drops finished items. */
+  completeWork(ids: readonly string[]): Promise<void>;
+  /** Counts a failed attempt on each item and keeps the error; at `maxAttempts` it is failed. */
+  failWork(ids: readonly string[], error: string, maxAttempts: number): Promise<void>;
+  workCounts(): Promise<RetrievalWorkCounts>;
 }
 
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
@@ -131,6 +179,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           version: versions.version,
           model: versions.model,
           modelVersion: versions.modelVersion,
+          stale: sql<boolean>`false`,
         })
         .from(sources)
         .innerJoin(versions, eq(versions.sourceId, sources.id))
@@ -225,6 +274,13 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         );
       });
     },
+
+    storeVectors: () => Promise.reject(new Error("not implemented")),
+    scheduleWork: () => Promise.reject(new Error("not implemented")),
+    pendingWork: () => Promise.reject(new Error("not implemented")),
+    completeWork: () => Promise.reject(new Error("not implemented")),
+    failWork: () => Promise.reject(new Error("not implemented")),
+    workCounts: () => Promise.reject(new Error("not implemented")),
 
     async removeSourcesExcept(sourceKind, sourceIds) {
       const removed = await db

@@ -74,6 +74,38 @@ export interface IndexedSource {
   readonly version: string;
   readonly model: string;
   readonly modelVersion: string;
+  /** A write changed its record after it was indexed; search leaves it out until it is re-indexed. */
+  readonly stale: boolean;
+}
+
+/** What queued work asks for: index a changed source again, or drop a deleted one. */
+export type WorkOperation = "index" | "remove";
+
+/** One queued piece of indexing work, oldest first. */
+export interface WorkItem {
+  readonly id: string;
+  /** The source the write affected, or `portfolio` when it maps to no one source. */
+  readonly sourceId: string;
+  readonly operation: WorkOperation;
+  /** Runs that failed on it because the provider was unavailable. */
+  readonly attempts: number;
+  /** It reached the most attempts; only an explicit run with `retryFailed` takes it again. */
+  readonly failed: boolean;
+}
+
+/** What one batch of content changes asks of the index, stored in one transaction. */
+export interface ScheduledWork {
+  /** Sources to drop from the index at once. */
+  readonly removeSourceIds: readonly string[];
+  /** Sources to leave out of search until they are indexed again. */
+  readonly staleSourceIds: readonly string[];
+  readonly items: readonly { readonly sourceId: string; readonly operation: WorkOperation }[];
+}
+
+/** How much work waits. */
+export interface WorkCounts {
+  readonly pending: number;
+  readonly failed: number;
 }
 
 /** A section of a source version: its heading path and its span in the version's text. */
@@ -139,19 +171,41 @@ export interface NearestChunk {
 /** The persistence of the index and of provider spend. */
 export interface RetrievalStore {
   indexedSources(): Promise<IndexedSource[]>;
-  /** Stored vectors of chunks with these text hashes, embedded with this model and version. */
+  /**
+   * Stored vectors of these text hashes embedded with this model and version, from the embedding
+   * cache, which keeps them whether or not a stored chunk still uses them.
+   */
   vectorsByHash(
     hashes: readonly string[],
     model: string,
     modelVersion: string,
   ): Promise<Map<string, readonly number[]>>;
+  /** Keeps vectors in the embedding cache by text hash, model and version; a known one stays. */
+  storeVectors(
+    vectors: ReadonlyMap<string, readonly number[]>,
+    model: string,
+    modelVersion: string,
+  ): Promise<void>;
   /** Stores a source version and its chunks atomically, replacing the source's earlier ones. */
   replaceSource(source: SourceVersion): Promise<void>;
   /** Removes every source of this kind not named; returns how many it removed. */
   removeSourcesExcept(sourceKind: SourceKind, sourceIds: readonly string[]): Promise<number>;
   recordUsage(usage: UsageRecord): Promise<void>;
   usageSince(since: Date): Promise<UsageTotals>;
+  /** Nearest chunks of current, non-stale versions embedded with the query's model. */
   nearest(query: NearestQuery): Promise<NearestChunk[]>;
+  /** Removes and marks the sources and queues the items, all in one transaction. */
+  scheduleWork(work: ScheduledWork): Promise<void>;
+  /** The oldest queued items, at most `limit`; failed ones only with `includeFailed`. */
+  pendingWork(limit: number, includeFailed: boolean): Promise<WorkItem[]>;
+  /** Drops finished items. */
+  completeWork(ids: readonly string[]): Promise<void>;
+  /**
+   * Counts a failed attempt on each item and keeps the error; an item that reaches `maxAttempts`
+   * is failed.
+   */
+  failWork(ids: readonly string[], error: string, maxAttempts: number): Promise<void>;
+  workCounts(): Promise<WorkCounts>;
 }
 
 // The portfolio as the API's public reads return it, narrowed to the fields the index reads. The
