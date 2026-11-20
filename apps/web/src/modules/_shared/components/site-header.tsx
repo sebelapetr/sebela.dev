@@ -10,8 +10,9 @@ import { ThemeToggle } from "./theme-toggle";
 
 /**
  * The site header of every page, sticky at the top: the name that leads home (or "Home" when the
- * profile could not be read), the navigation, "Ask AI" and the theme toggle; below the desktop
- * width, the name, "Ask AI" and a menu. A "Skip to content" link comes first. Not printed.
+ * profile could not be read), the navigation, "Ask AI", the source-code link and the theme toggle;
+ * below the desktop width, the name, "Ask AI" and a menu (which holds the toggle and the
+ * source-code link). A "Skip to content" link comes first. Not printed.
  */
 export function SiteHeader({ name }: { readonly name: string | null }) {
   const current = currentNavigationHref(usePathname());
