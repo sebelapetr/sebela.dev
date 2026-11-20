@@ -7,10 +7,16 @@ import {
   type PortfolioContentKind,
 } from "@sebela/contracts";
 
-import type { RetrievalStore, WorkOperation } from "../ports/index.js";
+import type { PortfolioSnapshot, RetrievalStore, WorkOperation } from "../ports/index.js";
 
 /** Queues indexing for these changes and excludes their sources from search in one transaction. */
-export async function scheduleChanges(
+export const scheduleChanges: (
+  store: Pick<RetrievalStore, "scheduleWork" | "indexedSources">,
+  changes: readonly ContentChange[],
+  current: PortfolioSnapshot,
+) => Promise<void> = scheduleDirect;
+
+async function scheduleDirect(
   store: Pick<RetrievalStore, "scheduleWork">,
   changes: readonly ContentChange[],
 ): Promise<void> {

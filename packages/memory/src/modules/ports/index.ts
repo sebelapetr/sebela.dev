@@ -71,6 +71,7 @@ export type SourceKind = "portfolio" | "supplemental";
 /** What the store knows about an indexed source: enough to tell whether it is current. */
 export interface IndexedSource {
   readonly sourceId: string;
+  readonly sourceKind: SourceKind;
   readonly version: string;
   readonly model: string;
   readonly modelVersion: string;
@@ -186,8 +187,13 @@ export interface RetrievalStore {
     model: string,
     modelVersion: string,
   ): Promise<void>;
-  /** Stores a source version and its chunks atomically, replacing the source's earlier ones. */
-  replaceSource(source: SourceVersion): Promise<void>;
+  /**
+   * Stores a source version and its chunks atomically, replacing the source's earlier ones and
+   * clearing its stale mark. With `unlessWorkAfter` (a `workWatermark()`) it stores nothing when
+   * work was queued after that watermark, because the version may predate that work; returns
+   * whether it stored.
+   */
+  replaceSource(source: SourceVersion, unlessWorkAfter?: number): Promise<boolean>;
   /** Removes every source of this kind not named; returns how many it removed. */
   removeSourcesExcept(sourceKind: SourceKind, sourceIds: readonly string[]): Promise<number>;
   recordUsage(usage: UsageRecord): Promise<void>;
@@ -196,6 +202,11 @@ export interface RetrievalStore {
   nearest(query: NearestQuery): Promise<NearestChunk[]>;
   /** Removes and marks the sources and queues the items, all in one transaction. */
   scheduleWork(work: ScheduledWork): Promise<void>;
+  /**
+   * The newest work queued so far, for `replaceSource`; it covers every `scheduleWork` committed
+   * before it and none that commits after it.
+   */
+  workWatermark(): Promise<number>;
   /** The oldest queued items, at most `limit`; failed ones only with `includeFailed`. */
   pendingWork(limit: number, includeFailed: boolean): Promise<WorkItem[]>;
   /** Drops finished items. */

@@ -22,6 +22,7 @@ export type RetrievalUsageOperation = "index" | "search" | "candidates";
 /** What is stored about an indexed source: enough to tell whether it is current. */
 export interface RetrievalIndexedSource {
   readonly sourceId: string;
+  readonly sourceKind: RetrievalSourceKind;
   readonly version: string;
   readonly model: string;
   readonly modelVersion: string;
@@ -154,9 +155,11 @@ export interface RetrievalPersistence {
   ): Promise<void>;
   /**
    * Stores a source version, its sections and chunks in one transaction, replacing the earlier
-   * and clearing its stale mark; its chunks' vectors join the embedding cache.
+   * and clearing its stale mark; its chunks' vectors join the embedding cache. With
+   * `unlessWorkAfter` (a `workWatermark()`) it stores nothing when work was queued after that
+   * watermark; returns whether it stored.
    */
-  replaceSource(source: RetrievalSourceVersion): Promise<void>;
+  replaceSource(source: RetrievalSourceVersion, unlessWorkAfter?: number): Promise<boolean>;
   /** Removes every source of this kind that is not named; returns how many it removed. */
   removeSourcesExcept(
     sourceKind: RetrievalSourceKind,
@@ -169,6 +172,8 @@ export interface RetrievalPersistence {
   nearest(query: RetrievalNearestQuery): Promise<RetrievalNearestChunk[]>;
   /** Removes and marks stale the named sources and queues the items, in one transaction. */
   scheduleWork(work: RetrievalScheduledWork): Promise<void>;
+  /** The newest work queued so far; covers every `scheduleWork` committed before it. */
+  workWatermark(): Promise<number>;
   /** The oldest queued items, at most `limit`; failed ones only with `includeFailed`. */
   pendingWork(limit: number, includeFailed: boolean): Promise<RetrievalWorkItem[]>;
   /** Drops finished items. */
@@ -181,9 +186,10 @@ export interface RetrievalPersistence {
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
   return {
     async indexedSources() {
-      return db
+      const rows = await db
         .select({
           sourceId: sources.sourceId,
+          sourceKind: sources.sourceKind,
           version: versions.version,
           model: versions.model,
           modelVersion: versions.modelVersion,
@@ -192,6 +198,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         .from(sources)
         .innerJoin(versions, eq(versions.sourceId, sources.id))
         .orderBy(asc(sources.sourceId));
+      return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
     },
 
     async vectorsByHash(hashes, model, modelVersion) {
@@ -216,7 +223,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
     },
 
     async replaceSource(source) {
-      await db.transaction(async (tx) => {
+      return db.transaction(async (tx) => {
         const [stored] = await tx
           .insert(sources)
           .values({
@@ -251,7 +258,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           source.model,
           source.modelVersion,
         );
-        if (source.sections.length === 0) return;
+        if (source.sections.length === 0) return true;
         const storedSections = await tx
           .insert(sections)
           .values(
@@ -265,7 +272,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           )
           .returning({ id: sections.id, ordinal: sections.ordinal });
         const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
-        if (source.chunks.length === 0) return;
+        if (source.chunks.length === 0) return true;
         await tx.insert(chunks).values(
           source.chunks.map((chunk) => {
             const sectionId = sectionIds.get(chunk.sectionOrdinal);
@@ -286,6 +293,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
             };
           }),
         );
+        return true;
       });
     },
 
@@ -305,6 +313,8 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         }
       });
     },
+
+    workWatermark: () => Promise.resolve(0),
 
     async pendingWork(limit, includeFailed) {
       const rows = await db

@@ -4,7 +4,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { SearchResultSchema } from "@sebela/contracts";
-import { DomainError, demoSeedFolder, type RetrievalConfig } from "@sebela/services";
+import {
+  DomainError,
+  demoSeedFolder,
+  type Embedder,
+  type KnowledgeService,
+  type RetrievalConfig,
+} from "@sebela/services";
 import { createFakeEmbedder } from "@sebela/services/testing";
 
 import {
@@ -27,13 +33,58 @@ const config: RetrievalConfig = {
   relevanceFloor: 0.1,
 };
 
+/**
+ * The fake embedder, which holds every call while `hold` is set and reports the first held call
+ * through `held`, so a test can write while a run is embedding.
+ */
+function gatedEmbedder() {
+  const fake = createFakeEmbedder();
+  const gate: { hold: Promise<void> | null; held: () => void } = {
+    hold: null,
+    held: () => undefined,
+  };
+  const embedder: Embedder = {
+    model: fake.model,
+    version: fake.version,
+    dimension: fake.dimension,
+    embed: async (texts, input, signal) => {
+      if (gate.hold !== null) {
+        gate.held();
+        await gate.hold;
+      }
+      return fake.embed(texts, input, signal);
+    },
+  };
+  /** Holds the provider; resolves `reached` once a call waits, and `release` lets it go on. */
+  const close = () => {
+    let release: () => void = () => undefined;
+    gate.hold = new Promise<void>((resolve) => {
+      release = () => {
+        gate.hold = null;
+        resolve();
+      };
+    });
+    const reached = new Promise<void>((resolve) => {
+      gate.held = resolve;
+    });
+    return {
+      reached,
+      release: () => {
+        release();
+      },
+    };
+  };
+  return { embedder, close };
+}
+
 describe("indexing after content writes", () => {
   let backend: TestBackend;
   let auth: Record<string, string>;
   let lines: string[];
+  const provider = gatedEmbedder();
 
   beforeAll(async () => {
-    backend = await openTestBackend({ retrieval: { config, embedder: createFakeEmbedder() } });
+    backend = await openTestBackend({ retrieval: { config, embedder: provider.embedder } });
     await backend.services.seed.loadSeed(demoSeedFolder);
     await backend.services.knowledge.reindexPortfolio();
     auth = bearer((await backend.services.apiKeys.createKey("indexing")).key);
@@ -139,6 +190,108 @@ describe("indexing after content writes", () => {
       "portfolio:project:booking-portal",
     );
     await restarted.close();
+  });
+
+  /** A queue whose runs never reach the provider, as while it is down. */
+  const offlineQueue = (knowledge: KnowledgeService) =>
+    queueOver({
+      schedule: (changes) => knowledge.schedule(changes),
+      processPending: () =>
+        Promise.reject(
+          new DomainError("provider_unavailable", "The embedding provider is unavailable."),
+        ),
+    });
+
+  const passageTexts = async (query: string) =>
+    SearchResultSchema.parse(await backend.services.knowledge.search({ query })).passages.map(
+      (passage) => passage.text,
+    );
+
+  it("takes a deleted testimonial's quote out of search at once, while the provider is down", async () => {
+    const quote = "That is why we trusted it with our archive.";
+    expect((await passageTexts(quote)).join("\n")).toContain(quote);
+    const { knowledge } = backend.services;
+    const offline = offlineQueue(knowledge);
+
+    const response = await write(offline, "/v1/testimonials/lumen-editor-in-chief", "DELETE", {
+      headers: auth,
+    });
+    expect(response.status).toBe(204);
+    await offline.idle();
+    expect((await passageTexts(quote)).join("\n")).not.toContain(quote);
+    await offline.close();
+
+    const restarted = queueOver(knowledge);
+    restarted.start();
+    await restarted.idle();
+    expect(await knowledge.pending()).toEqual({ pending: 0, failed: 0 });
+    expect((await passageTexts(quote)).join("\n")).not.toContain(quote);
+    expect(await found("staff engineer at Lumen Press")).toContain(
+      "portfolio:experience:lumen-press-staff-engineer",
+    );
+    await restarted.close();
+  });
+
+  it("does not bring back a project deleted while a run is embedding", async () => {
+    const { knowledge } = backend.services;
+    const offline = offlineQueue(knowledge);
+    const patched = await write(
+      offline,
+      "/v1/projects/community-catalogue",
+      "PATCH",
+      json({ summary: "Narwhal librarians lend kayaks across the island." }, auth),
+    );
+    expect(patched.status).toBe(200);
+    await offline.idle();
+
+    const gate = provider.close();
+    const run = knowledge.processPending();
+    await gate.reached;
+    const deleted = await write(offline, "/v1/projects/community-catalogue", "DELETE", {
+      headers: auth,
+    });
+    expect(deleted.status).toBe(204);
+    await offline.idle();
+    gate.release();
+    await run;
+
+    expect(await found("narwhal librarians lend kayaks")).not.toContain(
+      "portfolio:project:community-catalogue",
+    );
+    expect(await knowledge.pending()).toEqual({ pending: 1, failed: 0 });
+    await knowledge.processPending();
+    expect(await knowledge.pending()).toEqual({ pending: 0, failed: 0 });
+    expect(await found("narwhal librarians lend kayaks")).not.toContain(
+      "portfolio:project:community-catalogue",
+    );
+    await offline.close();
+  });
+
+  it("keeps a project hidden that was edited again while a run was embedding", async () => {
+    const { knowledge } = backend.services;
+    const offline = offlineQueue(knowledge);
+    const edit = (summary: string) =>
+      write(offline, "/v1/projects/warehouse-picking", "PATCH", json({ summary }, auth));
+    expect((await edit("Pelican couriers sort parcels by moonlight.")).status).toBe(200);
+    await offline.idle();
+
+    const gate = provider.close();
+    const run = knowledge.processPending();
+    await gate.reached;
+    expect((await edit("Otter forklifts stack crates before dawn.")).status).toBe(200);
+    await offline.idle();
+    gate.release();
+    await run;
+
+    expect(await found("pelican couriers sort parcels by moonlight")).not.toContain(
+      "portfolio:project:warehouse-picking",
+    );
+    expect(await knowledge.pending()).toEqual({ pending: 1, failed: 0 });
+    await knowledge.processPending();
+    expect((await found("otter forklifts stack crates before dawn"))[0]).toBe(
+      "portfolio:project:warehouse-picking",
+    );
+    await offline.close();
   });
 
   it("stops at the ceiling without a retry and keeps the work", async () => {

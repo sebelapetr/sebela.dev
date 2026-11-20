@@ -97,6 +97,7 @@ describe("retrieval persistence", () => {
     expect(await retrieval.indexedSources()).toEqual([
       {
         sourceId: "handbook",
+        sourceKind: "portfolio",
         version: hash("handbook"),
         model: MODEL,
         modelVersion: "1",
@@ -322,6 +323,44 @@ describe("retrieval persistence", () => {
       "changed",
       "untouched",
     ]);
+  });
+
+  it("stores a version only when no work was queued after the watermark", async () => {
+    await retrieval.replaceSource(source("changed"));
+    const before = await retrieval.workWatermark();
+    await retrieval.scheduleWork({
+      removeSourceIds: [],
+      staleSourceIds: ["changed"],
+      items: [{ sourceId: "changed", operation: "index" }],
+    });
+
+    expect(await retrieval.replaceSource(source("changed", { version: hash("v2") }), before)).toBe(
+      false,
+    );
+    const versionAndStale = async () =>
+      (await retrieval.indexedSources()).map(({ version, stale }) => ({ version, stale }));
+    expect(await versionAndStale()).toEqual([{ version: hash("changed"), stale: true }]);
+
+    const after = await retrieval.workWatermark();
+    expect(after).toBeGreaterThan(before);
+    expect(await retrieval.replaceSource(source("changed", { version: hash("v2") }), after)).toBe(
+      true,
+    );
+    expect(await versionAndStale()).toEqual([{ version: hash("v2"), stale: false }]);
+  });
+
+  it("never brings back a source removed after the watermark", async () => {
+    await retrieval.replaceSource(source("deleted"));
+    const before = await retrieval.workWatermark();
+    await retrieval.scheduleWork({
+      removeSourceIds: ["deleted"],
+      staleSourceIds: [],
+      items: [{ sourceId: "deleted", operation: "remove" }],
+    });
+
+    expect(await retrieval.replaceSource(source("deleted"), before)).toBe(false);
+    expect(await retrieval.indexedSources()).toEqual([]);
+    expect(await retrieval.replaceSource(source("deleted"))).toBe(true);
   });
 
   it("takes the oldest work first, at most the limit, and drops finished items", async () => {

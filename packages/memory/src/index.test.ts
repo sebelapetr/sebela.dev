@@ -174,6 +174,7 @@ function memoryStore() {
       Promise.resolve(
         [...sources.values()].map((source): IndexedSource => ({
           sourceId: source.sourceId,
+          sourceKind: source.sourceKind,
           version: source.version,
           model: source.model,
           modelVersion: source.modelVersion,
@@ -195,14 +196,17 @@ function memoryStore() {
       }
       return Promise.resolve();
     },
-    replaceSource: (source) => {
+    replaceSource: (source, unlessWorkAfter) => {
+      if (unlessWorkAfter !== undefined && work.some((item) => Number(item.id) > unlessWorkAfter)) {
+        return Promise.resolve(false);
+      }
       sources.set(source.sourceId, source);
       stale.delete(source.sourceId);
       for (const chunk of source.chunks) {
         const key = cacheKey(chunk.textHash, source.model, source.modelVersion);
         if (!cache.has(key)) cache.set(key, chunk.vector);
       }
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
     removeSourcesExcept: (sourceKind: SourceKind, sourceIds) => {
       let removed = 0;
@@ -272,6 +276,7 @@ function memoryStore() {
       }
       return Promise.resolve();
     },
+    workWatermark: () => Promise.resolve(nextId),
     pendingWork: (limit, includeFailed) =>
       Promise.resolve(
         work
@@ -466,10 +471,14 @@ describe("keeping the index current after content writes", () => {
     const { indexer, retriever, store, work } = knowledgeBase();
     await indexer.reindexPortfolio(snapshot());
 
-    await scheduleChanges(store, [
-      { domain: "service", record: "evaluation-setup", action: "deleted" },
-      { domain: "project", record: "reading-assistant", action: "updated" },
-    ]);
+    await scheduleChanges(
+      store,
+      [
+        { domain: "service", record: "evaluation-setup", action: "deleted" },
+        { domain: "project", record: "reading-assistant", action: "updated" },
+      ],
+      snapshot(),
+    );
 
     const service = await retriever.search({ query: "evaluation setup question set metrics" });
     expect(service.passages.map((passage) => passage.sourceId)).not.toContain(
@@ -484,11 +493,15 @@ describe("keeping the index current after content writes", () => {
 
   it("queues every change, also one that maps to no single source", async () => {
     const { store, work } = knowledgeBase();
-    await scheduleChanges(store, [
-      { domain: "technology", record: "typescript", action: "updated" },
-      { domain: "person", record: null, action: "updated" },
-      { domain: "roadmap-diary", record: "2025-02-10", action: "created" },
-    ]);
+    await scheduleChanges(
+      store,
+      [
+        { domain: "technology", record: "typescript", action: "updated" },
+        { domain: "person", record: null, action: "updated" },
+        { domain: "roadmap-diary", record: "2025-02-10", action: "created" },
+      ],
+      snapshot(),
+    );
     expect(work.map((item) => item.sourceId)).toEqual([
       "portfolio",
       "portfolio:profile:person",
@@ -496,12 +509,106 @@ describe("keeping the index current after content writes", () => {
     ]);
   });
 
+  it("hides a record a deleted testimonial was indexed inside, until the run stores it again", async () => {
+    const { indexer, retriever, store, stale } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    const current = { ...snapshot(), testimonials: [] };
+
+    await scheduleChanges(
+      store,
+      [{ domain: "testimonial", record: "editor-in-chief", action: "deleted" }],
+      current,
+    );
+    expect([...stale]).toEqual(["portfolio:experience:lumen-press-staff-engineer"]);
+    const hidden = await retriever.search({ query: "Calm under deadlines" });
+    expect(hidden.passages.map((passage) => passage.text).join("\n")).not.toContain("Calm");
+
+    await indexer.processPending(() => Promise.resolve(current));
+    expect(stale.size).toBe(0);
+    const stored = await retriever.search({ query: "Calm under deadlines" });
+    expect(stored.passages.map((passage) => passage.text).join("\n")).not.toContain("Calm");
+  });
+
+  it("hides records a renamed technology appears in and drops records gone with a parent", async () => {
+    const { indexer, store, stale, sources } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    const base = snapshot();
+    const [experience] = base.experiences;
+    if (experience === undefined) throw new Error("fixture");
+    const current: PortfolioSnapshot = {
+      ...base,
+      experiences: [{ ...experience, technologies: [{ name: "TypeScript 6" }] }],
+      roadmap: { areas: [] },
+    };
+
+    await scheduleChanges(
+      store,
+      [
+        { domain: "technology", record: "typescript", action: "updated" },
+        { domain: "roadmap-area", record: "foundations", action: "deleted" },
+      ],
+      current,
+    );
+    expect([...stale]).toEqual(["portfolio:experience:lumen-press-staff-engineer"]);
+    expect([...sources.keys()].filter((id) => id.includes("roadmap"))).toEqual([]);
+  });
+
+  it("does not bring back a record deleted while a run reads the portfolio", async () => {
+    const { indexer, retriever, store, sources } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    const changed = withDeliverable("A quarterly zebra audit.");
+    const service = { domain: "service", record: "evaluation-setup" } as const;
+    await scheduleChanges(store, [{ ...service, action: "updated" }], changed);
+
+    const report = await indexer.processPending(async () => {
+      await scheduleChanges(store, [{ ...service, action: "deleted" }], {
+        ...snapshot(),
+        services: [],
+      });
+      return changed;
+    });
+
+    expect(sources.has("portfolio:service:evaluation-setup")).toBe(false);
+    expect(report.remaining).toEqual({ pending: 1, failed: 0 });
+    const result = await retriever.search({ query: "quarterly zebra audit" });
+    expect(result.passages.map((passage) => passage.sourceId)).not.toContain(
+      "portfolio:service:evaluation-setup",
+    );
+  });
+
+  it("keeps a record hidden that changed again while a run read it, until the next run", async () => {
+    const { indexer, retriever, store, stale } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    const service = { domain: "service", record: "evaluation-setup", action: "updated" } as const;
+    const first = withDeliverable("A quarterly zebra audit.");
+    const second = withDeliverable("A yearly walrus review.");
+    await scheduleChanges(store, [service], first);
+
+    await indexer.processPending(async () => {
+      await scheduleChanges(store, [service], second);
+      return first;
+    });
+    expect(stale.has("portfolio:service:evaluation-setup")).toBe(true);
+    const old = await retriever.search({ query: "quarterly zebra audit" });
+    expect(old.passages.map((passage) => passage.sourceId)).not.toContain(
+      "portfolio:service:evaluation-setup",
+    );
+
+    await expect(indexer.processPending(() => Promise.resolve(second))).resolves.toMatchObject({
+      remaining: { pending: 0, failed: 0 },
+    });
+    const fresh = await retriever.search({ query: "yearly walrus review" });
+    expect(fresh.passages[0]?.sourceId).toBe("portfolio:service:evaluation-setup");
+  });
+
   it("makes a change searchable once the queued work runs", async () => {
     const { indexer, retriever, store } = knowledgeBase();
     await indexer.reindexPortfolio(snapshot());
-    await scheduleChanges(store, [
-      { domain: "service", record: "evaluation-setup", action: "updated" },
-    ]);
+    await scheduleChanges(
+      store,
+      [{ domain: "service", record: "evaluation-setup", action: "updated" }],
+      snapshot(),
+    );
 
     const report = await indexer.processPending(() =>
       Promise.resolve(withDeliverable("A quarterly zebra audit of the assistant.")),
@@ -519,9 +626,11 @@ describe("keeping the index current after content writes", () => {
     const memory = memoryStore();
     const first = knowledgeBase({ memory, embedder: createFakeEmbedder({ failing: true }) });
     await knowledgeBase({ memory }).indexer.reindexPortfolio(snapshot());
-    await scheduleChanges(memory.store, [
-      { domain: "service", record: "evaluation-setup", action: "updated" },
-    ]);
+    await scheduleChanges(
+      memory.store,
+      [{ domain: "service", record: "evaluation-setup", action: "updated" }],
+      snapshot(),
+    );
     const changed = () => Promise.resolve(withDeliverable("A quarterly zebra audit."));
 
     await expect(first.indexer.processPending(changed)).rejects.toBeInstanceOf(
@@ -542,9 +651,11 @@ describe("keeping the index current after content writes", () => {
   it("restores an unchanged record from stored vectors without the provider", async () => {
     const memory = memoryStore();
     await knowledgeBase({ memory }).indexer.reindexPortfolio(snapshot());
-    await scheduleChanges(memory.store, [
-      { domain: "service", record: "evaluation-setup", action: "updated" },
-    ]);
+    await scheduleChanges(
+      memory.store,
+      [{ domain: "service", record: "evaluation-setup", action: "updated" }],
+      snapshot(),
+    );
     const offline = knowledgeBase({ memory, embedder: createFakeEmbedder({ failing: true }) });
 
     await expect(
@@ -556,9 +667,11 @@ describe("keeping the index current after content writes", () => {
   it("gives up on an item after the most attempts until it is retried explicitly", async () => {
     const memory = memoryStore();
     await knowledgeBase({ memory }).indexer.reindexPortfolio(snapshot());
-    await scheduleChanges(memory.store, [
-      { domain: "service", record: "evaluation-setup", action: "updated" },
-    ]);
+    await scheduleChanges(
+      memory.store,
+      [{ domain: "service", record: "evaluation-setup", action: "updated" }],
+      snapshot(),
+    );
     const offline = knowledgeBase({ memory, embedder: createFakeEmbedder({ failing: true }) });
     const changed = () => Promise.resolve(withDeliverable("A quarterly zebra audit."));
     for (let attempt = 0; attempt < maxWorkAttempts; attempt += 1) {
@@ -580,10 +693,14 @@ describe("keeping the index current after content writes", () => {
 
   it("takes at most the given number of queued items in one run", async () => {
     const { indexer, store } = knowledgeBase();
-    await scheduleChanges(store, [
-      { domain: "service", record: "evaluation-setup", action: "updated" },
-      { domain: "project", record: "reading-assistant", action: "updated" },
-    ]);
+    await scheduleChanges(
+      store,
+      [
+        { domain: "service", record: "evaluation-setup", action: "updated" },
+        { domain: "project", record: "reading-assistant", action: "updated" },
+      ],
+      snapshot(),
+    );
     await expect(
       indexer.processPending(() => Promise.resolve(snapshot()), { limit: 1 }),
     ).resolves.toMatchObject({ completed: 1, remaining: { pending: 1, failed: 0 } });
@@ -591,9 +708,11 @@ describe("keeping the index current after content writes", () => {
 
   it("stops at the ceiling and keeps the work exactly as it was", async () => {
     const { indexer, store, work } = knowledgeBase();
-    await scheduleChanges(store, [
-      { domain: "service", record: "evaluation-setup", action: "updated" },
-    ]);
+    await scheduleChanges(
+      store,
+      [{ domain: "service", record: "evaluation-setup", action: "updated" }],
+      snapshot(),
+    );
     await store.recordUsage({
       operation: "index",
       model: config.embeddingModel,

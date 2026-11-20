@@ -107,7 +107,10 @@ export function createKnowledgeService(
       provider(async () => ready().indexer.reindexPortfolio(await snapshot(sources))),
     rebuildPortfolio: () =>
       provider(async () => ready().indexer.rebuildPortfolio(await snapshot(sources))),
-    schedule: (changes) => scheduleChanges(store, changes),
+    schedule: async (changes) => {
+      if (changes.length === 0) return;
+      await scheduleChanges(store, changes, await snapshot(sources));
+    },
     processPending: (processOptions) =>
       provider(() => ready().indexer.processPending(() => snapshot(sources), processOptions)),
     pending: () => store.workCounts(),
@@ -170,7 +173,7 @@ function narrowStore(persistence: RetrievalPersistence): RetrievalStore {
       persistence.vectorsByHash(hashes, model, modelVersion),
     storeVectors: (vectors, model, modelVersion) =>
       persistence.storeVectors(vectors, model, modelVersion),
-    replaceSource: (source) => persistence.replaceSource(source),
+    replaceSource: (source, unlessWorkAfter) => persistence.replaceSource(source, unlessWorkAfter),
     removeSourcesExcept: (sourceKind, sourceIds) =>
       persistence.removeSourcesExcept(sourceKind, sourceIds),
     recordUsage: (usage) => persistence.recordUsage(usage),
@@ -181,6 +184,7 @@ function narrowStore(persistence: RetrievalPersistence): RetrievalStore {
         contentKind: contentKindOf(chunk.contentKind),
       })),
     scheduleWork: (work) => persistence.scheduleWork(work),
+    workWatermark: () => persistence.workWatermark(),
     pendingWork: (limit, includeFailed) => persistence.pendingWork(limit, includeFailed),
     completeWork: (ids) => persistence.completeWork(ids),
     failWork: (ids, error, maxAttempts) => persistence.failWork(ids, error, maxAttempts),
