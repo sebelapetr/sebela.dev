@@ -147,6 +147,7 @@ The reviewer agent is the only check between issues inside a phase, so a mistake
 - UI: screenshots at three widths and both themes
 - MCP and AI: evals exist and meet their threshold
 - Documentation updated when behaviour or structure changed
+- On every migration pull request: the migration follows the compatibility rule, so the previous release still runs on the new schema ([Release workflow](release-workflow.md#migration-compatibility-rule))
 - No weakened checks, no hard-coded environment values, no real personal data
 
 ## Documentation upkeep
