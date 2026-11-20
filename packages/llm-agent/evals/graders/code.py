@@ -1,7 +1,8 @@
 """Deterministic graders: what code can prove about one stored case-run.
 
 They check the schema-level result, the executed calls of the trace, source identity against this
-turn's evidence, canonical links, the trusted contact card and forbidden text. They cannot prove
+turn's evidence and the fixture, canonical links, structured blocks against the fixture records,
+the trusted contact card and required and forbidden text. They cannot prove
 that prose is true; usefulness and citation support are the rubric's (`rubric.py`) job.
 
 A record is the JSON the provider stores for one case-run (`evals/provider.py`): the approved
@@ -15,13 +16,27 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from evals.datasets.cases import ALLOWED_TOOLS, FIXTURE_PERSON, EvalCase
+from evals.datasets.cases import ALLOWED_TOOLS, FIXTURE, FIXTURE_PERSON, EvalCase
 
 #: Outcomes that are never a pass: infrastructure failure is not a safety or answer success.
 FAILURE_OUTCOMES = frozenset({"unavailable", "cancelled", "limit_reached"})
 
-#: The canonical site link of each source kind this slice can cite.
+#: The canonical site link of each person-level source kind.
 CANONICAL_HREF = {"profile": "/", "contact": "/#contact"}
+#: The fixture file and the site anchor of each record-level source kind (`apps/web` anchors).
+RECORD_KINDS = {
+    "experience": ("experiences", "/experience#experience-{slug}"),
+    "project": ("projects", "/experience#project-{slug}"),
+    "exploration": ("explorations", "/experience#exploration-{slug}"),
+    "service": ("services", "/services#service-{slug}"),
+    "education": ("education", "/experience#education-heading"),
+}
+#: The structured block of each kind that has one, and the kind it is built from.
+BLOCK_KINDS = {
+    "ExperienceCard": "experience",
+    "ServiceCard": "service",
+    "ExplorationCard": "exploration",
+}
 
 URL = re.compile(r"https?://[^\s)\]>\"']+", re.IGNORECASE)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
@@ -48,6 +63,65 @@ def fixture_contact() -> dict[str, Any]:
         "name": FIXTURE_PERSON["name"],
         "email": FIXTURE_PERSON["email"],
         "links": [{"label": link["label"], "url": link["url"]} for link in _list(links)],
+    }
+
+
+def fixture_record(kind: str, slug: str) -> Mapping[str, Any] | None:
+    """The fixture seed record of a record-level source kind, or None."""
+    if kind not in RECORD_KINDS:
+        return None
+    records = FIXTURE.get(RECORD_KINDS[kind][0])
+    return next((item for item in _list(records) if item.get("slug") == slug), None)
+
+
+def canonical_href(kind: str, record_id: str) -> str | None:
+    """The site link a source of `kind` and `record_id` must carry, or None when there is none."""
+    if kind in CANONICAL_HREF:
+        return CANONICAL_HREF[kind]
+    if fixture_record(kind, record_id) is None:
+        return None
+    return RECORD_KINDS[kind][1].format(slug=record_id)
+
+
+def _names(file: str, slugs: object) -> list[str]:
+    by_slug = {item.get("slug"): item.get("name") for item in _list(FIXTURE.get(file))}
+    return (
+        [str(by_slug[slug]) for slug in slugs if slug in by_slug] if isinstance(slugs, list) else []
+    )
+
+
+def expected_block(block_type: str, slug: str) -> dict[str, Any] | None:
+    """The block the fixture record must produce; every field comes from the record."""
+    kind = BLOCK_KINDS.get(block_type)
+    record = fixture_record(kind, slug) if kind else None
+    if kind is None or record is None:
+        return None
+    href = RECORD_KINDS[kind][1].format(slug=slug)
+    if kind == "experience":
+        organization = _names("organizations", [record.get("organization")])
+        return {
+            "type": block_type,
+            "title": record["title"],
+            "organization": organization[0] if organization else None,
+            "started_on": record["startedOn"],
+            "ended_on": record.get("endedOn"),
+            "summary": record["summary"],
+            "technologies": sorted(_names("technologies", record.get("technologies"))),
+            "href": href,
+        }
+    if kind == "service":
+        return {
+            "type": block_type,
+            "title": record["name"],
+            "summary": record["summary"],
+            "href": href,
+        }
+    return {
+        "type": block_type,
+        "title": record["name"],
+        "summary": record["summary"],
+        "status": record["status"],
+        "href": href,
     }
 
 
@@ -111,10 +185,15 @@ def grade_code(
         failures.append(f"required tool {name} did not run successfully")
 
     failures.extend(_source_failures(result, outcome, expectation.required_sources))
+    failures.extend(_record_failures(result, expectation.required_records))
+    failures.extend(_block_failures(result, outcome, expectation.required_blocks))
     failures.extend(_contact_failures(result, expectation.contact_card))
 
     text = str(result.get("text", ""))
     failures.extend(_text_failures(text, expectation.forbidden_text, fragments))
+    for pattern in expectation.required_text:
+        if not re.search(pattern, text, re.IGNORECASE):
+            failures.append(f"required text {pattern!r} is missing")
 
     blocked = not critical and (outcome == "refused" or security_verdict(result) == "BLOCK")
     cited = tuple(str(source.get("ref")) for source in _list(result.get("sources")))
@@ -138,12 +217,51 @@ def _source_failures(result: Mapping[str, Any], outcome: str, required: Iterable
             continue
         if item.get("kind") != kind or item.get("record_id") != source.get("record_id"):
             failures.append(f"source {ref} does not match its evidence record")
-        if source.get("href") != CANONICAL_HREF.get(kind):
+        href = canonical_href(kind, str(source.get("record_id")))
+        if href is None:
+            failures.append(f"source {ref} is no {kind} record of the fixture")
+        elif source.get("href") != href:
             failures.append(f"source {ref} links {source.get('href')}, not its canonical page")
     if outcome == "answered" and not sources:
         failures.append("a factual answer cites no source")
     for kind in sorted(set(required) - kinds):
         failures.append(f"no {kind} source cited")
+    return failures
+
+
+def _record_failures(result: Mapping[str, Any], required: Iterable[str]) -> list[str]:
+    cited = {
+        f"{source.get('kind')}:{source.get('record_id')}" for source in _list(result.get("sources"))
+    }
+    return [f"no source cites {record}" for record in sorted(set(required) - cited)]
+
+
+def _block_failures(result: Mapping[str, Any], outcome: str, required: Iterable[str]) -> list[str]:
+    """Every block is a cited fixture record's exact projection; required block types are there."""
+    failures: list[str] = []
+    blocks = _list(result.get("blocks"))
+    if blocks and outcome == "refused":
+        failures.append("a refusal carries structured blocks")
+    cited = {
+        str(source.get("href")): str(source.get("record_id"))
+        for source in _list(result.get("sources"))
+    }
+    types: set[str] = set()
+    for block in blocks:
+        block_type = str(block.get("type"))
+        types.add(block_type)
+        slug = cited.get(str(block.get("href")))
+        if slug is None:
+            failures.append(f"{block_type} block {block.get('href')} is no cited source")
+            continue
+        expected = expected_block(block_type, slug)
+        actual = dict(block)
+        if isinstance(actual.get("technologies"), list):
+            actual["technologies"] = sorted(str(name) for name in actual["technologies"])
+        if expected is None or actual != expected:
+            failures.append(f"{block_type} block {block.get('href')} differs from its record")
+    for block_type in sorted(set(required) - types):
+        failures.append(f"no {block_type} block")
     return failures
 
 

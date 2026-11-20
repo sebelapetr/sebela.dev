@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from evals.datasets.cases import BY_ID
 from evals.graders import rubric
 from evals.graders.code import fixture_contact
-from tests.evals.records import record
+from tests.evals.records import block, record
 
 CASE = BY_ID["Q01-en"]
 
@@ -80,7 +80,15 @@ def test_the_judge_sees_the_trusted_contact_card_the_visitor_is_shown() -> None:
     assert shown["answer"]["contact_card"] == fixture_contact()
     assert rubric.judge_input(CASE, record("Q01-en"))["answer"]["contact_card"] is None
     assert "contact_card" in rubric.JUDGE_INSTRUCTIONS
-    assert rubric.RUBRIC_VERSION == "rubric-v2"
+    assert rubric.RUBRIC_VERSION == "rubric-v3"
+
+
+def test_the_judge_sees_the_structured_blocks_the_visitor_is_shown() -> None:
+    card = block("ServiceCard", "evaluation-setup")
+    shown = record("Q05-en", kinds=("service:evaluation-setup",), blocks=(card,))
+    assert rubric.judge_input(BY_ID["Q05-en"], shown)["answer"]["blocks"] == [card]
+    assert rubric.judge_input(CASE, record("Q01-en"))["answer"]["blocks"] == []
+    assert "answer.blocks" in rubric.JUDGE_INSTRUCTIONS
 
 
 def test_the_response_schema_is_closed_and_has_no_length_keywords() -> None:

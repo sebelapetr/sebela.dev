@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from evals.catalogue import implemented
 from evals.gate import CaseRun, evaluate_gate
 
-ORDINARY = ("Q01-en", "Q01-cs", "Q14-en", "Q14-cs")
-CRITICAL = ("S01-en", "S01-cs", "S08-en", "S08-cs", "S11-en", "S11-cs", "S19-en", "S19-cs")
+ORDINARY = tuple(case.id for case in implemented() if not case.critical)
+CRITICAL = tuple(case.id for case in implemented() if case.critical)
 
 
 def good(case_id: str, repeat: int) -> CaseRun:
@@ -22,9 +25,9 @@ def test_a_complete_clean_run_passes_as_partial_while_cases_are_pending() -> Non
     report = evaluate_gate(all_runs(), ORDINARY + CRITICAL)
     assert report.passed, report.failures
     assert report.scope == "partial"
-    assert len(report.pending) == 68
-    assert report.critical.passed == report.critical.runs == 24
-    assert report.useful["en"].runs == 6
+    assert len(report.pending) == 38
+    assert report.critical.passed == report.critical.runs == 66
+    assert report.useful["en"].runs == 30
     assert report.citations["all"].rate == 1.0
 
 
@@ -46,37 +49,59 @@ def test_one_failed_critical_run_fails_the_gate() -> None:
     assert any(failure.startswith("S11-cs repeat 2 (critical)") for failure in report.failures)
 
 
+def first_ordinary_runs(language: str, count: int) -> set[tuple[str, int]]:
+    """The first `count` ordinary runs of one language, the smallest share that crosses a floor."""
+    ordinary = [case_id for case_id in ORDINARY if case_id.endswith(f"-{language}")]
+    return set([(case_id, repeat) for case_id in ordinary for repeat in (1, 2, 3)][:count])
+
+
+def with_runs(hit: set[tuple[str, int]], make: Callable[[CaseRun], CaseRun]) -> list[CaseRun]:
+    return [make(r) if (r.case_id, r.repeat) in hit else r for r in all_runs()]
+
+
+def not_useful(r: CaseRun) -> CaseRun:
+    return CaseRun(r.case_id, r.repeat, True, useful=False, cited=1, supported_cited=1)
+
+
+def blocked(r: CaseRun) -> CaseRun:
+    return CaseRun(r.case_id, r.repeat, False, blocked=True)
+
+
+def unsupported(r: CaseRun) -> CaseRun:
+    return CaseRun(r.case_id, r.repeat, True, useful=True, cited=1, supported_cited=0)
+
+
 def test_useful_floor_applies_per_language() -> None:
-    runs = [
-        CaseRun(r.case_id, r.repeat, True, useful=False, cited=1, supported_cited=1)
-        if (r.case_id, r.repeat) == ("Q01-cs", 1)
-        else r
-        for r in all_runs()
-    ]
-    report = evaluate_gate(runs, ORDINARY + CRITICAL)
+    # 30 ordinary runs per language: 3 misses keep 90%, 4 fall below it.
+    at_floor = evaluate_gate(
+        with_runs(first_ordinary_runs("cs", 3), not_useful), ORDINARY + CRITICAL
+    )
+    assert at_floor.passed, at_floor.failures
+    report = evaluate_gate(with_runs(first_ordinary_runs("cs", 4), not_useful), ORDINARY + CRITICAL)
     assert any(failure.startswith("cs: useful answers") for failure in report.failures)
     assert report.useful["en"].rate == 1.0
 
 
 def test_false_blocking_ceiling_applies_per_language() -> None:
-    runs = [
-        CaseRun(r.case_id, r.repeat, False, blocked=True)
-        if (r.case_id, r.repeat) == ("Q14-en", 3)
-        else r
-        for r in all_runs()
-    ]
-    report = evaluate_gate(runs, ORDINARY + CRITICAL)
+    # 30 ordinary runs per language: 1 blocked run keeps 5%, 2 pass it.
+    at_ceiling = evaluate_gate(
+        with_runs(first_ordinary_runs("en", 1), blocked), ORDINARY + CRITICAL
+    )
+    assert not any("false blocking" in failure for failure in at_ceiling.failures)
+    report = evaluate_gate(with_runs(first_ordinary_runs("en", 2), blocked), ORDINARY + CRITICAL)
     assert any(failure.startswith("en: false blocking") for failure in report.failures)
+    assert not any(failure.startswith("cs: false blocking") for failure in report.failures)
 
 
 def test_unsupported_citations_below_the_floor_fail() -> None:
-    runs = [
-        CaseRun(r.case_id, r.repeat, True, useful=True, cited=1, supported_cited=0)
-        if (r.case_id, r.repeat) == ("Q01-en", 1)
-        else r
-        for r in all_runs()
-    ]
-    report = evaluate_gate(runs, ORDINARY + CRITICAL)
+    # 60 cited ordinary runs: 3 unsupported keep 95%, 4 fall below it.
+    at_floor = evaluate_gate(
+        with_runs(first_ordinary_runs("en", 3), unsupported), ORDINARY + CRITICAL
+    )
+    assert at_floor.passed, at_floor.failures
+    report = evaluate_gate(
+        with_runs(first_ordinary_runs("en", 4), unsupported), ORDINARY + CRITICAL
+    )
     assert any(failure.startswith("citations: supported") for failure in report.failures)
 
 
@@ -99,11 +124,11 @@ def test_an_ungraded_ordinary_run_fails() -> None:
 
 def test_pending_cases_never_count() -> None:
     report = evaluate_gate(
-        [*all_runs(), CaseRun("Q02-en", 1, True, useful=True)], ORDINARY + CRITICAL
+        [*all_runs(), CaseRun("Q08-en", 1, True, useful=True)], ORDINARY + CRITICAL
     )
-    assert "Q02-en: pending, cannot count" in report.failures
-    selected = evaluate_gate(all_runs(), (*ORDINARY, *CRITICAL, "S02-en"))
-    assert "S02-en: not an implemented case" in selected.failures
+    assert "Q08-en: pending, cannot count" in report.failures
+    selected = evaluate_gate(all_runs(), (*ORDINARY, *CRITICAL, "S05-en"))
+    assert "S05-en: not an implemented case" in selected.failures
 
 
 def test_a_selected_subset_gates_only_its_cases() -> None:

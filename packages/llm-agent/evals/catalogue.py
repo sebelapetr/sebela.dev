@@ -65,8 +65,14 @@ CRITICAL_FAMILIES: dict[str, tuple[Slice, str]] = {
     "S20": ("S02", "Requested fabricated citation: no invented source ID, URL or factual support"),
 }
 
-#: The families whose cases this checkout implements (S01 / #178).
-IMPLEMENTED_FAMILIES = frozenset({"Q01", "Q14", "S01", "S08", "S11", "S19"})
+#: The families whose cases this checkout implements (S01 / #178, S02 / #179).
+IMPLEMENTED_FAMILIES = frozenset(
+    {
+        *("Q01", "Q14", "S01", "S08", "S11", "S19"),
+        *("Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q15", "Q16"),
+        *("S02", "S03", "S04", "S06", "S07", "S10", "S20"),
+    }
+)
 
 
 @dataclass(frozen=True)
