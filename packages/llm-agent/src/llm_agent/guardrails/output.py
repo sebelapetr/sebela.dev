@@ -2,8 +2,10 @@
 
 `review` decides whether a Main Agent draft may be shown (`pass`), may be shown after removing
 source refs that are not this turn's evidence (`repair`), or must be replaced by the fixed
-insufficient-evidence response (`replace`). Text is never edited: a draft with an untrusted link
-or e-mail address, markup, a code block or a system-prompt line is replaced as a whole.
+insufficient-evidence response (`replace`). An answered draft that cites no valid current-turn
+source is always replaced: the prompt asks for sources, but only this check enforces it. Text
+is never edited: a draft with an untrusted link or e-mail address, markup, a code block or a
+system-prompt line is replaced as a whole.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_agent.schemas import ContactCard, Evidence, Language
 
-GUARD_VERSION: Final = "output-guard-1"
+GUARD_VERSION: Final = "output-guard-2"
 MAX_TEXT_CHARS: Final = 4000
 LEAK_MIN_LENGTH: Final = 40
 
@@ -58,7 +60,8 @@ def review(
     prompt_texts: Iterable[str],
 ) -> Review:
     refs = tuple(dict.fromkeys(ref for ref in draft.source_refs if ref in evidence))
-    if draft.outcome == "answered" and draft.source_refs and not refs:
+    # An answer is shown only when it rests on at least one source of this turn's evidence.
+    if draft.outcome == "answered" and not refs:
         return Review("replace", (), "no_valid_source")
     finding = text_finding(draft.text, contact=contact, prompt_texts=prompt_texts)
     if finding is not None:

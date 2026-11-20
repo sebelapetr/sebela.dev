@@ -351,7 +351,7 @@ async def test_a_tool_outside_the_allowlist_is_rejected_and_never_executed() -> 
     content = FakeContent()
     models = ScriptedModels(
         security=[verdict()],
-        main=[tools("update_person", args={"headline": "x"}), draft(refs=())],
+        main=[tools("update_person", args={"headline": "x"}), draft(outcome="refused", refs=())],
     )
     result = await run(models, content=content)
     assert content.reads == 0
@@ -365,7 +365,10 @@ async def test_tool_arguments_are_validated_before_execution() -> None:
     content = FakeContent()
     models = ScriptedModels(
         security=[verdict()],
-        main=[tools("get_profile", args={"url": "https://evil.example.test"}), draft(refs=())],
+        main=[
+            tools("get_profile", args={"url": "https://evil.example.test"}),
+            draft(outcome="refused", refs=()),
+        ],
     )
     result = await run(models, content=content)
     assert content.reads == 0
@@ -374,7 +377,9 @@ async def test_tool_arguments_are_validated_before_execution() -> None:
 
 async def test_an_oversized_tool_result_is_rejected_not_truncated() -> None:
     huge = PERSON.model_copy(update={"long_bio": "word " * 10_000})
-    models = ScriptedModels(security=[verdict()], main=[tools("get_profile"), draft(refs=())])
+    models = ScriptedModels(
+        security=[verdict()], main=[tools("get_profile"), draft(outcome="refused", refs=())]
+    )
     result = await run(models, content=FakeContent(huge))
     assert ("tool.get_profile", "too_large") in spans(result)
     assert result.evidence == []

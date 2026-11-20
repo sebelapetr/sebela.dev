@@ -90,6 +90,10 @@ class Versions(_Frozen):
     chat_prompt: str
     tools: str
     output_guard: str
+    #: The fingerprint of every module of the package: guard rules, tool projections, settings.
+    runtime: str
+    #: The price list the subject's costs were computed with.
+    pricing: str
 
 
 class ChatResult(_Frozen):

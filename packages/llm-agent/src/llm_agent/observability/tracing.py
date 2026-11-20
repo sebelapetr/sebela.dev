@@ -1,4 +1,4 @@
-"""The per-execution trace: one span per stage, tool call and guard decision, appended when done.
+"""The per-execution trace: one span per stage, model attempt, tool call and guard decision.
 
 Spans carry names, statuses, durations and small typed attributes only, never visitor text, model
 text or tool data.

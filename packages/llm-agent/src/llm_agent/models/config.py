@@ -14,6 +14,8 @@ Stage = Literal["security", "main"]
 Effort = Literal["low", "medium", "high"]
 
 HAIKU: Final = "claude-haiku-5-5"
+#: The checked price list the stage prices come from; part of the stored versions.
+PRICING_VERSION: Final = "anthropic-2026-11-19"
 SECURITY_EFFORT: Final = "medium"
 MAIN_EFFORT: Final = "high"
 

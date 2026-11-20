@@ -11,6 +11,8 @@ import asyncio
 import contextlib
 from typing import Any, Final
 
+from langsmith.run_helpers import tracing_context
+
 from llm_agent.context.tokens import text_tokens
 from llm_agent.guardrails.input import detect_language
 from llm_agent.models.gateway import Gateway, ModelFactory
@@ -48,9 +50,12 @@ class ChatAgent:
         execution = self._execution(request, limits)
         if text_tokens(request.question) > limits.question_tokens:
             return _stopped(execution, LimitReached("question_too_long"))
-        task = asyncio.ensure_future(
-            chat_graph().ainvoke({}, config={"configurable": {"execution": execution}})
-        )
+        # Visitor text never leaves through LangChain's tracing: the task copies this context,
+        # so LangSmith stays off whatever LANGSMITH_TRACING says.
+        with tracing_context(enabled=False):
+            task = asyncio.ensure_future(
+                chat_graph().ainvoke({}, config={"configurable": {"execution": execution}})
+            )
         waiters: set[asyncio.Future[Any]] = {task}
         cancelled: asyncio.Future[Any] | None = None
         if cancel is not None:
@@ -92,7 +97,7 @@ class ChatAgent:
             language=detect_language(request.question),
             budget=budget,
             deadline=deadline,
-            gateway=Gateway(self._models, budget, deadline),
+            gateway=Gateway(self._models, budget, deadline, tracer),
             tools=Tools(
                 self._content,
                 tracer=tracer,

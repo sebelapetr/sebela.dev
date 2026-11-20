@@ -12,6 +12,7 @@ dependencies = [
   "langchain-anthropic==1.7.12",
   "langchain-core==1.8.4",
   "langgraph==1.2.24",
+  "langsmith==0.15.1",
   "pydantic==2.14.4",
 ]
 
