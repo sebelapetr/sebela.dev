@@ -29,7 +29,7 @@ API-key caller (owner, evals) -> private search route -> packages/memory -> pack
 
 Everything is TypeScript inside the API backend. `packages/memory` is the knowledge/retrieval layer, called only by the API backend; persistence stays behind `packages/db` operations. Python, the website and both MCP apps are untouched in this phase.
 
-Inside `packages/memory`, ingest and retrieval are separate modules joined only by the stored chunk contract (text, vector, source, version, hashes): `ingest` (load, extract, clean, sensitivity and conflict checks, chunking, version and approval state), `indexing` (persisted work queue, batched embedding, spend ceiling, rebuild), `retrieval` (query embedding, vector and full-text candidates, rank fusion, reranking, relevance floor, passage projection) and `providers` (embedder and reranker interfaces with Voyage and deterministic fake implementations). The package exposes two narrow operation sets: ingest/index for the CLI and the write hook, and search for the route. No RAG framework (LangChain, LlamaIndex): Drizzle's pgvector support, a PDF text extractor, a Markdown parser and a tokenizer cover the narrow parts; chunking, fusion and thresholds are the repository's own code.
+Inside `packages/memory`, ingest and retrieval are separate modules joined only by the stored chunk contract (text, vector, source, version, hashes): `ingest` (load, extract, clean, sensitivity and conflict checks, chunking, version and approval state), `indexing` (persisted work queue, batched embedding, spend ceiling, rebuild), `retrieval` (query embedding, vector and full-text candidates, rank fusion, reranking, relevance floor, passage projection) and `providers` (embedder and reranker interfaces with Voyage and deterministic fake implementations) and `ports` (the persistence, original-storage, work-queue, spend and portfolio-reading interfaces it needs). `packages/memory` may import only `contracts` and `config`; it never imports `packages/db`. `packages/db` implements the persistence ports, and `packages/services` composes memory with db, private storage, the portfolio services and the Voyage adapter, so the whole pipeline is testable with fakes. The package exposes two narrow operation sets: ingest/index for the CLI and the write hook, and search for the route. No RAG framework (LangChain, LlamaIndex): Drizzle's pgvector support, a PDF text extractor, a Markdown parser and a tokenizer cover the narrow parts; chunking, fusion and thresholds are the repository's own code.
 
 The private search route returns exactly the passage projection phase 9.1 will expose to the agent tool and public MCP. Phase 9.1 adds the public path and budget admission; it must not need to redesign the result shape.
 
@@ -116,7 +116,7 @@ The private search route returns exactly the passage projection phase 9.1 will e
 
 ### Retrieval and the private search route
 
-- Two-stage retrieval. Stage 1: vector candidates by cosine distance (pgvector, HNSW index) and full-text candidates (Postgres full-text with the `simple` configuration and `unaccent`, since Postgres has no Czech stemmer), merged by reciprocal rank fusion into a configurable candidate pool (initially 30). Stage 2: a cross-encoder reranker (Voyage's current reranker, verified in its documentation) scores query and passage together and selects the final passages (initially 5–8); the relevance floor applies to the reranker score. The reranker is the expected configuration, but evals compare full-text only, vector only, hybrid without reranking and hybrid with reranking; if reranking brings no measurable gain it is switched off by configuration. Pool size, final count and floor are configuration tuned by evals.
+- Two-stage retrieval. Stage 1: vector candidates by cosine distance (pgvector, HNSW index) and full-text candidates (Postgres full-text with the `simple` configuration and `unaccent`, since Postgres has no Czech stemmer), merged by reciprocal rank fusion into a configurable candidate pool (initially 30). Stage 2: a cross-encoder reranker (Voyage's current reranker, verified in its documentation) scores query and passage together and selects the final passages (initially 5–8); the relevance floor applies to the reranker score. The reranker is a fixed part of the deployed pipeline (owner decision); evals still report full-text only, vector only and hybrid without reranking so its contribution is measured and published. If the reranker is unavailable, search returns the typed provider-unavailable result rather than unreranked passages, because the floor is calibrated on its score. Pool size, final count and floor are configuration tuned by evals.
 - `packages/memory` exposes one search operation: query text, optional content-kind filter and result limit in; ranked passages out, or a typed result for no evidence, budget exhausted or provider unavailable. "No evidence" is never used for a failure.
 - The route is private: the existing API-key authentication, per-key rate budget and request validation apply. It is not reachable anonymously and is not advertised to the website or MCP.
 - Bound query length, result count, result text length and latency. Below the calibrated relevance floor, return no evidence.
@@ -130,6 +130,25 @@ The private search route returns exactly the passage projection phase 9.1 will e
 - No owner stop in the loop: the agent drafts the question set, measures full-text and vector baselines, proposes thresholds and commits them in an issue that precedes hybrid and reranking work. Thresholds are never lowered afterwards (hard rule 9); the reviewer checks this. The owner reviews the set, method and thresholds in the phase pull request.
 - Paid eval spend for the whole phase is capped at **USD 3**, separate from the USD 10 campaign of phases 6 and 7; a single run stops at USD 1. Saved-result regrading and the secret wrapper follow the existing eval rules. Paid evals run per issue only for affected cases, and completely at the phase pull request into `master`.
 - Publish the fictional datasets, method and results. Real owner documents never enter Git.
+
+### Approximate file structure
+
+Paths show responsibilities, not mandatory files. Follow the backend module layout and maintain each `AGENTS.md` module map.
+
+```text
+packages/memory/                       new; imports only contracts and config
+  src/modules/{ingest,indexing,retrieval,providers,ports}/
+  evals/{promptfooconfig.yaml,datasets/,graders/,thresholds,results/}
+packages/db/src/modules/retrieval/     retrieval schema; implements the persistence ports
+packages/db/migrations/                retrieval migrations (renumbered after phases 7/8 merge)
+packages/services/src/modules/storage/ private store/read/delete for local and bunny-s3
+packages/services/src/modules/retrieval/  composition: memory + db + storage + portfolio + Voyage
+packages/contracts/src/modules/retrieval/ search request, passage variants, typed errors
+apps/api/src/modules/retrieval/        private search route
+apps/api/src/cli/knowledge.ts          ingest | show | approve | reject | withdraw | delete | list | reindex | rebuild
+```
+
+The `memory` row is added to the dependency table in `docs/repository-structure.md` and to the import-boundaries rule when the package is created.
 
 ## Testing Decisions
 
