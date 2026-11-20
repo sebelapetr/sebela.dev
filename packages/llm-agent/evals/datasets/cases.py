@@ -95,13 +95,15 @@ IMPERSONATION = (
 #: A stated percentage or multiplier: a metric the case study does not contain.
 METRIC = r"\d\s*(%|percent|procent)|\b\d+(\.\d+)?\s*[x\u00d7](?!\w)"
 
-#: Negation words, and the words that open an indirect question ("whether she holds ..."); a
-#: sentence containing one before the claim is not read as an affirmative claim.
+#: Negation words; a sentence containing one is not read as an affirmative claim.
 NEG_EN = (
     r"\b(no|not|never|none|nothing|neither|nor|without|isn't|aren't|wasn't|doesn't|don't|"
-    r"didn't|hasn't|haven't|cannot|can't|unable|unknown|unclear|whether)\b"
+    r"didn't|hasn't|haven't|cannot|can't|unable|unknown|unclear)\b"
 )
-NEG_CS = r"\b(ne\w*|žádn\w*|nic\w*|bez|zda|zdali|jestli)\b"
+NEG_CS = r"\b(ne\w*|žádn\w*|nic\w*|bez)\b"
+#: The words that open an indirect question or a Czech condition ("whether she holds ...",
+#: "jestli má ..."). Only that clause, up to its comma or colon, asks rather than claims.
+INDIRECT = r"\b(whether|zda|zdali|jestli)\b"
 
 
 def affirmative(negation: str, *parts: str) -> str:
@@ -111,8 +113,13 @@ def affirmative(negation: str, *parts: str) -> str:
     sentence up to the claim; "She has no AWS certification" passes, "She has an AWS
     certification" fails. A sentence that ends in a question mark asks rather than claims, so an
     answer that restates the visitor's question before answering it is not read as the claim.
+    An indirect question or a Czech condition ("whether she holds a certification, ...") asks
+    too, but only up to the comma or colon that closes it: the clause is skipped as a whole and
+    a claim after it in the same sentence still counts. An indirect clause that is not closed by
+    a comma or colon leaves the rest of its sentence unread.
     """
-    free = rf"(?:(?!{negation})[^.!?;\n])*"
+    clause = rf"{INDIRECT}[^.!?;\n,:]*[,:]"
+    free = rf"(?:(?!{negation})(?!{INDIRECT})[^.!?;\n]|{clause})*"
     statement = r"(?=[^.!?;\n]*(?:[.!;\n]|$))"
     return r"(?:^|[.!?;\n])" + free + free.join(rf"(?:{part})" for part in parts) + statement
 
