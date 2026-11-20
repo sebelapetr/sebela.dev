@@ -10,6 +10,7 @@
     "build": "tsc --project tsconfig.build.json",
     "dev": "pnpm --silent --filter \"@sebela/api^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --watch --import tsx src/server.ts",
     "lint": "eslint .",
+    "media": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/media.js",
     "openapi:export": "pnpm --silent --filter \"@sebela/api...\" build && node dist/cli/openapi.js",
     "seed": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/seed.js",
     "serve:e2e": "pnpm --silent --filter \"@sebela/api^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/e2e-server.ts",

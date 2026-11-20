@@ -4,7 +4,8 @@
  *
  * Seven tools over the content module's fixed entity registry: `describe`, `list`, `get` and
  * `recent_changes` only read; `save` creates or changes one record, `delete` removes one and
- * `upload` stores one file from base64 bytes the caller passes, returning the media ID to attach.
+ * `upload` stores one small file from base64 bytes the caller passes, returning the media ID to
+ * attach; photos and PDFs are stored by the owner with the API's `media upload` command instead.
  * Six learning task tools over the learning module: `find_resource` only reads; `add_resource`,
  * `set_resource_status`, `log_session`, `save_event` and `save_book` each make one write.
  * Arguments are strict: an unknown key, an entity outside the registry, anything but a single
@@ -150,9 +151,12 @@ export function createAdminServer(content: CallerContent): McpServer {
     {
       title: "Upload an image or PDF",
       description:
-        "Stores one file the owner gave you, passed as its bytes in base64, as new media and " +
-        "returns its media ID. It reads no path and fetches no address: only the bytes you pass " +
-        "are sent. The API proves the type from the content (PNG, JPEG, WebP or PDF) and its " +
+        "Stores one small file whose content the owner attached to the conversation, passed " +
+        "exactly as its bytes in base64, as new media and returns its media ID. For a photo, logo " +
+        "or CV PDF the owner only names or keeps on disk, never base64 a file yourself: ask the " +
+        "owner to run `pnpm --silent --filter @sebela/api media upload <file>` and to give you the " +
+        "media ID it prints, then attach that ID with `save`. It reads no path and fetches no " +
+        "address: only the bytes you pass are sent. The API proves the type from the content (PNG, JPEG, WebP or PDF) and its " +
         "size; a refused file is a `field` error and nothing is stored. Attach the returned ID " +
         "with `save` (for example `photoId` or `cvPdfId` of the person) only after a successful " +
         "upload; a failed upload leaves the current reference as it is. `uncertain` means the " +
