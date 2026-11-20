@@ -409,6 +409,49 @@ describe("attaching uploaded media", () => {
     expect(api.person()["photoId"]).toBeNull();
   });
 
+  it("attaches media the owner stored with the upload command, without passing any bytes", async () => {
+    const api = fakeApi();
+    // Stored outside the model, as `media upload <file>` of the API does (issue #201).
+    const id = "00000000-0000-4000-9000-000000000201";
+    api.media.set(id, {
+      id,
+      key: `fixture/${id}.pdf`,
+      mediaType: "application/pdf",
+      byteSize: 250_000,
+      width: null,
+      height: null,
+      altText: null,
+      url: `${API_BASE}/v1/media/files/fixture/${id}.pdf`,
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    });
+    const { client } = await open(api);
+
+    const saved = await call(client, "save", {
+      entity: "person",
+      action: "update",
+      fields: { cvPdfId: id },
+    });
+
+    expect(saved.isError).toBe(false);
+    expect(api.person()["cvPdfId"]).toBe(id);
+    expect(uploads(api)).toEqual([]);
+  });
+
+  it("sends photos and PDFs through the owner's upload command instead of base64", async () => {
+    const { client } = await open();
+
+    const { tools } = await client.listTools();
+    const upload = tools.find((tool) => tool.name === "upload")?.description ?? "";
+    const person = await call(client, "describe", { entity: "person" });
+    const organization = await call(client, "describe", { entity: "organization" });
+
+    for (const text of [upload, person.text, organization.text]) {
+      expect(text).toMatch(/media upload <file>/);
+    }
+    expect(upload).toMatch(/never base64/i);
+  });
+
   it("tells a caller how media is uploaded and attached", async () => {
     const { client } = await open();
 

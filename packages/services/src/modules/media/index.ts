@@ -130,6 +130,11 @@ export function readMediaConfig(env: Environment, cwd: string = process.cwd()): 
   return { storage, limits: { maxBytes, maxImageDimension } };
 }
 
+/** Not implemented yet. */
+export function readMediaLimits(env: Environment): MediaLimits {
+  throw new Error(`Not implemented: ${Object.keys(env).join(", ")}`);
+}
+
 /**
  * Checks a file exactly as `uploadMedia` would, without storing or recording anything, so a caller
  * can refuse a whole batch before its first upload. Returns the type the content proves; throws the
