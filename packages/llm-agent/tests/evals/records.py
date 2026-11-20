@@ -22,6 +22,14 @@ TOOL = {
     "exploration": "list_explorations",
     "service": "list_services",
     "education": "list_education",
+    "current_focus": "list_current_focus",
+    "roadmap": "get_roadmap",
+    "roadmap_area": "get_roadmap",
+    "roadmap_module": "get_roadmap_area",
+    "diary_day": "get_learning_diary",
+    "statistics": "get_learning_statistics",
+    "book": "list_books",
+    "event": "list_events",
 }
 
 

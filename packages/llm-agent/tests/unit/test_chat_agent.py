@@ -96,9 +96,16 @@ async def test_the_stages_use_the_configured_models_and_only_the_read_tools() ->
     assert (main.model, main.effort) == ("claude-haiku-5-5", "high")
     assert sorted(tool["name"] for tool in main.tools) == [
         "get_contact",
+        "get_learning_diary",
+        "get_learning_statistics",
         "get_profile",
         "get_project",
+        "get_roadmap",
+        "get_roadmap_area",
+        "list_books",
+        "list_current_focus",
         "list_education",
+        "list_events",
         "list_experiences",
         "list_explorations",
         "list_projects",

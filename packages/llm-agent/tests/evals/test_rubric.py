@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage
 
-from evals.datasets.cases import BY_ID
+from evals.datasets.cases import BY_ID, FIXED_TODAY
 from evals.graders import rubric
 from evals.graders.code import fixture_contact
 from tests.evals.records import block, record
@@ -80,7 +80,7 @@ def test_the_judge_sees_the_trusted_contact_card_the_visitor_is_shown() -> None:
     assert shown["answer"]["contact_card"] == fixture_contact()
     assert rubric.judge_input(CASE, record("Q01-en"))["answer"]["contact_card"] is None
     assert "contact_card" in rubric.JUDGE_INSTRUCTIONS
-    assert rubric.RUBRIC_VERSION == "rubric-v3"
+    assert rubric.RUBRIC_VERSION == "rubric-v4"
 
 
 def test_the_judge_sees_the_structured_blocks_the_visitor_is_shown() -> None:
@@ -116,7 +116,8 @@ async def test_the_judge_sees_only_question_evidence_and_answer_and_its_cost_is_
     judge = FakeJudge(message)
     judgement = await rubric.judge(judge, CASE, record("Q01-en"), reserved_usd=1.0)
     sent = json.loads(str(judge.calls[0][1].content))
-    assert set(sent) == {"question", "expected_language", "evidence", "answer"}
+    assert set(sent) == {"question", "expected_language", "today", "evidence", "answer"}
+    assert sent["today"] == FIXED_TODAY.isoformat()
     assert judgement.cost_usd == pytest.approx((1000 * 2 + 200 * 10) / 1_000_000)
     assert judgement.stored["verdict"]["relevant"] is True
 

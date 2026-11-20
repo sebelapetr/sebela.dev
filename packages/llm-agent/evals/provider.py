@@ -16,7 +16,7 @@ import os
 import time
 from typing import Any
 
-from evals.datasets.cases import BY_ID, DATASET_VERSION
+from evals.datasets.cases import BY_ID, DATASET_VERSION, FIXED_TODAY
 
 #: The schema of one stored case-run record (`evals/run.py`, regrade compatibility).
 RECORD_SCHEMA = "llm-agent-answer-v1"
@@ -32,7 +32,7 @@ async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]
     started = time.monotonic()
     async with ApiContentReader(os.environ["LLM_AGENT_API_URL"]) as content:
         agent = ChatAgent(content=content, models=anthropic_model_factory())
-        result = await agent.run(ChatRequest(question=case.question))
+        result = await agent.run(ChatRequest(question=case.question, today=FIXED_TODAY))
     record = {
         "record_schema": RECORD_SCHEMA,
         "case_id": case.id,

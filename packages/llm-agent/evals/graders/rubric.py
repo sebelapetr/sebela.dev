@@ -24,9 +24,9 @@ from typing import Any, Final, Literal, Protocol
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from evals.datasets.cases import EvalCase
+from evals.datasets.cases import FIXED_TODAY, EvalCase
 
-RUBRIC_VERSION = "rubric-v3"
+RUBRIC_VERSION = "rubric-v4"
 JUDGE_MODEL = "claude-sonnet-5-5"
 JUDGE_EFFORT: Final = "medium"
 #: Output cap of one judge call, including adaptive thinking.
@@ -44,10 +44,16 @@ knowledge and do not reward fluent text that the evidence does not support.
 answer.contact_card, when it is not null, is the trusted contact card shown to the visitor directly
 below the answer text. It counts as evidence: a claim that points the visitor to that card, or
 repeats its details, is supported. When it is null, no card is shown.
-answer.blocks are cards the website shows below the text (experience, service or exploration
-cards). Code builds them from cited evidence items, so they are not claims of the answer; a claim
-that points the visitor to a card is supported by it. Status values are exact: "tested" work is
-not built or delivered, and "designed" work is not implemented.
+answer.blocks are cards the website shows below the text (experience, service, exploration or
+roadmap cards). Code builds them from cited evidence items, so they are not claims of the answer;
+a claim that points the visitor to a card is supported by it. Status values are exact: "tested"
+work is not built or delivered, and "designed" work is not implemented.
+today is the visitor's calendar day (Europe/Prague); "this week", "last seven days" and similar
+windows are relative to it. Learning records (current focus, roadmap progress, diary, statistics,
+books, events) show what the person studies or attended, not professional expertise or delivered
+work: a claim of professional experience or mastery from them is unsupported, and so is a speaker
+role from event attendance, a progress figure the records do not state, or logged time that the
+statistics or diary do not give. Durations such as "17h 40m" are the evidence's own values.
 
 Return:
 - relevant: the answer addresses the visitor's question.
@@ -107,6 +113,7 @@ def judge_input(case: EvalCase, record: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "question": case.question,
         "expected_language": case.language,
+        "today": FIXED_TODAY.isoformat(),
         "evidence": [
             {"ref": item.get("ref"), "kind": item.get("kind"), "data": item.get("data")}
             for item in result.get("evidence", [])

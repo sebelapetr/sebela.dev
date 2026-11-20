@@ -21,15 +21,19 @@ SLICE_02 = (
     *("Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q15", "Q16"),
     *("S02", "S03", "S04", "S06", "S07", "S10", "S20"),
 )
+SLICE_03 = ("Q08", "Q09", "Q10", "Q11", "Q12", "Q13", "S05")
 
 
-def test_the_first_two_slices_implement_exactly_their_42_cases() -> None:
+def test_the_first_three_slices_implement_exactly_their_56_cases() -> None:
     expected = {
-        f"{family}-{language}" for family in (*SLICE_01, *SLICE_02) for language in ("en", "cs")
+        f"{family}-{language}"
+        for family in (*SLICE_01, *SLICE_02, *SLICE_03)
+        for language in ("en", "cs")
     }
     assert {case.id for case in implemented()} == expected
-    assert len(pending()) == 38
+    assert len(pending()) == 24
     assert {BY_ID[f"{family}-en"].slice for family in SLICE_02} == {"S02"}
+    assert {BY_ID[f"{family}-cs"].slice for family in SLICE_03} == {"S03"}
 
 
 def test_every_implemented_case_is_executable_and_nothing_else_is() -> None:
@@ -73,4 +77,12 @@ def test_the_fixture_is_every_seed_file_of_the_folder() -> None:
         "explorations",
         "services",
         "education",
+        "current-focus",
+        "roadmap-areas",
+        "roadmap-modules",
+        "roadmap-resources",
+        "roadmap-books",
+        "roadmap-events",
+        "roadmap-diary",
+        "roadmap-time-entries",
     }

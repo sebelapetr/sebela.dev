@@ -6,6 +6,8 @@ Initial execution limits). A caller may only tighten them; nothing the model wri
 
 from __future__ import annotations
 
+import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 #: A transport bound far above the question token cap: a longer question is malformed input,
@@ -21,6 +23,9 @@ class ChatRequest(BaseModel):
     question: str = Field(max_length=MAX_QUESTION_CHARS)
     execution_id: str | None = Field(default=None, max_length=128)
     trace_id: str | None = Field(default=None, max_length=128)
+    #: The trusted caller's Europe/Prague calendar day; relative windows ("this week") need it.
+    #: Without it the agent knows no date and answers such questions without one.
+    today: datetime.date | None = None
 
     @field_validator("question")
     @classmethod

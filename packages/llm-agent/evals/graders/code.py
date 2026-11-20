@@ -11,10 +11,12 @@ A record is the JSON the provider stores for one case-run (`evals/provider.py`):
 
 from __future__ import annotations
 
+import datetime
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from evals.datasets.cases import ALLOWED_TOOLS, FIXTURE, FIXTURE_PERSON, EvalCase
 
@@ -23,20 +25,34 @@ FAILURE_OUTCOMES = frozenset({"unavailable", "cancelled", "limit_reached"})
 
 #: The canonical site link of each person-level source kind.
 CANONICAL_HREF = {"profile": "/", "contact": "/#contact"}
-#: The fixture file and the site anchor of each record-level source kind (`apps/web` anchors).
+#: The one record id and site page of each singleton learning source kind.
+SINGLETON_KINDS = {
+    "roadmap": ("ai-roadmap", "/ai-roadmap"),
+    "statistics": ("learning-statistics", "/ai-roadmap/diary/stats"),
+}
+#: The fixture file and the site page of each record-level source kind (`apps/web` routes and
+#: anchors); `{area}` is a module's area slug and `{year}` an event's start year.
 RECORD_KINDS = {
     "experience": ("experiences", "/experience#experience-{slug}"),
     "project": ("projects", "/experience#project-{slug}"),
     "exploration": ("explorations", "/experience#exploration-{slug}"),
     "service": ("services", "/services#service-{slug}"),
     "education": ("education", "/experience#education-heading"),
+    "current_focus": ("current-focus", "/#now-heading"),
+    "roadmap_area": ("roadmap-areas", "/ai-roadmap/{slug}"),
+    "roadmap_module": ("roadmap-modules", "/ai-roadmap/{area}/{slug}"),
+    "book": ("roadmap-books", "/ai-roadmap/bookshelf/{slug}"),
+    "event": ("roadmap-events", "/ai-roadmap/events#events-{year}"),
 }
-#: The structured block of each kind that has one, and the kind it is built from.
+#: The structured block of each kind that has one, and the kinds it is built from.
 BLOCK_KINDS = {
-    "ExperienceCard": "experience",
-    "ServiceCard": "service",
-    "ExplorationCard": "exploration",
+    "ExperienceCard": ("experience",),
+    "ServiceCard": ("service",),
+    "ExplorationCard": ("exploration",),
+    "RoadmapCard": ("roadmap_area", "roadmap_module"),
 }
+#: The calendar the content API's diary days and statistics windows use.
+PRAGUE = ZoneInfo("Europe/Prague")
 
 URL = re.compile(r"https?://[^\s)\]>\"']+", re.IGNORECASE)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
@@ -74,13 +90,42 @@ def fixture_record(kind: str, slug: str) -> Mapping[str, Any] | None:
     return next((item for item in _list(records) if item.get("slug") == slug), None)
 
 
+def diary_days() -> frozenset[str]:
+    """The Europe/Prague days the fixture's learning diary has: notes, sessions or events."""
+    days = {str(item.get("date")) for item in _list(FIXTURE.get("roadmap-diary"))}
+    for entry in _list(FIXTURE.get("roadmap-time-entries")):
+        for moment in (entry.get("startedAt"), entry.get("endedAt")):
+            if isinstance(moment, str):
+                local = datetime.datetime.fromisoformat(moment).astimezone(PRAGUE)
+                days.add(local.date().isoformat())
+    for event in _list(FIXTURE.get("roadmap-events")):
+        day = datetime.date.fromisoformat(str(event["startsOn"]))
+        end = datetime.date.fromisoformat(str(event.get("endsOn") or event["startsOn"]))
+        while day <= end:
+            days.add(day.isoformat())
+            day += datetime.timedelta(days=1)
+    return frozenset(days)
+
+
+def _record_href(kind: str, record: Mapping[str, Any]) -> str:
+    return RECORD_KINDS[kind][1].format(
+        slug=record.get("slug"),
+        area=record.get("area"),
+        year=str(record.get("startsOn", ""))[:4],
+    )
+
+
 def canonical_href(kind: str, record_id: str) -> str | None:
     """The site link a source of `kind` and `record_id` must carry, or None when there is none."""
     if kind in CANONICAL_HREF:
         return CANONICAL_HREF[kind]
-    if fixture_record(kind, record_id) is None:
-        return None
-    return RECORD_KINDS[kind][1].format(slug=record_id)
+    if kind in SINGLETON_KINDS:
+        singleton_id, href = SINGLETON_KINDS[kind]
+        return href if record_id == singleton_id else None
+    if kind == "diary_day":
+        return f"/ai-roadmap/diary/{record_id}" if record_id in diary_days() else None
+    record = fixture_record(kind, record_id)
+    return None if record is None else _record_href(kind, record)
 
 
 def _names(file: str, slugs: object) -> list[str]:
@@ -92,11 +137,20 @@ def _names(file: str, slugs: object) -> list[str]:
 
 def expected_block(block_type: str, slug: str) -> dict[str, Any] | None:
     """The block the fixture record must produce; every field comes from the record."""
-    kind = BLOCK_KINDS.get(block_type)
-    record = fixture_record(kind, slug) if kind else None
-    if kind is None or record is None:
+    kinds = BLOCK_KINDS.get(block_type, ())
+    found = [(kind, fixture_record(kind, slug)) for kind in kinds]
+    matches = [(kind, record) for kind, record in found if record is not None]
+    if len(matches) != 1:
         return None
-    href = RECORD_KINDS[kind][1].format(slug=slug)
+    kind, record = matches[0]
+    href = _record_href(kind, record)
+    if block_type == "RoadmapCard":
+        return {
+            "type": block_type,
+            "title": record["name"],
+            "summary": record.get("description"),
+            "href": href,
+        }
     if kind == "experience":
         organization = _names("organizations", [record.get("organization")])
         return {

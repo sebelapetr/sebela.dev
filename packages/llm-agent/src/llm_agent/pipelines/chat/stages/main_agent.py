@@ -69,10 +69,14 @@ async def _loop(execution: Execution, *, uncertain: bool) -> Draft | None:
     decisions = limits.uncertain_main_decisions if uncertain else limits.main_decisions
     tool_cap = limits.uncertain_tool_calls if uncertain else limits.tool_calls
     language = execution.language
+    today = execution.request.today
+    # The caller's Europe/Prague calendar day, so "this week" or "recently" has a fixed anchor.
+    dated = f"<today>{today.isoformat()}</today>\n" if today is not None else ""
     messages: list[BaseMessage] = [
         SystemMessage(system_text(uncertain=uncertain)),
         HumanMessage(
-            f"<visitor_language>{language}</visitor_language>\n"
+            dated
+            + f"<visitor_language>{language}</visitor_language>\n"
             + visitor_block(execution.request.question)
         ),
     ]

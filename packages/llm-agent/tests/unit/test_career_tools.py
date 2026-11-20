@@ -60,9 +60,16 @@ async def test_the_main_stage_offers_exactly_the_public_read_tools() -> None:
     offered = {tool["name"]: tool for tool in models.stage_calls("main")[0][0].tools}
     assert sorted(offered) == [
         "get_contact",
+        "get_learning_diary",
+        "get_learning_statistics",
         "get_profile",
         "get_project",
+        "get_roadmap",
+        "get_roadmap_area",
+        "list_books",
+        "list_current_focus",
         "list_education",
+        "list_events",
         "list_experiences",
         "list_explorations",
         "list_projects",
@@ -73,7 +80,7 @@ async def test_the_main_stage_offers_exactly_the_public_read_tools() -> None:
     assert slug["additionalProperties"] is False
     assert slug["properties"]["slug"]["maxLength"] == 100
     for name, spec in offered.items():
-        if name != "get_project":
+        if name not in ("get_project", "get_roadmap_area"):
             assert spec["input_schema"]["properties"] == {}, name
 
 

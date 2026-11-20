@@ -22,14 +22,30 @@ from llm_agent import (
     ContentNotFoundError,
     ContentUnavailableError,
     ModelCall,
+    PublicBook,
+    PublicBookResource,
     PublicCaseStudy,
+    PublicCurrentFocus,
+    PublicDiaryDay,
+    PublicDiaryEvent,
+    PublicDiaryResource,
+    PublicDiarySession,
     PublicEducation,
+    PublicEvent,
     PublicExperience,
     PublicExploration,
+    PublicFocusProject,
+    PublicLearningStatistics,
     PublicLink,
     PublicPerson,
+    PublicProgress,
     PublicProject,
     PublicProjectSummary,
+    PublicRoadmap,
+    PublicRoadmapArea,
+    PublicRoadmapModule,
+    PublicRoadmapResource,
+    PublicRoadmapSummary,
     PublicService,
     PublicServiceEvidence,
     PublicStep,
@@ -239,6 +255,224 @@ EDUCATION = [
 ]
 
 
+CURRENT_FOCUS = [
+    PublicCurrentFocus(
+        slug="evaluation-harness-for-other-teams",
+        title="Opening the evaluation harness to other teams",
+        description="Turning the fictional harness into a shared release gate.",
+        project=PublicFocusProject(
+            slug="evaluation-harness",
+            name="Evaluation harness",
+            experience="brindle-labs-ai-engineer",
+        ),
+        topics=["Evaluation"],
+    ),
+    PublicCurrentFocus(
+        slug="learning-agent-guardrails",
+        title="Learning how tool-using agents stay safe",
+        description="Studying guardrails for agents on the AI Roadmap.",
+        project=None,
+        topics=["Agents"],
+    ),
+]
+
+
+def _progress(completed: int, total: int, status: str, minutes: int) -> PublicProgress:
+    return PublicProgress.model_validate(
+        {"completed": completed, "total": total, "status": status, "estimated_minutes": minutes}
+    )
+
+
+def _resource(slug: str, name: str, status: str, *, book: str | None = None) -> Any:
+    return PublicRoadmapResource.model_validate(
+        {
+            "slug": slug,
+            "name": name,
+            "description": None,
+            "type": "book" if book else "link",
+            "status": status,
+            "estimated_minutes": 90,
+            "book": book,
+            "topics": ["Agents"],
+        }
+    )
+
+
+AGENT_AREA = PublicRoadmapArea(
+    slug="agent-systems",
+    name="Agent systems",
+    description="Tool-using agents and their limits.",
+    progress=_progress(1, 4, "in-progress", 360),
+    modules=[
+        PublicRoadmapModule(
+            slug="tool-use-basics",
+            name="Tool use basics",
+            description="How a model asks for a tool.",
+            progress=_progress(1, 2, "in-progress", 180),
+            resources=[
+                _resource("function-calling-tutorial", "Function calling tutorial", "completed"),
+                _resource("agent-loop-walkthrough", "Agent loop walkthrough", "in-progress"),
+            ],
+        ),
+        PublicRoadmapModule(
+            slug="agent-guardrails",
+            name="Agent guardrails",
+            description=None,
+            progress=_progress(0, 2, "planned", 180),
+            resources=[
+                _resource("guardrail-notes", "Guardrail notes", "planned"),
+                _resource(
+                    "agent-design-notes", "Agent design notes", "planned", book="agent-design-notes"
+                ),
+            ],
+        ),
+    ],
+)
+
+ROADMAP = PublicRoadmap(
+    summary=PublicRoadmapSummary(
+        area_count=1,
+        module_count=2,
+        resource_count=4,
+        completed=1,
+        total=4,
+        estimated_minutes=360,
+    ),
+    areas=[AGENT_AREA],
+)
+
+LOOP = PublicDiaryResource(
+    slug="agent-loop-walkthrough",
+    name="Agent loop walkthrough",
+    type="link",
+    module="tool-use-basics",
+    area="agent-systems",
+)
+CONFERENCE = PublicDiaryEvent(
+    slug="port-wren-agents-conference",
+    name="Port Wren Agents Conference",
+    kind="conference",
+    starts_on=datetime.date(2026, 2, 19),
+    ends_on=datetime.date(2026, 2, 20),
+)
+
+DIARY = [
+    PublicDiaryDay(
+        date=datetime.date(2026, 3, 10),
+        notes="Traced an agent loop step by step.",
+        sessions=[PublicDiarySession(resource=LOOP, event=None, duration_seconds=5_400)],
+        events=[],
+        total_seconds=5_400,
+    ),
+    PublicDiaryDay(
+        date=datetime.date(2026, 2, 19),
+        notes=None,
+        sessions=[PublicDiarySession(resource=None, event=CONFERENCE, duration_seconds=19_800)],
+        events=[CONFERENCE],
+        total_seconds=19_800,
+    ),
+]
+
+
+def _time(total: int, resource: int, book: int, event: int) -> dict[str, int]:
+    return {
+        "total_seconds": total,
+        "resource_seconds": resource,
+        "book_seconds": book,
+        "event_seconds": event,
+    }
+
+
+STATISTICS = PublicLearningStatistics.model_validate(
+    {
+        "totals": {**_time(63_600, 27_600, 9_000, 27_000), "active_days": 9},
+        "weeks": [{"starts_on": "2026-03-09", **_time(5_400, 5_400, 0, 0)}],
+        "months": [
+            {"month": "2026-02", **_time(19_800, 0, 0, 19_800)},
+            {"month": "2026-03", **_time(24_000, 15_000, 9_000, 0)},
+        ],
+        "areas": [
+            {
+                "slug": "agent-systems",
+                "name": "Agent systems",
+                "total_seconds": 5_400,
+                "resource_seconds": 5_400,
+                "book_seconds": 0,
+                "modules": [
+                    {
+                        "slug": "tool-use-basics",
+                        "name": "Tool use basics",
+                        "total_seconds": 5_400,
+                        "resource_seconds": 5_400,
+                        "book_seconds": 0,
+                    }
+                ],
+            }
+        ],
+        "resources": [
+            {
+                "slug": "agent-loop-walkthrough",
+                "name": "Agent loop walkthrough",
+                "type": "link",
+                "category": "resource",
+                "module": {"slug": "tool-use-basics", "name": "Tool use basics"},
+                "area": {"slug": "agent-systems", "name": "Agent systems"},
+                "book": None,
+                "total_seconds": 5_400,
+            }
+        ],
+        "events": [
+            {
+                "slug": "port-wren-agents-conference",
+                "name": "Port Wren Agents Conference",
+                "kind": "conference",
+                "starts_on": "2026-02-19",
+                "ends_on": "2026-02-20",
+                "total_seconds": 19_800,
+            }
+        ],
+    }
+)
+
+BOOKS = [
+    PublicBook(
+        slug="search-evaluation-handbook",
+        title="A Fictional Handbook of Search Evaluation",
+        author="Mara Placeholder",
+        description="A fictional handbook on ranking metrics.",
+        pages=312,
+        year=2025,
+        started_on=datetime.date(2026, 2, 2),
+        ended_on=None,
+        summary=None,
+        status="reading",
+        resource=PublicBookResource(
+            slug="handbook-reading",
+            name="Handbook reading",
+            module="retrieval-evaluation",
+            area="retrieval-engineering",
+        ),
+        reading_seconds=9_000,
+    ),
+]
+
+EVENTS = [
+    PublicEvent(
+        slug="port-wren-agents-conference",
+        name="Port Wren Agents Conference",
+        kind="conference",
+        organizer="Port Wren AI Guild",
+        starts_on=datetime.date(2026, 2, 19),
+        ends_on=datetime.date(2026, 2, 20),
+        place="Port Wren",
+        online=False,
+        takeaways="Talks by other engineers on agent evaluation.",
+        topics=["Agents"],
+        attendance_seconds=19_800,
+    ),
+]
+
+
 class FakeContent:
     """The public reads over fixed fictional records, or scripted failures and delays."""
 
@@ -252,6 +486,12 @@ class FakeContent:
         explorations: Sequence[PublicExploration] = EXPLORATIONS,
         services: Sequence[PublicService] = SERVICES,
         education: Sequence[PublicEducation] = EDUCATION,
+        current_focus: Sequence[PublicCurrentFocus] = CURRENT_FOCUS,
+        roadmap: PublicRoadmap = ROADMAP,
+        diary: Sequence[PublicDiaryDay] = DIARY,
+        statistics: PublicLearningStatistics = STATISTICS,
+        books: Sequence[PublicBook] = BOOKS,
+        events: Sequence[PublicEvent] = EVENTS,
         delays: dict[str, float] | None = None,
     ) -> None:
         self.person = person
@@ -261,6 +501,12 @@ class FakeContent:
         self.explorations = list(explorations)
         self.services = list(services)
         self.education = list(education)
+        self.current_focus = list(current_focus)
+        self.roadmap = roadmap
+        self.diary = list(diary)
+        self.statistics = statistics
+        self.books = list(books)
+        self.events = list(events)
         self.delays = delays or {}
         self.reads = 0
         #: Every read, in the order it started (`read_project` with its slug).
@@ -313,6 +559,37 @@ class FakeContent:
     async def read_education(self) -> list[PublicEducation]:
         await self._read("read_education")
         return self.education
+
+    async def read_current_focus(self) -> list[PublicCurrentFocus]:
+        await self._read("read_current_focus")
+        return self.current_focus
+
+    async def read_roadmap(self) -> PublicRoadmap:
+        await self._read("read_roadmap")
+        return self.roadmap
+
+    async def read_roadmap_area(self, area: str) -> PublicRoadmapArea:
+        await self._read(f"read_roadmap_area:{area}")
+        found = next((a for a in self.roadmap.areas if a.slug == area), None)
+        if found is None:
+            raise ContentNotFoundError("no such area")
+        return found
+
+    async def read_diary(self) -> list[PublicDiaryDay]:
+        await self._read("read_diary")
+        return self.diary
+
+    async def read_statistics(self) -> PublicLearningStatistics:
+        await self._read("read_statistics")
+        return self.statistics
+
+    async def read_books(self) -> list[PublicBook]:
+        await self._read("read_books")
+        return self.books
+
+    async def read_events(self) -> list[PublicEvent]:
+        await self._read("read_events")
+        return self.events
 
 
 def calls(*requests: tuple[str, dict[str, Any]]) -> AIMessage:
