@@ -31,6 +31,10 @@ COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/web/.next/static apps/web/.next/static
 USER node
 WORKDIR /app/apps/web
+# Healthy once the server answers a route that reads no content, so a website whose API is down
+# still runs; the same check as compose.yaml, which overrides it.
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=30s --start-interval=1s \
+  CMD ["node", "--eval", "fetch(\"http://127.0.0.1:\" + process.env.WEB_PORT + \"/robots.txt\").then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
 # The server listens on WEB_HOST and WEB_PORT, as `scripts/next.mjs` does on the host, and refuses
 # to start without them; Next's own server reads them as HOSTNAME and PORT.
 CMD ["sh", "-c", ": \"${WEB_HOST:?set WEB_HOST}\" \"${WEB_PORT:?set WEB_PORT}\"; HOSTNAME=\"$WEB_HOST\" PORT=\"$WEB_PORT\" exec node server.js"]

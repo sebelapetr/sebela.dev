@@ -1,0 +1,68 @@
+# Production overrides of the root compose.yaml (infra/README.md, docs/release-workflow.md): the same
+# services, networks, volumes and health checks, run from the published images instead of local
+# builds. Used together with the root file and the server's production environment file, whose
+# every setting is documented, as a placeholder, in infra/production/.env.example:
+#
+#   docker compose --file compose.yaml --file infra/production/compose.yaml \
+#     --env-file <production environment file> up --detach --wait
+#
+# - Every service starts without a profile: Postgres, the one-off migration, the API, the website
+#   and MCP Admin. The migration and the API run the API image, so a release migrates with the very
+#   image it then runs.
+# - Images come from GHCR by a tag per service (API_IMAGE_TAG, WEB_IMAGE_TAG, MCP_ADMIN_IMAGE_TAG),
+#   so a release changes only the services it rebuilt. Nothing is built on the server.
+# - Only the website is published, on WEB_HOST and WEB_PORT (the host's loopback interface, where
+#   the server's nginx proxies to it). Postgres, the API and MCP Admin have no host port: the
+#   website and MCP Admin reach the API inside the Compose networks.
+# - Long-running services restart unless stopped; every container logs to rotated json-file logs.
+# - Analytics (Umami Cloud) is on only when WEB_ANALYTICS_WEBSITE_ID is set; indexing only with
+#   WEB_INDEXING=on.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+services:
+  postgres:
+    # Compose interpolates the root file before it applies these overrides, so POSTGRES_HOST and
+    # POSTGRES_PORT must still be set; nothing publishes them.
+    ports: !reset []
+    logging: *logging
+    restart: unless-stopped
+
+  migrate:
+    profiles: !reset []
+    build: !reset null
+    image: ghcr.io/sebelapetr/sebela-api:${API_IMAGE_TAG:?set API_IMAGE_TAG (infra/production/.env.example)}
+    logging: *logging
+    restart: "no"
+
+  api:
+    profiles: !reset []
+    build: !reset null
+    image: ghcr.io/sebelapetr/sebela-api:${API_IMAGE_TAG:?set API_IMAGE_TAG (infra/production/.env.example)}
+    ports: !reset []
+    logging: *logging
+    restart: unless-stopped
+
+  web:
+    profiles: !reset []
+    build: !reset null
+    image: ghcr.io/sebelapetr/sebela-web:${WEB_IMAGE_TAG:?set WEB_IMAGE_TAG (infra/production/.env.example)}
+    environment:
+      # Umami Cloud's script, only with a website ID; no other analytics address is taken.
+      WEB_ANALYTICS_SCRIPT_URL: ${WEB_ANALYTICS_WEBSITE_ID:+https://cloud.umami.is/script.js}
+    ports: !override
+      - "${WEB_HOST:?set WEB_HOST (infra/production/.env.example)}:${WEB_PORT:?set WEB_PORT (infra/production/.env.example)}:8080"
+    logging: *logging
+    restart: unless-stopped
+
+  mcp-admin:
+    profiles: !reset []
+    build: !reset null
+    image: ghcr.io/sebelapetr/sebela-mcp-admin:${MCP_ADMIN_IMAGE_TAG:?set MCP_ADMIN_IMAGE_TAG (infra/production/.env.example)}
+    ports: !reset []
+    logging: *logging
+    restart: unless-stopped
