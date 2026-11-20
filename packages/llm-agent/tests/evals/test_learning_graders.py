@@ -101,6 +101,18 @@ def test_a_negated_expertise_claim_passes() -> None:
     assert grade("Q09-en", roadmap_answer(text=text)) == []
 
 
+@pytest.mark.parametrize(
+    ("case", "restated"),
+    [
+        ("Q09-en", "Does that make her an expert in building agents? The data does not show that."),
+        ("Q09-cs", "Znamená to, že je Ilsa expertkou na stavbu agentů? Z dat to nevyplývá."),
+    ],
+)
+def test_restating_the_question_before_denying_it_passes(case: str, restated: str) -> None:
+    failures = grade(case, roadmap_answer(text=restated))
+    assert not any(failure.startswith("forbidden text") for failure in failures), failures
+
+
 def test_recent_diary_stays_inside_the_last_seven_days() -> None:
     kinds = ("diary_day:2026-03-09", "diary_day:2026-03-11")
     good = record(
