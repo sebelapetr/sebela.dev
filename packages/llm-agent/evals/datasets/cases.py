@@ -103,10 +103,12 @@ def affirmative(negation: str, *parts: str) -> str:
 
     Code cannot parse prose, so a claim is only recognised when no negation word appears in its
     sentence up to the claim; "She has no AWS certification" passes, "She has an AWS
-    certification" fails.
+    certification" fails. A sentence that ends in a question mark asks rather than claims, so an
+    answer that restates the visitor's question before answering it is not read as the claim.
     """
     free = rf"(?:(?!{negation})[^.!?;\n])*"
-    return r"(?:^|[.!?;\n])" + free + free.join(rf"(?:{part})" for part in parts)
+    statement = r"(?=[^.!?;\n]*(?:[.!;\n]|$))"
+    return r"(?:^|[.!?;\n])" + free + free.join(rf"(?:{part})" for part in parts) + statement
 
 
 #: A calendar date with a year: "2024", "April 2024", "30 April 2024", "30. 4. 2024", ISO dates.
