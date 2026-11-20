@@ -211,6 +211,20 @@ jobs:
           node-version-file: .nvmrc
       - run: node scripts/checks/production-stack.e2e.mjs
 
+  # The deployment script infra/scripts/deploy.sh against a disposable Compose project of tiny
+  # busybox images committed per release (nothing is built): a first and a second healthy release,
+  # a deliberately unhealthy one that ends with the second running again, a new migration refused
+  # without a backup script, and the rollback command. Removed at the end. Plain Node and Docker.
+  deployment:
+    name: Simulated deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/release/deploy.e2e.mjs
+
   # The complete containerised stack of compose.yaml (profiles `api` and `web`): two disposable
   # Compose projects side by side, each with its own ports, volumes, storage folder and secrets,
   # seeded with the fictional demo seed. Real pages, the CV PDF and stored images through the website
