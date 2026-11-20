@@ -219,7 +219,7 @@ async def test_the_learning_reads_keep_the_seeded_identities_and_statuses(api_ur
         )
 
 
-LEARNING_READS: Final = (
+LEARNING_READS: Final[tuple[tuple[str, dict[str, Any]], ...]] = (
     ("list_current_focus", {}),
     ("get_roadmap", {}),
     ("get_roadmap_area", {"area": "agent-systems"}),
