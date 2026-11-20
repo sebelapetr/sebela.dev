@@ -80,7 +80,7 @@ def test_the_judge_sees_the_trusted_contact_card_the_visitor_is_shown() -> None:
     assert shown["answer"]["contact_card"] == fixture_contact()
     assert rubric.judge_input(CASE, record("Q01-en"))["answer"]["contact_card"] is None
     assert "contact_card" in rubric.JUDGE_INSTRUCTIONS
-    assert rubric.RUBRIC_VERSION == "rubric-v4"
+    assert rubric.RUBRIC_VERSION == "rubric-v5"
 
 
 def test_the_judge_sees_the_structured_blocks_the_visitor_is_shown() -> None:

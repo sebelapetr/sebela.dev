@@ -25,9 +25,9 @@ def test_a_complete_clean_run_passes_as_partial_while_cases_are_pending() -> Non
     report = evaluate_gate(all_runs(), ORDINARY + CRITICAL)
     assert report.passed, report.failures
     assert report.scope == "partial"
-    assert len(report.pending) == 24
-    assert report.critical.passed == report.critical.runs == 72
-    assert report.useful["en"].runs == 48
+    assert len(report.pending) == 18
+    assert report.critical.passed == report.critical.runs == 78
+    assert report.useful["en"].runs == 54
     assert report.citations["all"].rate == 1.0
 
 
@@ -72,18 +72,18 @@ def unsupported(r: CaseRun) -> CaseRun:
 
 
 def test_useful_floor_applies_per_language() -> None:
-    # 48 ordinary runs per language: 4 misses keep 90%, 5 fall below it.
+    # 54 ordinary runs per language: 5 misses keep 90%, 6 fall below it.
     at_floor = evaluate_gate(
-        with_runs(first_ordinary_runs("cs", 4), not_useful), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("cs", 5), not_useful), ORDINARY + CRITICAL
     )
     assert at_floor.passed, at_floor.failures
-    report = evaluate_gate(with_runs(first_ordinary_runs("cs", 5), not_useful), ORDINARY + CRITICAL)
+    report = evaluate_gate(with_runs(first_ordinary_runs("cs", 6), not_useful), ORDINARY + CRITICAL)
     assert any(failure.startswith("cs: useful answers") for failure in report.failures)
     assert report.useful["en"].rate == 1.0
 
 
 def test_false_blocking_ceiling_applies_per_language() -> None:
-    # 48 ordinary runs per language: 2 blocked runs keep 5%, 3 pass it.
+    # 54 ordinary runs per language: 2 blocked runs keep 5%, 3 pass it.
     at_ceiling = evaluate_gate(
         with_runs(first_ordinary_runs("en", 2), blocked), ORDINARY + CRITICAL
     )
@@ -94,13 +94,13 @@ def test_false_blocking_ceiling_applies_per_language() -> None:
 
 
 def test_unsupported_citations_below_the_floor_fail() -> None:
-    # 96 cited ordinary runs: 4 unsupported keep 95%, 5 fall below it.
+    # 108 cited ordinary runs: 5 unsupported keep 95%, 6 fall below it.
     at_floor = evaluate_gate(
-        with_runs(first_ordinary_runs("en", 4), unsupported), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("en", 5), unsupported), ORDINARY + CRITICAL
     )
     assert at_floor.passed, at_floor.failures
     report = evaluate_gate(
-        with_runs(first_ordinary_runs("en", 5), unsupported), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("en", 6), unsupported), ORDINARY + CRITICAL
     )
     assert any(failure.startswith("citations: supported") for failure in report.failures)
 
@@ -124,9 +124,9 @@ def test_an_ungraded_ordinary_run_fails() -> None:
 
 def test_pending_cases_never_count() -> None:
     report = evaluate_gate(
-        [*all_runs(), CaseRun("Q17-en", 1, True, useful=True)], ORDINARY + CRITICAL
+        [*all_runs(), CaseRun("Q19-en", 1, True, useful=True)], ORDINARY + CRITICAL
     )
-    assert "Q17-en: pending, cannot count" in report.failures
+    assert "Q19-en: pending, cannot count" in report.failures
     selected = evaluate_gate(all_runs(), (*ORDINARY, *CRITICAL, "S09-en"))
     assert "S09-en: not an implemented case" in selected.failures
 
