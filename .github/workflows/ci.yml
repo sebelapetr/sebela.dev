@@ -76,7 +76,7 @@ jobs:
       # the Python minor of .python-version and exactly what uv.lock records. Their pnpm task
       # wrappers run through Turborepo like every other package; the drift check below regenerates
       # the Python content client too.
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version-file: pyproject.toml
       - run: uv sync --locked --all-packages
