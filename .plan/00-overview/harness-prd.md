@@ -41,17 +41,17 @@ The harness is: the phase loop, worktree isolation, agent definitions, hooks, pe
 - The script holds no state. Everything is read from GitHub each time: issue labels, pull requests, the phase branch.
 - Outcomes of a run and what follows:
 
-| Outcome                                                                           | Next                                                                                            |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Issue merged into the phase branch                                                | Next iteration                                                                                  |
-| Usage limit reached                                                               | Wait ten minutes, retry the same step                                                           |
-| Usage limit reached during an issue (reported `interrupted`, cause `usage_limit`) | Wait the same way and continue the same issue, without a label                                  |
-| A model safeguard stopped the run or an agent (cause `safeguard`)                 | Retry once at once, without a label; stop and alert the owner when it repeats on the same issue |
-| The environment cannot run the work (cause `environment`)                         | Stop at once and alert the owner with the cause, without a label                                |
-| Issue failed, first time                                                          | Label `agent-retry`; next iteration; the issue may be retried                                   |
-| Issue failed, second time                                                         | Label `agent-failed`, skip it                                                                   |
-| Several consecutive failed runs                                                   | Stop                                                                                            |
-| No ready issue left                                                               | The orchestrator opens the phase pull request; the loop ends                                    |
+| Outcome                                                                           | Next                                                                                                                        |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Issue merged into the phase branch                                                | Next iteration                                                                                                              |
+| Usage limit reached                                                               | Wait ten minutes, retry the same step                                                                                       |
+| Usage limit reached during an issue (reported `interrupted`, cause `usage_limit`) | Wait the same way and continue the same issue, without a label                                                              |
+| A model safeguard stopped the run or an agent (cause `safeguard`)                 | Retry once at once, without a label; stop and alert the owner when it repeats on the same issue                             |
+| The environment cannot run the work (cause `environment`)                         | Stop at once and alert the owner with the cause, without a label                                                            |
+| Issue failed, first time                                                          | Label `agent-retry`; next iteration; the issue may be retried                                                               |
+| Issue failed, second time                                                         | Label `agent-failed`, skip it                                                                                               |
+| Several consecutive failed runs                                                   | Stop                                                                                                                        |
+| No ready issue left                                                               | The orchestrator opens the phase pull request; the loop ends and reports phase done or phase stopped from what GitHub shows |
 
 - This decision table is a small pure module with no shell, network or agent in it, so it is testable without running anything.
 - A usage limit is recognised from the run's JSON result (an API error with status 429 or 529, or a limit message) or from its error output. Established from the documentation; it is confirmed the first time a real limit occurs, and the raw output of every run is logged for that purpose.

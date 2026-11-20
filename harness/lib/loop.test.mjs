@@ -8,6 +8,7 @@ import {
   decideNext,
   noteAfter,
   ownerNoteSection,
+  phaseEnd,
 } from "./loop.mjs";
 
 const success = (report) =>
@@ -389,4 +390,86 @@ test("the owner note stays while the loop waits for the usage limit and ends wit
   assert.equal(noteAfter(note, "done"), null);
   assert.equal(noteAfter(note, "stop"), null);
   assert.equal(noteAfter(null, "wait"), null);
+});
+
+// --- phaseEnd ---------------------------------------------------------------
+
+const issue = (number, ...labels) => ({ number, labels });
+
+test("a phase whose pull request is open and only HITL issues remain is done", () => {
+  const end = phaseEnd({
+    pullRequest: { number: 240 },
+    openIssues: [issue(51, "phase:09-rag", "hitl")],
+  });
+  assert.equal(end.status, "done");
+  assert.match(
+    end.log[0],
+    /^phase done: draft pull request #240 is open; mark it ready for review when the phase is complete/,
+  );
+  assert.ok(end.log.some((line) => /HITL.*#51/.test(line)));
+  assert.match(end.alert.join(" "), /phase done/);
+  assert.match(end.alert.join(" "), /#240/);
+});
+
+test("a done phase without open issues lists nothing more", () => {
+  const end = phaseEnd({ pullRequest: { number: 240 }, openIssues: [] });
+  assert.equal(end.status, "done");
+  assert.equal(end.log.length, 1);
+});
+
+test("a phase without a pull request has stopped and says so", () => {
+  const end = phaseEnd({
+    pullRequest: null,
+    openIssues: [
+      issue(222, "phase:09-rag", "agent-failed"),
+      issue(223, "phase:09-rag", "ready-for-agent"),
+      issue(224, "phase:09-rag", "hitl"),
+    ],
+  });
+  assert.equal(end.status, "stopped");
+  assert.equal(end.log[0], "phase stopped: no workable issue left");
+  const text = end.log.join("\n");
+  assert.match(text, /agent-failed: #222/);
+  assert.match(text, /blocked or not ready: #223/);
+  assert.match(text, /HITL: #224/);
+  assert.match(text, /no phase pull request/);
+  assert.doesNotMatch(text, /mark it ready/);
+  assert.match(end.alert.join(" "), /phase stopped/);
+  assert.match(end.alert.join(" "), /no phase pull request/);
+});
+
+test("failed or blocked issues make a phase with a pull request read as stopped", () => {
+  const end = phaseEnd({
+    pullRequest: { number: 240 },
+    openIssues: [issue(222, "agent-failed"), issue(224, "hitl")],
+  });
+  assert.equal(end.status, "stopped");
+  const text = end.log.join("\n");
+  assert.match(text, /draft pull request #240 is open/);
+  assert.match(text, /agent-failed: #222/);
+  assert.doesNotMatch(text, /mark it ready/);
+});
+
+test("an issue labelled both HITL and agent-failed counts as failed", () => {
+  const end = phaseEnd({
+    pullRequest: { number: 1 },
+    openIssues: [issue(9, "hitl", "agent-failed")],
+  });
+  assert.equal(end.status, "stopped");
+  assert.match(end.log.join("\n"), /agent-failed: #9/);
+  assert.doesNotMatch(end.log.join("\n"), /HITL/);
+});
+
+test("a pull request gh could not look up is not reported as open or missing", () => {
+  const end = phaseEnd({ pullRequest: undefined, openIssues: [] });
+  assert.equal(end.status, "stopped");
+  const text = end.log.join("\n");
+  assert.match(text, /could not check/);
+  assert.doesNotMatch(text, /no phase pull request|is open/);
+});
+
+test("open issues gh could not list are said to be unknown", () => {
+  const end = phaseEnd({ pullRequest: { number: 240 }, openIssues: null });
+  assert.equal(end.status, "done");
+  assert.match(end.log.join("\n"), /could not list/);
 });

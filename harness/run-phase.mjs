@@ -21,13 +21,14 @@ import {
   decideNext,
   noteAfter,
   ownerNoteSection,
+  phaseEnd,
 } from "./lib/loop.mjs";
 import { newProblem, notify } from "./lib/notify.mjs";
 import { currentWork, workChange } from "./lib/progress.mjs";
 import { formatCost, iterationStats } from "./lib/phase-report.mjs";
 import { writePhaseReport } from "./phase-report.mjs";
 import { checkReadiness } from "./preflight.mjs";
-import { readLines, transcriptDir } from "./run-tools.mjs";
+import { quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { checkOnce, failedIssues, phaseProgressNow } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
@@ -82,7 +83,7 @@ Handle exactly ONE issue, following your agent definition, docs/agents.md and do
 1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
 2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. Always read the issue with its comments (\`gh issue view <n> --comments\`): an \`Owner note\` there is binding, and you pass every owner note to the developer and the reviewer as written. An issue labelled \`agent-retry\` failed once before: its comments say why. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
 3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
-4. If no such issue is left, archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. Never mark it ready for review: the owner does that when the phase is complete, HITL issues included, which starts its model evals.
+4. If no such issue is left, archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. If GitHub refuses the pull request (for example because the phase branch has no commits beyond ${base}), still report phase_done and say why in the summary. Never mark it ready for review: the owner does that when the phase is complete, HITL issues included, which starts its model evals.
 5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
 6. If the work on the issue stops for a reason outside the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted with its cause:
    - usage_limit: the usage limit was reached. The loop waits and continues the same issue.
@@ -162,6 +163,47 @@ function issueLabels(issue) {
     },
   );
   return out.split("\n").filter(Boolean);
+}
+
+// The open pull request from the phase branch to the base: { number }, null when there is none,
+// undefined when gh fails.
+function phasePullRequest(phase, base) {
+  const out = quiet("gh", [
+    "pr",
+    "list",
+    "--head",
+    `phase/${phase}`,
+    "--base",
+    base,
+    "--state",
+    "open",
+    "--json",
+    "number",
+  ]);
+  if (out === null) return undefined;
+  const [pr] = JSON.parse(out);
+  return pr ? { number: pr.number } : null;
+}
+
+// The phase's open issues with their label names, or null when gh fails.
+function openPhaseIssues(phase) {
+  const out = quiet("gh", [
+    "issue",
+    "list",
+    "--label",
+    `phase:${phase}`,
+    "--state",
+    "open",
+    "--limit",
+    "200",
+    "--json",
+    "number,labels",
+  ]);
+  if (out === null) return null;
+  return JSON.parse(out).map((issue) => ({
+    number: issue.number,
+    labels: issue.labels.map((label) => label.name),
+  }));
 }
 
 // Why the loop stops, for the log and the notification.
@@ -351,14 +393,17 @@ async function main() {
     }
 
     if (decision.next === "done") {
-      log(
-        "phase done: the phase pull request is open as a draft; mark it ready for review when the phase is complete.",
-      );
+      // The report says the phase is done; GitHub says whether a pull request exists and what is left.
+      const end = phaseEnd({
+        pullRequest: phasePullRequest(options.phase, options.base),
+        openIssues: openPhaseIssues(options.phase),
+      });
+      for (const line of end.log) log(line);
       const report = await writePhaseReport({ mainRoot, phase: options.phase }).catch((error) =>
         log(`the phase report failed: ${error.message}`),
       );
       if (report) log(`phase report: ${report}`);
-      alert(options, ["phase done", "the phase pull request is open as a draft"]);
+      alert(options, end.alert);
       return;
     }
     if (decision.next === "stop") {

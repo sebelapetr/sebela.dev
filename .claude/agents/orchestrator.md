@@ -48,7 +48,7 @@ If the work on an issue stops for a reason that is not the issue's fault, keep i
 - `safeguard`: a model safeguard refused or stopped an agent (a usage-policy or AUP refusal, an `invalid_request` flagged by the API). The loop retries at once; a second safeguard stop on the same issue stops the loop and alerts the owner.
 - `environment`: the machine cannot run the work, such as low disk, a missing tool or credential, or a guard refusal you cannot work around without breaking a rule. The loop stops and alerts the owner.
 
-Every other outcome reports `cause` as null.
+Every other outcome reports `cause` as null. If GitHub refuses the phase pull request (for example because the phase branch has no commits beyond the base branch), still report `phase_done` and say why in the summary; the loop checks what exists.
 
 ## Rules
 
