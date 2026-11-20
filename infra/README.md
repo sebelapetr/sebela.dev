@@ -2,17 +2,17 @@
 
 The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/done/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
 
-| Path                       | What it is                                                                                      |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
-| `production/compose.yaml`  | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs     |
-| `production/.env.example`  | Every production setting, as a documented placeholder; the real file lives only on the server   |
-| `nginx/sebela.dev.conf`    | Reference configuration of the Ploi-managed nginx site that proxies sebela.dev to the website   |
-| `scripts/deploy.sh`        | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner |
-| `scripts/backup.sh`        | The encrypted backup of the production database to the `sebela-backups` zone, with retention    |
-| `scripts/restore.sh`       | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows  |
-| `scripts/clear-demo.sh`    | Backs up, then clears the fictional demo content, leaving an empty, migrated database           |
-| `scripts/backup-common.sh` | The settings and storage helpers the three scripts above share (sourced, never run)             |
-| `crons.txt`                | The server's scheduled jobs, entered once in Ploi: the nightly backup                           |
+| Path                       | What it is                                                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `production/compose.yaml`  | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                            |
+| `production/.env.example`  | Every production setting, as a documented placeholder; the real file lives only on the server                          |
+| `nginx/sebela.dev.conf`    | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website |
+| `scripts/deploy.sh`        | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                        |
+| `scripts/backup.sh`        | The encrypted backup of the production database to the `sebela-backups` zone, with retention                           |
+| `scripts/restore.sh`       | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                         |
+| `scripts/clear-demo.sh`    | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                  |
+| `scripts/backup-common.sh` | The settings and storage helpers the three scripts above share (sourced, never run)                                    |
+| `crons.txt`                | The server's scheduled jobs, entered once in the hosting panel: the nightly backup                                     |
 
 ## The production stack
 
@@ -70,7 +70,7 @@ Anything else (an unknown service, a short or upper-case SHA, a service named tw
 - **Stored** in the Bunny Storage zone `BACKUP_STORAGE_ZONE` (`sebela-backups`) as `postgres/<UTC time>.dump.age`, through the zone's HTTP storage API (`BACKUP_STORAGE_ENDPOINT`, `BACKUP_STORAGE_PASSWORD`).
 - **Retention.** Every backup younger than 14 days stays; of the older ones up to three months (92 days) the newest of each ISO week stays; the rest are removed. Files outside `postgres/` are never touched.
 - **Heartbeat.** Only after the upload and the retention succeeded is the Better Stack heartbeat `BACKUP_HEARTBEAT_URL` requested, so a failed or missing backup alerts by its missing ping. Any earlier failure exits non-zero without the ping; a refused ping is reported, and the backup still counts.
-- **Nightly** from `crons.txt` at 02:30 UTC, entered once in Ploi's cron jobs for the `deploy` user; the output goes to the system log under the tag `sebela-backup`.
+- **Nightly** from `crons.txt` at 02:30 UTC, entered once in the hosting panel's cron jobs for the `deploy` user; the output goes to the system log under the tag `sebela-backup`.
 - **No secret is printed**: curl reads the addresses and the zone's password from its standard input, and a failed request reports only its HTTP status. Every setting is checked before anything runs.
 
 ## Restore
@@ -108,12 +108,12 @@ The owner's one-time steps (issue #236), in order. Each names the setting it fil
 1. **The `deploy` user.** Create it, add it to the `docker` group, give it the production environment file and the state folder (below), and make the checkout of `master` readable to it. In its `~/.ssh/authorized_keys` put only the forced-command line of Deployment, for a new ed25519 key pair made for the workflow; the private key goes into the GitHub Environment and nowhere else. Check that `sshd` keeps `PermitUserEnvironment no` and accepts no `AcceptEnv` pattern that matches `DEPLOY_*`, `BACKUP_*` or `COMPOSE_*`. The owner signs in with their own key and runs the owner's commands (rollback, restore, clear) as `deploy` with `sudo --user=deploy`.
 2. **The checkout and the state folder.** Clone the repository's `master` on the server; create `DEPLOY_STATE_DIR`, owned by `deploy`, mode 700.
 3. **The production environment file**, from `production/.env.example` (below), including the `BACKUP_*` values of steps 6 to 8.
-4. **The Ploi site and nginx** for `sebela.dev` (below).
+4. **The hosting panel's site and nginx** for `sebela.dev` (below).
 5. **Postgres and pgvector.** Start Postgres alone, then as the superuser `CREATE EXTENSION vector` in `DATABASE_NAME` and create the application role (below); then start the stack (First start).
 6. **The `sebela-backups` zone.** In Bunny, a Storage Zone `sebela-backups`, separate from the media zone, without a pull zone, so nothing in it is ever served. Its storage endpoint (the https address of its region) goes into `BACKUP_STORAGE_ENDPOINT`, its password into `BACKUP_STORAGE_PASSWORD`.
 7. **The `age` key pair**, made by the owner on their own machine with `age-keygen --output <owner key>`. The public key (`age1...`, also printed by `age-keygen -y <owner key>`) goes into `BACKUP_AGE_RECIPIENT`; the private key stays offline with the owner, with a second copy kept offline elsewhere, and is never put on the server. Without it no backup can be restored. The server needs `age` installed (`apt install age`) to encrypt.
 8. **Better Stack.** An uptime monitor for `https://sebela.dev` and one for `https://sebela.dev/health`, and a heartbeat with a period of one day and a grace period of a few hours; the heartbeat's address goes into `BACKUP_HEARTBEAT_URL`. Alerts go by e-mail and to the mobile app.
-9. **The nightly backup.** The line of `crons.txt`, with the server's paths in place of the placeholders, as a Ploi cron job for `deploy`. Run `backup.sh` once by hand and check that the backup appears in the zone and the heartbeat turns green; then rehearse a restore (Restore).
+9. **The nightly backup.** The line of `crons.txt`, with the server's paths in place of the placeholders, as a cron job in the hosting panel for `deploy`. Run `backup.sh` once by hand and check that the backup appears in the zone and the heartbeat turns green; then rehearse a restore (Restore).
 10. **Umami** (Analytics, below).
 11. **GHCR packages** made public after the first release (below).
 12. **The GitHub Environment `production`** with its three secrets (Deployment).
@@ -123,7 +123,7 @@ Facts this composition relies on:
 - **First start, in order.** (1) The production environment file is in place. (2) `docker compose ... up --detach --wait postgres` initialises the volume. (3) The superuser creates the `vector` extension and the application role (below). (4) `docker compose ... up --detach --wait` runs the migration, which must finish successfully before the API starts, then the API, the website and MCP Admin.
 - **Production environment file.** Created from `production/.env.example`, mode 600, owner `deploy`; every `replace-with-...` value replaced. It never enters Git, an image or a log.
 - **Database role and pgvector.** `POSTGRES_USER` is the cluster's superuser and only initialises the volume. Once, after the first start of Postgres, the superuser creates the `vector` extension in `DATABASE_NAME` and the application role `DATABASE_USER` that owns that database; the migration and the API connect only as that role.
-- **nginx.** The Ploi site for `sebela.dev` with its Let's Encrypt certificate takes `nginx/sebela.dev.conf`, with the website's `WEB_PORT`, the certificate paths and the CDN edge address file in place of its placeholders.
+- **nginx.** The hosting panel's site for `sebela.dev` with its Let's Encrypt certificate takes `nginx/sebela.dev.conf`, with the website's `WEB_PORT`, the certificate paths and the CDN edge address file in place of its placeholders.
 - **GHCR packages.** The release workflow creates `sebela-api`, `sebela-web` and `sebela-mcp-admin` on its first publish, linked to the repository by their source label. Once, the owner sets each package's visibility to public in its package settings, so the server pulls without a registry login.
 - **Analytics.** On the Umami Cloud account, the website is created for `sebela.dev`; its tracker script address (`https://cloud.umami.is/script.js`) goes into `WEB_ANALYTICS_SCRIPT_URL` and its website ID into `WEB_ANALYTICS_WEBSITE_ID`, both public values. They stay empty until the owner turns analytics on.
 
