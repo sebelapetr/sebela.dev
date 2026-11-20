@@ -748,3 +748,44 @@ test("the owner's interactive session may manage the shared stack", () => {
   assert.equal(bash("pnpm stack:up"), null);
   assert.equal(bash("docker compose up --detach --wait"), null);
 });
+
+// --- the production stack -------------------------------------------------------
+
+test("agents cannot reach the production stack or run its scripts", () => {
+  for (const command of [
+    "docker exec sebela-production-api-1 env",
+    "docker logs sebela-production-web-1",
+    "docker inspect sebela-production-postgres-1",
+    "docker cp sebela-production-api-1:/app/x .",
+    "docker stop sebela-production-api-1",
+    "docker compose -p sebela-production ps",
+    "docker compose --project-name=sebela-production logs api",
+    "docker compose -f compose.yaml -f infra/production/compose.yaml up -d",
+    "docker compose --file infra/production/compose.yaml config",
+    "COMPOSE_PROJECT_NAME=sebela-production docker compose exec api sh",
+    "infra/scripts/deploy.sh rollback",
+    "bash infra/scripts/restore.sh list",
+    "sh ./infra/scripts/backup.sh",
+    "sudo -u deploy infra/scripts/clear-demo.sh --confirm x",
+  ]) {
+    assert.ok(bash(command, own), command);
+    assert.ok(bash(command, { isSubagent: true }), command);
+  }
+});
+
+test("agents may still read the production scripts and test the composition", () => {
+  for (const command of [
+    "cat infra/scripts/deploy.sh",
+    "sed -n 1,40p infra/production/compose.yaml",
+    "node --test scripts/checks/production-stack.test.mjs",
+    "pnpm test:production-stack",
+    "docker ps",
+  ]) {
+    assert.equal(bash(command, own), null, command);
+  }
+});
+
+test("the owner's interactive session may operate production", () => {
+  assert.equal(bash("docker logs sebela-production-web-1"), null);
+  assert.equal(bash("infra/scripts/deploy.sh rollback"), null);
+});
