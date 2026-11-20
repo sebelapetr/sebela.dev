@@ -31,7 +31,7 @@ describe("checkHealth", () => {
     await expect(checkHealth(client)).resolves.toEqual({
       status: "ok",
       api: "ok",
-      database: "ok",
+      postgres: "ok",
     });
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual(["/health/ready"]);
   });
@@ -43,7 +43,7 @@ describe("checkHealth", () => {
     await expect(checkHealth(client)).resolves.toEqual({
       status: "failing",
       api: "ok",
-      database: "failing",
+      postgres: "failing",
     });
   });
 
@@ -54,7 +54,7 @@ describe("checkHealth", () => {
     await expect(checkHealth(client)).resolves.toEqual({
       status: "failing",
       api: "failing",
-      database: "unknown",
+      postgres: "unknown",
     });
   });
 
@@ -69,7 +69,7 @@ describe("checkHealth", () => {
       await expect(checkHealth(client)).resolves.toEqual({
         status: "failing",
         api: "failing",
-        database: "unknown",
+        postgres: "unknown",
       });
     }
   });
@@ -86,7 +86,7 @@ describe("checkHealth", () => {
     await expect(checkHealth(client, { timeoutMs: 20 })).resolves.toEqual({
       status: "failing",
       api: "failing",
-      database: "unknown",
+      postgres: "unknown",
     });
   });
 
@@ -94,29 +94,29 @@ describe("checkHealth", () => {
     await expect(checkHealth(null)).resolves.toEqual({
       status: "failing",
       api: "failing",
-      database: "unknown",
+      postgres: "unknown",
     });
   });
 });
 
 describe("healthResponse", () => {
   it("answers 200 with the report when everything is healthy, never cached or indexed", async () => {
-    const response = healthResponse({ status: "ok", api: "ok", database: "ok" });
+    const response = healthResponse({ status: "ok", api: "ok", postgres: "ok" });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-robots-tag")).toBe("noindex");
     expect(response.headers.get("content-type")).toMatch(/^application\/json/);
-    await expect(response.json()).resolves.toEqual({ status: "ok", api: "ok", database: "ok" });
+    await expect(response.json()).resolves.toEqual({ status: "ok", api: "ok", postgres: "ok" });
   });
 
   it("answers 503 naming the failing part", async () => {
-    const response = healthResponse({ status: "failing", api: "ok", database: "failing" });
+    const response = healthResponse({ status: "failing", api: "ok", postgres: "failing" });
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
       status: "failing",
       api: "ok",
-      database: "failing",
+      postgres: "failing",
     });
   });
 });

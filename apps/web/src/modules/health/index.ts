@@ -1,6 +1,6 @@
 // The health module: whether the website can serve content now, for uptime monitoring. It asks the
 // API's readiness route (`GET /health/ready`, which answers only when the API reaches its database)
-// on every request, past the content cache, and answers 200 `{ status, api, database }` when both
+// on every request, past the content cache, and answers 200 `{ status, api, postgres }` when both
 // are healthy or 503 naming the failing part (the database is `unknown` when the API itself fails).
 // It reveals no address, configuration or error detail, is never cached and never indexed.
 import "server-only";

@@ -24,7 +24,7 @@ test.describe("the health route with a ready API", () => {
     const response = await request.get(`${website.url}/health`);
     expect(response.status()).toBe(200);
     expect(response.headers()["cache-control"]).toBe("no-store");
-    expect(await response.json()).toEqual({ status: "ok", api: "ok", database: "ok" });
+    expect(await response.json()).toEqual({ status: "ok", api: "ok", postgres: "ok" });
   });
 });
 
@@ -48,7 +48,7 @@ test.describe("the health route while the API is unreachable", () => {
     expect(await response.json()).toEqual({
       status: "failing",
       api: "failing",
-      database: "unknown",
+      postgres: "unknown",
     });
   });
 });

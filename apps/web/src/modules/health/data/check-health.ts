@@ -8,7 +8,7 @@ export type PartHealth = "ok" | "failing" | "unknown";
 export interface HealthReport {
   readonly status: "ok" | "failing";
   readonly api: "ok" | "failing";
-  readonly database: PartHealth;
+  readonly postgres: PartHealth;
 }
 
 export interface CheckHealthOptions {
@@ -18,9 +18,9 @@ export interface CheckHealthOptions {
 
 const DEFAULT_TIMEOUT_MS = 3_000;
 
-const HEALTHY: HealthReport = { status: "ok", api: "ok", database: "ok" };
-const DATABASE_FAILING: HealthReport = { status: "failing", api: "ok", database: "failing" };
-const API_FAILING: HealthReport = { status: "failing", api: "failing", database: "unknown" };
+const HEALTHY: HealthReport = { status: "ok", api: "ok", postgres: "ok" };
+const DATABASE_FAILING: HealthReport = { status: "failing", api: "ok", postgres: "failing" };
+const API_FAILING: HealthReport = { status: "failing", api: "failing", postgres: "unknown" };
 
 /**
  * Asks the API whether it and its database are ready. Never throws: a `null` client (the website's
@@ -49,7 +49,7 @@ export async function checkHealth(
 /** The health route's answer: 200 when healthy, 503 otherwise; never cached and never indexed. */
 export function healthResponse(report: HealthReport): Response {
   return Response.json(
-    { status: report.status, api: report.api, database: report.database },
+    { status: report.status, api: report.api, postgres: report.postgres },
     {
       status: report.status === "ok" ? 200 : 503,
       headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
