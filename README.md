@@ -6,7 +6,7 @@
 
 The open-source engineering behind Petr Šebela's next professional website.
 
-[![Status: Website](https://img.shields.io/badge/status-website-525252?style=flat-square)](.plan/03-web/prd.md)
+[![Status: MCP Admin delivered](https://img.shields.io/badge/status-MCP_Admin_delivered-525252?style=flat-square)](.plan/05-mcp-admin/prd.md)
 [![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-525252?style=flat-square)](LICENSE)
 
@@ -19,7 +19,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Website stage.** This checkout contains the specifications, architecture decisions and agent instructions, the development harness, the foundation (a pnpm and Turborepo workspace with shared lint, TypeScript and Prettier configuration, a local PostgreSQL with pgvector and a separate database and role per worktree, Git hooks, guardrail checks and CI) and the backend: the Hono content API with its profile domain, API-key authentication, media uploads, the assembled CV data, OpenAPI, the generated TypeScript client and a fictional demo seed, and the website: every presentation page, the CV and a chat interface that answers from prepared, deterministic scenarios instead of a model. The rest of the AI Roadmap (the overview exists), the real assistant, retrieval and both MCP servers are **planned** and arrive in later phases; sections describing them say what they are designed to do, not what runs today. The replacement for sebelapetr.cz will launch after all delivery phases are complete.
+> **Available on `master`.** The website serves the profile, CV and AI Engineering Roadmap from the content API. The owner can maintain that content through MCP Admin. Visitors can try prepared answers on the Ask page. The next phase adds the Python library for model-generated answers. [Phase 06 specification](.plan/06-llm-agent/prd.md)
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -50,7 +50,7 @@ The repository is part of the portfolio too: architecture decisions, testing pol
 
 ## Architecture
 
-**The API is the trust boundary.** Every client reaches content through HTTP. Only the API's backend layers access the database. The diagram shows the target design. Today the API with its services, database package, contracts and generated TypeScript client and the website exist; the AI service, retrieval and both MCP servers are planned.
+**The API is the trust boundary.** The website reads public HTTP routes. MCP Admin sends content changes to private routes using the caller's API key. Only the API accesses PostgreSQL. The diagram also shows the planned AI service, public MCP server and retrieval layer.
 
 ```mermaid
 flowchart TB
@@ -71,7 +71,7 @@ flowchart TB
     memory -->|Backend persistence operations| db
 ```
 
-- **One contract across languages.** OpenAPI drives generated clients; Zod provides API validation and shared TypeScript schemas. The TypeScript client is generated and drift-checked in CI today; the Python client of phase 6 is generated from the same committed `openapi.json` ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-6-not-scaffolded)).
+- **One contract across languages.** OpenAPI drives generated clients; Zod provides API validation and shared TypeScript schemas. The TypeScript client is generated and drift-checked in CI today; phase 6 will generate the Python client from the same committed `openapi.json` ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-6-not-scaffolded)).
 - **Authenticated content writes.** Admin MCP and private content writes are internal/SSH-tunnel only. Private API routes still verify API keys. Keys stay server-side; the public assistant has no content-write credentials or tools.
 - **A bounded chat exception.** Public chat routes may create, continue and delete the caller's own conversation. The API checks ownership, limits and budget.
 - **Rebuildable retrieval.** The index is derived from authoritative API content and approved supplemental documents whose originals stay in private storage.
@@ -81,25 +81,25 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 
 ### Stack
 
-| Area             | Technology                                                                 | Status                                                                                                 |
-| ---------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                   | Delivered                                                                                              |
-| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide              | Delivered; the chat answers from prepared scenarios until phase 7                                      |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                                      | Delivered; the TypeScript client is generated, the Python client follows in phase 6                    |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search        | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 9)                            |
-| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic         | Planned (phase 7)                                                                                      |
-| Verification     | Vitest, Playwright, pytest, Promptfoo; code/model graders and human review | Vitest, Playwright and Node's test runner delivered; the rest planned                                  |
-| Observability    | Langfuse for AI traces, cost and scoring                                   | Planned                                                                                                |
-| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                        | Compose for local Postgres, the API and the website, their images and CI delivered; deployment planned |
+| Area             | Technology                                                          | Status                                                                                                       |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier            | Delivered                                                                                                    |
+| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide       | Delivered; the chat answers from prepared scenarios until phase 7                                            |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                               | Delivered; the TypeScript client is generated, the Python client follows in phase 6                          |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 9)                                  |
+| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic  | Planned (phase 7)                                                                                            |
+| Verification     | Node's test runner, Vitest, Playwright, Promptfoo                   | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                     |
+| Observability    | Langfuse for AI traces, cost and scoring                            | Planned                                                                                                      |
+| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                 | Local containers for PostgreSQL, the API, the website and MCP Admin. VPS deployment is planned for phase 10. |
 
 The visual direction is editorial and monochrome: strong typography, generous whitespace, light and dark themes. See [design](docs/design.md).
 
 ## AI & MCP
 
 > [!NOTE]
-> **Planned.** Nothing in this section is implemented yet. Admin MCP arrives in phase 5, the reusable agent in 6, FastAPI and live chat in 7, public MCP in 8, and RAG in 9. Phase 10 launches the site; graph, ontology and external MCP UI are later independent improvements.
+> **MCP Admin is available.** The owner's agents can update profile content, upload media and log learning sessions. The visitor assistant, public MCP server and retrieval pipeline are planned for phases 6–9.
 
-### How an answer is produced
+### Planned visitor assistant
 
 The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers.
 
@@ -110,27 +110,27 @@ The browser reaches the assistant through the website and API. The API owns conv
 
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
-Langfuse receives redacted traces; stored conversations are scored afterwards and sampled for human review. The package runs three stages: Security Gateway, Main Agent and deterministic Output Guard. Context, retries, concurrency, cancellation and spend are bounded per request. Model and embeddings choices are deferred to their implementation phases and evaluated before adoption.
+The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/06-llm-agent/prd.md)
 
 ### Two servers, two responsibilities
 
 |                    | Public MCP                                                                        | Content-management MCP                                    |
 | ------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| **App**            | `apps/mcp-public`                                                                 | `apps/mcp-admin`                                          |
+| **App**            | `apps/mcp-public` (planned, phase 8)                                              | `apps/mcp-admin`                                          |
 | **Audience**       | External AI agents                                                                | The owner's agents                                        |
 | **Access**         | Public, read-only, rate limited                                                   | Internal/SSH tunnel; authenticated API operations         |
 | **Purpose**        | Read profile, experience, services and learning activity; search public knowledge | Add and update content through private API routes         |
 | **Implementation** | Python; calls FastAPI read capabilities backed by the shared agent package        | TypeScript; reuses contracts and the generated API client |
 
-The content-management MCP's connection, authentication and client configuration are in [`apps/mcp-admin/AGENTS.md`](apps/mcp-admin/AGENTS.md); it is in progress in phase 5. The public MCP's will be added when it is implemented.
+MCP Admin supports Streamable HTTP with a bearer key. The owner's content skills cover profile and CV updates, diary entries and events. [Client setup](apps/mcp-admin/AGENTS.md#connecting-a-client) · [Tool reference](apps/mcp-admin/AGENTS.md#tools)
 
-### Retrieval without a separate vector service
+### Planned retrieval
 
 Portfolio API content and owner-approved extra documents are chunked, embedded and indexed in a separate schema of the existing PostgreSQL/pgvector. Terminal ingest accepts Markdown, TXT and text-layer PDF, with local sensitivity checks and owner approval before external embedding calls/public indexing. Originals stay in private Bunny Storage or a private local root through the existing drivers. Measure full-text/vector/hybrid variants with known-source questions; rebuild from API data and retained approved originals. Graph and ontology extend this knowledge base after launch; visitor history stays a separate API responsibility.
 
 ## Roadmap
 
-The first public release follows phase 10; graph, ontology and interactive external MCP UI follow later. Specifications are drafts until approved. The harness (phase 00), the foundation (phase 01), the API and database (phase 02) and the website (phase 03) are delivered; later phases are planned.
+Phases 00–05 have merged into `master`. Phase 06 has an approved specification and six published implementation issues. The first public release is scheduled for phase 10. [Phase 06 issues](.plan/06-llm-agent/issues.md)
 
 | Phase                       | Deliverable                                                                       | Specification                                                                      |
 | --------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -152,7 +152,7 @@ The first public release follows phase 10; graph, ontology and interactive exter
 
 ## Working on the project
 
-What you can run today is the workspace, its quality checks, the local database, the worktree tooling, the content API with its demo data and the website. The assistant and the MCP servers do not exist yet.
+The local demo runs the website and content API against PostgreSQL with fictional data. Start MCP Admin as an optional service to manage that content from an MCP client.
 
 ### Prerequisites
 
@@ -205,6 +205,14 @@ pnpm stack:down                                # stop and remove the API and web
 
 `stack:up` starts a one-off migration service once Postgres is healthy, the API only after the migrations succeeded and the website once the API is healthy; a failed migration keeps the API down. The website is published on `WEB_HOST` and `WEB_PORT` and the API on `API_HOST` and `API_PORT`; inside the Compose network the website reads the API by its service name, and pages name stored images only by the website's own `/media/<file>`. Running `stack:up` again applies only new migrations; neither a start nor a restart seeds or resets content. Uploaded media live in the volume `api-media` and survive restarts. To stop everything, Postgres included, run `docker compose --profile api --profile web down` (a plain `docker compose down` leaves the API and the website running); add `--volumes` only to delete the data and the media. The API and the website run in containers or on the host (`pnpm --filter @sebela/api start`, `pnpm --filter @sebela/web start`), not both: they publish the same ports. Worktrees always use the host. The images hold code only, and the API's also the demo seed; personal content is loaded from a folder outside the repository at run time. Details: [`apps/api/AGENTS.md`](apps/api/AGENTS.md#container-stack) and [`apps/web/AGENTS.md`](apps/web/AGENTS.md#container).
 
+To add MCP Admin to the local stack, run this from the main checkout:
+
+```sh
+docker compose --profile api --profile mcp-admin up --detach --wait
+```
+
+Connect a client to the host's loopback endpoint, or use an SSH tunnel for remote access. Each client supplies its own API key. [Client configuration](apps/mcp-admin/AGENTS.md#connecting-a-client)
+
 ### 4. Run the quality checks
 
 ```sh
@@ -214,7 +222,7 @@ pnpm test       # package tests, harness tests and check tests
 pnpm build
 ```
 
-CI runs the same tasks on every pull request (`pnpm ci:root`, then `pnpm ci:affected` for the packages a change affects), plus end-to-end runs of the worktree databases and of the worktree backend setup against a disposable Postgres (jobs `Worktree database lifecycle` and `Worktree backend setup`) smoke checks of the containerised API stack and of two complete stacks with the website side by side, and the website's browser tests. You can run them yourself with Docker: `node harness/worktree-databases.e2e.mjs`, `node harness/worktree-backend.e2e.mjs`, `pnpm test:api-stack` and `pnpm test:web-stack`; each removes its containers, volumes and images at the end. Details: [testing](docs/testing.md).
+CI runs root checks and checks the packages affected by each change. It also exercises worktree provisioning and the containerised API. When the website is affected, CI runs its Playwright suite and tests two complete stacks side by side. [Testing policy](docs/testing.md)
 
 ### 5. Work in an isolated worktree
 
@@ -265,8 +273,8 @@ pnpm --silent --filter @sebela/api api-keys list             # metadata only; `r
 
 The interactive reference is served at `/reference`, the document at `/openapi.json`; every route, its access and its errors are listed in [`apps/api/AGENTS.md`](apps/api/AGENTS.md#http-behaviour).
 
-- **Two kinds of CV.** `GET /v1/cv` is CV _data_, assembled from the stored profile on every request; the website will render the CV page from it. The CV _PDF_ is a separate file you prepare yourself, upload with `POST /v1/media` and attach as the person's `cvPdfId`. The API never generates or updates the PDF, so it can differ from the data until you upload a new one.
-- **Generated clients.** `pnpm generate:api-client` exports the OpenAPI document into `packages/api-client/src/generated/` and regenerates the typed TypeScript client; `pnpm check:api-client`, run by CI on every change, fails when the committed files differ. A Python client (phase 6) is generated from the same committed `openapi.json`, without the TypeScript toolchain ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-6-not-scaffolded)).
+- **Two kinds of CV.** `GET /v1/cv` is CV _data_, assembled from the stored profile on every request; the website renders the CV page from it. The CV _PDF_ is a separate file you prepare yourself, upload with `POST /v1/media` and attach as the person's `cvPdfId`. The API never generates or updates the PDF, so it can differ from the data until you upload a new one.
+- **Generated clients.** `pnpm generate:api-client` exports the OpenAPI document into `packages/api-client/src/generated/` and regenerates the typed TypeScript client; `pnpm check:api-client`, run by CI on every change, fails when the committed files differ. Phase 6 will generate a Python client from the same committed `openapi.json`, without the TypeScript toolchain ([`packages/api-client`](packages/api-client/AGENTS.md#python-consumers-phase-6-not-scaffolded)).
 - **Storage without cloud credentials.** The default `STORAGE_DRIVER=local` keeps uploads on local disk and is served by the API itself; tests, CI and every command above need no Bunny credentials. The `STORAGE_BUNNY_*` settings are optional and only needed with `STORAGE_DRIVER=bunny-s3` ([Bunny Storage](docs/architecture.md#bunny-storage)).
 - **Cleanup is for development only.** `node harness/worktree.mjs remove` drops one worktree's databases, role and storage folder, and `pnpm --silent --filter @sebela/api storage remove <worktree>` removes only that storage folder. `pnpm stack:down` removes the API containers and keeps every database, while `docker compose --profile api down --volumes` deletes the shared Postgres volume, with every checkout's and worktree's database, and the media volume. `storage` refuses `STORAGE_ENVIRONMENT=production` and folders it does not own, and no command resets or deletes production content; production safety comes from backups ([release workflow](docs/release-workflow.md)).
 
@@ -284,10 +292,10 @@ pnpm test:e2e                        # browser tests with every build they need,
 
 The website reads content only through the public API routes and never holds an API key. A page whose content is missing shows a calm fallback instead of failing, and content changed through the API appears without a rebuild. Commands, configuration and caching in detail: [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 
-Known limits of this stage:
+### Website features and limits
 
 - **The chat is a mock.** Ask streams prepared answers from deterministic scenarios in the browser; no model, conversation storage or rate limit exists until phase 7 replaces the adapter ([extension points](apps/web/AGENTS.md#extension-points)).
-- **The AI Roadmap is partly built.** `/ai-roadmap` shows the overview of areas, modules and resources from the API, each area and module has its own page, `/ai-roadmap/diary` shows the learning diary by Prague calendar day, `/ai-roadmap/diary/stats` shows the learning statistics, and `/ai-roadmap/bookshelf` shows the books read, each with its own page; events and the roadmap answer card arrive later in phase 4.
+- **AI Engineering Roadmap.** Browse learning areas, modules and resources at `/ai-roadmap`. Follow logged sessions in the diary and statistics, explore the bookshelf and reading guide, or find events at `/ai-roadmap/events`. The Ask page can show current learning activity from the API.
 - **Analytics are optional.** Without the analytics settings the website sends nothing.
 - **Not deployed.** Production deployment, backups and the launch are phase 10.
 
@@ -328,7 +336,7 @@ See [agent orchestration](docs/agents.md), [permissions](docs/permissions.md) an
 - **Evals-first:** MCP and AI behaviour, including grounding, unknown answers, source correctness and direct and indirect prompt injection. Safety suites must pass completely; other thresholds are set from the baseline and never lowered to pass a run.
 - **Merge gate:** lint, typecheck, tests and build, enforced by CI on every pull request. API integration tests use real PostgreSQL and fictional fixtures.
 
-The merge gate, the harness and check tests (Node's built-in test runner), the backend's Vitest suites against temporary PostgreSQL databases, the worktree runs, the API and website stack smoke checks, the website's Playwright tests and the generated-client drift check are in place today. pytest and Promptfoo suites arrive with the apps they verify. Details: [testing policy](docs/testing.md).
+MCP Admin has deterministic integration tests against the real API and a Promptfoo suite with fictional fixtures. Across three repeats, every safety case-run and at least 90% of noncritical case-runs must pass. [MCP Admin tests and evals](apps/mcp-admin/AGENTS.md#tests-and-evals)
 
 ## Documentation
 
