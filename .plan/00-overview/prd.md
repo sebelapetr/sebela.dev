@@ -370,7 +370,7 @@ Deferred to the phase named in brackets.
 4. Whether Bunny's S3 compatibility must be chosen when a storage zone is created. [02]
 5. How a usage limit is recognised from an unattended run. [harness]
 6. Embeddings provider/model, measured retrieval settings and extraction limits. [09]
-7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Phase-7 hosting/bot choices are owner-agreed (Langfuse Cloud EU and Turnstile Managed); local PII model/resource measurements and the complete phase-7 document still need acceptance. Graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
+7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Phase-7 PRD and its seven-issue breakdown are owner-approved (Langfuse Cloud EU and Turnstile Managed); implementation still needs local PII model/resource measurements and final owner acceptance. See `.plan/07-ai-service/issues.md`. Graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
 8. For the owner before launch: the server (existing or new), the production domain (the repository is named `sebela.dev`, the plan says sebelapetr.cz), the reverse proxy product, the monthly model budget, and the legal side of storing conversations. [10]
 
 ## Further Notes

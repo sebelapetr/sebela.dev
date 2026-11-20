@@ -1,6 +1,6 @@
 # Phase 7 — Evaluation specification
 
-Status: draft for owner approval together with [the PRD](prd.md). This is a specification, not implemented tests, completed model selection or a passing report.
+Status: approved by the owner together with [the PRD](prd.md); scenario ownership is assigned in the [published issue breakdown](issues.md). This is a specification, not implemented tests, completed model selection or a passing report.
 
 ## Scope and evidence
 
@@ -63,7 +63,7 @@ C07 does not justify a cloud-judge raw-PII export in production: the test uses f
 Use a separate versioned fictional bilingual span-labelled corpus, runnable without paid LLM calls. Report each entity category and language separately, recall/precision and raw counts, false positives on public profile facts, payload size, detector/model/runtime/threshold versions and startup/warm resource measurements. Include mixed EN/CS, Czech inflections/diacritics, emails, local/international telephone forms, names/addresses in sentences, nested/encoded data and adversarial attempts to bypass public-value exceptions.
 
 - Known forbidden fields and seeded credentials must never reach the captured exporter in required cases. Explicit fixed-format PII fixtures must all be removed or the content dropped. This is a tested boundary, not a promise that arbitrary natural-language PII is fully detectable.
-- Builder proposal for review: choose NER acceptance floors before the first implementation (initial target at least 90% span recall and 90% precision separately for each language on declared person/address categories). Freeze corpus and floors before comparing candidates; do not tune the test or lower a gate after seeing a candidate fail. The owner's approximate 90% is not itself a measured score or a blanket security exception.
+- Freeze NER acceptance floors before the first implementation: the initial target is at least 90% span recall and 90% precision separately for each language on declared person/address categories. Freeze corpus and floors before comparing candidates; do not tune the test or lower a gate after seeing a candidate fail. The owner's approximate 90% is not itself a measured score or a blanket security exception.
 - Measure the actual shared CAX21/ARM64 environment before enabling production payload export: peak resident memory including load, CPU/thread use, cold/warm latency and throughput on bounded maximum payloads, four concurrent chat operations, queue saturation and metadata-only degradation. Declare the available resource envelope and workload first; do not invent a fitted model from RAM size alone.
 - Prefer one local CPU job and an ONNX-compatible model, with bounded text and queue. A model replacement or quantization/runtime/threshold change reruns quality and resource checks; general CPU support is not ARM64 artifact compatibility or Czech quality evidence.
 - If no candidate meets both requirements, retain metadata-only export and record that fallback at owner acceptance. Do not report full-content pseudonymization accepted, silently ship regex-only full text, or send raw content to a GPU provider. Hardware/model improvements are a later measured configuration change.
