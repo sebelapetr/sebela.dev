@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_agent.schemas import ContactCard, Evidence, Language
 
-GUARD_VERSION: Final = "output-guard-2"
+GUARD_VERSION: Final = "output-guard-3"
 MAX_TEXT_CHARS: Final = 4000
 LEAK_MIN_LENGTH: Final = 40
 

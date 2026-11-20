@@ -6,25 +6,44 @@ import copy
 from typing import Any
 
 from evals.datasets.cases import DATASET_VERSION, FIXTURE_PERSON
-from evals.graders.code import fixture_contact
+from evals.graders.code import canonical_href, expected_block, fixture_contact
 from evals.provider import RECORD_SCHEMA
 
 PERSON_ID = "00000000-0000-4000-8000-000000000001"
 SUBJECT = {"pipeline": "test-pipeline"}
 
 
+#: The tool that reads each source kind.
+TOOL = {
+    "profile": "get_profile",
+    "contact": "get_contact",
+    "experience": "list_experiences",
+    "project": "list_projects",
+    "exploration": "list_explorations",
+    "service": "list_services",
+    "education": "list_education",
+}
+
+
 def evidence(ref: str, kind: str) -> dict[str, Any]:
-    href = "/" if kind == "profile" else "/#contact"
-    tool = "get_profile" if kind == "profile" else "get_contact"
+    """Evidence of `kind` (the person) or of `kind:slug` (a fixture record)."""
+    kind, _, slug = kind.partition(":")
+    record_id = slug or PERSON_ID
     return {
         "ref": ref,
-        "tool": tool,
+        "tool": TOOL[kind],
         "kind": kind,
-        "record_id": PERSON_ID,
-        "title": "Ilsa Marrow",
-        "href": href,
-        "data": {"name": FIXTURE_PERSON["name"]},
+        "record_id": record_id,
+        "title": slug or "Ilsa Marrow",
+        "href": canonical_href(kind, record_id),
+        "data": {"name": FIXTURE_PERSON["name"]} if not slug else {"slug": slug},
     }
+
+
+def block(block_type: str, slug: str) -> dict[str, Any]:
+    built = expected_block(block_type, slug)
+    assert built is not None
+    return built
 
 
 def source(ref: str, kind: str) -> dict[str, Any]:
@@ -45,6 +64,7 @@ def record(
     kinds: tuple[str, ...] = ("profile",),
     cite: bool = True,
     contact: bool = False,
+    blocks: tuple[dict[str, Any], ...] = (),
     verdict: str = "ALLOW",
     repeat: int = 1,
 ) -> dict[str, Any]:
@@ -65,7 +85,10 @@ def record(
             "language": language,
             "text": text,
             "contact": fixture_contact() if contact else None,
-            "sources": [source(item["ref"], item["kind"]) for item in items] if cite else [],
+            "sources": [source(item["ref"], kind) for item, kind in zip(items, kinds, strict=True)]
+            if cite
+            else [],
+            "blocks": list(blocks),
             "evidence": items,
             "usage": {"cost_usd": 0.001, "cost_uncertain": False},
             "trace": [span("stage.security", verdict=verdict), *tools],

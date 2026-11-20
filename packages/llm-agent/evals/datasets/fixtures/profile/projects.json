@@ -1,0 +1,47 @@
+[
+  {
+    "slug": "support-answer-engine",
+    "experience": "brindle-labs-ai-engineer",
+    "name": "Support answer engine",
+    "summary": "Answers customer questions from the fictional Brindle Labs knowledge base, with sources.",
+    "problem": "Support agents searched three wikis by keyword and often answered from memory.",
+    "workDone": "Built retrieval over the knowledge base with pgvector and an answering step that must cite an article.",
+    "result": "Support agents get a cited draft answer for routine questions.",
+    "startedOn": "2021-06-01",
+    "endedOn": "2023-04-30",
+    "selectedForHomepage": true,
+    "position": 0,
+    "technologies": ["python", "pgvector", "postgresql"],
+    "caseStudy": {
+      "role": "Lead engineer",
+      "body": "Context: support agents at the fictional Brindle Labs searched three wikis by keyword. Approach: the team wrote evaluation questions first, then chose the chunking that answered them best, and the answer step may only reply with a cited article. Outcome: the engine went to the support team, and the evaluation questions now run before every release."
+    }
+  },
+  {
+    "slug": "evaluation-harness",
+    "experience": "brindle-labs-ai-engineer",
+    "name": "Evaluation harness",
+    "summary": "Runs the support assistant against fixed questions on every change and reports regressions.",
+    "problem": "Prompt and model changes were judged by trying a few questions by hand.",
+    "workDone": "Built a harness that replays fixed questions through the assistant and grades the answers.",
+    "result": "Every change to prompts or models is compared with the previous release before it ships.",
+    "startedOn": "2023-05-01",
+    "selectedForHomepage": true,
+    "position": 1,
+    "technologies": ["python", "langgraph"]
+  },
+  {
+    "slug": "timetable-api",
+    "experience": "port-wren-transit-backend-engineer",
+    "name": "Timetable API",
+    "summary": "One API for the fictional transit authority's timetables, used by the departure boards.",
+    "problem": "Each departure board read its own copy of the timetable.",
+    "workDone": "Built a TypeScript API over one PostgreSQL schema that publishes timetable changes as events.",
+    "result": "Timetable changes reach every departure board from one source.",
+    "startedOn": "2017-01-01",
+    "endedOn": "2019-06-30",
+    "selectedForHomepage": false,
+    "position": 2,
+    "technologies": ["typescript", "postgresql", "kafka"]
+  }
+]

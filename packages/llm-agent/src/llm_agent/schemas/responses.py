@@ -1,21 +1,36 @@
 """What an execution returns: only the approved response, its evidence, usage and trace.
 
 A `ChatResult` is built by the Output Guard (or a fixed response) and never carries a draft the
-guard did not approve.
+guard did not approve. Its typed blocks are the chat contract's `ExperienceCard`, `ServiceCard` and
+`ExplorationCard` payloads, built only from cited evidence; `model_dump(by_alias=True)` gives the
+contract's camelCase field names.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import datetime
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic.alias_generators import to_camel
 
 Outcome = Literal[
     "answered", "insufficient_evidence", "refused", "unavailable", "cancelled", "limit_reached"
 ]
 Language = Literal["en", "cs"]
-SourceKind = Literal["profile", "contact"]
-ToolName = Literal["get_profile", "get_contact"]
+SourceKind = Literal[
+    "profile", "contact", "experience", "project", "exploration", "service", "education"
+]
+ToolName = Literal[
+    "get_profile",
+    "get_contact",
+    "list_experiences",
+    "list_projects",
+    "get_project",
+    "list_services",
+    "list_explorations",
+    "list_education",
+]
 
 
 class _Frozen(BaseModel):
@@ -56,6 +71,55 @@ class ContactCard(_Frozen):
     name: str
     email: str | None
     links: list[ContactLink]
+
+
+Text100 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+Text200 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Text1000 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+#: A path on this site with an optional anchor; it can carry neither a scheme nor another host.
+SitePath = Annotated[
+    str,
+    StringConstraints(
+        max_length=2048,
+        pattern=r"^/(?:[^/\s\\\x00-\x1f\x7f][^\s\\\x00-\x1f\x7f]*)?$",
+    ),
+]
+
+
+class _Block(_Frozen):
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, alias_generator=to_camel, populate_by_name=True
+    )
+
+
+class ExperienceCard(_Block):
+    type: Literal["ExperienceCard"] = "ExperienceCard"
+    title: Text200
+    organization: Text200 | None
+    started_on: datetime.date
+    ended_on: datetime.date | None
+    summary: Text1000 | None
+    technologies: list[Text100] = Field(max_length=20)
+    href: SitePath
+
+
+class ServiceCard(_Block):
+    type: Literal["ServiceCard"] = "ServiceCard"
+    title: Text200
+    summary: Text1000
+    href: SitePath
+
+
+class ExplorationCard(_Block):
+    type: Literal["ExplorationCard"] = "ExplorationCard"
+    title: Text200
+    summary: Text1000 | None
+    #: The stored status; never shown stronger than stored.
+    status: Literal["built", "tested", "designed"]
+    href: SitePath
+
+
+Block = Annotated[ExperienceCard | ServiceCard | ExplorationCard, Field(discriminator="type")]
 
 
 class Usage(_Frozen):
@@ -104,6 +168,8 @@ class ChatResult(_Frozen):
     text: str
     contact: ContactCard | None
     sources: list[Source]
+    #: Typed blocks of cited experiences, services and explorations; only on an answer.
+    blocks: list[Block] = Field(default_factory=list, max_length=3)
     evidence: list[Evidence]
     usage: Usage
     trace: list[Span]

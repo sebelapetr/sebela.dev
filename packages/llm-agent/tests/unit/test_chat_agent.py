@@ -94,7 +94,16 @@ async def test_the_stages_use_the_configured_models_and_only_the_read_tools() ->
     security, main = models.calls[0][0], models.calls[1][0]
     assert (security.model, security.effort, security.tools) == ("claude-haiku-5-5", "medium", ())
     assert (main.model, main.effort) == ("claude-haiku-5-5", "high")
-    assert sorted(tool["name"] for tool in main.tools) == ["get_contact", "get_profile"]
+    assert sorted(tool["name"] for tool in main.tools) == [
+        "get_contact",
+        "get_profile",
+        "get_project",
+        "list_education",
+        "list_experiences",
+        "list_explorations",
+        "list_projects",
+        "list_services",
+    ]
     assert security.max_tokens == 768
     assert main.max_tokens == 8192
     assert security.response_schema["additionalProperties"] is False
@@ -222,6 +231,17 @@ async def test_an_uncertain_verdict_runs_a_restricted_main_stage() -> None:
     assert result.reason == "main_decisions"
     assert len(models.stage_calls("main")) == 2
     assert "Decline anything outside" in str(models.stage_calls("main")[0][1][0].content)
+
+
+async def test_the_restricted_main_stage_is_told_it_has_one_tool_round() -> None:
+    """Two decisions leave one tool round; the base prompt's "two rounds" must not stand alone."""
+    models = ScriptedModels(
+        security=[verdict("UNCERTAIN", "injection", "ambiguous")],
+        main=[draft()],
+    )
+    await run(models)
+    system = str(models.stage_calls("main")[0][1][0].content)
+    assert "only one round of tool requests" in system
 
 
 @pytest.mark.parametrize(

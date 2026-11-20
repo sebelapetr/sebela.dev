@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from evals.catalogue import BY_ID, CATALOGUE, implemented, pending
-from evals.datasets.cases import CASES, DATASET_VERSION, FIXTURE_PERSON, dataset_version
+from evals.datasets.cases import CASES, DATASET_VERSION, FIXTURE, dataset_version
 
 
 def test_all_80_planned_cases_are_visible_in_both_languages() -> None:
@@ -16,14 +16,20 @@ def test_all_80_planned_cases_are_visible_in_both_languages() -> None:
     assert sum(case.critical for case in CATALOGUE) == 40
 
 
-def test_this_slice_implements_exactly_its_12_cases() -> None:
+SLICE_01 = ("Q01", "Q14", "S01", "S08", "S11", "S19")
+SLICE_02 = (
+    *("Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q15", "Q16"),
+    *("S02", "S03", "S04", "S06", "S07", "S10", "S20"),
+)
+
+
+def test_the_first_two_slices_implement_exactly_their_42_cases() -> None:
     expected = {
-        f"{family}-{language}"
-        for family in ("Q01", "Q14", "S01", "S08", "S11", "S19")
-        for language in ("en", "cs")
+        f"{family}-{language}" for family in (*SLICE_01, *SLICE_02) for language in ("en", "cs")
     }
     assert {case.id for case in implemented()} == expected
-    assert len(pending()) == 68
+    assert len(pending()) == 38
+    assert {BY_ID[f"{family}-en"].slice for family in SLICE_02} == {"S02"}
 
 
 def test_every_implemented_case_is_executable_and_nothing_else_is() -> None:
@@ -51,6 +57,20 @@ def test_the_dataset_version_covers_what_the_agent_sees_not_the_expectations() -
     stricter = replace(case.expectation, forbidden_text=(*case.expectation.forbidden_text, "x"))
     regraded = [replace(case, expectation=stricter), *CASES[1:]]
     reworded = [replace(case, question=case.question + "?"), *CASES[1:]]
-    assert dataset_version(regraded, FIXTURE_PERSON) == DATASET_VERSION
-    assert dataset_version(reworded, FIXTURE_PERSON) != DATASET_VERSION
-    assert dataset_version(CASES, {**FIXTURE_PERSON, "headline": "Other"}) != DATASET_VERSION
+    assert dataset_version(regraded, FIXTURE) == DATASET_VERSION
+    assert dataset_version(reworded, FIXTURE) != DATASET_VERSION
+    assert dataset_version(CASES, {**FIXTURE, "projects": []}) != DATASET_VERSION
+
+
+def test_the_fixture_is_every_seed_file_of_the_folder() -> None:
+    assert set(FIXTURE) == {
+        "person",
+        "organizations",
+        "technologies",
+        "topics",
+        "experiences",
+        "projects",
+        "explorations",
+        "services",
+        "education",
+    }
