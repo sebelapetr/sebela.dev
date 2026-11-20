@@ -56,6 +56,26 @@ import { EVAL_CLIENT, OTHER_CLIENT, scenarios } from "./scenarios.js";
 import { captureState } from "./state.js";
 
 const PROMPTFOO = "promptfoo@0.126.0";
+/** The pinned Promptfoo version. */
+export const PROMPTFOO_VERSION = "";
+/** How many case-runs run at once. */
+export const CASE_RUN_CONCURRENCY = 1;
+
+/** @returns {string} */
+export function promptfooEntry() {
+  return "";
+}
+
+/**
+ * @template T
+ * @param {readonly (() => Promise<T>)[]} tasks
+ * @param {number} limit
+ * @returns {Promise<T[]>}
+ */
+export async function runBounded(tasks, limit) {
+  void limit;
+  return [await Promise.reject(new Error(`not implemented for ${String(tasks.length)}`))];
+}
 /** The pinned model of every eval; `promptfooconfig.yaml` names the same one. */
 export const MODEL = "claude-sonnet-5-5";
 const evalsFolder = fileURLToPath(new URL("./", import.meta.url));

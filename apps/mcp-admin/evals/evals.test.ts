@@ -59,10 +59,14 @@ import {
   type ToolCall,
 } from "./graders.js";
 import {
+  CASE_RUN_CONCURRENCY,
   MODEL,
+  PROMPTFOO_VERSION,
   answerRecord,
   planRun,
+  promptfooEntry,
   promptfooEnvironment,
+  runBounded,
   regradeRuns,
   removeLeakingFiles,
   summarize,
@@ -582,6 +586,86 @@ describe("pinned model", () => {
     expect(config).toMatch(/^\s+effort: medium$/m);
     expect(config).toMatch(/^\s+cache_control:\n\s+type: ephemeral$/m);
     expect(config).not.toMatch(/opus/i);
+  });
+});
+
+describe("pinned Promptfoo", () => {
+  it("is an exact dev dependency of this app, installed at the pinned version", async () => {
+    const manifest = JSON.parse(
+      await readFile(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+    ) as { devDependencies?: Record<string, string> };
+    expect(manifest.devDependencies?.["promptfoo"]).toBe(PROMPTFOO_VERSION);
+    expect(PROMPTFOO_VERSION).toBe("0.126.0");
+  });
+
+  it("runs the installed entry point with Node, not a download through pnpm dlx", () => {
+    const entry = promptfooEntry();
+    expect(existsSync(entry)).toBe(true);
+    expect(entry).toContain(join("node_modules", "promptfoo"));
+  });
+
+  it("is named in the config without pnpm dlx", async () => {
+    const config = await readFile(
+      fileURLToPath(new URL("./promptfooconfig.yaml", import.meta.url)),
+      "utf8",
+    );
+    expect(config).not.toMatch(/dlx/);
+    expect(config).toContain(`Promptfoo ${PROMPTFOO_VERSION}`);
+  });
+});
+
+describe("runBounded", () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+  it("keeps the tasks' order and never runs more than the limit at once", async () => {
+    let running = 0;
+    let peak = 0;
+    const tasks = Array.from({ length: 9 }, (_, index) => async () => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, (9 - index) * 2));
+      running -= 1;
+      return index;
+    });
+    expect(await runBounded(tasks, 3)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(peak).toBe(3);
+  });
+
+  it("runs one at a time with a limit of one", async () => {
+    let running = 0;
+    let peak = 0;
+    const tasks = Array.from({ length: 4 }, () => async () => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await tick();
+      running -= 1;
+    });
+    await runBounded(tasks, 1);
+    expect(peak).toBe(1);
+  });
+
+  it("starts no task after one failed, lets the running ones finish and throws the first error", async () => {
+    const started: number[] = [];
+    const finished: number[] = [];
+    const tasks = Array.from({ length: 6 }, (_, index) => async () => {
+      started.push(index);
+      if (index === 0) throw new Error("first");
+      await tick();
+      finished.push(index);
+      return index;
+    });
+    await expect(runBounded(tasks, 2)).rejects.toThrow("first");
+    expect(started).toEqual([0, 1]);
+    expect(finished).toEqual([1]);
+  });
+
+  it("refuses a limit below one", async () => {
+    await expect(runBounded([() => Promise.resolve(1)], 0)).rejects.toThrow(/limit/);
+  });
+
+  it("is bounded for the evals at a few case-runs at once", () => {
+    expect(CASE_RUN_CONCURRENCY).toBeGreaterThan(1);
+    expect(CASE_RUN_CONCURRENCY).toBeLessThanOrEqual(4);
   });
 });
 
