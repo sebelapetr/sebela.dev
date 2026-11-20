@@ -24,7 +24,7 @@ The trust boundary of the repository. It may import `@sebela/services`, `@sebela
 
 ## Container stack
 
-The main checkout can run the API in Docker: the profile `api` of the root `compose.yaml`, built from `Dockerfile` here (context: the repository root, allowlisted by the root `.dockerignore`). `pnpm stack:up` starts it together with the website container (profile `web`, `apps/web/AGENTS.md`, "Container"). Worktrees run the API on the host with the commands above.
+The main checkout can run the API in Docker: the profile `api` of the root `compose.yaml`, built from `Dockerfile` here (context: the repository root, allowlisted by the root `.dockerignore`). `pnpm stack:up` starts it together with the website container (profile `web`, `apps/web/AGENTS.md`, "Container"). Worktrees run the API on the host with the commands above. The image declares a `HEALTHCHECK` on `/health`, the same check `compose.yaml` declares, so the image is healthy also outside Compose; the production composition runs it from GHCR (`infra/README.md`).
 
 | Task                                                           | Command (repository root)                                                                                                 |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
