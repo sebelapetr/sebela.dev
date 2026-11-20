@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   primaryKey,
@@ -130,13 +131,16 @@ export const embeddings = retrievalSchema.table(
 );
 
 /**
- * Queued indexing work: each item owes a run over the portfolio. Pending items wait; an item whose
- * runs failed `maxAttempts` times is failed and waits for an explicit retry.
+ * Queued indexing work: each item owes a run over the portfolio, and `seq` orders the items as
+ * they were queued. Pending items wait. An item whose runs failed `maxAttempts` times is failed:
+ * runs no longer take it, but every run reconciles the whole portfolio, so a later successful run
+ * covers its change too; an explicit re-index takes and clears it.
  */
 export const workItems = retrievalSchema.table(
   "work_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
     sourceId: text("source_id").notNull(),
     operation: text("operation").notNull(),
     status: text("status").notNull().default("pending"),

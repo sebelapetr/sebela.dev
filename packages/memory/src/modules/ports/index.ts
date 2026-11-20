@@ -75,7 +75,7 @@ export interface IndexedSource {
   readonly version: string;
   readonly model: string;
   readonly modelVersion: string;
-  /** A write changed its record after it was indexed; search leaves it out until it is re-indexed. */
+  /** A write changed its record after it was indexed; search leaves it out until re-indexed. */
   readonly stale: boolean;
 }
 
@@ -90,7 +90,10 @@ export interface WorkItem {
   readonly operation: WorkOperation;
   /** Runs that failed on it because the provider was unavailable. */
   readonly attempts: number;
-  /** It reached the most attempts; only an explicit run with `retryFailed` takes it again. */
+  /**
+   * It reached the most attempts and is no longer taken by a normal run; any later run still
+   * reconciles the whole portfolio, and a run with `retryFailed` takes and drops it.
+   */
   readonly failed: boolean;
 }
 

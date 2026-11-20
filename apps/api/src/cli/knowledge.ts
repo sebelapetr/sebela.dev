@@ -1,6 +1,8 @@
 // Maintenance adapter for the knowledge base: works through queued indexing work, rebuilds the
-// portfolio index, lists the evals' candidate pools and prints the month's recorded provider spend, straight through the services, so it needs
-// no running server and no API key. Every answer is one JSON document on stdout.
+// portfolio index, lists the evals' candidate pools and prints the month's recorded provider
+// spend, straight through the services, so it needs no running server and no API key. Run it only
+// while no API serves the same database, which works through the queue itself.
+// Every answer is one JSON document on stdout.
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";

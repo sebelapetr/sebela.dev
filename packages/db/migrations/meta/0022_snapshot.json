@@ -1,5 +1,5 @@
 {
-  "id": "de9b33e3-87e3-4a80-baba-97a644301a61",
+  "id": "1923b30b-0975-444a-81cf-e7d600e35579",
   "prevId": "1ba61bf8-81dd-4d9e-a2d8-80193924f894",
   "version": "7",
   "dialect": "postgresql",
@@ -4029,6 +4029,23 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "work_items_seq_seq",
+            "schema": "retrieval",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
         },
         "source_id": {
           "name": "source_id",

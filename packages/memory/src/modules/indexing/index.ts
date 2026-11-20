@@ -54,7 +54,7 @@ export interface ProcessOptions {
   readonly retryFailed?: boolean;
 }
 
-/** Failed runs after which a queued item waits for an explicit re-index. */
+/** Failed runs after which a normal run no longer takes a queued item; `retryFailed` still does. */
 export const maxWorkAttempts = 5;
 
 /** Most queued items one run takes by default. */
@@ -93,8 +93,16 @@ export function createIndexer(options: IndexerOptions): Indexer {
   const now = options.now ?? (() => new Date());
   const spend = createSpend({ store, embedder, config, now });
 
-  /** Stores every source that is not current (or every source with `all`) from the snapshot. */
-  async function reconcile(snapshot: PortfolioSnapshot, all: boolean): Promise<IndexReport> {
+  /**
+   * Stores every source that is not current (or every source with `all`) from the snapshot. With
+   * `watermark`, a source is stored only while no work was queued after it, since the snapshot may
+   * then predate that work; the source stays as the newer work left it, for the next run.
+   */
+  async function reconcile(
+    snapshot: PortfolioSnapshot,
+    all: boolean,
+    watermark?: number,
+  ): Promise<IndexReport> {
     const sources = portfolioSources(snapshot);
     const indexed = new Map(
       (await store.indexedSources()).map((source) => [source.sourceId, source]),
@@ -132,7 +140,7 @@ export function createIndexer(options: IndexerOptions): Indexer {
       const waiting: PortfolioSource[] = [];
       for (const source of pending) {
         if (source.chunks.every((chunk) => vectors.has(chunk.textHash))) {
-          await store.replaceSource(toVersion(source, vectors, embedder, now()));
+          await store.replaceSource(toVersion(source, vectors, embedder, now()), watermark);
         } else {
           waiting.push(source);
         }
@@ -183,8 +191,11 @@ export function createIndexer(options: IndexerOptions): Indexer {
     const ids = items.map((item) => item.id);
     let report: IndexReport;
     try {
-      // Read after taking the items, so the snapshot holds every write they stand for.
-      report = await reconcile(await read(), false);
+      // The watermark covers the items taken; reading after it, the snapshot holds every write
+      // they stand for, and work queued later (a write during this run) keeps its sources as it
+      // left them instead of this run storing an older version over them.
+      const watermark = await store.workWatermark();
+      report = await reconcile(await read(), false, watermark);
     } catch (error) {
       // At the ceiling nothing was attempted for lack of the provider: the work stays as it was.
       if (!(error instanceof BudgetExhaustedError)) {

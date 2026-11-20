@@ -1,4 +1,15 @@
-import { and, asc, cosineDistance, count, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  cosineDistance,
+  count,
+  eq,
+  gt,
+  gte,
+  inArray,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 
 import type { Database } from "../../database.js";
 import {
@@ -222,8 +233,17 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       await cacheVectors(db, vectors, model, modelVersion);
     },
 
-    async replaceSource(source) {
+    async replaceSource(source, unlessWorkAfter) {
       return db.transaction(async (tx) => {
+        if (unlessWorkAfter !== undefined) {
+          await lockWork(tx);
+          const [newer] = await tx
+            .select({ seq: workItems.seq })
+            .from(workItems)
+            .where(gt(workItems.seq, unlessWorkAfter))
+            .limit(1);
+          if (newer !== undefined) return false;
+        }
         const [stored] = await tx
           .insert(sources)
           .values({
@@ -299,6 +319,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
 
     async scheduleWork(work) {
       await db.transaction(async (tx) => {
+        await lockWork(tx);
         if (work.removeSourceIds.length > 0) {
           await tx.delete(sources).where(inArray(sources.sourceId, [...work.removeSourceIds]));
         }
@@ -314,7 +335,15 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       });
     },
 
-    workWatermark: () => Promise.resolve(0),
+    async workWatermark() {
+      return db.transaction(async (tx) => {
+        await lockWork(tx);
+        const [row] = await tx
+          .select({ seq: sql<number>`coalesce(max(${workItems.seq}), 0)::float8` })
+          .from(workItems);
+        return row?.seq ?? 0;
+      });
+    },
 
     async pendingWork(limit, includeFailed) {
       const rows = await db
@@ -327,7 +356,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         })
         .from(workItems)
         .where(inArray(workItems.status, includeFailed ? ["pending", "failed"] : ["pending"]))
-        .orderBy(asc(workItems.createdAt), asc(workItems.id))
+        .orderBy(asc(workItems.seq))
         .limit(limit);
       return rows.map(({ status, operation, ...row }) => ({
         ...row,
@@ -451,6 +480,15 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
 }
 
 type Executor = Pick<Database, "insert">;
+
+/**
+ * Serialises queueing work, reading the watermark and a conditional replace until the end of the
+ * caller's transaction. A work item's `seq` is drawn before its transaction commits, so without the
+ * lock a watermark could be read past an item that commits later with a lower `seq`.
+ */
+async function lockWork(tx: Pick<Database, "execute">) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('retrieval.work_items'))`);
+}
 
 /** Adds vectors to the embedding cache, keeping a vector already there. */
 async function cacheVectors(
