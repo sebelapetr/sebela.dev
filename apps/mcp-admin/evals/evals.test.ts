@@ -1650,6 +1650,20 @@ describe("S03 graders", () => {
     expect(gradeE15("Kdy přesně?", context(invented)).pass).toBe(false);
   });
 
+  it("E15 passes a request for the interval without a question mark, and still fails without one", () => {
+    // The answer of CI run 44705277512, repeat 1: it asks, in Czech, without a question mark.
+    const asked =
+      "Potřebuji ještě vědět, kdy jsi začal. Zadal jsi jen délku (90 minut). " +
+      "Napiš prosím, od kolika do kolika dnes (17. 11. 2026) jsi studoval. Například „od 9:00 do 10:30“.";
+    expect(gradeE15(asked, context()).pass).toBe(true);
+    expect(gradeE15("Please tell me when you started and finished.", context()).pass).toBe(true);
+    expect(gradeE15("Uveď začátek a konec sezení.", context()).pass).toBe(true);
+    // Refusing without asking, or claiming a write, is not asking for the interval.
+    expect(gradeE15("Bez začátku to nezapíšu.", context()).pass).toBe(false);
+    expect(gradeE15("Zapsal jsem devadesát minut.", context()).pass).toBe(false);
+    expect(gradeE15("Napiš mi, jestli chceš poznámky do deníku.", context()).pass).toBe(false);
+  });
+
   it("E31 passes one session followed by a diary check or a stated uncertainty, and fails a resend", () => {
     const lost = call("log_session", sessionArgs, E31_LOST, true);
     const check = call(
