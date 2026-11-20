@@ -161,12 +161,12 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10">
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 sm:gap-10">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-4">
           <h1 className="flex flex-col gap-3">
             <span className="type-label">{name}</span>
-            <span className="type-title">Ask my AI</span>
+            <span className="type-heading sm:type-title">Ask my AI</span>
           </h1>
           <p className="type-intro max-w-prose">
             An AI assistant that answers questions about {name}&apos;s experience, projects,
@@ -240,7 +240,7 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
         {live}
       </p>
 
-      <div className="sticky bottom-0 mt-auto -mx-1 flex flex-col gap-2 bg-background px-1 pt-3 pb-4">
+      <div className="sticky bottom-0 mt-auto -mx-1 bg-background px-1 pt-3 pb-4">
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question
@@ -268,9 +268,6 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
             <ArrowUp aria-hidden="true" />
           </Button>
         </form>
-        <p className="text-sm text-muted-foreground">
-          Answers are generated from {name}&apos;s public profile and may be incomplete.
-        </p>
       </div>
     </div>
   );
