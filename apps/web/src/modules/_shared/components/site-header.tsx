@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { currentNavigationHref, mainContentId } from "../navigation";
 import { MobileMenu } from "./mobile-menu";
 import { AskLink, HomeLink, NavigationList } from "./navigation-links";
+import { SourceCodeLink } from "./source-code-link";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
@@ -30,6 +31,7 @@ export function SiteHeader({ name }: { readonly name: string | null }) {
           </nav>
           <div className="flex shrink-0 items-center gap-2">
             <AskLink current={current} />
+            <SourceCodeLink className="hidden md:inline-flex" />
             <ThemeToggle className="hidden md:inline-flex" />
             <MobileMenu name={name} current={current} />
           </div>
