@@ -195,6 +195,22 @@ jobs:
           node-version-file: .nvmrc
       - run: node scripts/checks/api-stack.e2e.mjs
 
+  # The production composition (compose.yaml with infra/production/compose.yaml): builds the API,
+  # website and MCP Admin images under their GHCR names, checks them and the fixture image with the
+  # image-content check, starts them from the production example settings with the demo seed, and
+  # checks health, that only the website is published and only on loopback, noindex without
+  # analytics, the website's health route with Postgres and then the API stopped, and that no secret
+  # is logged. Removed at the end. Plain Node and Docker, no installed dependencies.
+  production-stack:
+    name: Production stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/checks/production-stack.e2e.mjs
+
   # The complete containerised stack of compose.yaml (profiles `api` and `web`): two disposable
   # Compose projects side by side, each with its own ports, volumes, storage folder and secrets,
   # seeded with the fictional demo seed. Real pages, the CV PDF and stored images through the website
