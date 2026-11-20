@@ -179,3 +179,28 @@ def test_check_fixture_person_detects_a_different_contact() -> None:
     assert run.check_fixture_person({**FIXTURE_PERSON, "email": "other@x.test"}) == [
         "person.email differs from the fixture"
     ]
+
+
+async def test_the_summary_reports_latency_percentiles_and_no_answer_text(tmp_path: Path) -> None:
+    graded = []
+    for repeat, latency in enumerate([4000, 5000, 6000, 9000], start=1):
+        data = record("S01-en", repeat=repeat)
+        data["latency_ms"] = latency
+        graded.append(await run.grade_record(data, judge_model=None, allowance=None))
+    summary = run.write_summary(
+        tmp_path,
+        mode="regrade",
+        graded=graded,
+        selected=["S01-en"],
+        extra_failures=[],
+        allowance=None,
+        subject=SUBJECT,
+    )
+    # Nearest-rank percentiles over the case-runs that measured a latency.
+    assert summary["latency_ms"] == {"runs": 4, "p50": 5000, "p95": 9000}
+    stored = (tmp_path / "summary.json").read_text(encoding="utf-8")
+    assert "fictional engineer" not in stored
+
+
+def test_latency_percentiles_without_measurements_are_empty() -> None:
+    assert run.latency_percentiles([None, None]) == {"runs": 0, "p50": None, "p95": None}
