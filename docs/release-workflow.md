@@ -38,15 +38,37 @@ Built, verified and published by `.github/workflows/release.yml` on every push t
 - **Verified before publishing.** The new images and the current images of the unchanged services start as the production composition with the demo seed, and the production stack smoke check and the complete-stack browser tests run against it, with the model faked (the mock Ask page). Images that fail are never pushed.
 - **Published** to GHCR as public packages: the commit SHA tags first, then `current`. The workflow's only credential is its `GITHUB_TOKEN`, with `packages: write` only in that job; the Docker sign-in to GHCR exists only around pulling the reused images and publishing, not during the builds and tests. The tag set of every service is the job's output `tags` (JSON, service to tag) for the deployment.
 - **One release at a time.** GitHub lets the running release finish and cancels a release still waiting when a newer push queues. Nothing is lost by that: the newer release builds everything that changed since the current images.
-- **Open for the deployment (#234).** `current` moves when the images are published, before they are deployed. A change to `infra/` or `compose.yaml` changes no image and so releases nothing; the deployment has to decide how such a change reaches the server.
+- **`current` moves on publishing**, before the images are deployed. A failed deployment therefore leaves `current` on images that are not running; the next release still builds everything that changed since them, and the server runs whatever its record of verified releases names (Deployment).
+
+## Deployment
+
+The `deploy` job of `.github/workflows/release.yml` runs after the images are published, in the GitHub Environment `production` (deployment branches: `master` only). Its only secrets are the SSH key, the host and the server's known-host line; it references no application secret. It sends the images job's tag set over SSH to the `deploy` user, whose key is restricted to the forced command `infra/scripts/deploy.sh` (the `authorized_keys` line, the server settings and the state are in `infra/README.md`, Deployment).
+
+- **Input.** Only `deploy api=<SHA> web=<SHA> mcp-admin=<SHA>` (every service once, full 40-character commit SHAs, `scripts/release/deployment.mjs input`) or `rollback`. Anything else is refused before anything runs; the key can do nothing else. One deployment at a time (a lock on the server).
+- **Steps.** (1) Pull the release's images; nothing that runs changes. (2) Compare the migration files of the new API image with those of the running release: a new migration, or no verified release yet, needs a backup first; while the backup script is missing (#235) such a release is refused and nothing changes. (3) Run the one-off migration once. (4) Recreate the services whose image changed and wait until every service is healthy.
+- **Failure.** When the migration or the health check fails, the script starts the previous verified release again, waits for it to be healthy and exits non-zero, so the job fails and no version is tagged.
+- **Record.** A healthy release is appended to the server's record of verified releases, one tag set per line. Images of the three services that are in neither of the last two records are removed from the server; the previous release stays available for a rollback.
+- **Rollback.** `ssh deploy@<host> rollback` with the deployment key, or `infra/scripts/deploy.sh rollback` on the server as `deploy` (`infra/README.md`, Deployment): starts the previous verified release, waits for health and drops the newest release from the record. It runs no backup and applies no migration; the older release runs on the newer schema by the compatibility rule below.
+- **Smoke check.** After a deployment the job runs `scripts/release/production-smoke.mjs` against `https://sebela.dev`: the public pages answer with HTML, the website's `/health` is green, and the edge refuses the API's private routes, MCP Admin and the website's internal routes even with a key. The workflow holds no application secret, so it sends a made-up key; the owner can repeat the check with a real one.
+- **Infrastructure changes.** The script and the composition come from the server's checkout of `master`. A change to `infra/` or `compose.yaml` releases no image; it reaches the server when the owner updates that checkout, and the next deployment uses it.
+- **Verified in CI** by the input, migration, backup, rollback and record tests (`scripts/release/deploy.test.mjs`, against a faked Docker) and by a simulated deployment of the real script against a disposable Compose project, where a deliberately unhealthy release ends with the previous one running (`scripts/release/deploy.e2e.mjs`, `docs/testing.md`, CI).
+
+### Migration compatibility rule
+
+Migrations are forward-only, and a rollback or a failed deployment runs the previous release on the new schema. Every migration must therefore keep the previous release working: expand first (add tables, nullable or defaulted columns, new indexes), and remove or rename what the previous release still uses only in a later release, once no verified release that may be rolled back to depends on it (expand/contract). A release that adds a migration is backed up before the migration runs.
+
+## Versions
+
+After a healthy deployment and smoke check the `release` job tags the commit with the next version `vX.Y.Z` and publishes a GitHub release (`scripts/release/deployment.mjs notes`).
+
+- **Next version** from the Conventional Commits since the last version tag merged into the commit: a breaking change (`!` or a `BREAKING CHANGE` footer) raises the major, a `feat` the minor, anything else the patch. Counting starts at `v0.0.0`, so the first release is `v0.1.0` when it contains a feature.
+- **Release notes** list the commits since that tag, grouped as breaking changes, features, fixes and other changes, followed by the deployed image tags.
+- A failed deployment publishes no version; the next healthy one includes its commits.
 
 ## To be defined in phase 10
 
-- Versioning and tagging
-- The pipeline that deploys the published images
 - How MCP Admin is reached through the SSH tunnel, and how nginx learns the visitor's address from Bunny CDN (`infra/README.md`, Open points)
-- Database backups and restore procedure
-- Rollback
+- Database backups and restore procedure (#235; until then a release that adds a migration is refused)
 - The domain switch
 
 ## First-release scope

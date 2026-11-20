@@ -2,13 +2,14 @@
 
 The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
 
-| Path                      | What it is                                                                                    |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| `production/compose.yaml` | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs   |
-| `production/.env.example` | Every production setting, as a documented placeholder; the real file lives only on the server |
-| `nginx/sebela.dev.conf`   | Reference configuration of the Ploi-managed nginx site that proxies sebela.dev to the website |
+| Path                      | What it is                                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| `production/compose.yaml` | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs     |
+| `production/.env.example` | Every production setting, as a documented placeholder; the real file lives only on the server   |
+| `nginx/sebela.dev.conf`   | Reference configuration of the Ploi-managed nginx site that proxies sebela.dev to the website   |
+| `scripts/deploy.sh`       | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner |
 
-Later phase-10 issues add the deploy, backup and restore scripts and `crons.txt` here.
+Later phase-10 issues add the backup and restore scripts and `crons.txt` here.
 
 ## The production stack
 
@@ -27,6 +28,32 @@ docker compose --file compose.yaml --file infra/production/compose.yaml \
 - **Health.** The website's `/health` answers 200 only when the API and, through the API's `/health/ready`, Postgres answer; otherwise 503 with the failing part.
 
 What CI proves before an image is published: `scripts/checks/production-stack.test.mjs` (the composition's policy, rendered from the example settings) and `scripts/checks/production-stack.e2e.mjs` (`pnpm test:production-stack`: the images built, checked for forbidden files and started as this composition with the demo seed, all healthy, only the website published, on loopback). The release workflow runs that smoke check on the very images it then publishes, with the complete-stack browser tests, before it pushes anything (`docs/release-workflow.md`, Images).
+
+## Deployment
+
+`scripts/deploy.sh` deploys a verified tag set or rolls back to the previous verified release (`docs/release-workflow.md`, Deployment). It runs from the server's checkout of this repository, as the `deploy` user, and accepts exactly one of:
+
+```text
+deploy api=<commit SHA> web=<commit SHA> mcp-admin=<commit SHA>
+rollback
+```
+
+Anything else (an unknown service, a short or upper-case SHA, a service named twice or missing, any shell syntax, path or option) is refused before anything runs.
+
+- **The forced command.** The release workflow's key is restricted to the script in the `deploy` user's `~/.ssh/authorized_keys`, so the key cannot open a shell, forward ports or run anything else. The script reads its input from `SSH_ORIGINAL_COMMAND` and ignores arguments. One line, with the server's paths in place of the placeholders:
+
+  ```text
+  command="DEPLOY_ENV_FILE=<production environment file> DEPLOY_STATE_DIR=<state folder> <checkout>/infra/scripts/deploy.sh",restrict ssh-ed25519 <public key> deploy@github-actions
+  ```
+
+- **The `deploy` user** may run `docker` (member of the `docker` group), owns the production environment file (mode 600) and the state folder, and has the checkout readable. Its forced-command key is used only by the workflow; the owner signs in with their own key.
+- **State.** `DEPLOY_STATE_DIR` holds `releases`, the record of verified releases (one tag set per line, newest last), and the `lock` that keeps two deployments from running at once.
+- **Settings** besides the two above, all optional: `DEPLOY_BACKUP` (the backup script, default `infra/scripts/backup.sh` of the checkout; while it does not exist a release that adds a migration is refused), `DEPLOY_REGISTRY` (default the registry of `production/compose.yaml`), `DEPLOY_WAIT_TIMEOUT` (seconds, default 300) and `COMPOSE_FILE`.
+- **The checkout.** The script and the composition come from the server's checkout of `master`. A change to `infra/` or `compose.yaml` builds no image, so it reaches the server only when the owner updates that checkout (`git pull` as the checkout's owner); the next deployment then uses it.
+- **Images** are public GHCR packages (Server preparation), so the server pulls without a registry login.
+- **Rollback**, by the owner: `ssh deploy@<host> rollback` with the workflow's key, or `DEPLOY_ENV_FILE=... DEPLOY_STATE_DIR=... infra/scripts/deploy.sh rollback` on the server as `deploy`. It starts the previous verified release and drops the newest from the record; a second rollback goes one release further back only while its images are still on the server.
+- **GitHub Environment `production`.** Deployment branches limited to `master`; secrets `DEPLOY_SSH_KEY` (the private key of the forced-command line), `DEPLOY_HOST` (the server's host name) and `DEPLOY_KNOWN_HOSTS` (the server's `known_hosts` line, from `ssh-keyscan` checked against the server's own fingerprint). No application secret is stored there.
+- **Production smoke check.** After each deployment the workflow runs `scripts/release/production-smoke.mjs` against `https://sebela.dev`. The owner can run it at any time, with a real API key if wanted: `SMOKE_BASE_URL=https://sebela.dev [SMOKE_API_KEY=<key>] node scripts/release/production-smoke.mjs`.
 
 ## Server preparation
 
