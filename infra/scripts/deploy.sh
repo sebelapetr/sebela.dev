@@ -10,8 +10,9 @@
 # is the arguments. Every service is named exactly once, with a full 40-character commit SHA. Any
 # other input is refused before anything runs, so the key can do nothing but deploy or roll back.
 #
-# A deployment pulls the images, backs up first when the release adds a migration (DEPLOY_BACKUP;
-# while that script does not exist, such a release is refused), runs the one-off migration,
+# A deployment pulls the images, backs up first when the release adds a migration (DEPLOY_BACKUP,
+# which reads the same DEPLOY_ENV_FILE; without an executable backup script such a release is
+# refused), runs the one-off migration,
 # recreates the changed services and waits for them to be healthy. When the migration or the
 # health check fails it starts the previous release again and exits non-zero. A healthy release is
 # appended to the record of verified releases, and local images of releases older than the
@@ -215,8 +216,8 @@ compose pull --policy missing || fail "pulling the images failed; nothing change
 
 if adds_migration; then
   [[ -x "$BACKUP" ]] ||
-    fail "the release adds a new migration and there is no backup script at $BACKUP" \
-      "(issue #235); refusing to migrate without a backup; nothing changed"
+    fail "the release adds a new migration and there is no backup script at $BACKUP;" \
+      "refusing to migrate without a backup; nothing changed"
   say "the release adds a new migration: backing up first"
   "$BACKUP" || fail "the backup failed; nothing changed"
 fi
