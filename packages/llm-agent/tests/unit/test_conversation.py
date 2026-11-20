@@ -399,6 +399,8 @@ TO_CZECH = (
     "Czech only, please.",
     "Tell me in Czech",
     "Can you tell me more in Czech?",
+    "Tell me a bit more in Czech, please.",
+    "Translate this to Czech please",
     "From now on answer in Czech",
     "I'd like you to answer in Czech",
     "I would like you to reply in Czech from now on.",
@@ -428,6 +430,7 @@ TO_ENGLISH = (
     "Radši v angličtině.",
     "Přepni do angličtiny, díky.",
     "Napiš mi to prosím po anglicku.",
+    "Pověz mi to anglicky",
 )
 #: Questions that only mention a language; none of them asks for the answer in it.
 NOT_A_SWITCH = (
@@ -437,6 +440,8 @@ NOT_A_SWITCH = (
     ("Does she speak Czech?", "cs", "en"),
     ("Czech?", "en", "en"),
     ("Is she Czech or English?", "en", "en"),
+    ("Did she answer in Czech?", "en", "en"),
+    ("Can you write code in Czech?", "en", "en"),
     ("Mluví Ilsa anglicky?", "en", "cs"),
     ("Píše Ilsa články anglicky?", "en", "cs"),
     ("Je ten projekt napsaný v angličtině?", "en", "cs"),

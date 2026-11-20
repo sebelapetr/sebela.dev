@@ -32,6 +32,13 @@ class ExecutionRecord(BaseModel):
 
 
 class TelemetrySink(Protocol):
+    """Receives the record on the event loop, synchronously, before `run` returns.
+
+    `export` must not block or do I/O: it should only enqueue the record (for example on an
+    `asyncio.Queue` or a background exporter's buffer). A slow sink delays the caller and every
+    other execution on the loop, though it cannot change the result.
+    """
+
     def export(self, record: ExecutionRecord) -> None: ...
 
 

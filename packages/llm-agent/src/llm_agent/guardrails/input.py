@@ -9,6 +9,7 @@ language of the newest earlier exchange, else English.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 
 from llm_agent.schemas import ChatExchange, Language
@@ -78,41 +79,71 @@ _ENGLISH_WORDS = frozenset(
         "you",
     }
 )
-_EN_TARGETS: dict[str, Language] = {"english": "en", "czech": "cs"}
-#: An English instruction to answer in a language: "answer in Czech", "switch to English".
-_EN_SWITCH = re.compile(
-    r"(?:^|[.!?,;:]\s*|\b(?:you|please|now|and)\s+)"
-    r"(?:answer|reply|respond|write|continue|speak|talk|switch)"
-    r"(?:\s+(?:back|to\s+me|me|only|please))*\s+(?:in|to|into)\s+(english|czech)\b",
-    re.IGNORECASE,
+#: Language switches are matched on lower-case text without diacritics, so "Muzes odpovidat
+#: anglicky?" counts like "Můžeš odpovídat anglicky?". A clause is a switch only when all of it is
+#: a request for a language: optional polite words, an optional answering verb with its objects,
+#: the language, and optional polite words after it. A clause that also asks or says something
+#: else ("Which project did you write in Czech?", "Is the CV available in Czech?") is no switch.
+_CLAUSE = re.compile(r"[.!?;:\n]+|\b(?:and|but|ale)\b")
+_EN_POLITE = (
+    r"please|pls|kindly|now|so|ok|okay|also|then|no|wait|actually|sorry|hey|thanks|thank you"
+    r"|from now on|from here on|going forward|again|instead|only|just|too|if possible"
+    r"|if you can|for me|can you|could you|would you|will you|would you mind|i'd like you to"
+    r"|i would like you to|i want you to|i'd prefer|i would prefer|let's|lets|let us|you can"
 )
-_CS_TARGETS: dict[str, Language] = {
-    "anglicky": "en",
-    "v angličtině": "en",
-    "po anglicku": "en",
-    "angličtinou": "en",
-    "na angličtinu": "en",
-    "česky": "cs",
-    "v češtině": "cs",
-    "po česku": "cs",
-    "češtinou": "cs",
-    "na češtinu": "cs",
-}
-#: A Czech imperative to answer in a language: "odpovídej anglicky", "přepni na češtinu".
-_CS_SWITCH = re.compile(
-    r"\b(?:odpovídej|odpověz|piš|napiš|mluv|pokračuj|přepni)(?:te)?\b"
-    r"(?:\s+[\w,]+){0,3}?\s+(" + "|".join(sorted(_CS_TARGETS, key=len, reverse=True)) + r")\b",
-    re.IGNORECASE,
+_EN_VERB = (
+    r"(?:answer|reply|respond|write|continue|speak|talk|switch|explain|say|translate|repeat)"
+    r"(?:ing)?|tell me|tell us|give me|go on|keep going"
+)
+_EN_OBJECT = (
+    r"me|to me|us|it|that|this|everything|more|a bit|a little|a bit more|some more|the rest"
+    r"|the answer|your answer|answers|back"
+    r"|again|please|only|just|from now on|about it|about that|about her|about him"
+)
+_EN_REQUEST = re.compile(
+    rf"(?P<before>(?:(?:{_EN_POLITE})\s+)*)"
+    rf"(?P<verb>(?:{_EN_VERB})(?:\s+(?:{_EN_OBJECT}))*\s+)?"
+    r"(?P<prep>(?:in|to|into)\s+)?(?P<lang>english|czech)(?:\s+language)?"
+    rf"(?P<after>(?:\s+(?:{_EN_POLITE}))*)"
+)
+_CS_POLITE = (
+    r"prosim|prosimte|prosim vas|diky|dik|dekuji|dekuju|ted|uz|od ted|odted|nadale|dal|jen"
+    r"|jenom|pouze|radsi|radeji|tak|no|ok|dobre|vlastne|zase|znovu|i|taky|take|klidne|pak|a"
+    r"|hned|muzes|muzete|mohl bys|mohla bys|mohl byste|mohla byste|mohli byste|budes|budete"
+    r"|zkus|zkuste|chci|chtel bych|chtela bych|potreboval bych|potrebovala bych|jestli muzes"
+    r"|jestli muzete|at|slo by|mi|nam|to|ji|vic|vice|vse|vsechno|zbytek|odpoved|odpovedi"
+)
+_CS_VERB = (
+    r"odpovidej|odpovidejte|odpovez|odpovezte|odpovidat|odpovedet|pis|piste|napis|napiste"
+    r"|psat|napsat|mluv|mluvte|mluvit|pokracuj|pokracujte|pokracovat|prepni|prepnete|prepnout"
+    r"|rekni|reknete|rict|rikat|povez|povezte|vysvetli|vysvetlete|vysvetlit|povidej|povidejte|preloz|prelozte"
+    r"|prelozit|komunikuj|komunikujte|komunikovat|zopakuj|zopakujte|zopakovat"
+)
+_CS_REQUEST = re.compile(
+    rf"(?P<before>(?:(?:{_CS_POLITE})\s+)*)"
+    rf"(?P<verb>(?:{_CS_VERB})(?:\s+(?:{_CS_POLITE}))*\s+)?"
+    r"(?P<prep>(?:v|po|na|do)\s+)?"
+    r"(?P<lang>anglick[yu]|anglictin[eouya]|anglictinou|cesk[yu]|cestin[eouya]|cestinou)"
+    rf"(?P<after>(?:\s+(?:{_CS_POLITE}))*)"
 )
 
 
-def detect_language(question: str) -> Language:
-    """Czech when the question uses Czech letters or several common Czech words, else English."""
-    if _CZECH_LETTERS.search(question):
-        return "cs"
+def _detected(question: str) -> Language | None:
+    """The question's own language, or None when it is too short or mixed to tell.
+
+    Common words decide before letters, so a Czech name ("What did she do at Škoda?") does not make
+    an English question Czech, while a short question with Czech letters ("Řekni víc") is Czech.
+    """
     words = [word.casefold() for word in _WORD.findall(question)]
-    czech = sum(word in _CZECH_WORDS for word in words)
-    return "cs" if czech >= 2 else "en"
+    czech = sum(word in _CZECH_WORDS for word in words) + (words[:2] == ["a", "co"])
+    english = sum(word in _ENGLISH_WORDS for word in words)
+    if czech >= 2 and czech > english:
+        return "cs"
+    if english >= 2:
+        return "en"
+    if _CZECH_LETTERS.search(question) or czech >= 2:
+        return "cs"
+    return None
 
 
 def select_language(question: str, history: Sequence[ChatExchange] = ()) -> Language:
@@ -125,24 +156,30 @@ def select_language(question: str, history: Sequence[ChatExchange] = ()) -> Lang
     switch = _switch(question)
     if switch is not None:
         return switch
-    if detect_language(question) == "cs":
-        return "cs"
-    words = [word.casefold() for word in _WORD.findall(question)]
-    if sum(word in _ENGLISH_WORDS for word in words) >= 2 or not history:
-        return "en"
-    return history[-1].language
+    detected = _detected(question)
+    if detected is not None:
+        return detected
+    return history[-1].language if history else "en"
 
 
 def _switch(question: str) -> Language | None:
-    found: list[tuple[int, Language]] = [
-        (match.start(1), _EN_TARGETS[match.group(1).casefold()])
-        for match in _EN_SWITCH.finditer(question)
-    ]
-    found += [
-        (match.start(1), _CS_TARGETS[match.group(1).casefold()])
-        for match in _CS_SWITCH.finditer(question)
-    ]
-    return max(found)[1] if found else None
+    plain = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", question.casefold().replace("\u2019", "'"))
+        if not unicodedata.combining(char)
+    )
+    found: Language | None = None
+    for clause in _CLAUSE.split(plain):
+        words = " ".join(re.findall(r"[\w']+", clause))
+        for request in (_EN_REQUEST, _CS_REQUEST):
+            match = request.fullmatch(words)
+            if match is None:
+                continue
+            # A bare language word ("Czech?") is a question, not a request: it needs a verb, a
+            # preposition or a polite word.
+            if match["verb"] or match["prep"] or match["before"] or match["after"]:
+                found = "en" if match["lang"].startswith(("english", "angl")) else "cs"
+    return found
 
 
 def neutralized(text: str) -> str:
