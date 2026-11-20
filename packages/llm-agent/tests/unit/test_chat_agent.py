@@ -20,6 +20,7 @@ from tests.unit.fakes import (
     connection_error,
     draft,
     refusal,
+    span,
     spans,
     status_error,
     tools,
@@ -71,12 +72,15 @@ async def test_an_allowed_profile_question_returns_a_grounded_answer() -> None:
     assert "email" not in result.evidence[0].data
     assert result.contact is None
     assert spans(result) == [
+        ("model.security", "ok"),
         ("stage.security", "ok"),
+        ("model.main", "ok"),
         ("tool.get_profile", "ok"),
+        ("model.main", "ok"),
         ("stage.main", "ok"),
         ("stage.output", "ok"),
     ]
-    assert result.trace[0].attributes["verdict"] == "ALLOW"
+    assert span(result, "stage.security").attributes["verdict"] == "ALLOW"
     assert result.usage.model_attempts == 3
     assert result.usage.input_tokens == 3000
     assert result.usage.cost_usd == pytest.approx(3 * CALL_USD)
@@ -169,8 +173,12 @@ async def test_an_explicit_manipulation_is_refused_playfully_without_a_main_call
     assert result.contact is None
     assert result.sources == []
     assert models.stage_calls("main") == []
-    assert spans(result) == [("stage.security", "ok"), ("stage.output", "ok")]
-    assert result.trace[0].attributes["verdict"] == "BLOCK"
+    assert spans(result) == [
+        ("model.security", "ok"),
+        ("stage.security", "ok"),
+        ("stage.output", "ok"),
+    ]
+    assert span(result, "stage.security").attributes["verdict"] == "BLOCK"
 
 
 @pytest.mark.parametrize("category", ["off_topic", "abuse"])
@@ -197,7 +205,7 @@ async def test_a_provider_refusal_of_the_classifier_blocks() -> None:
     models = ScriptedModels(security=[refusal()])
     result = await run(models)
     assert result.outcome == "refused"
-    assert result.trace[0].attributes["verdict"] == "BLOCK"
+    assert span(result, "stage.security").attributes["verdict"] == "BLOCK"
     assert models.stage_calls("main") == []
 
 
@@ -281,6 +289,20 @@ async def test_the_guard_replaces_an_answer_without_a_valid_source() -> None:
     assert result.outcome == "insufficient_evidence"
     assert result.sources == []
     assert "fictional engineer" not in result.text
+
+
+async def test_the_guard_replaces_an_answer_that_cites_no_source() -> None:
+    claim = "Ilsa is a world-famous astronaut."
+    models = ScriptedModels(
+        security=[verdict()], main=[tools("get_profile"), draft(claim, refs=())]
+    )
+    result = await run(models)
+    assert result.outcome == "insufficient_evidence"
+    assert result.reason == "output_replaced"
+    assert result.sources == []
+    assert claim not in dumped(result)
+    assert result.trace[-1].attributes["action"] == "replace"
+    assert result.contact is not None
 
 
 async def test_the_guard_replaces_a_leaked_system_prompt_line() -> None:
@@ -434,6 +456,22 @@ async def test_one_transient_failure_is_retried(error: Exception) -> None:
     assert len(models.stage_calls("main")) == 2
 
 
+async def test_every_model_attempt_is_a_span_with_its_model_effort_and_tokens() -> None:
+    models = ScriptedModels(security=[status_error(429), verdict()], main=[draft()])
+    result = await run(models)
+    attempts = [item for item in result.trace if item.name.startswith("model.")]
+    assert [(item.name, item.status) for item in attempts] == [
+        ("model.security", "transient_error"),
+        ("model.security", "ok"),
+        ("model.main", "ok"),
+    ]
+    ok = attempts[1].attributes
+    assert (ok["model"], ok["effort"], ok["attempt"]) == ("claude-haiku-5-5", "medium", 2)
+    assert (ok["input_tokens"], ok["output_tokens"]) == (1000, 200)
+    assert attempts[0].attributes["input_tokens"] is None
+    assert attempts[2].attributes["effort"] == "high"
+
+
 async def test_the_retry_allowance_is_one_for_the_whole_execution() -> None:
     models = ScriptedModels(
         security=[status_error(500), verdict()],
@@ -485,3 +523,17 @@ async def test_two_executions_are_isolated_when_one_is_cancelled() -> None:
     assert first.evidence == []
     assert first.usage.model_attempts == 2
     assert answered.usage.model_attempts == 3
+
+
+# --- Telemetry ----------------------------------------------------------------------------------
+
+
+async def test_langsmith_tracing_stays_off_even_when_the_environment_enables_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+    models = ScriptedModels(security=[verdict()], main=[tools("get_profile"), draft()])
+    result = await run(models)
+    assert result.outcome == "answered"
+    assert models.tracing == [False, False, False]

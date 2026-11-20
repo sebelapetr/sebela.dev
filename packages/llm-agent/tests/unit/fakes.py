@@ -16,6 +16,7 @@ from typing import Any
 import anthropic
 import httpx2
 from langchain_core.messages import AIMessage, BaseMessage
+from langsmith.run_helpers import get_tracing_context
 
 from llm_agent import ContentUnavailableError, ModelCall, PublicLink, PublicPerson, PublicStep
 
@@ -69,6 +70,7 @@ class ScriptedModel:
 
     async def ainvoke(self, input: Sequence[BaseMessage]) -> BaseMessage:
         self.owner.calls.append((self.call, list(input)))
+        self.owner.tracing.append(get_tracing_context()["enabled"])
         script = self.owner.scripts[self.call.stage]
         if not script:
             raise AssertionError(f"unexpected {self.call.stage} call")
@@ -88,6 +90,8 @@ class ScriptedModels:
     def __init__(self, *, security: Sequence[Step] = (), main: Sequence[Step] = ()) -> None:
         self.scripts: dict[str, list[Step]] = {"security": list(security), "main": list(main)}
         self.calls: list[tuple[ModelCall, list[BaseMessage]]] = []
+        #: The LangSmith tracing switch each model call saw (False: explicitly off).
+        self.tracing: list[bool | str | None] = []
 
     def __call__(self, call: ModelCall) -> ScriptedModel:
         return ScriptedModel(self, call)
@@ -178,3 +182,8 @@ def connection_error() -> anthropic.APIConnectionError:
 
 def spans(result: Any) -> list[tuple[str, str]]:
     return [(span.name, span.status) for span in result.trace]
+
+
+def span(result: Any, name: str) -> Any:
+    """The first span of that name."""
+    return next(item for item in result.trace if item.name == name)
