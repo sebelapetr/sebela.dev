@@ -29,6 +29,8 @@ API-key caller (owner, evals) -> private search route -> packages/memory -> pack
 
 Everything is TypeScript inside the API backend. `packages/memory` is the knowledge/retrieval layer, called only by the API backend; persistence stays behind `packages/db` operations. Python, the website and both MCP apps are untouched in this phase.
 
+Inside `packages/memory`, ingest and retrieval are separate modules joined only by the stored chunk contract (text, vector, source, version, hashes): `ingest` (load, extract, clean, sensitivity and conflict checks, chunking, version and approval state), `indexing` (persisted work queue, batched embedding, spend ceiling, rebuild), `retrieval` (query embedding, vector and full-text candidates, rank fusion, reranking, relevance floor, passage projection) and `providers` (embedder and reranker interfaces with Voyage and deterministic fake implementations). The package exposes two narrow operation sets: ingest/index for the CLI and the write hook, and search for the route. No RAG framework (LangChain, LlamaIndex): Drizzle's pgvector support, a PDF text extractor, a Markdown parser and a tokenizer cover the narrow parts; chunking, fusion and thresholds are the repository's own code.
+
 The private search route returns exactly the passage projection phase 9.1 will expose to the agent tool and public MCP. Phase 9.1 adds the public path and budget admission; it must not need to redesign the result shape.
 
 ## User Stories
@@ -114,7 +116,7 @@ The private search route returns exactly the passage projection phase 9.1 will e
 
 ### Retrieval and the private search route
 
-- Variants: full-text only, vector only, hybrid with rank fusion and optional reranking (Voyage's reranker as a measured candidate). Deploy the simplest variant that meets the frozen thresholds.
+- Two-stage retrieval. Stage 1: vector candidates by cosine distance (pgvector, HNSW index) and full-text candidates (Postgres full-text with the `simple` configuration and `unaccent`, since Postgres has no Czech stemmer), merged by reciprocal rank fusion into a configurable candidate pool (initially 30). Stage 2: a cross-encoder reranker (Voyage's current reranker, verified in its documentation) scores query and passage together and selects the final passages (initially 5–8); the relevance floor applies to the reranker score. The reranker is the expected configuration, but evals compare full-text only, vector only, hybrid without reranking and hybrid with reranking; if reranking brings no measurable gain it is switched off by configuration. Pool size, final count and floor are configuration tuned by evals.
 - `packages/memory` exposes one search operation: query text, optional content-kind filter and result limit in; ranked passages out, or a typed result for no evidence, budget exhausted or provider unavailable. "No evidence" is never used for a failure.
 - The route is private: the existing API-key authentication, per-key rate budget and request validation apply. It is not reachable anonymously and is not advertised to the website or MCP.
 - Bound query length, result count, result text length and latency. Below the calibrated relevance floor, return no evidence.
