@@ -2,11 +2,13 @@
 
 |            |                                                                                                                                                                              |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Draft consolidated from the owner's phase-7 interview; awaiting approval of the complete document                                                                            |
+| Status     | Approved by the owner; seven implementation issues published                                                                                                                 |
 | Date       | 2026-11-20                                                                                                                                                                   |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                                                                   |
 | Depends on | Phases 3 and 6, including their API/roadmap dependencies; phase 6 is being implemented independently                                                                         |
 | Result     | A useful structured-data web chatbot with FastAPI, private conversation ownership, bounded spending, usage UI, manual context compaction and locally pseudonymized telemetry |
+
+Implementation breakdown: [7 published issues](issues.md), with prerequisites and the final owner acceptance gate. Publication starts no implementation or paid run.
 
 This change specifies future implementation. It delivers no server, migration, model download, executable eval or passing baseline. The [evaluation specification](evals.md) defines acceptance. Phase 6's three-stage agent and its current issues remain unchanged; phase-7 extensions are implemented after that dependency is accepted.
 
@@ -211,6 +213,6 @@ Public MCP transport/setup page (8), retrieval/extra-document ingest (9), knowle
 
 ## Builder decisions and checked references
 
-The owner selected product behaviour and initial quotas above. Exact route names, compatible pinned SDK/generator versions, schema/table internals, identity-cookie rotation, concrete PII candidate and measured resource allocation are builder decisions within these bounds. Summary target, SSE delivery and explicitly typed progress are proposed implementation defaults for review; they cannot weaken safety, ownership, budget or failure semantics.
+The owner selected product behaviour and initial quotas above. Exact route names, compatible pinned SDK/generator versions, schema/table internals, identity-cookie rotation, concrete PII candidate and measured resource allocation are builder decisions within these bounds. Summary target, SSE delivery and explicitly typed progress are approved implementation defaults; they cannot weaken safety, ownership, budget or failure semantics.
 
 References checked 2026-11-20: [Turnstile modes](https://developers.cloudflare.com/turnstile/concepts/widget/), [Siteverify and replay limits](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), [Langfuse pricing](https://langfuse.com/pricing), [masking and exporter limitations](https://langfuse.com/docs/observability/features/masking), [annotation queues](https://langfuse.com/docs/evaluation/evaluation-methods/annotation-queues), [deletion API](https://langfuse.com/docs/administration/data-deletion), [access versus retention](https://langfuse.com/faq/all/data-access-vs-data-retention), [Presidio languages](https://github.com/data-privacy-stack/presidio/blob/main/docs/analyzer/languages.md), [GLiNER ONNX](https://github.com/urchade/gliner/blob/main/docs/convert_to_onnx.md), [ONNX CPU/ARM64](https://onnxruntime.ai/docs/get-started/with-python.html), [Hetzner CAX](https://www.hetzner.com/cloud/cost-optimized/).
