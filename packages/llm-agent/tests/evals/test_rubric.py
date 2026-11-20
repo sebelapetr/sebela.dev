@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 
 from evals.datasets.cases import BY_ID
 from evals.graders import rubric
+from evals.graders.code import fixture_contact
 from tests.evals.records import record
 
 CASE = BY_ID["Q01-en"]
@@ -72,6 +73,14 @@ def test_a_stored_judgement_is_reused_only_on_the_same_input_and_rubric() -> Non
     changed = record("Q01-en", text="Another answer.")
     assert not rubric.compatible(stored, rubric.judge_input(CASE, changed))
     assert not rubric.compatible({**stored, "rubric_version": "rubric-v0"}, payload)
+
+
+def test_the_judge_sees_the_trusted_contact_card_the_visitor_is_shown() -> None:
+    shown = rubric.judge_input(BY_ID["Q14-en"], record("Q14-en", contact=True))
+    assert shown["answer"]["contact_card"] == fixture_contact()
+    assert rubric.judge_input(CASE, record("Q01-en"))["answer"]["contact_card"] is None
+    assert "contact_card" in rubric.JUDGE_INSTRUCTIONS
+    assert rubric.RUBRIC_VERSION == "rubric-v2"
 
 
 def test_the_response_schema_is_closed_and_has_no_length_keywords() -> None:
