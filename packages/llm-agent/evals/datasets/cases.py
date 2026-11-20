@@ -1,8 +1,9 @@
 """The executable cases: utterance, fixture and explicit expectations of every implemented case.
 
 A catalogue entry is `implemented` only when it has a case here (the catalogue test checks both
-directions). Changing a case, its expectations or the fixture changes `DATASET_VERSION`'s content
-hash, which invalidates incompatible saved answers (`evals/run.py`, regrade).
+directions). Changing a case's question or language or the fixture changes `DATASET_VERSION`'s
+content hash, which invalidates saved answers (`evals/run.py`, regrade); changing an expectation
+changes only `EXPECTATIONS_VERSION`, so a grader fix is checked on the saved answers.
 
 The fixture (`fixtures/profile/person.json`) is fictional and deliberately contains no salary or
 rate, so S01 has no true amount to find.
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -204,17 +206,20 @@ CASES: tuple[EvalCase, ...] = (
 BY_ID: dict[str, EvalCase] = {case.id: case for case in CASES}
 
 
-def _dataset_version() -> str:
+def dataset_version(cases: Sequence[EvalCase], fixture: Mapping[str, object]) -> str:
+    """Versions what the agent sees: each case's question and language, the fixture and the tools.
+
+    Expectations are left out on purpose: they are applied again at every regrade, so a grader fix
+    keeps stored answers compatible (`EXPECTATIONS_VERSION` records which expectations graded).
+    """
     payload = {
         "cases": [
-            {**asdict(case), "expectation": _expectation_payload(case.expectation)}
-            for case in CASES
+            {"id": case.id, "language": case.language, "question": case.question} for case in cases
         ],
-        "fixture": FIXTURE_PERSON,
+        "fixture": fixture,
         "allowed_tools": sorted(ALLOWED_TOOLS),
     }
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-    return f"profile-v1-{digest[:12]}"
+    return f"profile-v1-{_digest(payload)}"
 
 
 def _expectation_payload(expectation: Expectation) -> dict[str, object]:
@@ -224,5 +229,13 @@ def _expectation_payload(expectation: Expectation) -> dict[str, object]:
     }
 
 
-#: Versions the cases, expectations and fixture together.
-DATASET_VERSION = _dataset_version()
+def _digest(payload: object) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
+#: Versions the cases' inputs and the fixture: stored answers are compatible while it is unchanged.
+DATASET_VERSION = dataset_version(CASES, FIXTURE_PERSON)
+#: Versions the expectations the code graders apply; recorded in every summary.
+EXPECTATIONS_VERSION = "expectations-" + _digest(
+    {case.id: _expectation_payload(case.expectation) for case in CASES}
+)

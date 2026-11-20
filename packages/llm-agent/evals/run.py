@@ -56,7 +56,12 @@ from evals import budget
 from evals.catalogue import BY_ID as CATALOGUE
 from evals.catalogue import REPEATS, implemented
 from evals.datasets.cases import BY_ID as CASES
-from evals.datasets.cases import DATASET_VERSION, FIXTURE_FOLDER, FIXTURE_PERSON
+from evals.datasets.cases import (
+    DATASET_VERSION,
+    EXPECTATIONS_VERSION,
+    FIXTURE_FOLDER,
+    FIXTURE_PERSON,
+)
 from evals.gate import CaseRun, evaluate_gate
 from evals.graders import rubric
 from evals.graders.code import fixture_contact, grade_code
@@ -556,6 +561,7 @@ def write_summary(
         "pass": gate.passed and not extra_failures,
         "gate": {**gate.as_dict(), "failures": failures},
         "dataset_version": DATASET_VERSION,
+        "expectations_version": EXPECTATIONS_VERSION,
         "subject": subject,
         "judge": {
             "model": rubric.JUDGE_MODEL,
