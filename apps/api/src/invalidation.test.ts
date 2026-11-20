@@ -784,6 +784,37 @@ describe("notifying the website of committed content writes", () => {
     }
   });
 
+  it("calls every notifier in order, even after one fails", async () => {
+    const calls: string[] = [];
+    const lines: string[] = [];
+    const { app } = backend.api({
+      onWrite: [
+        () => {
+          calls.push("first");
+          return Promise.reject(new TypeError("fictional first notifier failure"));
+        },
+        (event) => {
+          calls.push(`second ${event.change.domain}`);
+          return Promise.resolve();
+        },
+      ],
+      log: (line) => lines.push(line),
+    });
+
+    const created = await app.request(
+      "/v1/technologies",
+      { method: "POST", ...json(technology, auth) },
+      connection(),
+    );
+
+    expect(created.status).toBe(201);
+    expect(calls).toEqual(["first", "second technology"]);
+    expect(lines.filter((line) => line.startsWith("error notifying"))).toEqual([
+      "error notifying POST /v1/technologies: TypeError",
+    ]);
+    await backend.services.profile.deleteTechnology("postgres");
+  });
+
   it("sends nothing when the write's transaction fails", async () => {
     const failure = new Error("fictional failed transaction");
     // The write itself succeeds inside the transaction, then the transaction fails and rolls back.

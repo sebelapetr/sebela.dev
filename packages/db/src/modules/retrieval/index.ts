@@ -1,7 +1,26 @@
-import { and, asc, cosineDistance, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  cosineDistance,
+  count,
+  eq,
+  gt,
+  gte,
+  inArray,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 
 import type { Database } from "../../database.js";
-import { chunks, providerUsage, sections, sources, versions } from "./schema.js";
+import {
+  chunks,
+  embeddings,
+  providerUsage,
+  sections,
+  sources,
+  versions,
+  workItems,
+} from "./schema.js";
 
 export { retrievalDimension } from "./schema.js";
 
@@ -14,9 +33,40 @@ export type RetrievalUsageOperation = "index" | "search" | "candidates";
 /** What is stored about an indexed source: enough to tell whether it is current. */
 export interface RetrievalIndexedSource {
   readonly sourceId: string;
+  readonly sourceKind: RetrievalSourceKind;
   readonly version: string;
   readonly model: string;
   readonly modelVersion: string;
+  /** A content write superseded it; search leaves it out until it is stored again. */
+  readonly stale: boolean;
+}
+
+/** What queued work asks for: index a changed source again, or drop a deleted one. */
+export type RetrievalWorkOperation = "index" | "remove";
+
+/** One queued piece of indexing work. */
+export interface RetrievalWorkItem {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly operation: RetrievalWorkOperation;
+  readonly attempts: number;
+  readonly failed: boolean;
+}
+
+/** Work to queue, with the sources it removes or hides from search at once. */
+export interface RetrievalScheduledWork {
+  readonly removeSourceIds: readonly string[];
+  readonly staleSourceIds: readonly string[];
+  readonly items: readonly {
+    readonly sourceId: string;
+    readonly operation: RetrievalWorkOperation;
+  }[];
+}
+
+/** How much work waits. */
+export interface RetrievalWorkCounts {
+  readonly pending: number;
+  readonly failed: number;
 }
 
 /** A section of a source version: its heading path and its span in the version's text. */
@@ -102,14 +152,25 @@ export interface RetrievalUsageTotals {
 export interface RetrievalPersistence {
   /** Every indexed source with its current version and embedding model. */
   indexedSources(): Promise<RetrievalIndexedSource[]>;
-  /** Stored vectors of chunks with these text hashes, embedded with this model and version. */
+  /** Cached vectors of these text hashes, embedded with this model and version. */
   vectorsByHash(
     hashes: readonly string[],
     model: string,
     modelVersion: string,
   ): Promise<Map<string, readonly number[]>>;
-  /** Stores a source version, its sections and chunks in one transaction, replacing the earlier. */
-  replaceSource(source: RetrievalSourceVersion): Promise<void>;
+  /** Adds vectors to the embedding cache; a vector already cached is kept. */
+  storeVectors(
+    vectors: ReadonlyMap<string, readonly number[]>,
+    model: string,
+    modelVersion: string,
+  ): Promise<void>;
+  /**
+   * Stores a source version, its sections and chunks in one transaction, replacing the earlier
+   * and clearing its stale mark; its chunks' vectors join the embedding cache. With
+   * `unlessWorkAfter` (a `workWatermark()`) it stores nothing when work was queued after that
+   * watermark; returns whether it stored.
+   */
+  replaceSource(source: RetrievalSourceVersion, unlessWorkAfter?: number): Promise<boolean>;
   /** Removes every source of this kind that is not named; returns how many it removed. */
   removeSourcesExcept(
     sourceKind: RetrievalSourceKind,
@@ -118,48 +179,71 @@ export interface RetrievalPersistence {
   recordUsage(usage: RetrievalUsageRecord): Promise<void>;
   /** Usage recorded at or after `since`. */
   usageSince(since: Date): Promise<RetrievalUsageTotals>;
-  /** The nearest chunks by cosine distance, nearest first. */
+  /** The nearest chunks of non-stale versions by cosine distance, nearest first. */
   nearest(query: RetrievalNearestQuery): Promise<RetrievalNearestChunk[]>;
+  /** Removes and marks stale the named sources and queues the items, in one transaction. */
+  scheduleWork(work: RetrievalScheduledWork): Promise<void>;
+  /** The newest work queued so far; covers every `scheduleWork` committed before it. */
+  workWatermark(): Promise<number>;
+  /** The oldest queued items, at most `limit`; failed ones only with `includeFailed`. */
+  pendingWork(limit: number, includeFailed: boolean): Promise<RetrievalWorkItem[]>;
+  /** Drops finished items. */
+  completeWork(ids: readonly string[]): Promise<void>;
+  /** Counts a failed attempt on each item and keeps the error; at `maxAttempts` it is failed. */
+  failWork(ids: readonly string[], error: string, maxAttempts: number): Promise<void>;
+  workCounts(): Promise<RetrievalWorkCounts>;
 }
 
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
   return {
     async indexedSources() {
-      return db
+      const rows = await db
         .select({
           sourceId: sources.sourceId,
+          sourceKind: sources.sourceKind,
           version: versions.version,
           model: versions.model,
           modelVersion: versions.modelVersion,
+          stale: sources.stale,
         })
         .from(sources)
         .innerJoin(versions, eq(versions.sourceId, sources.id))
         .orderBy(asc(sources.sourceId));
+      return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
     },
 
     async vectorsByHash(hashes, model, modelVersion) {
       const found = new Map<string, readonly number[]>();
       if (hashes.length === 0) return found;
       const rows = await db
-        .selectDistinctOn([chunks.textHash], {
-          textHash: chunks.textHash,
-          embedding: chunks.embedding,
-        })
-        .from(chunks)
+        .select({ textHash: embeddings.textHash, embedding: embeddings.embedding })
+        .from(embeddings)
         .where(
           and(
-            inArray(chunks.textHash, [...hashes]),
-            eq(chunks.model, model),
-            eq(chunks.modelVersion, modelVersion),
+            inArray(embeddings.textHash, [...new Set(hashes)]),
+            eq(embeddings.model, model),
+            eq(embeddings.modelVersion, modelVersion),
           ),
-        )
-        .orderBy(chunks.textHash);
+        );
       for (const row of rows) found.set(row.textHash, row.embedding);
       return found;
     },
 
-    async replaceSource(source) {
-      await db.transaction(async (tx) => {
+    async storeVectors(vectors, model, modelVersion) {
+      await cacheVectors(db, vectors, model, modelVersion);
+    },
+
+    async replaceSource(source, unlessWorkAfter) {
+      return db.transaction(async (tx) => {
+        if (unlessWorkAfter !== undefined) {
+          await lockWork(tx);
+          const [newer] = await tx
+            .select({ seq: workItems.seq })
+            .from(workItems)
+            .where(gt(workItems.seq, unlessWorkAfter))
+            .limit(1);
+          if (newer !== undefined) return false;
+        }
         const [stored] = await tx
           .insert(sources)
           .values({
@@ -169,7 +253,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           })
           .onConflictDoUpdate({
             target: sources.sourceId,
-            set: { sourceKind: source.sourceKind, contentKind: source.contentKind },
+            set: { sourceKind: source.sourceKind, contentKind: source.contentKind, stale: false },
           })
           .returning({ id: sources.id });
         if (stored === undefined) throw new Error("The source was not stored.");
@@ -188,7 +272,13 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           })
           .returning({ id: versions.id });
         if (version === undefined) throw new Error("The version was not stored.");
-        if (source.sections.length === 0) return;
+        await cacheVectors(
+          tx,
+          new Map(source.chunks.map((chunk) => [chunk.textHash, chunk.vector])),
+          source.model,
+          source.modelVersion,
+        );
+        if (source.sections.length === 0) return true;
         const storedSections = await tx
           .insert(sections)
           .values(
@@ -202,7 +292,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           )
           .returning({ id: sections.id, ordinal: sections.ordinal });
         const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
-        if (source.chunks.length === 0) return;
+        if (source.chunks.length === 0) return true;
         await tx.insert(chunks).values(
           source.chunks.map((chunk) => {
             const sectionId = sectionIds.get(chunk.sectionOrdinal);
@@ -223,7 +313,83 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
             };
           }),
         );
+        return true;
       });
+    },
+
+    async scheduleWork(work) {
+      await db.transaction(async (tx) => {
+        await lockWork(tx);
+        if (work.removeSourceIds.length > 0) {
+          await tx.delete(sources).where(inArray(sources.sourceId, [...work.removeSourceIds]));
+        }
+        if (work.staleSourceIds.length > 0) {
+          await tx
+            .update(sources)
+            .set({ stale: true })
+            .where(inArray(sources.sourceId, [...work.staleSourceIds]));
+        }
+        if (work.items.length > 0) {
+          await tx.insert(workItems).values(work.items.map((item) => ({ ...item })));
+        }
+      });
+    },
+
+    async workWatermark() {
+      return db.transaction(async (tx) => {
+        await lockWork(tx);
+        const [row] = await tx
+          .select({ seq: sql<number>`coalesce(max(${workItems.seq}), 0)::float8` })
+          .from(workItems);
+        return row?.seq ?? 0;
+      });
+    },
+
+    async pendingWork(limit, includeFailed) {
+      const rows = await db
+        .select({
+          id: workItems.id,
+          sourceId: workItems.sourceId,
+          operation: workItems.operation,
+          attempts: workItems.attempts,
+          status: workItems.status,
+        })
+        .from(workItems)
+        .where(inArray(workItems.status, includeFailed ? ["pending", "failed"] : ["pending"]))
+        .orderBy(asc(workItems.seq))
+        .limit(limit);
+      return rows.map(({ status, operation, ...row }) => ({
+        ...row,
+        operation: workOperationOf(operation),
+        failed: status === "failed",
+      }));
+    },
+
+    async completeWork(ids) {
+      if (ids.length === 0) return;
+      await db.delete(workItems).where(inArray(workItems.id, [...ids]));
+    },
+
+    async failWork(ids, error, maxAttempts) {
+      if (ids.length === 0) return;
+      await db
+        .update(workItems)
+        .set({
+          attempts: sql`${workItems.attempts} + 1`,
+          status: sql`CASE WHEN ${workItems.attempts} + 1 >= ${maxAttempts} THEN 'failed' ELSE 'pending' END`,
+          lastError: error.slice(0, 200),
+          updatedAt: sql`now()`,
+        })
+        .where(inArray(workItems.id, [...ids]));
+    },
+
+    async workCounts() {
+      const rows = await db
+        .select({ status: workItems.status, count: count() })
+        .from(workItems)
+        .groupBy(workItems.status);
+      const of = (status: string) => rows.find((row) => row.status === status)?.count ?? 0;
+      return { pending: of("pending"), failed: of("failed") };
     },
 
     async removeSourcesExcept(sourceKind, sourceIds) {
@@ -297,6 +463,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           .innerJoin(sections, eq(sections.id, chunks.sectionId))
           .where(
             and(
+              eq(sources.stale, false),
               eq(chunks.model, query.model),
               eq(chunks.modelVersion, query.modelVersion),
               query.kinds === undefined
@@ -310,6 +477,43 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
     },
   };
+}
+
+type Executor = Pick<Database, "insert">;
+
+/**
+ * Serialises queueing work, reading the watermark and a conditional replace until the end of the
+ * caller's transaction. A work item's `seq` is drawn before its transaction commits, so without the
+ * lock a watermark could be read past an item that commits later with a lower `seq`.
+ */
+async function lockWork(tx: Pick<Database, "execute">) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('retrieval.work_items'))`);
+}
+
+/** Adds vectors to the embedding cache, keeping a vector already there. */
+async function cacheVectors(
+  db: Executor,
+  vectors: ReadonlyMap<string, readonly number[]>,
+  model: string,
+  modelVersion: string,
+) {
+  if (vectors.size === 0) return;
+  await db
+    .insert(embeddings)
+    .values(
+      [...vectors].map(([textHash, vector]) => ({
+        textHash,
+        model,
+        modelVersion,
+        embedding: [...vector],
+      })),
+    )
+    .onConflictDoNothing();
+}
+
+function workOperationOf(value: string): RetrievalWorkOperation {
+  if (value === "index" || value === "remove") return value;
+  throw new Error(`Unknown work operation ${value}.`);
 }
 
 const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", "candidates"];

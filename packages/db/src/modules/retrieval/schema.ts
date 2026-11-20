@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
+  boolean,
   check,
+  primaryKey,
   customType,
   index,
   integer,
@@ -37,6 +40,8 @@ export const sources = retrievalSchema.table(
     sourceId: text("source_id").notNull().unique(),
     sourceKind: text("source_kind").notNull(),
     contentKind: text("content_kind").notNull(),
+    /** A content write superseded the indexed version; search leaves it out until it is stored. */
+    stale: boolean("stale").notNull().default(false),
   },
   (table) => [
     check("sources_kind_known", sql`${table.sourceKind} IN ('portfolio', 'supplemental')`),
@@ -110,11 +115,32 @@ export const chunks = retrievalSchema.table(
   ],
 );
 
-/** Queued indexing work, for the asynchronous ingest of later issues. */
+/**
+ * Every vector ever embedded, by text hash and model, so no text is embedded twice: not across an
+ * interrupted run, a superseded version or a rebuild.
+ */
+export const embeddings = retrievalSchema.table(
+  "embeddings",
+  {
+    textHash: text("text_hash").notNull(),
+    model: text("model").notNull(),
+    modelVersion: text("model_version").notNull(),
+    embedding: vector("embedding", { dimensions: retrievalDimension }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.textHash, table.model, table.modelVersion] })],
+);
+
+/**
+ * Queued indexing work: each item owes a run over the portfolio, and `seq` orders the items as
+ * they were queued. Pending items wait. An item whose runs failed `maxAttempts` times is failed:
+ * runs no longer take it, but every run reconciles the whole portfolio, so a later successful run
+ * covers its change too; an explicit re-index takes and clears it.
+ */
 export const workItems = retrievalSchema.table(
   "work_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
     sourceId: text("source_id").notNull(),
     operation: text("operation").notNull(),
     status: text("status").notNull().default("pending"),

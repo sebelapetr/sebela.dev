@@ -184,6 +184,107 @@ describe("the knowledge service over the demo seed", () => {
   });
 });
 
+describe("keeping the knowledge base current after content writes", () => {
+  let database: TemporaryDatabase;
+  let persistence: Persistence;
+  let storageFolder: string;
+
+  const open = (options: Parameters<typeof createKnowledgeService>[1]) =>
+    createKnowledgeService(
+      {
+        store: persistence.retrieval,
+        profile: createProfileService(persistence.profile),
+        roadmap: createRoadmapService(persistence.roadmap),
+      },
+      options,
+    );
+  const term = "portfolio:glossary_term:context-window";
+  const query = { query: "context window tokens a model reads in one request" };
+  const found = async (knowledge: KnowledgeService) =>
+    (await knowledge.search(query)).passages.map((passage) => passage.sourceId);
+  const changed = { domain: "roadmap-glossary-term", record: "context-window" } as const;
+
+  beforeAll(async () => {
+    database = await createTemporaryDatabase(readDatabaseConfig(process.env));
+    persistence = createPersistence(database.config);
+    storageFolder = await mkdtemp(join(tmpdir(), "sebela-knowledge-queue-storage-"));
+    const storage = openStorage({
+      driver: "local",
+      root: storageFolder,
+      environment: "test",
+      worktree: "knowledge-queue",
+      publicBaseUrl: "https://media.example.test/files",
+    });
+    await createSeedService(persistence, {
+      storage,
+      limits: { maxBytes: 10 * 1024 * 1024, maxImageDimension: 4000 },
+      onCleanupFailure: () => undefined,
+    }).loadSeed(demoSeedFolder);
+    await open({ config, embedder: createFakeEmbedder() }).reindexPortfolio();
+  }, 60_000);
+
+  afterAll(async () => {
+    await persistence.close();
+    await database.drop();
+    await rm(storageFolder, { recursive: true, force: true });
+  });
+
+  it("queues a change without retrieval settings and hides the record at once", async () => {
+    await open({ config: null }).schedule([{ ...changed, action: "updated" }]);
+    const knowledge = open({ config, embedder: createFakeEmbedder() });
+    expect(await knowledge.pending()).toEqual({ pending: 1, failed: 0 });
+    expect(await found(knowledge)).not.toContain(term);
+
+    await expect(knowledge.processPending()).resolves.toMatchObject({
+      completed: 1,
+      remaining: { pending: 0, failed: 0 },
+    });
+    expect((await found(knowledge))[0]).toBe(term);
+  });
+
+  it("restores an unchanged record from stored vectors while the provider is unavailable", async () => {
+    const offline = open({ config, embedder: createFakeEmbedder({ failing: true }) });
+    await offline.schedule([{ domain: "service", record: "evaluation-setup", action: "updated" }]);
+    await expect(offline.processPending()).resolves.toMatchObject({ completed: 1, embedded: 0 });
+    expect(await offline.pending()).toEqual({ pending: 0, failed: 0 });
+  });
+
+  it("rebuilds every source once for a new model version and then from stored vectors", async () => {
+    const next = { ...createFakeEmbedder(), version: "2" };
+    const knowledge = open({ config, embedder: next });
+    const first = await knowledge.rebuildPortfolio();
+    expect(first.updated).toBe(first.sources);
+    expect(first.embedded).toBeGreaterThan(0);
+    expect((await found(knowledge))[0]).toBe(term);
+
+    const second = await knowledge.rebuildPortfolio();
+    expect(second).toMatchObject({ updated: first.sources, embedded: 0, tokens: 0 });
+    const indexed = await persistence.retrieval.indexedSources();
+    expect(indexed.every((source) => source.modelVersion === "2" && !source.stale)).toBe(true);
+  });
+
+  it("reports the provider and the ceiling as domain errors and keeps the work", async () => {
+    await open({ config: null }).schedule([{ ...changed, action: "updated" }]);
+    const knowledge = open({ config, embedder: createFakeEmbedder() });
+    await persistence.retrieval.recordUsage({
+      operation: "index",
+      model: config.embeddingModel,
+      tokens: 1,
+      costUsd: config.monthlyCeilingUsd,
+      occurredAt: new Date(),
+    });
+    // Restoring from stored vectors needs no budget, so a changed text is what meets the ceiling.
+    const rebuilt = open({
+      config,
+      embedder: { ...createFakeEmbedder(), version: "3" },
+    });
+    expect((await refusal(rebuilt.processPending())).code).toBe("budget_exhausted");
+    expect(await knowledge.pending()).toEqual({ pending: 1, failed: 0 });
+    expect((await refusal(open({ config }).processPending())).code).toBe("provider_unavailable");
+    expect((await refusal(open({ config }).rebuildPortfolio())).code).toBe("provider_unavailable");
+  });
+});
+
 describe("readRetrievalOptions", () => {
   const settings = {
     RETRIEVAL_EMBEDDING_MODEL: "voyage-4",

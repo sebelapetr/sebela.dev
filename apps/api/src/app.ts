@@ -151,10 +151,11 @@ export interface AppDependencies {
   readonly now?: () => number;
   readonly log?: Logger;
   /**
-   * Called after every committed write, never after a failed one; a failure is logged by the
-   * error's name only and never fails or rolls back the write.
+   * Called after every committed write, never after a failed one, each notifier in order; a
+   * failure is logged by the error's name only and never fails or rolls back the write, nor keeps
+   * a later notifier from being called.
    */
-  readonly onWrite?: WriteNotifier;
+  readonly onWrite?: WriteNotifier | readonly WriteNotifier[];
 }
 
 /** A route as it is registered and documented. */
@@ -387,6 +388,10 @@ const describingAudit: AuditService = {
 /** A knowledge service for describing routes; describing never calls it. */
 const describingKnowledge: KnowledgeService = {
   reindexPortfolio: documentationOnly,
+  rebuildPortfolio: documentationOnly,
+  schedule: documentationOnly,
+  processPending: documentationOnly,
+  pending: documentationOnly,
   search: documentationOnly,
   candidates: documentationOnly,
   usage: documentationOnly,
@@ -431,7 +436,12 @@ const writeLog: Logger = (line) => {
 export function createApp(dependencies: AppDependencies): Api {
   const { services, config } = dependencies;
   const log = dependencies.log ?? writeLog;
-  const onWrite = dependencies.onWrite ?? (() => Promise.resolve());
+  const onWrite: readonly WriteNotifier[] =
+    dependencies.onWrite === undefined
+      ? []
+      : typeof dependencies.onWrite === "function"
+        ? [dependencies.onWrite]
+        : dependencies.onWrite;
   const limits = createRateLimits(config, dependencies.now ?? Date.now);
   const app = new Hono<ApiEnv>();
   const modules = moduleRoutes(services);
@@ -455,12 +465,14 @@ export function createApp(dependencies: AppDependencies): Api {
     );
 
   const notify = async (event: WriteEvent) => {
-    try {
-      await onWrite(event);
-    } catch (error) {
-      // The error's name only: a notifier's message may carry content or its destination.
-      const name = error instanceof Error ? error.name : "error";
-      log(redact(`error notifying ${event.method} ${event.path}: ${name}`));
+    for (const notifier of onWrite) {
+      try {
+        await notifier(event);
+      } catch (error) {
+        // The error's name only: a notifier's message may carry content or its destination.
+        const name = error instanceof Error ? error.name : "error";
+        log(redact(`error notifying ${event.method} ${event.path}: ${name}`));
+      }
     }
   };
 
