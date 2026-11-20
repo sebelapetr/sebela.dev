@@ -1,0 +1,21 @@
+# Retrieval evals of the knowledge base (.plan/09-rag/prd.md, Evals and measurement).
+#
+# Do not run this file directly: `node evals/run.js` starts the API on a temporary database seeded
+# with the fictional demo seed, indexes it, records the candidate pools and passes the route's
+# address, an ephemeral key and the pools file through the environment. Pinned settings: Promptfoo
+# 0.126.0 (run through `pnpm dlx`), one question at a time so latency is the route's own, 60 s per
+# question. The provider calls the private search route; no model answers anything here.
+description: Knowledge base retrieval over the fictional EN/CS question set
+
+prompts:
+  - "{{query}}"
+
+providers:
+  - id: file://provider.js
+    label: retrieval-search
+
+tests: file://tests.js
+
+evaluateOptions:
+  maxConcurrency: 1
+  timeoutMs: 60000

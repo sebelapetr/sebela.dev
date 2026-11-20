@@ -81,6 +81,11 @@ describe("import boundaries: the dependency table", () => {
     ],
     ["packages/contracts/src/index.ts", [], ["@sebela/db", "@sebela/services", "@sebela/ui"]],
     [
+      "packages/memory/src/index.ts",
+      ["@sebela/contracts"],
+      ["@sebela/db", "@sebela/services", "@sebela/api-client", "@sebela/ui"],
+    ],
+    [
       "packages/ui/src/fonts.ts",
       [],
       ["@sebela/api-client", "@sebela/contracts", "@sebela/services", "@sebela/db"],
@@ -168,8 +173,8 @@ describe("import boundaries: the dependency table", () => {
   });
 
   it("rejects every import of a workspace package from a member without a row", async () => {
-    await assertRejected("packages/memory/src/chunks.ts", `import "@sebela/contracts";\n`, {
-      mentions: ["'@sebela/contracts'", "packages/memory", /no row in the dependency table/],
+    await assertRejected("packages/payments/src/charge.ts", `import "@sebela/contracts";\n`, {
+      mentions: ["'@sebela/contracts'", "packages/payments", /no row in the dependency table/],
     });
   });
 

@@ -62,6 +62,7 @@ const DEPENDENCIES = new Map([
   ["packages/services", ["db", "contracts", "memory", "config"]],
   ["packages/db", ["config"]],
   ["packages/contracts", ["config"]],
+  ["packages/memory", ["contracts", "config"]],
   ["packages/api-client", ["config"]],
   ["packages/ui", ["config"]],
   ["packages/config", []],
