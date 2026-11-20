@@ -298,7 +298,9 @@ compose.yaml in the root; a Dockerfile inside each app
 - **Evals:** Promptfoo for component and end-to-end behaviour; pytest for deterministic Python contracts and failures. Code/model graders are supplemented by human review of ambiguous and sampled successful cases. **Monitoring:** redacted Langfuse traces, usage, costs and offline scores.
 - Two MCP deployables: TypeScript `mcp-admin` forwards caller keys to private content API routes; Python `mcp-public` calls public read capability routes on FastAPI and never runs the chat pipeline. External MCP agents bring their own model.
 - FastAPI is a separate AI runtime with internal authenticated generation and public bounded read capabilities. `packages/llm-agent` owns shared tools, three-stage LangGraph pipelines, LangChain OpenAI/Anthropic integrations, guardrails, context/cost controls and evals. Python never accesses Postgres directly.
-- Start with bounded single-process concurrency, cancellation/deadlines and durable idempotency in the API. No new worker, distributed AI platform or standalone provider proxy. Package contracts and evals are in phase 6; HTTP, conversation, durable spend and failure contracts are in phase 7.
+- Start with bounded single-process concurrency, explicit Stop/deadlines and durable idempotency in the API. In phase 7 browser disconnection does not cancel generation: the answer finishes into the same conversation; restart recovery never blindly replays ambiguous paid work. One conversation/active operation per anonymous identity, shared across tabs. No distributed AI platform, job broker or standalone provider proxy. Package contracts and evals are in phase 6; HTTP, conversation, durable spend and failure contracts are in phase 7.
+- Phase 7 adds read-only model/effort and personal usage (10 operations/rolling two hours, 30/UTC day), accurate context indicators and manual `/compact` with slash suggestions. Compaction preserves visible history, shares the operation lock/budget and never resets quotas. It is not automatic summarization or a model selector.
+- Phase-7 monitoring uses Langfuse Cloud EU with automatic best-effort local pseudonymization before content export and actual 30-day exported-content deletion. Public owner facts stay readable; credentials and raw identifying fields are excluded. A replaceable CPU/ONNX detector must fit the shared ARM64 CAX21 and pass EN/CS checks; otherwise export metadata only. Production model grading starts as manually selected, budgeted batches.
 
 ### Deployment
 
@@ -368,7 +370,7 @@ Deferred to the phase named in brackets.
 4. Whether Bunny's S3 compatibility must be chosen when a storage zone is created. [02]
 5. How a usage limit is recognised from an unattended run. [harness]
 6. Embeddings provider/model, measured retrieval settings and extraction limits. [09]
-7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Langfuse hosting and bot checks [07], graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
+7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Phase-7 hosting/bot choices are owner-agreed (Langfuse Cloud EU and Turnstile Managed); local PII model/resource measurements and the complete phase-7 document still need acceptance. Graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
 8. For the owner before launch: the server (existing or new), the production domain (the repository is named `sebela.dev`, the plan says sebelapetr.cz), the reverse proxy product, the monthly model budget, and the legal side of storing conversations. [10]
 
 ## Further Notes
