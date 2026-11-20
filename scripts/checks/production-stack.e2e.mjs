@@ -93,6 +93,7 @@ const env = {
   STORAGE_BUNNY_PASSWORD: "",
   WEB_PORT: webPort,
   WEB_SITE_ORIGIN: web,
+  WEB_ANALYTICS_SCRIPT_URL: "",
   WEB_ANALYTICS_WEBSITE_ID: "",
   WEB_INDEXING: "",
 };

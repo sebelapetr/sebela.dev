@@ -15,8 +15,9 @@
 #   the server's nginx proxies to it). Postgres, the API and MCP Admin have no host port: the
 #   website and MCP Admin reach the API inside the Compose networks.
 # - Long-running services restart unless stopped; every container logs to rotated json-file logs.
-# - Analytics (Umami Cloud) is on only when WEB_ANALYTICS_WEBSITE_ID is set; indexing only with
-#   WEB_INDEXING=on.
+# - The website's settings, including analytics (WEB_ANALYTICS_SCRIPT_URL and
+#   WEB_ANALYTICS_WEBSITE_ID, off when unset) and indexing (WEB_INDEXING=on), pass through
+#   compose.yaml unchanged.
 
 x-logging: &logging
   driver: json-file
@@ -51,9 +52,6 @@ services:
     profiles: !reset []
     build: !reset null
     image: ghcr.io/sebelapetr/sebela-web:${WEB_IMAGE_TAG:?set WEB_IMAGE_TAG (infra/production/.env.example)}
-    environment:
-      # Umami Cloud's script, only with a website ID; no other analytics address is taken.
-      WEB_ANALYTICS_SCRIPT_URL: ${WEB_ANALYTICS_WEBSITE_ID:+https://cloud.umami.is/script.js}
     ports: !override
       - "${WEB_HOST:?set WEB_HOST (infra/production/.env.example)}:${WEB_PORT:?set WEB_PORT (infra/production/.env.example)}:8080"
     logging: *logging
