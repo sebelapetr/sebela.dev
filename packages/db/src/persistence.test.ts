@@ -13,6 +13,37 @@ const organization = {
   description: null,
 };
 
+describe("persistence ping", () => {
+  let database: TemporaryDatabase;
+
+  beforeAll(async () => {
+    database = await createTemporaryDatabase(readDatabaseConfig(process.env));
+  });
+
+  afterAll(async () => {
+    await database.drop();
+  });
+
+  it("resolves when the database answers", async () => {
+    const persistence = createPersistence(database.config);
+    try {
+      await expect(persistence.ping()).resolves.toBeUndefined();
+    } finally {
+      await persistence.close();
+    }
+  });
+
+  it("rejects when the database cannot be reached", async () => {
+    const missing = `missing_${randomUUID().replaceAll("-", "")}`;
+    const persistence = createPersistence({ ...database.config, name: missing });
+    try {
+      await expect(persistence.ping()).rejects.toThrow();
+    } finally {
+      await persistence.close();
+    }
+  });
+});
+
 describe("persistence transactions", () => {
   let database: TemporaryDatabase;
   let persistence: Persistence;
