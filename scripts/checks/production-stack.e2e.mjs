@@ -23,7 +23,7 @@
 //   tags, random passwords and secrets, local storage instead of Bunny, the website on a free
 //   loopback port;
 // - loads the demo seed and checks that Postgres, the API, the website and MCP Admin are healthy,
-//   that the migration finished, that only the website publishes a port and only on the loopback
+//   that the migration finished, that only the website and MCP Admin publish a port, only on the loopback
 //   interface, and that pages show the seed with `noindex` and without the analytics script;
 // - with --browser, the hero's question to the mock Ask page in a browser (no model is called);
 // - checks that the website's /health reports the database failing when Postgres is stopped and the
@@ -100,6 +100,7 @@ function freePort(address) {
 const password = randomBytes(24).toString("hex");
 const secret = randomBytes(32).toString("hex");
 const webPort = String(await freePort(example.WEB_HOST));
+const adminPort = String(await freePort(example.MCP_ADMIN_HOST));
 const web = `http://${example.WEB_HOST}:${webPort}`;
 
 // Compose reads the production example (`--env-file`); these process variables take precedence.
@@ -122,6 +123,7 @@ const env = {
   STORAGE_BUNNY_ZONE: "",
   STORAGE_BUNNY_PASSWORD: "",
   WEB_PORT: webPort,
+  MCP_ADMIN_PORT: adminPort,
   WEB_SITE_ORIGIN: web,
   WEB_ANALYTICS_SCRIPT_URL: "",
   WEB_ANALYTICS_WEBSITE_ID: "",
@@ -230,7 +232,9 @@ try {
   step("the demo seed through its explicit command");
   compose(["run", "--rm", "--no-TTY", "api", "node", "dist/cli/seed.js"]);
 
-  step("every service is healthy, the migration finished, only the website is on loopback");
+  step(
+    "every service is healthy, the migration finished, only the website and MCP Admin are on loopback",
+  );
   const listed = containers();
   for (const name of HEALTHY_SERVICES) {
     const container = listed.find((entry) => entry.Service === name);
@@ -241,14 +245,18 @@ try {
   assert.equal(migration?.ExitCode, 0, "the migration succeeded");
   for (const container of listed) {
     const published = (container.Publishers ?? []).filter((entry) => entry.PublishedPort > 0);
-    if (container.Service !== "web") {
+    const expected = { web: webPort, "mcp-admin": adminPort }[String(container.Service)];
+    if (expected === undefined) {
       assert.deepEqual(published, [], `${String(container.Service)} publishes no port`);
       continue;
     }
-    assert.ok(published.length > 0, "the website is published");
+    assert.ok(published.length > 0, `${String(container.Service)} is published`);
     for (const entry of published) {
-      assert.ok(loopbackAddresses.has(entry.URL), `the website is on ${String(entry.URL)}`);
-      assert.equal(String(entry.PublishedPort), webPort);
+      assert.ok(
+        loopbackAddresses.has(entry.URL),
+        `${String(container.Service)} is on ${String(entry.URL)}`,
+      );
+      assert.equal(String(entry.PublishedPort), expected);
     }
   }
 

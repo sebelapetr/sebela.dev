@@ -25,7 +25,7 @@ docker compose --file compose.yaml --file infra/production/compose.yaml \
 
 - **Images.** `ghcr.io/sebelapetr/sebela-api`, `sebela-web` and `sebela-mcp-admin`, each by its own tag (`API_IMAGE_TAG`, `WEB_IMAGE_TAG`, `MCP_ADMIN_IMAGE_TAG`), so a release changes only what it rebuilt. The migration runs the API image and finishes before the API starts. Nothing is built on the server.
 - **Images run unprivileged** (`USER node`) with a `HEALTHCHECK`, the same check `compose.yaml` declares. The build context admits only the fictional demo seed and no environment file; `scripts/checks/image-content.mjs` refuses an image that contains an environment file other than the example, a `.context/` file or a seed other than the demo.
-- **Addresses.** Only the website is published, on `WEB_HOST:WEB_PORT` — the host's loopback interface — where nginx proxies to it. Postgres, the API and MCP Admin have no host port; the website and MCP Admin reach the API by service name inside the Compose networks. The public edge therefore cannot reach the API's private content-write routes or MCP Admin, with or without a key.
+- **Addresses.** The website is published on `WEB_HOST:WEB_PORT` and MCP Admin on `MCP_ADMIN_HOST:MCP_ADMIN_PORT`, both on the host's loopback interface: nginx proxies only to the website, and MCP Admin is reached only through the owner's SSH tunnel (`ssh -N -L <local port>:127.0.0.1:<MCP_ADMIN_PORT> <server>`), with its API key still required. Postgres and the API have no host port; the website and MCP Admin reach the API by service name inside the Compose networks. The public edge therefore cannot reach the API's private content-write routes or MCP Admin, with or without a key.
 - **Project.** The composition is the Compose project `sebela-production` (its own `name`), so its containers, networks and volume never mix with the development stack `sebela` of the root file, also on a host that runs both.
 - **Operation.** Long-running services restart unless stopped; every container logs to `json-file` logs rotated at 10 MB, five files.
 - **Website switches.** `WEB_INDEXING=on` lets search engines index the site; empty (the default) sends `noindex, nofollow` on every page. Analytics use the website's existing Umami integration (`apps/web/AGENTS.md`, Configuration): `WEB_ANALYTICS_SCRIPT_URL` and `WEB_ANALYTICS_WEBSITE_ID` pass through unchanged, and both empty (the default) means no analytics.
@@ -75,13 +75,13 @@ Anything else (an unknown service, a short or upper-case SHA, a service named tw
 
 ## Restore
 
-`scripts/restore.sh` never decrypts. The owner fetches a backup, decrypts it on their own machine with the offline key and streams the dump back; the decrypted dump reaches the server only through SSH, on standard input. Every command runs as the `deploy` user with `BACKUP_ENV_FILE=<production environment file>`; below, `restore` stands for `ssh <server> sudo --non-interactive --user=deploy env BACKUP_ENV_FILE=<production environment file> <checkout>/infra/scripts/restore.sh`.
+`scripts/restore.sh` never decrypts. The owner fetches a backup, decrypts it on their own machine with the offline key and brings the decrypted dump back to the server only for the restore: copied to a file only `deploy` can read and deleted right after (Owner's commands over SSH). Every command runs in the owner's `sudo -iu deploy` session with `BACKUP_ENV_FILE=<production environment file>`; below, `restore` stands for `<checkout>/infra/scripts/restore.sh` run there, and `fetch` writes the encrypted backup to standard output so it can be copied to the owner's machine.
 
 ```sh
 restore list                                         # the backups, oldest first
 restore fetch <backup> > <backup>                    # one encrypted backup, to the owner's machine
-age --decrypt --identity <owner key> <backup> |
-  restore into <database> --confirm <database>       # restore and compare row counts
+# on the owner's machine: age --decrypt --identity <owner key> <backup> > <dump>, copy <dump> to the server
+restore into <database> --confirm <database> < <dump>  # restore and compare row counts; then delete <dump>
 restore drop <database> --confirm <database>         # remove a rehearsal database
 ```
 
@@ -135,8 +135,8 @@ The nginx request budget counts per visitor only when nginx trusts Bunny's edges
 
 ### Owner's commands over SSH
 
-The restore streams the decrypted dump through `ssh <server> sudo --non-interactive --user=deploy ...`, which works only when the owner's account may run the scripts as `deploy` without a password prompt (SSH gives `sudo` no terminal there). Whether that is a narrow sudoers rule for the owner limited to `infra/scripts/restore.sh`, or the owner copies the decrypted dump in another way, is decided with the server preparation. The decrypted dump never stays on the server's disk.
+Decided: no passwordless sudo rule. Agents run as the same account the owner signs in with, so a rule that let it run `restore.sh` as `deploy` without a password would let agents do so too. The owner runs the owner's commands (rollback, restore, clear) interactively with `sudo -iu deploy` and their own password. For a restore, the owner copies the encrypted backup to their machine with `restore fetch`, decrypts it there, copies the decrypted dump to a file only `deploy` can read on the server, restores it with `restore into … < <dump>` in that session and deletes the file at once.
 
 ### MCP Admin over the SSH tunnel
 
-The delivery PRD reaches MCP Admin through an authenticated SSH tunnel, while this composition publishes no MCP Admin port. A tunnel needs a target on the server: either a loopback-only MCP Admin port in this composition (a one-line override with its policy test), or the container's address on the Compose network. This is decided with the server preparation and the SSH-tunnel acceptance check.
+Decided: MCP Admin is published on the host's loopback interface only (`MCP_ADMIN_HOST`, `MCP_ADMIN_PORT`, Addresses above) and reached through an SSH tunnel to that port; nginx never proxies to it.
