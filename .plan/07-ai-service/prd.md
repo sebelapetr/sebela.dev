@@ -54,6 +54,10 @@ browser -> web -> api -> ai-service -> packages/llm-agent
 
 ### Limits, context and cost
 
+- Inherit the approved [phase-6 limits](../06-llm-agent/prd.md#initial-execution-limits-and-async-behaviour): 60-second end-to-end attempt deadline, 6 tools, 3 main decisions, at most 5 model attempts including one shared retry, bounded context and USD 0.02 initial Haiku allowance. API admission starts the deadline before the bounded wait; calling the package does not reset it. The initial durable runtime ceiling is USD 20 per calendar month (UTC), separate from the USD 10 initial evaluation campaign. Never silently increase allowances after a model/pricing change.
+- API/AI runtime paths use nonblocking I/O and async provider/content clients. Start with 4 admitted executions in one AI-service process, one active turn per conversation, and a 2-second maximum admission wait; excess requests receive `busy` without paid work. Independent reads may run up to 3 at a time per execution. A replica/process change must revisit the process-local cap and preserve atomic API spend reservations.
+- Return an initial status event promptly (target within 1 second under the documented test workload). Target p95 time to approved content at most 20 seconds on a representative EN/CS workload; record workload, concurrency and measured values. The 60-second deadline is a failure ceiling, not normal latency.
+
 - Before paid work: input byte/message limits, conversation ownership, visitor/fingerprint limits, bot checks and an atomic budget reservation. Bot detection requires no third-party cookies; choose its mechanism at phase start.
 - The API owns the durable daily/monthly cost ledger. Reserve a conservative upper bound for the entire attempt, including security, generation, retries and fallback, before admitting it. Concurrent reservations cannot collectively exceed the remaining allowance.
 - The runtime enforces the granted request allowance before every model call: stage/request tokens, estimated cost, maximum LLM calls, tool calls/iterations and wall-clock deadline. Retries and repair/fallback attempts count towards these same limits. It cannot grant itself more allowance.
@@ -100,7 +104,7 @@ browser -> web -> api -> ai-service -> packages/llm-agent
 - Test classifier/provider/tool failures, retry/cancellation/deadline propagation, busy admission, unknown spend, SDK retry configuration and telemetry failure.
 - Reject generation without the dedicated service credential; exercise read requests trying to reach generation and all private content operations.
 - End to end with fakes: hero -> `/ask` -> approved text and card -> refresh/direct `/ask` restores -> follow-up uses bounded history. A second browser with the same URL cannot obtain the conversation; if that browser already has its own history, opening the foreign URL preserves and resolves its own conversation.
-- Reuse the phase-3 contract scenarios; no unvalidated draft token is emitted. Run phase-6 component/full-pipeline suites and owner review with real models before acceptance.
+- Reuse the phase-3 contract scenarios; no unvalidated draft token is emitted. During issues run affected local paid cases only, with scoped evidence; run the complete relevant phase-6 plus phase-7 integration catalogue on the phase PR into `master`, then record owner human scores before acceptance. Preserve case selection, compatible saved-answer regrading, all three grader types and the secret wrapper; do not rerun reference-model comparisons automatically.
 
 ## Out of Scope
 

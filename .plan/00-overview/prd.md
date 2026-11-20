@@ -320,7 +320,7 @@ compose.yaml in the root; a Dockerfile inside each app
 - **Unit and integration:** Vitest for TypeScript; pytest for the Python apps/package. API tests run against a real Postgres, not mocks of the database.
 - **Authentication is tested as a property:** one test walks every route and asserts that each write and each private route rejects a request without a valid API key.
 - **End to end and visual:** Playwright, including screenshots at the three widths in both themes.
-- **Evals-driven development for MCP and AI features:** evals are written before the implementation, with promptfoo. Safety suites must pass completely; the others have a threshold set from the first baseline and never lowered. They cover desired and forbidden behaviour: tool selection, factual grounding, saying "I don't know", prompt injection, unsupported claims, source correctness. They call real models, so they run on demand and for changes to the AI parts, not on every pull request.
+- **Evals-driven development for MCP and AI features:** evals are written before the implementation, with promptfoo. Safety suites must pass completely; the others have a threshold set from the first baseline and never lowered. They cover desired and forbidden behaviour: tool selection, factual grounding, saying "I don't know", prompt injection, unsupported claims, source correctness. They call real models, so they run on demand and for changes to the AI parts, not on every pull request: an issue runs only its affected cases locally, and CI runs only the affected suites, on the phase pull request when it opens or becomes ready and by hand, never on every push (`docs/testing.md`).
 - **CI gate:** lint, typecheck, tests and build must pass before merge.
 - **Prior art:** Petr's Booky monorepo (Turborepo, Hono, Drizzle, a test database, CI) is the reference for structure and test setup.
 
@@ -349,7 +349,7 @@ compose.yaml in the root; a Dockerfile inside each app
 ## Out of Scope
 
 - An admin UI or any login for humans.
-- A second language.
+- A second website UI language. The chatbot supports English and Czech with separate eval coverage.
 - A contact form, blog, comments, newsletter.
 - Separate pages for unreleased side projects.
 - Advanced ML research or autonomous multi-agent products as offered services.
@@ -368,7 +368,7 @@ Deferred to the phase named in brackets.
 4. Whether Bunny's S3 compatibility must be chosen when a storage zone is created. [02]
 5. How a usage limit is recognised from an unattended run. [harness]
 6. Embeddings provider/model, measured retrieval settings and extraction limits. [09]
-7. Security/main models and Python tooling [06]; Langfuse hosting and bot checks [07]; graph extraction/storage details [11]; Auto Ontology suitability [12]; verified MCP Apps/client support [13].
+7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Langfuse hosting and bot checks [07], graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
 8. For the owner before launch: the server (existing or new), the production domain (the repository is named `sebela.dev`, the plan says sebelapetr.cz), the reverse proxy product, the monthly model budget, and the legal side of storing conversations. [10]
 
 ## Further Notes
