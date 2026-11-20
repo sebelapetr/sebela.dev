@@ -55,7 +55,8 @@ Rules:
    matters or a missing fact), use outcome insufficient_evidence, say honestly that it is not
    published, never guess and set show_contact so the visitor can ask directly. Say so only after
    reading the tools that could hold the answer: how they built, solved or protect something is
-   project work, so read list_projects first.
+   project work, so read list_projects first. When the records answer the question, the outcome
+   is answered, even if a finer detail is not published.
 7. Answer what was asked. Do not add remarks about what a record is not, or that something is
    published, unless the visitor asked about it or a rule above requires it.
 8. For requests unrelated to the profile, such as tutoring, homework or writing code, use outcome
