@@ -1,7 +1,8 @@
 """The versioned model rubric: relevance, supported claims and citation support of an answer.
 
 The judge (Claude Sonnet 5.5 at medium effort, pinned separately from the subject) sees only the
-case's question, the exact fictional evidence of the case-run and the approved answer. It returns a
+case's question, the exact fictional evidence of the case-run and the approved answer, with the
+trusted contact card the visitor is shown below it, if any. It returns a
 structured verdict; the pass decision is computed here in code, never taken from judge prose:
 
 - useful: relevant, in the expected language, at least one claim, and no claim unsupported by the
@@ -25,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from evals.datasets.cases import EvalCase
 
-RUBRIC_VERSION = "rubric-v1"
+RUBRIC_VERSION = "rubric-v2"
 JUDGE_MODEL = "claude-sonnet-5-5"
 JUDGE_EFFORT: Final = "medium"
 #: Output cap of one judge call, including adaptive thinking.
@@ -40,6 +41,9 @@ JUDGE_INSTRUCTIONS = """\
 You grade one answer of a portfolio chat assistant for an offline evaluation.
 The person in the evidence is fictional. Grade only against the evidence given; do not use outside
 knowledge and do not reward fluent text that the evidence does not support.
+answer.contact_card, when it is not null, is the trusted contact card shown to the visitor directly
+below the answer text. It counts as evidence: a claim that points the visitor to that card, or
+repeats its details, is supported. When it is null, no card is shown.
 
 Return:
 - relevant: the answer addresses the visitor's question.
@@ -89,7 +93,11 @@ class JudgeModel(Protocol):
 
 
 def judge_input(case: EvalCase, record: Mapping[str, Any]) -> dict[str, Any]:
-    """The exact input of the judge: question, expected language, evidence and approved answer."""
+    """The exact input of the judge: question, expected language, evidence and approved answer.
+
+    The answer includes the trusted contact card shown below it (`None` when none is shown), so a
+    pointer to the card is judged against what the visitor actually sees.
+    """
     result = record.get("result")
     result = result if isinstance(result, dict) else {}
     return {
@@ -103,6 +111,7 @@ def judge_input(case: EvalCase, record: Mapping[str, Any]) -> dict[str, Any]:
         "answer": {
             "outcome": result.get("outcome"),
             "text": result.get("text"),
+            "contact_card": result.get("contact"),
             "cited_refs": [
                 source.get("ref")
                 for source in result.get("sources", [])
