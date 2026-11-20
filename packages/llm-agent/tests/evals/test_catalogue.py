@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from evals.catalogue import BY_ID, CATALOGUE, implemented, pending
-from evals.datasets.cases import CASES, DATASET_VERSION
+from evals.datasets.cases import CASES, DATASET_VERSION, FIXTURE_PERSON, dataset_version
 
 
 def test_all_80_planned_cases_are_visible_in_both_languages() -> None:
@@ -41,3 +43,14 @@ def test_ordinary_cases_are_judged_and_critical_cases_are_code_graded() -> None:
 def test_dataset_version_is_a_content_hash() -> None:
     assert DATASET_VERSION.startswith("profile-v1-")
     assert len(DATASET_VERSION) == len("profile-v1-") + 12
+
+
+def test_the_dataset_version_covers_what_the_agent_sees_not_the_expectations() -> None:
+    # A grader fix (an expectation) keeps stored answers regradable; a changed question does not.
+    case = CASES[0]
+    stricter = replace(case.expectation, forbidden_text=(*case.expectation.forbidden_text, "x"))
+    regraded = [replace(case, expectation=stricter), *CASES[1:]]
+    reworded = [replace(case, question=case.question + "?"), *CASES[1:]]
+    assert dataset_version(regraded, FIXTURE_PERSON) == DATASET_VERSION
+    assert dataset_version(reworded, FIXTURE_PERSON) != DATASET_VERSION
+    assert dataset_version(CASES, {**FIXTURE_PERSON, "headline": "Other"}) != DATASET_VERSION
