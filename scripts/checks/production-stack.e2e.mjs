@@ -3,10 +3,18 @@
 // compose.yaml with infra/production/compose.yaml, started from built images with the fictional
 // demo seed.
 //
-//   node scripts/checks/production-stack.e2e.mjs
+//   node scripts/checks/production-stack.e2e.mjs [--images] [--browser]
+//
+// --images: verify images that already exist locally instead of building them, by the tags in
+//   API_IMAGE_TAG, WEB_IMAGE_TAG and MCP_ADMIN_IMAGE_TAG (the release workflow, which pushes only
+//   images that passed). They are kept at the end.
+// --browser: also run the complete-stack browser tests of apps/web against the website (needs the
+//   website's installed dependencies with Chromium; screenshots in
+//   apps/web/test-results/complete-stack/).
 //
 // Needs Docker with Compose and `tar`; plain Node with no dependencies. It builds the API, website
-// and MCP Admin images under the GHCR names the composition runs, with a tag of this run, and:
+// and MCP Admin images under the GHCR names the composition runs, with a tag of this run (or takes
+// the given ones, --images), and:
 //
 // - checks them with the image-content check (scripts/checks/image-content.mjs), which must pass on
 //   them and refuse its fixture image (scripts/checks/fixtures/image-content/);
@@ -17,11 +25,12 @@
 // - loads the demo seed and checks that Postgres, the API, the website and MCP Admin are healthy,
 //   that the migration finished, that only the website publishes a port and only on the loopback
 //   interface, and that pages show the seed with `noindex` and without the analytics script;
+// - with --browser, the hero's question to the mock Ask page in a browser (no model is called);
 // - checks that the website's /health reports the database failing when Postgres is stopped and the
 //   API failing when the API is stopped;
 // - checks that no password or secret is in the logs.
 //
-// It removes the project, its containers, volumes and the built images at the end, also when a
+// It removes the project, its containers, volumes and the images it built at the end, also when a
 // step fails. Exits with 1 when a step fails.
 
 import assert from "node:assert/strict";
@@ -39,14 +48,35 @@ const EXAMPLE_FILE = path.join(CHECKOUT_ROOT, "infra", "production", ".env.examp
 const IMAGE_CHECK = path.join(CHECKOUT_ROOT, "scripts", "checks", "image-content.mjs");
 const FIXTURE = path.join(CHECKOUT_ROOT, "scripts", "checks", "fixtures", "image-content");
 const DEMO_SEED = path.join(CHECKOUT_ROOT, "packages", "db", "seed", "demo");
+const WEB_ROOT = path.join(CHECKOUT_ROOT, "apps", "web");
+const PLAYWRIGHT_CLI = path.join(WEB_ROOT, "node_modules", "@playwright", "test", "cli.js");
 const REGISTRY = "ghcr.io/sebelapetr";
 const APPS = ["api", "web", "mcp-admin"];
 const HEALTHY_SERVICES = ["api", "mcp-admin", "postgres", "web"];
 
 const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
 const seededPerson = JSON.parse(fs.readFileSync(path.join(DEMO_SEED, "person.json"), "utf8"));
+const GIVEN_IMAGES = process.argv.includes("--images");
+const BROWSER = process.argv.includes("--browser");
+const TAG_VARIABLES = {
+  api: "API_IMAGE_TAG",
+  web: "WEB_IMAGE_TAG",
+  "mcp-admin": "MCP_ADMIN_IMAGE_TAG",
+};
 const tag = `smoke-${String(process.pid)}`;
-const images = Object.fromEntries(APPS.map((app) => [app, `${REGISTRY}/sebela-${app}:${tag}`]));
+const tags = Object.fromEntries(
+  APPS.map((app) => {
+    if (!GIVEN_IMAGES) return [app, tag];
+    const given = process.env[TAG_VARIABLES[app]] ?? "";
+    if (!/^[\w][\w.-]{0,127}$/.test(given)) {
+      throw new Error(`--images needs an image tag in ${TAG_VARIABLES[app]}`);
+    }
+    return [app, given];
+  }),
+);
+const images = Object.fromEntries(
+  APPS.map((app) => [app, `${REGISTRY}/sebela-${app}:${tags[app]}`]),
+);
 const fixtureImage = `sebela-image-content-fixture:${tag}`;
 
 const loopbackAddresses = new Set(
@@ -76,9 +106,9 @@ const web = `http://${example.WEB_HOST}:${webPort}`;
 const env = {
   ...process.env,
   COMPOSE_PROJECT_NAME: `sebela-production-smoke-${String(process.pid)}`,
-  API_IMAGE_TAG: tag,
-  WEB_IMAGE_TAG: tag,
-  MCP_ADMIN_IMAGE_TAG: tag,
+  API_IMAGE_TAG: tags.api,
+  WEB_IMAGE_TAG: tags.web,
+  MCP_ADMIN_IMAGE_TAG: tags["mcp-admin"],
   POSTGRES_USER: "sebela_smoke",
   POSTGRES_PASSWORD: password,
   // The superuser stands in for the application role the server preparation creates.
@@ -154,15 +184,20 @@ async function waitFor(check, message, timeoutMs = 30_000) {
 }
 
 try {
-  step("the API, website and MCP Admin images build under their published names");
-  for (const app of APPS) {
-    run(
-      "docker",
-      ["build", "--file", path.join("apps", app, "Dockerfile"), "--tag", images[app], "."],
-      {
-        stdio: ["ignore", "ignore", "inherit"],
-      },
-    );
+  if (GIVEN_IMAGES) {
+    step(`the given images: ${Object.values(images).join(", ")}`);
+    for (const image of Object.values(images)) run("docker", ["image", "inspect", image]);
+  } else {
+    step("the API, website and MCP Admin images build under their published names");
+    for (const app of APPS) {
+      run(
+        "docker",
+        ["build", "--file", path.join("apps", app, "Dockerfile"), "--tag", images[app], "."],
+        {
+          stdio: ["ignore", "ignore", "inherit"],
+        },
+      );
+    }
   }
   run("docker", ["build", "--tag", fixtureImage, FIXTURE], {
     stdio: ["ignore", "ignore", "inherit"],
@@ -228,6 +263,20 @@ try {
     assert.ok(!html.includes("data-website-id"), `${pathname} loads no analytics script`);
   }
 
+  if (BROWSER) {
+    step("the hero's question to the mock Ask page in a browser, with screenshots");
+    const browser = spawnSync(
+      process.execPath,
+      [PLAYWRIGHT_CLI, "test", "--config", "playwright.complete-stack.config.ts"],
+      {
+        cwd: WEB_ROOT,
+        env: { ...process.env, WEB_STACK_URL: web, WEB_STACK_PERSON_NAME: seededPerson.name },
+        stdio: "inherit",
+      },
+    );
+    assert.equal(browser.status, 0, "the browser checks pass");
+  }
+
   step("the health route reports each failing part");
   assert.deepEqual(await health(), {
     status: 200,
@@ -278,7 +327,7 @@ try {
     process.exitCode = 1;
     process.stderr.write(`Removing the smoke project failed: ${String(error)}\n`);
   }
-  for (const image of [...Object.values(images), fixtureImage]) {
+  for (const image of [...(GIVEN_IMAGES ? [] : Object.values(images)), fixtureImage]) {
     spawnSync("docker", ["image", "rm", "--force", image], { stdio: "ignore" });
   }
 }

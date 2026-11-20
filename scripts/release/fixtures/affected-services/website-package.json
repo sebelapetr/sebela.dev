@@ -1,0 +1,29 @@
+{
+  "description": "The shared UI package is in the website image only",
+  "changedFiles": ["packages/ui/src/index.ts"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "@sebela/ui",
+            "path": "packages/ui",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          },
+          {
+            "name": "@sebela/web",
+            "path": "apps/web",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          }
+        ],
+        "length": 2
+      }
+    }
+  },
+  "services": ["web"]
+}

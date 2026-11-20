@@ -26,10 +26,24 @@ Defined in `infra/` (details and server preparation: `infra/README.md`).
 - **Health.** The website's `/health` answers 200 only when the API and Postgres (through the API's `/health/ready`) answer, otherwise 503 with the failing part.
 - **Verified in CI** by the production composition policy (`scripts/checks/production-stack.test.mjs`) and the production stack smoke check (`pnpm test:production-stack`, `docs/testing.md`, CI).
 
+## Images
+
+Built, verified and published by `.github/workflows/release.yml` on every push to `master`; the decisions are `scripts/release/images.mjs`, tested with fixtures (`docs/testing.md`, CI).
+
+- **What is built.** The services are `api`, `web` and `mcp-admin`. Each is judged against the commit of its current image (below), not against the previous push, so a change whose own release failed or was cancelled is built by the next release. A service is built when Turborepo's affected packages between that commit and the pushed commit include its app, the selection CI uses, so a change to a shared package rebuilds every service that depends on it. A change to `.dockerignore` or the root `package.json`, which enter every image build without selecting an app, builds every service; so does a service that has no current image yet. A push that changes no image (documentation, `.plan/`, a workflow alone) builds, publishes and deploys nothing.
+- **Tags.** Each image built is tagged with the full commit SHA and labelled with it (`org.opencontainers.image.revision`) and with the repository (`org.opencontainers.image.source`). The tag `current` names the last verified image of each service published from `master`.
+- **Unchanged services.** They keep their `current` image, by the commit SHA in its revision label. A service whose current image names no published commit tag is built with the others.
+- **Never backwards.** A release whose commit does not descend from the commit of a current image is refused, when it is planned and again just before it publishes: a rerun of an older release cannot move `current` back.
+- **Built natively** on GitHub's arm64 runners, the server's architecture; nothing is built on the server.
+- **Verified before publishing.** The new images and the current images of the unchanged services start as the production composition with the demo seed, and the production stack smoke check and the complete-stack browser tests run against it, with the model faked (the mock Ask page). Images that fail are never pushed.
+- **Published** to GHCR as public packages: the commit SHA tags first, then `current`. The workflow's only credential is its `GITHUB_TOKEN`, with `packages: write` only in that job; the Docker sign-in to GHCR exists only around pulling the reused images and publishing, not during the builds and tests. The tag set of every service is the job's output `tags` (JSON, service to tag) for the deployment.
+- **One release at a time.** GitHub lets the running release finish and cancels a release still waiting when a newer push queues. Nothing is lost by that: the newer release builds everything that changed since the current images.
+- **Open for the deployment (#234).** `current` moves when the images are published, before they are deployed. A change to `infra/` or `compose.yaml` changes no image and so releases nothing; the deployment has to decide how such a change reaches the server.
+
 ## To be defined in phase 10
 
 - Versioning and tagging
-- Pipelines that build images and deploy them
+- The pipeline that deploys the published images
 - How MCP Admin is reached through the SSH tunnel, and how nginx learns the visitor's address from Bunny CDN (`infra/README.md`, Open points)
 - Database backups and restore procedure
 - Rollback
