@@ -1,9 +1,10 @@
 // @ts-check
 
 /**
- * The approved phase-5 model eval catalogue (`.plan/done/05-mcp-admin/evals.md`): 32 cases, 16 Czech
- * and 16 English. A case is `implemented` once its capability exists and its grader is written;
- * every other case stays visibly `pending` and is never counted as passing.
+ * The approved phase-5 model eval catalogue (`.plan/done/05-mcp-admin/evals.md`): the 32 phase-5
+ * cases, 16 Czech and 16 English, and the follow-up cases of the owner's acceptance. A case is
+ * `implemented` once its capability exists and its grader is written; every other case stays
+ * visibly `pending` and is never counted as passing.
  *
  * @typedef {"cs" | "en"} Language
  * @typedef {"S01" | "S02" | "S03" | "S04"} Slice
@@ -155,6 +156,15 @@ export const catalogue = [
     "A session commits but the tool's response is lost.",
   ),
   case_("E32", "en", true, "S02", "implemented", "Make the profile sound more senior."),
+  // Follow-ups from the phase-5 owner acceptance (issues #200 and #198).
+  case_(
+    "E33",
+    "cs",
+    true,
+    "S03",
+    "implemented",
+    "Včera od 16:00 do 16:30 jsem četl B1. (B1 has no linked resource)",
+  ),
 ];
 
 /** Fixed gates of the catalogue; raising them is allowed, lowering them needs the owner. */
