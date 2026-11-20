@@ -272,32 +272,41 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
 
     async nearest(query) {
       const distance = cosineDistance(chunks.embedding, [...query.vector]);
-      const rows = await db
-        .select({
-          sourceId: sources.sourceId,
-          sourceKind: sources.sourceKind,
-          contentKind: sources.contentKind,
-          title: versions.title,
-          path: versions.path,
-          version: versions.version,
-          text: chunks.text,
-          headingPath: sections.headingPath,
-          indexedAt: versions.indexedAt,
-          similarity: sql<number>`(1 - (${distance}))::float8`,
-        })
-        .from(chunks)
-        .innerJoin(versions, eq(versions.id, chunks.versionId))
-        .innerJoin(sources, eq(sources.id, versions.sourceId))
-        .innerJoin(sections, eq(sections.id, chunks.sectionId))
-        .where(
-          and(
-            eq(chunks.model, query.model),
-            eq(chunks.modelVersion, query.modelVersion),
-            query.kinds === undefined ? undefined : inArray(sources.contentKind, [...query.kinds]),
-          ),
-        )
-        .orderBy(distance)
-        .limit(query.limit);
+      // The model and content-kind conditions filter the rows an HNSW scan yields, and one scan
+      // yields only hnsw.ef_search of them. An iterative scan goes on until `limit` rows pass the
+      // filters (or hnsw.max_scan_tuples is reached), still in exact distance order, so a narrow
+      // kind is not reported empty while matches exist.
+      const rows = await db.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL hnsw.iterative_scan = strict_order`);
+        return tx
+          .select({
+            sourceId: sources.sourceId,
+            sourceKind: sources.sourceKind,
+            contentKind: sources.contentKind,
+            title: versions.title,
+            path: versions.path,
+            version: versions.version,
+            text: chunks.text,
+            headingPath: sections.headingPath,
+            indexedAt: versions.indexedAt,
+            similarity: sql<number>`(1 - (${distance}))::float8`,
+          })
+          .from(chunks)
+          .innerJoin(versions, eq(versions.id, chunks.versionId))
+          .innerJoin(sources, eq(sources.id, versions.sourceId))
+          .innerJoin(sections, eq(sections.id, chunks.sectionId))
+          .where(
+            and(
+              eq(chunks.model, query.model),
+              eq(chunks.modelVersion, query.modelVersion),
+              query.kinds === undefined
+                ? undefined
+                : inArray(sources.contentKind, [...query.kinds]),
+            ),
+          )
+          .orderBy(distance)
+          .limit(query.limit);
+      });
       return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
     },
   };
