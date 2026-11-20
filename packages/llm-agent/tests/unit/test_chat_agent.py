@@ -94,7 +94,16 @@ async def test_the_stages_use_the_configured_models_and_only_the_read_tools() ->
     security, main = models.calls[0][0], models.calls[1][0]
     assert (security.model, security.effort, security.tools) == ("claude-haiku-5-5", "medium", ())
     assert (main.model, main.effort) == ("claude-haiku-5-5", "high")
-    assert sorted(tool["name"] for tool in main.tools) == ["get_contact", "get_profile"]
+    assert sorted(tool["name"] for tool in main.tools) == [
+        "get_contact",
+        "get_profile",
+        "get_project",
+        "list_education",
+        "list_experiences",
+        "list_explorations",
+        "list_projects",
+        "list_services",
+    ]
     assert security.max_tokens == 768
     assert main.max_tokens == 8192
     assert security.response_schema["additionalProperties"] is False
