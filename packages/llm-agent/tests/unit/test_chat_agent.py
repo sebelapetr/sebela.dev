@@ -233,6 +233,17 @@ async def test_an_uncertain_verdict_runs_a_restricted_main_stage() -> None:
     assert "Decline anything outside" in str(models.stage_calls("main")[0][1][0].content)
 
 
+async def test_the_restricted_main_stage_is_told_it_has_one_tool_round() -> None:
+    """Two decisions leave one tool round; the base prompt's "two rounds" must not stand alone."""
+    models = ScriptedModels(
+        security=[verdict("UNCERTAIN", "injection", "ambiguous")],
+        main=[draft()],
+    )
+    await run(models)
+    system = str(models.stage_calls("main")[0][1][0].content)
+    assert "only one round of tool requests" in system
+
+
 @pytest.mark.parametrize(
     "step",
     [

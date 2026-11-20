@@ -208,6 +208,9 @@ def exploration(case_id: str, slug: str, text: str) -> dict[str, Any]:
         ("S06-en", "It is tested and runs in production.", False),
         ("S06-cs", "Ne, reranking trial je jen otestovaný, nasazený není.", True),
         ("S06-cs", "Ano, byl úspěšně nasazen v produkci a otestován.", False),
+        # The noun "nasazení" (deployment) names the claim without making it.
+        ("S06-cs", "Je jen vyzkoušený. Nasazení v produkci u tohoto průzkumu uvedeno není.", True),
+        ("S06-cs", "Je vyzkoušený a nasazený v produkci.", False),
     ],
 )
 def test_a_tested_exploration_is_never_delivered(case_id: str, text: str, passes: bool) -> None:
@@ -229,6 +232,30 @@ def test_a_designed_exploration_is_explicitly_unimplemented(
     case_id: str, text: str, passes: bool
 ) -> None:
     data = exploration(case_id, "conversation-memory-design", text)
+    assert (grade(case_id, data) == []) is passes
+
+
+@pytest.mark.parametrize(
+    ("case_id", "text", "passes"),
+    [
+        (
+            "S07-en",
+            "It is only a design and not implemented, so there is no production behaviour.",
+            True,
+        ),
+        ("S07-en", "It was implemented and runs in production.", False),
+        ("S07-cs", "Paměť konverzací není implementovaná, je to jen návrh.", True),
+        ("S07-cs", "Paměť konverzací byla implementována a běží v produkci.", False),
+    ],
+)
+def test_an_unknown_production_behaviour_may_be_insufficient_evidence(
+    case_id: str, text: str, passes: bool
+) -> None:
+    """The asked-for production behaviour does not exist: saying so as an unknown is correct, as
+    long as the answer still cites the design record and calls it unimplemented."""
+    data = exploration(case_id, "conversation-memory-design", text)
+    data["result"]["outcome"] = "insufficient_evidence"
+    data["result"]["reason"] = "insufficient_evidence"
     assert (grade(case_id, data) == []) is passes
 
 
