@@ -82,6 +82,12 @@ function interpolated(file) {
 }
 
 describe("the production composition", () => {
+  it("runs as its own Compose project, never the development stack's `sebela`", () => {
+    // The root compose.yaml names its project `sebela`, the stack every development checkout and
+    // worktree shares; production on the same host must not adopt its containers or volume.
+    assert.equal(render().name, "sebela-production");
+  });
+
   it("starts every service without a profile", () => {
     assert.deepEqual(Object.keys(rendered.services).sort(), SERVICES);
     for (const name of SERVICES) assert.deepEqual(service(name).profiles ?? [], [], name);

@@ -24,7 +24,7 @@ merge into master
   -> GitHub Environment "production": SSH as user deploy (forced command)
        -> infra/scripts/deploy.sh: [backup if a migration is included] -> pull -> migrate -> recreate -> health -> rollback on failure
   -> version tag and GitHub release with a generated changelog
-VPS (Hetzner CAX21, ARM64, shared): Ploi nginx (TLS) -> 127.0.0.1 ports -> Compose stack (postgres, api, web, mcp-admin)
+VPS (ARM64, shared): the server's nginx (TLS) -> 127.0.0.1 ports -> Compose stack (postgres, api, web, mcp-admin)
 Bunny CDN in front of sebela.dev, as today
 ```
 
@@ -79,7 +79,7 @@ Bunny CDN in front of sebela.dev, as today
 ### Production stack
 
 - `infra/` holds the production definition (owner-approved new top-level folder, added to `docs/repository-structure.md`): Compose production overrides (GHCR images, `127.0.0.1` port bindings, restart policies, health checks, `json-file` log rotation), an environment example with every production variable as a placeholder, a reference nginx site configuration, `crons.txt`, and the `deploy`, `backup` and `restore` scripts, with a README.
-- **Reverse proxy:** the server's existing Ploi-managed nginx with its Let's Encrypt certificate, proxying `sebela.dev` to the website's local port, with security headers, compression and request limits. No Traefik. Bunny CDN stays in front, as today.
+- **Reverse proxy:** the server's existing nginx managed by the server's hosting panel with its Let's Encrypt certificate, proxying `sebela.dev` to the website's local port, with security headers, compression and request limits. No Traefik. Bunny CDN stays in front, as today.
 - **Networks:** Postgres, the API and admin MCP have no public address. Admin MCP and private content-write routes are reachable only through an authenticated SSH tunnel; authentication still applies. The public edge refuses them even with a valid key.
 - **Indexing:** the website sends `noindex` until `WEB_INDEXING` is switched on in the production environment.
 - **Analytics:** Umami Cloud, loaded only in production when its website ID is configured; never in worktrees, e2e or CI. The builder checks the current free-plan limits.
@@ -120,7 +120,7 @@ Bunny CDN in front of sebela.dev, as today
 
 ## Further Notes
 
-- HITL, before the phase pull request is merged: prepare the server and accounts by the steps the loop writes in `infra/README.md` (deploy user and forced-command key, Ploi site, production environment file, `sebela-backups` zone and `age` key, Better Stack, Umami, the GitHub Environment, the pgvector extension).
+- HITL, before the phase pull request is merged: prepare the server and accounts by the steps the loop writes in `infra/README.md` (deploy user and forced-command key, hosting-panel site, production environment file, `sebela-backups` zone and `age` key, Better Stack, Umami, the GitHub Environment, the pgvector extension).
 - HITL, after the merge: the first deployment, the rollback test, the restore rehearsal and the SSH-tunnel check; closing it accepts the phase.
 - Images are built on GitHub, so the VPS's small system disk only holds pulled images; the deploy script prunes images older than the previous release. Moving Docker's data root to the volume is deferred to a planned window if space runs short.
 - Prior art: the owner's Booky monorepo (per-service image tags, release workflow).

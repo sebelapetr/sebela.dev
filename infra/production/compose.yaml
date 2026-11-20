@@ -19,6 +19,11 @@
 #   WEB_ANALYTICS_WEBSITE_ID, off when unset) and indexing (WEB_INDEXING=on), pass through
 #   compose.yaml unchanged.
 
+# Its own project: the root compose.yaml names its project `sebela`, the development stack that every
+# checkout and worktree shares, possibly on the same host. A later file's `name` wins, so production
+# never adopts the development containers or the `postgres-data` volume.
+name: sebela-production
+
 x-logging: &logging
   driver: json-file
   options:

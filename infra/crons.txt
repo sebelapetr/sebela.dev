@@ -1,5 +1,5 @@
 # Scheduled jobs of the production server (infra/README.md, "Backups"), in crontab form. They are
-# entered once in Ploi's cron jobs for the `deploy` user, with the server's paths in place of the
+# entered once in the hosting panel's cron jobs for the `deploy` user, with the server's paths in place of the
 # placeholders; the server's clock runs in UTC.
 #
 # minute hour day-of-month month day-of-week  command
