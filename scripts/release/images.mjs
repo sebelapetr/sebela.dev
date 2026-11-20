@@ -148,14 +148,16 @@ export function formatOutputs(outputs) {
 
 const log = (text) => process.stderr.write(`${text}\n`);
 
+/** Runs a command; its trimmed output, or "" when the output goes straight to the job log. */
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  const output = execFileSync(command, args, {
     cwd: CHECKOUT_ROOT,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
     maxBuffer: 64 * 1024 * 1024,
     ...options,
-  }).trim();
+  });
+  return (output ?? "").trim();
 }
 
 function knownServices(services) {
