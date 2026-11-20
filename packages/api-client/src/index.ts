@@ -118,6 +118,7 @@ export type DiaryResource = Schemas["DiaryResource"];
 export type DiaryEvent = Schemas["DiaryEvent"];
 export type DiaryNotesWrite = Schemas["DiaryNotesWrite"];
 export type TimeEntry = Schemas["TimeEntry"];
+export type RoadmapSessionCreate = Schemas["RoadmapSessionCreate"];
 export type TimeEntryCreate = Schemas["TimeEntryCreate"];
 export type TimeEntryUpdate = Schemas["TimeEntryUpdate"];
 export type TimeEntryWrite = Schemas["TimeEntryWrite"];
@@ -132,12 +133,22 @@ export type LearningTimeResource = Schemas["LearningTimeResource"];
 export type LearningTimeResourceCategory = LearningTimeResource["category"];
 export type LearningTimeEvent = Schemas["LearningTimeEvent"];
 export type Health = Schemas["Health"];
+export type AuthenticationCheck = Schemas["AuthenticationCheck"];
+export type RecentChanges = Schemas["RecentChanges"];
+export type AuditChange = Schemas["AuditChange"];
+export type AuditEntity = AuditChange["entity"];
+export type AuditAction = AuditChange["action"];
 export type ErrorResponse = Schemas["ErrorResponse"];
 export type ErrorField = Schemas["ErrorField"];
 export type ErrorCode = ErrorResponse["error"]["code"];
 
 /** The client of every documented operation, typed by the API's OpenAPI document. */
 export type ApiClient = Client<paths>;
+
+/** The documented routes that have `method`, such as `"/v1/projects/{slug}"` for `"patch"`. */
+export type ApiRoute<Method extends "get" | "post" | "patch" | "delete"> = {
+  [Route in keyof paths]: [NonNullable<paths[Route][Method]>] extends [never] ? never : Route;
+}[keyof paths];
 
 export interface ApiClientOptions {
   /** The API's base address, from the consumer's environment. */

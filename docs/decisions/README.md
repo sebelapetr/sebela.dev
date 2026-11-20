@@ -39,3 +39,4 @@ Date: YYYY-MM-DD
 | 0018 | [The website serves stored images from its own origin](0018-images-from-the-website-origin.md)                           |
 | 0019 | [Roadmap progress is derived on read](0019-roadmap-progress-derived-on-read.md)                                          |
 | 0020 | [The learning diary groups time by Prague days and refuses overlaps in the database](0020-learning-diary-prague-days.md) |
+| 0021 | [The API audits every content write in the write's own transaction](0021-api-owned-atomic-content-audit.md)              |

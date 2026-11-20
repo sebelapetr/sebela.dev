@@ -70,3 +70,6 @@ export function createApiKeyPersistence(db: Database): ApiKeyPersistence {
     },
   };
 }
+
+// The audit schema references the key that made a change.
+export { apiKeys } from "./schema.js";

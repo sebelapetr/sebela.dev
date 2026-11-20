@@ -10,6 +10,7 @@ import {
   type ContentChange,
   type InvalidationVerification,
 } from "@sebela/contracts";
+import type { Services } from "@sebela/services";
 import { samplePng } from "@sebela/services/testing";
 
 import { createApp } from "./app.js";
@@ -552,7 +553,8 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
-  it("names each diary day a notes or time-entry write changed, old and new", async () => {
+  /** An empty diary and one resource to log time on, set up without notifying. */
+  async function emptyDiaryWithResource() {
     const { roadmap } = backend.services;
     for (const day of (await roadmap.getDiary()).days) {
       for (const entry of day.entries) await roadmap.deleteTimeEntry(entry.id);
@@ -580,6 +582,10 @@ describe("notifying the website of committed content writes", () => {
         expect(response.status).toBe(201);
       }
     }
+  }
+
+  it("names each diary day a notes or time-entry write changed, old and new", async () => {
+    await emptyDiaryWithResource();
 
     const notes = json({ notes: "Late reading." }, auth);
     expect((await send("/v1/roadmap/diary/2026-03-02", "PATCH", notes)).status).toBe(200);
@@ -676,6 +682,21 @@ describe("notifying the website of committed content writes", () => {
     ]);
   });
 
+  it("names every diary day a logged session with notes changed", async () => {
+    await emptyDiaryWithResource();
+    const session = {
+      resource: "prompting-guide",
+      startedAt: "2026-03-02T23:30:00+01:00",
+      endedAt: "2026-03-03T00:30:00+01:00",
+      notes: "Late reading.",
+    };
+    expect((await send("/v1/roadmap/sessions", "POST", json(session, auth))).status).toBe(201);
+
+    const day = (record: string) => [{ domain: "roadmap-diary", record, action: "created" }];
+    expect(await delivered()).toEqual([day("2026-03-02"), day("2026-03-03")]);
+    await emptyDiaryWithResource();
+  });
+
   it("names the supporting record each project idea, followed source and term write changed", async () => {
     const writes = [
       ["project-ideas", { slug: "fictional-idea", title: "Idea", whyItMatters: "Why." }],
@@ -765,21 +786,19 @@ describe("notifying the website of committed content writes", () => {
 
   it("sends nothing when the write's transaction fails", async () => {
     const failure = new Error("fictional failed transaction");
-    const services = new Proxy(backend.services, {
-      get(target, property, receiver) {
-        const value: unknown = Reflect.get(target, property, receiver);
-        if (property !== "profile") return value;
-        return new Proxy(target.profile, {
-          get(profile, name) {
-            if (name === "createTechnology") return () => Promise.reject(failure);
-            const method: unknown = Reflect.get(profile, name);
-            return typeof method === "function"
-              ? (...args: unknown[]): unknown => Reflect.apply(method, profile, args)
-              : method;
+    // The write itself succeeds inside the transaction, then the transaction fails and rolls back.
+    const audit: Services["audit"] = {
+      recentChanges: () => backend.services.audit.recentChanges(),
+      write: (write) =>
+        backend.services.audit.write({
+          ...write,
+          run: async (content) => {
+            await write.run(content);
+            throw failure;
           },
-        });
-      },
-    });
+        }),
+    };
+    const services: Services = { ...backend.services, audit };
     const { app: failing } = createApp({
       services,
       config: testConfig(),
@@ -794,6 +813,7 @@ describe("notifying the website of committed content writes", () => {
     );
 
     expect(response.status).toBe(500);
+    expect((await send("/v1/technologies/postgres", "GET")).status).toBe(404);
     expect(await delivered()).toEqual([]);
   });
 });

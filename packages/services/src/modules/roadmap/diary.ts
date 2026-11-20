@@ -6,6 +6,7 @@ import type {
   Diary,
   DiaryDay,
   DiaryNotesWrite,
+  RoadmapSessionCreate,
   TimeEntry,
   TimeEntryCreate,
   TimeEntryUpdate,
@@ -44,6 +45,8 @@ export interface LearningDiary {
   getDiary(): Promise<Diary>;
   /** One diary day; a date without notes, time entries or a covering event is `not_found`. */
   getDiaryDay(date: string): Promise<DiaryDay>;
+  /** One time entry as the diary shows it; `not_found` when missing. */
+  getTimeEntry(id: string): Promise<TimeEntry>;
   /** Creates the day or replaces its notes; its time entries stay. */
   writeDiaryNotes(date: string, input: DiaryNotesWrite): Promise<DiaryDay>;
   /** Clears the day's notes and keeps its time entries; `not_found` when it has no notes. */
@@ -57,6 +60,13 @@ export interface LearningDiary {
    * concurrently. Adjacent intervals are allowed.
    */
   createTimeEntry(input: TimeEntryCreate): Promise<TimeEntryWrite>;
+  /**
+   * Logs a session like `createTimeEntry` and, with `notes`, appends them after a blank line to the
+   * notes of the session's first diary day (or starts them), keeping what was there. Time and notes
+   * are written in one transaction: a refused session changes neither. The same refusals as
+   * `createTimeEntry`.
+   */
+  logSession(input: RoadmapSessionCreate): Promise<TimeEntryWrite>;
   /**
    * Changes the given fields of a time entry and splits the merged interval again; a given
    * `resource` or `event` moves it to that target, otherwise it keeps its own. The first piece
@@ -101,6 +111,15 @@ function planSession(startedAt: string, endedAt: string): DiaryPiece[] | Session
     return { ok: false, reason: "invalid_session", path: "endedAt", message: ORDER_RULE };
   }
   return splitIntoDiaryDays(start, end);
+}
+
+/**
+ * The Prague diary days a session from `startedAt` to `endedAt` touches, ascending; none when the
+ * interval is invalid or not positive. The API names these days to audit a session before it runs.
+ */
+export function sessionDiaryDates(startedAt: string, endedAt: string): string[] {
+  const pieces = planSession(startedAt, endedAt);
+  return Array.isArray(pieces) ? [...new Set(pieces.map((piece) => piece.date))] : [];
 }
 
 /** The target a write names, if any: an event or a resource, never both. */
@@ -178,6 +197,22 @@ function toWrite(entries: readonly TimeEntryRecord[], ...previous: string[]): Ti
 
 /** The diary operations over the roadmap persistence. */
 export function createLearningDiary(persistence: RoadmapPersistence): LearningDiary {
+  async function logSession(input: TimeEntryCreate, notes?: string): Promise<TimeEntryWrite> {
+    const pieces = planSession(input.startedAt, input.endedAt);
+    if (!Array.isArray(pieces)) throw invalid(pieces.path, pieces.message);
+    const target = namedTarget(input);
+    // The contract requires exactly one target; a body without one never reaches the service.
+    if (target === undefined) throw invalid("resource", "Name a resource or an event.");
+    const [first] = pieces;
+    const result = await persistence.createTimeEntries(
+      target,
+      pieces,
+      notes === undefined || first === undefined ? undefined : { date: first.date, text: notes },
+    );
+    if (!result.ok) throw writeRefusal(result, target, input.startedAt);
+    return toWrite(result.entries);
+  }
+
   return {
     async getDiary() {
       return { days: (await persistence.loadDiary()).map(toDiaryDay) };
@@ -187,6 +222,11 @@ export function createLearningDiary(persistence: RoadmapPersistence): LearningDi
       if (!day) throw noDay(date);
       return toDiaryDay(day);
     },
+    async getTimeEntry(id) {
+      const record = await persistence.findTimeEntry(id);
+      if (record === null) throw noEntry(id);
+      return toTimeEntry(record);
+    },
     async writeDiaryNotes(date, input) {
       return toDiaryDay(await persistence.writeDiaryNotes(date, input.notes));
     },
@@ -195,16 +235,8 @@ export function createLearningDiary(persistence: RoadmapPersistence): LearningDi
       if (!result.ok) throw new DomainError("not_found", `The diary has no notes on ${date}.`);
     },
 
-    async createTimeEntry(input) {
-      const pieces = planSession(input.startedAt, input.endedAt);
-      if (!Array.isArray(pieces)) throw invalid(pieces.path, pieces.message);
-      const target = namedTarget(input);
-      // The contract requires exactly one target; a body without one never reaches the service.
-      if (target === undefined) throw invalid("resource", "Name a resource or an event.");
-      const result = await persistence.createTimeEntries(target, pieces);
-      if (!result.ok) throw writeRefusal(result, target, input.startedAt);
-      return toWrite(result.entries);
-    },
+    createTimeEntry: (input) => logSession(input),
+    logSession: (input) => logSession(input, input.notes),
     async updateTimeEntry(id, changes) {
       // The merged session and target the plan judged, for reading a refusal of the database.
       let target: TimeEntryTarget = { resource: "" };

@@ -122,7 +122,7 @@ Langfuse receives redacted traces; stored conversations are scored afterwards an
 | **Purpose**        | Read profile, experience, services and learning activity; search public knowledge | Add and update content through private API routes         |
 | **Implementation** | Python; calls FastAPI read capabilities backed by the shared agent package        | TypeScript; reuses contracts and the generated API client |
 
-Connection URLs and client configuration will be added when the servers are implemented.
+The content-management MCP's connection, authentication and client configuration are in [`apps/mcp-admin/AGENTS.md`](apps/mcp-admin/AGENTS.md); it is in progress in phase 5. The public MCP's will be added when it is implemented.
 
 ### Retrieval without a separate vector service
 

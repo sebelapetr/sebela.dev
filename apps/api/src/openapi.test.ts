@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { CvSchema, PersonSchema } from "@sebela/contracts";
+import {
+  AuditChangeSchema,
+  CvSchema,
+  PersonSchema,
+  auditProvenanceHeader,
+  auditProvenanceMaxLength,
+} from "@sebela/contracts";
 
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
@@ -128,7 +134,8 @@ describe("the OpenAPI document and the reference", () => {
       ["DELETE", "/v1/topics/:slug"],
     ] as const) {
       const documented = operation(method, path);
-      expect(documented.parameters).toEqual([
+      const pathParameters = documented.parameters?.filter((parameter) => parameter.in === "path");
+      expect(pathParameters).toEqual([
         expect.objectContaining({
           name: "slug",
           in: "path",
@@ -670,9 +677,16 @@ describe("the OpenAPI document and the reference", () => {
     expect(Object.keys(operation("DELETE", "/v1/roadmap/time-entries/:id").responses)).toEqual(
       expect.arrayContaining(["204", "401", "404"]),
     );
+    const session = operation("POST", "/v1/roadmap/sessions");
+    expect(session.requestBody?.content).toEqual(content("RoadmapSessionCreate"));
+    expect(session.responses["201"]?.content).toEqual(content("TimeEntryWrite"));
+    expect(Object.keys(session.responses)).toEqual(
+      expect.arrayContaining(["201", "400", "401", "409"]),
+    );
     for (const [method, path] of [
       ["PATCH", "/v1/roadmap/diary/:date"],
       ["DELETE", "/v1/roadmap/diary/:date"],
+      ["POST", "/v1/roadmap/sessions"],
       ["POST", "/v1/roadmap/time-entries"],
       ["PATCH", "/v1/roadmap/time-entries/:id"],
       ["DELETE", "/v1/roadmap/time-entries/:id"],
@@ -823,8 +837,51 @@ describe("the OpenAPI document and the reference", () => {
     }
   });
 
+  it("documents the optional provenance header on every audited write, and on no read", () => {
+    for (const route of backend.api().routes) {
+      const headers = (operation(route.method, route.path).parameters ?? []).filter(
+        (parameter) => parameter.in === "header",
+      );
+      if (route.audit === null) {
+        expect(headers, `${route.method} ${route.path}`).toEqual([]);
+        continue;
+      }
+      expect(headers, `${route.method} ${route.path}`).toEqual([
+        expect.objectContaining({
+          name: auditProvenanceHeader,
+          in: "header",
+          schema: expect.objectContaining({
+            type: "string",
+            maxLength: auditProvenanceMaxLength,
+          }) as unknown,
+        }),
+      ]);
+      expect(headers[0]?.required ?? false, `${route.method} ${route.path}`).toBe(false);
+    }
+  });
+
+  it("documents the private recent changes from their contract schema", () => {
+    const documented = operation("GET", "/v1/audit/changes");
+    expect(documented.operationId).toBe("listRecentChanges");
+    expect(documented.security).toEqual([{ bearerAuth: [] }]);
+    expect(documented.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/RecentChanges" } },
+    });
+    expect(
+      Object.keys(document.components.schemas["AuditChange"]?.properties ?? {}).sort(),
+    ).toEqual(Object.keys(AuditChangeSchema.shape).sort());
+  });
+
   it("documents the health route", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
+  });
+
+  it("documents the private authentication check without a body", () => {
+    const documented = operation("GET", "/v1/authentication");
+    expect(documented.security).toEqual([{ bearerAuth: [] }]);
+    expect(documented.requestBody).toBeUndefined();
+    expect(Object.keys(documented.responses)).toEqual(["200", "400", "401", "429", "500"]);
+    expect(document.components.schemas).toHaveProperty("AuthenticationCheck");
   });
 
   it("serves a browsable reference of the document without a key", async () => {

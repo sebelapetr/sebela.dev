@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-import type { ContentDomain } from "@sebela/contracts";
+import type { AuditEntity, ContentDomain } from "@sebela/contracts";
 
 import type { ApiConfig } from "./config.js";
 
@@ -80,6 +80,22 @@ export interface FileResponse {
   readonly fileName: string;
 }
 
+/**
+ * How a write route's changes are audited when the default does not name them. By default a write
+ * is audited as its content domain, for the person or the record its `slug`, `id` or `date` path
+ * parameter names, or else the record the result's `slug` or `id` names.
+ */
+export interface RouteAudit<Params = unknown, Result = unknown, Body = unknown> {
+  readonly entity: AuditEntity;
+  /**
+   * The records the write addresses before it runs, from its path parameters or its validated body
+   * (such as the diary days a session will write); none for a create.
+   */
+  records(params: Params, body: Body): readonly (string | null)[];
+  /** Further records only the result names, such as the entries a write created. */
+  recordsOf?(result: Result): readonly (string | null)[];
+}
+
 /** A route as a module contributes it: its documentation and what it does. */
 export interface RouteDefinition extends RouteDocumentation {
   /** Runs the operation; the result is sent as the JSON success body, or as a file. */
@@ -89,20 +105,23 @@ export interface RouteDefinition extends RouteDocumentation {
    * several, for example every diary day a time entry left or entered. The app reports each one.
    */
   records?(input: { readonly params: unknown; readonly result: unknown }): readonly string[];
+  /** The audit of a write route when its default does not fit. */
+  readonly audit?: RouteAudit;
 }
 
 /**
  * Declares a route whose handler receives the parsed output of its body and path-parameter
- * schemas, and whose `records` receives those parameters and the handler's result. The types are
+ * schemas, and whose `records` and `audit` receive those parameters and the handler's result. The types are
  * erased afterwards: the app validates with exactly these schemas before it
  * calls `handle`.
  */
 export function defineRoute<Body = undefined, Params = undefined, Result = unknown>(
-  route: Omit<RouteDefinition, "body" | "params" | "handle" | "records"> & {
+  route: Omit<RouteDefinition, "body" | "params" | "handle" | "records" | "audit"> & {
     readonly body?: z.ZodType<Body>;
     readonly params?: z.ZodObject & z.ZodType<Params>;
     handle(input: { readonly body: Body; readonly params: Params }): Promise<Result>;
     records?(input: { readonly params: Params; readonly result: Result }): readonly string[];
+    readonly audit?: RouteAudit<NoInfer<Params>, NoInfer<Result>, NoInfer<Body>>;
   },
 ): RouteDefinition {
   return route;

@@ -4,9 +4,29 @@ import {
   type ZodOpenApiPathsObject,
 } from "zod-openapi";
 
-import { ErrorResponseSchema } from "@sebela/contracts";
+import { z } from "zod";
+
+import {
+  AuditProvenanceSchema,
+  ErrorResponseSchema,
+  auditProvenanceHeader,
+} from "@sebela/contracts";
 
 import { PARAMETER, type RouteDocumentation } from "./routing.js";
+
+/** The optional label of the tool or client that makes an audited write. */
+const ProvenanceHeaderSchema = z.object({
+  [auditProvenanceHeader]: AuditProvenanceSchema.optional().meta({
+    description:
+      "A short label of the tool or client making the write, such as `mcp-admin/update_content`, " +
+      "stored with its audit. Stated by the caller: never proof of who acted or that a human " +
+      "approved. A label outside the pattern is refused with `validation_failed` on `provenance`.",
+  }),
+});
+
+/** Every write is audited: it changes content, which the app commits together with its audit. */
+const audited = (route: RouteDocumentation) =>
+  route.method !== "GET" && route.content !== undefined;
 
 const errorContent = { "application/json": { schema: ErrorResponseSchema } };
 
@@ -87,6 +107,7 @@ function badRequest(route: RouteDocumentation): string {
     ...(route.params ? ["a malformed path parameter"] : []),
     ...(route.body ? ["an invalid body or a broken domain rule"] : []),
     ...(route.upload ? ["an invalid form, a malformed file or an image over the size limit"] : []),
+    ...(audited(route) ? [`an invalid \`${auditProvenanceHeader}\` header`] : []),
   ];
   return [
     ...(route.body ? ["`malformed_json`"] : []),
@@ -103,7 +124,14 @@ function operation(route: RouteDocumentation): ZodOpenApiOperationObject {
     summary: route.summary,
     ...(route.description ? { description: route.description } : {}),
     security: route.access === "private" ? [{ bearerAuth: [] }] : [],
-    ...(route.params ? { requestParams: { path: route.params } } : {}),
+    ...(route.params || audited(route)
+      ? {
+          requestParams: {
+            ...(route.params ? { path: route.params } : {}),
+            ...(audited(route) ? { header: ProvenanceHeaderSchema } : {}),
+          },
+        }
+      : {}),
     ...(route.body
       ? { requestBody: { required: true, content: { "application/json": { schema: route.body } } } }
       : {}),

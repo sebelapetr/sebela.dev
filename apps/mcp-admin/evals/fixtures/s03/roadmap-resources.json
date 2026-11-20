@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "python-async-intro",
+    "module": "async-basics",
+    "name": "Python Async",
+    "type": "youtube-video",
+    "status": "planned",
+    "estimatedMinutes": 90,
+    "link": "https://videos.example.test/python-async",
+    "position": 0
+  },
+  {
+    "slug": "python-async-lab",
+    "module": "concurrency-lab",
+    "name": "Python Async",
+    "type": "project",
+    "status": "in-progress",
+    "estimatedMinutes": 240,
+    "startedAt": "2026-10-20T17:00:00.000Z",
+    "link": "https://lab.example.test/async",
+    "position": 0
+  },
+  {
+    "slug": "harbor-patterns-book",
+    "module": "reading-list",
+    "name": "Harbor Patterns",
+    "type": "book",
+    "status": "in-progress",
+    "book": "harbor-patterns",
+    "position": 0
+  }
+]

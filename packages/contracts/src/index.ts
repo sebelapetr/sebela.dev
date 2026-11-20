@@ -139,6 +139,7 @@ export {
   DiaryNotesWriteSchema,
   DiaryResourceSchema,
   DiarySchema,
+  RoadmapSessionCreateSchema,
   TimeEntryCreateSchema,
   TimeEntryIdParamsSchema,
   TimeEntrySchema,
@@ -210,6 +211,7 @@ export type {
   DiaryNotesWrite,
   DiaryResource,
   TimeEntry,
+  RoadmapSessionCreate,
   TimeEntryCreate,
   TimeEntryIdParams,
   TimeEntryUpdate,
@@ -294,6 +296,16 @@ export type {
   InvalidationRefusal,
   InvalidationVerification,
 } from "./modules/invalidation/index.js";
+export {
+  AuditChangeSchema,
+  AuditProvenanceSchema,
+  RecentChangesSchema,
+  auditEntities,
+  auditProvenanceHeader,
+  auditProvenanceMaxLength,
+  recentChangesLimit,
+} from "./modules/audit/index.js";
+export type { AuditChange, AuditEntity, RecentChanges } from "./modules/audit/index.js";
 export {
   ChatBlockSchema,
   ChatRelatedLinkSchema,

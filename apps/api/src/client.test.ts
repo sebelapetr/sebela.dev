@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createApiClient,
   type ApiClient,
+  type AuditChange,
+  type AuthenticationCheck,
   type Cv,
   type Diary,
   type DiaryDay,
@@ -14,6 +16,7 @@ import {
   type LearningTimeResource,
   type LearningTimeResourceCategory,
   type MediaUpload,
+  type RecentChanges,
   type Roadmap,
   type RoadmapAreaDetail,
   type RoadmapBook,
@@ -138,6 +141,25 @@ describe("the generated API client", () => {
       expect(refused.error?.error.code).toBe("unauthorized");
       expect(authorizations).toEqual([apiKey === undefined ? null : `Bearer ${apiKey}`]);
     }
+  });
+
+  it("checks a key: authenticated with it, refused without it or once revoked", async () => {
+    const checked = await backend.services.apiKeys.createKey("checked consumer");
+    const { client, authorizations } = consumer(checked.key);
+
+    const valid = await client.GET("/v1/authentication");
+    expect(valid.response.status).toBe(200);
+    const body: AuthenticationCheck | undefined = valid.data;
+    expect(body).toEqual({ status: "authenticated" });
+
+    await backend.services.apiKeys.revokeKey(checked.metadata.id);
+    const revoked = await client.GET("/v1/authentication");
+    expect(revoked.response.status).toBe(401);
+    expect(revoked.error?.error.code).toBe("unauthorized");
+    expect(authorizations).toEqual([`Bearer ${checked.key}`, `Bearer ${checked.key}`]);
+
+    const anonymous = await consumer().client.GET("/v1/authentication");
+    expect(anonymous.response.status).toBe(401);
   });
 
   it("reports an exhausted budget with Retry-After", async () => {
@@ -1353,6 +1375,27 @@ describe("the generated API client", () => {
     });
     expect(unknown.error?.error.fields?.map(({ path }) => path)).toEqual(["resource"]);
 
+    const evening = {
+      resource: "diary-guide",
+      startedAt: "2026-03-02T20:00:00+01:00",
+      endedAt: "2026-03-02T21:00:00+01:00",
+      notes: "Then the *exercises*.",
+    };
+    const logged = await client.POST("/v1/roadmap/sessions", { body: evening });
+    const loggedWrite: TimeEntryWrite | undefined = logged.data;
+    expect(logged.response.status).toBe(201);
+    expect(loggedWrite?.dates).toEqual(["2026-03-02"]);
+    const repeated = await client.POST("/v1/roadmap/sessions", { body: evening });
+    expect(repeated.error?.error.code).toBe("conflict");
+    const withNotes = await visitor.GET("/v1/roadmap/diary/{date}", day("2026-03-02"));
+    expect(withNotes.data?.notes).toBe("A *fictional* evening.\n\nThen the *exercises*.");
+    for (const entry of loggedWrite?.entries ?? []) {
+      const removed = await client.DELETE("/v1/roadmap/time-entries/{id}", {
+        params: { path: { id: entry.id } },
+      });
+      expect(removed.response.status).toBe(204);
+    }
+
     const read = await visitor.GET("/v1/roadmap/diary");
     const diary: Diary | undefined = read.data;
     expect(diary?.days.map(({ date, totalSeconds }) => [date, totalSeconds])).toEqual([
@@ -1702,5 +1745,49 @@ describe("the generated API client", () => {
     await backend.services.profile.deleteTopic("client-agents");
 
     expect(authorizations.every((authorization) => authorization === `Bearer ${key}`)).toBe(true);
+  });
+
+  it("states provenance on a write and reads the audited change back with the key", async () => {
+    const { client, authorizations } = consumer(key);
+    const { client: visitor } = consumer();
+
+    const created = await client.POST("/v1/technologies", {
+      params: { header: { "sebela-provenance": "mcp-admin/create_technology" } },
+      body: { slug: "client-audited", name: "Audited", tier: "secondary", position: 0 },
+    });
+    expect(created.response.status).toBe(201);
+
+    const invalid = await client.DELETE("/v1/technologies/{slug}", {
+      params: { path: { slug: "client-audited" }, header: { "sebela-provenance": "Not Valid" } },
+    });
+    expect(invalid.error?.error.fields?.map(({ path }) => path)).toContain("provenance");
+
+    const read = await client.GET("/v1/audit/changes");
+    expect(read.response.status).toBe(200);
+    const recent: RecentChanges | undefined = read.data;
+    const newest: AuditChange | undefined = recent?.changes[0];
+    expect(newest).toMatchObject({
+      actor: { keyName: "consumer contract" },
+      operation: { operationId: "createTechnology", method: "POST", route: "/v1/technologies" },
+      provenance: "mcp-admin/create_technology",
+      entity: "technology",
+      record: "client-audited",
+      action: "created",
+      before: null,
+      after: { slug: "client-audited", name: "Audited" },
+    });
+    expect(authorizations).toEqual([`Bearer ${key}`, `Bearer ${key}`, `Bearer ${key}`]);
+
+    const refused = await visitor.GET("/v1/audit/changes");
+    expect(refused.response.status).toBe(401);
+    expect(refused.data).toBeUndefined();
+
+    expect(
+      (
+        await client.DELETE("/v1/technologies/{slug}", {
+          params: { path: { slug: "client-audited" } },
+        })
+      ).response.status,
+    ).toBe(204);
   });
 });

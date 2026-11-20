@@ -8,6 +8,7 @@ export default defineConfig({
     "./src/modules/profile/schema.ts",
     "./src/modules/roadmap/schema.ts",
     "./src/modules/api-keys/schema.ts",
+    "./src/modules/audit/schema.ts",
   ],
   out: "./migrations",
 });

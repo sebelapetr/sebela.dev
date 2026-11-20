@@ -1,0 +1,32 @@
+{
+  "name": "@sebela/mcp-admin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The private administrative MCP server: authenticated content tools over the content API.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "eval": "node ../../harness/with-secrets.mjs -- node evals/run.js",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "catalog:",
+    "@modelcontextprotocol/hono": "2.0.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@sebela/api-client": "workspace:*",
+    "@sebela/contracts": "workspace:*",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@sebela/config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

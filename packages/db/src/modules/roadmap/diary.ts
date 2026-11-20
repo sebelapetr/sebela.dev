@@ -20,6 +20,7 @@ import type {
   DiaryEventRecord,
   DiaryResourceRecord,
   RoadmapPersistence,
+  SessionNotes,
   TimeEntryPiece,
   TimeEntryRecord,
   TimeEntryTarget,
@@ -251,6 +252,22 @@ async function insertPieces(
   );
 }
 
+/**
+ * Appends text to a diary day's notes after a blank line, or starts them. One statement over the
+ * row, so concurrent appends to the same day serialize on its lock and both stay.
+ */
+async function appendNotes(tx: Executor, notes: SessionNotes): Promise<void> {
+  const rows = await tx
+    .update(diaryEntries)
+    .set({
+      notes: sql`case when ${diaryEntries.notes} is null then ${notes.text} else ${diaryEntries.notes} || ${"\n\n"} || ${notes.text} end`,
+      updatedAt: now,
+    })
+    .where(eq(diaryEntries.date, notes.date))
+    .returning({ date: diaryEntries.date });
+  if (rows.length === 0) throw new Error("The diary day of the session notes is missing.");
+}
+
 /** Runs a write; a refusal or an overlap rolls it back and becomes its failure. */
 async function refusable<T, Failure>(write: () => Promise<T>): Promise<T | Failure> {
   try {
@@ -304,11 +321,13 @@ export function createDiaryPersistence(db: Database): DiaryPersistence {
       const [entry] = await loadEntries(db, eq(timeEntries.id, id));
       return entry ?? null;
     },
-    createTimeEntries(target, pieces) {
+    createTimeEntries(target, pieces, notes) {
       return refusable(() =>
-        db.transaction(
-          async (tx) => ({ ok: true, entries: await insertPieces(tx, target, pieces) }) as const,
-        ),
+        db.transaction(async (tx) => {
+          const entries = await insertPieces(tx, target, pieces);
+          if (notes !== undefined) await appendNotes(tx, notes);
+          return { ok: true, entries } as const;
+        }),
       );
     },
     replaceTimeEntry(id, plan) {

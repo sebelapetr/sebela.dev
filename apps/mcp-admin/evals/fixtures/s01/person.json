@@ -1,0 +1,19 @@
+{
+  "name": "Mira Tolland",
+  "headline": "Fictional platform engineer for the MCP Admin evals",
+  "shortBio": "Mira is a **fictional** person who exists only in the MCP Admin eval fixture.",
+  "longBio": "Mira Tolland does not exist. This record is the small eval fixture of the administrative MCP server, separate from the demo seed.",
+  "location": "Kestrel Bay",
+  "email": "mira@tolland.example.test",
+  "links": [{ "label": "Website", "url": "https://tolland.example.test/" }],
+  "availability": "Not available; this is a fixture.",
+  "careerStartedOn": "2017-02-01",
+  "servicesIntro": "Mira offers **fictional** platform reviews.",
+  "collaborationSteps": [
+    { "title": "Talk", "description": "A short call about the problem." },
+    { "title": "Build", "description": "Small increments, checked early." }
+  ],
+  "servicesNote": "A fixture note.",
+  "photo": null,
+  "cvPdf": null
+}

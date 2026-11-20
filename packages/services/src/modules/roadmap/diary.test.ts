@@ -9,7 +9,7 @@ import {
 import { createPersistence, readDatabaseConfig, type Persistence } from "@sebela/db";
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
 
-import { createRoadmapService, type RoadmapService } from "./index.js";
+import { createRoadmapService, sessionDiaryDates, type RoadmapService } from "./index.js";
 
 /** 23:30 to 00:30 Prague time on a fictional winter evening (UTC+01:00). */
 const lateSession: TimeEntryCreate = {
@@ -142,6 +142,17 @@ describe("the learning diary", () => {
       });
       expect(written).toEqual(day);
     });
+
+    it("returns one time entry as the diary shows it, and refuses a missing one", async () => {
+      const { entries } = await roadmap.createTimeEntry(lateSession);
+      const [first] = entries;
+      if (first === undefined) throw new Error("Expected a written entry.");
+
+      await expect(roadmap.getTimeEntry(first.id)).resolves.toEqual(first);
+      await expect(
+        roadmap.getTimeEntry("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toMatchObject({ code: "not_found" });
+    });
   });
 
   describe("notes", () => {
@@ -273,6 +284,87 @@ describe("the learning diary", () => {
       await expect(roadmap.getDiaryDay("2026-03-04")).resolves.toMatchObject({
         totalSeconds: 4 * 3600,
       });
+    });
+  });
+
+  describe("logging a session with notes", () => {
+    const yesterday = {
+      resource: "prompt-guide",
+      startedAt: "2026-03-04T14:00:00+01:00",
+      endedAt: "2026-03-04T15:30:00+01:00",
+    };
+
+    it("logs the time and appends the notes to the start day, keeping its notes", async () => {
+      await roadmap.writeDiaryNotes("2026-03-04", { notes: "Earlier notes." });
+      await roadmap.createTimeEntry(morning("agents-video", "10:00", "11:00"));
+
+      const write = await roadmap.logSession({ ...yesterday, notes: "Async chapter." });
+
+      expect(write.dates).toEqual(["2026-03-04"]);
+      expect(write.entries.map((entry) => entry.durationSeconds)).toEqual([5400]);
+      await expect(roadmap.getDiaryDay("2026-03-04")).resolves.toMatchObject({
+        notes: "Earlier notes.\n\nAsync chapter.",
+        totalSeconds: 3600 + 5400,
+      });
+    });
+
+    it("splits a session across midnight once and puts the notes on its first day", async () => {
+      const write = await roadmap.logSession({ ...lateSession, notes: "Late." });
+
+      expect(write.entries.map((entry) => [entry.date, entry.durationSeconds])).toEqual([
+        ["2026-03-02", 1800],
+        ["2026-03-03", 1800],
+      ]);
+      await expect(roadmap.getDiaryDay("2026-03-02")).resolves.toMatchObject({ notes: "Late." });
+      await expect(roadmap.getDiaryDay("2026-03-03")).resolves.toMatchObject({ notes: null });
+    });
+
+    it("logs time without notes and leaves the notes as they are", async () => {
+      await roadmap.writeDiaryNotes("2026-03-04", { notes: "Earlier notes." });
+      await roadmap.logSession(yesterday);
+      await expect(roadmap.getDiaryDay("2026-03-04")).resolves.toMatchObject({
+        notes: "Earlier notes.",
+      });
+    });
+
+    it("refuses an overlap with neither the time nor the notes written", async () => {
+      await roadmap.writeDiaryNotes("2026-03-04", { notes: "Earlier notes." });
+      await roadmap.createTimeEntry(morning("agents-video", "14:30", "15:00"));
+
+      await expect(roadmap.logSession({ ...yesterday, notes: "Lost." })).rejects.toMatchObject({
+        code: "conflict",
+      });
+      await expect(roadmap.getDiaryDay("2026-03-04")).resolves.toMatchObject({
+        notes: "Earlier notes.",
+        totalSeconds: 1800,
+      });
+    });
+
+    it("refuses an unknown target and a bad interval before writing", async () => {
+      await expect(
+        roadmap.logSession({ ...yesterday, resource: "missing", notes: "No." }),
+      ).rejects.toMatchObject({ code: "validation_failed", fields: [{ path: "resource" }] });
+      await expect(
+        roadmap.logSession({ ...yesterday, endedAt: yesterday.startedAt, notes: "No." }),
+      ).rejects.toMatchObject({ code: "validation_failed", fields: [{ path: "endedAt" }] });
+      await expect(roadmap.getDiary()).resolves.toEqual({ days: [] });
+    });
+  });
+
+  describe("the days of a session", () => {
+    it("names each Prague day the session touches, also across midnight and DST", () => {
+      expect(sessionDiaryDates(lateSession.startedAt, lateSession.endedAt)).toEqual([
+        "2026-03-02",
+        "2026-03-03",
+      ]);
+      expect(sessionDiaryDates("2026-10-25T01:00:00+02:00", "2026-10-25T04:00:00+01:00")).toEqual([
+        "2026-10-25",
+      ]);
+    });
+
+    it("names no day for an interval it cannot split", () => {
+      expect(sessionDiaryDates(lateSession.endedAt, lateSession.startedAt)).toEqual([]);
+      expect(sessionDiaryDates("not a time", lateSession.endedAt)).toEqual([]);
     });
   });
 
