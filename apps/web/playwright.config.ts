@@ -54,6 +54,9 @@ export default defineConfig({
         // No analytics, whatever the checkout's environment says (e2e/analytics.spec.ts sets it).
         WEB_ANALYTICS_SCRIPT_URL: "",
         WEB_ANALYTICS_WEBSITE_ID: "",
+        // The launched site's metadata, whatever the checkout says (e2e/seo.spec.ts checks the
+        // default, which keeps the site out of search engines).
+        WEB_INDEXING: "on",
       },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },

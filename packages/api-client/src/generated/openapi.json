@@ -64,6 +64,74 @@
         }
       }
     },
+    "/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Readiness",
+        "description": "Answers whether the API can serve content now: it checks that the database answers within a short time. For uptime monitoring and the website's health check; never cached. Shares the health budget.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The API and its database answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the database cannot be reached now, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/authentication": {
       "get": {
         "operationId": "checkAuthentication",
@@ -16086,7 +16154,8 @@
                   "payload_too_large",
                   "unsupported_media_type",
                   "rate_limited",
-                  "internal_error"
+                  "internal_error",
+                  "unavailable"
                 ]
               },
               "message": {
@@ -16126,6 +16195,19 @@
         "required": [
           "path",
           "message"
+        ],
+        "additionalProperties": false
+      },
+      "Readiness": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ready"
+          }
+        },
+        "required": [
+          "status"
         ],
         "additionalProperties": false
       },

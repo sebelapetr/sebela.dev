@@ -147,7 +147,7 @@ Phases 00–05 have merged into `master`. Phase 06 has an approved specification
 | **09 · RAG**                | Approved-source ingest, private originals, embeddings and private retrieval        | [RAG](.plan/09-rag/prd.md)                                                         |
 | **09.1 · RAG integration**  | Public search, agent tool and skill, public MCP search, cited supplemental sources | [RAG integration](.plan/09.1-rag-integration/prd.md)                               |
 | **09.2 · RAG upgrades**     | BM25 ranking and parent-child retrieval, measured                                  | [RAG upgrades](.plan/09.2-rag-upgrades/prd.md)                                     |
-| **10 · Delivery**           | Affected-image builds, VPS deployment with rollback, backups, monitoring           | [Delivery](.plan/10-delivery/prd.md)                                               |
+| **10 · Delivery**           | Affected-image builds, VPS deployment with rollback, backups, monitoring           | [Delivery](.plan/done/10-delivery/prd.md)                                          |
 | **11 · Knowledge graph**    | Source-backed relationships and measured graph-assisted retrieval                  | [Knowledge graph](.plan/11-knowledge-graph/prd.md)                                 |
 | **12 · Ontology**           | Semantic constraints and a bounded Auto Ontology experiment                        | [Ontology](.plan/12-ontology/prd.md)                                               |
 | **13 · External MCP UI**    | Verified interactive views with structured/text fallbacks                          | [MCP Apps](.plan/13-mcp-apps/prd.md)                                               |

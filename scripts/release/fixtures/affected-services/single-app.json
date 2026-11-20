@@ -1,0 +1,22 @@
+{
+  "description": "A change to one app rebuilds only its image",
+  "changedFiles": ["apps/web/src/app/page.tsx"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "@sebela/web",
+            "path": "apps/web",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": ["web"]
+}

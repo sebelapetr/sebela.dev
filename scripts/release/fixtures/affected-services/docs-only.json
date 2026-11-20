@@ -1,0 +1,22 @@
+{
+  "description": "A docs-only change builds nothing",
+  "changedFiles": ["docs/testing.md"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": []
+}
