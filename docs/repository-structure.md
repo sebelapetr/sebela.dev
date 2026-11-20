@@ -157,7 +157,7 @@ apps/api/src/
   config.ts                         # validated runtime configuration
   routing.ts, openapi.ts            # route descriptions and the generated OpenAPI document
   middleware/                       # HTTP authentication, limits, errors
-  cli/                              # maintenance adapters using services: api-keys, seed, storage, openapi
+  cli/                              # maintenance adapters using services: api-keys, seed, storage, media, knowledge, openapi
   modules/profile/index.ts          # profile HTTP entry
   modules/media/index.ts            # media HTTP entry
   modules/roadmap/index.ts          # roadmap HTTP entry
