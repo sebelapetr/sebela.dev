@@ -1,6 +1,6 @@
 # Release workflow
 
-How sebela.dev is built, deployed, backed up and restored (`.plan/10-delivery/prd.md`). The commands and the server's one-time preparation are in `infra/README.md`.
+How sebela.dev is built, deployed, backed up and restored (`.plan/done/10-delivery/prd.md`). The commands and the server's one-time preparation are in `infra/README.md`.
 
 ## Decided so far
 

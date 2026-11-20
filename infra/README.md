@@ -1,6 +1,6 @@
 # infra
 
-The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
+The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/done/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
 
 | Path                       | What it is                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------- |
