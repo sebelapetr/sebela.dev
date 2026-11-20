@@ -8,6 +8,8 @@ untrusted delimited data and drops the oldest first when the Main input would ov
 from __future__ import annotations
 
 import json
+import signal
+import time
 from collections.abc import Sequence
 
 import pytest
@@ -28,6 +30,7 @@ from llm_agent.context.tokens import request_tokens, text_tokens
 from llm_agent.guardrails.input import select_language
 from llm_agent.pipelines.chat.stages.main_agent import DRAFT_SCHEMA
 from llm_agent.pipelines.chat.stages.security_gateway import VERDICT_SCHEMA
+from llm_agent.schemas.requests import MAX_QUESTION_CHARS
 from llm_agent.tools.registry import TOOL_SPECS
 from tests.unit.fakes import (
     PERSON_ID,
@@ -446,6 +449,83 @@ NOT_A_SWITCH = (
     ("Píše Ilsa články anglicky?", "en", "cs"),
     ("Je ten projekt napsaný v angličtině?", "en", "cs"),
 )
+
+
+#: A switch that shares its clause or sentence with the question, or stands alone as an exclamation.
+SWITCH_WITH_QUESTION = (
+    ("Answer in Czech, what did she build?", "en", "cs"),
+    ("Tell me about her projects in Czech", "en", "cs"),
+    ("Thanks! Now in Czech, what technologies did she use?", "en", "cs"),
+    ("Please tell me about her work at Brindle Labs in Czech.", "en", "cs"),
+    ("Czech!", "en", "cs"),
+    ("Odpověz anglicky, na čem pracovala?", "cs", "en"),
+    ("Řekni mi o jejích projektech anglicky.", "cs", "en"),
+    ("Anglicky: na čem pracovala?", "cs", "en"),
+    ("English!", "cs", "en"),
+)
+#: Refusals of a language and bare language words asked as questions; none of them switches.
+NOT_A_REQUEST = (
+    ("No Czech, please.", "en", "en"),
+    ("No English please", "cs", "cs"),
+    ("Not in Czech, please.", "en", "en"),
+    ("Don't answer in Czech.", "en", "en"),
+    ("Tell me about her projects, not in Czech.", "en", "en"),
+    ("Also Czech?", "en", "en"),
+    ("So Czech?", "en", "en"),
+    ("Czech too?", "en", "en"),
+    ("Then English?", "cs", "cs"),
+    ("A česky?", "en", "en"),
+    ("Taky anglicky?", "cs", "cs"),
+    ("Czech, English or German?", "en", "en"),
+)
+
+
+@pytest.mark.parametrize(("question", "previous", "expected"), SWITCH_WITH_QUESTION)
+def test_a_switch_beside_the_question_still_switches(
+    question: str, previous: Language, expected: Language
+) -> None:
+    assert select_language(question, (exchange(language=previous),)) == expected
+
+
+@pytest.mark.parametrize(("question", "previous", "expected"), NOT_A_REQUEST)
+def test_refusing_or_asking_about_a_language_is_not_a_switch(
+    question: str, previous: Language, expected: Language
+) -> None:
+    assert select_language(question, (exchange(language=previous),)) == expected
+
+
+#: Inputs of the longest allowed question built to make a backtracking matcher explode: overlapping
+#: objects and polite words repeated before a word that rules out a match.
+PATHOLOGICAL = (
+    "tell me " + "a bit more " * 4000,
+    "tell me " + "a bit " * 4000 + "more " * 1000,
+    "please " * 4000 + "now " * 1000,
+    "can you tell me " + "about it " * 2000 + "in czech no",
+    "rekni mi " + "to mi " * 4000,
+    "prosim " * 2000 + "od ted " * 1000 + "mohl bys " * 500,
+    "odpovez " + "mi to " * 4000 + "cesky nebo",
+    ", please" * 3500 + " czech",
+    "tell me " + "in czech " * 3000 + "x",
+)
+
+
+@pytest.mark.parametrize("prefix", PATHOLOGICAL, ids=range(len(PATHOLOGICAL)))
+def test_choosing_the_language_takes_bounded_time_on_the_longest_question(prefix: str) -> None:
+    question = (prefix + " x")[: MAX_QUESTION_CHARS - 1] + "x"
+
+    def expire(_signum: int, _frame: object) -> None:
+        raise TimeoutError("select_language exceeded 1 s")
+
+    previous = signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, 1.0)
+    try:
+        started = time.perf_counter()
+        select_language(question, (exchange(language="cs"),))
+        elapsed = time.perf_counter() - started
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+    assert elapsed < 0.5
 
 
 @pytest.mark.parametrize("question", TO_CZECH)
