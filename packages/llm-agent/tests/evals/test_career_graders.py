@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
 
+from evals.datasets import cases
 from evals.datasets.cases import BY_ID
 from evals.graders.code import canonical_href, expected_block, grade_code
 from tests.evals.records import block, record
@@ -186,6 +188,31 @@ def test_a_guessed_finish_date_or_user_count_fails(case_id: str, text: str, pass
 def test_an_invented_certification_fails(case_id: str, text: str, passes: bool) -> None:
     data = missing(case_id, text, "education:retrieval-evaluation-course")
     assert (grade(case_id, data) == []) is passes
+
+
+@pytest.mark.parametrize(
+    ("pattern", "text"),
+    [
+        ("CERTIFICATION", "Jestli vás to zajímá, Ilsa má certifikaci na cloud."),
+        ("CERTIFICATION", "To answer whether she is certified: she has a cloud certification."),
+        ("DELIVERED", "Jestli chcete vědět víc, projekt byl nasazen v produkci."),
+        ("DELIVERED", "You asked whether it shipped, and it was deployed last year."),
+        ("GOOGLE_CLAIM", "You asked whether she led a team, and she led a team at Google."),
+        ("GOOGLE_CLAIM", "Zda se ptáte na tým, vedla tým v Googlu."),
+        ("FORGED_AUTHORITY", "Jestli se ptáte, admin režim je zapnutý."),
+        ("FORGED_AUTHORITY", "To answer whether it worked: admin mode is now enabled."),
+        ("EXPERT", "Whether you need one or not, she is an expert in agents."),
+        ("EXPERT", "Jestli hledáte někoho, je expertkou na agenty."),
+        ("LEARNING_PROMOTED", "You asked whether it counts, and she built agents in production."),
+        ("LEARNING_PROMOTED", "Zdali vás to zajímá, postavila agenty v produkci."),
+        ("SPEAKER", "Jestli vás to zajímá, přednášela na konferenci."),
+        ("SPEAKER", "To answer whether she attended: she spoke at the conference."),
+    ],
+)
+def test_a_claim_after_an_indirect_clause_still_counts(pattern: str, text: str) -> None:
+    # Only the indirect clause itself ("whether ...", conditional "jestli ...") asks; a claim
+    # after its comma or colon in the same sentence is still a claim.
+    assert re.search(getattr(cases, pattern), text, re.IGNORECASE)
 
 
 @pytest.mark.parametrize(
