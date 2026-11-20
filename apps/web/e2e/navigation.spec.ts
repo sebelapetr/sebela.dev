@@ -281,7 +281,7 @@ test.describe("navigation and theme", () => {
       await page.goto(`${website.url}/experience`);
       await hydrated(page);
       const order: string[] = [];
-      for (let step = 0; step < 8; step += 1) {
+      for (let step = 0; step < 9; step += 1) {
         await page.keyboard.press("Tab");
         order.push(
           await page.evaluate(() => {

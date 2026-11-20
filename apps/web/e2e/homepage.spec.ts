@@ -118,7 +118,7 @@ test.describe("homepage read from the API", () => {
     await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
     await page.keyboard.press("Enter");
     const order: string[] = [];
-    for (let step = 0; step < 15; step += 1) {
+    for (let step = 0; step < 16; step += 1) {
       await page.keyboard.press("Tab");
       order.push(
         await page.evaluate(() => {
