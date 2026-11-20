@@ -1,112 +1,178 @@
-# Phase 9 — RAG: ingest, embeddings and retrieval
+# Phase 9 — RAG knowledge base: ingest, embeddings and retrieval
 
-|            |                                                                                                                                                              |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status     | Draft, revised after the owner's architecture discussion; awaiting document approval                                                                         |
-| Date       | 2026-11-17                                                                                                                                                   |
-| Parent     | `.plan/00-overview/prd.md`                                                                                                                                   |
-| Depends on | Phases 2, 4, 7 and 8                                                                                                                                         |
-| Result     | Chat and public MCP search the portfolio and owner-approved supplemental documents, with private originals and measured retrieval in the existing PostgreSQL |
+|             |                                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status      | Draft from the owner's phase-9 interview (2026-11-20); awaiting document approval                                                                                        |
+| Date        | 2026-11-20                                                                                                                                                               |
+| Parent      | `.plan/00-overview/prd.md`                                                                                                                                               |
+| Depends on  | Phases 2 and 4 (content API, storage drivers, the write attachment point). **Not** on phases 6, 7 or 8                                                                   |
+| Followed by | Phase 9.1 (`.plan/09.1-rag-integration/prd.md`): public search, budget admission, agent tool and skill, public MCP search and the Sources contract                       |
+| Result      | A private, measured knowledge base in the existing PostgreSQL: portfolio content and owner-approved extra documents, private originals and an authenticated search route |
 
 ## Problem Statement
 
-Structured tools already answer exact questions. Open questions also need relevant passages from portfolio content and additional explanations supplied by the owner. Those extra documents must not become pages or public downloads, and unreviewed or sensitive material must not enter the public knowledge base.
+Structured tools answer exact questions, but open questions need relevant passages from portfolio content and from additional explanations the owner supplies. Those extra documents must not become pages or public downloads, and unreviewed or sensitive material must not reach an embedding provider or the knowledge base.
+
+The owner also wants this work to run in a second phase loop while phase 7 (AI service) and phase 8 (public MCP) are built. Phase 9 therefore delivers the knowledge base and its retrieval interface on its own, without the Python agent, the chat runtime, the phase-7 spend ledger or public exposure. Connecting it to chat and MCP is phase 9.1.
 
 ## Solution
 
-RAG is delivered in order: ingest and provenance -> text extraction/chunking -> owner approval for extra material -> embeddings/index -> retrieval -> agent/MCP integration. Retrieval is part of RAG, not a separate memory product.
+Delivered in order: retrieval evals -> private originals -> ingest, extraction and chunking -> sensitivity checks and owner approval -> embeddings and index -> portfolio indexing -> retrieval variants -> authenticated search route.
 
-Keep the existing planned TypeScript `packages/memory` boundary for retrieval/index orchestration, called only by the API backend. This package name denotes knowledge about Petr, not visitor conversation storage. Database operations belong to `packages/db` through backend operations; Python continues to use HTTP only.
+```text
+owner terminal -> api maintenance CLI -> packages/services -> packages/memory (ingest/index/search orchestration)
+                                                         -> packages/db (retrieval schema, pgvector)
+                                                         -> private storage (local | bunny-s3 private zone)
+API content write -> onWrite attachment point -> persisted indexing work -> packages/memory
+API-key caller (owner, evals) -> private search route -> packages/memory -> packages/db
+```
+
+Everything is TypeScript inside the API backend. `packages/memory` is the knowledge/retrieval layer, called only by the API backend; persistence stays behind `packages/db` operations. Python, the website and both MCP apps are untouched in this phase.
+
+Inside `packages/memory`, ingest and retrieval are separate modules joined only by the stored chunk contract (text, vector, source, version, hashes): `ingest` (load, extract, clean, sensitivity and conflict checks, chunking, version and approval state), `indexing` (persisted work queue, batched embedding, spend ceiling, rebuild), `retrieval` (query embedding, vector and full-text candidates, rank fusion, reranking, relevance floor, passage projection) and `providers` (embedder and reranker interfaces with Voyage and deterministic fake implementations) and `ports` (the persistence, original-storage, work-queue, spend and portfolio-reading interfaces it needs). `packages/memory` may import only `contracts` and `config`; it never imports `packages/db`. `packages/db` implements the persistence ports, and `packages/services` composes memory with db, private storage, the portfolio services and the Voyage adapter, so the whole pipeline is testable with fakes. The package exposes two narrow operation sets: ingest/index for the CLI and the write hook, and search for the route. No RAG framework (LangChain, LlamaIndex): Drizzle's pgvector support, a PDF text extractor, a Markdown parser and a tokenizer cover the narrow parts; chunking, fusion and thresholds are the repository's own code.
+
+The private search route returns exactly the passage projection phase 9.1 will expose to the agent tool and public MCP. Phase 9.1 adds the public path and budget admission; it must not need to redesign the result shape.
 
 ## User Stories
 
-1. Visitors and external agents find relevant evidence for open questions in the portfolio and approved supplemental material.
-2. Exact structured API facts take precedence over contradictory extra documents.
-3. The owner ingests a file from a terminal, reviews extracted content and sensitivity findings, and explicitly approves publication.
-4. The owner can replace, withdraw or delete a source and rebuild the index from retained originals.
-5. Neither a visitor nor public MCP can list pending imports or download source originals.
-6. A reviewer can compare measured structured-tools-only, full-text, vector and hybrid retrieval quality.
+1. As the owner, I want to ingest a Markdown, plain-text or text-layer PDF file from a terminal, so that I can add explanations that are not part of my structured portfolio.
+2. As the owner, I want unsupported, malformed, password-protected, scanned or empty files rejected with an actionable message, so that I know what to fix.
+3. As the owner, I want to see the extracted text, the chunks and the sensitivity findings before anything is published, so that I decide on exactly what will become public knowledge.
+4. As the owner, I want a version with sensitivity findings blocked until I supply a sanitized revision, so that a secret or private identifier cannot slip into the index.
+5. As the owner, I want to approve one exact version, identified by its content hash, so that a later change to the file needs a new approval.
+6. As the owner, I want ingesting the same version twice to do nothing new, so that repeated commands are safe.
+7. As the owner, I want to replace a source with a new approved version atomically, so that search never shows a mix of old and new chunks.
+8. As the owner, I want to withdraw a source and have it disappear from search immediately, independent of the embedding provider, so that a mistake can be undone at once.
+9. As the owner, I want to delete a source, its original and its chunks, so that nothing of it remains.
+10. As the owner, I want to list sources with their status, version, approval and indexing state, so that I can see what the knowledge base contains.
+11. As the owner, I want to rebuild the whole index from current API data and retained approved originals, so that a model change or a lost index is recoverable without re-approving everything.
+12. As the owner, I want a rebuild never to publish a source I rejected or withdrew, so that rebuilding is safe.
+13. As the owner, I want originals kept in private storage with no public URL, so that approved information can be public while the files themselves are not downloadable.
+14. As the owner, I want portfolio content indexed automatically after I edit it through the API or admin MCP, so that I do not approve every ordinary content change.
+15. As the owner, I want saving content to succeed even when the embedding provider is down, so that indexing problems never block editing.
+16. As the owner, I want stale evidence for deleted or replaced portfolio records excluded while re-indexing catches up, so that search never cites removed facts.
+17. As the owner, I want unfinished indexing work retried after a restart, so that an interrupted process loses nothing.
+18. As the owner, I want unchanged approved content never re-embedded, so that I do not pay twice.
+19. As the owner, I want embedding spend recorded and capped by configuration, so that indexing cannot run up an unexpected bill.
+20. As the owner or an eval run, I want an authenticated search route that returns ranked passages with source identity, version, provenance and a canonical page link where one exists, so that I can test retrieval before it is public.
+21. As the owner, I want search to return no evidence below a calibrated relevance floor, so that weak matches are not presented as answers.
+22. As the owner, I want search filtered by content kind, so that a caller can ask only roadmap or only profile knowledge.
+23. As the owner, I want supplemental sources to carry a safe display label and identifier but never a fabricated URL or storage link, so that private files stay private.
+24. As the owner, I want known conflicts between an extra document and a structured API fact flagged and the conflicting claim excluded until I resolve it, so that API facts keep precedence.
+25. As a reviewer, I want measured recall, reciprocal rank and correct empty results for full-text, vector, hybrid and reranked retrieval on a fictional EN/CS question set, so that the deployed variant is chosen by evidence.
+26. As a reviewer, I want thresholds frozen in the repository before the hybrid and reranking work starts, so that nobody lowers them to pass.
+27. As a visitor or an external agent, I want no access at all to the knowledge base in this phase, so that unfinished retrieval cannot be abused or charged to the owner.
 
 ## Implementation Decisions
 
+### Independence from phases 6, 7 and 8
+
+- Phase 9 starts from current `master` and runs in its own loop alongside phase 7. It touches no Python, no `chat` schema, no chat event or Sources contract, no website code and no MCP app.
+- It adds its own `retrieval` modules to `packages/db`, `packages/services`, `packages/contracts` and `apps/api`, and creates `packages/memory`. Shared documents are edited only in their retrieval/knowledge sections.
+- Drizzle migrations are generated normally per issue. The phase pull request into `master` waits until phases 7 and 8 are merged; the phase then merges `master` in, regenerates its unmerged migrations on top of the new numbering and resolves document conflicts once.
+
 ### Sources and authority
 
-- Only the owner's portfolio and owner-supplied extra documents. Read portfolio content from its API/database representation; do not crawl the rendered website as a duplicate source. No external websites, GitHub/LinkedIn crawling or live web search.
-- Include public profile/experience/project/case-study/service/education content and roadmap, diary, books, events, resources, FAQ and glossary as appropriate to the approved question set.
-- Structured API data is authoritative for facts such as dates, roles, project status and technologies. Supplemental documents explain or enrich facts and relationships; they never silently overwrite them.
-- Flag known conflicts for owner resolution and exclude the conflicting claims until resolved. Compare structured facts where deterministic checks are available, use review/evals for prose; do not claim automated conflict detection is complete.
-- Information in approved extra material is permitted in public answers and public search/MCP results. Private original-file access does not mean the approved information is confidential.
+- Only the owner's portfolio and owner-supplied extra documents. Portfolio content is read from its API/database representation, not by crawling the rendered website. No external websites, GitHub/LinkedIn crawling or live web search.
+- Portfolio scope: public profile, experiences, projects, case studies, services, education, roadmap, diary, books, events, resources, FAQ and glossary, as the approved question set requires.
+- Structured API data is authoritative for facts such as dates, roles, project status and technologies. Supplemental documents explain and enrich; they never silently overwrite.
+- Deterministic checks compare supplemental claims with structured facts where possible (dates, role titles, technology names); a found conflict is recorded, the conflicting chunk is excluded from search until the owner resolves it, and the CLI shows it. Prose conflicts beyond that are left to evals and review; complete automatic conflict detection is not claimed.
+- Approved extra material may appear in public answers and search later; private original-file access does not make its approved information confidential.
 
 ### Ingest from a terminal
 
-- A backend maintenance CLI reuses services/storage/validation and the API-owned persistence boundary, like the existing seed CLI. No extra app, admin UI or MCP ingest tool is introduced. Python apps/package never acquire database access.
-- First formats: UTF-8 Markdown, plain text and PDF with an extractable text layer. Reject unsupported, malformed, password-protected, scanned/image-only or empty PDFs with an actionable error; OCR, Word and images are later scope.
-- Limit file size, extracted text size, processing time and parser resources. Check actual content/type, generated storage keys and path traversal. Parse documents as data; never execute embedded content or follow links automatically.
-- Extra-document lifecycle: stage privately -> extract/normalize -> local sensitivity checks -> show owner preview/findings/conflicts -> explicit approval of this exact content/version -> embed and publish. No pending version enters public search or model context.
-- Detect common credentials/secrets and sensitive identifiers locally before any external model/embedding request. Block a version with findings until the owner supplies a sanitized revision; preserve finding metadata without copying detected secrets into logs. Human review covers context-specific confidentiality that automated rules miss. No claim of perfect secret detection.
-- Hosted embedding calls receive only the approved text/version. Do not send unreviewed originals to an LLM-based checker as a shortcut around the approval boundary.
-- New extra-document versions require new approval; changing bytes after approval invalidates it. Repeated ingestion of the same version is idempotent. Reject incomplete extraction rather than silently indexing a truncated document.
-- Portfolio API records are already public and follow automatic incremental indexing; do not require owner approval for every normal content edit.
+- A backend maintenance CLI in the API, like the existing seed CLI, reusing services, storage and validation. No new app, admin UI or MCP ingest tool. Commands cover: ingest a file, show a version (extracted text, chunks, findings, conflicts), approve a version by hash, reject, withdraw, delete, list, re-index pending work and rebuild.
+- Formats: UTF-8 Markdown, plain text and PDF with an extractable text layer. PDF is a separate, last ingest issue, so a parser problem does not block the rest.
+- Limit file size, extracted text size, processing time and parser resources; check the actual content type; generate storage keys; resist path traversal. Parse documents as data; never execute embedded content or follow links.
+- Lifecycle: stage privately -> extract and normalize -> local sensitivity checks -> owner preview -> explicit approval of this exact content hash -> embed and index. No pending, rejected or withdrawn version reaches the embedding provider or search.
+- Local sensitivity checks detect common credentials and secrets (key formats, tokens, private keys, connection strings) and sensitive identifiers (e-mail addresses, telephone numbers, national identifiers, bank account numbers) before any external call. A version with findings is blocked until a sanitized revision is ingested. Finding metadata is stored without copying the detected value into logs or the database. No claim of perfect detection; human review covers context-specific confidentiality.
+- Changing bytes after approval invalidates the approval. Repeated ingestion of the same version is idempotent. Incomplete extraction is rejected, never indexed truncated.
+- Portfolio records are already public and are indexed automatically without per-edit approval.
 
-### Originals and storage
+### Originals and private storage
 
-- Extend the existing `local`/`bunny-s3` storage interface with private read/store/delete operations; do not force a public-URL operation on a private object. Driver selection is explicit configuration. An S3 failure reports failure, not silent fallback to a different store.
-- `bunny-s3`: separate private Storage Zone and credentials, with no public Pull Zone/CDN mapping, distinct from public media. A folder named `private/` in publicly served media is insufficient. Preserve development/production separation and worktree prefixes.
-- `local`: separate configured private root outside the API's public static-file directory and outside Git; do not serve it with the public local-media handler.
-- Storage credentials and original reads belong only to the backend/maintenance path. Neither Python runtime nor MCP receives keys or a raw-file download capability.
-- Retain source identity, version/hash, safe display title, provenance, approval and storage key. Original filenames/paths are not automatically public titles. Back up original documents and approval/source metadata; the index remains rebuildable derived data.
-- Bunny storage/CDN separation is described in the [official storage quickstart](https://bunny.net/docs/storage/quickstart); verify provider configuration and test the public edge before publishing real files.
-- Existing public media upload validation remains separate; supporting knowledge TXT/Markdown must not broaden the public image/CV serving surface.
+- Extend the existing storage interface with private store, read and delete operations that never produce a public URL. Driver selection stays explicit configuration; a provider failure reports failure, never falls back to a different store.
+- `bunny-s3`: a separate private Storage Zone with its own credentials and no Pull Zone/CDN mapping, distinct from public media. A `private/` folder in public media is not access control. Preserve development/production separation and worktree prefixes.
+- `local`: a separately configured private root outside the API's public static directory and outside Git, never served by the public media handler.
+- Storage credentials and original reads belong to the backend and maintenance path only.
+- Retain source identity, version hash, safe display title, provenance, approval state and storage key. Original filenames and paths are not automatically public titles. Approval/source metadata and originals are backed up; the index is rebuildable derived data.
+- Existing public media upload validation stays separate; knowledge files do not broaden the public image/CV serving surface.
 
-### Chunks, embeddings and storage
+### Chunks, embeddings and the retrieval schema
 
-- Use a separate retrieval schema in the existing PostgreSQL with its existing pgvector extension. No second vector database or Redis is required.
-- Chunks contain retrievable text as well as vectors, context, source/version references and hashes. Split long documents by headings before size/overlap boundaries; tune parameters with evals.
-- A hosted embedding provider behind the embedder entry; select model/dimension from current docs and measured Czech/English retrieval results. Store model/version/dimension and hash metadata; changing the model requires a controlled rebuild.
-- Unchanged approved content is not re-embedded. Deterministic fake embeddings support ordinary tests; real calls are explicitly budgeted. Keep ingest/embedding spend separate from visitor-generation reservations and bound batch retries/timeouts.
-- Storage/approval/indexing state is private maintenance data. Only approved passage projections are public; there is no generic public CRUD/list over ingest records or raw retrieval tables.
+- A separate `retrieval` schema in the existing PostgreSQL with its pgvector extension. No second vector database or Redis.
+- Chunks hold retrievable text, the vector, heading context, source/version references and hashes. Long documents split by headings before size/overlap boundaries; portfolio records chunk by record and section. Parameters are tuned with evals.
+- Every chunk records its parent section (a stored section with heading path and text span inside its source version; for portfolio content the record or record section) and its ordinal position in that section. Phase 9 delivers no parent-child or neighbour expansion, but the model supports both without re-chunking: returning a chunk's parent section, or its adjacent chunks, to the caller. Both are phase 9.2 (`.plan/09.2-rag-upgrades/prd.md`), measured against the token budget the agent will have in phase 9.1.
+- Embeddings: **Voyage AI, `voyage-4`** as the initial model, behind a replaceable embedder interface (decision 0010). The builder verifies the current model name, dimension, price and free-tier terms in Voyage's documentation before the first paid call. `voyage-4-lite` or another provider is compared only if `voyage-4` misses a frozen threshold or a latency target. Store model, version, dimension and content hashes per chunk; changing the model requires a controlled rebuild.
+- The key is `VOYAGE_API_KEY` in the main checkout's `.env.secrets`, placeholder in `.env.secrets.example`, used through `harness/with-secrets.mjs` for evals and through the API's environment in deployment. Ordinary tests use a deterministic fake embedder.
+- Embedding spend in this phase: every provider call records reported token usage and estimated cost in private retrieval state. A configured monthly embedding token/cost ceiling is checked before each batch; exhaustion stops indexing with a typed error and leaves work pending. Batch sizes, retries and timeouts are bounded. Phase 9.1 folds this category into the overall AI ceiling of phase 7's ledger.
+- Ingest, approval and indexing state is private maintenance data. There is no generic list/CRUD route over ingest records or raw retrieval tables.
 
-### Incremental updates and withdrawal
+### Incremental indexing and withdrawal
 
-- After an API content write commits, schedule its indexing through the existing invalidation attachment point. Persist pending/failed work so an interrupted process can retry; no standalone worker is required at this volume.
-- Saving content must not fail because an embedding provider is unavailable. Exclude stale evidence for deleted or superseded authoritative records while indexing catches up; retries and rebuild recover it.
-- Replacing an extra document publishes a complete approved version atomically; a failed replacement does not expose partial or pending chunks. Explicit withdrawal immediately removes that source from public retrieval, independently of provider availability.
-- Remove old chunks/version references on replacement or deletion. Rebuild from current API data and retained approved originals, preserving approval; it cannot publish a previously rejected source.
+- After an API content write commits, schedule indexing of the affected records through the existing `onWrite` attachment point that website invalidation uses. Pending and failed work is persisted so an interrupted process retries; no separate worker at this volume.
+- A content write never fails because the embedding provider is unavailable. Evidence for deleted or superseded records is excluded immediately; re-indexing and rebuild recover the rest.
+- Replacing an extra document publishes a complete approved version atomically; a failed replacement exposes no partial or pending chunks. Withdrawal removes the source from search immediately.
+- Replacement and deletion remove old chunks and version references. Rebuild uses current API data and retained approved originals and preserves approval; it cannot publish a rejected or withdrawn source.
 
-### Retrieval and agent/MCP integration
+### Retrieval and the private search route
 
-- Compare full-text only, vectors only, hybrid rank fusion and optional reranking. Start from the existing hybrid-search proposal and deploy the simplest variant meeting frozen eval thresholds.
-- Public retrieval can incur embedding/reranking charges even though it cannot invoke chat generation. Extend the API-owned durable cost ledger with retrieval admission for every paid query, including anonymous API/MCP callers. Atomically reserve a bounded allowance for query embeddings/reranking/retries against configured daily/monthly retrieval and overall AI ceilings before provider calls; reconcile reported or conservatively uncertain usage. Separate ingest and visitor-generation categories do not bypass the overall ceiling. Rate limits alone are not a spend cap.
-- When retrieval admission is exhausted or a provider fails, return a typed unavailable/budget result rather than treating failure as "no relevant evidence". No MCP generation credential is needed or granted for this limited search capability.
-- Bound input/query length, results, result text, latency and request rates. Filter by content kind; below the calibrated relevance floor return no evidence.
-- Return passages, source IDs, safe display titles, version/provenance and canonical URLs/anchors where a public portfolio page exists. Extra sources without public pages use a source label and identifier, never a fabricated URL or storage link.
-- Extend the existing source/event contract compatibly: distinguish portfolio references with canonical page links from supplemental references with a safe label, identifier and version but no public URL. Generate clients/models from the updated contract; Output Guard accepts only source IDs from returned evidence and never invents a link for an extra document. Update the website Sources renderer to show a safe non-clickable title for supplemental evidence; keep existing portfolio links working and add fixtures/contract scenarios for both variants.
-- The API exposes the bounded public search projection. Shared Python tools call it over HTTP; chat invokes them in-process and public MCP reaches them through FastAPI. Do not expose raw vectors as the agent interface or duplicate the search implementation in Python.
-- Preserve structured tools for exact facts. The agent's system policy and evidence ledger apply API precedence to supplemental evidence; retrieved instructions remain untrusted data.
+- Two-stage retrieval. Stage 1: vector candidates by cosine distance (pgvector, HNSW index) and full-text candidates (Postgres full-text with the `simple` configuration and `unaccent`, since Postgres has no Czech stemmer), merged by reciprocal rank fusion into a configurable candidate pool (initially 30). Stage 2: a cross-encoder reranker (Voyage's current reranker, verified in its documentation) scores query and passage together and selects the final passages (initially 5–8); the relevance floor applies to the reranker score. The reranker is a fixed part of the deployed pipeline (owner decision); evals still report full-text only, vector only and hybrid without reranking so its contribution is measured and published. If the reranker is unavailable, search returns the typed provider-unavailable result rather than unreranked passages, because the floor is calibrated on its score. Pool size, final count and floor are configuration tuned by evals.
+- Postgres full-text ranking is not BM25 (no inverse-document-frequency weighting or term-frequency saturation). It is kept for this corpus; BM25 ranking inside Postgres is phase 9.2. No separate search engine is introduced.
+- `packages/memory` exposes one search operation: query text, optional content-kind filter and result limit in; ranked passages out, or a typed result for no evidence, budget exhausted or provider unavailable. "No evidence" is never used for a failure.
+- The route is private: the existing API-key authentication, per-key rate budget and request validation apply. It is not reachable anonymously and is not advertised to the website or MCP.
+- Bound query length, result count, result text length and latency. Below the calibrated relevance floor, return no evidence.
+- Each passage carries: passage text, source ID, source kind (`portfolio` or `supplemental`), safe display title, version, provenance, score, and for portfolio sources a canonical site path/anchor validated against known routes. Supplemental sources carry a label and identifier, never a URL or storage link. This shape is defined in a new `retrieval` module of `@sebela/contracts` and is what phase 9.1 exposes publicly.
+- Retrieved text is data; instructions inside documents are never executed. Treating them safely in the agent is phase 9.1's job, but the eval set already contains an injected-instruction document.
 
 ### Evals and measurement
 
-- Evals-first, with an owner-approved fictional question set (about forty initial questions), expected sources and no-answer cases. Cover exact names, paraphrases, cross-record questions, roadmap/diary, extra sources, API conflicts and injected document instructions.
-- Measure recall among top results, reciprocal rank, correct empty results, citation/provenance accuracy, grounded answers, latency and embedding/query cost.
-- Compare structured-tools-only baseline, full-text, vectors, hybrid, reranking, chunk sizes and candidate embeddings. Freeze thresholds after baseline and before implementation; never lower them to pass.
-- Publish fictional datasets, method and results. Real owner documents/visitor questions remain outside Git. Promptfoo remains the shared runner; no new eval service.
+- Evals first, run by promptfoo from `packages/memory/evals/`, the repository's shared runner. A fictional question set of about forty EN/CS questions over the demo seed plus fictional extra documents (including one contradicting an API fact and one with injected instructions), with expected sources and no-answer cases. Cover exact names, paraphrases, cross-record questions, roadmap and diary, extra sources and conflicts.
+- Metrics: recall at k on the candidate pool, nDCG at k and precision at k on the final passages, mean reciprocal rank, correct empty results, provenance accuracy, latency and embedding cost per query. No LLM judge in this phase; answer groundedness belongs to 9.1.
+- The question set uses graded relevance (2 = the passage answers the question, 1 = related context, 0 = irrelevant) so nDCG measures the quality of the whole ranking when chunking, fusion and reranking are compared. Gating thresholds: recall at k on the candidate pool, nDCG at k on the final passages and correct empty results; the other metrics are reported.
+- No owner stop in the loop: the agent drafts the question set, measures full-text and vector baselines, proposes thresholds and commits them in an issue that precedes hybrid and reranking work. Thresholds are never lowered afterwards (hard rule 9); the reviewer checks this. The owner reviews the set, method and thresholds in the phase pull request.
+- Paid eval spend for the whole phase is capped at **USD 3**, separate from the USD 10 campaign of phases 6 and 7; a single run stops at USD 1. Saved-result regrading and the secret wrapper follow the existing eval rules. Paid evals run per issue only for affected cases, and completely at the phase pull request into `master`.
+- Publish the fictional datasets, method and results. Real owner documents never enter Git.
+
+### Approximate file structure
+
+Paths show responsibilities, not mandatory files. Follow the backend module layout and maintain each `AGENTS.md` module map.
+
+```text
+packages/memory/                       new; imports only contracts and config
+  src/modules/{ingest,indexing,retrieval,providers,ports}/
+  evals/{promptfooconfig.yaml,datasets/,graders/,thresholds,results/}
+packages/db/src/modules/retrieval/     retrieval schema; implements the persistence ports
+packages/db/migrations/                retrieval migrations (renumbered after phases 7/8 merge)
+packages/services/src/modules/storage/ private store/read/delete for local and bunny-s3
+packages/services/src/modules/retrieval/  composition: memory + db + storage + portfolio + Voyage
+packages/contracts/src/modules/retrieval/ search request, passage variants, typed errors
+apps/api/src/modules/retrieval/        private search route
+apps/api/src/cli/knowledge.ts          ingest | show | approve | reject | withdraw | delete | list | reindex | rebuild
+```
+
+The `memory` row is added to the dependency table in `docs/repository-structure.md` and to the import-boundaries rule when the package is created.
 
 ## Testing Decisions
 
-- Test-first: extraction, type/size/parser limits, sensitivity findings, exact-version approval, rejection/withdrawal, idempotent ingest and no external call before approval.
-- Test concurrent anonymous retrieval reservations, query/rerank retry accounting, exhausted overall/retrieval budgets and interrupted calls with uncertain usage. These gates cover direct API search and MCP search alike.
-- Real Postgres/pgvector plus fake embeddings: unchanged hashes, complete replacement, model-version rebuild, filtering/rank fusion/relevance floor, deletion and restart recovery.
-- Private storage contract tests for both drivers: no unauthenticated download through media/API/CDN paths, generated keys, private-root traversal resistance and failure cleanup. Optional live Bunny checks require dedicated development keys; CI uses local storage only.
-- Test API facts winning over contradictory extra material and invalid source URLs being rejected by Output Guard.
-- Integration/end-to-end parity: search from the web chatbot and public MCP returns only approved current evidence; pending/rejected/original content and credentials are inaccessible.
+- Tests check external behaviour through module interfaces (`packages/memory` search and ingest operations, the CLI, the HTTP route), not internals. Prior art: the services/db integration tests on a temporary database, the storage contract tests for both drivers, the API route tests with API keys, and the MCP Admin eval runner.
+- Test-first: extraction, type/size/parser limits, sensitivity findings, approval bound to an exact hash, rejection, withdrawal, deletion, idempotent ingest and no external embedding call before approval.
+- Real Postgres/pgvector with the fake embedder: unchanged hashes skip embedding, complete replacement, model-version rebuild, content-kind filter, rank fusion, relevance floor, deletion and restart recovery of pending work.
+- Spend: ceiling exhaustion stops indexing with a typed error and keeps work pending; usage is recorded once per call; bounded retries.
+- Private storage contract tests for both drivers: no download through media, API or CDN paths, generated keys, traversal resistance and failure cleanup. Optional live Bunny checks need dedicated development keys; CI uses local storage only.
+- Route tests: no API key -> refused; oversized query -> refused; passage shape validated against the contract; supplemental passages never carry a URL; pending, rejected and withdrawn content never returned.
+- Content writes succeed with the embedder failing; stale evidence for a deleted record is excluded at once.
 
 ## Out of Scope
 
-- External sources/crawling, live web search, OCR, Word, images, a document-admin UI or ingest through MCP.
-- Knowledge graph (11), ontology/Auto Ontology (12), external MCP UI (13), conversation memory across identities.
-- A separate vector database, Cognee, extra worker or distributed ingestion platform.
+- Anything public: a public or anonymous search route, retrieval budget admission against phase 7's ledger, the agent tool and skill, public MCP search, the Sources/event contract change and the website Sources renderer. All are phase 9.1.
+- Answer groundedness and citation evals with a model. Phase 9.1.
+- External sources/crawling, live web search, OCR, Word, images, a document-admin UI, ingest through MCP, an admin MCP search tool.
+- Knowledge graph (11), ontology (12), external MCP UI (13), conversation memory.
+- A separate vector database, Cognee, a worker or a distributed ingestion platform.
 
 ## Further Notes
 
-- This completes the first-release knowledge capability. The owner-approved corpus and sensitivity/conflict checks are finite controls, not guarantees that all secrets or contradictions can be detected automatically.
-- Source knowledge and visitor history are separate. `packages/memory` names the knowledge/retrieval layer; conversations stay in the API's separate schema from phase 7.
+- Owner acceptance at the phase pull request: question set, thresholds and measured results; a private Bunny Storage Zone created and the live `bunny-s3` private checks run with development keys; a sample real document ingested locally, approved and found by the search route.
+- `packages/memory` names the knowledge/retrieval layer about Petr; visitor conversations stay in phase 7's `chat` schema.
+- Sensitivity and conflict checks are finite controls, not guarantees.
