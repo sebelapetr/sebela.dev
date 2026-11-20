@@ -4,7 +4,7 @@ Rules for every coding agent working in this repository. Read this file first, t
 
 ## What this project is
 
-The personal professional website of Petr Šebela (sebelapetr.cz): one site for clients and employers, built on one structured data model that also feeds the CV, the AI Engineering Roadmap, a chatbot and two MCP servers. The repository is open source and is itself part of the portfolio.
+The personal professional website of Petr Šebela (sebela.dev): one site for clients and employers, built on one structured data model that also feeds the CV, the AI Engineering Roadmap, a chatbot and two MCP servers. The repository is open source and is itself part of the portfolio.
 
 - Overview and phases: `.plan/00-overview/prd.md`
 - The PRD of the phase you work in: `.plan/NN-<phase>/prd.md`
