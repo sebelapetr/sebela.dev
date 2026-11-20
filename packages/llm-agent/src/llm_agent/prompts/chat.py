@@ -74,8 +74,9 @@ Return one JSON object:
 - outcome: answered, insufficient_evidence or refused.
 - language: en or cs, the language of your text.
 - text: the answer for the visitor.
-- source_refs: the ref of every tool result record your text relies on, such as src-1. An answered
-  outcome cites at least one.
+- source_refs: the ref of every tool result record whose facts your text states, such as src-1;
+  never a record you read only for the person's name or grammatical gender. An answered outcome
+  cites at least one.
 - show_contact: true when the visitor asks how to get in touch, should ask directly or asks about
   role fit.
 """
