@@ -7,11 +7,14 @@
 // The public edge in front of the website is phase 10; here it is enough that MCP Admin shares a
 // network with the API only (not with the website or Postgres), that nothing reaches it from
 // outside the host's loopback interface, and that it holds no database or storage setting.
+// It also checks that the API image's runtime stage carries every workspace package the API runs
+// on, read from the manifests, so a new package dependency cannot leave the container unable to
+// start.
 // Needs the Docker CLI with Compose; no daemon is contacted.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { before, describe, it } from "node:test";
@@ -114,6 +117,53 @@ describe("the MCP Admin container (D22, D23)", () => {
   it("gives the public website no API key and no MCP Admin setting", () => {
     for (const name of Object.keys(service("web").environment ?? {})) {
       assert.doesNotMatch(name, /API_KEY|MCP_ADMIN/);
+    }
+  });
+});
+
+/** The workspace packages an app needs at run time: its `workspace:` dependencies, transitively. */
+function runtimeWorkspacePackages(appFolder) {
+  const folders = new Map();
+  for (const folder of ["apps", "packages"]) {
+    for (const entry of readdirSync(path.join(root, folder), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const manifestPath = path.join(root, folder, entry.name, "package.json");
+      if (!existsSync(manifestPath)) continue;
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      folders.set(manifest.name, { folder: `${folder}/${entry.name}`, manifest });
+    }
+  }
+  const appName = JSON.parse(readFileSync(path.join(root, appFolder, "package.json"), "utf8")).name;
+  const found = new Map();
+  const visit = (name) => {
+    const workspace = folders.get(name);
+    if (!workspace) throw new Error(`No workspace package ${name}`);
+    for (const [dependency, range] of Object.entries(workspace.manifest.dependencies ?? {})) {
+      if (!String(range).startsWith("workspace:") || found.has(dependency)) continue;
+      found.set(dependency, folders.get(dependency)?.folder);
+      visit(dependency);
+    }
+  };
+  visit(appName);
+  return [...found.values()].sort();
+}
+
+describe("the API image", () => {
+  const dockerfile = readFileSync(path.join(root, "apps", "api", "Dockerfile"), "utf8");
+  const runtime = dockerfile.slice(dockerfile.indexOf("AS runtime"));
+
+  it("carries the manifest and build output of every workspace package the API runs on", () => {
+    const packages = runtimeWorkspacePackages("apps/api");
+    assert.ok(packages.includes("packages/services"));
+    for (const folder of packages) {
+      assert.ok(
+        runtime.includes(`COPY --from=build /app/${folder}/package.json ${folder}/`),
+        `the runtime stage copies ${folder}/package.json`,
+      );
+      assert.ok(
+        runtime.includes(`COPY --from=build /app/${folder}/dist ${folder}/dist`),
+        `the runtime stage copies ${folder}/dist`,
+      );
     }
   });
 });
