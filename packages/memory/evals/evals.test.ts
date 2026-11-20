@@ -16,7 +16,13 @@ import {
   reciprocalRank,
 } from "./graders/metrics.js";
 import { SEARCHABLE, loadDataset, planCases } from "./plan.js";
-import { RUN_CEILING_USD, parseOptions, pendingSummary } from "./run.js";
+import {
+  DEFAULT_MIN_INTERVAL_MS,
+  RUN_CEILING_USD,
+  parseOptions,
+  pendingSummary,
+  providerEnvironment,
+} from "./run.js";
 
 const dataset = loadDataset();
 
@@ -127,6 +133,24 @@ describe("the runner's options", () => {
     expect(parseOptions(["--max-cost-usd", "0.25"]).ceilingUsd).toBe(0.25);
     expect(() => parseOptions(["--max-cost-usd", "1.5"])).toThrow(/at most/);
     expect(() => parseOptions(["--max-cost-usd", "0"])).toThrow();
+  });
+
+  it("paces provider calls conservatively by default and within bounds when asked", () => {
+    expect(parseOptions([]).minIntervalMs).toBe(DEFAULT_MIN_INTERVAL_MS);
+    expect(DEFAULT_MIN_INTERVAL_MS).toBeGreaterThanOrEqual(20_000);
+    expect(parseOptions(["--min-interval-ms", "0"]).minIntervalMs).toBe(0);
+    expect(parseOptions(["--min-interval-ms", "500"]).minIntervalMs).toBe(500);
+    for (const value of ["-1", "1.5", "600001", "soon"]) {
+      expect(() => parseOptions(["--min-interval-ms", value]), value).toThrow(/--min-interval-ms/);
+    }
+  });
+
+  it("gives the API and the knowledge command the run's ceiling and patient retries", () => {
+    expect(providerEnvironment(parseOptions(["--max-cost-usd", "0.5"]))).toEqual({
+      RETRIEVAL_MONTHLY_CEILING_USD: "0.5",
+      RETRIEVAL_PROVIDER_RETRIES: "6",
+      RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: "60000",
+    });
   });
 
   it("refuses unknown options and unsafe result names", () => {

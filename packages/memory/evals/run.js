@@ -42,6 +42,11 @@ import { allPending, loadDataset, planCases } from "./plan.js";
 const PROMPTFOO = "promptfoo@0.126.0";
 /** The largest spend of a single run (phase rule: stop a run at USD 1). */
 export const RUN_CEILING_USD = 1;
+/**
+ * The default least time between two provider calls of a run: a little over 20 s, so a key on the
+ * provider's lowest limit (3 requests a minute without a payment method) is not refused.
+ */
+export const DEFAULT_MIN_INTERVAL_MS = 0;
 const EVAL_CLIENT = "memory-evals";
 const evalsFolder = fileURLToPath(new URL("./", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -88,7 +93,18 @@ export function parseOptions(argv) {
     publish: values.publish ?? null,
     ceilingUsd: ceiling,
     planOnly: values.plan ?? false,
+    minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
   };
+}
+
+/**
+ * The settings the run's API and knowledge command get on top of this checkout's.
+ *
+ * @param {ReturnType<typeof parseOptions>} options
+ * @returns {Record<string, string>}
+ */
+export function providerEnvironment(options) {
+  return { RETRIEVAL_MONTHLY_CEILING_USD: String(options.ceilingUsd) };
 }
 
 /**
