@@ -20,17 +20,14 @@ const BASE_FILE = "compose.yaml";
 const PRODUCTION_FILE = path.join("infra", "production", "compose.yaml");
 const EXAMPLE_FILE = path.join("infra", "production", ".env.example");
 const REGISTRY = "ghcr.io/sebelapetr";
-const UMAMI_SCRIPT = "https://cloud.umami.is/script.js";
 const SERVICES = ["api", "mcp-admin", "migrate", "postgres", "web"];
 const LONG_RUNNING = ["api", "mcp-admin", "postgres", "web"];
-// Settings of the root file that only name a host port the production composition removes, and the
-// analytics script address the production composition decides itself.
+// Settings of the root file that only name a host port the production composition removes.
 const NOT_PRODUCTION_SETTINGS = new Set([
   "API_HOST",
   "API_PORT",
   "MCP_ADMIN_HOST",
   "MCP_ADMIN_PORT",
-  "WEB_ANALYTICS_SCRIPT_URL",
 ]);
 
 const exampleText = readFileSync(path.join(root, EXAMPLE_FILE), "utf8");
@@ -133,16 +130,15 @@ describe("the production composition", () => {
     for (const name of LONG_RUNNING) assert.ok(service(name).healthcheck?.test, name);
   });
 
-  it("loads Umami Cloud's script only with a website ID, whatever script address is set", () => {
+  it("leaves analytics off by default and passes the website's analytics settings through", () => {
     const environment = service("web").environment ?? {};
     assert.equal(environment.WEB_ANALYTICS_WEBSITE_ID ?? "", "");
     assert.equal(environment.WEB_ANALYTICS_SCRIPT_URL ?? "", "");
-    const other = render({ WEB_ANALYTICS_SCRIPT_URL: "https://analytics.example.test/a.js" });
-    assert.equal(service("web", other).environment?.WEB_ANALYTICS_SCRIPT_URL ?? "", "");
+    const script = "https://analytics.example.test/script.js";
     const id = "00000000-0000-4000-8000-000000000000";
-    const on = service("web", render({ WEB_ANALYTICS_WEBSITE_ID: id })).environment ?? {};
-    assert.equal(on.WEB_ANALYTICS_WEBSITE_ID, id);
-    assert.equal(on.WEB_ANALYTICS_SCRIPT_URL, UMAMI_SCRIPT);
+    const on = render({ WEB_ANALYTICS_SCRIPT_URL: script, WEB_ANALYTICS_WEBSITE_ID: id });
+    assert.equal(service("web", on).environment?.WEB_ANALYTICS_SCRIPT_URL, script);
+    assert.equal(service("web", on).environment?.WEB_ANALYTICS_WEBSITE_ID, id);
   });
 
   it("keeps the site noindex unless WEB_INDEXING is switched on", () => {
@@ -170,6 +166,7 @@ describe("the production example settings", () => {
     }
     assert.equal(example.STORAGE_ENVIRONMENT, "production");
     assert.equal(example.WEB_INDEXING, "");
+    assert.equal(example.WEB_ANALYTICS_SCRIPT_URL, "");
     assert.equal(example.WEB_ANALYTICS_WEBSITE_ID, "");
   });
 
