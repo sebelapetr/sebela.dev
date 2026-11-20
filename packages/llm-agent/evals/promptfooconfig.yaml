@@ -1,0 +1,23 @@
+# Model evals of the Python chat agent (.plan/06-llm-agent/evals.md).
+#
+# Do not run this file directly: `python -m evals.run` (`pnpm --filter @sebela/llm-agent eval`)
+# starts the fictional test API, selects the cases, sets the allowlisted environment and applies
+# the gates. Pinned settings: Promptfoo 0.126.0 (through `pnpm dlx`), the provider below, which
+# runs the public package operation with the agent's own pinned models (Security Gateway Claude
+# Haiku 5.5 at medium effort, Main Agent Claude Haiku 5.5 at high effort, Output Guard without a
+# model) and its own limits (60 s, 0.02 USD per execution). No sampling parameter is set; three
+# independent repeats carry the variance.
+description: LLM agent S01 guarded bilingual profile answer
+
+prompts:
+  - "{{question}}"
+
+providers:
+  - id: file://provider.py
+    label: llm-agent
+
+tests: file://tests.py:generate_tests
+
+evaluateOptions:
+  # A case-run that takes longer than the agent's own deadline plus set-up is an error, not a hang.
+  timeoutMs: 90000

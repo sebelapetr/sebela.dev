@@ -1,0 +1,8 @@
+# The uv workspace of the Python members (docs/repository-structure.md, Toolchain and workspace).
+# It is virtual: the root is not a package. One lockfile, `uv.lock`, sits beside this file.
+[tool.uv.workspace]
+members = ["packages/llm-agent"]
+
+# The uv version, read by uv itself and by `astral-sh/setup-uv` in CI (`version-file`).
+[tool.uv]
+required-version = "==0.7.22"

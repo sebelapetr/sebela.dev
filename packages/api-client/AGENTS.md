@@ -33,17 +33,17 @@ The API key is sent as `Authorization: Bearer` only to operations whose OpenAPI 
 
 **Every pull request that adds, removes or changes a route or a contract schema** runs `pnpm generate:api-client`, commits `src/generated/`, exports any new DTO from `src/index.ts` and extends the consumer contract tests in `apps/api/src/client.test.ts`. CI's drift check fails when the committed files differ from a regeneration.
 
-### Python consumers (phase 6, not scaffolded)
+### Python consumer (`packages/llm-agent`)
 
-The committed `src/generated/openapi.json` is the language-independent input. A Python client is generated from it, without the TypeScript toolchain, with openapi-python-client (Python 3.11 or later):
+The committed `src/generated/openapi.json` is also the input of the Python content client. It is generated without the TypeScript toolchain:
 
-```sh
-uvx openapi-python-client@0.30.0 generate \
-  --path packages/api-client/src/generated/openapi.json \
-  --output-path <target-folder> --overwrite
-```
+- **Tool.** openapi-python-client 0.30.0, pinned in the dev group of `packages/llm-agent/pyproject.toml` and run through uv.
+- **How it runs.** The `generate` script of `@sebela/llm-agent` runs it with `--meta none --config content-api-client.yaml`.
+- **Output.** It writes to `packages/llm-agent/src/llm_agent/generated/content_api`.
+- **Regeneration.** `pnpm generate:api-client` regenerates both clients.
+- **Drift.** `pnpm check:api-client` fails when either client differs from the committed files (`scripts/checks/generated-drift.mjs`).
 
-Pin the version so the output is reproducible, commit the generated package where phase 6 places it and extend the drift check (`scripts/checks/generated-drift.mjs`) to that folder.
+The Python package exposes only a handwritten allowlist of public reads on top of the generated client (`packages/llm-agent/AGENTS.md`).
 
 ## Module map
 

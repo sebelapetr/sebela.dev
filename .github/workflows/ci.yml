@@ -72,6 +72,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The Python members (packages/llm-agent): the uv version pinned in the root pyproject.toml,
+      # the Python minor of .python-version and exactly what uv.lock records. Their pnpm task
+      # wrappers run through Turborepo like every other package; the drift check below regenerates
+      # the Python content client too.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version-file: pyproject.toml
+      - run: uv sync --locked --all-packages
       - name: Postgres for the integration tests
         run: docker compose --env-file .env.example up --detach --wait
       - name: Affected packages and why
@@ -80,6 +88,22 @@ jobs:
         run: pnpm ci:root
       - name: Affected package tasks (lint, typecheck, test, build)
         run: pnpm ci:affected
+      # Turborepo maps uv.lock, .python-version and the root pyproject.toml to the root only (their
+      # $TURBO_ROOT$ inputs affect caching, not selection), so a change to them alone would skip the
+      # Python member. Run its tasks then; when the affected run already ran them they are cache hits.
+      - name: Python member tasks when the root Python files changed
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          python_root='^(uv\.lock|\.python-version|pyproject\.toml)$'
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+            echo "No comparison base: the affected run already selected every package."
+          elif printf '%s\n' "$changed" | grep -qE "$python_root"; then
+            printf '%s\n' "$changed" | grep -E "$python_root"
+            pnpm exec turbo run lint typecheck test build --filter=@sebela/llm-agent --continue
+          else
+            echo "No root Python file changed."
+          fi
       # On every run, not only when the API is affected: regenerates the OpenAPI document and the
       # client from the API source (no database or secrets) and fails on any difference from the
       # committed files.
