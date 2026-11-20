@@ -2,8 +2,12 @@
 # each service, verify them as the running production stack and publish only verified images to
 # GHCR (docs/release-workflow.md, "Images"). The decisions live in scripts/release/images.mjs and
 # are tested with fixtures. The only credential is the job's GITHUB_TOKEN; the Docker sign-in to
-# GHCR exists only around the steps that read or write it. A later job deploys the tag set of the
-# `images` job (issue #234).
+# GHCR exists only around the steps that read or write it. The `deploy` job then deploys the
+# verified tag set to the server through the deploy user's forced SSH command and runs the
+# production smoke check, and the `release` job tags the version and publishes a GitHub release
+# with a changelog from Conventional Commits (docs/release-workflow.md, "Deployment"). The workflow
+# references no application secret: only the SSH key, host and known-host line of the `production`
+# environment, and GITHUB_TOKEN.
 name: Release
 
 on:
@@ -146,3 +150,82 @@ jobs:
             printf '%s\n' "$TAGS"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The verified tag set reaches the server only as the input of the deploy user's forced command,
+  # infra/scripts/deploy.sh, which validates it again, backs up before a new migration, migrates,
+  # recreates the services, waits for health and returns to the previous release on failure. The
+  # GitHub Environment `production` is restricted to master and holds the only secrets: the deploy
+  # key, the host and its known_hosts line. The smoke check then asks the public edge with a made-up
+  # key; no application secret is used here.
+  deploy:
+    name: Deploy to production
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://sebela.dev
+    permissions:
+      contents: read
+    env:
+      TAGS: ${{ needs.images.outputs.tags }}
+      SSH_DIR: ${{ runner.temp }}/ssh
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: SSH key and known host
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$SSH_DIR"
+          (umask 077 && printf '%s\n' "$SSH_KEY" > "$SSH_DIR/key")
+          printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
+      - name: Deploy the verified tag set
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          input="$(node scripts/release/deployment.mjs input)"
+          ssh -i "$SSH_DIR/key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            "deploy@$HOST" "$input"
+      - name: Remove the SSH key
+        if: ${{ always() }}
+        run: rm -rf "$SSH_DIR"
+      - name: Production smoke check
+        env:
+          SMOKE_BASE_URL: https://sebela.dev
+        run: node scripts/release/production-smoke.mjs
+
+  # After a healthy deployment: the next version from the Conventional Commits since the last
+  # version tag, tagged on the release commit, and a GitHub release whose notes group those commits
+  # and list the deployed images.
+  release:
+    name: Version and GitHub release
+    needs: [images, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      SHA: ${{ github.sha }}
+      TAGS: ${{ needs.images.outputs.tags }}
+      NOTES_FILE: ${{ runner.temp }}/release-notes.md
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Version and changelog
+        id: notes
+        run: node scripts/release/deployment.mjs notes >> "$GITHUB_OUTPUT"
+      - name: Tag and publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.notes.outputs.version }}
+        run: gh release create "$VERSION" --target "$SHA" --title "$VERSION" --notes-file "$NOTES_FILE"
