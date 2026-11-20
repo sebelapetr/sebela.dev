@@ -42,7 +42,11 @@ Free hands inside a worktree, hard limits at the boundaries. An agent should fin
 
 The local environment exception requires a session running inside a Git-confirmed worktree of this repository. It covers `.env.local` at the worktree root and in its app folders. Both the written path and the resolved path must remain in that worktree; symbolic links do not grant access elsewhere. Exact file paths work with file tools and simple shell commands. Shell expressions with expansions, wildcards or directory changes are refused when they name environment files; broad searches for environment files are refused too.
 
-### Environment files
+### Private infrastructure details
+
+The repository is public. Tracked files (code, docs, PRDs, comments, commit messages, pull requests) never name the owner's hosting provider, the server's control panel, the server's host name, its IP address or its file-system paths; they say "the server", "its hosting panel", "an ARM64 VPS", "the data volume". Placeholders (`<checkout>`, `replace-with-…`) stand in for real values in examples. CI enforces it with `scripts/checks/private-terms.mjs` (`Hard-coded configuration check` job): the terms live only in the repository secret `PRIVATE_TERMS` and in the owner's `.env.secrets` (`pnpm check:private-terms` runs it locally), never in the repository, and a finding names only the file and line. Without the secret the check reports that it was skipped. Git history is not rewritten; a term found in an old commit stays there.
+
+## Environment files
 
 Two documented examples split what agents may see from what they may not:
 

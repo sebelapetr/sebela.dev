@@ -44,6 +44,10 @@ jobs:
           node-version-file: .nvmrc
       - run: node --test scripts/checks/
       - run: node scripts/checks/hardcoded-config.mjs
+      # The private terms are a repository secret, never in the repository (docs/permissions.md).
+      - run: node scripts/checks/private-terms.mjs
+        env:
+          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
 
   # The root checks on every run, then lint (including the import-boundaries rule), typecheck, test
   # and build of the packages the change affects. The comparison base is the pull request's base or
