@@ -1,0 +1,22 @@
+{
+  "description": "The image build context's allowlist belongs to no package but enters every build",
+  "changedFiles": [".dockerignore"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": ["api", "web", "mcp-admin"]
+}
