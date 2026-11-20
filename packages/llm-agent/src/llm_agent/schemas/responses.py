@@ -1,9 +1,9 @@
 """What an execution returns: only the approved response, its evidence, usage and trace.
 
 A `ChatResult` is built by the Output Guard (or a fixed response) and never carries a draft the
-guard did not approve. Its typed blocks are the chat contract's `ExperienceCard`, `ServiceCard` and
-`ExplorationCard` payloads, built only from cited evidence; `model_dump(by_alias=True)` gives the
-contract's camelCase field names.
+guard did not approve. Its typed blocks are the chat contract's `ExperienceCard`, `ServiceCard`,
+`ExplorationCard` and `RoadmapCard` payloads, built only from cited evidence;
+`model_dump(by_alias=True)` gives the contract's camelCase field names.
 """
 
 from __future__ import annotations
@@ -19,8 +19,23 @@ Outcome = Literal[
 ]
 Language = Literal["en", "cs"]
 SourceKind = Literal[
-    "profile", "contact", "experience", "project", "exploration", "service", "education"
+    "profile",
+    "contact",
+    "experience",
+    "project",
+    "exploration",
+    "service",
+    "education",
+    "current_focus",
+    "roadmap",
+    "roadmap_area",
+    "roadmap_module",
+    "diary_day",
+    "statistics",
+    "book",
+    "event",
 ]
+#: The allowlist of read tools; a requested name outside it is never executed.
 ToolName = Literal[
     "get_profile",
     "get_contact",
@@ -30,6 +45,13 @@ ToolName = Literal[
     "list_services",
     "list_explorations",
     "list_education",
+    "list_current_focus",
+    "get_roadmap",
+    "get_roadmap_area",
+    "get_learning_diary",
+    "get_learning_statistics",
+    "list_books",
+    "list_events",
 ]
 
 
@@ -119,7 +141,18 @@ class ExplorationCard(_Block):
     href: SitePath
 
 
-Block = Annotated[ExperienceCard | ServiceCard | ExplorationCard, Field(discriminator="type")]
+class RoadmapCard(_Block):
+    """A cited roadmap area or module; its progress stays in the answer text and the page."""
+
+    type: Literal["RoadmapCard"] = "RoadmapCard"
+    title: Text200
+    summary: Text1000 | None
+    href: SitePath
+
+
+Block = Annotated[
+    ExperienceCard | ServiceCard | ExplorationCard | RoadmapCard, Field(discriminator="type")
+]
 
 
 class Usage(_Frozen):

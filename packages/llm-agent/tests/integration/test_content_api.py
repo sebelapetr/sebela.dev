@@ -11,7 +11,7 @@ import datetime
 import os
 import shutil
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Final
 
 import pytest
 import pytest_asyncio
@@ -219,22 +219,29 @@ async def test_the_learning_reads_keep_the_seeded_identities_and_statuses(api_ur
         )
 
 
+LEARNING_READS: Final = (
+    ("list_current_focus", {}),
+    ("get_roadmap", {}),
+    ("get_roadmap_area", {"area": "agent-systems"}),
+    ("get_learning_statistics", {}),
+    ("list_books", {}),
+    ("list_events", {}),
+)
+
+
 @pytest.mark.asyncio(loop_scope="module")
 async def test_every_learning_read_cites_its_exact_site_page(api_url: str) -> None:
-    every_read = calls(
-        ("list_current_focus", {}),
-        ("get_roadmap", {}),
-        ("get_roadmap_area", {"area": "agent-systems"}),
-        ("get_learning_statistics", {}),
-        ("list_books", {}),
-        ("list_events", {}),
-    )
+    every_read = calls(*LEARNING_READS)
     models = ScriptedModels(security=[verdict()], main=[every_read, draft(refs=())])
     async with ApiContentReader(api_url) as content:
         result = await ChatAgent(content=content, models=models).run(
             ChatRequest(question="What is she learning?", today=datetime.date(2026, 3, 12))
         )
-    assert [status for name, status in spans(result) if name.startswith("tool.")] == ["ok"] * 6
+    # An uncited answer also reads the trusted contact card outside the model loop.
+    assert [(name, status) for name, status in spans(result) if name.startswith("tool.")] == [
+        *((f"tool.{name}", "ok") for name, _ in LEARNING_READS),
+        ("tool.get_contact", "ok"),
+    ]
     for item in result.evidence:
         assert item.href == canonical_href(item.kind, item.record_id), item
     cited = [e.ref for e in result.evidence if e.kind in ("roadmap_area", "roadmap_module")][:3]
@@ -259,8 +266,13 @@ async def test_the_learning_diary_days_are_cited_on_their_day_pages(api_url: str
         result = await ChatAgent(content=content, models=models).run(
             ChatRequest(question="What did she study?")
         )
-    assert [status for name, status in spans(result) if name.startswith("tool.")] == ["ok"]
+    assert [(name, status) for name, status in spans(result) if name.startswith("tool.")] == [
+        ("tool.get_learning_diary", "ok"),
+        ("tool.get_contact", "ok"),
+    ]
     assert result.evidence
     for item in result.evidence:
+        if item.kind == "contact":
+            continue
         assert item.kind == "diary_day"
         assert item.href == canonical_href("diary_day", item.record_id)

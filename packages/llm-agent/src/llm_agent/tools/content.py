@@ -3,9 +3,10 @@
 This module is the handwritten allowlist: it calls only public read routes, sends no credential
 and maps the generated models to the package's own read models. Every failure (connection, status,
 malformed body) becomes `ContentUnavailableError`, so callers never see transport details; a
-missing project is the narrower `ContentNotFoundError`. A project slug is validated before any
-request. The read models carry no outside URL: project links, service link evidence, logos and
-testimonials are not read.
+missing project or roadmap area is the narrower `ContentNotFoundError`. A project or area slug is
+validated before any request. The read models carry no outside URL, id, ISBN or timestamp: project,
+focus, resource and event links, service link evidence, logos, covers and testimonials are not
+read. Learning progress, statuses and time totals are the API's own; nothing here recomputes them.
 """
 
 from __future__ import annotations
@@ -24,17 +25,41 @@ from llm_agent.generated.content_api import Client
 from llm_agent.generated.content_api.api.default import (
     get_person,
     get_project,
+    get_roadmap,
+    get_roadmap_area_detail,
+    get_roadmap_diary,
+    get_roadmap_statistics,
+    list_current_focus,
     list_education,
     list_experiences,
     list_explorations,
     list_projects,
+    list_roadmap_books,
+    list_roadmap_events,
     list_services,
 )
+from llm_agent.generated.content_api.models.current_focus import CurrentFocus
+from llm_agent.generated.content_api.models.diary import Diary
+from llm_agent.generated.content_api.models.diary_day import DiaryDay
+from llm_agent.generated.content_api.models.diary_event import DiaryEvent
+from llm_agent.generated.content_api.models.diary_resource import DiaryResource
 from llm_agent.generated.content_api.models.education import Education
 from llm_agent.generated.content_api.models.experience import Experience
 from llm_agent.generated.content_api.models.exploration import Exploration
+from llm_agent.generated.content_api.models.learning_time_area import LearningTimeArea
+from llm_agent.generated.content_api.models.learning_time_event import LearningTimeEvent
+from llm_agent.generated.content_api.models.learning_time_resource import LearningTimeResource
 from llm_agent.generated.content_api.models.person import Person
 from llm_agent.generated.content_api.models.project import Project
+from llm_agent.generated.content_api.models.roadmap import Roadmap
+from llm_agent.generated.content_api.models.roadmap_area_detail import RoadmapAreaDetail
+from llm_agent.generated.content_api.models.roadmap_book import RoadmapBook
+from llm_agent.generated.content_api.models.roadmap_event import RoadmapEvent
+from llm_agent.generated.content_api.models.roadmap_progress import RoadmapProgress
+from llm_agent.generated.content_api.models.roadmap_statistics import RoadmapStatistics
+from llm_agent.generated.content_api.models.roadmap_tree_area import RoadmapTreeArea
+from llm_agent.generated.content_api.models.roadmap_tree_module import RoadmapTreeModule
+from llm_agent.generated.content_api.models.roadmap_tree_resource import RoadmapTreeResource
 from llm_agent.generated.content_api.models.service import Service
 from llm_agent.generated.content_api.models.service_exploration_evidence import (
     ServiceExplorationEvidence,
@@ -602,6 +627,234 @@ def _education(education: Education) -> PublicEducation:
     )
 
 
+def _focus(focus: CurrentFocus) -> PublicCurrentFocus:
+    project = focus.project
+    return PublicCurrentFocus(
+        slug=focus.slug,
+        title=focus.title,
+        description=focus.description,
+        project=PublicFocusProject(
+            slug=project.slug, name=project.name, experience=project.experience
+        )
+        if project
+        else None,
+        topics=[topic.name for topic in focus.topics],
+    )
+
+
+def _progress(progress: RoadmapProgress) -> PublicProgress:
+    return PublicProgress.model_validate(
+        {
+            "completed": progress.completed,
+            "total": progress.total,
+            "status": str(progress.status),
+            "estimated_minutes": progress.estimated_minutes,
+        }
+    )
+
+
+def _resource(resource: RoadmapTreeResource) -> PublicRoadmapResource:
+    return PublicRoadmapResource.model_validate(
+        {
+            "slug": resource.slug,
+            "name": resource.name,
+            "description": resource.description,
+            "type": str(resource.type_),
+            "status": str(resource.status),
+            "estimated_minutes": resource.estimated_minutes,
+            "book": resource.book,
+            "topics": [topic.name for topic in resource.topics],
+        }
+    )
+
+
+def _module(module: RoadmapTreeModule) -> PublicRoadmapModule:
+    return PublicRoadmapModule(
+        slug=module.slug,
+        name=module.name,
+        description=module.description,
+        progress=_progress(module.progress),
+        resources=[_resource(resource) for resource in module.resources],
+    )
+
+
+def _area(area: RoadmapTreeArea) -> PublicRoadmapArea:
+    return PublicRoadmapArea(
+        slug=area.slug,
+        name=area.name,
+        description=area.description,
+        progress=_progress(area.progress),
+        modules=[_module(module) for module in area.modules],
+    )
+
+
+def _roadmap(roadmap: Roadmap) -> PublicRoadmap:
+    summary = roadmap.summary
+    return PublicRoadmap(
+        summary=PublicRoadmapSummary(
+            area_count=summary.area_count,
+            module_count=summary.module_count,
+            resource_count=summary.resource_count,
+            completed=summary.completed,
+            total=summary.total,
+            estimated_minutes=summary.estimated_minutes,
+        ),
+        areas=[_area(area) for area in roadmap.areas],
+    )
+
+
+def _diary_event(event: DiaryEvent) -> PublicDiaryEvent:
+    return PublicDiaryEvent.model_validate(
+        {
+            "slug": event.slug,
+            "name": event.name,
+            "kind": str(event.kind),
+            "starts_on": event.starts_on,
+            "ends_on": event.ends_on,
+        }
+    )
+
+
+def _diary_resource(resource: DiaryResource) -> PublicDiaryResource:
+    return PublicDiaryResource(
+        slug=resource.slug,
+        name=resource.name,
+        type=str(resource.type_),
+        module=resource.module,
+        area=resource.area,
+    )
+
+
+def _diary_day(day: DiaryDay) -> PublicDiaryDay:
+    return PublicDiaryDay(
+        date=day.date,
+        notes=day.notes,
+        sessions=[
+            PublicDiarySession(
+                resource=_diary_resource(entry.resource) if entry.resource else None,
+                event=_diary_event(entry.event) if entry.event else None,
+                duration_seconds=entry.duration_seconds,
+            )
+            for entry in day.entries
+        ],
+        events=[_diary_event(event) for event in day.events],
+        total_seconds=day.total_seconds,
+    )
+
+
+def _time(value: Any) -> dict[str, int]:
+    return {
+        "total_seconds": value.total_seconds,
+        "resource_seconds": value.resource_seconds,
+        "book_seconds": value.book_seconds,
+        "event_seconds": value.event_seconds,
+    }
+
+
+def _learning_area(area: LearningTimeArea) -> PublicLearningArea:
+    return PublicLearningArea(
+        slug=area.slug,
+        name=area.name,
+        total_seconds=area.total_seconds,
+        resource_seconds=area.resource_seconds,
+        book_seconds=area.book_seconds,
+        modules=[
+            PublicLearningModule(
+                slug=module.slug,
+                name=module.name,
+                total_seconds=module.total_seconds,
+                resource_seconds=module.resource_seconds,
+                book_seconds=module.book_seconds,
+            )
+            for module in area.modules
+        ],
+    )
+
+
+def _learning_resource(resource: LearningTimeResource) -> PublicLearningResource:
+    return PublicLearningResource(
+        slug=resource.slug,
+        name=resource.name,
+        type=str(resource.type_),
+        category=str(resource.category),
+        module=PublicNamed(slug=resource.module.slug, name=resource.module.name),
+        area=PublicNamed(slug=resource.area.slug, name=resource.area.name),
+        book=resource.book.title if resource.book else None,
+        total_seconds=resource.total_seconds,
+    )
+
+
+def _learning_event(event: LearningTimeEvent) -> PublicLearningEvent:
+    return PublicLearningEvent.model_validate(
+        {
+            "slug": event.slug,
+            "name": event.name,
+            "kind": str(event.kind),
+            "starts_on": event.starts_on,
+            "ends_on": event.ends_on,
+            "total_seconds": event.total_seconds,
+        }
+    )
+
+
+def _statistics(statistics: RoadmapStatistics) -> PublicLearningStatistics:
+    totals = statistics.totals
+    return PublicLearningStatistics(
+        totals=PublicLearningTotals(**_time(totals), active_days=totals.active_days),
+        weeks=[
+            PublicLearningWeek(starts_on=week.starts_on, **_time(week)) for week in statistics.weeks
+        ],
+        months=[
+            PublicLearningMonth(month=month.month, **_time(month)) for month in statistics.months
+        ],
+        areas=[_learning_area(area) for area in statistics.areas],
+        resources=[_learning_resource(resource) for resource in statistics.resources],
+        events=[_learning_event(event) for event in statistics.events],
+    )
+
+
+def _book(book: RoadmapBook) -> PublicBook:
+    resource = book.resource
+    return PublicBook.model_validate(
+        {
+            "slug": book.slug,
+            "title": book.title,
+            "author": book.author,
+            "description": book.description,
+            "pages": book.pages,
+            "year": book.year,
+            "started_on": book.started_on,
+            "ended_on": book.ended_on,
+            "summary": book.summary,
+            "status": str(book.status),
+            "resource": PublicBookResource(
+                slug=resource.slug, name=resource.name, module=resource.module, area=resource.area
+            )
+            if resource
+            else None,
+            "reading_seconds": book.reading_seconds,
+        }
+    )
+
+
+def _event(event: RoadmapEvent) -> PublicEvent:
+    return PublicEvent.model_validate(
+        {
+            "slug": event.slug,
+            "name": event.name,
+            "kind": str(event.kind),
+            "organizer": event.organizer,
+            "starts_on": event.starts_on,
+            "ends_on": event.ends_on,
+            "place": event.place,
+            "online": event.online,
+            "takeaways": event.takeaways,
+            "topics": [topic.name for topic in event.topics],
+            "attendance_seconds": event.attendance_seconds,
+        }
+    )
+
+
 class ApiContentReader:
     """Reads public content from the API at `base_url`. Use it as an async context manager."""
 
@@ -659,25 +912,40 @@ class ApiContentReader:
         return self._map(lambda rows: [_education(row) for row in rows], items)
 
     async def read_current_focus(self) -> list[PublicCurrentFocus]:
-        raise NotImplementedError(self._client)
+        items = await self._fetch(list_current_focus.asyncio_detailed(client=self._client), list)
+        return self._map(lambda rows: [_focus(row) for row in rows], items)
 
     async def read_roadmap(self) -> PublicRoadmap:
-        raise NotImplementedError(self._client)
+        roadmap = await self._fetch(get_roadmap.asyncio_detailed(client=self._client), Roadmap)
+        return self._map(_roadmap, roadmap)
 
     async def read_roadmap_area(self, area: str) -> PublicRoadmapArea:
-        raise NotImplementedError(area)
+        if not valid_slug(area):
+            raise ValueError("the roadmap area slug is not a valid slug")
+        detail = await self._fetch(
+            get_roadmap_area_detail.asyncio_detailed(area, client=self._client),
+            RoadmapAreaDetail,
+            found=True,
+        )
+        return self._map(_area, detail.area)
 
     async def read_diary(self) -> list[PublicDiaryDay]:
-        raise NotImplementedError(self._client)
+        diary = await self._fetch(get_roadmap_diary.asyncio_detailed(client=self._client), Diary)
+        return self._map(lambda value: [_diary_day(day) for day in value.days], diary)
 
     async def read_statistics(self) -> PublicLearningStatistics:
-        raise NotImplementedError(self._client)
+        statistics = await self._fetch(
+            get_roadmap_statistics.asyncio_detailed(client=self._client), RoadmapStatistics
+        )
+        return self._map(_statistics, statistics)
 
     async def read_books(self) -> list[PublicBook]:
-        raise NotImplementedError(self._client)
+        items = await self._fetch(list_roadmap_books.asyncio_detailed(client=self._client), list)
+        return self._map(lambda rows: [_book(row) for row in rows], items)
 
     async def read_events(self) -> list[PublicEvent]:
-        raise NotImplementedError(self._client)
+        items = await self._fetch(list_roadmap_events.asyncio_detailed(client=self._client), list)
+        return self._map(lambda rows: [_event(row) for row in rows], items)
 
     @staticmethod
     async def _fetch[T](
