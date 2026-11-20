@@ -214,6 +214,23 @@ describe("restoring into a database", () => {
     assert.match(result.stderr, /restore: /);
   });
 
+  it("says the replaced database is now empty when the restore over it fails", async () => {
+    sandbox.scenario({
+      databases: ["fictional_site"],
+      counts: { fictional_site: COUNTS },
+      failRestore: true,
+    });
+    const result = await restore([
+      "into",
+      "fictional_site",
+      "--confirm",
+      "fictional_site",
+      "--replace",
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /fictional_site is now empty/);
+  });
+
   it("refuses an unknown command and settings of the wrong form", async () => {
     assert.notEqual((await restore(["recover"])).status, 0);
     sandbox.settings({ DATABASE_USER: "app; DROP" });
