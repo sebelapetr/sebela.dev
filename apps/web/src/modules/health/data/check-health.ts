@@ -46,6 +46,21 @@ export async function checkHealth(
   }
 }
 
+export interface ReuseRecentHealthOptions {
+  /** How long a report is reused. */
+  readonly maxAgeMs: number;
+  /** The clock, in milliseconds; `Date.now` by default. */
+  readonly now?: () => number;
+}
+
+/** Not implemented yet. */
+export function reuseRecentHealth(
+  check: () => Promise<HealthReport>,
+  options: ReuseRecentHealthOptions,
+): () => Promise<HealthReport> {
+  throw new Error(`not implemented: ${String(options.maxAgeMs)} ${check.name}`);
+}
+
 /** The health route's answer: 200 when healthy, 503 otherwise; never cached and never indexed. */
 export function healthResponse(report: HealthReport): Response {
   return Response.json(

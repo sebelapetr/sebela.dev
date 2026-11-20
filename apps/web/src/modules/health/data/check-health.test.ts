@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createApiClient } from "@sebela/api-client";
 
-import { checkHealth, healthResponse } from "./check-health";
+import { checkHealth, healthResponse, reuseRecentHealth, type HealthReport } from "./check-health";
 
 const BASE = "https://api.example.test";
 
@@ -118,5 +118,47 @@ describe("healthResponse", () => {
       api: "ok",
       postgres: "failing",
     });
+  });
+});
+
+describe("reuseRecentHealth", () => {
+  const HEALTHY: HealthReport = { status: "ok", api: "ok", postgres: "ok" };
+  const FAILING: HealthReport = { status: "failing", api: "ok", postgres: "failing" };
+
+  function counting(reports: readonly HealthReport[]) {
+    let calls = 0;
+    const check = () => Promise.resolve(reports[Math.min(calls++, reports.length - 1)] ?? HEALTHY);
+    return { check, calls: () => calls };
+  }
+
+  it("answers from the last report while it is recent, so monitors cannot load the API", async () => {
+    let now = 1_000;
+    const { check, calls } = counting([HEALTHY, FAILING]);
+    const health = reuseRecentHealth(check, { maxAgeMs: 5_000, now: () => now });
+    await expect(health()).resolves.toEqual(HEALTHY);
+    now += 4_999;
+    await expect(health()).resolves.toEqual(HEALTHY);
+    expect(calls()).toBe(1);
+  });
+
+  it("asks again once the last report is older than its maximum age", async () => {
+    let now = 1_000;
+    const { check, calls } = counting([HEALTHY, FAILING]);
+    const health = reuseRecentHealth(check, { maxAgeMs: 5_000, now: () => now });
+    await health();
+    now += 5_000;
+    await expect(health()).resolves.toEqual(FAILING);
+    expect(calls()).toBe(2);
+  });
+
+  it("shares one check among requests that arrive while it runs", async () => {
+    const { check, calls } = counting([HEALTHY]);
+    const health = reuseRecentHealth(check, { maxAgeMs: 5_000, now: () => 1_000 });
+    await expect(Promise.all([health(), health(), health()])).resolves.toEqual([
+      HEALTHY,
+      HEALTHY,
+      HEALTHY,
+    ]);
+    expect(calls()).toBe(1);
   });
 });
