@@ -64,7 +64,7 @@ export function useDeepLinkTarget(
 
   useEffect(() => {
     const onLoad = () => {
-      onLoad();
+      follow("load");
     };
     const onNavigate = () => {
       follow("navigation");
