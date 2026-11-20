@@ -86,11 +86,11 @@ export function useConversation(evidence: AskEvidence) {
     () => emptySnapshot,
   );
   const open = useCallback(
-    (conversationId: string | null) => {
-      store().open(conversationId);
-    },
+    (conversationId: string | null) => store().open(conversationId),
     [store],
   );
+  /** The store's state now, which may be ahead of the snapshot this render shows. */
+  const current = useCallback(() => store().getSnapshot(), [store]);
   const submit = useCallback(
     (question: string) => {
       const current = store();
@@ -105,7 +105,7 @@ export function useConversation(evidence: AskEvidence) {
   const newChat = useCallback(() => {
     store().newChat();
   }, [store]);
-  return { snapshot, open, submit, retry, newChat };
+  return { snapshot, current, open, submit, retry, newChat };
 }
 
 /**

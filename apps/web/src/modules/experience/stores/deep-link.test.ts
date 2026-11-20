@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ExplorationRow } from "../data/explorations";
 import type { TechnologyGroup } from "../data/technologies";
 import type { TimelineEntry, TimelineProject } from "../data/timeline";
-import { deepLinkIndex, resolveDeepLink } from "./deep-link";
+import { deepLinkIndex, deepLinkScrollBehavior, inPageHash, resolveDeepLink } from "./deep-link";
 
 function project(slug: string, withCaseStudy: boolean): TimelineProject {
   return {
@@ -178,5 +178,44 @@ describe("resolveDeepLink", () => {
     ["an anchor in another case", "#PROJECT-EXPORT"],
   ])("opens nothing for %s", (_label, hash) => {
     expect(resolveDeepLink(hash, index)).toBeNull();
+  });
+});
+
+describe("deepLinkScrollBehavior", () => {
+  it("jumps at once when the page loads with a link, whatever the motion preference", () => {
+    expect(deepLinkScrollBehavior("load", false)).toBe("instant");
+    expect(deepLinkScrollBehavior("load", true)).toBe("instant");
+  });
+
+  it("scrolls smoothly when the visitor navigates within the page", () => {
+    expect(deepLinkScrollBehavior("navigation", false)).toBe("smooth");
+  });
+
+  it("jumps at once within the page when reduced motion is requested", () => {
+    expect(deepLinkScrollBehavior("navigation", true)).toBe("instant");
+  });
+});
+
+describe("inPageHash", () => {
+  const current = "https://site.example/experience?tab=1#project-export";
+
+  it.each([
+    ["a bare hash", "#case-study-export", "#case-study-export"],
+    ["the same page with a hash", "/experience?tab=1#project-other", "#project-other"],
+    ["an absolute address of the same page", "https://site.example/experience?tab=1#x", "#x"],
+    ["the hash the page already shows", "#project-export", "#project-export"],
+  ])("returns the hash of %s", (_label, href, hash) => {
+    expect(inPageHash(href, current)).toBe(hash);
+  });
+
+  it.each([
+    ["another page", "/services#service-a"],
+    ["the same path with another query", "/experience#project-other"],
+    ["another origin", "https://other.example/experience?tab=1#project-other"],
+    ["the page without a hash", "/experience?tab=1"],
+    ["an empty hash", "/experience?tab=1#"],
+    ["a mail link", "mailto:someone@site.example"],
+  ])("returns null for %s", (_label, href) => {
+    expect(inPageHash(href, current)).toBeNull();
   });
 });

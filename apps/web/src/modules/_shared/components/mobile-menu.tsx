@@ -7,6 +7,7 @@ import { buttonVariants } from "@sebela/ui/components/button";
 import { cn } from "@sebela/ui/lib/utils";
 
 import { AskLink, HomeLink, NavigationList } from "./navigation-links";
+import { SourceCodeLink } from "./source-code-link";
 import { ThemeToggle } from "./theme-toggle";
 
 /** The width from which the header shows the navigation itself (Tailwind's `md`). */
@@ -145,8 +146,11 @@ export function MobileMenu({
           <nav aria-label="Main">
             <NavigationList current={current} stacked onNavigate={navigate} />
           </nav>
-          {/* The icon lines up with the items above; the padding stays for the hover state. */}
-          <ThemeToggle withLabel className="-ms-3 self-start" />
+          {/* The icons line up with the items above; the padding stays for the hover state. */}
+          <div className="-ms-3 flex flex-wrap items-center gap-2">
+            <ThemeToggle withLabel />
+            <SourceCodeLink withLabel onNavigate={navigate} />
+          </div>
         </div>
       </dialog>
     </>
