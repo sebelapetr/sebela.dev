@@ -34,15 +34,21 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 
 ## When the phase is done
 
-When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists; never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
+When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists. Before opening it the first time, archive the phase's plan: on a short-lived branch `chore/<phase>-plan-done` from the phase branch, `git mv .plan/<phase> .plan/done/<phase>`, update every reference to the old path (`git grep`), commit (`docs(plan): archive the <phase> plan`) and squash-merge it into the phase branch; skip this when the folder is already in `.plan/done/`. A plan folder may therefore be at `.plan/<phase>/` or `.plan/done/<phase>/`. never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
 
 ## When an issue fails
 
 If an issue cannot be finished — the reviewer keeps rejecting, CI cannot be made green, the issue needs a decision the PRD does not contain — do not force it. Comment on the issue with what happened and why. In the phase loop, report `failed` and leave labels to the loop. In an interactive session, tell the owner.
 
-## When the usage limit interrupts an issue
+## When something outside the issue interrupts it
 
-If an agent stops because the usage limit was reached, the issue is not at fault. Keep its worktree and branch, comment on the issue what is done and what remains, and in the phase loop report `interrupted`. The loop waits for the limit and continues the same issue, without marking it.
+If the work on an issue stops for a reason that is not the issue's fault, keep its worktree and branch, comment on the issue what is done and what remains, and in the phase loop report `interrupted` with its `cause`. The loop does not mark the issue in any of these cases.
+
+- `usage_limit`: an agent stopped because the usage limit was reached. The loop waits for the limit and continues the same issue.
+- `safeguard`: a model safeguard refused or stopped an agent (a usage-policy or AUP refusal, an `invalid_request` flagged by the API). The loop retries at once; a second safeguard stop on the same issue stops the loop and alerts the owner.
+- `environment`: the machine cannot run the work, such as low disk, a missing tool or credential, or a guard refusal you cannot work around without breaking a rule. The loop stops and alerts the owner.
+
+Every other outcome reports `cause` as null. If GitHub refuses the phase pull request (for example because the phase branch has no commits beyond the base branch), still report `phase_done` and say why in the summary; the loop checks what exists.
 
 ## Rules
 

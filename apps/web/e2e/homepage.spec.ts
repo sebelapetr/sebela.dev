@@ -95,6 +95,15 @@ test.describe("homepage read from the API", () => {
       footer.getByRole("link", { name: "Built in public with an agentic engineering workflow" }),
     ).toHaveAttribute("href", "https://github.com/sebelapetr/sebela.dev");
     await expect(footer.getByRole("link", { name: "CV" })).toHaveAttribute("href", "/cv");
+    // What I do closes with one line on the open-source website and its repository.
+    const whatIDo = page.getByRole("region", { name: "What I do" });
+    await expect(whatIDo).toContainText(
+      "This website is open source and built with an agentic engineering workflow.",
+    );
+    await expect(whatIDo.getByRole("link", { name: "Source code on GitHub" })).toHaveAttribute(
+      "href",
+      "https://github.com/sebelapetr/sebela.dev",
+    );
   });
 
   test("the contact anchor leads to the contact block", async ({ page }) => {
@@ -109,7 +118,7 @@ test.describe("homepage read from the API", () => {
     await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
     await page.keyboard.press("Enter");
     const order: string[] = [];
-    for (let step = 0; step < 15; step += 1) {
+    for (let step = 0; step < 16; step += 1) {
       await page.keyboard.press("Tab");
       order.push(
         await page.evaluate(() => {
@@ -129,6 +138,7 @@ test.describe("homepage read from the API", () => {
       "Working on now?",
       "Work with me",
       "View my experience",
+      "Source code on GitHub",
       "Full experience",
       "Read the CV",
       withPhoto.email,

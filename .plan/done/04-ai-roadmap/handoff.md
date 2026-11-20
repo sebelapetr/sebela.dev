@@ -49,7 +49,7 @@ The documentation-only pull requests #161, #165 and #168 kept the README in step
 
 ## Left for later phases
 
-- **The real launch import.** Issue #115 says the actual import, the owner's data, the conversion mapper and the real reconciliation report belong to **phase 8**. The [PRD](prd.md) (Implementation Decisions and Out of Scope) and [issues.md](issues.md) say **phase 10**, and the [overview](../00-overview/prd.md) places launch after phase 10 (`10-delivery`); phase 8 is the public MCP server. The repository documents the import without naming a phase. **The owner should decide which is meant.**
+- **The real launch import.** Issue #115 says the actual import, the owner's data, the conversion mapper and the real reconciliation report belong to **phase 8**. The [PRD](prd.md) (Implementation Decisions and Out of Scope) and [issues.md](issues.md) say **phase 10**, and the [overview](../../00-overview/prd.md) places launch after phase 10 (`10-delivery`); phase 8 is the public MCP server. The repository documents the import without naming a phase. **The owner should decide which is meant.**
 - **The diary-entry replacement** is phase 5 (admin MCP). Its extension points are in `docs/domain-context.md` and `apps/web/AGENTS.md`.
 - **Knowledge and chat sources** (phases 6 and 7) can name a roadmap record by kind and slug; the targets are listed in the same documents.
 

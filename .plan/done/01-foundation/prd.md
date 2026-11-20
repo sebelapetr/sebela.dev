@@ -5,7 +5,7 @@
 | Status     | Approved                                                                                                                |
 | Date       | 2026-11-15                                                                                                              |
 | Parent     | `.plan/00-overview/prd.md`                                                                                              |
-| Depends on | The harness (`.plan/00-overview/harness-prd.md`) and a passed trial (`.plan/00-trial/prd.md`)                           |
+| Depends on | The harness (`.plan/00-overview/harness-prd.md`) and a passed trial (`.plan/done/00-trial/prd.md`)                           |
 | Result     | A monorepo with its toolchain, guard rails and CI. The first phase processed by the loop. No application behaviour yet. |
 
 ## Problem Statement

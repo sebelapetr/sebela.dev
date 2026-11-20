@@ -100,6 +100,40 @@ async function expectOpenedAt(page: Page, anchor: string) {
     .toBe(headerBottom + 32);
 }
 
+/**
+ * Clicks a link to `anchor` placed on the experience page (none of its own links stays on the page
+ * yet) and returns the page's scroll position in each frame of the second after the click.
+ */
+async function followInPageLink(page: Page, anchor: string): Promise<number[]> {
+  await page.evaluate((hash) => {
+    const link = document.createElement("a");
+    link.href = `#${hash}`;
+    link.textContent = "To the item";
+    link.id = "in-page-link";
+    link.style.cssText = "position:fixed;bottom:0;left:0;z-index:100;background:white;padding:12px";
+    document.body.append(link);
+    const sampled = { positions: [] as number[], done: false };
+    (window as unknown as { sampled: typeof sampled }).sampled = sampled;
+    link.addEventListener("click", () => {
+      const started = performance.now();
+      const sample = () => {
+        sampled.positions.push(Math.round(window.scrollY));
+        if (performance.now() - started < 1000) requestAnimationFrame(sample);
+        else sampled.done = true;
+      };
+      requestAnimationFrame(sample);
+    });
+  }, anchor);
+  await page.locator("#in-page-link").click();
+  interface Sampled {
+    sampled: { positions: number[]; done: boolean };
+  }
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as Sampled).sampled.done))
+    .toBe(true);
+  return page.evaluate(() => (window as unknown as Sampled).sampled.positions);
+}
+
 test.describe("selected work and deep links into the experience page", () => {
   let api: Started;
   let website: Started;
@@ -336,6 +370,50 @@ test.describe("selected work and deep links into the experience page", () => {
     await page.goto(`${website.url}/experience#project-removed-long-ago`);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Experience");
     expect(errors).toEqual([]);
+  });
+
+  test("scrolls smoothly to an item a link on the page names, with its address, history and focus", async ({
+    page,
+  }) => {
+    await page.goto(`${website.url}/experience`);
+    await hydrated(page);
+    const before = await page.evaluate(() => window.history.length);
+    const positions = await followInPageLink(page, "case-study-clinic-scheduling");
+    await expect(page).toHaveURL(/\/experience#case-study-clinic-scheduling$/u);
+    await expectOpenedAt(page, "case-study-clinic-scheduling");
+    // On its way: the frames show positions between the start and the target.
+    const final = Math.max(...positions);
+    expect(positions.filter((top) => top > 0 && top < final).length).toBeGreaterThan(1);
+    // A new history entry, as the browser adds for a link: back leaves the item's address.
+    expect(await page.evaluate(() => window.history.length)).toBe(before + 1);
+    await page.goBack();
+    await expect(page).toHaveURL(`${website.url}/experience`);
+    await page.goForward();
+    await expectOpenedAt(page, "case-study-clinic-scheduling");
+  });
+
+  test("jumps at once to an item a link on the page names when reduced motion is requested", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(`${website.url}/experience`);
+    await hydrated(page);
+    const positions = await followInPageLink(page, "project-ledger-importer");
+    await expect(page).toHaveURL(/\/experience#project-ledger-importer$/u);
+    await expectOpenedAt(page, "project-ledger-importer");
+    // From the start straight to the target, nothing in between.
+    expect(new Set(positions).size).toBeLessThanOrEqual(2);
+  });
+
+  test("leaves the skip link to the browser on the experience page", async ({ page }) => {
+    await page.goto(`${website.url}/experience`);
+    await hydrated(page);
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(`${website.url}/experience#main-content`);
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement?.closest("main") !== null)).toBe(true);
   });
 
   test("jumps at once to the target when reduced motion is requested", async ({ page }) => {

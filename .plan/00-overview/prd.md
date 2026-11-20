@@ -1,4 +1,4 @@
-# sebelapetr.cz — Overview PRD
+# sebela.dev — Overview PRD
 
 |        |                                                                                                                                                                                                          |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -20,7 +20,7 @@ Separately, his learning roadmap lives in another application (Road to AI, `road
 
 ## Solution
 
-A new sebelapetr.cz: a hybrid personal professional site built on one structured data model.
+A new site at sebela.dev: a hybrid personal professional site built on one structured data model.
 
 - One identity, two paths. Positioning: _software engineer focused on AI systems, automation and modern software — available for selected projects and career opportunities._
 - The site answers, in this order: who he is, what he can do, what he has built, what he is doing now, where he is heading, how to work with him.
@@ -29,7 +29,7 @@ A new sebelapetr.cz: a hybrid personal professional site built on one structured
 - Visitors and AI agents can ask about Petr: a chatbot on the homepage and a public MCP server, both answering only from his public data.
 - The repository is open source and is itself part of the portfolio: it shows how he engineers and how he works with coding agents.
 
-The site launches publicly after phase 10 and replaces the current sebelapetr.cz. Phases 11–13 are separate post-launch improvements: knowledge graph, ontology and interactive UI for external MCP clients. They do not delay the first release.
+Delivery runs from phase 10 onwards on sebela.dev; the public launch with real data is the last step of phase 9.1. The old sebelapetr.cz stays as it is. Phases 11–13 are separate post-launch improvements: knowledge graph, ontology and interactive UI for external MCP clients. They do not delay the first release.
 
 ## Audiences
 
@@ -122,29 +122,32 @@ The site launches publicly after phase 10 and replaces the current sebelapetr.cz
 
 ## Phases
 
-Folder names below are the `.plan/` folders. Each phase has its own PRD — all of them are written before implementation starts — and gets its own set of GitHub issues when its turn comes.
+Folder names below are the `.plan/` folders; a phase merged into `master` is archived in `.plan/done/` by its phase pull request. Each phase has its own PRD — all of them are written before implementation starts — and gets its own set of GitHub issues when its turn comes.
+
+A **sub-phase** `NN.M-<name>` (for example `09.1-rag-integration`, `07.1-jev-gateway`) holds independently deliverable work that builds on phase NN but should neither block nor bloat it: connecting a finished capability, improvements after measurement, or an experiment that swaps a component. It is a phase like any other — its own PRD, issues, label `phase:NN.M-<name>`, phase branch, phase pull request and archive in `.plan/done/` — listed in the table right after its parent and naming what it depends on. Work of a few issues that belongs to a running phase is added to that phase instead.
 
 Order of work: planning and the harness on `phase/00-overview` → the trial → fixes from the trial → phase 0 is merged into the main branch → phases 1–10 to the first public release, then phases 11–13 as separate improvements. Each phase is processed by the loop and merged by the owner.
 
-| #   | Folder                 | Phase                                | Result                                                                                            |
-| --- | ---------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| 0   | `00-overview`          | Overview and harness                 | Planning, binding docs and the unattended development harness                                     |
-| 0   | `00-trial`             | Trial                                | Disposable harness verification, closed without merging                                           |
-| 1   | `01-foundation`        | Foundation                           | Workspace, tooling, checks, Compose/Postgres and CI                                               |
-| 2   | `02-api-db`            | API and database                     | Profile domain, authenticated writes, generated contracts and demo seed                           |
-| 3   | `03-web`               | Website                              | Presentation pages and chat UI behind a mock adapter                                              |
-| 4   | `04-ai-roadmap`        | AI Roadmap                           | Learning domain, API, pages and the one-time launch import contract                               |
-| 5   | `05-mcp-admin`         | Complete content administration      | TypeScript MCP over the private API, internal/SSH-tunnel access, skills and security gates        |
-| 6   | `06-llm-agent`         | Reusable LLM agent                   | Three-stage Python package and structured API tools, tested without an HTTP server                |
-| 7   | `07-ai-service`        | AI service and real web chat         | FastAPI, conversation/identity/spend controls and live chat over structured API data              |
-| 8   | `08-mcp-public`        | Public MCP                           | Python read-only adapter, structured/text results and `/mcp` setup page                           |
-| 9   | `09-rag`               | RAG knowledge base                   | Portfolio + approved extra documents, private originals, embeddings and a private search route    |
-| 9.1 | `09.1-rag-integration` | RAG integration                      | Public search with budget admission, agent tool and skill, public MCP search, Sources contract    |
-| 9.2 | `09.2-rag-upgrades`    | RAG upgrades                         | BM25 ranking in Postgres, parent-child and neighbour retrieval, kept only where evals show a gain |
-| 10  | `10-delivery`          | Continuous delivery and first launch | Verified deployment, backups/restore, private admin networking and public release                 |
-| 11  | `11-knowledge-graph`   | Knowledge graph                      | Evidence-backed entities/relations and measured graph-assisted retrieval after launch             |
-| 12  | `12-ontology`          | Ontology                             | Reviewed semantic definitions and a bounded Auto Ontology suitability experiment                  |
-| 13  | `13-mcp-apps`          | External MCP UI                      | Optional interactive views in verified clients, with structured/text fallback                     |
+| #   | Folder                 | Phase                           | Result                                                                                                       |
+| --- | ---------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 0   | `00-overview`          | Overview and harness            | Planning, binding docs and the unattended development harness                                                |
+| 0   | `00-trial`             | Trial                           | Disposable harness verification, closed without merging                                                      |
+| 1   | `01-foundation`        | Foundation                      | Workspace, tooling, checks, Compose/Postgres and CI                                                          |
+| 2   | `02-api-db`            | API and database                | Profile domain, authenticated writes, generated contracts and demo seed                                      |
+| 3   | `03-web`               | Website                         | Presentation pages and chat UI behind a mock adapter                                                         |
+| 4   | `04-ai-roadmap`        | AI Roadmap                      | Learning domain, API, pages and the one-time launch import contract                                          |
+| 5   | `05-mcp-admin`         | Complete content administration | TypeScript MCP over the private API, internal/SSH-tunnel access, skills and security gates                   |
+| 6   | `06-llm-agent`         | Reusable LLM agent              | Three-stage Python package and structured API tools, tested without an HTTP server                           |
+| 7   | `07-ai-service`        | AI service and real web chat    | FastAPI, conversation/identity/spend controls and live chat over structured API data                         |
+| 7.1 | `07.1-jev-gateway`     | Jev Security Gateway            | Measure TypeSafe AI's Jev against Haiku as the Security Gateway classifier; switch only if every gate passes |
+| 8   | `08-mcp-public`        | Public MCP                      | Python read-only adapter, structured/text results and `/mcp` setup page                                      |
+| 9   | `09-rag`               | RAG knowledge base              | Portfolio + approved extra documents, private originals, embeddings and a private search route               |
+| 9.1 | `09.1-rag-integration` | RAG integration                 | Public search with budget admission, agent tool and skill, public MCP search, Sources contract               |
+| 9.2 | `09.2-rag-upgrades`    | RAG upgrades                    | BM25 ranking in Postgres, parent-child and neighbour retrieval, kept only where evals show a gain            |
+| 10  | `10-delivery`          | Continuous delivery             | Affected-image builds on merge, VPS deployment with rollback, backups/restore, monitoring, sebela.dev        |
+| 11  | `11-knowledge-graph`   | Knowledge graph                 | Evidence-backed entities/relations and measured graph-assisted retrieval after launch                        |
+| 12  | `12-ontology`          | Ontology                        | Reviewed semantic definitions and a bounded Auto Ontology suitability experiment                             |
+| 13  | `13-mcp-apps`          | External MCP UI                 | Optional interactive views in verified clients, with structured/text fallback                                |
 
 ### Phase boundaries
 
@@ -166,6 +169,8 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 
 **7 — AI service and real web chat.** FastAPI wraps the package; the API owns one conversation per anonymous browser identity, ownership, durable idempotency, limits and spend reservations. Replace the website mock and restore the same conversation on direct `/ask` visits. The chatbot is useful over structured data before RAG. No public MCP or retrieval prerequisite.
 
+**7.1 — Jev Security Gateway.** After phase 6: a switchable Jev adapter behind the Security Gateway's classifier contract, compared with Haiku on the phase-6 English/Czech catalogue and gates (latency, cost, calibration, false blocks). Haiku stays configured until Jev passes every gate and the owner records the switch.
+
 **8 — Public MCP.** A separate Python adapter calls FastAPI read capabilities backed by the same tools. External agents bring their model: no generation, admin or raw-file tool. Add `/mcp` with verified remote setup examples and discovery links. Return structured results and text, without interactive UI.
 
 **9 — RAG knowledge base.** Ingest -> extraction/chunking -> approval -> embeddings/index -> retrieval -> an authenticated private search route. Depends only on phases 2 and 4 and runs in its own loop alongside phase 7; its phase pull request waits for phases 7 and 8 and then resolves migration numbering and document conflicts once. Read the portfolio's API source rather than crawling duplicate pages. Extra Markdown/TXT/text-PDF documents enter through a terminal, local sensitivity checks and owner approval of the exact version. Their approved information may be disclosed publicly, but originals remain in private Bunny/local storage. API facts take precedence over extra explanations. Keep vectors/chunks/provenance in a separate schema of the same pgvector-enabled PostgreSQL; measure retrieval before launch. Nothing is public in this phase.
@@ -174,7 +179,7 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 
 **9.2 — RAG upgrades.** After 9.1: BM25 ranking inside Postgres and parent-child/neighbour retrieval over the section and ordinal data phase 9 already stores. Measured against frozen thresholds and the agent's evidence budget. Does not block phase 10.
 
-**10 — Continuous delivery and first launch.** Build and verify the complete first-release stack, deploy to the VPS with backups/restore and rollback, load real profile data and the fresh roadmap import, approve extra sources and rebuild search. Only public web/read/chat/MCP surfaces are exposed. Graph, ontology and MCP Apps do not block this release.
+**10 — Continuous delivery.** Runs now, in a third loop. Every merge into `master` builds only the affected images on GitHub Actions (arm64, public GHCR images), verifies the stack and deploys it to the owner's VPS through a forced-command SSH key, with automatic rollback, nightly and pre-migration encrypted backups, a rehearsed restore and uptime monitoring. Ploi's nginx is the reverse proxy; the production domain is sebela.dev. It deploys what `master` holds (website, API, admin MCP); phases 7, 8 and 9/9.1 each end with a delivery issue for their service. The launch with real data is the last HITL issue of phase 9.1.
 
 **11 — Knowledge graph.** After launch, add concrete source-backed entities/relationships and bounded relationship reads. Start with a small explicit schema; measure against launched RAG and preserve source withdrawal and API authority.
 
@@ -377,7 +382,7 @@ Deferred to the phase named in brackets.
 5. How a usage limit is recognised from an unattended run. [harness]
 6. Measured retrieval settings and extraction limits; the initial embeddings model is Voyage AI `voyage-4`, replaceable if it misses frozen thresholds. [09]
 7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Phase-7 PRD and its seven-issue breakdown are owner-approved (Langfuse Cloud EU and Turnstile Managed); implementation still needs local PII model/resource measurements and final owner acceptance. See `.plan/07-ai-service/issues.md`. Graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
-8. For the owner before launch: the server (existing or new), the production domain (the repository is named `sebela.dev`, the plan says sebelapetr.cz), the reverse proxy product, the monthly model budget, and the legal side of storing conversations. [10]
+8. Resolved for phase 10: the existing Hetzner server, the production domain sebela.dev (sebelapetr.cz stays as it is), Ploi's nginx as reverse proxy. Still for the owner before launch: the monthly model budget and the legal side of storing conversations. [10, 9.1]
 
 ## Further Notes
 

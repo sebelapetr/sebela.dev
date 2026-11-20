@@ -16,6 +16,7 @@ import {
   checkMediaUpload,
   createMediaService,
   readMediaConfig,
+  readMediaLimits,
   type CleanupFailure,
   type MediaLimits,
   type MediaService,
@@ -101,6 +102,21 @@ describe("readMediaConfig", () => {
   it("names every missing or invalid limit", () => {
     const attempt = () =>
       readMediaConfig({ ...env, MEDIA_MAX_BYTES: "0", MEDIA_MAX_IMAGE_DIMENSION: "" });
+    expect(attempt).toThrow(/MEDIA_MAX_BYTES/);
+    expect(attempt).toThrow(/MEDIA_MAX_IMAGE_DIMENSION/);
+  });
+});
+
+describe("readMediaLimits", () => {
+  it("reads only the upload limits, without any storage settings", () => {
+    expect(readMediaLimits({ MEDIA_MAX_BYTES: "4096", MEDIA_MAX_IMAGE_DIMENSION: "640" })).toEqual({
+      maxBytes: 4096,
+      maxImageDimension: 640,
+    });
+  });
+
+  it("names every missing or invalid limit", () => {
+    const attempt = () => readMediaLimits({ MEDIA_MAX_BYTES: "-1" });
     expect(attempt).toThrow(/MEDIA_MAX_BYTES/);
     expect(attempt).toThrow(/MEDIA_MAX_IMAGE_DIMENSION/);
   });

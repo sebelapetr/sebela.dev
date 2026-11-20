@@ -41,7 +41,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── scripts/
 │   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API and website stack smoke checks — plain Node, no dependencies [1, 2]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
-├── .plan/                   PRDs and issue overviews, one folder per phase
+├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
 ├── .claude/
 │   ├── skills/              grill-me, to-prd, to-issues, later content skills
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
