@@ -48,7 +48,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
-├── .github/workflows/       CI [1]
+├── .github/workflows/       CI and the image release [1, 10]
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
 ├── infra/                   production definition, see infra/README.md [10]
 │   ├── production/          Compose production overrides and the production example settings
