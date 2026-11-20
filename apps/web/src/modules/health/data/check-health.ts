@@ -16,21 +16,43 @@ export interface CheckHealthOptions {
   readonly timeoutMs?: number;
 }
 
+const DEFAULT_TIMEOUT_MS = 3_000;
+
+const HEALTHY: HealthReport = { status: "ok", api: "ok", database: "ok" };
+const DATABASE_FAILING: HealthReport = { status: "failing", api: "ok", database: "failing" };
+const API_FAILING: HealthReport = { status: "failing", api: "failing", database: "unknown" };
+
 /**
  * Asks the API whether it and its database are ready. Never throws: a `null` client (the website's
  * configuration is unusable), an unreachable or slow API and any answer but "ready" or the API's
  * own `unavailable` error report the API failing; that error reports the database failing.
  */
-export function checkHealth(
+export async function checkHealth(
   client: ApiClient | null,
   options: CheckHealthOptions = {},
 ): Promise<HealthReport> {
-  return Promise.reject(
-    new Error(`not implemented: ${String(client === null)} ${String(options.timeoutMs)}`),
-  );
+  if (client === null) return API_FAILING;
+  try {
+    const { data, error, response } = await client.GET("/health/ready", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    });
+    if (response.status === 200 && data?.status === "ready") return HEALTHY;
+    if (response.status === 503 && error?.error.code === "unavailable") return DATABASE_FAILING;
+    return API_FAILING;
+  } catch {
+    // Unreachable, timed out or an answer that is not the API's JSON.
+    return API_FAILING;
+  }
 }
 
 /** The health route's answer: 200 when healthy, 503 otherwise; never cached and never indexed. */
 export function healthResponse(report: HealthReport): Response {
-  throw new Error(`not implemented: ${report.status}`);
+  return Response.json(
+    { status: report.status, api: report.api, database: report.database },
+    {
+      status: report.status === "ok" ? 200 : 503,
+      headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
+    },
+  );
 }

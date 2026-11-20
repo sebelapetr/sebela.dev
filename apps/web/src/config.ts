@@ -254,5 +254,10 @@ export function readAnalyticsConfig(
  * an error naming the variable, never its value, for anything else.
  */
 export function readIndexingConfig(env: Readonly<Record<string, string | undefined>>): boolean {
-  throw new Error(`not implemented: ${String(Object.keys(env).length)}`);
+  const value = env["WEB_INDEXING"] ?? "";
+  if (value === "on") return true;
+  if (value === "" || value === "off") return false;
+  throw new Error(
+    "Invalid website configuration (documented in .env.example): WEB_INDEXING must be on or off",
+  );
 }
