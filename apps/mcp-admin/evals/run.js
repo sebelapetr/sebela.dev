@@ -23,6 +23,10 @@
 // written only after the credential scan found nothing), so a grader fix is checked with
 // `--regrade` instead of a new paid run. The redacted `summary.json` never holds them.
 //
+// Promptfoo is an exact dev dependency of this app (PROMPTFOO_VERSION, locked in pnpm-lock.yaml):
+// a case-run starts the installed CLI with this Node instead of fetching it through `pnpm dlx`.
+// Up to CASE_RUN_CONCURRENCY case-runs run at once; the summary keeps them in catalogue order.
+//
 // Every case-run gets its own API on a fresh temporary database seeded from the case's fixture
 // (`fixtures/s01`, `fixtures/s02`, `fixtures/s03` or `fixtures/s04`), two ephemeral API keys (`eval` for the
 // model's client and `studio-desktop` for another of the owner's clients) and its own MCP server.
@@ -42,7 +46,7 @@
 // `repeats` (3) per named case; a regrade none. Needs ANTHROPIC_API_KEY, the running Postgres and a build
 // (`pnpm --filter @sebela/mcp-admin build`).
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,26 +59,72 @@ import * as graders from "./graders.js";
 import { EVAL_CLIENT, OTHER_CLIENT, scenarios } from "./scenarios.js";
 import { captureState } from "./state.js";
 
-const PROMPTFOO = "promptfoo@0.126.0";
-/** The pinned Promptfoo version. */
-export const PROMPTFOO_VERSION = "";
-/** How many case-runs run at once. */
-export const CASE_RUN_CONCURRENCY = 1;
+/**
+ * The pinned Promptfoo version: an exact dev dependency of this app (`package.json`, locked in
+ * `pnpm-lock.yaml`), so a case-run starts the installed CLI instead of fetching it again.
+ */
+export const PROMPTFOO_VERSION = "0.126.0";
+const PROMPTFOO = `promptfoo@${PROMPTFOO_VERSION}`;
+/**
+ * How many case-runs run at once. Each has its own fixture database, API, MCP server, client
+ * adapter and Promptfoo state, so their results stay independent; the bound keeps the requests
+ * well inside the provider's rate limits.
+ */
+export const CASE_RUN_CONCURRENCY = 4;
+const appFolder = fileURLToPath(new URL("../", import.meta.url));
 
-/** @returns {string} */
+/**
+ * The installed Promptfoo CLI's entry point, run with this Node. Refuses an installation of
+ * another version than the pinned one.
+ *
+ * @returns {string}
+ */
 export function promptfooEntry() {
-  return "";
+  const folder = join(appFolder, "node_modules", "promptfoo");
+  /** @type {{ version?: string, bin?: Record<string, string> }} */
+  const manifest = JSON.parse(readFileSync(join(folder, "package.json"), "utf8"));
+  if (manifest.version !== PROMPTFOO_VERSION) {
+    throw new Error(
+      `Promptfoo ${String(manifest.version)} is installed, not the pinned ${PROMPTFOO_VERSION}; run pnpm install.`,
+    );
+  }
+  const bin = manifest.bin?.["promptfoo"];
+  if (!bin) throw new Error("The installed Promptfoo names no promptfoo command.");
+  return join(folder, bin);
 }
 
 /**
+ * Runs the tasks with at most `limit` of them at once and returns their results in the tasks'
+ * order. After a task fails no further task starts; the running ones finish (so their fixtures
+ * stop) and the first failure is thrown.
+ *
  * @template T
  * @param {readonly (() => Promise<T>)[]} tasks
  * @param {number} limit
  * @returns {Promise<T[]>}
  */
 export async function runBounded(tasks, limit) {
-  void limit;
-  return [await Promise.reject(new Error(`not implemented for ${String(tasks.length)}`))];
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("The limit must be at least 1.");
+  /** @type {T[]} */
+  const results = Array.from({ length: tasks.length });
+  let next = 0;
+  /** @type {{ error: unknown } | null} */
+  let failed = null;
+  const worker = async () => {
+    while (failed === null && next < tasks.length) {
+      const index = next;
+      next += 1;
+      const task = /** @type {() => Promise<T>} */ (tasks[index]);
+      try {
+        results[index] = await task();
+      } catch (error) {
+        failed ??= { error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  if (failed !== null) throw /** @type {{ error: unknown }} */ (failed).error;
+  return results;
 }
 /** The pinned model of every eval; `promptfooconfig.yaml` names the same one. */
 export const MODEL = "claude-sonnet-5-5";
@@ -228,8 +278,7 @@ function sentinels(keys) {
  */
 function promptfoo(caseId, output, env) {
   const args = [
-    "dlx",
-    PROMPTFOO,
+    promptfooEntry(),
     "eval",
     "--config",
     "promptfooconfig.yaml",
@@ -244,7 +293,7 @@ function promptfoo(caseId, output, env) {
     output,
   ];
   return new Promise((resolve, reject) => {
-    const child = spawn("pnpm", args, {
+    const child = spawn(process.execPath, args, {
       cwd: evalsFolder,
       stdio: ["ignore", "ignore", "inherit"],
       env,
@@ -637,12 +686,13 @@ async function main() {
   const startedAt = new Date().toISOString();
   const folder = join(reportRoot, startedAt.replaceAll(":", "-"));
   await mkdir(folder, { recursive: true });
-  const runs = [];
-  for (const entry of plan.cases) {
-    for (let repeat = 1; repeat <= gates.repeats; repeat += 1) {
-      runs.push(await runCase(entry, repeat, folder));
-    }
-  }
+  // Every case-run has its own fixture; a few run at once, in catalogue order in the summary.
+  const runs = await runBounded(
+    plan.cases.flatMap((entry) =>
+      Array.from({ length: gates.repeats }, (_, index) => () => runCase(entry, index + 1, folder)),
+    ),
+    CASE_RUN_CONCURRENCY,
+  );
   // A partial run is gated on its own case only; it never stands in for a full run's gate.
   const gate = evaluateGate(runs, plan.partial ? { cases: plan.cases } : {});
   const summary = {
@@ -660,6 +710,7 @@ async function main() {
       dataset:
         "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases), fixtures/s04 (S04 cases)",
       repeats: gates.repeats,
+      caseRunConcurrency: CASE_RUN_CONCURRENCY,
       noncriticalFloor: gates.noncriticalFloor,
     },
     gate,
