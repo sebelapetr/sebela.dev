@@ -1,4 +1,10 @@
-// The site's own words for the three kinds of work (.plan/03-web/prd.md, Homepage): no profile
+import { ArrowUpRight } from "lucide-react";
+
+import { GitHubMark, repositoryUrl } from "../../_shared";
+
+import { textLinkClass } from "./text-link";
+
+// The site's own words for the three kinds of work (.plan/done/03-web/prd.md, Homepage): no profile
 // record holds them. They describe kinds of work only, never results, numbers or clients, and the
 // AI engineering column says it is the current focus rather than a delivered track record.
 const AREAS = [
@@ -16,7 +22,10 @@ const AREAS = [
   },
 ] as const;
 
-/** Three short columns that say what kinds of work the person does; one sentence each. */
+/**
+ * Three short columns that say what kinds of work the person does; one sentence each. Below them
+ * one line says the website itself is open source, with a link to its repository.
+ */
 export function WhatIDo() {
   return (
     <section aria-labelledby="what-i-do-heading" className="flex flex-col gap-8">
@@ -31,6 +40,14 @@ export function WhatIDo() {
           </li>
         ))}
       </ul>
+      <p className="flex flex-wrap items-center gap-x-3 text-sm text-pretty text-muted-foreground">
+        <span>This website is open source and built with an agentic engineering workflow.</span>
+        <a href={repositoryUrl} className={`${textLinkClass} text-foreground`}>
+          <GitHubMark className="size-4" />
+          Source code on GitHub
+          <ArrowUpRight aria-hidden="true" className="size-4" />
+        </a>
+      </p>
     </section>
   );
 }

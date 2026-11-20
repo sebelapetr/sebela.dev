@@ -301,6 +301,283 @@ test.describe("the Ask page", () => {
     await expect(composer(page)).toBeInViewport();
     await expectNoHorizontalScroll(page);
   });
+
+  test("keeps the profile note out of the composer, below the chat and above the footer", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    const note = page.getByText(
+      `Answers are generated from ${name}'s public profile and may be incomplete.`,
+    );
+    const form = page.getByRole("form", { name: "Ask a question" });
+    // Not part of the sticky composer: it scrolls with the page.
+    expect(
+      await form.evaluate(
+        (element) => element.parentElement?.textContent.includes("Answers are generated") ?? true,
+      ),
+    ).toBe(false);
+    await composer(page).fill(unknownQuestion);
+    await composer(page).press("Enter");
+    await answered(page);
+    await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    });
+    await expect(note).toBeInViewport();
+    const [formBox, noteBox, footerBox] = await Promise.all([
+      form.boundingBox(),
+      note.boundingBox(),
+      page.getByRole("contentinfo").boundingBox(),
+    ]);
+    if (formBox === null || noteBox === null || footerBox === null) throw new Error("not laid out");
+    expect(noteBox.y).toBeGreaterThanOrEqual(formBox.y + formBox.height);
+    expect(footerBox.y).toBeGreaterThanOrEqual(noteBox.y + noteBox.height);
+  });
+
+  test("a long question on a phone wraps, and the latest answer and the composer stay reachable", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    const long = `${"A rather long fictional question about the weather on the planet ".repeat(6)}?`;
+    await composer(page).fill(long);
+    await composer(page).press("Enter");
+    await answered(page);
+    await expectNoHorizontalScroll(page);
+    await expect(turns(page).last()).toContainText("A rather long fictional question");
+    // The composer keeps the focus after sending, ready for the next question.
+    await expect(composer(page)).toBeFocused();
+    // An open on-screen keyboard shrinks the visible height; the composer stays in view.
+    await page.setViewportSize({ width: 360, height: 320 });
+    await expect(composer(page)).toBeInViewport();
+    await expectNoHorizontalScroll(page);
+  });
+
+  test("spaces the page tighter on a phone than on a wide screen", async ({ page }) => {
+    const spacing = async () =>
+      page.evaluate(() => {
+        const main = document.querySelector("main");
+        const intro = document.querySelector("main header p");
+        const title = document.querySelector("main h1 span:last-child");
+        if (main === null || intro === null || title === null) throw new Error("not rendered");
+        return {
+          padding: getComputedStyle(main).paddingTop,
+          intro: getComputedStyle(intro).fontSize,
+          title: getComputedStyle(title).fontSize,
+        };
+      });
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    expect(await spacing()).toEqual({ padding: "20px", intro: "16px", title: "24px" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    expect(await spacing()).toEqual({ padding: "80px", intro: "18px", title: "36px" });
+  });
+});
+
+const latestButton = (page: Page) => page.getByRole("button", { name: "Jump to latest" });
+
+/** How far the latest question is from its place just below the sticky header, in pixels. */
+async function questionOffTop(page: Page) {
+  return turns(page)
+    .last()
+    .locator("[data-chat-question]")
+    .evaluate((question) => {
+      const header = document.querySelector("body header");
+      const place = parseFloat(getComputedStyle(question).scrollMarginTop);
+      if (header === null || place <= header.getBoundingClientRect().bottom) {
+        throw new Error("the question's place is not below the header");
+      }
+      return Math.abs(question.getBoundingClientRect().top - place);
+    });
+}
+
+/** Room between the end of the conversation and the top of the composer; negative when hidden. */
+async function roomAboveComposer(page: Page) {
+  return page.evaluate(() => {
+    const end = [...document.querySelectorAll("[data-chat-answer]")].at(-1);
+    const sticky = document.querySelector("form[aria-label='Ask a question']")?.parentElement;
+    if (end === undefined || sticky === null || sticky === undefined) throw new Error("no chat");
+    return sticky.getBoundingClientRect().top - end.getBoundingClientRect().bottom;
+  });
+}
+
+/** Records every vertical scroll position the page passes from now on. */
+async function recordScrolling(page: Page) {
+  await page.evaluate(() => {
+    const seen: number[] = [];
+    (window as unknown as { scrolled: number[] }).scrolled = seen;
+    window.addEventListener("scroll", () => seen.push(window.scrollY), { passive: true });
+  });
+}
+
+const scrolled = (page: Page) =>
+  page.evaluate(() => (window as unknown as { scrolled: number[] }).scrolled);
+
+async function send(page: Page, question: string) {
+  await composer(page).fill(question);
+  await composer(page).press("Enter");
+}
+
+test.describe("the chat's scrolling", () => {
+  const site = serveFixture();
+
+  test("a sent question goes below the header and stays there as its answer streams and ends", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 768, height: 800 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    await page.getByRole("button", { name: `Would ${name} fit an AI engineering role?` }).click();
+    await expect.poll(() => questionOffTop(page)).toBeLessThan(1.5);
+    await answered(page);
+
+    // The short answer fits below its question; the services answer with its cards runs on.
+    for (const [question, runsOn] of [
+      [unknownQuestion, false],
+      [`What could ${name} automate for my company?`, true],
+    ] as const) {
+      await send(page, question);
+      await expect(turns(page).last()).toContainText(question);
+      await expect.poll(() => questionOffTop(page)).toBeLessThan(1.5);
+      await answered(page);
+      // Neither the end of the answer nor its new state moves the page.
+      const settled = await page.evaluate(() => window.scrollY);
+      await recordScrolling(page);
+      await page.waitForTimeout(500);
+      expect(await scrolled(page)).toEqual([]);
+      expect(await page.evaluate(() => window.scrollY)).toBe(settled);
+      expect(await questionOffTop(page)).toBeLessThan(1.5);
+      // Latest is offered exactly when the answer runs on below the composer.
+      expect((await roomAboveComposer(page)) < 0).toBe(runsOn);
+      await expect(latestButton(page)).toHaveCount(runsOn ? 1 : 0);
+    }
+  });
+
+  test("never pulls back a reader who scrolled away, and Latest brings back the end", async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    for (const question of [unknownQuestion, "Another fictional question?"]) {
+      await send(page, question);
+      await answered(page);
+    }
+    // An answer that stays open until it times out.
+    await page.evaluate(() => {
+      window.__sebelaMockChatScenarios = ["stall"];
+    });
+    await send(page, "A third fictional question?");
+    await expect(turns(page).last()).toContainText("The assistant is");
+    await expect.poll(() => questionOffTop(page)).toBeLessThan(1.5);
+    await expect(latestButton(page)).toHaveCount(0);
+
+    await page.mouse.move(180, 300);
+    await page.mouse.wheel(0, -2000);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(latestButton(page)).toBeVisible();
+    const box = await latestButton(page).boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    await recordScrolling(page);
+    await page.clock.fastForward(21_000);
+    await answered(page);
+    await expect(turns(page).last().getByText("Incomplete", { exact: true })).toBeVisible();
+    await page.waitForTimeout(300);
+    expect(await scrolled(page)).toEqual([]);
+
+    // By keyboard: the end comes into view, the button goes and the keyboard is at the answer.
+    await latestButton(page).focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => roomAboveComposer(page)).toBeGreaterThanOrEqual(0);
+    await expect(latestButton(page)).toHaveCount(0);
+    await expect(turns(page).last().locator("[data-chat-answer]")).toBeFocused();
+
+    // And with a pointer.
+    await page.mouse.wheel(0, -2000);
+    await expect(latestButton(page)).toBeVisible();
+    await latestButton(page).click();
+    await expect.poll(() => roomAboveComposer(page)).toBeGreaterThanOrEqual(0);
+    await expect(latestButton(page)).toHaveCount(0);
+  });
+
+  test("moves at once under reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    await send(page, unknownQuestion);
+    await answered(page);
+    await recordScrolling(page);
+    await send(page, "Another fictional question?");
+    await expect.poll(() => questionOffTop(page)).toBeLessThan(1.5);
+    await answered(page);
+    // One jump straight to the question, no steps in between.
+    const positions = await scrolled(page);
+    expect(positions.length).toBeGreaterThan(0);
+    expect(new Set(positions).size).toBe(1);
+  });
+
+  test("a conversation opened from the address shows its end at once, after a reload and back", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    for (const question of [
+      `Would ${name} fit an AI engineering role?`,
+      `What is ${name} working on now?`,
+      unknownQuestion,
+    ]) {
+      await send(page, question);
+      await answered(page);
+    }
+    const address = page.url();
+
+    await page.reload();
+    await hydrated(page);
+    await expect(turns(page)).toHaveCount(3);
+    await expect.poll(() => roomAboveComposer(page)).toBeGreaterThanOrEqual(0);
+    await expect(latestButton(page)).toHaveCount(0);
+    // Shown once: the reader can scroll up and stays there.
+    await recordScrolling(page);
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(300);
+    expect(new Set(await scrolled(page))).toEqual(new Set([0]));
+    await expect(latestButton(page)).toBeVisible();
+
+    // Away to a related page and back again.
+    await turns(page).last().getByRole("link", { name: "Experience" }).first().click();
+    await expect(page).toHaveURL(/\/experience$/u);
+    await page.goBack();
+    await expect(page).toHaveURL(address);
+    await expect(turns(page)).toHaveCount(3);
+    await expect.poll(() => roomAboveComposer(page)).toBeGreaterThanOrEqual(0);
+  });
+
+  test("with a phone's keyboard open, a sent question still reaches the top above the composer", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto(`${site.url()}/ask`);
+    await hydrated(page);
+    await send(page, unknownQuestion);
+    await answered(page);
+    // An open on-screen keyboard leaves this much of the screen.
+    await page.setViewportSize({ width: 360, height: 320 });
+    await send(page, "Another fictional question?");
+    await expect.poll(() => questionOffTop(page)).toBeLessThan(1.5);
+    await expect(composer(page)).toBeInViewport();
+    await answered(page);
+    expect(await questionOffTop(page)).toBeLessThan(1.5);
+    await expect(composer(page)).toBeInViewport();
+    await expectNoHorizontalScroll(page);
+  });
 });
 
 /** The element of the page with this anchor. */
@@ -515,6 +792,13 @@ test.describe("the chat's layout", () => {
         for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
         await page.screenshot({
           path: testInfo.outputPath(`ask-answered-${String(width)}-${scheme}.png`),
+        });
+        // Scrolled to its end, the page shows the profile note below the composer.
+        await page.evaluate(() => {
+          window.scrollTo(0, document.documentElement.scrollHeight);
+        });
+        await page.screenshot({
+          path: testInfo.outputPath(`ask-end-${String(width)}-${scheme}.png`),
         });
 
         // Every kind of card and the sources, in one conversation: the services, the

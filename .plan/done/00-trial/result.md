@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-11-15 |
-| PRD | `.plan/00-trial/prd.md` |
+| PRD | `.plan/done/00-trial/prd.md` |
 | Phase pull request | #13, closed without merging; `phase/00-trial` deleted |
 | Verdict | Passed. The harness is ready for phase 1. |
 

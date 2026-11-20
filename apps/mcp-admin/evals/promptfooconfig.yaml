@@ -1,10 +1,10 @@
-# Model evals of the administrative MCP server (.plan/05-mcp-admin/evals.md).
+# Model evals of the administrative MCP server (.plan/done/05-mcp-admin/evals.md).
 #
 # Do not run this file directly: `node evals/run.js` starts a clean API and MCP server for every
 # case-run, passes the address and an ephemeral key through the environment and applies the gates.
-# Pinned settings: Promptfoo 0.126.0 (run through `pnpm dlx`), the provider and model below
+# Pinned settings: Promptfoo 0.126.0 (an exact dev dependency of this app), the provider and model below
 # (Claude Sonnet 5.5 at medium effort, the model the owner's client uses; the owner's decision in
-# .plan/05-mcp-admin/evals.md), prompt caching of the repeated prefix,
+# .plan/done/05-mcp-admin/evals.md), prompt caching of the repeated prefix,
 # @modelcontextprotocol/server 2.4.0, the model's default sampling, at most 6 tool calls and 4096
 # output tokens per conversation, 120 s per case-run, and the frozen clock in prompt.json. The clock is frozen in the
 # prompt only: the API and MCP Admin run on real time (no case depends on it). The MCP address is
@@ -39,6 +39,7 @@ providers:
 
 tests: file://tests.js
 
+# One test per Promptfoo process; the runner runs a few case-runs at once, each on its own fixture.
 evaluateOptions:
   maxConcurrency: 1
   # A case-run that takes longer is an error, not a hang.

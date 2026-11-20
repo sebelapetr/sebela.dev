@@ -1,6 +1,6 @@
 # Phase 5 — Issues
 
-Source: [MCP Admin PRD](prd.md). The owner approved direct publication of this five-slice breakdown in conversation, using the repository-local [to-issues skill](../../.claude/skills/to-issues/SKILL.md).
+Source: [MCP Admin PRD](prd.md). The owner approved direct publication of this five-slice breakdown in conversation, using the repository-local [to-issues skill](../../../.claude/skills/to-issues/SKILL.md).
 
 Published on 2026-11-18: **5 issues, 4 AFK and 1 HITL**. Labels are `phase:05-mcp-admin`, `afk`/`hitl` and `ready-for-agent`; labels do not waive dependencies or HITL gates. No MCP implementation, real-model eval or phase loop was started by this publication.
 

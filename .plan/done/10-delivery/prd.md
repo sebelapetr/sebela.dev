@@ -79,7 +79,7 @@ Bunny CDN in front of sebela.dev, as today
 ### Production stack
 
 - `infra/` holds the production definition (owner-approved new top-level folder, added to `docs/repository-structure.md`): Compose production overrides (GHCR images, `127.0.0.1` port bindings, restart policies, health checks, `json-file` log rotation), an environment example with every production variable as a placeholder, a reference nginx site configuration, `crons.txt`, and the `deploy`, `backup` and `restore` scripts, with a README.
-- **Reverse proxy:** the server's existing nginx managed by the server's hosting panel with its Let's Encrypt certificate, proxying `sebela.dev` to the website's local port, with security headers, compression and request limits. No Traefik. Bunny CDN stays in front, as today.
+- **Reverse proxy:** the server's existing nginx, managed by its hosting panel, with its Let's Encrypt certificate, proxying `sebela.dev` to the website's local port, with security headers, compression and request limits. No Traefik. Bunny CDN stays in front, as today.
 - **Networks:** Postgres, the API and admin MCP have no public address. Admin MCP and private content-write routes are reachable only through an authenticated SSH tunnel; authentication still applies. The public edge refuses them even with a valid key.
 - **Indexing:** the website sends `noindex` until `WEB_INDEXING` is switched on in the production environment.
 - **Analytics:** Umami Cloud, loaded only in production when its website ID is configured; never in worktrees, e2e or CI. The builder checks the current free-plan limits.

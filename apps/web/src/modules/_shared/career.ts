@@ -1,5 +1,5 @@
 // The length of the person's career, the same on every page that states it: the years count
-// software development overall, never one technology or the AI work (.plan/03-web/prd.md).
+// software development overall, never one technology or the AI work (.plan/done/03-web/prd.md).
 
 /**
  * Whole years since the career started, or null without a start date or before the first full

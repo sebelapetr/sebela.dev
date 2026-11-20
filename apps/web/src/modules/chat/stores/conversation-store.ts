@@ -44,6 +44,9 @@ export interface ConversationSnapshot {
 /** What became of a question: sent, refused while another is answering, or not a valid question. */
 export type SubmitResult = "sent" | "busy" | "invalid";
 
+/** What opening an address did: sent the question the hero handed off, or only showed it. */
+export type OpenResult = "sent" | "shown";
+
 /** What became of a retry: sent, refused while another is answering, or not a turn to retry. */
 export type RetryResult = "sent" | "busy" | "not_retryable";
 
@@ -57,9 +60,9 @@ export interface ConversationStore {
    * changes nothing, so rerenders, back and forward never resend. Otherwise it cancels the request
    * in flight, restores the conversation from this tab (an answer that was still streaming becomes
    * interrupted; an unknown address opens empty) and sends a question handed off by the hero for
-   * this address, exactly once.
+   * this address, exactly once. Says whether it sent that question or only showed the conversation.
    */
-  open(conversationId: string | null): void;
+  open(conversationId: string | null): OpenResult;
   /**
    * Sends a question (trimmed, 1 to `chatQuestionMaxLength` characters) in the open conversation,
    * creating its random address for a new chat. Refused while another question is answering.
@@ -351,17 +354,19 @@ export function createConversationStore({
       };
     },
     open(conversationId) {
-      if (opened && conversationId === state.conversationId) return;
+      if (opened && conversationId === state.conversationId) return "shown";
       opened = true;
       cancel();
       if (conversationId === null) {
         set(snapshot(null, []));
-        return;
+        return "shown";
       }
       const turns = restore(storage, conversationId);
       set(snapshot(conversationId, turns));
       const handedOff = take(storage, handOffKey(conversationId));
-      if (handedOff !== null && turns.length === 0) submit(handedOff);
+      return handedOff !== null && turns.length === 0 && submit(handedOff) === "sent"
+        ? "sent"
+        : "shown";
     },
     submit,
     retry,

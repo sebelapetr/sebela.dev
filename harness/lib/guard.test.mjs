@@ -25,7 +25,7 @@ test("editing app code inside a worktree is allowed", () => {
 
 test("editing docs, plans and agent configuration in the main checkout is allowed", () => {
   assert.equal(call("Edit", { file_path: "/repo/docs/testing.md" }), null);
-  assert.equal(call("Write", { file_path: "/repo/.plan/03-web/prd.md" }), null);
+  assert.equal(call("Write", { file_path: "/repo/.plan/done/03-web/prd.md" }), null);
   assert.equal(call("Edit", { file_path: "/repo/.claude/agents/reviewer.md" }), null);
 });
 
@@ -699,4 +699,93 @@ test("ordinary commands pass", () => {
   assert.equal(bash("pnpm test"), null);
   assert.equal(bash("git status"), null);
   assert.equal(call("WebFetch", { url: "https://example.com" }), null);
+});
+
+// --- the shared Compose stack -------------------------------------------------
+
+test("agents cannot start, stop or rebuild the shared Compose stack", () => {
+  for (const command of [
+    "pnpm stack:up",
+    "pnpm --silent stack:down",
+    "pnpm run stack:seed",
+    "docker compose up --detach --wait",
+    "docker compose --profile api up --build --detach",
+    "docker compose -f compose.yaml down",
+    "docker-compose restart postgres",
+    "docker compose stop postgres",
+    "docker compose rm -f api",
+    "docker compose build api",
+    "docker compose run --rm migrate",
+    "docker compose -p sebela up -d",
+    "docker compose --project-name=sebela down",
+    "cd /repo && docker compose up -d",
+    "COMPOSE_PROJECT_NAME=sebela docker compose up -d",
+  ]) {
+    assert.ok(bash(command, own), command);
+    assert.ok(bash(command, { isSubagent: true }), command);
+  }
+});
+
+test("agents may inspect the shared stack and use their own Compose project", () => {
+  for (const command of [
+    "docker compose ps",
+    "docker compose logs postgres",
+    "docker compose exec -T postgres psql -c 'select 1'",
+    "docker compose config",
+    "docker compose -p feat-232-check up -d",
+    "docker compose --project-name feat-232-check down -v",
+    "docker compose --project-name=feat-232-check build web",
+    "COMPOSE_PROJECT_NAME=feat-232-check docker compose up -d",
+    "pnpm test:api-stack",
+    "pnpm --silent stack:api-keys create reviewer",
+    "pnpm stack:logs",
+  ]) {
+    assert.equal(bash(command, own), null, command);
+  }
+});
+
+test("the owner's interactive session may manage the shared stack", () => {
+  assert.equal(bash("pnpm stack:up"), null);
+  assert.equal(bash("docker compose up --detach --wait"), null);
+});
+
+// --- the production stack -------------------------------------------------------
+
+test("agents cannot reach the production stack or run its scripts", () => {
+  for (const command of [
+    "docker exec sebela-production-api-1 env",
+    "docker logs sebela-production-web-1",
+    "docker inspect sebela-production-postgres-1",
+    "docker cp sebela-production-api-1:/app/x .",
+    "docker stop sebela-production-api-1",
+    "docker compose -p sebela-production ps",
+    "docker compose --project-name=sebela-production logs api",
+    "docker compose -f compose.yaml -f infra/production/compose.yaml up -d",
+    "docker compose --file infra/production/compose.yaml config",
+    "COMPOSE_PROJECT_NAME=sebela-production docker compose exec api sh",
+    "infra/scripts/deploy.sh rollback",
+    "bash infra/scripts/restore.sh list",
+    "sh ./infra/scripts/backup.sh",
+    "sudo -u deploy infra/scripts/clear-demo.sh --confirm x",
+  ]) {
+    assert.ok(bash(command, own), command);
+    assert.ok(bash(command, { isSubagent: true }), command);
+  }
+});
+
+test("agents may still read the production scripts and test the composition", () => {
+  for (const command of [
+    "cat infra/scripts/deploy.sh",
+    "sed -n 1,40p infra/production/compose.yaml",
+    "node --test scripts/checks/production-stack.test.mjs",
+    "pnpm test:production-stack",
+    "docker ps",
+  ]) {
+    assert.equal(bash(command, own), null, command);
+  }
+});
+
+test("the owner's interactive session may operate production", () => {
+  assert.equal(bash("docker logs sebela-production-web-1"), null);
+  assert.equal(bash("infra/scripts/deploy.sh rollback"), null);
 });

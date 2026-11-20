@@ -51,7 +51,7 @@ Prerequisite: phase 2 must be complete and owner-merged into `master` before imp
 
 ## Web module layout (added 2026-11-17)
 
-The owner stopped the first run during [#42](https://github.com/sebelapetr/sebela.dev/issues/42): its modules sat directly under `apps/web/src/`, outside what the import-boundaries rule checks. The layout is now decided ([decision 0017](../../docs/decisions/0017-web-module-layout.md)) and described in [repository structure](../../docs/repository-structure.md#web-module-layout) and the PRD (Code layout): thin routes in `src/app/`, everything else in `src/modules/<name>/` behind one entry, `_shared` for what several modules use.
+The owner stopped the first run during [#42](https://github.com/sebelapetr/sebela.dev/issues/42): its modules sat directly under `apps/web/src/`, outside what the import-boundaries rule checks. The layout is now decided ([decision 0017](../../../docs/decisions/0017-web-module-layout.md)) and described in [repository structure](../../../docs/repository-structure.md#web-module-layout) and the PRD (Code layout): thin routes in `src/app/`, everything else in `src/modules/<name>/` behind one entry, `_shared` for what several modules use.
 
 - All twenty issues, #42–#61, received one more acceptance criterion requiring that layout. Nothing else in them changed.
 - #42 is reopened in effect: its pull request is not merged, and a comment on the issue lists the remaining move of `profile`, `homepage` and the shared footer and addresses into `src/modules/`.

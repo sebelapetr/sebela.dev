@@ -113,21 +113,34 @@ export function readMediaConfig(env: Environment, cwd: string = process.cwd()): 
   } catch (error) {
     problems.push(error instanceof Error ? error.message : String(error));
   }
+  let limits: MediaLimits | null = null;
+  try {
+    limits = readMediaLimits(env);
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : String(error));
+  }
+  if (storage === null || limits === null) throw new Error(problems.join("; "));
+  return { storage, limits };
+}
+
+/**
+ * Reads only the upload limits `MEDIA_MAX_BYTES` and `MEDIA_MAX_IMAGE_DIMENSION` (positive
+ * integers), for a caller that checks a file without storing it. Throws an error naming every
+ * missing or invalid variable, never their values.
+ */
+export function readMediaLimits(env: Environment): MediaLimits {
   const maxBytes = positiveInteger(env["MEDIA_MAX_BYTES"]);
   const maxImageDimension = positiveInteger(env["MEDIA_MAX_IMAGE_DIMENSION"]);
-  const invalid = [
-    ...(maxBytes === null ? ["MEDIA_MAX_BYTES"] : []),
-    ...(maxImageDimension === null ? ["MEDIA_MAX_IMAGE_DIMENSION"] : []),
-  ];
-  if (invalid.length > 0) {
-    problems.push(
+  if (maxBytes === null || maxImageDimension === null) {
+    const invalid = [
+      ...(maxBytes === null ? ["MEDIA_MAX_BYTES"] : []),
+      ...(maxImageDimension === null ? ["MEDIA_MAX_IMAGE_DIMENSION"] : []),
+    ];
+    throw new Error(
       `Invalid media configuration: set ${invalid.join(", ")} to positive integers (documented in .env.example)`,
     );
   }
-  if (storage === null || maxBytes === null || maxImageDimension === null) {
-    throw new Error(problems.join("; "));
-  }
-  return { storage, limits: { maxBytes, maxImageDimension } };
+  return { maxBytes, maxImageDimension };
 }
 
 /**
