@@ -80,7 +80,7 @@ export function deepLinkScrollBehavior(
   trigger: DeepLinkTrigger,
   reducedMotion: boolean,
 ): "instant" | "smooth" {
-  throw new Error("not implemented", { cause: { trigger, reducedMotion } });
+  return trigger === "navigation" && !reducedMotion ? "smooth" : "instant";
 }
 
 /**
@@ -88,5 +88,17 @@ export function deepLinkScrollBehavior(
  * path and query), or null for another page, another address or a link without a hash.
  */
 export function inPageHash(href: string, current: string): string | null {
-  throw new Error("not implemented", { cause: { href, current } });
+  let target: URL;
+  let page: URL;
+  try {
+    page = new URL(current);
+    target = new URL(href, page);
+  } catch {
+    return null;
+  }
+  const samePage =
+    target.origin === page.origin &&
+    target.pathname === page.pathname &&
+    target.search === page.search;
+  return samePage && target.hash.length > 1 ? target.hash : null;
 }
