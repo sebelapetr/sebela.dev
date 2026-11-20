@@ -24,11 +24,11 @@ from llm_agent.models.config import STAGES, Effort, Stage
 from llm_agent.models.usage import measured
 from llm_agent.observability.tracing import Tracer
 from llm_agent.reliability.budgets import Budget
-from llm_agent.reliability.retries import is_transient
+from llm_agent.reliability.retries import is_transient, retry_after_s
 from llm_agent.reliability.stops import LimitReached
 from llm_agent.reliability.timeouts import Deadline
 
-#: The pause before the single retry, bounded by the deadline.
+#: The least pause before the single retry; a provider's longer Retry-After is honoured instead.
 RETRY_BACKOFF_S = 0.25
 #: The token attributes of an attempt the provider did not bill or report.
 _NO_TOKENS: dict[str, int | None] = {"input_tokens": None, "output_tokens": None}
@@ -165,6 +165,11 @@ class Gateway:
             if isinstance(failure, TimeoutError):
                 status = "timeout"
             self._tracer.finish(span, status, started, **labels, **_NO_TOKENS)
-            if not (is_transient(failure) and self._budget.allow_retry()):
+            # The pause the provider asks for; one that would outlast the deadline is not waited for
+            # and the retry allowance stays unused.
+            pause = max(RETRY_BACKOFF_S, retry_after_s(failure) or 0.0)
+            if not is_transient(failure) or pause >= self._deadline.remaining():
                 raise ModelUnavailable(stage) from failure
-            await asyncio.sleep(self._deadline.bounded(RETRY_BACKOFF_S))
+            if not self._budget.allow_retry():
+                raise ModelUnavailable(stage) from failure
+            await asyncio.sleep(pause)

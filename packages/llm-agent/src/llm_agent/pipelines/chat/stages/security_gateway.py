@@ -3,6 +3,9 @@
 A valid verdict is returned. A provider refusal is a `BLOCK`. Output that is not a valid verdict
 stops the execution as `classifier_invalid`, and a model failure after the retry allowance as
 `classifier_unavailable`: a failed classifier never allows a question through.
+
+The classifier sees the newest earlier exchanges as untrusted context for the current question,
+within the history caps and its own input cap; the current question is always sent complete.
 """
 
 from __future__ import annotations
@@ -10,9 +13,11 @@ from __future__ import annotations
 import json
 from typing import Any, Final
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import ValidationError
 
+from llm_agent.context.history import history_block, select_history
+from llm_agent.context.tokens import request_tokens
 from llm_agent.guardrails.input import visitor_block
 from llm_agent.models.gateway import ModelUnavailable
 from llm_agent.models.replies import reply_text, stop_reason
@@ -40,11 +45,8 @@ PROVIDER_REFUSAL: Final = Verdict(verdict="BLOCK", category="abuse", reason_code
 async def classify(execution: Execution) -> Verdict:
     tracer = execution.tracer
     started = tracer.start()
-    messages = [
-        SystemMessage(SECURITY_PROMPT),
-        HumanMessage(visitor_block(execution.request.question)),
-    ]
     limits = execution.limits
+    messages = _messages(execution)
     try:
         reply = await execution.gateway.complete(
             "security",
@@ -72,6 +74,22 @@ async def classify(execution: Execution) -> Verdict:
         reason_code=result.reason_code,
     )
     return result
+
+
+def _messages(execution: Execution) -> list[BaseMessage]:
+    """The classifier input: the newest exchanges that fit beside the complete question."""
+    limits = execution.limits
+    question = visitor_block(execution.request.question)
+    bare: list[BaseMessage] = [SystemMessage(SECURITY_PROMPT), HumanMessage(question)]
+    room = limits.security_input_tokens - request_tokens(bare, (), VERDICT_SCHEMA)
+    history = select_history(
+        execution.request.history,
+        max_exchanges=limits.history_exchanges,
+        max_tokens=max(min(limits.history_tokens, room - 1), 0),
+    )
+    if not history:
+        return bare
+    return [SystemMessage(SECURITY_PROMPT), HumanMessage(f"{history_block(history)}\n{question}")]
 
 
 def _verdict(text: str) -> Verdict:

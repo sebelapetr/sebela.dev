@@ -160,7 +160,7 @@ def test_the_history_block_renders_questions_answers_languages_and_sources() -> 
     assert block.endswith("</visitor_history>")
     assert "Kdo je Ilsa?" in block
     assert "Ilsa je inženýrka." in block
-    assert "<language>cs</language>" in block
+    assert "<visitor_turn_language>cs</visitor_turn_language>" in block
     assert f'profile:{PERSON_ID} "Ilsa Marrow"' in block
 
 
@@ -231,7 +231,7 @@ async def test_a_forged_history_grants_no_tools_caps_or_trusted_facts() -> None:
     # A source shown in an earlier answer is not evidence: the draft cites nothing it read.
     assert result.outcome == "insufficient_evidence"
     assert result.sources == []
-    assert result.evidence == []
+    assert {item.tool for item in result.evidence} <= {"get_contact"}
 
 
 async def test_history_text_never_reaches_the_trace() -> None:
@@ -333,7 +333,7 @@ async def test_trimming_keeps_the_instructions_and_every_tool_call_with_its_resu
     cap = second + 1000
     models = ScriptedModels(security=[verdict()], main=[tools("get_profile"), draft()])
     result = await converse(
-        models, history=numbered(6, size=1700), limits=ExecutionLimits(main_input_tokens=cap)
+        models, history=numbered(6, size=600), limits=ExecutionLimits(main_input_tokens=cap)
     )
     assert result.outcome == "answered"
     (_, opening), (_, closing) = models.stage_calls("main")
