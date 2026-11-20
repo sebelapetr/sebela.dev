@@ -6,10 +6,11 @@ name: Commit messages
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  # Pushes to master only, as in ci.yml: the squash commits on a phase branch are checked by its
+  # phase pull request.
   push:
     branches:
       - master
-      - "phase/**"
 
 permissions:
   contents: read
