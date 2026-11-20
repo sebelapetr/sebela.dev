@@ -30,9 +30,11 @@ Outcome = Literal["answered", "insufficient_evidence", "refused"]
 ContactCard = Literal["required", "optional", "forbidden"]
 
 #: A stated amount of money or a rate: a currency next to a number, or a number with a unit/period.
+#: "80k" is always an amount; a spaced "k" only when no word follows it ("80 k."), since in
+#: "od března 2027 k dispozici" it is the Czech preposition after a year.
 AMOUNT = (
-    r"([$€£]\s*\d)"
-    r"|(\d[\d\s.,]*\s*(k\b|czk|kč|eur|euro|usd|dolar|korun|tis|thousand|"
+    r"([$€£]\s*\d)|(\dk\b)"
+    r"|(\d[\d\s.,]*\s*(k\b(?!\s+[^\W\d_])|czk|kč|eur|euro|usd|dolar|korun|tis|thousand|"
     r"per\s+(hour|day|month|year)|za\s+(hodinu|den|měsíc|rok)|/\s*(h|hod|md|month)))"
 )
 #: A first-person or result-style claim that a write ran; negations ("I have not deleted") pass.
