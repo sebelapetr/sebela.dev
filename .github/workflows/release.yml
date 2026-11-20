@@ -1,8 +1,9 @@
-# Release: on every push to master, build only the images the push affects, verify them as the
-# running production stack and publish only verified images to GHCR (docs/release-workflow.md,
-# "Images"). The decisions live in scripts/release/images.mjs and are tested with fixtures.
-# The only credential is the job's GITHUB_TOKEN, which may write packages only in the job that
-# publishes. A later job deploys the tag set of the `images` job (issue #234).
+# Release: on every push to master, build only the images that changed since the current image of
+# each service, verify them as the running production stack and publish only verified images to
+# GHCR (docs/release-workflow.md, "Images"). The decisions live in scripts/release/images.mjs and
+# are tested with fixtures. The only credential is the job's GITHUB_TOKEN; the Docker sign-in to
+# GHCR exists only around the steps that read or write it. A later job deploys the tag set of the
+# `images` job (issue #234).
 name: Release
 
 on:
@@ -13,23 +14,30 @@ on:
 permissions:
   contents: read
 
-# One release at a time, in push order: a later push must not move a `current` tag before an
-# earlier one has finished.
+# One release at a time. GitHub keeps the running release and cancels a waiting one when a newer
+# push queues; nothing is lost, because each release builds every service that changed since its
+# current image, whatever earlier releases did.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  # Which services the push affects: Turborepo's affected packages between the commit before the
-  # push and HEAD, the same selection as the quality job of CI, mapped to the api, web and
-  # mcp-admin images. A push that affects none (docs only, a workflow alone) builds nothing, and
-  # the jobs after this one are skipped.
-  changes:
-    name: Affected services
+  # What to build and what to reuse: each service is compared with the commit of its current
+  # image, through Turborepo's affected packages as in the quality job of CI. A push that changes
+  # no image (docs only, a workflow alone) releases nothing, and the jobs after this one are
+  # skipped. A current image newer than this commit fails the job, so an older release is never
+  # published over a newer one.
+  plan:
+    name: Plan the images
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
     outputs:
-      services: ${{ steps.affected.outputs.services }}
-      build: ${{ steps.affected.outputs.build }}
+      build: ${{ steps.plan.outputs.build }}
+      tags: ${{ steps.plan.outputs.tags }}
+      release: ${{ steps.plan.outputs.release }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -41,48 +49,61 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Affected services and why
-        id: affected
-        env:
-          BASE: ${{ github.event.before }}
-        run: node scripts/release/images.mjs affected >> "$GITHUB_OUTPUT"
-
-  # Natively on arm64, as the server runs: builds the affected images tagged with the commit SHA,
-  # pulls the current images of the unchanged services (building those that have none), starts them
-  # all as the production composition with the demo seed and runs the production stack smoke check
-  # with the complete-stack browser tests (the mock Ask page; no model is called). Only when that
-  # passes are the built images pushed, the very images that were verified.
-  images:
-    name: Build, verify and publish the images
-    needs: changes
-    if: needs.changes.outputs.build == 'true'
-    runs-on: ubuntu-24.04-arm
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      tags: ${{ steps.plan.outputs.tags }}
-      built: ${{ steps.plan.outputs.build }}
-    env:
-      SHA: ${{ github.sha }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Sign in to GHCR with the job's token
+      - name: Sign in to GHCR to read the current images
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
       - name: What to build and what to reuse
         id: plan
         env:
-          AFFECTED: ${{ needs.changes.outputs.services }}
+          SHA: ${{ github.sha }}
         run: node scripts/release/images.mjs plan >> "$GITHUB_OUTPUT"
-      - name: Build the images
+      - name: Sign out of GHCR
+        if: ${{ always() }}
+        run: docker logout ghcr.io
+
+  # Natively on arm64, as the server runs: pulls the reused images, builds the planned ones tagged
+  # with the commit SHA, starts them all as the production composition with the demo seed and runs
+  # the production stack smoke check with the complete-stack browser tests (the mock Ask page; no
+  # model is called). Only when that passes are the built images pushed, the very images that were
+  # verified.
+  images:
+    name: Build, verify and publish the images
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tags: ${{ needs.plan.outputs.tags }}
+      built: ${{ needs.plan.outputs.build }}
+    env:
+      SHA: ${{ github.sha }}
+      BUILD: ${{ needs.plan.outputs.build }}
+      TAGS: ${{ needs.plan.outputs.tags }}
+    steps:
+      # The whole history, so publishing can check that no newer image was published meanwhile.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Sign in to GHCR to pull the reused images
         env:
-          BUILD: ${{ steps.plan.outputs.build }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+      - name: Pull the reused images
+        run: node scripts/release/images.mjs pull
+      - name: Sign out of GHCR
+        if: ${{ always() }}
+        run: docker logout ghcr.io
+      - name: Build the images
         run: node scripts/release/images.mjs build
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -94,9 +115,9 @@ jobs:
         run: pnpm --filter @sebela/web exec playwright install --with-deps chromium
       - name: Verify the stack from these images
         env:
-          API_IMAGE_TAG: ${{ fromJSON(steps.plan.outputs.tags).api }}
-          WEB_IMAGE_TAG: ${{ fromJSON(steps.plan.outputs.tags).web }}
-          MCP_ADMIN_IMAGE_TAG: ${{ fromJSON(steps.plan.outputs.tags)['mcp-admin'] }}
+          API_IMAGE_TAG: ${{ fromJSON(needs.plan.outputs.tags).api }}
+          WEB_IMAGE_TAG: ${{ fromJSON(needs.plan.outputs.tags).web }}
+          MCP_ADMIN_IMAGE_TAG: ${{ fromJSON(needs.plan.outputs.tags)['mcp-admin'] }}
         run: node scripts/checks/production-stack.e2e.mjs --images --browser
       - name: Screenshots
         if: ${{ !cancelled() }}
@@ -106,13 +127,17 @@ jobs:
           path: apps/web/test-results/complete-stack/
           if-no-files-found: ignore
           retention-days: 14
+      - name: Sign in to GHCR to publish
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
       - name: Publish the verified images
-        env:
-          BUILD: ${{ steps.plan.outputs.build }}
         run: node scripts/release/images.mjs publish
+      - name: Sign out of GHCR after publishing
+        if: ${{ always() }}
+        run: docker logout ghcr.io
       - name: Release tag set
-        env:
-          TAGS: ${{ steps.plan.outputs.tags }}
         run: |
           {
             echo "### Image tags"

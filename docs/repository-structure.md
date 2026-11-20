@@ -144,7 +144,7 @@ A task with no package defining it, such as `build` before the first package wit
 
 `turbo run … --affected` selects the packages changed between a comparison base (`TURBO_SCM_BASE`) and `HEAD`, together with every package that depends on them. Turborepo widens that selection itself:
 
-- A change to `turbo.json`, the root `package.json` or a file of `globalDependencies` in `turbo.json` (`.nvmrc`, `pnpm-workspace.yaml`) selects every package.
+- A change to `turbo.json` or a file of `globalDependencies` in `turbo.json` (`.nvmrc`, `pnpm-workspace.yaml`) selects every package. A change to the root `package.json` selects only the root package (`//`), whose tasks CI runs on every change; the release workflow treats it as a change to every image (`docs/release-workflow.md`, Images).
 - A change to the lockfile selects the packages whose external dependencies changed.
 - The root depends on `@sebela/config`, so a change to the shared configuration selects every package, its consumers included.
 - A base Turborepo cannot resolve in the checkout — a new branch, a rewritten history, a shallow clone — selects every package.
