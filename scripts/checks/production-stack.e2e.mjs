@@ -98,15 +98,17 @@ const env = {
   WEB_INDEXING: "",
 };
 
+/** The command's standard output, trimmed; empty when `options.stdio` does not pipe it. */
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  const output = execFileSync(command, args, {
     cwd: CHECKOUT_ROOT,
     env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 64 * 1024 * 1024,
     ...options,
-  }).trim();
+  });
+  return (output ?? "").trim();
 }
 
 function compose(args) {
