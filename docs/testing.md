@@ -58,6 +58,15 @@ MCP tools and AI features are developed evals-first.
 - Measure attack success from outcomes and executed tool calls, plus legitimate-question false positives, latency and cost. Passing a finite safety suite is a release gate, not proof of absolute security.
 - Use fictional adversarial fixtures. Real visitor/owner data never enters committed regression datasets.
 
+### Memory evals
+
+The retrieval evals of `packages/memory/evals/` (`packages/memory/AGENTS.md`, Evals) measure search without an LLM judge: recall@pool over graded relevance, nDCG, precision, MRR, correct and false empty results below the relevance floor, provenance accuracy, latency and cost per query.
+
+- `pnpm --filter @sebela/memory eval [--case <id>] [--publish <name>] [--max-cost-usd <n>]` runs through `node harness/with-secrets.mjs --`, which supplies `VOYAGE_API_KEY`; `--plan` prints what would run, free. A run spends at most USD 1 (the default and the maximum of `--max-cost-usd`), enforced as the API's monthly embedding ceiling on the run's fresh database.
+- A measured run starts the API's end-to-end server on a temporary database with the fictional demo seed, indexes it and records the candidate pools through the API's `knowledge` command, then sends every question to the private search route. It needs the running Postgres and a build of the API's packages.
+- Cases the system cannot answer yet (`plan.js`) are reported pending, never passed; without the key every case is pending (exit code 2). Publish paid baselines to `evals/results/` with their cost, and post the cumulative spend in the pull request.
+- Ordinary tests never call the provider: the deterministic fake embedder is a bag of words, so a test query uses the target record's own words and a no-evidence query uses words absent from the seed. `evals/evals.test.ts` checks dataset, graders, plan and options with `pnpm test`.
+
 ## Knowledge publication and source privacy
 
 - Phase 9 tests the terminal ingest boundary before implementation: supported formats/extraction limits, local sensitivity checks, approval tied to content/version, no external embedding call before approval and no public access to pending/rejected material.

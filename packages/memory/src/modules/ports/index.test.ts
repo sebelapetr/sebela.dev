@@ -28,7 +28,7 @@ describe("readRetrievalConfig", () => {
   });
 
   it("is absent when no setting is given", () => {
-    expect(readRetrievalConfig({ DATABASE_NAME: "ignored" })).toBeNull();
+    expect(readRetrievalConfig({ MEDIA_MAX_BYTES: "10485760" })).toBeNull();
   });
 
   it("names every missing or invalid setting", () => {

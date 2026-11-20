@@ -76,7 +76,9 @@ describe("POST /v1/retrieval/search", () => {
   });
 
   it("returns portfolio passages that validate against the contract", async () => {
-    const response = await search({ query: "What is a context window?" });
+    // The fake embedder is a bag of words, so stop words would rank long records first: the query
+    // names the glossary term's own words.
+    const response = await search({ query: "context window tokens a model reads in one request" });
 
     expect(response.status).toBe(200);
     const result = SearchResultSchema.parse(await response.json());
@@ -104,7 +106,9 @@ describe("POST /v1/retrieval/search", () => {
   });
 
   it("returns no evidence below the relevance floor", async () => {
-    const response = await search({ query: "zyxwv qpqpq mnbvc" });
+    // The fake embedder hashes words into 1024 buckets; no demo-seed word shares these words' buckets.
+    const unmatched = "glorpk vlemish drubnik";
+    const response = await search({ query: unmatched });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "no_evidence", passages: [] });

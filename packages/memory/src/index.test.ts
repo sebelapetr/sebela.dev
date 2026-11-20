@@ -442,4 +442,12 @@ describe("searching the portfolio", () => {
     expect(pool[0]).toBe("portfolio:project:reading-assistant");
     expect(new Set(pool).size).toBe(pool.length);
   });
+
+  it("restricts the candidate pool to the given kinds, as the search does", async () => {
+    const { indexer, retriever } = knowledgeBase({ config: { relevanceFloor: 0.999 } });
+    await indexer.reindexPortfolio(snapshot());
+    const pool = await retriever.candidates("hybrid search reranker archive", ["glossary_term"]);
+    expect(pool.length).toBeGreaterThan(0);
+    expect(pool.every((sourceId) => sourceId.startsWith("portfolio:glossary_term:"))).toBe(true);
+  });
 });

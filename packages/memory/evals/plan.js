@@ -29,12 +29,12 @@ import { readFileSync } from "node:fs";
  */
 
 /**
- * What the search route can answer today. Empty until the vector baseline exists: every case is
- * pending, so the runner can never report a pass for search that is not implemented.
+ * What the search route can answer today: the indexed public portfolio. Supplemental documents are
+ * not ingested yet, so their cases stay pending and the runner never reports a pass for them.
  *
  * @type {ReadonlySet<Capability>}
  */
-export const SEARCHABLE = new Set();
+export const SEARCHABLE = new Set(/** @type {Capability[]} */ (["portfolio"]));
 
 /** @returns {Dataset} */
 export function loadDataset() {

@@ -1,4 +1,9 @@
+import { and, asc, cosineDistance, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
+
 import type { Database } from "../../database.js";
+import { chunks, providerUsage, sections, sources, versions } from "./schema.js";
+
+export { retrievalDimension } from "./schema.js";
 
 /** Whether a source is portfolio content or a supplemental document. */
 export type RetrievalSourceKind = "portfolio" | "supplemental";
@@ -118,16 +123,189 @@ export interface RetrievalPersistence {
 }
 
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
-  const missing = (): never => {
-    throw new Error(`Not implemented: ${typeof db}`);
-  };
   return {
-    indexedSources: missing,
-    vectorsByHash: missing,
-    replaceSource: missing,
-    removeSourcesExcept: missing,
-    recordUsage: missing,
-    usageSince: missing,
-    nearest: missing,
+    async indexedSources() {
+      return db
+        .select({
+          sourceId: sources.sourceId,
+          version: versions.version,
+          model: versions.model,
+          modelVersion: versions.modelVersion,
+        })
+        .from(sources)
+        .innerJoin(versions, eq(versions.sourceId, sources.id))
+        .orderBy(asc(sources.sourceId));
+    },
+
+    async vectorsByHash(hashes, model, modelVersion) {
+      const found = new Map<string, readonly number[]>();
+      if (hashes.length === 0) return found;
+      const rows = await db
+        .selectDistinctOn([chunks.textHash], {
+          textHash: chunks.textHash,
+          embedding: chunks.embedding,
+        })
+        .from(chunks)
+        .where(
+          and(
+            inArray(chunks.textHash, [...hashes]),
+            eq(chunks.model, model),
+            eq(chunks.modelVersion, modelVersion),
+          ),
+        )
+        .orderBy(chunks.textHash);
+      for (const row of rows) found.set(row.textHash, row.embedding);
+      return found;
+    },
+
+    async replaceSource(source) {
+      await db.transaction(async (tx) => {
+        const [stored] = await tx
+          .insert(sources)
+          .values({
+            sourceId: source.sourceId,
+            sourceKind: source.sourceKind,
+            contentKind: source.contentKind,
+          })
+          .onConflictDoUpdate({
+            target: sources.sourceId,
+            set: { sourceKind: source.sourceKind, contentKind: source.contentKind },
+          })
+          .returning({ id: sources.id });
+        if (stored === undefined) throw new Error("The source was not stored.");
+        await tx.delete(versions).where(eq(versions.sourceId, stored.id));
+        const [version] = await tx
+          .insert(versions)
+          .values({
+            sourceId: stored.id,
+            version: source.version,
+            title: source.title,
+            path: source.path,
+            model: source.model,
+            modelVersion: source.modelVersion,
+            dimension: source.dimension,
+            indexedAt: source.indexedAt,
+          })
+          .returning({ id: versions.id });
+        if (version === undefined) throw new Error("The version was not stored.");
+        if (source.sections.length === 0) return;
+        const storedSections = await tx
+          .insert(sections)
+          .values(
+            source.sections.map((section) => ({
+              versionId: version.id,
+              ordinal: section.ordinal,
+              headingPath: [...section.headingPath],
+              start: section.start,
+              end: section.end,
+            })),
+          )
+          .returning({ id: sections.id, ordinal: sections.ordinal });
+        const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
+        if (source.chunks.length === 0) return;
+        await tx.insert(chunks).values(
+          source.chunks.map((chunk) => {
+            const sectionId = sectionIds.get(chunk.sectionOrdinal);
+            if (sectionId === undefined) {
+              throw new Error(`Chunk ${String(chunk.ordinal)} names an unknown section.`);
+            }
+            return {
+              versionId: version.id,
+              sectionId,
+              ordinal: chunk.ordinal,
+              text: chunk.text,
+              textHash: chunk.textHash,
+              search: sql`to_tsvector('simple', unaccent(${chunk.text}))`,
+              embedding: [...chunk.vector],
+              model: source.model,
+              modelVersion: source.modelVersion,
+              dimension: source.dimension,
+            };
+          }),
+        );
+      });
+    },
+
+    async removeSourcesExcept(sourceKind, sourceIds) {
+      const removed = await db
+        .delete(sources)
+        .where(
+          and(
+            eq(sources.sourceKind, sourceKind),
+            sourceIds.length === 0 ? undefined : notInArray(sources.sourceId, [...sourceIds]),
+          ),
+        )
+        .returning({ id: sources.id });
+      return removed.length;
+    },
+
+    async recordUsage(usage) {
+      await db.insert(providerUsage).values({ ...usage });
+    },
+
+    async usageSince(since) {
+      const rows = await db
+        .select({
+          operation: providerUsage.operation,
+          tokens: sql<number>`sum(${providerUsage.tokens})::float8`,
+          costUsd: sql<number>`sum(${providerUsage.costUsd})::float8`,
+        })
+        .from(providerUsage)
+        .where(gte(providerUsage.occurredAt, since))
+        .groupBy(providerUsage.operation);
+      const byOperation = {
+        index: { tokens: 0, costUsd: 0 },
+        search: { tokens: 0, costUsd: 0 },
+        candidates: { tokens: 0, costUsd: 0 },
+      } satisfies Record<RetrievalUsageOperation, { tokens: number; costUsd: number }>;
+      let tokens = 0;
+      let costUsd = 0;
+      for (const row of rows) {
+        const operation = usageOperations.find((known) => known === row.operation);
+        if (operation === undefined) continue;
+        byOperation[operation] = { tokens: row.tokens, costUsd: row.costUsd };
+        tokens += row.tokens;
+        costUsd += row.costUsd;
+      }
+      return { tokens, costUsd, byOperation };
+    },
+
+    async nearest(query) {
+      const distance = cosineDistance(chunks.embedding, [...query.vector]);
+      const rows = await db
+        .select({
+          sourceId: sources.sourceId,
+          sourceKind: sources.sourceKind,
+          contentKind: sources.contentKind,
+          title: versions.title,
+          path: versions.path,
+          version: versions.version,
+          text: chunks.text,
+          headingPath: sections.headingPath,
+          indexedAt: versions.indexedAt,
+          similarity: sql<number>`(1 - (${distance}))::float8`,
+        })
+        .from(chunks)
+        .innerJoin(versions, eq(versions.id, chunks.versionId))
+        .innerJoin(sources, eq(sources.id, versions.sourceId))
+        .innerJoin(sections, eq(sections.id, chunks.sectionId))
+        .where(
+          and(
+            eq(chunks.model, query.model),
+            eq(chunks.modelVersion, query.modelVersion),
+            query.kinds === undefined ? undefined : inArray(sources.contentKind, [...query.kinds]),
+          ),
+        )
+        .orderBy(distance)
+        .limit(query.limit);
+      return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
+    },
   };
+}
+
+const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", "candidates"];
+
+function sourceKindOf(value: string): RetrievalSourceKind {
+  if (value === "portfolio" || value === "supplemental") return value;
+  throw new Error(`Unknown source kind ${value}.`);
 }

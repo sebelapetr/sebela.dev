@@ -26,7 +26,7 @@ const ProvenanceHeaderSchema = z.object({
 
 /** Every write is audited: it changes content, which the app commits together with its audit. */
 const audited = (route: RouteDocumentation) =>
-  route.method !== "GET" && route.content !== undefined;
+  route.method !== "GET" && route.readOnly !== true && route.content !== undefined;
 
 const errorContent = { "application/json": { schema: ErrorResponseSchema } };
 
@@ -98,6 +98,15 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
       },
     }),
     "500": error("`internal_error`: an unexpected failure, without details."),
+    ...(route.errors.includes("provider_unavailable")
+      ? {
+          "503": error(
+            "`provider_unavailable`: an outside provider the route needs is not configured, failed " +
+              "or did not answer in time; `budget_exhausted`: the month's spend on it reached its " +
+              "ceiling. Never reported as an empty result.",
+          ),
+        }
+      : {}),
   };
 }
 

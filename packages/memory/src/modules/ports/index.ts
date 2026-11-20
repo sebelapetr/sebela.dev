@@ -2,7 +2,7 @@
 // of the index and its spend, and the portfolio as the public reads return it. `packages/db`
 // implements the store structurally, `packages/services` reads the portfolio and composes both;
 // nothing here knows SQL, HTTP or a provider's wire format.
-import type { RetrievalContentKind } from "@sebela/contracts";
+import { retrievalMaxPassages, type RetrievalContentKind } from "@sebela/contracts";
 
 /** Whether texts are embedded to be stored or to search with; providers encode them differently. */
 export type EmbeddingInput = "document" | "query";
@@ -307,6 +307,20 @@ export interface RetrievalConfig {
   readonly relevanceFloor: number;
 }
 
+const SETTINGS = {
+  embeddingModel: "RETRIEVAL_EMBEDDING_MODEL",
+  embeddingPricePerMillionTokensUsd: "RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD",
+  embeddingBatchSize: "RETRIEVAL_EMBEDDING_BATCH_SIZE",
+  providerTimeoutMs: "RETRIEVAL_PROVIDER_TIMEOUT_MS",
+  monthlyCeilingUsd: "RETRIEVAL_MONTHLY_CEILING_USD",
+  candidatePool: "RETRIEVAL_CANDIDATE_POOL",
+  finalPassages: "RETRIEVAL_FINAL_PASSAGES",
+  relevanceFloor: "RETRIEVAL_RELEVANCE_FLOOR",
+} as const satisfies Record<keyof RetrievalConfig, string>;
+
+/** The most texts the Voyage API accepts in one call. */
+const MAX_BATCH_SIZE = 1000;
+
 /**
  * Reads the retrieval settings. Returns `null` when none is set, so a process without retrieval
  * still starts and its search answers that the provider is unavailable; throws naming every
@@ -315,5 +329,53 @@ export interface RetrievalConfig {
 export function readRetrievalConfig(
   env: Readonly<Record<string, string | undefined>>,
 ): RetrievalConfig | null {
-  throw new Error(`Not implemented: ${String(Object.keys(env).length)}`);
+  const raw = (name: string) => {
+    const value = env[name]?.trim();
+    return value === undefined || value === "" ? undefined : value;
+  };
+  if (Object.values(SETTINGS).every((name) => raw(name) === undefined)) return null;
+
+  const problems: string[] = [];
+  const number = (name: string, valid: (value: number) => boolean, expectation: string): number => {
+    const value = raw(name);
+    const parsed = value === undefined ? Number.NaN : Number(value);
+    if (!Number.isFinite(parsed) || !valid(parsed)) {
+      problems.push(`${name} must be ${expectation}`);
+    }
+    return parsed;
+  };
+  const integer = (name: string, min: number, max: number) =>
+    number(
+      name,
+      (value) => Number.isInteger(value) && value >= min && value <= max,
+      `an integer from ${String(min)} to ${String(max)}`,
+    );
+
+  const embeddingModel = raw(SETTINGS.embeddingModel) ?? "";
+  if (embeddingModel === "") problems.push(`${SETTINGS.embeddingModel} must be a model name`);
+  const config: RetrievalConfig = {
+    embeddingModel,
+    embeddingPricePerMillionTokensUsd: number(
+      SETTINGS.embeddingPricePerMillionTokensUsd,
+      (value) => value >= 0,
+      "a non-negative price",
+    ),
+    embeddingBatchSize: integer(SETTINGS.embeddingBatchSize, 1, MAX_BATCH_SIZE),
+    providerTimeoutMs: integer(SETTINGS.providerTimeoutMs, 1, 120_000),
+    monthlyCeilingUsd: number(
+      SETTINGS.monthlyCeilingUsd,
+      (value) => value >= 0,
+      "a non-negative amount",
+    ),
+    candidatePool: integer(SETTINGS.candidatePool, 1, 1000),
+    finalPassages: integer(SETTINGS.finalPassages, 1, retrievalMaxPassages),
+    relevanceFloor: number(SETTINGS.relevanceFloor, (value) => value >= 0 && value <= 1, "0 to 1"),
+  };
+  if (problems.length === 0 && config.candidatePool < config.finalPassages) {
+    problems.push(`${SETTINGS.candidatePool} must be at least ${SETTINGS.finalPassages}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(`Invalid retrieval configuration: ${problems.join("; ")}.`);
+  }
+  return config;
 }

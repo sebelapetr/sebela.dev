@@ -19,7 +19,7 @@ import { createProfileService } from "../profile/index.js";
 import { createRoadmapService } from "../roadmap/index.js";
 import { createSeedService } from "../seed/index.js";
 import { openStorage } from "../storage/index.js";
-import { createKnowledgeService, type KnowledgeService } from "./index.js";
+import { createKnowledgeService, readRetrievalOptions, type KnowledgeService } from "./index.js";
 
 const config: RetrievalConfig = {
   embeddingModel: "fake-hashed-words",
@@ -126,7 +126,9 @@ describe("the knowledge service over the demo seed", () => {
   });
 
   it("finds no evidence below the relevance floor", async () => {
-    expect(await knowledge.search({ query: "zyxwvut plughqwerty frobnicated" })).toEqual({
+    // The fake embedder hashes words into 1024 buckets; no demo-seed word shares these words' buckets.
+    const unmatched = "glorpk vlemish drubnik";
+    expect(await knowledge.search({ query: unmatched })).toEqual({
       status: "no_evidence",
       passages: [],
     });
@@ -157,5 +159,48 @@ describe("the knowledge service over the demo seed", () => {
     expect((await refusal(spent.search({ query: "context window" }))).code).toBe(
       "budget_exhausted",
     );
+  });
+});
+
+describe("readRetrievalOptions", () => {
+  const settings = {
+    RETRIEVAL_EMBEDDING_MODEL: "voyage-4",
+    RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD: "0.06",
+    RETRIEVAL_EMBEDDING_BATCH_SIZE: "64",
+    RETRIEVAL_PROVIDER_TIMEOUT_MS: "10000",
+    RETRIEVAL_MONTHLY_CEILING_USD: "1",
+    RETRIEVAL_CANDIDATE_POOL: "30",
+    RETRIEVAL_FINAL_PASSAGES: "6",
+    RETRIEVAL_RELEVANCE_FLOOR: "0.3",
+  };
+  const fakeKey = "fictional-voyage-key-for-tests";
+
+  it("switches retrieval off without its settings", () => {
+    expect(readRetrievalOptions({ VOYAGE_API_KEY: fakeKey })).toEqual({ config: null });
+  });
+
+  it("has no provider without a key, so searching is unavailable", () => {
+    for (const key of [undefined, "", "  "]) {
+      const options = readRetrievalOptions({ ...settings, VOYAGE_API_KEY: key });
+      expect(options.config?.embeddingModel).toBe("voyage-4");
+      expect(options.embedder).toBeUndefined();
+    }
+  });
+
+  it("embeds with the configured Voyage model at the stored dimension", () => {
+    const { embedder } = readRetrievalOptions({ ...settings, VOYAGE_API_KEY: fakeKey });
+    expect(embedder?.model).toBe("voyage-4");
+    expect(embedder?.dimension).toBe(1024);
+  });
+
+  it("names invalid settings, never the key", () => {
+    expect(() =>
+      readRetrievalOptions({ ...settings, RETRIEVAL_FINAL_PASSAGES: "0", VOYAGE_API_KEY: fakeKey }),
+    ).toThrow(/RETRIEVAL_FINAL_PASSAGES/);
+    try {
+      readRetrievalOptions({ ...settings, RETRIEVAL_FINAL_PASSAGES: "0", VOYAGE_API_KEY: fakeKey });
+    } catch (error) {
+      expect(String(error)).not.toContain(fakeKey);
+    }
   });
 });

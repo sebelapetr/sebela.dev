@@ -2,7 +2,12 @@
 // listens. It never migrates the database; that is the db package's own command.
 import { serve } from "@hono/node-server";
 
-import { openServices, readDatabaseConfig, readMediaConfig } from "@sebela/services";
+import {
+  openServices,
+  readDatabaseConfig,
+  readMediaConfig,
+  readRetrievalOptions,
+} from "@sebela/services";
 
 import { createApp, type Logger } from "./app.js";
 import { readApiConfig } from "./config.js";
@@ -17,6 +22,8 @@ function start() {
   const config = readApiConfig(process.env);
   const services = openServices(readDatabaseConfig(process.env), {
     media: { config: readMediaConfig(process.env), onCleanupFailure: logCleanupFailure(log) },
+    // Without its settings or a provider key, search answers a typed 503.
+    retrieval: readRetrievalOptions(process.env),
   });
   // Signed notifications to the website after committed content writes, when configured.
   const invalidation = config.websiteInvalidation

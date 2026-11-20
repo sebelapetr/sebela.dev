@@ -117,7 +117,7 @@ describe("the case plan", () => {
   });
 
   it("uses the searchable capabilities of the current slice", () => {
-    expect([...SEARCHABLE].every((capability) => capability !== "supplemental")).toBe(true);
+    expect([...SEARCHABLE]).toEqual(["portfolio"]);
   });
 });
 

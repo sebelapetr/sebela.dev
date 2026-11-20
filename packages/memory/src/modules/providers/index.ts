@@ -1,7 +1,12 @@
 // Embedding providers behind the `Embedder` port: the Voyage AI adapter for deployment and paid
 // evals, and a deterministic fake for every other test. Nothing outside this module knows a
 // provider's wire format.
-import type { Embedder } from "../ports/index.js";
+import {
+  ProviderUnavailableError,
+  type Embedder,
+  type Embedding,
+  type EmbeddingInput,
+} from "../ports/index.js";
 
 /** The fake embedder's model name; the store keeps its vectors apart from any real model's. */
 export const fakeEmbeddingModel = "fake-hashed-words";
@@ -21,7 +26,54 @@ export interface FakeEmbedderOptions {
 export function createFakeEmbedder(
   options: FakeEmbedderOptions = {},
 ): Embedder & { readonly calls: number } {
-  throw new Error(`Not implemented: ${String(options.dimension)}`);
+  const dimension = options.dimension ?? 1024;
+  let calls = 0;
+  const vector = (text: string) => {
+    const values = new Array<number>(dimension).fill(0);
+    for (const word of words(text)) {
+      const hash = fnv1a(word);
+      values[hash % dimension] = (values[hash % dimension] ?? 0) + 1;
+    }
+    const length = Math.hypot(...values);
+    return length === 0 ? values : values.map((value) => value / length);
+  };
+  return {
+    model: fakeEmbeddingModel,
+    version: "1",
+    dimension,
+    get calls() {
+      return calls;
+    },
+    embed(texts) {
+      calls += 1;
+      if (options.failing === true) {
+        return Promise.reject(new ProviderUnavailableError("The fake provider is failing."));
+      }
+      const tokens = texts.reduce((sum, text) => sum + words(text).length, 0);
+      return Promise.resolve({ vectors: texts.map(vector), tokens });
+    },
+  };
+}
+
+/** Lower-cased words without diacritics. */
+function words(text: string): string[] {
+  return (
+    text
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  );
+}
+
+/** The 32-bit FNV-1a hash of a word. */
+function fnv1a(word: string): number {
+  let hash = 0x811c9dc5;
+  for (const char of word) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
 }
 
 export interface VoyageEmbedderOptions {
@@ -39,5 +91,75 @@ export interface VoyageEmbedderOptions {
  * in an error message.
  */
 export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
-  throw new Error(`Not implemented: ${options.model}`);
+  const { apiKey, model, dimension, timeoutMs } = options;
+  const send = options.fetch ?? globalThis.fetch;
+  const unavailable = (reason: string) =>
+    new ProviderUnavailableError(`The embedding provider is unavailable: ${reason}.`);
+
+  async function embed(
+    texts: readonly string[],
+    input: EmbeddingInput,
+    signal?: AbortSignal,
+  ): Promise<Embedding> {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    let response: Response;
+    try {
+      response = await send(VOYAGE_EMBEDDINGS, {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          input: texts,
+          model,
+          input_type: input,
+          output_dimension: dimension,
+        }),
+        signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+      });
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      throw unavailable(timeout.aborted || timedOut ? "it did not answer in time" : "no answer");
+    }
+    if (!response.ok) throw unavailable(`it answered ${String(response.status)}`);
+    const body: unknown = await response.json().catch(() => null);
+    const parsed = parseVoyage(body);
+    if (parsed === null) throw unavailable("its answer was malformed");
+    const vectors: number[][] = [];
+    for (let index = 0; index < texts.length; index += 1) {
+      const vector = parsed.vectors.get(index);
+      if (vector?.length !== dimension)
+        throw unavailable("a vector was missing or of another size");
+      vectors.push(vector);
+    }
+    return { vectors, tokens: parsed.tokens };
+  }
+
+  return { model, version: VOYAGE_VERSION, dimension, embed };
+}
+
+const VOYAGE_EMBEDDINGS = "https://api.voyageai.com/v1/embeddings";
+/** The Voyage API version whose vectors the index stores. */
+const VOYAGE_VERSION = "v1";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The vectors by input index and the billed tokens of a Voyage answer, or `null`. */
+function parseVoyage(body: unknown): { vectors: Map<number, number[]>; tokens: number } | null {
+  if (!isRecord(body)) return null;
+  const data = body["data"];
+  const usage = body["usage"];
+  if (!Array.isArray(data) || !isRecord(usage)) return null;
+  const tokens = usage["total_tokens"];
+  if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return null;
+  const vectors = new Map<number, number[]>();
+  for (const item of data as unknown[]) {
+    if (!isRecord(item)) return null;
+    const index = item["index"];
+    const embedding = item["embedding"];
+    if (typeof index !== "number" || !Array.isArray(embedding)) return null;
+    const values = embedding as unknown[];
+    if (!values.every((value) => typeof value === "number" && Number.isFinite(value))) return null;
+    vectors.set(index, values as number[]);
+  }
+  return { vectors, tokens };
 }
