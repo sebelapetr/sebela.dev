@@ -71,10 +71,14 @@ export async function runKnowledgeCommand(
         output.err("The questions file is not a list of { id, query, kinds? }.\n");
         return 1;
       }
-      const pools: Record<string, string[]> = {};
-      for (const { id, query, kinds } of questions.data) {
-        pools[id] = await services.knowledge.candidates(query, kinds);
-      }
+      const found = await services.knowledge.candidates(
+        questions.data.map(({ query, kinds }) =>
+          kinds === undefined ? { query } : { query, kinds },
+        ),
+      );
+      const pools = Object.fromEntries(
+        questions.data.map(({ id }, index) => [id, found[index] ?? []]),
+      );
       print({ pools });
       return 0;
     }

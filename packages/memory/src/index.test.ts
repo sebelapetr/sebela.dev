@@ -440,15 +440,35 @@ describe("searching the portfolio", () => {
   it("lists the candidate pool by source without applying the floor", async () => {
     const { indexer, retriever } = knowledgeBase({ config: { relevanceFloor: 0.999 } });
     await indexer.reindexPortfolio(snapshot());
-    const pool = await retriever.candidates("hybrid search reranker archive");
+    const [pool = []] = await retriever.candidates([{ query: "hybrid search reranker archive" }]);
     expect(pool[0]).toBe("portfolio:project:reading-assistant");
     expect(new Set(pool).size).toBe(pool.length);
+  });
+
+  it("embeds the questions of a candidate run in batches, one usage record per call", async () => {
+    const embedder = createFakeEmbedder();
+    const { indexer, retriever, usage } = knowledgeBase({
+      embedder,
+      config: { embeddingBatchSize: 2 },
+    });
+    await indexer.reindexPortfolio(snapshot());
+    const before = embedder.calls;
+    const questions = ["hybrid search", "reranker archive", "context window"].map((query) => ({
+      query,
+    }));
+    const pools = await retriever.candidates(questions);
+    expect(pools).toHaveLength(3);
+    expect(embedder.calls - before).toBe(2);
+    expect(usage.filter((record) => record.operation === "candidates")).toHaveLength(2);
+    expect(await retriever.candidates([])).toEqual([]);
   });
 
   it("restricts the candidate pool to the given kinds, as the search does", async () => {
     const { indexer, retriever } = knowledgeBase({ config: { relevanceFloor: 0.999 } });
     await indexer.reindexPortfolio(snapshot());
-    const pool = await retriever.candidates("hybrid search reranker archive", ["glossary_term"]);
+    const [pool = []] = await retriever.candidates([
+      { query: "hybrid search reranker archive", kinds: ["glossary_term"] },
+    ]);
     expect(pool.length).toBeGreaterThan(0);
     expect(pool.every((sourceId) => sourceId.startsWith("portfolio:glossary_term:"))).toBe(true);
   });

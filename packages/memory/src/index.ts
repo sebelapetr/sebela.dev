@@ -32,4 +32,4 @@ export type { FakeEmbedderOptions, VoyageEmbedderOptions } from "./modules/provi
 export { createIndexer } from "./modules/indexing/index.js";
 export type { IndexReport, Indexer, IndexerOptions } from "./modules/indexing/index.js";
 export { createRetriever } from "./modules/retrieval/index.js";
-export type { Retriever, RetrieverOptions } from "./modules/retrieval/index.js";
+export type { CandidateQuestion, Retriever, RetrieverOptions } from "./modules/retrieval/index.js";

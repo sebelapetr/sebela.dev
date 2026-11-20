@@ -33,10 +33,17 @@ export interface Retriever {
    */
   search(request: SearchRequest): Promise<SearchResult>;
   /**
-   * The source IDs of the candidate pool, best first, without the floor and, like the search,
-   * only of the given kinds when any; for the evals' recall.
+   * For each question, in order, the source IDs of its candidate pool, best first, without the
+   * floor and, like the search, only of the given kinds when any; for the evals' recall. The
+   * queries are embedded together, `embeddingBatchSize` per provider call. Throws as `search` does.
    */
-  candidates(query: string, kinds?: readonly RetrievalContentKind[]): Promise<string[]>;
+  candidates(questions: readonly CandidateQuestion[]): Promise<string[][]>;
+}
+
+/** One question of a candidate run. */
+export interface CandidateQuestion {
+  readonly query: string;
+  readonly kinds?: readonly RetrievalContentKind[];
 }
 
 export function createRetriever(options: RetrieverOptions): Retriever {
@@ -82,8 +89,12 @@ export function createRetriever(options: RetrieverOptions): Retriever {
           : { status: "found", passages },
       );
     },
-    async candidates(query, kinds) {
-      return (await pool("candidates", query, kinds)).map((chunk) => chunk.sourceId);
+    async candidates(questions) {
+      const pools: string[][] = [];
+      for (const { query, kinds } of questions) {
+        pools.push((await pool("candidates", query, kinds)).map((chunk) => chunk.sourceId));
+      }
+      return pools;
     },
   };
 }

@@ -137,7 +137,7 @@ describe("the knowledge service over the demo seed", () => {
   });
 
   it("names the candidate pool's sources for the evals", async () => {
-    const candidates = await knowledge.candidates("context window tokens");
+    const [candidates = []] = await knowledge.candidates([{ query: "context window tokens" }]);
     expect(candidates[0]).toBe("portfolio:glossary_term:context-window");
     expect(candidates.length).toBeLessThanOrEqual(config.candidatePool);
   });

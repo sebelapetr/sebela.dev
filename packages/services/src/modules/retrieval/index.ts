@@ -17,6 +17,7 @@ import {
   type Embedder,
   type IndexReport,
   type PortfolioSnapshot,
+  type CandidateQuestion,
   type RetrievalConfig,
   type RetrievalStore,
   type UsageTotals,
@@ -36,8 +37,11 @@ export interface KnowledgeService {
   reindexPortfolio(): Promise<IndexReport>;
   /** The passages answering the query, or no evidence below the relevance floor. */
   search(request: SearchRequest): Promise<SearchResult>;
-  /** The candidate pool's source IDs, best first and without the floor; for the evals. */
-  candidates(query: string, kinds?: readonly RetrievalContentKind[]): Promise<string[]>;
+  /**
+   * Each question's candidate pool as source IDs, best first and without the floor, in the order
+   * of the questions; the queries are embedded in batches. For the evals.
+   */
+  candidates(questions: readonly CandidateQuestion[]): Promise<string[][]>;
   /** The provider usage recorded this calendar month (UTC). */
   usage(): Promise<UsageTotals>;
 }
@@ -80,7 +84,7 @@ export function createKnowledgeService(
     reindexPortfolio: () =>
       provider(async () => ready().indexer.reindexPortfolio(await snapshot(sources))),
     search: (request) => provider(() => ready().retriever.search(request)),
-    candidates: (query, kinds) => provider(() => ready().retriever.candidates(query, kinds)),
+    candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
   };
 }
@@ -96,13 +100,31 @@ async function provider<Result>(operation: () => Promise<Result>): Promise<Resul
     return await operation();
   } catch (error) {
     if (error instanceof ProviderUnavailableError) {
-      throw new DomainError("provider_unavailable", "The embedding provider is unavailable.");
+      const answered =
+        error.status === undefined ? "" : `: it answered ${statusClass(error.status)}`;
+      throw new DomainError(
+        "provider_unavailable",
+        `The embedding provider is unavailable${answered}.`,
+      );
     }
     if (error instanceof BudgetExhaustedError) {
       throw new DomainError("budget_exhausted", "The month's embedding budget is exhausted.");
     }
     throw error;
   }
+}
+
+/** An HTTP status with its class, for example `HTTP 429 (4xx, rate limited)`; nothing of the body. */
+function statusClass(status: number): string {
+  const kind =
+    status === 429
+      ? "4xx, rate limited"
+      : status >= 500
+        ? "5xx, provider error"
+        : status >= 400
+          ? "4xx, refused"
+          : `${String(Math.floor(status / 100))}xx, unexpected`;
+  return `HTTP ${String(status)} (${kind})`;
 }
 
 /** The content kind the persistence stores as text, narrowed back to the contract's kinds. */
@@ -197,6 +219,8 @@ export function readRetrievalOptions(
       model: config.embeddingModel,
       dimension: retrievalDimension,
       timeoutMs: config.providerTimeoutMs,
+      retries: config.providerRetries,
+      maxRetryWaitMs: config.providerMaxRetryWaitMs,
     }),
   };
 }
