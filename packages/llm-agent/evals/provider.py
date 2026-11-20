@@ -14,16 +14,40 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from evals.datasets.cases import BY_ID, DATASET_VERSION, FIXED_TODAY
+from evals.datasets.cases import BY_ID, DATASET_VERSION, FIXED_TODAY, EvalCase
+
+if TYPE_CHECKING:
+    from llm_agent import ChatRequest
 
 #: The schema of one stored case-run record (`evals/run.py`, regrade compatibility).
 RECORD_SCHEMA = "llm-agent-answer-v1"
 
 
+def chat_request(case: EvalCase) -> ChatRequest:
+    """The request of one case-run: its question, the fixed day and its earlier exchanges."""
+    from llm_agent import ChatExchange, ChatRequest, ExchangeSource
+
+    history = tuple(
+        ChatExchange(
+            question=exchange.question,
+            answer=exchange.answer,
+            language=exchange.language,
+            sources=tuple(
+                ExchangeSource.model_validate(
+                    {"kind": source.kind, "record_id": source.record_id, "title": source.title}
+                )
+                for source in exchange.sources
+            ),
+        )
+        for exchange in case.history
+    )
+    return ChatRequest(question=case.question, today=FIXED_TODAY, history=history)
+
+
 async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
-    from llm_agent import ApiContentReader, ChatAgent, ChatRequest, anthropic_model_factory
+    from llm_agent import ApiContentReader, ChatAgent, anthropic_model_factory
 
     case_id = str(context.get("vars", {}).get("case_id", ""))
     case = BY_ID.get(case_id)
@@ -32,7 +56,7 @@ async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]
     started = time.monotonic()
     async with ApiContentReader(os.environ["LLM_AGENT_API_URL"]) as content:
         agent = ChatAgent(content=content, models=anthropic_model_factory())
-        result = await agent.run(ChatRequest(question=case.question, today=FIXED_TODAY))
+        result = await agent.run(chat_request(case))
     record = {
         "record_schema": RECORD_SCHEMA,
         "case_id": case.id,

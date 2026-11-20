@@ -25,7 +25,7 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
     [
         (["--bogus"], "unknown option --bogus"),
         (["--case", "Q99-en", "--allowance", "1"], "unknown case Q99-en"),
-        (["--case", "Q17-en", "--allowance", "1"], "Q17-en is pending and cannot run"),
+        (["--case", "Q19-en", "--allowance", "1"], "Q19-en is pending and cannot run"),
         (["--case", "S01-en", "--case", "S01-en", "--allowance", "1"], "S01-en named twice"),
         (["--case", "S01-en"], "a paid run needs --allowance"),
         (["--case", "S01-en", "--allowance", "11"], "exceeds the 10.0 USD campaign ceiling"),

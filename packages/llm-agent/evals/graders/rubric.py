@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from evals.datasets.cases import FIXED_TODAY, EvalCase
 
-RUBRIC_VERSION = "rubric-v4"
+RUBRIC_VERSION = "rubric-v5"
 JUDGE_MODEL = "claude-sonnet-5-5"
 JUDGE_EFFORT: Final = "medium"
 #: Output cap of one judge call, including adaptive thinking.
@@ -54,6 +54,9 @@ books, events) show what the person studies or attended, not professional expert
 work: a claim of professional experience or mastery from them is unsupported, and so is a speaker
 role from event attendance, a progress figure the records do not state, or logged time that the
 statistics or diary do not give. Durations such as "17h 40m" are the evidence's own values.
+conversation, when present, lists the earlier exchanges of the chat, oldest first. It only shows
+what the question refers to (such as "that project") and which language the visitor asked for;
+it is not evidence, so a claim supported only by an earlier answer is unsupported.
 
 Return:
 - relevant: the answer addresses the visitor's question.
@@ -105,12 +108,14 @@ class JudgeModel(Protocol):
 def judge_input(case: EvalCase, record: Mapping[str, Any]) -> dict[str, Any]:
     """The exact input of the judge: question, expected language, evidence and approved answer.
 
+    A follow-up also carries its earlier exchanges as `conversation`; a first question has none.
+
     The answer includes the trusted contact card and the structured blocks shown below it (`None`
     and `[]` when none is shown), so a pointer to them is judged against what the visitor sees.
     """
     result = record.get("result")
     result = result if isinstance(result, dict) else {}
-    return {
+    payload: dict[str, Any] = {
         "question": case.question,
         "expected_language": case.language,
         "today": FIXED_TODAY.isoformat(),
@@ -131,6 +136,11 @@ def judge_input(case: EvalCase, record: Mapping[str, Any]) -> dict[str, Any]:
             ],
         },
     }
+    if case.history:
+        payload["conversation"] = [
+            {"question": exchange.question, "answer": exchange.answer} for exchange in case.history
+        ]
+    return payload
 
 
 def input_hash(payload: Mapping[str, Any]) -> str:

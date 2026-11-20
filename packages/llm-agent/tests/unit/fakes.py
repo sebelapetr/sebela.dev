@@ -91,7 +91,15 @@ class Hang:
         self.started = asyncio.Event()
 
 
-Step = BaseMessage | BaseException | Hang
+class Delayed:
+    """A model step that answers after an async wait, as a provider call does."""
+
+    def __init__(self, seconds: float, reply: BaseMessage) -> None:
+        self.seconds = seconds
+        self.reply = reply
+
+
+Step = BaseMessage | BaseException | Hang | Delayed
 
 
 class ScriptedModel:
@@ -110,6 +118,9 @@ class ScriptedModel:
             step.started.set()
             await asyncio.Event().wait()
             raise AssertionError("unreachable")
+        if isinstance(step, Delayed):
+            await asyncio.sleep(step.seconds)
+            return step.reply
         if isinstance(step, BaseException):
             raise step
         return step
@@ -655,8 +666,8 @@ def refusal() -> AIMessage:
 _REQUEST = httpx2.Request("POST", "https://api.anthropic.test/v1/messages")
 
 
-def status_error(status: int) -> anthropic.APIStatusError:
-    response = httpx2.Response(status, request=_REQUEST)
+def status_error(status: int, headers: dict[str, str] | None = None) -> anthropic.APIStatusError:
+    response = httpx2.Response(status, request=_REQUEST, headers=headers)
     kinds: dict[int, type[anthropic.APIStatusError]] = {
         400: anthropic.BadRequestError,
         429: anthropic.RateLimitError,

@@ -7,18 +7,22 @@ fakes in tests).
 """
 
 from llm_agent.models.gateway import ChatModel, ModelCall, ModelFactory, anthropic_model_factory
+from llm_agent.observability.telemetry import ExecutionRecord, TelemetrySink
 from llm_agent.pipelines.chat import ChatAgent
 from llm_agent.pipelines.chat.versions import versions
 from llm_agent.schemas import (
     Block,
+    ChatExchange,
     ChatRequest,
     ChatResult,
     ContactCard,
     ContactLink,
     Evidence,
+    ExchangeSource,
     ExecutionLimits,
     ExperienceCard,
     ExplorationCard,
+    Language,
     RoadmapCard,
     ServiceCard,
     Source,
@@ -73,6 +77,7 @@ __all__ = [
     "ApiContentReader",
     "Block",
     "ChatAgent",
+    "ChatExchange",
     "ChatModel",
     "ChatRequest",
     "ChatResult",
@@ -82,9 +87,12 @@ __all__ = [
     "ContentReader",
     "ContentUnavailableError",
     "Evidence",
+    "ExchangeSource",
     "ExecutionLimits",
+    "ExecutionRecord",
     "ExperienceCard",
     "ExplorationCard",
+    "Language",
     "ModelCall",
     "ModelFactory",
     "PublicBook",
@@ -127,6 +135,7 @@ __all__ = [
     "ServiceCard",
     "Source",
     "Span",
+    "TelemetrySink",
     "Usage",
     "Versions",
     "anthropic_model_factory",

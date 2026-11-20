@@ -3,6 +3,8 @@
 `ChatAgent.run` always returns a `ChatResult` and never raises for a model, content, limit or
 cancellation failure: each becomes a fixed response with a stable reason. Each run owns its budget,
 deadline, evidence and trace; nothing is shared between concurrent runs except the compiled graph.
+The deadline starts at admission: time the caller already spent admitting the turn is deducted.
+A final result is exported to the optional telemetry sink, whose failures change nothing.
 """
 
 from __future__ import annotations
@@ -14,8 +16,9 @@ from typing import Any, Final
 from langsmith.run_helpers import tracing_context
 
 from llm_agent.context.tokens import text_tokens
-from llm_agent.guardrails.input import detect_language
+from llm_agent.guardrails.input import select_language
 from llm_agent.models.gateway import Gateway, ModelFactory
+from llm_agent.observability.telemetry import TelemetrySink, export
 from llm_agent.observability.tracing import Tracer
 from llm_agent.pipelines.chat.graph import chat_graph
 from llm_agent.pipelines.chat.stages.output_guard import stopped_result, with_trace
@@ -35,9 +38,16 @@ DEADLINE_GRACE_S: Final = 0.5
 class ChatAgent:
     """Answers one visitor question at a time over public content reads."""
 
-    def __init__(self, *, content: ContentReader, models: ModelFactory) -> None:
+    def __init__(
+        self,
+        *,
+        content: ContentReader,
+        models: ModelFactory,
+        telemetry: TelemetrySink | None = None,
+    ) -> None:
         self._content = content
         self._models = models
+        self._telemetry = telemetry
 
     async def run(
         self,
@@ -46,10 +56,20 @@ class ChatAgent:
         limits: ExecutionLimits | None = None,
         cancel: asyncio.Event | None = None,
     ) -> ChatResult:
-        limits = limits or ExecutionLimits()
+        result = await self._run(request, limits or ExecutionLimits(), cancel)
+        export(self._telemetry, result)
+        return result
+
+    async def _run(
+        self, request: ChatRequest, limits: ExecutionLimits, cancel: asyncio.Event | None
+    ) -> ChatResult:
         execution = self._execution(request, limits)
         if text_tokens(request.question) > limits.question_tokens:
             return _stopped(execution, LimitReached("question_too_long"))
+        if cancel is not None and cancel.is_set():
+            return _stopped(execution, Cancelled())
+        if execution.deadline.expired:
+            return _stopped(execution, LimitReached("deadline"))
         # Visitor text never leaves through LangChain's tracing: the task copies this context,
         # so LangSmith stays off whatever LANGSMITH_TRACING says.
         with tracing_context(enabled=False):
@@ -64,7 +84,7 @@ class ChatAgent:
         try:
             done, _ = await asyncio.wait(
                 waiters,
-                timeout=limits.deadline_s + DEADLINE_GRACE_S,
+                timeout=execution.deadline.remaining() + DEADLINE_GRACE_S,
                 return_when=asyncio.FIRST_COMPLETED,
             )
         finally:
@@ -90,11 +110,11 @@ class ChatAgent:
     def _execution(self, request: ChatRequest, limits: ExecutionLimits) -> Execution:
         tracer = Tracer()
         budget = Budget(limits)
-        deadline = Deadline(limits.deadline_s)
+        deadline = Deadline(limits.deadline_s - request.admission_elapsed_s)
         return Execution(
             request=request,
             limits=limits,
-            language=detect_language(request.question),
+            language=select_language(request.question, request.history),
             budget=budget,
             deadline=deadline,
             gateway=Gateway(self._models, budget, deadline, tracer),
