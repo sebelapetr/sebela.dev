@@ -1,6 +1,8 @@
 # Quality gate for issue pull requests and for pushes to phase branches and the main branch.
 # Node.js comes from .nvmrc and pnpm from the packageManager field of package.json. Every job runs on
-# every event; none is skipped by a path filter, so no required status is ever left waiting.
+# every event; none is skipped by a path filter, so no required status is ever left waiting. The two
+# website jobs report success at once when the change touches only files that cannot change the
+# website (docs/testing.md, "CI", "Website jobs").
 # What each job checks: docs/testing.md ("CI").
 name: CI
 
@@ -85,9 +87,9 @@ jobs:
   # The website in a browser: Playwright runs the built website against the API's end-to-end server,
   # a real API on a temporary database of the job's Postgres seeded from small fictional fixtures,
   # and checks content, the missing-photo and unavailable states, keyboard order, accessibility and
-  # no horizontal scroll at 360, 768 and 1280 px in light and dark mode. On every run, not only when
-  # the website is affected, because a change to the API can break what the website reads. The
-  # screenshots are kept as an artifact.
+  # no horizontal scroll at 360, 768 and 1280 px in light and dark mode. On every change except one
+  # that touches only files that cannot change the website: a change to the API, the contracts or
+  # the shared packages can break what the website reads. The screenshots are kept as an artifact.
   web-e2e:
     name: Website end to end
     runs-on: ubuntu-latest
@@ -97,20 +99,50 @@ jobs:
       DATABASE_PASSWORD: ci-only-disposable-password
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      # Success at once, without a browser, when every changed file is one that cannot change the
+      # website: docs, plans, agent configuration, the harness, the MCP and AI apps and packages,
+      # Markdown anywhere, and the eval and commit-message workflows. Anything else, a new branch or
+      # an unknown base runs the job in full.
+      - name: Website affected
+        id: website
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          unaffected='^(docs/|\.plan/|\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)|(^|/)[^/]+\.md$'
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+            echo "No comparison base: the website job runs in full."
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE "$unaffected"; then
+            echo "Only files that cannot change the website changed; nothing to run:"
+            printf '%s\n' "$changed"
+            echo "affected=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.website.outputs.affected == 'true'
+        uses: pnpm/action-setup@v6
+      - if: steps.website.outputs.affected == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - if: steps.website.outputs.affected == 'true'
+        run: pnpm install --frozen-lockfile
       - name: Chromium for Playwright
+        if: steps.website.outputs.affected == 'true'
         run: pnpm --filter @sebela/web exec playwright install --with-deps chromium
       - name: Postgres for the API's end-to-end server
+        if: steps.website.outputs.affected == 'true'
         run: docker compose --env-file .env.example up --detach --wait
       - name: Browser tests (builds the website and the API first)
+        if: steps.website.outputs.affected == 'true'
         run: pnpm test:e2e
+      # Kept two weeks: for looking at a run's pages and failures, not as an archive.
       - name: Screenshots and reports
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.website.outputs.affected == 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: web-e2e
@@ -118,6 +150,7 @@ jobs:
             apps/web/test-results/
             apps/web/playwright-report/
           if-no-files-found: ignore
+          retention-days: 14
 
   # Real-Postgres lifecycle of the worktree databases: a disposable Compose project from
   # compose.yaml on a free port. Plain Node and Docker, no installed dependencies.
@@ -172,20 +205,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      # Success at once, without a browser, when every changed file is one that cannot change the
+      # website: docs, plans, agent configuration, the harness, the MCP and AI apps and packages,
+      # Markdown anywhere, and the eval and commit-message workflows. Anything else, a new branch or
+      # an unknown base runs the job in full.
+      - name: Website affected
+        id: website
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          unaffected='^(docs/|\.plan/|\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)|(^|/)[^/]+\.md$'
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+            echo "No comparison base: the website job runs in full."
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE "$unaffected"; then
+            echo "Only files that cannot change the website changed; nothing to run:"
+            printf '%s\n' "$changed"
+            echo "affected=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.website.outputs.affected == 'true'
+        uses: pnpm/action-setup@v6
+      - if: steps.website.outputs.affected == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - if: steps.website.outputs.affected == 'true'
+        run: pnpm install --frozen-lockfile
       - name: Chromium for Playwright
+        if: steps.website.outputs.affected == 'true'
         run: pnpm --filter @sebela/web exec playwright install --with-deps chromium
       - name: Two complete stacks
+        if: steps.website.outputs.affected == 'true'
         run: pnpm test:web-stack
       - name: Screenshots
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.website.outputs.affected == 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: web-stack
           path: apps/web/test-results/complete-stack/
           if-no-files-found: ignore
+          retention-days: 14
