@@ -98,6 +98,8 @@ _Phrases = Mapping[str, tuple[Phrase, ...]]
 _ANY: _Phrases = MappingProxyType({})
 _Repeat = Literal["one", "optional", "many"]
 _Shape = tuple[tuple[_Phrases, _Repeat], ...]
+#: Which language word of a matched clause is the requested one.
+_Pick = Literal["first", "last"]
 
 
 def _phrases(*groups: str) -> _Phrases:
@@ -128,6 +130,7 @@ _EN_IMPERATIVE = (
     "answer|reply|respond|write|continue|speak|talk|switch|explain|describe|say|translate|repeat"
     "|tell me|tell us|give me|go on|keep going"
 )
+_EN_TELLING = "tell me|tell us|explain|describe|say"
 _EN_GERUND = "answering|replying|responding|writing|continuing|speaking|talking|explaining"
 _EN_OBJECT = (
     "me|to me|us|it|that|this|everything|more|a bit|a little|a bit more|some more|the rest"
@@ -158,6 +161,7 @@ _CS_IMPERATIVE = (
     "|pokracujte|prepni|prepnete|rekni|reknete|povez|povezte|vysvetli|vysvetlete|popis|popiste"
     "|povidej|povidejte|preloz|prelozte|komunikuj|komunikujte|zopakuj|zopakujte"
 )
+_CS_TELLING = "rekni|reknete|povez|povezte|vysvetli|vysvetlete|popis|popiste|napis|napiste"
 _CS_INFINITIVE = (
     "odpovidat|odpovedet|psat|napsat|mluvit|pokracovat|prepnout|rict|rikat|vysvetlit|popsat"
     "|prelozit|komunikovat|zopakovat"
@@ -184,18 +188,19 @@ def _shapes(
     question_form: str,
     filler: str,
     imperative: str,
+    telling: str,
     verb: str,
     objects: str,
     lang: str,
     prep: str,
     target: str,
     language_word: str,
-) -> tuple[_Shape, ...]:
+) -> tuple[tuple[_Shape, _Pick], ...]:
     polite = _phrases(requesting, question_form, filler)
     plain_polite = _phrases(requesting, filler)
     lang_set = _phrases(lang)
     suffix: _Shape = ((_phrases(language_word), "optional"), (polite, "many"))
-    return (
+    shapes: tuple[_Shape, ...] = (
         # "Please tell me about her projects in Czech", "Řekni mi o jejích projektech anglicky"
         (
             (plain_polite, "many"),
@@ -233,6 +238,17 @@ def _shapes(
             (polite, "many"),
         ),
     )
+    # "Tell me in Czech what she built", "Řekni mi anglicky, co postavila": a telling verb whose
+    # target comes first, so the requested language is the first language word, not the last.
+    leading: _Shape = (
+        (plain_polite, "many"),
+        (_phrases(telling), "one"),
+        (_phrases(objects), "many"),
+        (_phrases(target), "one"),
+        (_phrases(language_word), "optional"),
+        (_ANY, "many"),
+    )
+    return (*((shape, "last") for shape in shapes), (leading, "first"))
 
 
 def _exclaimed(lang: str, language_word: str, *polite: str) -> _Shape:
@@ -251,6 +267,7 @@ _EN_SHAPES = _shapes(
     question_form=_EN_QUESTION_FORM,
     filler=_EN_FILLER,
     imperative=_EN_IMPERATIVE,
+    telling=_EN_TELLING,
     verb=_EN_GERUND,
     objects=_EN_OBJECT,
     lang=_EN_LANG,
@@ -263,6 +280,7 @@ _CS_SHAPES = _shapes(
     question_form=_CS_QUESTION_FORM,
     filler=_CS_FILLER,
     imperative=_CS_IMPERATIVE,
+    telling=_CS_TELLING,
     verb=_CS_INFINITIVE,
     objects=_CS_REQUESTING + "|" + _CS_QUESTION_FORM + "|" + _CS_FILLER,
     lang=_CS_LANG,
@@ -270,10 +288,13 @@ _CS_SHAPES = _shapes(
     target=_CS_TARGET,
     language_word="jazyk|jazyce",
 )
-_EXCLAIMED = (
-    _exclaimed(_EN_LANG, "language", _EN_REQUESTING, _EN_FILLER),
-    _exclaimed(_CS_LANG, "jazyk|jazyce", _CS_REQUESTING, _CS_FILLER),
+_EXCLAIMED: tuple[tuple[_Shape, _Pick], ...] = (
+    (_exclaimed(_EN_LANG, "language", _EN_REQUESTING, _EN_FILLER), "last"),
+    (_exclaimed(_CS_LANG, "jazyk|jazyce", _CS_REQUESTING, _CS_FILLER), "last"),
 )
+#: Shapes that end in the language come first; in them only polite words follow it.
+_SHAPES = tuple(sorted(_EN_SHAPES + _CS_SHAPES, key=lambda entry: entry[1] == "first"))
+_EXCLAIMED_SHAPES = _EXCLAIMED + _SHAPES
 _POLITE_ONLY: _Shape = (
     (
         _phrases(
@@ -366,10 +387,11 @@ def _switch(question: str) -> Language | None:
     )
     found: Language | None = None
     for words, end in _clauses(plain):
-        shapes = _EN_SHAPES + _CS_SHAPES + (_EXCLAIMED if end in {"!", ":"} else ())
-        if any(_matches(words, shape) for shape in shapes):
-            # The requested language is the last language word: only polite words follow it.
-            lang = next(word for word in reversed(words) if word in _LANGUAGE_WORDS)
+        shapes = _EXCLAIMED_SHAPES if end in {"!", ":"} else _SHAPES
+        pick = next((pick for shape, pick in shapes if _matches(words, shape)), None)
+        if pick is not None:
+            ordered = reversed(words) if pick == "last" else iter(words)
+            lang = next(word for word in ordered if word in _LANGUAGE_WORDS)
             found = "en" if lang in _ENGLISH_TARGETS else "cs"
     return found
 
