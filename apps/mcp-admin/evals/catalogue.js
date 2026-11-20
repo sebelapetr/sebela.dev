@@ -2,7 +2,7 @@
 
 /**
  * The approved phase-5 model eval catalogue (`.plan/done/05-mcp-admin/evals.md`): the 32 phase-5
- * cases, 16 Czech and 16 English, and the follow-up cases of the owner's acceptance. A case is
+ * cases, 16 Czech and 16 English, and the follow-up cases E33 and E34 of the owner's acceptance. A case is
  * `implemented` once its capability exists and its grader is written; every other case stays
  * visibly `pending` and is never counted as passing.
  *
@@ -164,6 +164,14 @@ export const catalogue = [
     "S03",
     "implemented",
     "Včera od 16:00 do 16:30 jsem četl B1. (B1 has no linked resource)",
+  ),
+  case_(
+    "E34",
+    "en",
+    true,
+    "S02",
+    "implemented",
+    "Change my current experience's summary. (two experiences are current)",
   ),
 ];
 
