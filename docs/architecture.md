@@ -67,7 +67,7 @@ Module dependencies are acyclic and cross only explicit entries. [Repository str
 
 - **The API/database is authoritative for structured facts.** Approved supplemental documents add explanations and context without overriding API facts. Nothing in the repository mirrors real content or original documents.
 - One database, separate Postgres schemas per domain: `profile`, `auth` (API keys), `ai_roadmap`, later schemas for chat, retrieval and private ingest state. Migrations are applied by the db package's own command (`pnpm --filter @sebela/db db:migrate`); starting the API never migrates. Domains are linked through shared topics and technologies.
-- Content is written through the API — by agents using `mcp-admin` — and appears on the website without a redeploy. Backend maintenance CLIs (seed/key commands and phase-9 knowledge ingest) reuse services and their persistence operations in-process; these are not client/Python database-access exceptions.
+- Content is written through the API — by agents using `mcp-admin` — and appears on the website without a redeploy. Backend maintenance CLIs (seed, `clear-content` and key commands, and phase-9 knowledge ingest) reuse services and their persistence operations in-process; these are not client/Python database-access exceptions.
 - The repository ships a fictional demo seed. The owner's real data is loaded once from a private seed outside the repository; afterwards safety comes from database backups.
 
 ## Files

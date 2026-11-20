@@ -1,6 +1,6 @@
 # Release workflow
 
-Skeleton. The content is defined in phase 10 (`.plan/10-delivery/prd.md`).
+How sebela.dev is built, deployed, backed up and restored (`.plan/10-delivery/prd.md`). The commands and the server's one-time preparation are in `infra/README.md`.
 
 ## Decided so far
 
@@ -45,7 +45,7 @@ Built, verified and published by `.github/workflows/release.yml` on every push t
 The `deploy` job of `.github/workflows/release.yml` runs after the images are published, in the GitHub Environment `production` (deployment branches: `master` only). Its only secrets are the SSH key, the host and the server's known-host line; it references no application secret. It sends the images job's tag set over SSH to the `deploy` user, whose key is restricted to the forced command `infra/scripts/deploy.sh` (the `authorized_keys` line, the server settings and the state are in `infra/README.md`, Deployment).
 
 - **Input.** Only `deploy api=<SHA> web=<SHA> mcp-admin=<SHA>` (every service once, full 40-character commit SHAs, `scripts/release/deployment.mjs input`) or `rollback`. Anything else is refused before anything runs; the key can do nothing else. One deployment at a time (a lock on the server).
-- **Steps.** (1) Pull the release's images; nothing that runs changes. (2) Compare the migration files of the new API image with those of the running release: a new migration, or no verified release yet, needs a backup first; while the backup script is missing (#235) such a release is refused and nothing changes. (3) Run the one-off migration once, as its own step. (4) Recreate the services whose image changed and wait until every service is healthy; this starts Postgres, the API, the website and MCP Admin by name without their dependencies, so the migration does not run a second time.
+- **Steps.** (1) Pull the release's images; nothing that runs changes. (2) Compare the migration files of the new API image with those of the running release: a new migration, or no verified release yet, needs a backup first (`infra/scripts/backup.sh`, Backups); when it fails, or no backup script is there, the release is refused and nothing changes. (3) Run the one-off migration once, as its own step. (4) Recreate the services whose image changed and wait until every service is healthy; this starts Postgres, the API, the website and MCP Admin by name without their dependencies, so the migration does not run a second time.
 - **Failure.** When the migration or the health check fails, the script starts the previous verified release again, waits for it to be healthy and exits non-zero, so the job fails and no version is tagged.
 - **Record.** A healthy release is appended to the server's record of verified releases, one tag set per line. Images of the three services that are in neither of the last two records are removed from the server; the previous release stays available for a rollback.
 - **Rollback.** The owner, signed in to the server with their own key, runs `infra/scripts/deploy.sh rollback` as `deploy` with the settings of the forced-command line (the exact command is in `infra/README.md`, Deployment; the deployment key belongs to the workflow alone). It starts the previous verified release, waits for health and drops the newest release from the record. It runs no backup and applies no migration; the older release runs on the newer schema by the compatibility rule below.
@@ -53,7 +53,30 @@ The `deploy` job of `.github/workflows/release.yml` runs after the images are pu
 - **Infrastructure changes.** The script and the composition come from the server's checkout of `master`. A change to `infra/` or `compose.yaml` releases no image; it reaches the server when the owner updates that checkout, and the next deployment uses it.
 - **Verified in CI** by the input, migration, backup, rollback and record tests (`scripts/release/deploy.test.mjs`, against a faked Docker) and by a simulated deployment of the real script against a disposable Compose project, where a deliberately unhealthy release ends with the previous one running (`scripts/release/deploy.e2e.mjs`, `docs/testing.md`, CI).
 
-### Migration compatibility rule
+## Backups
+
+`infra/scripts/backup.sh` runs nightly (`infra/crons.txt`, 02:30 UTC) and before every deployment that adds a migration (Deployment, step 2).
+
+- **Encrypted off the server.** A `pg_dump` of the production database is piped straight into `age`, encrypted to the owner's public key, and uploaded to the Bunny Storage zone `sebela-backups`; no unencrypted dump is written to disk. The private key stays offline with the owner and is never needed on the server, so neither the server nor the zone can read a backup.
+- **Retention.** Daily for 14 days; then the newest of each ISO week up to three months; older backups are removed.
+- **Monitored.** Only a complete backup (dump, upload and retention) pings the Better Stack heartbeat; a failure exits non-zero without it, so a missing backup alerts within a day.
+- **Scope.** The database only. Uploaded media live in their own Bunny Storage zone, off the server; the later phases' private knowledge originals are added to the backups by the phase that stores them (First-release scope).
+- **Extensions.** The dump leaves extensions out, because they belong to the superuser; `restore.sh into` creates `vector` itself. A later phase that adds another extension must add it to `restore.sh` too.
+- **No secret in logs.** The scripts print no password, key or heartbeat address.
+
+## Restore
+
+`infra/scripts/restore.sh` lists and fetches the encrypted backups. The owner decrypts a backup on their own machine and streams the dump back over SSH into a chosen database, which `restore.sh into` creates for the application role, restores in one transaction and compares table by table with the source's row counts, failing on any difference. Every destructive step needs the database's name repeated after `--confirm`; an existing database is replaced only with `--replace`, and `drop` removes only a rehearsal database.
+
+- **Rehearsal.** Before the launch, and after any change to the scripts, the latest backup is restored into a temporary database, its counts are compared with production and it is dropped.
+- **Recovering production.** Stop the API, the website and MCP Admin, restore into the production database with `--replace` comparing against a rehearsal restored from the same backup, then start the release whose schema matches the backup (Rollback).
+- **Verified in CI** by the decision tests against a faked Docker, curl and storage (`scripts/release/backup.test.mjs`: settings, retention selection, failures without the heartbeat, no secret printed; `restore.test.mjs` and `clear-demo.test.mjs`: the confirmations and refusals) and by a round trip with the real scripts and the real `age` against a disposable Postgres of the production image and a fake storage zone: dump, encrypt, upload, fetch, decrypt, restore, equal row counts and vectors (`scripts/release/backup.e2e.mjs`, `docs/testing.md`, CI).
+
+## Clearing the demo content
+
+Production starts with the fictional demo seed. Before the real content is entered, `infra/scripts/clear-demo.sh --confirm <database>` backs up first and, only when that succeeds, runs the API's `clear-content` maintenance command: every table of the profile and the AI roadmap is emptied and their stored media files are deleted. The migrations, API keys and the audit stay, so the database is empty, migrated and ready for content. The confirmation must name the production database.
+
+## Migration compatibility rule
 
 Migrations are forward-only, and a rollback or a failed deployment runs the previous release on the new schema. Every migration must therefore keep the previous release working: expand first (add tables, nullable or defaulted columns, new indexes), and remove or rename what the previous release still uses only in a later release, once no verified release that may be rolled back to depends on it (expand/contract). A release that adds a migration is backed up before the migration runs.
 
@@ -70,7 +93,6 @@ After a healthy deployment and smoke check the `release` job tags the commit wit
 ## To be defined in phase 10
 
 - How MCP Admin is reached through the SSH tunnel, and how nginx learns the visitor's address from Bunny CDN (`infra/README.md`, Open points)
-- Database backups and restore procedure (#235; until then a release that adds a migration is refused)
 - The domain switch
 
 ## First-release scope

@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+// A stand-in for the age encryption tool, put first on PATH beside the fake docker (see there).
+// It accepts only `age --encrypt --recipient <recipient> --output <file>`, records the call as a
+// JSON line in FAKE_TOOLS_LOG and writes `age[<recipient>](<input>)` to the file, so a test can see
+// what was encrypted and for whom. With `failAge` in the scenario it fails without writing.
+
+import fs from "node:fs";
+
+const scenario = JSON.parse(fs.readFileSync(process.env.FAKE_TOOLS_SCENARIO ?? "", "utf8"));
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.FAKE_TOOLS_LOG ?? "", `${JSON.stringify({ tool: "age", args })}\n`);
+
+if (
+  args.length !== 5 ||
+  args[0] !== "--encrypt" ||
+  args[1] !== "--recipient" ||
+  args[3] !== "--output"
+) {
+  process.stderr.write(`fake age: unexpected call: ${args.join(" ")}\n`);
+  process.exit(1);
+}
+const input = fs.readFileSync(0, "utf8");
+if (scenario.failAge) {
+  process.stderr.write("fake age: encryption failed\n");
+  process.exit(1);
+}
+fs.writeFileSync(args[4], `age[${args[2]}](${input})`);

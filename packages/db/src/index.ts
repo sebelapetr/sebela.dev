@@ -10,6 +10,7 @@ export type {
   ApiKeyPersistence,
 } from "./modules/api-keys/index.js";
 export type { AuditEntryInput, AuditEntryRecord, AuditPersistence } from "./modules/audit/index.js";
+export type { MaintenancePersistence } from "./modules/maintenance/index.js";
 export type {
   CaseStudyFields,
   CaseStudyPersistence,

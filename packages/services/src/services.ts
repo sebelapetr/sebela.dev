@@ -53,7 +53,11 @@ const unconfigured = (): never => {
   throw new Error("Media storage is not configured.");
 };
 
-const unconfiguredSeed: SeedService = { loadSeed: unconfigured, loadSeedIntoEmpty: unconfigured };
+const unconfiguredSeed: SeedService = {
+  loadSeed: unconfigured,
+  loadSeedIntoEmpty: unconfigured,
+  clearContent: unconfigured,
+};
 
 /** Composes the services over a migrated database. Connects on the first operation. */
 export function openServices(config: DatabaseConfig, options: ServicesOptions = {}): Services {

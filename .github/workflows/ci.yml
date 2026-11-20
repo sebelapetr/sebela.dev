@@ -225,6 +225,24 @@ jobs:
           node-version-file: .nvmrc
       - run: node scripts/release/deploy.e2e.mjs
 
+  # The backup and restore round trip of infra/scripts/backup.sh and restore.sh against a
+  # disposable Postgres of the production image with a fictional database owned by the application
+  # role (pgvector column included), a key generated for the run and the fake storage zone: dump,
+  # encrypt, upload and heartbeat; list, fetch, decrypt in the test, restore with equal row counts
+  # and the same vectors, refuse an existing database without --replace, drop. Removed at the end.
+  # Plain Node, Docker and age.
+  backup:
+    name: Backup and restore round trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: age
+        run: sudo apt-get update && sudo apt-get install --yes age
+      - run: node scripts/release/backup.e2e.mjs
+
   # The complete containerised stack of compose.yaml (profiles `api` and `web`): two disposable
   # Compose projects side by side, each with its own ports, volumes, storage folder and secrets,
   # seeded with the fictional demo seed. Real pages, the CV PDF and stored images through the website
