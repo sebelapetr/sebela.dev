@@ -34,7 +34,7 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 
 ## When the phase is done
 
-When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
+When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists; never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
 
 ## When an issue fails
 

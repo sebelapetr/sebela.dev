@@ -62,12 +62,11 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 
 The `Commit messages` workflow (`.github/workflows/commit-messages.yml`, `scripts/checks/commit-messages.mjs`) applies the rules of the `commit-msg` hook, from the same module (`harness/lib/commit-message.mjs`), to what reaches GitHub. It runs on every pull request, again whenever a pull request's title is edited, and on pushes to `master` and `phase/**`.
 
-| Event                                              | Commits checked                                   | Merge commits | `fixup!`, `squash!`, `amend!` | Title                                                                                                                              |
-| -------------------------------------------------- | ------------------------------------------------- | ------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Issue pull request (head is not a `phase/` branch) | Base commit of the pull request to its head       | Pass          | Pass                          | Checked: it becomes the squash commit, so it must be a Conventional header itself — not a `Merge …` or autosquash header, one line |
-| Phase pull request (head is a `phase/` branch)     | Base commit of the pull request to its head       | Pass          | Refused                       | Not checked: a phase is merged with a merge commit                                                                                 |
-| Push to `master` or a phase branch                 | The commit before the push to the pushed commit   | Pass          | Refused                       | —                                                                                                                                  |
-| Push that creates a phase branch                   | The commits the branch adds to the default branch | Pass          | Refused                       | —                                                                                                                                  |
+| Event                                              | Commits checked                                 | Merge commits | `fixup!`, `squash!`, `amend!` | Title                                                                                                                              |
+| -------------------------------------------------- | ----------------------------------------------- | ------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Issue pull request (head is not a `phase/` branch) | Base commit of the pull request to its head     | Pass          | Pass                          | Checked: it becomes the squash commit, so it must be a Conventional header itself — not a `Merge …` or autosquash header, one line |
+| Phase pull request (head is a `phase/` branch)     | Base commit of the pull request to its head     | Pass          | Refused                       | Not checked: a phase is merged with a merge commit                                                                                 |
+| Push to `master`                                   | The commit before the push to the pushed commit | Pass          | Refused                       | —                                                                                                                                  |
 
 - **Test-first history passes.** Only the message is checked, never the tree of each commit, so a red test commit followed by its implementation is accepted; CI's other jobs check the head of the branch.
 - **Autosquash markers are folded before they reach a shared branch.** On an issue branch the squash merge removes them; a phase branch and `master` keep every commit, so a `fixup!` there fails the check.
@@ -102,7 +101,8 @@ Orchestrated by: <agent>
 
 ## Phase pull request
 
-- Opened by the orchestrator from the phase branch to `master` when no ready issue of the phase remains.
+- Opened by the orchestrator from the phase branch to `master` **as a draft** when no ready issue of the phase remains; HITL issues may still be open.
+- When the phase is complete, the owner marks it **ready for review**. That runs the model evals of the affected suites once on the final state (`docs/testing.md`, Evals-driven development); a draft runs none.
 - The description lists the issues of the phase with their pull requests, and anything skipped or failed.
 - The owner reviews the phase as a whole and is the only one who merges it. It is merged with a **merge commit**, so `master` keeps one commit per issue plus one commit marking the phase.
 - CI must be green on the phase branch.

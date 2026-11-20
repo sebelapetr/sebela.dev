@@ -82,7 +82,7 @@ Handle exactly ONE issue, following your agent definition, docs/agents.md and do
 1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
 2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. An issue labelled \`agent-retry\` failed once before: read its comments first. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
 3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
-4. If no such issue is left, open the phase pull request from phase/${phase} to ${base} (or update it if it exists) and report phase_done.
+4. If no such issue is left, open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. Never mark it ready for review: the owner does that when the phase is complete, HITL issues included, which starts its model evals.
 
 Write the report summary in English; it goes to the loop's log.
 5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
@@ -321,12 +321,14 @@ async function main() {
     }
 
     if (decision.next === "done") {
-      log("phase done: the phase pull request is open for review.");
+      log(
+        "phase done: the phase pull request is open as a draft; mark it ready for review when the phase is complete.",
+      );
       const report = await writePhaseReport({ mainRoot, phase: options.phase }).catch((error) =>
         log(`the phase report failed: ${error.message}`),
       );
       if (report) log(`phase report: ${report}`);
-      alert(options, ["phase done", "the phase pull request is open for review"]);
+      alert(options, ["phase done", "the phase pull request is open as a draft"]);
       return;
     }
     if (decision.next === "stop") {

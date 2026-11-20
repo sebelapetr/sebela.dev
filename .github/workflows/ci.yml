@@ -1,4 +1,4 @@
-# Quality gate for issue pull requests and for pushes to phase branches and the main branch.
+# Quality gate for every pull request and for pushes to the main branch.
 # Node.js comes from .nvmrc and pnpm from the packageManager field of package.json. Every job runs on
 # every event; none is skipped by a path filter, so no required status is ever left waiting. The two
 # website jobs report success at once when the change touches only files that cannot change the
@@ -8,10 +8,12 @@ name: CI
 
 on:
   pull_request:
+  # Pushes to master only: a phase branch changes through issue pull requests, which ran CI on
+  # their merge with it, and its open phase pull request runs CI again on every push. A push run
+  # there too would check the same commit twice.
   push:
     branches:
       - master
-      - "phase/**"
 
 permissions:
   contents: read

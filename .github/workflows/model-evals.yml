@@ -1,5 +1,7 @@
 # Paid model evals: only the suites a change affects, and not on every push (docs/testing.md,
-# Evals-driven development). Each suite has its own job and its own paths: its folder and what can
+# Evals-driven development). The phase loop opens a phase pull request as a draft, which runs no
+# evals; the owner marks it ready for review when the phase is complete, HITL work included, and
+# that runs them once on the final state. Each suite has its own job and its own paths: its folder and what can
 # change its behaviour. A suite runs in full on a pull request into the main branch when it is
 # opened, reopened or marked ready for review and the pull request changes one of its paths, and
 # by hand (workflow_dispatch, one suite or all). New commits on the pull request start no charged
@@ -29,6 +31,8 @@ jobs:
   # Which suites the pull request affects. A manual run selects them by its input instead.
   changes:
     name: Affected eval suites
+    # A draft pull request runs no evals: the phase is not complete yet.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     outputs:
       mcp-admin: ${{ steps.affected.outputs.mcp-admin }}

@@ -85,7 +85,7 @@ For each issue of a phase:
 8. When CI is green, the orchestrator squash-merges it into the phase branch. The issue closes.
 9. The orchestrator runs the docs-keeper on the merged change and removes the worktree.
 
-When no ready issue of the phase remains, the orchestrator opens the phase pull request to the phase's base branch — `master`, except for the trial — and stops. The owner reviews and merges it.
+When no ready issue of the phase remains, the orchestrator opens the phase pull request to the phase's base branch — `master`, except for the trial — as a draft, and stops. HITL issues may still be open then. When the phase is complete, the owner marks the pull request ready for review, which runs the model evals of the affected suites once on the final state (`docs/testing.md`), and merges it when they pass.
 
 ## The phase loop
 
@@ -98,7 +98,7 @@ harness/run-phase.sh <phase-folder>
 - **One iteration, one issue.** The script starts Claude Code non-interactively with the orchestrator agent and the instruction to take the next ready issue of the phase through to a merged issue pull request. Every iteration starts with a clean context.
 - **State lives in GitHub**, not in the script: issue labels, open and merged pull requests, the phase branch. The script can be stopped and started again at any time and continues where it left off.
 - **Usage limit.** When a run ends because the usage limit is reached, the script waits ten minutes and tries again, until the limit lifts. A wait counts neither as a failure nor as an iteration, and Ctrl+C ends it at once.
-- **End.** The loop ends when no ready issue of the phase remains; the phase pull request is then open and the loop writes [the phase report](#the-phase-report).
+- **End.** The loop ends when no ready issue of the phase remains; the phase pull request is then open as a draft and the loop writes [the phase report](#the-phase-report).
 - **Before each iteration** (`harness/preflight.mjs`, rules in `harness/lib/preflight.mjs`) the loop checks the machine. Docker not running, Postgres not healthy or `gh` not signed in stop the loop with what to do, because every agent would otherwise fail or try to work around it. A main checkout that is not on the base branch, is behind `origin/<base>` or has uncommitted changes is only a warning, printed before the first iteration: the owner may mean it.
 - **Progress.** An iteration's first line says how many of the phase's issues are closed (`(3/21 issues closed)`). Every half minute the loop reads the orchestrator's transcript and prints a line when it picks an issue or hands it to another agent (`#24 feat/24-generated-api-client → reviewer`), also when it sends objections back to the developer or fixes back to the reviewer it already started; the phase report counts those as further rounds; rules in `harness/lib/progress.mjs`.
 - **Cost.** Each iteration's log line ends with what the run cost and how long it took, from the orchestrator's result (`merged #22 ($4.07, 24 min): …`); subagents are included.
