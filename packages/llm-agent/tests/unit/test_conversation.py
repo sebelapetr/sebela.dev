@@ -392,6 +392,89 @@ def test_the_language_follows_a_switch_then_the_question_then_the_conversation(
     assert select_language(question, history) == expected
 
 
+#: Ordinary requests for the other language, beyond the eval phrasings, in both directions.
+TO_CZECH = (
+    "In Czech, please.",
+    "Czech please",
+    "Czech only, please.",
+    "Tell me in Czech",
+    "Can you tell me more in Czech?",
+    "From now on answer in Czech",
+    "I'd like you to answer in Czech",
+    "I would like you to reply in Czech from now on.",
+    "Please continue in Czech.",
+    "Could you switch to Czech?",
+    "Ok, now in Czech.",
+    "Please answer in Czech and tell me what she built.",
+    "What did she build? Explain it in Czech, please.",
+    "Odpovídej česky.",
+    "Česky prosím.",
+    "Prosím česky",
+    "Mohl bys odpovídat česky?",
+    "Muzes psat cesky?",
+)
+TO_ENGLISH = (
+    "In English please",
+    "English, please.",
+    "English only",
+    "Can you answer in English?",
+    "No wait, answer in English.",
+    "Anglicky prosím.",
+    "Prosím anglicky",
+    "Mohl bys odpovídat anglicky?",
+    "Muzes odpovidat anglicky?",
+    "Můžete mi to říct anglicky?",
+    "Od teď piš anglicky.",
+    "Radši v angličtině.",
+    "Přepni do angličtiny, díky.",
+    "Napiš mi to prosím po anglicku.",
+)
+#: Questions that only mention a language; none of them asks for the answer in it.
+NOT_A_SWITCH = (
+    ("Which project did you write in Czech?", "en", "en"),
+    ("What did he say? Answer in Czech means what?", "en", "en"),
+    ("Is the CV available in Czech?", "en", "en"),
+    ("Does she speak Czech?", "cs", "en"),
+    ("Czech?", "en", "en"),
+    ("Is she Czech or English?", "en", "en"),
+    ("Mluví Ilsa anglicky?", "en", "cs"),
+    ("Píše Ilsa články anglicky?", "en", "cs"),
+    ("Je ten projekt napsaný v angličtině?", "en", "cs"),
+)
+
+
+@pytest.mark.parametrize("question", TO_CZECH)
+def test_an_ordinary_request_for_czech_switches_from_english(question: str) -> None:
+    assert select_language(question, (exchange(language="en"),)) == "cs"
+
+
+@pytest.mark.parametrize("question", TO_ENGLISH)
+def test_an_ordinary_request_for_english_switches_from_czech(question: str) -> None:
+    assert select_language(question, (exchange(language="cs"),)) == "en"
+
+
+@pytest.mark.parametrize(("question", "previous", "expected"), NOT_A_SWITCH)
+def test_mentioning_a_language_is_not_a_switch(
+    question: str, previous: Language, expected: Language
+) -> None:
+    assert select_language(question, (exchange(language=previous),)) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("What did she do at Škoda?", "en"),
+        ("Tell me about her time at Brněnská Labs.", "en"),
+        ("A co Brindle Labs?", "cs"),
+        ("Kdo je Ilsa?", "cs"),
+    ],
+)
+def test_a_czech_name_does_not_make_an_english_question_czech(
+    question: str, expected: Language
+) -> None:
+    assert select_language(question, (exchange(language="en"),)) == expected
+
+
 def test_an_ambiguous_follow_up_inherits_the_newest_exchange_language() -> None:
     history = (exchange(language="en"), exchange(language="cs"))
     assert select_language(FOLLOW_UP, history) == "cs"
