@@ -61,6 +61,7 @@ The `deploy` job of `.github/workflows/release.yml` runs after the images are pu
 - **Retention.** Daily for 14 days; then the newest of each ISO week up to three months; older backups are removed.
 - **Monitored.** Only a complete backup (dump, upload and retention) pings the Better Stack heartbeat; a failure exits non-zero without it, so a missing backup alerts within a day.
 - **Scope.** The database only. Uploaded media live in their own Bunny Storage zone, off the server; the later phases' private knowledge originals are added to the backups by the phase that stores them (First-release scope).
+- **Extensions.** The dump leaves extensions out, because they belong to the superuser; `restore.sh into` creates `vector` itself. A later phase that adds another extension must add it to `restore.sh` too.
 - **No secret in logs.** The scripts print no password, key or heartbeat address.
 
 ## Restore
