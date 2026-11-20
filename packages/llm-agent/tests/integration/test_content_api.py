@@ -159,22 +159,23 @@ async def test_every_career_read_fits_one_answer_and_builds_exact_blocks(api_url
         ("list_education", {}),
         ("get_project", {"slug": "support-answer-engine"}),
     )
-    models = ScriptedModels(
-        security=[verdict()], main=[every_read, draft(refs=("src-1", "src-6", "src-8"))]
-    )
+    # Refs follow the read order: experiences, projects, services, then explorations; the
+    # project detail reuses its list ref.
+    first_service = len(_seed("experiences")) + len(_seed("projects")) + 1
+    first_exploration = first_service + len(_seed("services"))
+    refs = ("src-1", f"src-{first_service}", f"src-{first_exploration}")
+    models = ScriptedModels(security=[verdict()], main=[every_read, draft(refs=refs)])
     async with ApiContentReader(api_url) as content:
         result = await ChatAgent(content=content, models=models).run(
             ChatRequest(question="What has she worked on?")
         )
     assert [status for name, status in spans(result) if name.startswith("tool.")] == ["ok"] * 6
-    # Two experiences (src-1, src-2), three projects, two services (src-6, src-7), then the
-    # explorations (src-8 on); the project detail reuses its list ref.
     assert len(result.evidence) == sum(
         len(_seed(file))
         for file in ("experiences", "projects", "services", "explorations", "education")
     )
     by_ref = {item.ref: item for item in result.evidence}
-    cited = [by_ref[ref] for ref in ("src-1", "src-6", "src-8")]
+    cited = [by_ref[ref] for ref in refs]
     assert [item.kind for item in cited] == ["experience", "service", "exploration"]
     blocks = [block.model_dump(mode="json") for block in result.blocks]
     assert [block["href"] for block in blocks] == [item.href for item in cited]

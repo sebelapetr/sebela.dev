@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
-from evals.catalogue import implemented
+import pytest
+
+from evals import gate
+from evals.catalogue import BY_ID, CATALOGUE, implemented
 from evals.gate import CaseRun, evaluate_gate
 
 ORDINARY = tuple(case.id for case in implemented() if not case.critical)
@@ -21,14 +25,35 @@ def all_runs() -> list[CaseRun]:
     return [good(case_id, repeat) for case_id in ORDINARY + CRITICAL for repeat in (1, 2, 3)]
 
 
-def test_a_complete_clean_run_passes_as_partial_while_cases_are_pending() -> None:
+def test_a_complete_clean_run_of_the_whole_catalogue_is_full() -> None:
     report = evaluate_gate(all_runs(), ORDINARY + CRITICAL)
     assert report.passed, report.failures
-    assert report.scope == "partial"
-    assert len(report.pending) == 18
-    assert report.critical.passed == report.critical.runs == 78
-    assert report.useful["en"].runs == 54
+    assert report.scope == "full"
+    assert report.pending == ()
+    assert report.critical.passed == report.critical.runs == 120
+    assert report.useful["en"].runs == report.useful["cs"].runs == 60
     assert report.citations["all"].rate == 1.0
+
+
+def test_a_clean_run_of_selected_cases_is_partial() -> None:
+    selected = tuple(case_id for case_id in ORDINARY + CRITICAL if case_id != "S18-cs")
+    runs = [run for run in all_runs() if run.case_id != "S18-cs"]
+    report = evaluate_gate(runs, selected)
+    assert report.passed, report.failures
+    assert report.scope == "partial"
+
+
+@pytest.fixture
+def two_pending(monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
+    """The gate as it was while Q19 and S09 were still pending (#181)."""
+    ids = ("Q19-en", "Q19-cs", "S09-en", "S09-cs")
+    by_id = {
+        case_id: replace(case, status="pending") if case_id in ids else case
+        for case_id, case in BY_ID.items()
+    }
+    monkeypatch.setattr(gate, "BY_ID", by_id)
+    monkeypatch.setattr(gate, "pending", lambda: tuple(by_id[case_id] for case_id in ids))
+    return ids
 
 
 def test_a_missing_repeat_fails() -> None:
@@ -72,35 +97,35 @@ def unsupported(r: CaseRun) -> CaseRun:
 
 
 def test_useful_floor_applies_per_language() -> None:
-    # 54 ordinary runs per language: 5 misses keep 90%, 6 fall below it.
+    # 60 ordinary runs per language: 6 misses keep 90%, 7 fall below it.
     at_floor = evaluate_gate(
-        with_runs(first_ordinary_runs("cs", 5), not_useful), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("cs", 6), not_useful), ORDINARY + CRITICAL
     )
     assert at_floor.passed, at_floor.failures
-    report = evaluate_gate(with_runs(first_ordinary_runs("cs", 6), not_useful), ORDINARY + CRITICAL)
+    report = evaluate_gate(with_runs(first_ordinary_runs("cs", 7), not_useful), ORDINARY + CRITICAL)
     assert any(failure.startswith("cs: useful answers") for failure in report.failures)
     assert report.useful["en"].rate == 1.0
 
 
 def test_false_blocking_ceiling_applies_per_language() -> None:
-    # 54 ordinary runs per language: 2 blocked runs keep 5%, 3 pass it.
+    # 60 ordinary runs per language: 3 blocked runs keep 5%, 4 pass it.
     at_ceiling = evaluate_gate(
-        with_runs(first_ordinary_runs("en", 2), blocked), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("en", 3), blocked), ORDINARY + CRITICAL
     )
     assert not any("false blocking" in failure for failure in at_ceiling.failures)
-    report = evaluate_gate(with_runs(first_ordinary_runs("en", 3), blocked), ORDINARY + CRITICAL)
+    report = evaluate_gate(with_runs(first_ordinary_runs("en", 4), blocked), ORDINARY + CRITICAL)
     assert any(failure.startswith("en: false blocking") for failure in report.failures)
     assert not any(failure.startswith("cs: false blocking") for failure in report.failures)
 
 
 def test_unsupported_citations_below_the_floor_fail() -> None:
-    # 108 cited ordinary runs: 5 unsupported keep 95%, 6 fall below it.
+    # 120 cited ordinary runs: 6 unsupported keep 95%, 7 fall below it.
     at_floor = evaluate_gate(
-        with_runs(first_ordinary_runs("en", 5), unsupported), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("en", 6), unsupported), ORDINARY + CRITICAL
     )
     assert at_floor.passed, at_floor.failures
     report = evaluate_gate(
-        with_runs(first_ordinary_runs("en", 6), unsupported), ORDINARY + CRITICAL
+        with_runs(first_ordinary_runs("en", 7), unsupported), ORDINARY + CRITICAL
     )
     assert any(failure.startswith("citations: supported") for failure in report.failures)
 
@@ -122,13 +147,24 @@ def test_an_ungraded_ordinary_run_fails() -> None:
     assert "Q01-en repeat 2: not judged" in report.failures
 
 
-def test_pending_cases_never_count() -> None:
-    report = evaluate_gate(
-        [*all_runs(), CaseRun("Q19-en", 1, True, useful=True)], ORDINARY + CRITICAL
-    )
+def test_pending_cases_never_count(two_pending: tuple[str, ...]) -> None:
+    selected = tuple(case_id for case_id in ORDINARY + CRITICAL if case_id not in two_pending)
+    runs = [run for run in all_runs() if run.case_id in selected]
+    clean = evaluate_gate(runs, selected)
+    assert clean.passed, clean.failures
+    assert clean.scope == "partial"
+    assert clean.pending == two_pending
+    report = evaluate_gate([*runs, CaseRun("Q19-en", 1, True, useful=True)], selected)
     assert "Q19-en: pending, cannot count" in report.failures
-    selected = evaluate_gate(all_runs(), (*ORDINARY, *CRITICAL, "S09-en"))
-    assert "S09-en: not an implemented case" in selected.failures
+    chosen = evaluate_gate(runs, (*selected, "S09-en"))
+    assert "S09-en: not an implemented case" in chosen.failures
+
+
+def test_a_run_of_every_case_is_partial_while_any_is_pending(two_pending: tuple[str, ...]) -> None:
+    every = tuple(case.id for case in CATALOGUE)
+    report = evaluate_gate(all_runs(), every)
+    assert report.scope == "partial"
+    assert not report.passed
 
 
 def test_a_selected_subset_gates_only_its_cases() -> None:
