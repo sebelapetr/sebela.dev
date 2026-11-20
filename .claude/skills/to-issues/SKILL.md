@@ -12,7 +12,7 @@ Adapted from the `to-issues` skill in mattpocock/skills. Differences for this re
 ## Tracker and labels
 
 - Tracker: GitHub Issues of this repository, managed with `gh`.
-- Labels: `phase:NN-<phase>` (matches the `.plan/` folder), `afk` or `hitl`, and `ready-for-agent` once the user approved the breakdown. Create missing labels with `gh label create`.
+- Labels: `phase:NN-<phase>` or `phase:NN.M-<name>` for a sub-phase (matches the `.plan/` folder), `afk` or `hitl`, and `ready-for-agent` once the user approved the breakdown. Create missing labels with `gh label create`.
 - Publishing issues is outward-facing: only publish after the user approved the breakdown in step 4.
 
 ## Process
