@@ -146,7 +146,7 @@ The reviewer agent is the only check between issues inside a phase, so a mistake
 
 ## What the reviewer checks
 
-- Every acceptance criterion of the issue, with the browser specs the change affects run once per review and none when it cannot change the website; the whole suite runs only in CI before the merge ( [Browser tests by role](testing.md#browser-tests-by-role))
+- Every acceptance criterion of the issue, with the browser specs the change affects run once per review and none when it cannot change the website; the whole suite runs only in CI before the merge ([Browser tests by role](testing.md#browser-tests-by-role))
 - Package boundaries and the trust boundary
 - Access: every write is a private, authenticated route; the API key never reaches client-side code
 - Where test-first is mandatory: the test came before the implementation
