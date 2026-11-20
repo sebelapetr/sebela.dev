@@ -481,6 +481,11 @@ class Tools:
         return evidence
 
 
+def study_time(seconds: int) -> str:
+    """Seconds as the website shows learning time (`formatStudyTime`)."""
+    raise NotImplementedError(seconds)
+
+
 def _tool(name: str) -> ToolName | None:
     for tool in _KIND:
         if tool == name:

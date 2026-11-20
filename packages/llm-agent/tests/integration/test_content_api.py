@@ -17,7 +17,7 @@ import pytest
 import pytest_asyncio
 
 from evals.datasets.cases import FIXTURE, FIXTURE_PERSON
-from evals.graders.code import expected_block, fixture_contact
+from evals.graders.code import canonical_href, diary_days, expected_block, fixture_contact
 from evals.run import REPORT_ROOT, start_api
 from llm_agent import (
     ApiContentReader,
@@ -182,3 +182,85 @@ async def test_every_career_read_fits_one_answer_and_builds_exact_blocks(api_url
         if isinstance(block.get("technologies"), list):
             block["technologies"] = sorted(block["technologies"])
         assert block == expected_block(block["type"], item.record_id)
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_learning_reads_keep_the_seeded_identities_and_statuses(api_url: str) -> None:
+    async with ApiContentReader(api_url) as content:
+        focus = await content.read_current_focus()
+        roadmap = await content.read_roadmap()
+        area = await content.read_roadmap_area("agent-systems")
+        with pytest.raises(ContentNotFoundError):
+            await content.read_roadmap_area("quantum-computing")
+        diary = await content.read_diary()
+        statistics = await content.read_statistics()
+        books = await content.read_books()
+        events = await content.read_events()
+    assert [item.slug for item in focus] == [item["slug"] for item in _seed("current-focus")]
+    assert {item.slug for item in roadmap.areas} == set(_names("roadmap-areas"))
+    modules = {item["slug"]: item["area"] for item in _seed("roadmap-modules")}
+    statuses = {item["slug"]: item["status"] for item in _seed("roadmap-resources")}
+    for listed in roadmap.areas:
+        for module in listed.modules:
+            assert modules[module.slug] == listed.slug
+            for resource in module.resources:
+                assert resource.status == statuses[resource.slug]
+    assert area == next(item for item in roadmap.areas if item.slug == "agent-systems")
+    assert {day.date.isoformat() for day in diary} <= diary_days()
+    assert all(day.total_seconds == sum(s.duration_seconds for s in day.sessions) for day in diary)
+    assert statistics.totals.total_seconds == sum(day.total_seconds for day in diary)
+    assert {item.slug for item in books} == {item["slug"] for item in _seed("roadmap-books")}
+    assert {item.slug for item in events} == set(_names("roadmap-events"))
+    for event in events:
+        record = next(item for item in _seed("roadmap-events") if item["slug"] == event.slug)
+        assert (event.starts_on, event.ends_on) == (
+            _day(record["startsOn"]),
+            _day(record.get("endsOn")),
+        )
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_every_learning_read_cites_its_exact_site_page(api_url: str) -> None:
+    every_read = calls(
+        ("list_current_focus", {}),
+        ("get_roadmap", {}),
+        ("get_roadmap_area", {"area": "agent-systems"}),
+        ("get_learning_statistics", {}),
+        ("list_books", {}),
+        ("list_events", {}),
+    )
+    models = ScriptedModels(security=[verdict()], main=[every_read, draft(refs=())])
+    async with ApiContentReader(api_url) as content:
+        result = await ChatAgent(content=content, models=models).run(
+            ChatRequest(question="What is she learning?", today=datetime.date(2026, 3, 12))
+        )
+    assert [status for name, status in spans(result) if name.startswith("tool.")] == ["ok"] * 6
+    for item in result.evidence:
+        assert item.href == canonical_href(item.kind, item.record_id), item
+    cited = [e.ref for e in result.evidence if e.kind in ("roadmap_area", "roadmap_module")][:3]
+    models = ScriptedModels(security=[verdict()], main=[every_read, draft(refs=tuple(cited))])
+    async with ApiContentReader(api_url) as content:
+        result = await ChatAgent(content=content, models=models).run(
+            ChatRequest(question="What is she learning?")
+        )
+    blocks = [block.model_dump(mode="json") for block in result.blocks]
+    assert len(blocks) == 3
+    by_ref = {item.ref: item for item in result.evidence}
+    for block, ref in zip(blocks, cited, strict=True):
+        assert block == expected_block("RoadmapCard", by_ref[ref].record_id)
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_learning_diary_days_are_cited_on_their_day_pages(api_url: str) -> None:
+    models = ScriptedModels(
+        security=[verdict()], main=[tools("get_learning_diary"), draft(refs=())]
+    )
+    async with ApiContentReader(api_url) as content:
+        result = await ChatAgent(content=content, models=models).run(
+            ChatRequest(question="What did she study?")
+        )
+    assert [status for name, status in spans(result) if name.startswith("tool.")] == ["ok"]
+    assert result.evidence
+    for item in result.evidence:
+        assert item.kind == "diary_day"
+        assert item.href == canonical_href("diary_day", item.record_id)

@@ -343,3 +343,397 @@ async def test_a_failed_career_read_is_unavailable() -> None:
         with pytest.raises(ContentUnavailableError) as raised:
             await reader.read_project("support-answer-engine")
         assert not isinstance(raised.value, ContentNotFoundError)
+
+
+# --- Learning reads -------------------------------------------------------------------------
+
+UUID = "00000000-0000-4000-8000-000000000201"
+
+
+def topic(name: str) -> dict[str, Any]:
+    return {"id": UUID, "slug": name.lower(), "name": name, "position": 0, **STAMPS}
+
+
+def progress(completed: int, total: int, status: str, minutes: int) -> dict[str, Any]:
+    return {
+        "completed": completed,
+        "total": total,
+        "status": status,
+        "completedAt": None,
+        "lastUpdatedAt": "2026-03-10T09:00:00.000Z",
+        "estimatedMinutes": minutes,
+    }
+
+
+FOCUS_JSON: dict[str, Any] = {
+    "id": UUID,
+    "slug": "learning-agent-guardrails",
+    "title": "Learning how tool-using agents stay safe",
+    "description": "Studying guardrails.",
+    "link": "https://focus.example.test/",
+    "position": 0,
+    "project": {
+        "slug": "evaluation-harness",
+        "name": "Evaluation harness",
+        "experience": "brindle-labs-ai-engineer",
+    },
+    "topics": [topic("Agents")],
+    **STAMPS,
+}
+
+TREE_RESOURCE_JSON: dict[str, Any] = {
+    "id": UUID,
+    "slug": "agent-loop-walkthrough",
+    "name": "Agent loop walkthrough",
+    "description": None,
+    "type": "link",
+    "status": "in-progress",
+    "estimatedMinutes": 90,
+    "startedAt": "2026-03-01T09:00:00.000Z",
+    "finishedAt": None,
+    "link": "https://resource.example.test/",
+    "position": 0,
+    "book": None,
+    "topics": [topic("Agents")],
+    **STAMPS,
+}
+
+TREE_AREA_JSON: dict[str, Any] = {
+    "id": UUID,
+    "slug": "agent-systems",
+    "name": "Agent systems",
+    "description": "Tool-using agents.",
+    "weight": 3,
+    "position": 0,
+    **STAMPS,
+    "progress": progress(1, 4, "in-progress", 360),
+    "modules": [
+        {
+            "id": UUID,
+            "slug": "tool-use-basics",
+            "name": "Tool use basics",
+            "description": None,
+            "position": 0,
+            **STAMPS,
+            "progress": progress(1, 2, "in-progress", 180),
+            "resources": [TREE_RESOURCE_JSON],
+        }
+    ],
+}
+
+ROADMAP_JSON: dict[str, Any] = {
+    "summary": {
+        "areaCount": 1,
+        "moduleCount": 1,
+        "resourceCount": 4,
+        "completed": 1,
+        "total": 4,
+        "estimatedMinutes": 360,
+        "estimatedHours": 6,
+        "lastUpdatedAt": "2026-03-10T09:00:00.000Z",
+    },
+    "areas": [TREE_AREA_JSON],
+}
+
+DIARY_EVENT_JSON: dict[str, Any] = {
+    "slug": "port-wren-agents-conference",
+    "name": "Port Wren Agents Conference",
+    "kind": "conference",
+    "startsOn": "2026-02-19",
+    "endsOn": "2026-02-20",
+    "link": "https://event.example.test/",
+}
+
+DIARY_JSON: dict[str, Any] = {
+    "days": [
+        {
+            "date": "2026-03-10",
+            "notes": "Traced an agent loop.",
+            "entries": [
+                {
+                    "id": UUID,
+                    "date": "2026-03-10",
+                    "resource": {
+                        "slug": "agent-loop-walkthrough",
+                        "name": "Agent loop walkthrough",
+                        "type": "link",
+                        "link": "https://resource.example.test/",
+                        "module": "tool-use-basics",
+                        "area": "agent-systems",
+                    },
+                    "event": None,
+                    "startedAt": "2026-03-10T08:00:00.000Z",
+                    "endedAt": "2026-03-10T09:30:00.000Z",
+                    "durationSeconds": 5400,
+                }
+            ],
+            "events": [],
+            "totalSeconds": 5400,
+        },
+        {
+            "date": "2026-02-19",
+            "notes": None,
+            "entries": [
+                {
+                    "id": UUID,
+                    "date": "2026-02-19",
+                    "resource": None,
+                    "event": DIARY_EVENT_JSON,
+                    "startedAt": "2026-02-19T08:00:00.000Z",
+                    "endedAt": "2026-02-19T13:30:00.000Z",
+                    "durationSeconds": 19800,
+                }
+            ],
+            "events": [DIARY_EVENT_JSON],
+            "totalSeconds": 19800,
+        },
+    ]
+}
+
+
+def seconds(total: int, resource: int, book: int, event: int) -> dict[str, int]:
+    return {
+        "totalSeconds": total,
+        "resourceSeconds": resource,
+        "bookSeconds": book,
+        "eventSeconds": event,
+    }
+
+
+STATISTICS_JSON: dict[str, Any] = {
+    "totals": {**seconds(25200, 5400, 0, 19800), "activeDays": 2},
+    "days": [{"date": "2026-03-10", **seconds(5400, 5400, 0, 0)}],
+    "weeks": [{"startsOn": "2026-03-09", **seconds(5400, 5400, 0, 0)}],
+    "months": [{"month": "2026-03", **seconds(5400, 5400, 0, 0)}],
+    "areas": [
+        {
+            "slug": "agent-systems",
+            "name": "Agent systems",
+            "totalSeconds": 5400,
+            "resourceSeconds": 5400,
+            "bookSeconds": 0,
+            "modules": [
+                {
+                    "slug": "tool-use-basics",
+                    "name": "Tool use basics",
+                    "totalSeconds": 5400,
+                    "resourceSeconds": 5400,
+                    "bookSeconds": 0,
+                }
+            ],
+        }
+    ],
+    "resources": [
+        {
+            "slug": "handbook-reading",
+            "name": "Handbook reading",
+            "type": "book",
+            "category": "book",
+            "module": {"slug": "retrieval-evaluation", "name": "Retrieval evaluation"},
+            "area": {"slug": "retrieval-engineering", "name": "Retrieval engineering"},
+            "book": {
+                "slug": "search-evaluation-handbook",
+                "title": "A Fictional Handbook of Search Evaluation",
+            },
+            "totalSeconds": 9000,
+        }
+    ],
+    "events": [
+        {
+            "slug": "port-wren-agents-conference",
+            "name": "Port Wren Agents Conference",
+            "kind": "conference",
+            "startsOn": "2026-02-19",
+            "endsOn": "2026-02-20",
+            "totalSeconds": 19800,
+        }
+    ],
+}
+
+BOOK_JSON: dict[str, Any] = {
+    "id": UUID,
+    "slug": "search-evaluation-handbook",
+    "title": "A Fictional Handbook of Search Evaluation",
+    "author": "Mara Placeholder",
+    "description": None,
+    "pages": 312,
+    "year": 2025,
+    "isbn": "9780000000000",
+    "priority": 1,
+    "startedOn": "2026-02-02",
+    "endedOn": None,
+    "summary": None,
+    "coverId": None,
+    "cover": None,
+    "status": "reading",
+    "resource": {
+        "slug": "handbook-reading",
+        "name": "Handbook reading",
+        "module": "retrieval-evaluation",
+        "area": "retrieval-engineering",
+    },
+    "readingSeconds": 9000,
+    **STAMPS,
+}
+
+EVENT_JSON: dict[str, Any] = {
+    "id": UUID,
+    "slug": "port-wren-agents-conference",
+    "name": "Port Wren Agents Conference",
+    "kind": "conference",
+    "organizer": "Port Wren AI Guild",
+    "startsOn": "2026-02-19",
+    "endsOn": "2026-02-20",
+    "place": "Port Wren",
+    "online": False,
+    "link": "https://event.example.test/",
+    "takeaways": "Talks on agent evaluation.",
+    "topics": [topic("Agents")],
+    "attendanceSeconds": 19800,
+    **STAMPS,
+}
+
+LEARNING_ROUTES = {
+    "/v1/current-focus": (200, [FOCUS_JSON]),
+    "/v1/roadmap": (200, ROADMAP_JSON),
+    "/v1/roadmap/tree/agent-systems": (200, {"area": TREE_AREA_JSON}),
+    "/v1/roadmap/diary": (200, DIARY_JSON),
+    "/v1/roadmap/statistics": (200, STATISTICS_JSON),
+    "/v1/roadmap/books": (200, [BOOK_JSON]),
+    "/v1/roadmap/events": (200, [EVENT_JSON]),
+}
+
+
+async def test_the_learning_reads_map_the_public_records_and_send_no_credentials() -> None:
+    seen: list[httpx2.Request] = []
+    async with ApiContentReader(BASE_URL, transport=routes(seen, **LEARNING_ROUTES)) as reader:
+        focus = await reader.read_current_focus()
+        roadmap = await reader.read_roadmap()
+        area = await reader.read_roadmap_area("agent-systems")
+        diary = await reader.read_diary()
+        statistics = await reader.read_statistics()
+        books = await reader.read_books()
+        events = await reader.read_events()
+    assert focus[0].project is not None
+    assert (focus[0].slug, focus[0].project.experience, focus[0].topics) == (
+        "learning-agent-guardrails",
+        "brindle-labs-ai-engineer",
+        ["Agents"],
+    )
+    assert roadmap.summary.estimated_minutes == 360
+    assert roadmap.areas[0] == area
+    assert (area.progress.completed, area.progress.total, area.progress.status) == (
+        1,
+        4,
+        "in-progress",
+    )
+    resource = area.modules[0].resources[0]
+    assert (resource.type, resource.status, resource.topics) == ("link", "in-progress", ["Agents"])
+    assert [day.date.isoformat() for day in diary] == ["2026-03-10", "2026-02-19"]
+    session = diary[0].sessions[0]
+    assert session.resource is not None
+    assert (session.resource.module, session.event, session.duration_seconds) == (
+        "tool-use-basics",
+        None,
+        5400,
+    )
+    assert diary[1].sessions[0].event == diary[1].events[0]
+    assert statistics.totals.active_days == 2
+    assert statistics.months[0].month == "2026-03"
+    assert statistics.resources[0].book == "A Fictional Handbook of Search Evaluation"
+    assert statistics.resources[0].module.name == "Retrieval evaluation"
+    assert statistics.events[0].total_seconds == 19800
+    assert books[0].status == "reading"
+    assert books[0].resource is not None
+    assert (books[0].resource.slug, books[0].reading_seconds) == ("handbook-reading", 9000)
+    assert (events[0].kind, events[0].topics, events[0].attendance_seconds) == (
+        "conference",
+        ["Agents"],
+        19800,
+    )
+    assert [r.url.path for r in seen] == list(LEARNING_ROUTES)
+    assert all(r.method == "GET" for r in seen)
+    for request in seen:
+        headers = {key.lower() for key in request.headers}
+        assert "authorization" not in headers
+        assert "x-api-key" not in headers
+
+
+async def test_no_learning_read_model_carries_an_outside_url_or_private_detail() -> None:
+    seen: list[httpx2.Request] = []
+    async with ApiContentReader(BASE_URL, transport=routes(seen, **LEARNING_ROUTES)) as reader:
+        dumped = json.dumps(
+            [
+                *(f.model_dump(mode="json") for f in await reader.read_current_focus()),
+                (await reader.read_roadmap()).model_dump(mode="json"),
+                *(d.model_dump(mode="json") for d in await reader.read_diary()),
+                (await reader.read_statistics()).model_dump(mode="json"),
+                *(b.model_dump(mode="json") for b in await reader.read_books()),
+                *(e.model_dump(mode="json") for e in await reader.read_events()),
+            ]
+        )
+    assert "example.test" not in dumped
+    assert UUID not in dumped
+    assert "9780000000000" not in dumped
+    assert "2026-03-10T08:00" not in dumped
+
+
+async def test_a_missing_area_is_not_found_and_a_bad_area_slug_is_never_requested() -> None:
+    seen: list[httpx2.Request] = []
+    async with ApiContentReader(BASE_URL, transport=routes(seen, **LEARNING_ROUTES)) as reader:
+        with pytest.raises(ContentNotFoundError):
+            await reader.read_roadmap_area("no-such-area")
+        for slug in ("../person", "UPPER", "a" * 101, "", "a/b", "a?b"):
+            with pytest.raises(ValueError, match="slug"):
+                await reader.read_roadmap_area(slug)
+    assert [r.url.path for r in seen] == ["/v1/roadmap/tree/no-such-area"]
+
+
+@pytest.mark.parametrize(
+    ("path", "read", "body"),
+    [
+        ("/v1/current-focus", "read_current_focus", [{**FOCUS_JSON, "slug": "Not A Slug"}]),
+        ("/v1/roadmap", "read_roadmap", {"summary": ROADMAP_JSON["summary"]}),
+        (
+            "/v1/roadmap",
+            "read_roadmap",
+            {
+                **ROADMAP_JSON,
+                "areas": [{**TREE_AREA_JSON, "progress": progress(1, 4, "halfway", 360)}],
+            },
+        ),
+        ("/v1/roadmap/diary", "read_diary", {"days": [{"date": "not a date"}]}),
+        ("/v1/roadmap/statistics", "read_statistics", {"totals": {}}),
+        ("/v1/roadmap/books", "read_books", [{**BOOK_JSON, "status": "abandoned"}]),
+        ("/v1/roadmap/events", "read_events", [{**EVENT_JSON, "kind": "party"}]),
+        ("/v1/roadmap/events", "read_events", {"unexpected": True}),
+    ],
+)
+async def test_a_malformed_learning_read_is_unavailable(path: str, read: str, body: object) -> None:
+    seen: list[httpx2.Request] = []
+    transport = routes(seen, **{**LEARNING_ROUTES, path: (200, body)})
+    async with ApiContentReader(BASE_URL, transport=transport) as reader:
+        with pytest.raises(ContentUnavailableError):
+            await getattr(reader, read)()
+
+
+async def test_a_failed_learning_read_is_unavailable() -> None:
+    seen: list[httpx2.Request] = []
+    failing = {
+        path: (500, {"error": {"code": "internal_error", "message": "Failed."}})
+        for path in LEARNING_ROUTES
+    }
+    async with ApiContentReader(BASE_URL, transport=routes(seen, **failing)) as reader:
+        for read in (
+            reader.read_current_focus,
+            reader.read_roadmap,
+            reader.read_diary,
+            reader.read_statistics,
+            reader.read_books,
+            reader.read_events,
+        ):
+            with pytest.raises(ContentUnavailableError):
+                await read()
+        with pytest.raises(ContentUnavailableError) as raised:
+            await reader.read_roadmap_area("agent-systems")
+        assert not isinstance(raised.value, ContentNotFoundError)

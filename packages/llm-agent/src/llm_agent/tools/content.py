@@ -196,6 +196,244 @@ class PublicEducation(_Read):
     description: str | None
 
 
+RoadmapStatus = Literal["planned", "in-progress", "completed"]
+ResourceStatus = Literal["planned", "in-progress", "paused", "completed", "skipped"]
+BookStatus = Literal["to-read", "reading", "completed"]
+EventKind = Literal["conference", "meetup", "workshop", "lecture"]
+
+
+class PublicFocusProject(_Read):
+    """The project a current-focus entry builds on, with the slug of its experience."""
+
+    slug: Slug
+    name: str
+    experience: Slug
+
+
+class PublicCurrentFocus(_Read):
+    """What the person is focused on now; a focus, not delivered work."""
+
+    slug: Slug
+    title: str
+    description: str
+    project: PublicFocusProject | None
+    topics: list[str]
+
+
+class PublicProgress(_Read):
+    """The API's own progress of an area or module: completed of total resources and status."""
+
+    completed: int
+    total: int
+    status: RoadmapStatus
+    estimated_minutes: int
+
+
+class PublicRoadmapResource(_Read):
+    """A learning resource of a module; `book` is the slug of the book it links, if any."""
+
+    slug: Slug
+    name: str
+    description: str | None
+    type: str
+    status: ResourceStatus
+    estimated_minutes: int | None
+    book: Slug | None
+    topics: list[str]
+
+
+class PublicRoadmapModule(_Read):
+    slug: Slug
+    name: str
+    description: str | None
+    progress: PublicProgress
+    resources: list[PublicRoadmapResource]
+
+
+class PublicRoadmapArea(_Read):
+    slug: Slug
+    name: str
+    description: str | None
+    progress: PublicProgress
+    modules: list[PublicRoadmapModule]
+
+
+class PublicRoadmapSummary(_Read):
+    """The whole roadmap's counts as the API computes them; estimated minutes are not logged."""
+
+    area_count: int
+    module_count: int
+    resource_count: int
+    completed: int
+    total: int
+    estimated_minutes: int
+
+
+class PublicRoadmap(_Read):
+    summary: PublicRoadmapSummary
+    areas: list[PublicRoadmapArea]
+
+
+class PublicDiaryResource(_Read):
+    """The resource a session was logged on; `module` and `area` are slugs."""
+
+    slug: Slug
+    name: str
+    type: str
+    module: Slug
+    area: Slug
+
+
+class PublicDiaryEvent(_Read):
+    """An attended event with its inclusive calendar dates."""
+
+    slug: Slug
+    name: str
+    kind: EventKind
+    starts_on: datetime.date
+    ends_on: datetime.date
+
+
+class PublicDiarySession(_Read):
+    """One logged session: exactly one of resource or event, and its elapsed seconds."""
+
+    resource: PublicDiaryResource | None
+    event: PublicDiaryEvent | None
+    duration_seconds: int
+
+
+class PublicDiaryDay(_Read):
+    """One Europe/Prague calendar day of the learning diary, as the API derives it."""
+
+    date: datetime.date
+    notes: str | None
+    sessions: list[PublicDiarySession]
+    events: list[PublicDiaryEvent]
+    total_seconds: int
+
+
+class PublicLearningTime(_Read):
+    """Logged seconds split by target: roadmap resources, books (resource time) and events."""
+
+    total_seconds: int
+    resource_seconds: int
+    book_seconds: int
+    event_seconds: int
+
+
+class PublicLearningTotals(PublicLearningTime):
+    active_days: int
+
+
+class PublicLearningWeek(PublicLearningTime):
+    """A Monday-start Europe/Prague week."""
+
+    starts_on: datetime.date
+
+
+class PublicLearningMonth(PublicLearningTime):
+    """A Europe/Prague calendar month, such as `2026-03`."""
+
+    month: str
+
+
+class PublicLearningModule(_Read):
+    slug: Slug
+    name: str
+    total_seconds: int
+    resource_seconds: int
+    book_seconds: int
+
+
+class PublicLearningArea(_Read):
+    slug: Slug
+    name: str
+    total_seconds: int
+    resource_seconds: int
+    book_seconds: int
+    modules: list[PublicLearningModule]
+
+
+class PublicNamed(_Read):
+    slug: Slug
+    name: str
+
+
+class PublicLearningResource(_Read):
+    """A resource's logged seconds; `book` is the title of the book it links, if any."""
+
+    slug: Slug
+    name: str
+    type: str
+    category: str
+    module: PublicNamed
+    area: PublicNamed
+    book: str | None
+    total_seconds: int
+
+
+class PublicLearningEvent(_Read):
+    slug: Slug
+    name: str
+    kind: EventKind
+    starts_on: datetime.date
+    ends_on: datetime.date
+    total_seconds: int
+
+
+class PublicLearningStatistics(_Read):
+    """The API's learning-time aggregates; the per-day series is not read."""
+
+    totals: PublicLearningTotals
+    weeks: list[PublicLearningWeek]
+    months: list[PublicLearningMonth]
+    areas: list[PublicLearningArea]
+    resources: list[PublicLearningResource]
+    events: list[PublicLearningEvent]
+
+
+class PublicBookResource(_Read):
+    """The roadmap resource that links a book; `module` and `area` are slugs."""
+
+    slug: Slug
+    name: str
+    module: Slug
+    area: Slug
+
+
+class PublicBook(_Read):
+    """A bookshelf entry; `reading_seconds` is the logged time of its linked resource."""
+
+    slug: Slug
+    title: str
+    author: str | None
+    description: str | None
+    pages: int | None
+    year: int | None
+    started_on: datetime.date | None
+    ended_on: datetime.date | None
+    summary: str | None
+    status: BookStatus
+    resource: PublicBookResource | None
+    reading_seconds: int
+
+
+class PublicEvent(_Read):
+    """An attended event; `attendance_seconds` is the time logged on it, not its length."""
+
+    slug: Slug
+    name: str
+    kind: EventKind
+    organizer: str | None
+    starts_on: datetime.date
+    ends_on: datetime.date
+    place: str | None
+    online: bool
+    takeaways: str | None
+    topics: list[str]
+    attendance_seconds: int
+
+
 class ContentReader(Protocol):
     """The public reads the agent's tools use."""
 
@@ -212,6 +450,20 @@ class ContentReader(Protocol):
     async def read_services(self) -> list[PublicService]: ...
 
     async def read_education(self) -> list[PublicEducation]: ...
+
+    async def read_current_focus(self) -> list[PublicCurrentFocus]: ...
+
+    async def read_roadmap(self) -> PublicRoadmap: ...
+
+    async def read_roadmap_area(self, area: str) -> PublicRoadmapArea: ...
+
+    async def read_diary(self) -> list[PublicDiaryDay]: ...
+
+    async def read_statistics(self) -> PublicLearningStatistics: ...
+
+    async def read_books(self) -> list[PublicBook]: ...
+
+    async def read_events(self) -> list[PublicEvent]: ...
 
 
 def _person(person: Person) -> PublicPerson:
@@ -405,6 +657,27 @@ class ApiContentReader:
     async def read_education(self) -> list[PublicEducation]:
         items = await self._fetch(list_education.asyncio_detailed(client=self._client), list)
         return self._map(lambda rows: [_education(row) for row in rows], items)
+
+    async def read_current_focus(self) -> list[PublicCurrentFocus]:
+        raise NotImplementedError(self._client)
+
+    async def read_roadmap(self) -> PublicRoadmap:
+        raise NotImplementedError(self._client)
+
+    async def read_roadmap_area(self, area: str) -> PublicRoadmapArea:
+        raise NotImplementedError(area)
+
+    async def read_diary(self) -> list[PublicDiaryDay]:
+        raise NotImplementedError(self._client)
+
+    async def read_statistics(self) -> PublicLearningStatistics:
+        raise NotImplementedError(self._client)
+
+    async def read_books(self) -> list[PublicBook]:
+        raise NotImplementedError(self._client)
+
+    async def read_events(self) -> list[PublicEvent]:
+        raise NotImplementedError(self._client)
 
     @staticmethod
     async def _fetch[T](
