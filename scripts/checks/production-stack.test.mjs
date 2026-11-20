@@ -23,12 +23,7 @@ const REGISTRY = "ghcr.io/sebelapetr";
 const SERVICES = ["api", "mcp-admin", "migrate", "postgres", "web"];
 const LONG_RUNNING = ["api", "mcp-admin", "postgres", "web"];
 // Settings of the root file that only name a host port the production composition removes.
-const NOT_PRODUCTION_SETTINGS = new Set([
-  "API_HOST",
-  "API_PORT",
-  "MCP_ADMIN_HOST",
-  "MCP_ADMIN_PORT",
-]);
+const NOT_PRODUCTION_SETTINGS = new Set(["API_HOST", "API_PORT"]);
 
 const exampleText = readFileSync(path.join(root, EXAMPLE_FILE), "utf8");
 const example = parseEnv(exampleText);
@@ -106,10 +101,14 @@ describe("the production composition", () => {
     for (const name of SERVICES) assert.equal(service(name).build, undefined, name);
   });
 
-  it("publishes only the website, on the host's loopback interface", () => {
-    for (const name of SERVICES.filter((entry) => entry !== "web")) {
+  it("publishes only the website and MCP Admin, each on the host's loopback interface", () => {
+    // The website for the server's nginx; MCP Admin only as the target of the owner's SSH tunnel.
+    for (const name of SERVICES.filter((entry) => entry !== "web" && entry !== "mcp-admin")) {
       assert.deepEqual(service(name).ports ?? [], [], `${name} has no host port`);
     }
+    const admin = service("mcp-admin").ports ?? [];
+    assert.equal(admin.length, 1, "MCP Admin has one host port");
+    assert.ok(loopbackAddresses.has(admin[0].host_ip), `mcp-admin on ${String(admin[0].host_ip)}`);
     const ports = service("web").ports ?? [];
     assert.equal(ports.length, 1);
     assert.ok(loopbackAddresses.has(ports[0].host_ip), `web on ${String(ports[0].host_ip)}`);

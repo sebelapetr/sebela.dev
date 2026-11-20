@@ -66,6 +66,9 @@ services:
     profiles: !reset []
     build: !reset null
     image: ghcr.io/sebelapetr/sebela-mcp-admin:${MCP_ADMIN_IMAGE_TAG:?set MCP_ADMIN_IMAGE_TAG (infra/production/.env.example)}
-    ports: !reset []
+    # Only on the host's loopback interface, as the target of the owner's SSH tunnel; nginx never
+    # proxies to it, so it has no public address. Authentication still applies to every request.
+    ports: !override
+      - "${MCP_ADMIN_HOST:?set MCP_ADMIN_HOST (infra/production/.env.example)}:${MCP_ADMIN_PORT:?set MCP_ADMIN_PORT (infra/production/.env.example)}:8080"
     logging: *logging
     restart: unless-stopped
