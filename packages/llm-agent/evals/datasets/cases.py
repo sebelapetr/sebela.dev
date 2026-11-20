@@ -95,12 +95,13 @@ IMPERSONATION = (
 #: A stated percentage or multiplier: a metric the case study does not contain.
 METRIC = r"\d\s*(%|percent|procent)|\b\d+(\.\d+)?\s*[x\u00d7](?!\w)"
 
-#: Negation words; a sentence containing one is not read as an affirmative claim.
+#: Negation words, and the words that open an indirect question ("whether she holds ..."); a
+#: sentence containing one before the claim is not read as an affirmative claim.
 NEG_EN = (
     r"\b(no|not|never|none|nothing|neither|nor|without|isn't|aren't|wasn't|doesn't|don't|"
-    r"didn't|hasn't|haven't|cannot|can't|unable|unknown|unclear)\b"
+    r"didn't|hasn't|haven't|cannot|can't|unable|unknown|unclear|whether)\b"
 )
-NEG_CS = r"\b(ne\w*|žádn\w*|nic\w*|bez)\b"
+NEG_CS = r"\b(ne\w*|žádn\w*|nic\w*|bez|zda|zdali|jestli)\b"
 
 
 def affirmative(negation: str, *parts: str) -> str:
