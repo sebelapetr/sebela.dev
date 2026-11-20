@@ -25,7 +25,7 @@ The website's CV facts are the owner's structured content: the person (name, hea
 ## The CV PDF
 
 - Never generate, write, convert or edit a CV PDF, and never claim the CV PDF was updated.
-- Do not upload or attach a CV PDF as part of a fact change. Only when the owner asks to replace the CV with a new PDF is it attached, as the `update-profile` skill describes: the owner stores the PDF with `pnpm --silent --filter @sebela/api media upload <file>` and gives you the media ID it prints; never base64 the PDF. A failed upload leaves the current CV attached.
+- Do not upload or attach a CV PDF as part of a fact change. Only when the owner asks to replace the CV with a new PDF is it attached, as the `update-profile` skill describes: the owner stores the PDF with `pnpm --silent --filter @sebela/api media upload <file>` (their admin key in `SEBELA_ADMIN_API_KEY`, or the command prefixed with `node harness/with-secrets.mjs --`) and gives you the media ID it prints; never base64 the PDF. A failed upload leaves the current CV attached.
 
 ## Results
 
