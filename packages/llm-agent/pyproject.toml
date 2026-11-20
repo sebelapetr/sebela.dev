@@ -52,7 +52,7 @@ known-first-party = ["llm_agent", "evals"]
 strict = true
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
-files = ["src"]
+files = ["src", "evals", "tests"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
