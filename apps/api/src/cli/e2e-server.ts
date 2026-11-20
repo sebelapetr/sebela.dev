@@ -18,7 +18,12 @@ import { join, resolve } from "node:path";
 
 import { serve } from "@hono/node-server";
 
-import { openServices, readDatabaseConfig, readMediaConfig } from "@sebela/services";
+import {
+  openServices,
+  readDatabaseConfig,
+  readMediaConfig,
+  readRetrievalOptions,
+} from "@sebela/services";
 import { createTemporaryDatabase } from "@sebela/services/testing";
 
 import { createApp, type Logger } from "../app.js";
@@ -69,6 +74,7 @@ async function main() {
         }),
         onCleanupFailure: logCleanupFailure(log),
       },
+      retrieval: readRetrievalOptions(process.env),
     });
     await services.seed.loadSeed(seedFolder);
     const keyFile = process.env["API_E2E_KEY_FILE"];

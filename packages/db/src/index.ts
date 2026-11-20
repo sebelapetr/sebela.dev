@@ -3,12 +3,26 @@ export type { DatabaseConfig } from "./config.js";
 export { demoSeedFolder } from "./demo-seed.js";
 export { migrateDatabase } from "./migrate.js";
 export { createPersistence } from "./persistence.js";
+export { retrievalDimension } from "./modules/retrieval/index.js";
 export type { Persistence } from "./persistence.js";
 export type {
   ApiKeyCredential,
   ApiKeyMetadata,
   ApiKeyPersistence,
 } from "./modules/api-keys/index.js";
+export type {
+  RetrievalChunkRecord,
+  RetrievalIndexedSource,
+  RetrievalNearestChunk,
+  RetrievalNearestQuery,
+  RetrievalPersistence,
+  RetrievalSectionRecord,
+  RetrievalSourceKind,
+  RetrievalSourceVersion,
+  RetrievalUsageOperation,
+  RetrievalUsageRecord,
+  RetrievalUsageTotals,
+} from "./modules/retrieval/index.js";
 export type { AuditEntryInput, AuditEntryRecord, AuditPersistence } from "./modules/audit/index.js";
 export type {
   CaseStudyFields,

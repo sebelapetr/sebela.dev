@@ -1,0 +1,16 @@
+{
+  "description": "Gate of the memory evals. Not frozen yet: the vector baseline (#222) only measures; the thresholds are set from the measured variants and frozen when the deployed variant is chosen (#225). While `frozen` is false the runner reports metrics without a gate.",
+  "frozen": false,
+  "minimum": {
+    "recallAtPool": null,
+    "ndcg": null,
+    "mrr": null,
+    "correctEmptyRate": null,
+    "provenanceAccuracy": null
+  },
+  "maximum": {
+    "falseEmptyRate": null,
+    "latencyP95Ms": null,
+    "costPerQueryUsd": null
+  }
+}

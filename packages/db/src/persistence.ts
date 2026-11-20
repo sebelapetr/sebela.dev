@@ -3,6 +3,10 @@ import { openConnection } from "./connection.js";
 import { createApiKeyPersistence, type ApiKeyPersistence } from "./modules/api-keys/index.js";
 import { createAuditPersistence, type AuditPersistence } from "./modules/audit/index.js";
 import { createProfilePersistence, type ProfilePersistence } from "./modules/profile/index.js";
+import {
+  createRetrievalPersistence,
+  type RetrievalPersistence,
+} from "./modules/retrieval/index.js";
 import { createRoadmapPersistence, type RoadmapPersistence } from "./modules/roadmap/index.js";
 
 /** Every persistence operation of the backend over one connection pool. */
@@ -12,6 +16,8 @@ export interface Persistence {
   readonly apiKeys: ApiKeyPersistence;
   /** The private audit of content changes; written only inside `transaction`, with the change. */
   readonly audit: AuditPersistence;
+  /** The private knowledge index and its embedding spend. */
+  readonly retrieval: RetrievalPersistence;
   /**
    * Runs `work` with profile, roadmap and audit persistence inside one database transaction. It commits
    * when the work resolves and rolls every write back when it throws; the work's result or error
@@ -36,6 +42,7 @@ export function createPersistence(config: DatabaseConfig): Persistence {
     roadmap: createRoadmapPersistence(connection.db),
     apiKeys: createApiKeyPersistence(connection.db),
     audit: createAuditPersistence(connection.db),
+    retrieval: createRetrievalPersistence(connection.db),
     transaction: (work) =>
       connection.db.transaction((tx) =>
         work(

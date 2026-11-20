@@ -17,6 +17,9 @@ import { z } from "zod";
  *   declared type or extension does not match its content.
  * - `rate_limited` (429): a rate-limit budget is exhausted; `Retry-After` says when to retry.
  * - `internal_error` (500): an unexpected failure. No stack, SQL or secret is included.
+ * - `provider_unavailable` (503): an outside provider the operation needs, such as the embedding
+ *   provider of a search, is not configured, failed or timed out. Never reported as no result.
+ * - `budget_exhausted` (503): the month's spend on an outside provider reached its ceiling.
  */
 export const errorCodes = [
   "validation_failed",
@@ -29,6 +32,8 @@ export const errorCodes = [
   "unsupported_media_type",
   "rate_limited",
   "internal_error",
+  "provider_unavailable",
+  "budget_exhausted",
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];

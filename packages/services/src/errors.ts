@@ -8,9 +8,18 @@
  * - `payload_too_large`: an uploaded file is larger than the configured limit.
  * - `unsupported_media_type`: an uploaded file is not an accepted type, or its declared type or
  *   extension contradicts its content.
+ * - `provider_unavailable`: an outside provider the operation needs (the embedding provider) is
+ *   not configured, failed or did not answer in time.
+ * - `budget_exhausted`: the month's spend on an outside provider reached its configured ceiling.
  */
 export type DomainErrorCode =
-  "not_found" | "conflict" | "validation_failed" | "payload_too_large" | "unsupported_media_type";
+  | "not_found"
+  | "conflict"
+  | "validation_failed"
+  | "payload_too_large"
+  | "unsupported_media_type"
+  | "provider_unavailable"
+  | "budget_exhausted";
 
 /** An offending input field of a `validation_failed` refusal, named by its dotted path. */
 export interface DomainErrorField {

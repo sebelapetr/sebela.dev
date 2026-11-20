@@ -12583,6 +12583,126 @@
         }
       }
     },
+    "/v1/retrieval/search": {
+      "post": {
+        "operationId": "searchKnowledge",
+        "summary": "Search the indexed knowledge",
+        "description": "Embeds a query of at most 500 characters and returns up to 8 passages of the indexed public portfolio, best first, each with its source, version, canonical site path and provenance, optionally only of the given content kinds. When no passage reaches the configured relevance floor the result is `no_evidence`. A provider that is not configured, fails or times out, or a month's spend at its ceiling, is a 503 and never no evidence. It reads only and changes no content.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The passages or no evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the API key is missing, malformed, unknown or revoked.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`provider_unavailable`: an outside provider the route needs is not configured, failed or did not answer in time; `budget_exhausted`: the month's spend on it reached its ceiling. Never reported as an empty result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -16055,6 +16175,57 @@
         },
         "additionalProperties": false
       },
+      "SearchRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "The question or keywords, at most 500 characters after trimming."
+          },
+          "kinds": {
+            "description": "Only passages of these content kinds; every kind when absent.",
+            "minItems": 1,
+            "maxItems": 15,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetrievalContentKind"
+            }
+          },
+          "limit": {
+            "description": "The most passages to return; the configured number when absent.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false,
+        "description": "A search of the indexed knowledge."
+      },
+      "RetrievalContentKind": {
+        "type": "string",
+        "enum": [
+          "profile",
+          "experience",
+          "project",
+          "case_study",
+          "exploration",
+          "service",
+          "education",
+          "roadmap_area",
+          "roadmap_module",
+          "roadmap_resource",
+          "diary_day",
+          "book",
+          "event",
+          "glossary_term",
+          "document"
+        ]
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -16086,7 +16257,9 @@
                   "payload_too_large",
                   "unsupported_media_type",
                   "rate_limited",
-                  "internal_error"
+                  "internal_error",
+                  "provider_unavailable",
+                  "budget_exhausted"
                 ]
               },
               "message": {
@@ -20497,6 +20670,248 @@
           "after"
         ],
         "additionalProperties": false
+      },
+      "SearchResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "found"
+              },
+              "passages": {
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Passage"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "passages"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "no_evidence"
+              },
+              "passages": {
+                "type": "array",
+                "prefixItems": [],
+                "items": false,
+                "maxItems": 0
+              }
+            },
+            "required": [
+              "status",
+              "passages"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "The passages answering the query, best first, or no evidence when none reaches the relevance floor. A failing provider is an error, never no evidence.",
+        "type": "object"
+      },
+      "Passage": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PortfolioPassage"
+          },
+          {
+            "$ref": "#/components/schemas/SupplementalPassage"
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "sourceKind",
+          "mapping": {
+            "portfolio": "#/components/schemas/PortfolioPassage",
+            "supplemental": "#/components/schemas/SupplementalPassage"
+          }
+        }
+      },
+      "PortfolioPassage": {
+        "type": "object",
+        "properties": {
+          "sourceKind": {
+            "type": "string",
+            "const": "portfolio"
+          },
+          "sourceId": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "`portfolio:<content kind>:<slug or date>` of the public record."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the indexed source text; changes when the source changes."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "score": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "Cosine similarity to the query."
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 300,
+            "format": "starts_with",
+            "pattern": "^\\/.*",
+            "description": "The canonical site path of the record, never an absolute URL."
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "contentKind": {
+                "type": "string",
+                "enum": [
+                  "profile",
+                  "experience",
+                  "project",
+                  "case_study",
+                  "exploration",
+                  "service",
+                  "education",
+                  "roadmap_area",
+                  "roadmap_module",
+                  "roadmap_resource",
+                  "diary_day",
+                  "book",
+                  "event",
+                  "glossary_term"
+                ]
+              },
+              "sectionPath": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "description": "The headings from the source title down to the passage's section."
+              },
+              "indexedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              }
+            },
+            "required": [
+              "contentKind",
+              "sectionPath",
+              "indexedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "sourceKind",
+          "sourceId",
+          "title",
+          "version",
+          "text",
+          "score",
+          "path",
+          "provenance"
+        ],
+        "additionalProperties": false,
+        "description": "A passage of a public portfolio record."
+      },
+      "SupplementalPassage": {
+        "type": "object",
+        "properties": {
+          "sourceKind": {
+            "type": "string",
+            "const": "supplemental"
+          },
+          "sourceId": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^document:[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "`document:<slug>`, an opaque identifier; never an address."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the indexed source text; changes when the source changes."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "score": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "Cosine similarity to the query."
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "contentKind": {
+                "type": "string",
+                "const": "document"
+              },
+              "sectionPath": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "description": "The headings from the source title down to the passage's section."
+              },
+              "indexedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              }
+            },
+            "required": [
+              "contentKind",
+              "sectionPath",
+              "indexedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "sourceKind",
+          "sourceId",
+          "title",
+          "version",
+          "text",
+          "score",
+          "provenance"
+        ],
+        "additionalProperties": false,
+        "description": "A passage of an approved supplemental document: a label, never a link."
       }
     },
     "securitySchemes": {
