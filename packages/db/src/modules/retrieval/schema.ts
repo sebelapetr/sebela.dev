@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
+  primaryKey,
   customType,
   index,
   integer,
@@ -37,6 +39,8 @@ export const sources = retrievalSchema.table(
     sourceId: text("source_id").notNull().unique(),
     sourceKind: text("source_kind").notNull(),
     contentKind: text("content_kind").notNull(),
+    /** A content write superseded the indexed version; search leaves it out until it is stored. */
+    stale: boolean("stale").notNull().default(false),
   },
   (table) => [
     check("sources_kind_known", sql`${table.sourceKind} IN ('portfolio', 'supplemental')`),
@@ -110,7 +114,25 @@ export const chunks = retrievalSchema.table(
   ],
 );
 
-/** Queued indexing work, for the asynchronous ingest of later issues. */
+/**
+ * Every vector ever embedded, by text hash and model, so no text is embedded twice: not across an
+ * interrupted run, a superseded version or a rebuild.
+ */
+export const embeddings = retrievalSchema.table(
+  "embeddings",
+  {
+    textHash: text("text_hash").notNull(),
+    model: text("model").notNull(),
+    modelVersion: text("model_version").notNull(),
+    embedding: vector("embedding", { dimensions: retrievalDimension }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.textHash, table.model, table.modelVersion] })],
+);
+
+/**
+ * Queued indexing work: each item owes a run over the portfolio. Pending items wait; an item whose
+ * runs failed `maxAttempts` times is failed and waits for an explicit retry.
+ */
 export const workItems = retrievalSchema.table(
   "work_items",
   {

@@ -56,7 +56,15 @@ export type {
   TimeEntryDeletion,
 } from "./modules/roadmap/index.js";
 export { readRetrievalOptions } from "./modules/retrieval/index.js";
-export type { Embedder, IndexReport, RetrievalConfig, UsageTotals } from "@sebela/memory";
+export type {
+  Embedder,
+  IndexReport,
+  ProcessOptions,
+  QueueReport,
+  RetrievalConfig,
+  UsageTotals,
+  WorkCounts,
+} from "@sebela/memory";
 export type {
   KnowledgeService,
   KnowledgeServiceOptions,

@@ -1,5 +1,5 @@
-// Maintenance adapter for the knowledge base: reindexes the portfolio, lists the evals' candidate
-// pools and prints the month's recorded provider spend, straight through the services, so it needs
+// Maintenance adapter for the knowledge base: works through queued indexing work, rebuilds the
+// portfolio index, lists the evals' candidate pools and prints the month's recorded provider spend, straight through the services, so it needs
 // no running server and no API key. Every answer is one JSON document on stdout.
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -14,6 +14,7 @@ import {
   readDatabaseConfig,
   readMediaConfig,
   readRetrievalOptions,
+  type QueueReport,
   type Services,
 } from "@sebela/services";
 
@@ -22,8 +23,12 @@ import type { CommandOutput } from "./api-keys.js";
 
 const USAGE = `Usage: knowledge <command>
 
-  reindex                 Brings the index in step with the portfolio, embedding only what
-                          changed, and prints the report.
+  reindex                 Works through all queued indexing work, failed items included, and
+                          brings the index in step with the portfolio, embedding only what
+                          changed; prints the report with what is still queued.
+  rebuild                 Stores every portfolio source again, as after an embedding model or
+                          version change, embedding each text at most once per model.
+  pending                 Prints { pending, failed }: the queued indexing work.
   candidates <questions>  Prints { pools: { <id>: [sourceId, ...] } }: each question's candidate
                           pool, best first, without the relevance floor. <questions> is a JSON file
                           of [{ id, query, kinds? }], resolved against the starting directory.
@@ -55,7 +60,15 @@ export async function runKnowledgeCommand(
   };
   try {
     if (command === "reindex" && rest.length === 0) {
-      print(await services.knowledge.reindexPortfolio());
+      print(await workThroughQueue(services.knowledge));
+      return 0;
+    }
+    if (command === "rebuild" && rest.length === 0) {
+      print(await services.knowledge.rebuildPortfolio());
+      return 0;
+    }
+    if (command === "pending" && rest.length === 0) {
+      print(await services.knowledge.pending());
       return 0;
     }
     if (command === "usage" && rest.length === 0) {
@@ -100,6 +113,27 @@ export async function runKnowledgeCommand(
   }
   output.err(USAGE);
   return 2;
+}
+
+/** Runs bounded batches until no queued work is left, summing what they did. */
+async function workThroughQueue(knowledge: Services["knowledge"]): Promise<QueueReport> {
+  let total = await knowledge.processPending({ retryFailed: true });
+  let last = total;
+  while (last.completed > 0 && last.remaining.pending + last.remaining.failed > 0) {
+    last = await knowledge.processPending({ retryFailed: true });
+    total = {
+      sources: last.sources,
+      updated: total.updated + last.updated,
+      removed: total.removed + last.removed,
+      embedded: total.embedded + last.embedded,
+      reused: total.reused + last.reused,
+      tokens: total.tokens + last.tokens,
+      costUsd: total.costUsd + last.costUsd,
+      completed: total.completed + last.completed,
+      remaining: last.remaining,
+    };
+  }
+  return total;
 }
 
 async function main() {

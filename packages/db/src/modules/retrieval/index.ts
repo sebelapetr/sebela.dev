@@ -1,7 +1,15 @@
-import { and, asc, cosineDistance, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, cosineDistance, count, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
 
 import type { Database } from "../../database.js";
-import { chunks, providerUsage, sections, sources, versions } from "./schema.js";
+import {
+  chunks,
+  embeddings,
+  providerUsage,
+  sections,
+  sources,
+  versions,
+  workItems,
+} from "./schema.js";
 
 export { retrievalDimension } from "./schema.js";
 
@@ -179,7 +187,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           version: versions.version,
           model: versions.model,
           modelVersion: versions.modelVersion,
-          stale: sql<boolean>`false`,
+          stale: sources.stale,
         })
         .from(sources)
         .innerJoin(versions, eq(versions.sourceId, sources.id))
@@ -190,21 +198,21 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       const found = new Map<string, readonly number[]>();
       if (hashes.length === 0) return found;
       const rows = await db
-        .selectDistinctOn([chunks.textHash], {
-          textHash: chunks.textHash,
-          embedding: chunks.embedding,
-        })
-        .from(chunks)
+        .select({ textHash: embeddings.textHash, embedding: embeddings.embedding })
+        .from(embeddings)
         .where(
           and(
-            inArray(chunks.textHash, [...hashes]),
-            eq(chunks.model, model),
-            eq(chunks.modelVersion, modelVersion),
+            inArray(embeddings.textHash, [...new Set(hashes)]),
+            eq(embeddings.model, model),
+            eq(embeddings.modelVersion, modelVersion),
           ),
-        )
-        .orderBy(chunks.textHash);
+        );
       for (const row of rows) found.set(row.textHash, row.embedding);
       return found;
+    },
+
+    async storeVectors(vectors, model, modelVersion) {
+      await cacheVectors(db, vectors, model, modelVersion);
     },
 
     async replaceSource(source) {
@@ -218,7 +226,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           })
           .onConflictDoUpdate({
             target: sources.sourceId,
-            set: { sourceKind: source.sourceKind, contentKind: source.contentKind },
+            set: { sourceKind: source.sourceKind, contentKind: source.contentKind, stale: false },
           })
           .returning({ id: sources.id });
         if (stored === undefined) throw new Error("The source was not stored.");
@@ -237,6 +245,12 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           })
           .returning({ id: versions.id });
         if (version === undefined) throw new Error("The version was not stored.");
+        await cacheVectors(
+          tx,
+          new Map(source.chunks.map((chunk) => [chunk.textHash, chunk.vector])),
+          source.model,
+          source.modelVersion,
+        );
         if (source.sections.length === 0) return;
         const storedSections = await tx
           .insert(sections)
@@ -275,12 +289,69 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       });
     },
 
-    storeVectors: () => Promise.reject(new Error("not implemented")),
-    scheduleWork: () => Promise.reject(new Error("not implemented")),
-    pendingWork: () => Promise.reject(new Error("not implemented")),
-    completeWork: () => Promise.reject(new Error("not implemented")),
-    failWork: () => Promise.reject(new Error("not implemented")),
-    workCounts: () => Promise.reject(new Error("not implemented")),
+    async scheduleWork(work) {
+      await db.transaction(async (tx) => {
+        if (work.removeSourceIds.length > 0) {
+          await tx.delete(sources).where(inArray(sources.sourceId, [...work.removeSourceIds]));
+        }
+        if (work.staleSourceIds.length > 0) {
+          await tx
+            .update(sources)
+            .set({ stale: true })
+            .where(inArray(sources.sourceId, [...work.staleSourceIds]));
+        }
+        if (work.items.length > 0) {
+          await tx.insert(workItems).values(work.items.map((item) => ({ ...item })));
+        }
+      });
+    },
+
+    async pendingWork(limit, includeFailed) {
+      const rows = await db
+        .select({
+          id: workItems.id,
+          sourceId: workItems.sourceId,
+          operation: workItems.operation,
+          attempts: workItems.attempts,
+          status: workItems.status,
+        })
+        .from(workItems)
+        .where(inArray(workItems.status, includeFailed ? ["pending", "failed"] : ["pending"]))
+        .orderBy(asc(workItems.createdAt), asc(workItems.id))
+        .limit(limit);
+      return rows.map(({ status, operation, ...row }) => ({
+        ...row,
+        operation: workOperationOf(operation),
+        failed: status === "failed",
+      }));
+    },
+
+    async completeWork(ids) {
+      if (ids.length === 0) return;
+      await db.delete(workItems).where(inArray(workItems.id, [...ids]));
+    },
+
+    async failWork(ids, error, maxAttempts) {
+      if (ids.length === 0) return;
+      await db
+        .update(workItems)
+        .set({
+          attempts: sql`${workItems.attempts} + 1`,
+          status: sql`CASE WHEN ${workItems.attempts} + 1 >= ${maxAttempts} THEN 'failed' ELSE 'pending' END`,
+          lastError: error.slice(0, 200),
+          updatedAt: sql`now()`,
+        })
+        .where(inArray(workItems.id, [...ids]));
+    },
+
+    async workCounts() {
+      const rows = await db
+        .select({ status: workItems.status, count: count() })
+        .from(workItems)
+        .groupBy(workItems.status);
+      const of = (status: string) => rows.find((row) => row.status === status)?.count ?? 0;
+      return { pending: of("pending"), failed: of("failed") };
+    },
 
     async removeSourcesExcept(sourceKind, sourceIds) {
       const removed = await db
@@ -353,6 +424,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           .innerJoin(sections, eq(sections.id, chunks.sectionId))
           .where(
             and(
+              eq(sources.stale, false),
               eq(chunks.model, query.model),
               eq(chunks.modelVersion, query.modelVersion),
               query.kinds === undefined
@@ -366,6 +438,34 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
     },
   };
+}
+
+type Executor = Pick<Database, "insert">;
+
+/** Adds vectors to the embedding cache, keeping a vector already there. */
+async function cacheVectors(
+  db: Executor,
+  vectors: ReadonlyMap<string, readonly number[]>,
+  model: string,
+  modelVersion: string,
+) {
+  if (vectors.size === 0) return;
+  await db
+    .insert(embeddings)
+    .values(
+      [...vectors].map(([textHash, vector]) => ({
+        textHash,
+        model,
+        modelVersion,
+        embedding: [...vector],
+      })),
+    )
+    .onConflictDoNothing();
+}
+
+function workOperationOf(value: string): RetrievalWorkOperation {
+  if (value === "index" || value === "remove") return value;
+  throw new Error(`Unknown work operation ${value}.`);
 }
 
 const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", "candidates"];

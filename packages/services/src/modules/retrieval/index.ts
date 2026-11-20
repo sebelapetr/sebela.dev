@@ -15,6 +15,7 @@ import {
   createRetriever,
   createVoyageEmbedder,
   readRetrievalConfig,
+  scheduleChanges,
   type Embedder,
   type IndexReport,
   type PortfolioSnapshot,
@@ -104,10 +105,12 @@ export function createKnowledgeService(
   return {
     reindexPortfolio: () =>
       provider(async () => ready().indexer.reindexPortfolio(await snapshot(sources))),
-    rebuildPortfolio: () => Promise.reject(new Error("not implemented")),
-    schedule: () => Promise.reject(new Error("not implemented")),
-    processPending: () => Promise.reject(new Error("not implemented")),
-    pending: () => Promise.reject(new Error("not implemented")),
+    rebuildPortfolio: () =>
+      provider(async () => ready().indexer.rebuildPortfolio(await snapshot(sources))),
+    schedule: (changes) => scheduleChanges(store, changes),
+    processPending: (processOptions) =>
+      provider(() => ready().indexer.processPending(() => snapshot(sources), processOptions)),
+    pending: () => store.workCounts(),
     search: (request) => provider(() => ready().retriever.search(request)),
     candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
