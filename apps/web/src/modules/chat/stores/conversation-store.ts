@@ -364,8 +364,9 @@ export function createConversationStore({
       const turns = restore(storage, conversationId);
       set(snapshot(conversationId, turns));
       const handedOff = take(storage, handOffKey(conversationId));
-      if (handedOff !== null && turns.length === 0) submit(handedOff);
-      return "shown";
+      return handedOff !== null && turns.length === 0 && submit(handedOff) === "sent"
+        ? "sent"
+        : "shown";
     },
     submit,
     retry,

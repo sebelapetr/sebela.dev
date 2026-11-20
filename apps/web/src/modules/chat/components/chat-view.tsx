@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, ArrowUp, Plus, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Plus, RotateCcw } from "lucide-react";
 
 import { Button } from "@sebela/ui/components/button";
 import { Input } from "@sebela/ui/components/input";
+import { cn } from "@sebela/ui/lib/utils";
 
 import { chatQuestionMaxLength } from "@sebela/contracts";
 
@@ -15,8 +16,16 @@ import type { AskEvidence } from "../data/evidence";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
 import { askSuggestions } from "../data/prepared-answers";
 import { describeChatTurn } from "../data/turn-status";
+import { chatTurnParts, useChatScroll } from "../hooks/use-chat-scroll";
 import { useConversation } from "../hooks/use-conversation";
 import { AnswerBlock, AnswerSources } from "./answer-blocks";
+
+/**
+ * The latest turn asked on this page reaches from just below the header (the question's scroll
+ * margin) to the composer (76 px) with the column's gap (20 px, 40 px from `sm`) between them.
+ */
+const roomyTurnClass =
+  "min-h-[calc(100dvh-var(--header-height)-7.25rem)] sm:min-h-[calc(100dvh-var(--header-height)-8.5rem)]";
 
 const textLinkClass =
   "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline";
@@ -33,7 +42,13 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
   const { tag, note, retry, showsEvidence } = describeChatTurn(turn);
   return (
     // Focus lands here after a retry, so the keyboard stays at the answer it asked again.
-    <div ref={ref} tabIndex={-1} className="flex flex-col gap-2" aria-busy={open}>
+    <div
+      ref={ref}
+      tabIndex={-1}
+      className="flex flex-col gap-2"
+      aria-busy={open}
+      {...{ [chatTurnParts.answer]: "" }}
+    >
       <p className="flex flex-wrap items-center gap-2">
         <span className="type-label">Assistant</span>
         {tag === null ? null : (
@@ -93,37 +108,47 @@ function AnswerEvidence({ turn }: { readonly turn: ChatTurn }) {
  * questions and streamed answers with their cards, sources and related pages, the four suggested questions of an empty chat, "New chat" and
  * the composer. It is an assistant answering about the person from the public profile and says
  * so; it never speaks as the person. Opening the address again — a rerender, back or forward —
- * never resends a question.
+ * never resends a question. A question the reader sends goes to just below the header and its
+ * answer streams below it without moving the page; "Latest" brings back the end once it is out of
+ * view (`useChatScroll`).
  */
 export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
   const { name } = evidence;
   const searchParams = useSearchParams();
   const addressId = conversationIdFromParam(searchParams.get("c"));
-  const { snapshot, open, submit, retry, newChat } = useConversation(evidence);
+  const { snapshot, current, open, submit, retry, newChat } = useConversation(evidence);
   const [question, setQuestion] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const lastTurnRef = useRef<HTMLLIElement>(null);
+  const conversationRef = useRef<HTMLOListElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const lastAnswerRef = useRef<HTMLDivElement>(null);
+  // The address this page gave its own conversation; reaching it is not opening anything.
+  const ownAddress = useRef<string | null>(null);
   const turnCount = snapshot.turns.length;
   const latest = snapshot.turns.at(-1);
   const [watched, setWatched] = useState<string | null>(null);
+  const { request, toLatest, endHidden } = useChatScroll({
+    conversationRef,
+    composerRef,
+    snapshot,
+    current,
+  });
 
+  // A conversation opened from the address shows its end once; the hero's question goes to the
+  // top like one asked here.
   useEffect(() => {
-    open(addressId);
-  }, [addressId, open]);
-
-  // Brings the latest question into view as it is asked, and its whole answer with the related
-  // pages above the composer as it ends.
-  const latestStatus = latest?.status;
-  useEffect(() => {
-    if (turnCount > 0) lastTurnRef.current?.scrollIntoView({ block: "nearest" });
-  }, [turnCount, latestStatus]);
+    if (addressId !== null && addressId === ownAddress.current) return;
+    ownAddress.current = null;
+    request(open(addressId));
+  }, [addressId, open, request]);
 
   // Announces an answer this page saw start, once as it starts and once as it ends; never every
   // streamed piece, and never an answer restored as it was.
   if (latest !== undefined && isChatTurnOpen(latest) && watched !== latest.requestId) {
     setWatched(latest.requestId);
   }
+  // The latest turn asked on this page keeps the room below its question for the answer to fill.
+  const roomy = watched !== null && watched === latest?.requestId;
   const live =
     latest === undefined
       ? ""
@@ -137,7 +162,9 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
     const { result, conversationId } = submit(text);
     if (result !== "sent") return;
     setQuestion("");
+    request("sent");
     if (conversationId !== addressId) {
+      ownAddress.current = conversationId;
       window.history.replaceState(null, "", conversationHref(conversationId));
     }
   }
@@ -149,8 +176,16 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
 
   function retryLatest(requestId: string): void {
     if (retry(requestId) !== "sent") return;
-    // The retry button goes with the failed answer; the keyboard stays at the answer.
-    lastAnswerRef.current?.focus();
+    request("sent");
+    // The retry button goes with the failed answer; the keyboard stays at the answer, and the
+    // page moves only to bring its question to the top.
+    lastAnswerRef.current?.focus({ preventScroll: true });
+  }
+
+  function showLatest(): void {
+    toLatest();
+    // The button goes once the end is in view; the keyboard continues at the latest answer.
+    lastAnswerRef.current?.focus({ preventScroll: true });
   }
 
   function startNewChat(): void {
@@ -209,14 +244,22 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
           </ul>
         </section>
       ) : (
-        <ol aria-label="Conversation" className="flex flex-col gap-10">
+        <ol ref={conversationRef} aria-label="Conversation" className="flex flex-col gap-10">
           {snapshot.turns.map((turn, index) => (
             <li
               key={turn.requestId}
-              ref={index === turnCount - 1 ? lastTurnRef : undefined}
-              className="flex scroll-mb-40 flex-col gap-6"
+              {...{ [chatTurnParts.requestId]: turn.requestId }}
+              className={cn(
+                "flex flex-col gap-6",
+                // From the question below the header down to the composer, so the question can
+                // reach the top however short the conversation is.
+                roomy && index === turnCount - 1 && roomyTurnClass,
+              )}
             >
-              <div className="ml-auto max-w-[85%] rounded-xl bg-muted px-4 py-3">
+              <div
+                {...{ [chatTurnParts.question]: "" }}
+                className="ml-auto max-w-[85%] scroll-mt-[calc(var(--header-height)+1.25rem)] rounded-xl bg-muted px-4 py-3"
+              >
                 <p className="sr-only">You asked:</p>
                 <p className="text-pretty whitespace-pre-line">{turn.question}</p>
               </div>
@@ -240,7 +283,19 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
         {live}
       </p>
 
-      <div className="sticky bottom-0 mt-auto -mx-1 bg-background px-1 pt-3 pb-4">
+      <div ref={composerRef} className="sticky bottom-0 mt-auto -mx-1 bg-background px-1 pt-3 pb-4">
+        {turnCount > 0 && endHidden ? (
+          <Button
+            type="button"
+            variant="outline"
+            aria-label="Jump to latest"
+            className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-full bg-background dark:bg-background dark:hover:bg-muted"
+            onClick={showLatest}
+          >
+            <ArrowDown aria-hidden="true" />
+            Latest
+          </Button>
+        ) : null}
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question

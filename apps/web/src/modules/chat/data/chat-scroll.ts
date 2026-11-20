@@ -19,7 +19,15 @@ export function chatScroll(
   cause: ChatScrollCause,
   view: { readonly endHidden: boolean; readonly reducedMotion: boolean },
 ): ChatScroll | null {
-  throw new Error("not implemented", { cause: { cause, view } });
+  const motion = view.reducedMotion ? "instant" : "smooth";
+  switch (cause) {
+    case "sent":
+      return { to: "question", behavior: motion };
+    case "shown":
+      return view.endHidden ? { to: "end", behavior: "instant" } : null;
+    case "latest":
+      return { to: "end", behavior: motion };
+  }
 }
 
 /** The reason still waiting for its turn to render, once another arrives. */
@@ -27,7 +35,7 @@ export function nextChatScrollCause(
   pending: ChatScrollCause | null,
   next: ChatScrollCause,
 ): ChatScrollCause {
-  throw new Error("not implemented", { cause: { pending, next } });
+  return pending === "sent" && next === "shown" ? pending : next;
 }
 
 /** Whether the conversation ends below the top of the composer, so the reader cannot see it. */
@@ -35,5 +43,5 @@ export function isChatEndHidden(position: {
   readonly endBottom: number;
   readonly composerTop: number;
 }): boolean {
-  throw new Error("not implemented", { cause: position });
+  return position.endBottom - position.composerTop >= 1;
 }
