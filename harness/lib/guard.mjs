@@ -431,6 +431,78 @@ const UNATTENDED_FORBIDDEN = new RegExp(
 const SETTINGS_REASON =
   "The phase loop does not change repository settings, secrets or credentials (docs/permissions.md). To read a release of another repository, use `gh release view --repo <owner>/<repo>`; to read a Git setting, `git config --get <key>`; for a commit message that mentions configuration, write it to a file in .tmp/ and use `git commit -F <file>`.";
 
+// compose.yaml names its project `sebela`, so a Compose command without its own project name acts
+// on the stack every worktree and loop shares: starting, stopping or rebuilding it recreates the
+// shared Postgres and builds images on the small system disk. Agents use the disposable-project
+// checks (`pnpm test:api-stack`, `pnpm test:web-stack`) or `-p <own name>`; inspecting is fine.
+const SHARED_PROJECT = "sebela";
+const STACK_SCRIPT = new RegExp(
+  `${AT_COMMAND}pnpm(?:\\s+-{1,2}[\\w-]+)*\\s+(?:run\\s+)?stack:(?:up|down|seed)\\b`,
+);
+const COMPOSE_CALL = new RegExp(
+  `${AT_COMMAND.replace("(?:\\w+=\\S*\\s+)*", "((?:\\w+=\\S*\\s+)*)")}(?:docker\\s+compose|docker-compose)\\b([^;&|\\n]*)`,
+  "g",
+);
+const COMPOSE_CHANGES = new Set([
+  "up",
+  "down",
+  "start",
+  "stop",
+  "restart",
+  "rm",
+  "create",
+  "build",
+  "run",
+  "kill",
+  "pause",
+  "unpause",
+  "scale",
+]);
+const COMPOSE_OPTIONS_WITH_VALUE = new Set([
+  "-f",
+  "--file",
+  "-p",
+  "--project-name",
+  "--profile",
+  "--env-file",
+  "--project-directory",
+  "--ansi",
+  "--parallel",
+  "--progress",
+]);
+const SHARED_STACK_REASON =
+  "The shared Compose project `sebela` (compose.yaml) belongs to every worktree and loop; agents do not start, stop or rebuild it (docs/permissions.md). Use `pnpm test:api-stack` or `pnpm test:web-stack`, or `docker compose -p <your-own-name> …` with its own port, and remove the images afterwards; prefer verifying images in CI.";
+
+function composeProjectOf(assignments, args) {
+  let project = /(?:^|\s)COMPOSE_PROJECT_NAME=(\S+)/.exec(assignments ?? "")?.[1] ?? null;
+  let subcommand = null;
+  const words = args.trim().split(/\s+/).filter(Boolean);
+  for (let i = 0; i < words.length && subcommand === null; i += 1) {
+    const word = words[i].replace(/^['"]|['"]$/g, "");
+    const [flag, inline] = word.split("=", 2);
+    if (flag === "-p" || flag === "--project-name") {
+      project = inline ?? words[(i += 1)] ?? "";
+    } else if (word.startsWith("-p") && word.length > 2 && !word.startsWith("--")) {
+      project = word.slice(2);
+    } else if (word.startsWith("-")) {
+      if (COMPOSE_OPTIONS_WITH_VALUE.has(flag) && inline === undefined) i += 1;
+    } else {
+      subcommand = word;
+    }
+  }
+  return { project: project?.replace(/^['"]|['"]$/g, "") ?? null, subcommand };
+}
+
+function changesSharedStack(command) {
+  if (STACK_SCRIPT.test(command)) return true;
+  for (const [, assignments, args] of command.matchAll(COMPOSE_CALL)) {
+    const { project, subcommand } = composeProjectOf(assignments, args);
+    if (!COMPOSE_CHANGES.has(subcommand)) continue;
+    if (project === null || project === "" || project === SHARED_PROJECT) return true;
+  }
+  return false;
+}
+
 // The command may run somewhere other than the directory the hook looked at.
 const MOVES =
   /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
@@ -596,6 +668,7 @@ export function evaluateToolCall({
     if (unattended && (UNATTENDED_FORBIDDEN.test(command) || changesGitConfig(command))) {
       return deny(SETTINGS_REASON);
     }
+    if (restricted && changesSharedStack(command)) return deny(SHARED_STACK_REASON);
     if (restricted && mentionsContext(command)) {
       return deny(
         ".context/ holds the owner's private notes; agents do not read it (docs/permissions.md). To search the checkout, leave it out with --exclude-dir=.context (grep) or -path ./.context -prune (find).",
