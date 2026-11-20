@@ -120,9 +120,11 @@ The developer still runs the tests and the build for what it changed before it f
 
 The website's browser suite (`pnpm test:e2e`) takes minutes, so each role runs only its share of it:
 
-- **Developer:** only the spec files its change adds or touches, by path (`pnpm --filter @sebela/web test:e2e e2e/<name>.spec.ts`, after `pnpm --filter @sebela/web build`), and while fixing one failure only that test (`-g "<title>"`). Never the whole suite: a change elsewhere that breaks another spec is found by the reviewer's run.
-- **Reviewer:** the whole suite once per review, before writing the objections. A re-review after fixes runs only the specs the fixes touch and the ones that failed; it does not run the whole suite again.
-- **CI:** the whole suite on every push, as the condition for merging.
+Locally nobody runs the whole suite: it takes long, it competes for the memory of the machine the parallel phase loops share, and CI runs it anyway before anything merges.
+
+- **Every developer (frontend, backend, AI):** only the spec files its change adds or touches, by path (`pnpm --filter @sebela/web test:e2e e2e/<name>.spec.ts`, after `pnpm --filter @sebela/web build`), and while fixing one failure only that test (`-g "<title>"`). A change that cannot change the website (the same paths CI's `Website affected` step skips: `docs/`, `.plan/`, `.claude/`, `harness/`, the MCP apps, the AI service, `packages/llm-agent`, `packages/memory`, Markdown) runs no browser tests at all.
+- **Reviewer:** the specs the change adds or touches, plus the specs of the pages a changed shared part feeds (a shared component, a website module, an API route or contract the pages read), once per review; none when the change cannot change the website. A re-review after fixes runs only the specs the fixes touch and the ones that failed. The reviewer does not run the whole suite.
+- **CI:** the whole suite on every pull request the website is affected by, as the condition for merging; the orchestrator merges only with every check green, so a spec broken elsewhere is caught there.
 
 ## CI
 
