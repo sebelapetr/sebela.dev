@@ -84,7 +84,7 @@ age --decrypt --identity <owner key> <backup> |
 restore drop <database> --confirm <database>         # remove a rehearsal database
 ```
 
-- **`into`** creates `<database>` for `DATABASE_USER` (an existing one only with `--replace`, which drops it first), creates the `vector` extension, restores the dump in one transaction as that role and prints the row count of every table beside the source's: `--compare <database>`, otherwise `DATABASE_NAME`. Any difference exits non-zero. It refuses `POSTGRES_DB`.
+- **`into`** creates `<database>` for `DATABASE_USER` (an existing one only with `--replace`, which drops it first), creates the `vector` extension, restores the dump in one transaction as that role and prints the row count of every table beside the source's: `--compare <database>`, otherwise `DATABASE_NAME`. Any difference exits non-zero. If a restore with `--replace` fails after the drop, the error says the database is now empty or missing; restore a backup into it again. It refuses `POSTGRES_DB`.
 - **Rehearsal** (before the launch and after a change to the scripts): restore the latest backup into a temporary database such as `sebela_restore`, check that the counts are equal, then `drop` it. A restore is rehearsed this way before the launch.
 - **Restoring production** means restoring into `DATABASE_NAME` itself with `--replace` after the API, the website and MCP Admin are stopped (`docker compose ... stop api web mcp-admin`), naming a rehearsal database restored from the same backup with `--compare`; then start the release that matches the backup's schema again.
 - **`drop`** removes only a rehearsal database: it refuses `DATABASE_NAME` and `POSTGRES_DB`.
@@ -98,7 +98,7 @@ The production database starts with the fictional demo seed. Before the real con
 BACKUP_ENV_FILE=<production environment file> <checkout>/infra/scripts/clear-demo.sh --confirm <DATABASE_NAME>
 ```
 
-It refuses a confirmation other than `DATABASE_NAME`, runs `backup.sh` first and stops when the backup fails. Then the API image's `clear-content` command empties every table of the profile and the AI roadmap and deletes their stored media files. The migrations, API keys and the audit stay, so the database is empty, migrated and ready for the content; the backup just taken holds the demo content.
+It refuses a confirmation other than `DATABASE_NAME`, runs `backup.sh` first and stops when the backup fails. Then the API image's `clear-content` command empties every table of the profile and the AI roadmap and deletes their stored media files. The migrations, API keys and the audit stay, so the database is empty, migrated and ready for the content; the backup just taken holds the demo content. The website's content cache can still show the demo content for up to `WEB_CONTENT_REVALIDATE_SECONDS` (60 seconds by default), since the clear sends no invalidation notification.
 
 ## Server preparation
 

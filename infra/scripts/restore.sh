@@ -131,23 +131,26 @@ case "$command" in
     [[ "$target" != "$POSTGRES_DB" ]] || fail "refusing to restore into the cluster's database $POSTGRES_DB"
     if [[ -z "$compare" && "$target" != "$DATABASE_NAME" ]]; then compare="$DATABASE_NAME"; fi
 
+    # Once a database is dropped its old content is gone; a later failure must say so.
+    replaced_note=""
     if database_exists "$target"; then
       [[ "$replace" == yes ]] ||
         fail "the database $target exists; add --replace to drop and recreate it; nothing changed"
       say "dropping $target"
       psql_in "$POSTGRES_DB" "DROP DATABASE \"$target\" WITH (FORCE)" >/dev/null ||
         fail "dropping $target failed"
+      replaced_note="; $target is now empty or missing, restore a backup into it again"
     fi
     say "creating $target for $DATABASE_USER"
     psql_in "$POSTGRES_DB" "CREATE DATABASE \"$target\" OWNER \"$DATABASE_USER\"" >/dev/null ||
-      fail "creating $target failed"
+      fail "creating $target failed$replaced_note"
     psql_in "$target" "CREATE EXTENSION IF NOT EXISTS vector" >/dev/null ||
-      fail "creating the vector extension in $target failed"
+      fail "creating the vector extension in $target failed$replaced_note"
 
     say "restoring the dump from standard input into $target"
     compose exec -T postgres pg_restore --username "$POSTGRES_USER" --dbname "$target" \
       --no-owner --role "$DATABASE_USER" --exit-on-error --single-transaction ||
-      fail "the restore into $target failed; nothing of it was kept"
+      fail "the restore into $target failed; nothing of it was kept$replaced_note"
 
     restored="$(counts "$target")"
     if [[ -z "$compare" ]]; then
