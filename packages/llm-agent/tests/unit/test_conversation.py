@@ -474,7 +474,7 @@ NOT_A_REQUEST = (
     ("So Czech?", "en", "en"),
     ("Czech too?", "en", "en"),
     ("Then English?", "cs", "cs"),
-    ("A česky?", "en", "en"),
+    ("A cesky?", "en", "en"),
     ("Taky anglicky?", "cs", "cs"),
     ("Czech, English or German?", "en", "en"),
 )
