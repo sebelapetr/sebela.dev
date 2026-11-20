@@ -462,6 +462,9 @@ SWITCH_WITH_QUESTION = (
     ("Řekni mi o jejích projektech anglicky.", "cs", "en"),
     ("Anglicky: na čem pracovala?", "cs", "en"),
     ("English!", "cs", "en"),
+    ("Tell me in Czech what she built.", "en", "cs"),
+    ("Explain in Czech what her English projects were.", "en", "cs"),
+    ("Řekni mi anglicky co postavila", "cs", "en"),
 )
 #: Refusals of a language and bare language words asked as questions; none of them switches.
 NOT_A_REQUEST = (
