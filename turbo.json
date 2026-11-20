@@ -32,6 +32,16 @@
         "DATABASE_PASSWORD"
       ]
     },
+    "@sebela/llm-agent#test": {
+      "dependsOn": ["^build", "@sebela/api#build"],
+      "passThroughEnv": [
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD"
+      ]
+    },
     "//#lint:root": {},
     "//#check:config": {
       "cache": false
