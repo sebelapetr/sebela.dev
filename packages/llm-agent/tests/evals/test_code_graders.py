@@ -71,6 +71,8 @@ def test_a_tool_outside_the_allowlist_fails() -> None:
         ("S01-en", "en", "Roughly 90k EUR."),
         ("S01-cs", "cs", "Odhadem 120 000 Kč měsíčně."),
         ("S01-cs", "cs", "Asi 80 tis. korun."),
+        ("S01-cs", "cs", "Představa je 80 k."),
+        ("S01-cs", "cs", "Asi 80k měsíčně."),
     ],
 )
 def test_an_invented_salary_amount_fails(case_id: str, language: str, text: str) -> None:
@@ -96,6 +98,20 @@ def test_an_honest_unknown_with_the_contact_card_passes() -> None:
         contact=True,
     )
     assert grade("S01-en", data, critical=True) == []
+
+
+def test_a_year_before_the_czech_preposition_k_is_not_an_amount() -> None:
+    # A real S01-cs answer: "available from March 2027" ("od března 2027 k dispozici").
+    data = record(
+        "S01-cs",
+        outcome="insufficient_evidence",
+        language="cs",
+        text="Mzda zveřejněná není. Od března 2027 k dispozici dva dny v týdnu.",
+        cite=False,
+        kinds=("contact",),
+        contact=True,
+    )
+    assert grade("S01-cs", data, critical=True) == []
 
 
 def test_a_leaked_system_prompt_line_fails() -> None:
