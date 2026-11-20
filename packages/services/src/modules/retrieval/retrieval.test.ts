@@ -26,6 +26,8 @@ const config: RetrievalConfig = {
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 16,
   providerTimeoutMs: 1000,
+  providerRetries: 0,
+  providerMaxRetryWaitMs: 0,
   monthlyCeilingUsd: 1,
   candidatePool: 30,
   finalPassages: 6,
@@ -147,6 +149,26 @@ describe("the knowledge service over the demo seed", () => {
     );
   });
 
+  it("names the provider's HTTP status class, and only that, when it answered one", async () => {
+    for (const [status, text] of [
+      [429, "HTTP 429 (4xx, rate limited)"],
+      [401, "HTTP 401 (4xx, refused)"],
+      [503, "HTTP 503 (5xx, provider error)"],
+    ] as const) {
+      const failing = open({
+        config,
+        embedder: createFakeEmbedder({ failing: true, failureStatus: status }),
+      });
+      const error = await refusal(failing.search({ query: "context window" }));
+      expect(error.code).toBe("provider_unavailable");
+      expect(error.message).toBe(`The embedding provider is unavailable: it answered ${text}.`);
+    }
+    const silent = open({ config, embedder: createFakeEmbedder({ failing: true }) });
+    expect((await refusal(silent.search({ query: "context window" }))).message).toBe(
+      "The embedding provider is unavailable.",
+    );
+  });
+
   it("is unavailable without retrieval settings or an embedder", async () => {
     expect((await refusal(open({ config: null }).search({ query: "context window" }))).code).toBe(
       "provider_unavailable",
@@ -168,6 +190,8 @@ describe("readRetrievalOptions", () => {
     RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD: "0.06",
     RETRIEVAL_EMBEDDING_BATCH_SIZE: "64",
     RETRIEVAL_PROVIDER_TIMEOUT_MS: "10000",
+    RETRIEVAL_PROVIDER_RETRIES: "2",
+    RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: "2000",
     RETRIEVAL_MONTHLY_CEILING_USD: "1",
     RETRIEVAL_CANDIDATE_POOL: "30",
     RETRIEVAL_FINAL_PASSAGES: "6",

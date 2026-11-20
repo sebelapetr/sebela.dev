@@ -16,6 +16,8 @@ export interface FakeEmbedderOptions {
   readonly dimension?: number;
   /** Fails every call with `ProviderUnavailableError`, as a provider outage would. */
   readonly failing?: boolean;
+  /** The HTTP status a failing call reports, as a provider answering one would. */
+  readonly failureStatus?: number;
 }
 
 /**
@@ -81,8 +83,16 @@ export interface VoyageEmbedderOptions {
   readonly model: string;
   readonly dimension: number;
   readonly timeoutMs: number;
+  /** How many times a rate-limited (429) call is tried again; 0, the default, never retries. */
+  readonly retries?: number;
+  /** The longest wait before one retry; a longer `Retry-After` gives up at once. */
+  readonly maxRetryWaitMs?: number;
   /** The fetch to call; tests pass a fake. */
   readonly fetch?: typeof globalThis.fetch;
+  /** Waits between retries; tests pass one that only records. */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** The jitter source, from 0 to 1; tests pass a constant. */
+  readonly random?: () => number;
 }
 
 /**

@@ -17,6 +17,8 @@ const config: RetrievalConfig = {
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 32,
   providerTimeoutMs: 1000,
+  providerRetries: 0,
+  providerMaxRetryWaitMs: 0,
   monthlyCeilingUsd: 1,
   candidatePool: 20,
   finalPassages: 6,
@@ -41,7 +43,9 @@ describe("the knowledge command", () => {
   beforeAll(async () => {
     [backend, failing] = await Promise.all([
       openTestBackend({ retrieval: { config, embedder: createFakeEmbedder() } }),
-      openTestBackend({ retrieval: { config, embedder: createFakeEmbedder({ failing: true }) } }),
+      openTestBackend({
+        retrieval: { config, embedder: createFakeEmbedder({ failing: true, failureStatus: 429 }) },
+      }),
     ]);
     await Promise.all([
       backend.services.seed.loadSeed(demoSeedFolder),
@@ -100,6 +104,8 @@ describe("the knowledge command", () => {
     const unavailable = await run(["reindex"], failing);
     expect(unavailable.code).toBe(1);
     expect(unavailable.err()).toMatch(/unavailable/i);
+    // The status class tells a rate limit from an outage; nothing else of the answer is printed.
+    expect(unavailable.err()).toContain("HTTP 429 (4xx, rate limited)");
 
     for (const args of [[], ["unknown"], ["candidates"], ["usage", "extra"]]) {
       const { code, err } = await run(args);

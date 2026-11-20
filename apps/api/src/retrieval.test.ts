@@ -24,6 +24,8 @@ const config: RetrievalConfig = {
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 32,
   providerTimeoutMs: 1000,
+  providerRetries: 0,
+  providerMaxRetryWaitMs: 0,
   monthlyCeilingUsd: 1,
   candidatePool: 20,
   finalPassages: 6,

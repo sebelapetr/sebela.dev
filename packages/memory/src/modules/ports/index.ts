@@ -29,6 +29,14 @@ export interface Embedder {
 /** The embedding provider failed or did not answer in time. Never reported as "no evidence". */
 export class ProviderUnavailableError extends Error {
   override readonly name = "ProviderUnavailableError";
+
+  constructor(
+    message: string,
+    /** The HTTP status the provider answered, when it answered one; never part of its body. */
+    readonly status?: number,
+  ) {
+    super(message);
+  }
 }
 
 /** The month's embedding spend reached its ceiling; nothing more is sent to the provider. */
@@ -297,6 +305,13 @@ export interface RetrievalConfig {
   readonly embeddingBatchSize: number;
   /** How long one provider call may take before it counts as unavailable. */
   readonly providerTimeoutMs: number;
+  /** How many times a rate-limited (429) provider call is tried again; 0 never retries. */
+  readonly providerRetries: number;
+  /**
+   * The longest wait before one retry. A `Retry-After` asking for longer gives up at once; the
+   * exponential backoff used without one is capped at it.
+   */
+  readonly providerMaxRetryWaitMs: number;
   /** The month's embedding spend at which nothing more is sent to the provider. */
   readonly monthlyCeilingUsd: number;
   /** How many nearest chunks a search considers. */
@@ -312,6 +327,8 @@ const SETTINGS = {
   embeddingPricePerMillionTokensUsd: "RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD",
   embeddingBatchSize: "RETRIEVAL_EMBEDDING_BATCH_SIZE",
   providerTimeoutMs: "RETRIEVAL_PROVIDER_TIMEOUT_MS",
+  providerRetries: "RETRIEVAL_PROVIDER_RETRIES",
+  providerMaxRetryWaitMs: "RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS",
   monthlyCeilingUsd: "RETRIEVAL_MONTHLY_CEILING_USD",
   candidatePool: "RETRIEVAL_CANDIDATE_POOL",
   finalPassages: "RETRIEVAL_FINAL_PASSAGES",
@@ -362,6 +379,8 @@ export function readRetrievalConfig(
     ),
     embeddingBatchSize: integer(SETTINGS.embeddingBatchSize, 1, MAX_BATCH_SIZE),
     providerTimeoutMs: integer(SETTINGS.providerTimeoutMs, 1, 120_000),
+    providerRetries: 0,
+    providerMaxRetryWaitMs: 0,
     monthlyCeilingUsd: number(
       SETTINGS.monthlyCeilingUsd,
       (value) => value >= 0,
