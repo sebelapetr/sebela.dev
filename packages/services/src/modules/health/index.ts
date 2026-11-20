@@ -16,12 +16,30 @@ export interface HealthServiceOptions {
   readonly timeoutMs?: number;
 }
 
+const DEFAULT_TIMEOUT_MS = 2_000;
+
 export function createHealthService(
   persistence: Pick<Persistence, "ping">,
   options: HealthServiceOptions = {},
 ): HealthService {
   return {
-    databaseReachable: () =>
-      Promise.reject(new Error(`not implemented: ${typeof persistence}, ${typeof options}`)),
+    async databaseReachable() {
+      const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<false>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs, false);
+      });
+      try {
+        return await Promise.race([
+          persistence.ping().then(
+            () => true,
+            () => false,
+          ),
+          timeout,
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
   };
 }

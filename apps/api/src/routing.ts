@@ -10,7 +10,8 @@ export type Method = "GET" | "POST" | "PATCH" | "DELETE";
 export type RateBudget = keyof Omit<ApiConfig["rateLimits"], "key" | "maxTrackedCallers">;
 
 /** The domain errors a route can answer with, beyond the errors every route shares. */
-export type RouteError = "not_found" | "conflict";
+/** The expected failures a route documents beyond the common ones. */
+export type RouteError = "not_found" | "conflict" | "unavailable";
 
 /** What the OpenAPI document says about a route. */
 export interface RouteDocumentation {

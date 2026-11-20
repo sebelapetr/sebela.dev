@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+
 import type { DatabaseConfig } from "./config.js";
 import { openConnection } from "./connection.js";
 import { createApiKeyPersistence, type ApiKeyPersistence } from "./modules/api-keys/index.js";
@@ -49,7 +51,9 @@ export function createPersistence(config: DatabaseConfig): Persistence {
           createAuditPersistence(tx),
         ),
       ),
-    ping: () => Promise.reject(new Error("not implemented")),
+    ping: async () => {
+      await connection.db.execute(sql`select 1`);
+    },
     close: () => connection.close(),
   };
 }
