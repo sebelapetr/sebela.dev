@@ -3,10 +3,13 @@
 // service against the commit of its current image. The
 // fixtures hold real `turbo query affected --packages` output, captured on synthetic commits of
 // this repository, with the files each commit changed and the services it must select. The command
-// line around these decisions (Turborepo, git, docker) is exercised by the release workflow.
+// line around these decisions (Turborepo, git, docker) is exercised by the release workflow, apart
+// from `build`, which runs here against a stand-in `docker` that only records its arguments.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
@@ -241,5 +244,39 @@ describe("workflow outputs", () => {
       formatOutputs({ build: ["web"], release: true, tags: { web: C } }),
       `build=["web"]\nrelease=true\ntags={"web":"${C}"}\n`,
     );
+  });
+});
+
+describe("the build command", () => {
+  it("builds each planned service with its build output on the job log", () => {
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "images-build-"));
+    const calls = path.join(bin, "calls");
+    const docker = path.join(bin, "docker");
+    fs.writeFileSync(docker, `#!/bin/sh\necho "$@" >> "${calls}"\necho "build output"\n`);
+    fs.chmodSync(docker, 0o755);
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(import.meta.dirname, "images.mjs"), "build"],
+        {
+          encoding: "utf8",
+          env: {
+            PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+            SHA: C,
+            BUILD: JSON.stringify(["api", "web"]),
+            GITHUB_SERVER_URL: "https://github.example.test",
+            GITHUB_REPOSITORY: "owner/repository",
+          },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /build output/);
+      const lines = fs.readFileSync(calls, "utf8").trim().split("\n");
+      assert.equal(lines.length, 2);
+      assert.match(lines[0] ?? "", new RegExp(`^build .*sebela-api:${C} \\.$`));
+      assert.match(lines[1] ?? "", new RegExp(`^build .*sebela-web:${C} \\.$`));
+    } finally {
+      fs.rmSync(bin, { recursive: true, force: true });
+    }
   });
 });
