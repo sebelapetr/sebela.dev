@@ -5,17 +5,24 @@
 export const RUN_REPORT_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["outcome", "issue", "summary"],
+  required: ["outcome", "issue", "cause", "summary"],
   properties: {
     outcome: {
       type: "string",
       enum: ["merged", "failed", "interrupted", "phase_done"],
       description:
-        "merged: one issue was merged into the phase branch. failed: the issue could not be finished. interrupted: work on the issue stopped because the usage limit was reached, not because of the issue; its worktree and branch are kept. phase_done: no ready issue was left and the phase pull request is open.",
+        "merged: one issue was merged into the phase branch. failed: the issue could not be finished. interrupted: work on the issue stopped for a reason outside the issue, named in cause; its worktree and branch are kept. phase_done: no ready issue was left and the phase pull request is open or could not be opened.",
     },
     issue: {
       type: ["integer", "null"],
       description: "Number of the issue that was worked on, or null for phase_done.",
+    },
+    // A top-level field rather than a variant per outcome keeps the structured output flat.
+    cause: {
+      type: ["string", "null"],
+      enum: ["usage_limit", "safeguard", "environment", null],
+      description:
+        "Why the work was interrupted; null unless outcome is interrupted. usage_limit: the usage limit was reached. safeguard: a model safeguard refused or stopped an agent (a usage-policy or AUP refusal). environment: the machine cannot run the work, such as low disk, a missing tool or credential, or a guard refusal that cannot be worked around without breaking a rule.",
     },
     summary: { type: "string", description: "Two or three sentences for the run log." },
   },
@@ -27,6 +34,13 @@ export const FAILED_LABEL = "agent-failed";
 const LIMIT_PATTERN =
   /usage limit|rate limit|limit reached|limit will reset|resets? at|too many requests|overloaded/i;
 const LIMIT_STATUSES = new Set([429, 529]);
+
+// What a model safeguard looks like in Claude Code's output: the API ends with stop reason
+// "refusal" and Claude Code prints "... appears to violate our Usage Policy
+// (https://www.anthropic.com/legal/aup) ...", or the request is rejected as an invalid_request with
+// policy wording ("Output blocked by content filtering policy").
+const SAFEGUARD_PATTERN =
+  /usage policy|acceptable use|legal\/aup|\bAUP\b|content filtering policy|\bsafeguard/i;
 
 function parseJson(text) {
   const trimmed = String(text ?? "").trim();
@@ -45,13 +59,16 @@ function parseJson(text) {
 
 // Turns the raw result of `claude -p --output-format json` into one of:
 //   { kind: "limit" }                                   usage limit or overload: wait and retry
-//   { kind: "report", outcome, issue, summary }         the orchestrator finished and reported
+//   { kind: "safeguard" }                               a model safeguard refused the run itself
+//   { kind: "report", outcome, issue, cause, summary }  the orchestrator finished and reported
 //   { kind: "crash", detail }                           anything else
+// A finished report wins: safeguards that stopped a subagent are the orchestrator's to report.
 export function classifyRun({ exitCode, stdout, stderr }) {
   const result = parseJson(stdout);
 
   if (!result) {
     const text = `${stderr ?? ""}\n${stdout ?? ""}`;
+    if (SAFEGUARD_PATTERN.test(text)) return { kind: "safeguard" };
     if (LIMIT_PATTERN.test(text)) return { kind: "limit" };
     return {
       kind: "crash",
@@ -60,7 +77,15 @@ export function classifyRun({ exitCode, stdout, stderr }) {
   }
 
   if (result.is_error) {
-    if (LIMIT_STATUSES.has(result.api_error_status) || LIMIT_PATTERN.test(result.result ?? "")) {
+    if (LIMIT_STATUSES.has(result.api_error_status)) return { kind: "limit" };
+    if (
+      result.stop_reason === "refusal" ||
+      result.safety_stops > 0 ||
+      SAFEGUARD_PATTERN.test(result.result ?? "")
+    ) {
+      return { kind: "safeguard" };
+    }
+    if (LIMIT_PATTERN.test(result.result ?? "")) {
       return { kind: "limit" };
     }
     return {
@@ -78,6 +103,7 @@ export function classifyRun({ exitCode, stdout, stderr }) {
     kind: "report",
     outcome: report.outcome,
     issue: report.issue ?? null,
+    cause: report.cause ?? null,
     summary: report.summary ?? "",
   };
 }
@@ -85,39 +111,78 @@ export function classifyRun({ exitCode, stdout, stderr }) {
 // Decides what the loop does after a run.
 //   run                  result of classifyRun
 //   consecutiveFailures  failed runs in a row so far
+//   lastSafeguard        { issue } when the run before was stopped by a safeguard, else null
 //   issueLabels          labels of the reported issue (only needed when it failed)
 //   maxConsecutiveFailures
-// Returns { next, label, consecutiveFailures }:
-//   next   "continue" | "wait" | "stop" | "done"
-//   label  label to add to the reported issue, or null
+// Returns { next, label, consecutiveFailures, lastSafeguard, reason }:
+//   next           "continue" | "wait" | "stop" | "done"
+//   label          label to add to the reported issue, or null
+//   lastSafeguard  what the loop passes to the next decision
+//   reason         why it waits, retries or stops: "usage_limit" | "safeguard" |
+//                  "safeguard_repeated" | "environment" | "failures", or null
 export function decideNext({
   run,
   consecutiveFailures,
+  lastSafeguard = null,
   issueLabels = [],
   maxConsecutiveFailures = 3,
 }) {
-  // A usage limit is not the issue's fault, also when it stops a run halfway through an issue.
-  if (run.kind === "limit" || (run.kind === "report" && run.outcome === "interrupted")) {
-    return { next: "wait", label: null, consecutiveFailures };
+  const decision = (
+    next,
+    { label = null, failures = consecutiveFailures, safeguard = null, reason = null } = {},
+  ) => ({
+    next,
+    label,
+    consecutiveFailures: failures,
+    lastSafeguard: safeguard,
+    reason,
+  });
+  const interrupted = run.kind === "report" && run.outcome === "interrupted";
+
+  // A usage limit is not the issue's fault, also when it stops a run halfway through an issue. An
+  // interruption without a cause comes from an orchestrator that knew only the usage limit.
+  if (run.kind === "limit" || (interrupted && (run.cause ?? "usage_limit") === "usage_limit")) {
+    return decision("wait", { safeguard: lastSafeguard, reason: "usage_limit" });
+  }
+
+  // A safeguard is not the issue's fault either and often passes on a second try. Twice in a row
+  // on the same issue it will not; an unknown issue (the run itself was refused) counts as the same.
+  if (run.kind === "safeguard" || (interrupted && run.cause === "safeguard")) {
+    const issue = run.issue ?? null;
+    const repeated =
+      lastSafeguard !== null &&
+      (lastSafeguard.issue === null || issue === null || lastSafeguard.issue === issue);
+    return repeated
+      ? decision("stop", {
+          safeguard: { issue: issue ?? lastSafeguard.issue },
+          reason: "safeguard_repeated",
+        })
+      : decision("continue", { safeguard: { issue }, reason: "safeguard" });
+  }
+
+  // The machine cannot run the work: every further run would fail the same way.
+  if (interrupted && run.cause === "environment") {
+    return decision("stop", { reason: "environment" });
   }
 
   if (run.kind === "report" && run.outcome === "merged") {
-    return { next: "continue", label: null, consecutiveFailures: 0 };
+    return decision("continue", { failures: 0 });
   }
 
   if (run.kind === "report" && run.outcome === "phase_done") {
-    return { next: "done", label: null, consecutiveFailures: 0 };
+    return decision("done", { failures: 0 });
   }
 
   const failures = consecutiveFailures + 1;
-  const giveUp = failures >= maxConsecutiveFailures;
+  const next = failures >= maxConsecutiveFailures ? "stop" : "continue";
+  const reason = next === "stop" ? "failures" : null;
 
   if (run.kind === "report" && run.outcome === "failed" && run.issue !== null) {
     const label = issueLabels.includes(RETRY_LABEL) ? FAILED_LABEL : RETRY_LABEL;
-    return { next: giveUp ? "stop" : "continue", label, consecutiveFailures: failures };
+    return decision(next, { label, failures, reason });
   }
 
-  return { next: giveUp ? "stop" : "continue", label: null, consecutiveFailures: failures };
+  return decision(next, { failures, reason });
 }
 
 // What the owner tells the orchestrator for this start of the loop (`--note`), as a section

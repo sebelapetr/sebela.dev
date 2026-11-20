@@ -26,7 +26,22 @@ test("a structured report is read from a successful run", () => {
     stdout: success({ outcome: "merged", issue: 12, summary: "done" }),
     stderr: "",
   });
-  assert.deepEqual(run, { kind: "report", outcome: "merged", issue: 12, summary: "done" });
+  assert.deepEqual(run, {
+    kind: "report",
+    outcome: "merged",
+    issue: 12,
+    cause: null,
+    summary: "done",
+  });
+});
+
+test("the cause of an interruption is read from the report", () => {
+  const run = classifyRun({
+    exitCode: 0,
+    stdout: success({ outcome: "interrupted", issue: 113, cause: "safeguard", summary: "" }),
+    stderr: "",
+  });
+  assert.equal(run.cause, "safeguard");
 });
 
 test("an API error with status 429 is a usage limit", () => {
@@ -63,6 +78,74 @@ test("a limit reported only on stderr is recognised", () => {
   assert.equal(run.kind, "limit");
 });
 
+// What Claude Code prints when the API refuses a request (stop reason "refusal").
+const REFUSAL_TEXT =
+  "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Please double press esc to edit your last message or start a new session for Claude Code to assist with a different task.";
+
+test("a run refused by a model safeguard is a safeguard, not a crash or a limit", () => {
+  const stdout = JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: true,
+    stop_reason: "refusal",
+    api_error_status: null,
+    result: REFUSAL_TEXT,
+  });
+  assert.deepEqual(classifyRun({ exitCode: 1, stdout, stderr: "" }), { kind: "safeguard" });
+});
+
+test("a refusal stop reason alone is a safeguard", () => {
+  const stdout = JSON.stringify({ subtype: "success", is_error: true, stop_reason: "refusal" });
+  assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "safeguard");
+});
+
+test("an invalid request flagged under the usage policy is a safeguard", () => {
+  const stdout = JSON.stringify({
+    subtype: "success",
+    is_error: true,
+    api_error_status: 400,
+    result:
+      'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Output blocked by content filtering policy"}}',
+  });
+  assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "safeguard");
+});
+
+test("an error run with safety stops counted is a safeguard", () => {
+  const stdout = JSON.stringify({
+    subtype: "error_during_execution",
+    is_error: true,
+    safety_stops: 1,
+    result: "",
+  });
+  assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "safeguard");
+});
+
+test("a safeguard reported only on stderr is recognised", () => {
+  assert.equal(classifyRun({ exitCode: 1, stdout: "", stderr: REFUSAL_TEXT }).kind, "safeguard");
+});
+
+test("an invalid request without policy wording stays a crash", () => {
+  const stdout = JSON.stringify({
+    subtype: "success",
+    is_error: true,
+    api_error_status: 400,
+    result:
+      'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long"}}',
+  });
+  assert.equal(classifyRun({ exitCode: 1, stdout, stderr: "" }).kind, "crash");
+});
+
+test("a successful report wins over safety stops inside the run", () => {
+  const stdout = JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    safety_stops: 2,
+    structured_output: { outcome: "merged", issue: 5, cause: null, summary: "" },
+  });
+  assert.equal(classifyRun({ exitCode: 0, stdout, stderr: "" }).kind, "report");
+});
+
 test("other API errors are crashes", () => {
   const stdout = JSON.stringify({
     subtype: "success",
@@ -89,13 +172,21 @@ test("the JSON result is found on the last line after other output", () => {
 
 // --- decideNext ------------------------------------------------------------
 
-const report = (outcome, issue = 7) => ({ kind: "report", outcome, issue, summary: "" });
+const report = (outcome, issue = 7, cause = null) => ({
+  kind: "report",
+  outcome,
+  issue,
+  cause,
+  summary: "",
+});
 
 test("a merged issue continues and resets the failure count", () => {
   assert.deepEqual(decideNext({ run: report("merged"), consecutiveFailures: 2 }), {
     next: "continue",
     label: null,
     consecutiveFailures: 0,
+    lastSafeguard: null,
+    reason: null,
   });
 });
 
@@ -104,23 +195,123 @@ test("a usage limit waits and does not count as a failure", () => {
     next: "wait",
     label: null,
     consecutiveFailures: 1,
+    lastSafeguard: null,
+    reason: "usage_limit",
   });
 });
 
 test("an issue interrupted by the usage limit waits, without a label or a failure", () => {
+  for (const cause of ["usage_limit", null]) {
+    assert.deepEqual(
+      decideNext({
+        run: report("interrupted", 29, cause),
+        consecutiveFailures: 1,
+        issueLabels: ["agent-retry"],
+      }),
+      {
+        next: "wait",
+        label: null,
+        consecutiveFailures: 1,
+        lastSafeguard: null,
+        reason: "usage_limit",
+      },
+    );
+  }
+});
+
+test("the orchestrator may report an interruption with its cause", () => {
+  assert.ok(RUN_REPORT_SCHEMA.properties.outcome.enum.includes("interrupted"));
+  assert.match(RUN_REPORT_SCHEMA.properties.outcome.description, /interrupted: /);
+  assert.ok(RUN_REPORT_SCHEMA.required.includes("cause"));
+  assert.deepEqual(RUN_REPORT_SCHEMA.properties.cause.enum, [
+    "usage_limit",
+    "safeguard",
+    "environment",
+    null,
+  ]);
+  for (const cause of ["usage_limit", "safeguard", "environment"]) {
+    assert.match(RUN_REPORT_SCHEMA.properties.cause.description, new RegExp(`${cause}: `));
+  }
+});
+
+test("a safeguard stop is retried once at once, without a label or a failure", () => {
+  for (const run of [report("interrupted", 113, "safeguard"), { kind: "safeguard" }]) {
+    const decision = decideNext({ run, consecutiveFailures: 1, lastSafeguard: null });
+    assert.equal(decision.next, "continue");
+    assert.equal(decision.label, null);
+    assert.equal(decision.consecutiveFailures, 1);
+    assert.equal(decision.reason, "safeguard");
+    assert.deepEqual(decision.lastSafeguard, { issue: run.issue ?? null });
+  }
+});
+
+test("a second safeguard stop on the same issue stops the loop", () => {
+  const decision = decideNext({
+    run: report("interrupted", 113, "safeguard"),
+    consecutiveFailures: 0,
+    lastSafeguard: { issue: 113 },
+    issueLabels: [],
+  });
+  assert.deepEqual(decision, {
+    next: "stop",
+    label: null,
+    consecutiveFailures: 0,
+    lastSafeguard: { issue: 113 },
+    reason: "safeguard_repeated",
+  });
+});
+
+test("a second safeguard stop whose issue is unknown counts as the same issue", () => {
+  const first = decideNext({ run: { kind: "safeguard" }, consecutiveFailures: 0 });
+  const second = decideNext({
+    run: report("interrupted", 113, "safeguard"),
+    consecutiveFailures: 0,
+    lastSafeguard: first.lastSafeguard,
+  });
+  assert.equal(second.next, "stop");
+});
+
+test("a safeguard stop on another issue is a first one again", () => {
+  const decision = decideNext({
+    run: report("interrupted", 114, "safeguard"),
+    consecutiveFailures: 0,
+    lastSafeguard: { issue: 113 },
+  });
+  assert.equal(decision.next, "continue");
+  assert.deepEqual(decision.lastSafeguard, { issue: 114 });
+});
+
+test("the safeguard memory survives a usage-limit wait and ends with any other run", () => {
+  const lastSafeguard = { issue: 113 };
   assert.deepEqual(
-    decideNext({
-      run: report("interrupted", 29),
-      consecutiveFailures: 1,
-      issueLabels: ["agent-retry"],
-    }),
-    { next: "wait", label: null, consecutiveFailures: 1 },
+    decideNext({ run: { kind: "limit" }, consecutiveFailures: 0, lastSafeguard }).lastSafeguard,
+    lastSafeguard,
+  );
+  assert.equal(
+    decideNext({ run: report("merged"), consecutiveFailures: 0, lastSafeguard }).lastSafeguard,
+    null,
+  );
+  assert.equal(
+    decideNext({ run: report("failed"), consecutiveFailures: 0, lastSafeguard }).lastSafeguard,
+    null,
   );
 });
 
-test("the orchestrator may report an interruption by the usage limit", () => {
-  assert.ok(RUN_REPORT_SCHEMA.properties.outcome.enum.includes("interrupted"));
-  assert.match(RUN_REPORT_SCHEMA.properties.outcome.description, /interrupted: .*usage limit/);
+test("an environment stop stops the loop at once, without a label or a failure", () => {
+  assert.deepEqual(
+    decideNext({
+      run: report("interrupted", 40, "environment"),
+      consecutiveFailures: 1,
+      issueLabels: ["agent-retry"],
+    }),
+    {
+      next: "stop",
+      label: null,
+      consecutiveFailures: 1,
+      lastSafeguard: null,
+      reason: "environment",
+    },
+  );
 });
 
 test("no ready issue left ends the loop", () => {
@@ -132,7 +323,13 @@ test("no ready issue left ends the loop", () => {
 
 test("the first failure of an issue marks it for one retry", () => {
   const decision = decideNext({ run: report("failed"), consecutiveFailures: 0, issueLabels: [] });
-  assert.deepEqual(decision, { next: "continue", label: RETRY_LABEL, consecutiveFailures: 1 });
+  assert.deepEqual(decision, {
+    next: "continue",
+    label: RETRY_LABEL,
+    consecutiveFailures: 1,
+    lastSafeguard: null,
+    reason: null,
+  });
 });
 
 test("the second failure of the same issue marks it as failed", () => {
@@ -153,11 +350,18 @@ test("consecutive failures stop the loop at the limit", () => {
   });
   assert.equal(decision.next, "stop");
   assert.equal(decision.consecutiveFailures, 3);
+  assert.equal(decision.reason, "failures");
 });
 
 test("crashes count towards the stop and label nothing", () => {
   const first = decideNext({ run: { kind: "crash", detail: "" }, consecutiveFailures: 0 });
-  assert.deepEqual(first, { next: "continue", label: null, consecutiveFailures: 1 });
+  assert.deepEqual(first, {
+    next: "continue",
+    label: null,
+    consecutiveFailures: 1,
+    lastSafeguard: null,
+    reason: null,
+  });
   const third = decideNext({ run: { kind: "crash", detail: "" }, consecutiveFailures: 2 });
   assert.equal(third.next, "stop");
 });

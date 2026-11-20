@@ -4,7 +4,7 @@ The agent harness of this repository: what lets coding agents work through a pha
 
 | Part                            | What it does                                                                                                                                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `run-phase.sh`, `run-phase.mjs` | The phase loop: starts the orchestrator agent once per issue, waits out usage limits, labels failing issues `agent-retry` and `agent-failed`, stops when the phase pull request is open                |
+| `run-phase.sh`, `run-phase.mjs` | The phase loop: starts the orchestrator once per issue, waits out usage limits, retries a safeguard stop once, labels failing issues `agent-retry` and `agent-failed`, stops when the phase is done    |
 | `preflight.mjs`                 | Before each iteration: Docker, Postgres, `gh` and the main checkout; stops the loop with what to do when the machine cannot run one                                                                    |
 | `phase-report.mjs`              | When the phase pull request opens: cost, time and review rounds per issue, steward findings, refusals and changed agent memory, with the `retrospective` agent's suggestions                           |
 | `run-tools.mjs`                 | What the loop's helpers share: quiet shell calls, session transcripts, asking a tool-less agent                                                                                                        |
