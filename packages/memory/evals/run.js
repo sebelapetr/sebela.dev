@@ -46,7 +46,11 @@ export const RUN_CEILING_USD = 1;
  * The default least time between two provider calls of a run: a little over 20 s, so a key on the
  * provider's lowest limit (3 requests a minute without a payment method) is not refused.
  */
-export const DEFAULT_MIN_INTERVAL_MS = 0;
+export const DEFAULT_MIN_INTERVAL_MS = 21_000;
+const MAX_MIN_INTERVAL_MS = 600_000;
+/** Retries of a rate-limited call in the run's processes, each wait at most a minute. */
+const RUN_PROVIDER_RETRIES = "6";
+const RUN_PROVIDER_MAX_RETRY_WAIT_MS = "60000";
 const EVAL_CLIENT = "memory-evals";
 const evalsFolder = fileURLToPath(new URL("./", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -77,6 +81,7 @@ export function parseOptions(argv) {
       case: { type: "string", multiple: true },
       publish: { type: "string" },
       "max-cost-usd": { type: "string" },
+      "min-interval-ms": { type: "string" },
       plan: { type: "boolean" },
     },
   });
@@ -84,6 +89,15 @@ export function parseOptions(argv) {
     values["max-cost-usd"] === undefined ? RUN_CEILING_USD : Number(values["max-cost-usd"]);
   if (!Number.isFinite(ceiling) || ceiling <= 0 || ceiling > RUN_CEILING_USD) {
     throw new Error(`--max-cost-usd must be above 0 and at most ${String(RUN_CEILING_USD)}.`);
+  }
+  const interval =
+    values["min-interval-ms"] === undefined
+      ? DEFAULT_MIN_INTERVAL_MS
+      : Number(values["min-interval-ms"]);
+  if (!Number.isInteger(interval) || interval < 0 || interval > MAX_MIN_INTERVAL_MS) {
+    throw new Error(
+      `--min-interval-ms must be a whole number of milliseconds from 0 to ${String(MAX_MIN_INTERVAL_MS)}.`,
+    );
   }
   if (values.publish !== undefined && !/^[a-z0-9][a-z0-9-]*$/.test(values.publish)) {
     throw new Error("--publish takes a lowercase name of letters, digits and hyphens.");
@@ -93,7 +107,7 @@ export function parseOptions(argv) {
     publish: values.publish ?? null,
     ceilingUsd: ceiling,
     planOnly: values.plan ?? false,
-    minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
+    minIntervalMs: interval,
   };
 }
 
@@ -104,7 +118,11 @@ export function parseOptions(argv) {
  * @returns {Record<string, string>}
  */
 export function providerEnvironment(options) {
-  return { RETRIEVAL_MONTHLY_CEILING_USD: String(options.ceilingUsd) };
+  return {
+    RETRIEVAL_MONTHLY_CEILING_USD: String(options.ceilingUsd),
+    RETRIEVAL_PROVIDER_RETRIES: RUN_PROVIDER_RETRIES,
+    RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: RUN_PROVIDER_MAX_RETRY_WAIT_MS,
+  };
 }
 
 /**
@@ -169,7 +187,10 @@ async function main() {
  */
 async function measure(dataset, plan, options, folder) {
   const scratch = await mkdtemp(join(folder, "scratch-"));
-  const budget = { RETRIEVAL_MONTHLY_CEILING_USD: String(options.ceilingUsd) };
+  const budget = providerEnvironment(options);
+  // Every provider call of the run (the reindex, the candidate batch, each search) waits at least
+  // this long after the one before, so a low-limit key is not refused mid-run.
+  const pause = () => new Promise((resolve) => setTimeout(resolve, options.minIntervalMs));
   const api = await startApi(scratch, budget);
   const secrets = [
     api.key,
@@ -183,6 +204,7 @@ async function measure(dataset, plan, options, folder) {
         env: { ...process.env, ...budget, DATABASE_NAME: api.database },
       });
     const indexing = await knowledge("reindex");
+    await pause();
     const questionsFile = join(scratch, "questions.json");
     await writeFile(
       questionsFile,
@@ -195,6 +217,7 @@ async function measure(dataset, plan, options, folder) {
       await knowledge("candidates", questionsFile)
     );
     await writeFile(poolsFile, JSON.stringify(candidates.pools));
+    await pause();
 
     const raw = join(scratch, "promptfoo.json");
     const state = join(scratch, "promptfoo-state");
@@ -205,6 +228,7 @@ async function measure(dataset, plan, options, folder) {
     try {
       await promptfoo(
         raw,
+        options.minIntervalMs,
         promptfooEnvironment(
           process.env,
           {
@@ -282,6 +306,11 @@ function summarize(dataset, plan, options, report, indexing, usage) {
     settings: Object.fromEntries(
       RECORDED_SETTINGS.map((name) => [name, process.env[name] ?? null]),
     ),
+    pacing: {
+      minIntervalMs: options.minIntervalMs,
+      providerRetries: Number(RUN_PROVIDER_RETRIES),
+      maxRetryWaitMs: Number(RUN_PROVIDER_MAX_RETRY_WAIT_MS),
+    },
     measured: cases.length,
     passed: cases.filter((entry) => entry.pass).length,
     metrics: aggregate(
@@ -407,9 +436,10 @@ function runJson(command, args, { cwd, env }) {
 
 /**
  * @param {string} output
+ * @param {number} delayMs The least time between two questions.
  * @param {Record<string, string>} env The complete environment of the Promptfoo process.
  */
-function promptfoo(output, env) {
+function promptfoo(output, delayMs, env) {
   const args = [
     "dlx",
     PROMPTFOO,
@@ -421,6 +451,8 @@ function promptfoo(output, env) {
     "--no-cache",
     "--no-write",
     "--no-table",
+    "--delay",
+    String(delayMs),
     "--output",
     output,
   ];

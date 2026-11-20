@@ -379,8 +379,8 @@ export function readRetrievalConfig(
     ),
     embeddingBatchSize: integer(SETTINGS.embeddingBatchSize, 1, MAX_BATCH_SIZE),
     providerTimeoutMs: integer(SETTINGS.providerTimeoutMs, 1, 120_000),
-    providerRetries: 0,
-    providerMaxRetryWaitMs: 0,
+    providerRetries: integer(SETTINGS.providerRetries, 0, 10),
+    providerMaxRetryWaitMs: integer(SETTINGS.providerMaxRetryWaitMs, 0, 120_000),
     monthlyCeilingUsd: number(
       SETTINGS.monthlyCeilingUsd,
       (value) => value >= 0,

@@ -9,12 +9,13 @@ import {
   type SearchResult,
 } from "@sebela/contracts";
 
-import type {
-  Embedder,
-  NearestChunk,
-  RetrievalConfig,
-  RetrievalStore,
-  UsageOperation,
+import {
+  ProviderUnavailableError,
+  type Embedder,
+  type NearestChunk,
+  type RetrievalConfig,
+  type RetrievalStore,
+  type UsageOperation,
 } from "../ports/index.js";
 import { createSpend } from "../spend/index.js";
 
@@ -50,15 +51,11 @@ export function createRetriever(options: RetrieverOptions): Retriever {
   const { store, embedder, config } = options;
   const spend = createSpend({ store, embedder, config, now: options.now });
 
-  /** The candidate pool, best chunk of each source first. */
+  /** The candidate pool of a query's vector, best chunk of each source first. */
   async function pool(
-    operation: UsageOperation,
-    query: string,
+    vector: readonly number[],
     kinds?: readonly RetrievalContentKind[],
   ): Promise<NearestChunk[]> {
-    const { vectors } = await spend.embed(operation, [query], "query");
-    const [vector] = vectors;
-    if (vector === undefined) return [];
     const nearest = await store.nearest({
       vector,
       model: embedder.model,
@@ -73,10 +70,30 @@ export function createRetriever(options: RetrieverOptions): Retriever {
     return [...best.values()];
   }
 
+  /** The vectors of the queries, `embeddingBatchSize` per provider call, in their order. */
+  async function embedQueries(
+    operation: UsageOperation,
+    queries: readonly string[],
+  ): Promise<(readonly number[])[]> {
+    const vectors: (readonly number[])[] = [];
+    for (let start = 0; start < queries.length; start += config.embeddingBatchSize) {
+      const batch = queries.slice(start, start + config.embeddingBatchSize);
+      const embedded = await spend.embed(operation, batch, "query");
+      for (let index = 0; index < batch.length; index += 1) {
+        const vector = embedded.vectors[index];
+        if (vector === undefined) throw new ProviderUnavailableError("A vector was missing.");
+        vectors.push(vector);
+      }
+    }
+    return vectors;
+  }
+
   return {
     async search(request) {
       const limit = Math.min(request.limit ?? config.finalPassages, config.finalPassages);
-      const passages = (await pool("search", request.query, request.kinds))
+      const [vector] = await embedQueries("search", [request.query]);
+      const found = vector === undefined ? [] : await pool(vector, request.kinds);
+      const passages = found
         .filter((chunk) => chunk.similarity >= config.relevanceFloor)
         .map(toPassage)
         .filter((passage) => passage !== null)
@@ -90,9 +107,15 @@ export function createRetriever(options: RetrieverOptions): Retriever {
       );
     },
     async candidates(questions) {
+      const vectors = await embedQueries(
+        "candidates",
+        questions.map((question) => question.query),
+      );
       const pools: string[][] = [];
-      for (const { query, kinds } of questions) {
-        pools.push((await pool("candidates", query, kinds)).map((chunk) => chunk.sourceId));
+      for (const [index, { kinds }] of questions.entries()) {
+        const vector = vectors[index];
+        if (vector === undefined) throw new ProviderUnavailableError("A vector was missing.");
+        pools.push((await pool(vector, kinds)).map((chunk) => chunk.sourceId));
       }
       return pools;
     },

@@ -49,7 +49,9 @@ export function createFakeEmbedder(
     embed(texts) {
       calls += 1;
       if (options.failing === true) {
-        return Promise.reject(new ProviderUnavailableError("The fake provider is failing."));
+        return Promise.reject(
+          new ProviderUnavailableError("The fake provider is failing.", options.failureStatus),
+        );
       }
       const tokens = texts.reduce((sum, text) => sum + words(text).length, 0);
       return Promise.resolve({ vectors: texts.map(vector), tokens });
@@ -97,24 +99,31 @@ export interface VoyageEmbedderOptions {
 
 /**
  * The Voyage AI embeddings adapter. Any failure (network, timeout, a non-2xx answer, a malformed
- * body or a vector of another dimension) becomes `ProviderUnavailableError`; the key never appears
- * in an error message.
+ * body or a vector of another dimension) becomes `ProviderUnavailableError`, carrying the HTTP
+ * status when there was one; the key never appears in an error message. A rate-limited (429) call
+ * is tried again up to `retries` times: after the `Retry-After` the provider asked for, or else
+ * after an exponential backoff with jitter (1 s, 2 s, 4 s and so on), each wait capped at
+ * `maxRetryWaitMs`. A `Retry-After` longer than that gives up at once. The timeout applies to each
+ * attempt; a caller's abort ends the waiting too.
  */
 export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
   const { apiKey, model, dimension, timeoutMs } = options;
+  const retries = options.retries ?? 0;
+  const maxRetryWaitMs = options.maxRetryWaitMs ?? 0;
   const send = options.fetch ?? globalThis.fetch;
-  const unavailable = (reason: string) =>
-    new ProviderUnavailableError(`The embedding provider is unavailable: ${reason}.`);
+  const sleep = options.sleep ?? wait;
+  const random = options.random ?? Math.random;
+  const unavailable = (reason: string, status?: number) =>
+    new ProviderUnavailableError(`The embedding provider is unavailable: ${reason}.`, status);
 
-  async function embed(
+  async function call(
     texts: readonly string[],
     input: EmbeddingInput,
     signal?: AbortSignal,
-  ): Promise<Embedding> {
+  ): Promise<Response> {
     const timeout = AbortSignal.timeout(timeoutMs);
-    let response: Response;
     try {
-      response = await send(VOYAGE_EMBEDDINGS, {
+      return await send(VOYAGE_EMBEDDINGS, {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
         body: JSON.stringify({
@@ -129,7 +138,26 @@ export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       throw unavailable(timeout.aborted || timedOut ? "it did not answer in time" : "no answer");
     }
-    if (!response.ok) throw unavailable(`it answered ${String(response.status)}`);
+  }
+
+  async function embed(
+    texts: readonly string[],
+    input: EmbeddingInput,
+    signal?: AbortSignal,
+  ): Promise<Embedding> {
+    let response = await call(texts, input, signal);
+    for (let attempt = 0; response.status === RATE_LIMITED && attempt < retries; attempt += 1) {
+      const asked = retryAfterMs(response.headers.get("retry-after"));
+      if (asked !== null && asked > maxRetryWaitMs) break;
+      const backoff = BACKOFF_BASE_MS * 2 ** attempt * (0.5 + random() / 2);
+      await response.body?.cancel();
+      await sleep(asked ?? Math.min(maxRetryWaitMs, Math.round(backoff)));
+      if (signal?.aborted === true) throw unavailable("the call was cancelled");
+      response = await call(texts, input, signal);
+    }
+    if (!response.ok) {
+      throw unavailable(`it answered ${String(response.status)}`, response.status);
+    }
     const body: unknown = await response.json().catch(() => null);
     const parsed = parseVoyage(body);
     if (parsed === null) throw unavailable("its answer was malformed");
@@ -144,6 +172,23 @@ export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
   }
 
   return { model, version: VOYAGE_VERSION, dimension, embed };
+}
+
+const RATE_LIMITED = 429;
+/** The first backoff without `Retry-After`; it doubles with every retry. */
+const BACKOFF_BASE_MS = 1000;
+
+/** The wait a `Retry-After` header asks for (seconds or an HTTP date), or `null`. */
+function retryAfterMs(header: string | null): number | null {
+  if (header === null || header.trim() === "") return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return seconds >= 0 ? Math.round(seconds * 1000) : null;
+  const date = Date.parse(header);
+  return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const VOYAGE_EMBEDDINGS = "https://api.voyageai.com/v1/embeddings";
