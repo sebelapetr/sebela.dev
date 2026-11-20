@@ -53,12 +53,30 @@ export interface ReuseRecentHealthOptions {
   readonly now?: () => number;
 }
 
-/** Not implemented yet. */
+/**
+ * A health check that reuses its last report for `maxAgeMs` and shares one running check among
+ * the requests that arrive meanwhile, so frequent or concurrent monitor requests cost the API at
+ * most one readiness request per period. A report is reused whether healthy or failing.
+ */
 export function reuseRecentHealth(
   check: () => Promise<HealthReport>,
   options: ReuseRecentHealthOptions,
 ): () => Promise<HealthReport> {
-  throw new Error(`not implemented: ${String(options.maxAgeMs)} ${check.name}`);
+  const now = options.now ?? Date.now;
+  let last: { readonly report: HealthReport; readonly at: number } | undefined;
+  let running: Promise<HealthReport> | undefined;
+  return () => {
+    if (last && now() - last.at < options.maxAgeMs) return Promise.resolve(last.report);
+    running ??= check()
+      .then((report) => {
+        last = { report, at: now() };
+        return report;
+      })
+      .finally(() => {
+        running = undefined;
+      });
+    return running;
+  };
 }
 
 /** The health route's answer: 200 when healthy, 503 otherwise; never cached and never indexed. */

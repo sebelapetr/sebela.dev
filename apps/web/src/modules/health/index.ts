@@ -1,14 +1,18 @@
 // The health module: whether the website can serve content now, for uptime monitoring. It asks the
 // API's readiness route (`GET /health/ready`, which answers only when the API reaches its database)
-// on every request, past the content cache, and answers 200 `{ status, api, postgres }` when both
-// are healthy or 503 naming the failing part (the database is `unknown` when the API itself fails).
+// past the content cache, at most once per 2 seconds however often it is asked, and answers 200
+// `{ status, api, postgres }` when both are healthy or 503 naming the failing part (the database
+// is `unknown` when the API itself fails).
 // It reveals no address, configuration or error detail, is never cached and never indexed.
 import "server-only";
 
 import { createApiClient, type ApiClient } from "@sebela/api-client";
 
 import { readWebConfig } from "../../config";
-import { checkHealth, healthResponse } from "./data/check-health";
+import { checkHealth, healthResponse, reuseRecentHealth } from "./data/check-health";
+
+/** How long one readiness answer is reused, so monitors cannot load the API through this route. */
+const REPORT_MAX_AGE_MS = 2_000;
 
 let client: ApiClient | undefined;
 
@@ -23,7 +27,11 @@ function healthClient(): ApiClient | null {
   }
 }
 
-/** The health route's answer for the current state of the API and the database. */
+const recentHealth = reuseRecentHealth(() => checkHealth(healthClient()), {
+  maxAgeMs: REPORT_MAX_AGE_MS,
+});
+
+/** The health route's answer for the state of the API and the database, at most 2 seconds old. */
 export async function websiteHealthResponse(): Promise<Response> {
-  return healthResponse(await checkHealth(healthClient()));
+  return healthResponse(await recentHealth());
 }
