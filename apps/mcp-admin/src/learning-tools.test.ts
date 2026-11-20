@@ -387,7 +387,21 @@ describe("log_session", () => {
       endedAt: "2026-11-17T19:00:00+01:00",
     });
 
-    expect(errorOf(outcome)).toMatchObject({ code: "field", fields: [{ path: "book" }] });
+    const error = errorOf(outcome) as {
+      code: string;
+      message: string;
+      fields: { path: string; message: string }[];
+    };
+    expect(error).toMatchObject({ code: "field", fields: [{ path: "book" }] });
+    // The error names what is missing and how to supply it, so the model can tell the owner.
+    expect(error.message).toMatch(/quiet-ledger/);
+    expect(error.message).toMatch(/no roadmap resource of type `book` linked/);
+    const detail = error.fields[0]?.message ?? "";
+    expect(detail).toMatch(/`book` field/);
+    expect(detail).toMatch(/save \{ entity: "roadmap-resource"/);
+    expect(detail).toMatch(/fields: \{ book: "quiet-ledger" \}/);
+    expect(detail).toMatch(/add_resource/);
+    expect(detail).toMatch(/ask the owner/i);
     expect(writes(api)).toEqual([]);
   });
 

@@ -85,6 +85,7 @@ export const E04_CONCURRENT_RESULT = "Bookings arrive complete; another client e
 export const E06_AVAILABILITY =
   "Open to one fictional platform review per quarter, starting in January 2027.";
 export const E06_LIMIT = 40;
+export const E34_SUMMARY = "Leads the platform team of a fictional studio.";
 export const E24_HEADLINE = "Platform engineer and billing reviewer";
 /** E21's attached photo: a fictional 2x2 grey PNG as base64 text (a simulated attachment). */
 export const E21_PHOTO = Object.freeze({
@@ -429,6 +430,28 @@ export const scenarios = Object.freeze({
     expect: (before, after) =>
       sessionLogged(before, after, `resource:${R2}`, [["2026-11-16", 2700]]) ??
       notesKept(before, after, ["2026-11-16"]),
+  },
+  E33: {
+    fixture: "s03",
+    prompt: `Včera od 16:00 do 16:30 jsem četl knihu ${B1}. Zapiš to.`,
+    skill: "diary-entry",
+    // Only the book session itself is approved: the tool refuses it with a field error, so it
+    // writes nothing. Linking or creating a resource is the owner's decision, not this case's.
+    approvals: [session({ book: B1 }, "2026-11-16T16:00:00+01:00", "2026-11-16T16:30:00+01:00")],
+    setup: [{ method: "PATCH", path: `/v1/roadmap/resources/${R3}`, body: { book: null } }],
+    expect: unchanged,
+  },
+  E34: {
+    ...readOnly("s02", `Change the summary of my current experience to: "${E34_SUMMARY}"`),
+    skill: "update-cv",
+    // Harbor's end date is removed first, so two experiences are current and the owner must choose.
+    setup: [
+      {
+        method: "PATCH",
+        path: "/v1/experiences/harbor-logistics-engineer",
+        body: { endedOn: null },
+      },
+    ],
   },
   E21: {
     fixture: "s04",
