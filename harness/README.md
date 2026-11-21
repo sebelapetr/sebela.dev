@@ -15,7 +15,7 @@ The agent harness of this repository: what lets coding agents work through a pha
 | `git-hooks/`                    | Git hooks (formatting, commit messages) installed by `pnpm install`                                                                                                                                    |
 | `lib/`                          | The pure rules behind them — slots, the loop's decision table, the guard, the steward, readiness, progress, the phase report, Windows notifications — with their tests                                 |
 | `mcp.json`                      | The only MCP servers an unattended run loads                                                                                                                                                           |
-| `setup-github.sh`               | Labels and protection of `master`; run once by the owner                                                                                                                                               |
+| `setup-github.sh`               | Labels, protection of `master` and Actions opening pull requests; run once by the owner                                                                                                                |
 
 Run a phase (owner only, with Postgres running in the main checkout):
 

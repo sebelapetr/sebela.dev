@@ -357,6 +357,7 @@ MCP Admin has deterministic integration tests against the real API and a Promptf
 | [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries       |
 | [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback               |
 | [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)                                     | How to help, and how to report a vulnerability privately |
+| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                       |
 
 ## License
 

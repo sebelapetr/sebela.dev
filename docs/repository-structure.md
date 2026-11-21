@@ -40,7 +40,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
 │   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check, the pinned-actions check and whether a change runs the MCP Admin model evals — plain Node, no dependencies [1, 2, 10]
-│   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version and release notes; the production smoke check and the simulated deployment, with fixtures [10]
+│   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version, release notes and changelog; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
 ├── .claude/
@@ -70,6 +70,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── .env.example             every setting with a comment and an example value; placeholders only [1]
 ├── .env.secrets.example     the owner's secrets for paid outside services, as placeholders; the real file stays in the main checkout [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
+├── CHANGELOG.md             every version's release notes, newest first; written by the release workflow [10]
 ├── GLOSSARY.md              canonical domain terms
 ├── CONTRIBUTING.md          how the repository is built and how outside contributors can help
 ├── SECURITY.md              private vulnerability reporting, scope and safe harbour

@@ -9,6 +9,8 @@ issue → branch → worktree → implementation → checks → review → issue
       → orchestrator squash-merges into the phase branch
                                   ...all issues of the phase...
 phase branch → phase pull request → owner approval → merge into master
+                                  → deployment and version (docs/release-workflow.md)
+                                  → changelog pull request → owner merges
 ```
 
 One issue, one branch, one worktree, one pull request. One phase, one integration branch, one pull request to `master`.
@@ -111,9 +113,13 @@ Orchestrated by: <agent>
 - Opened by the orchestrator from the phase branch to `master` **as a draft** when no ready issue of the phase remains; HITL issues may still be open.
 - When the phase is complete, the owner marks it **ready for review**. That runs the model evals of the affected suites once on the final state (`docs/testing.md`, Evals-driven development); a draft runs none.
 - It also moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, so merging the phase into `master` archives its PRD and issue overview. The orchestrator does this once, on a short-lived branch merged into the phase branch, when it first opens the pull request; a phase already in `.plan/done/` is left there.
-- The description lists the issues of the phase with their pull requests, and anything skipped or failed.
+- The description starts with a `## Summary` section whose first paragraph says in plain words what the phase brings to the site; the release that deploys the phase quotes it as its highlight (`docs/release-workflow.md`, Versions). It then lists the issues of the phase with their pull requests, and anything skipped or failed.
 - The owner reviews the phase as a whole and is the only one who merges it. It is merged with a **merge commit**, so `master` keeps one commit per issue plus one commit marking the phase.
 - CI must be green on the phase branch.
+
+## Changelog pull request
+
+After every deployment that publishes a new version, the release workflow opens `chore(release): changelog for vX.Y.Z` from `changelog/vX.Y.Z` into `master`: it adds that version's release notes to `CHANGELOG.md` and nothing else (`docs/release-workflow.md`, Changelog). It is part of the normal flow after each release: the owner merges it with a squash merge once its checks are green, oldest version first when several are open. Merging it releases nothing. Nobody else edits `CHANGELOG.md` by hand.
 
 ## Rules that never bend
 

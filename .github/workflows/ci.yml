@@ -14,6 +14,15 @@ on:
   push:
     branches:
       - master
+  # Started by the release workflow on the changelog pull request it opens, which, opened with
+  # GITHUB_TOKEN, starts no pull_request run of its own; `base` is the master commit the branch was
+  # cut from, the comparison a pull_request run would use (docs/release-workflow.md, Changelog).
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Commit to compare the branch with (empty runs every job in full)
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -61,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TURBO_TELEMETRY_DISABLED: "1"
-      TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
       TURBO_SCM_HEAD: HEAD
       POSTGRES_PASSWORD: ci-only-disposable-password
       DATABASE_PASSWORD: ci-only-disposable-password
@@ -115,7 +124,7 @@ jobs:
       - name: Website affected
         id: website
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: |
           unaffected='^(docs/|\.plan/|\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)|(^|/)[^/]+\.md$'
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
@@ -269,7 +278,7 @@ jobs:
       - name: Website affected
         id: website
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: |
           unaffected='^(docs/|\.plan/|\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)|(^|/)[^/]+\.md$'
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
