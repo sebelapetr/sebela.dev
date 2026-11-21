@@ -7,6 +7,7 @@ import {
   BudgetExhaustedError,
   ProviderUnavailableError,
   createFakeEmbedder,
+  createFakeReranker,
   createIndexer,
   maxWorkAttempts,
   scheduleChanges,
@@ -18,8 +19,10 @@ import {
   type NearestQuery,
   type PortfolioSnapshot,
   type PreparedDocument,
+  type Reranker,
   type RetrievalConfig,
   type RetrievalStore,
+  type SearchVariant,
   type SourceKind,
   type SourceVersion,
   type UsageRecord,
@@ -35,6 +38,8 @@ const NOW = new Date("2026-11-20T10:00:00.000Z");
 const config: RetrievalConfig = {
   embeddingModel: "voyage-4",
   embeddingPricePerMillionTokensUsd: 0.06,
+  rerankModel: "rerank-3",
+  rerankPricePerMillionTokensUsd: 0.05,
   embeddingBatchSize: 4,
   providerTimeoutMs: 1000,
   providerRetries: 0,
@@ -149,6 +154,7 @@ const emptyUsage = (): UsageTotals => ({
     index: { tokens: 0, costUsd: 0 },
     search: { tokens: 0, costUsd: 0 },
     candidates: { tokens: 0, costUsd: 0 },
+    rerank: { tokens: 0, costUsd: 0 },
   },
 });
 
@@ -352,6 +358,10 @@ function memoryStore() {
 function knowledgeBase(
   options: {
     embedder?: Embedder;
+    /** The fake reranker when absent. */
+    reranker?: Reranker;
+    /** The deployed `reranked` search when absent. */
+    variant?: SearchVariant;
     config?: Partial<RetrievalConfig>;
     /** The store of an earlier knowledge base, as a restarted process finds it. */
     memory?: ReturnType<typeof memoryStore>;
@@ -361,7 +371,16 @@ function knowledgeBase(
   const embedder = options.embedder ?? createFakeEmbedder();
   const settings = { ...config, ...options.config };
   const parts = { store: memory.store, embedder, config: settings, now: () => NOW };
-  return { ...memory, indexer: createIndexer(parts), retriever: createRetriever(parts) };
+  const reranker = options.reranker ?? createFakeReranker();
+  return {
+    ...memory,
+    indexer: createIndexer(parts),
+    retriever: createRetriever({
+      ...parts,
+      reranker,
+      ...(options.variant === undefined ? {} : { variant: options.variant }),
+    }),
+  };
 }
 
 describe("indexing the portfolio", () => {
@@ -790,13 +809,29 @@ describe("keeping the index current after content writes", () => {
     await expect(partial.indexer.rebuildPortfolio(snapshot())).rejects.toBeInstanceOf(
       ProviderUnavailableError,
     );
+    // Cosine similarity compares only vectors of one model; full-text candidates of a source not yet
+    // re-embedded are its current text and may still be reranked into the hybrid result.
     const during = await knowledgeBase({
       memory,
       embedder: countingEmbedder({ version: "2" }).embedder,
+      variant: "vector",
     }).retriever.search({ query: "hybrid search reranker archive" });
     for (const passage of during.passages) {
       expect(memory.sources.get(passage.sourceId)?.modelVersion).toBe("2");
     }
+    // The deployed search keeps answering with contract passages, one per source, within the
+    // final count, and reaches the sources not yet re-embedded through their current text.
+    const deployed = await knowledgeBase({
+      memory,
+      embedder: countingEmbedder({ version: "2" }).embedder,
+    }).retriever.search({ query: "hybrid search reranker archive" });
+    expect(SearchResultSchema.parse(deployed)).toEqual(deployed);
+    expect(deployed.status).toBe("found");
+    const deployedIds = deployed.passages.map((passage) => passage.sourceId);
+    expect(new Set(deployedIds).size).toBe(deployedIds.length);
+    expect(deployedIds.length).toBeLessThanOrEqual(config.finalPassages);
+    expect(deployedIds).toContain("portfolio:project:reading-assistant");
+    expect(deployedIds.some((id) => memory.sources.get(id)?.modelVersion !== "2")).toBe(true);
 
     const resumed = countingEmbedder({ version: "2" });
     const after = knowledgeBase({ memory, embedder: resumed.embedder });
@@ -854,14 +889,15 @@ describe("searching the portfolio", () => {
   it("finds no evidence below the relevance floor", async () => {
     const { indexer, retriever } = knowledgeBase();
     await indexer.reindexPortfolio(snapshot());
-    await expect(retriever.search({ query: "quarterly tax filing deadlines" })).resolves.toEqual({
+    await expect(retriever.search({ query: "quarterly tax filing" })).resolves.toEqual({
       status: "no_evidence",
       passages: [],
     });
-    const strict = knowledgeBase({ config: { relevanceFloor: 0.999 } });
+    // The fake reranker scores the best passage 4 of 5 words: 0.8, below a floor of 0.9.
+    const strict = knowledgeBase({ config: { relevanceFloor: 0.9 } });
     await strict.indexer.reindexPortfolio(snapshot());
     await expect(
-      strict.retriever.search({ query: "hybrid search reranker archive" }),
+      strict.retriever.search({ query: "hybrid search reranker archive quarterly" }),
     ).resolves.toEqual({ status: "no_evidence", passages: [] });
   });
 
@@ -970,6 +1006,294 @@ describe("the full-text search variant", () => {
     expect(glossary.every((sourceId) => sourceId.startsWith("portfolio:glossary_term:"))).toBe(
       true,
     );
+  });
+});
+
+/** A portfolio project chunk as either first-stage list returns it. */
+function found(key: string, similarity: number, text = `Project ${key}.`): NearestChunk {
+  return {
+    sourceId: `portfolio:project:${key}`,
+    sourceKind: "portfolio",
+    contentKind: "project",
+    title: `Project ${key}`,
+    path: `/experience#project-${key}`,
+    version: createHash("sha256").update(key).digest("hex"),
+    text,
+    headingPath: [`Project ${key}`],
+    indexedAt: NOW,
+    similarity,
+  };
+}
+
+/**
+ * A retriever whose first-stage lists are scripted: `vector` is what the nearest-neighbour query
+ * returns and `text` what the full-text query returns, each best first, cut at the query's limit.
+ */
+function scripted(
+  lists: { vector: readonly NearestChunk[]; text: readonly NearestChunk[] },
+  options: {
+    variant?: SearchVariant;
+    reranker?: Reranker | null;
+    config?: Partial<RetrievalConfig>;
+  } = {},
+) {
+  const memory = memoryStore();
+  const asked: { nearest: number[]; fullText: number[] } = { nearest: [], fullText: [] };
+  const store: RetrievalStore = {
+    ...memory.store,
+    nearest: (query) => {
+      asked.nearest.push(query.limit);
+      return Promise.resolve(lists.vector.slice(0, query.limit));
+    },
+    fullText: (query) => {
+      asked.fullText.push(query.limit);
+      return Promise.resolve(lists.text.slice(0, query.limit));
+    },
+  };
+  const reranker = options.reranker === undefined ? createFakeReranker() : options.reranker;
+  const retriever = createRetriever({
+    store,
+    embedder: createFakeEmbedder(),
+    config: { ...config, ...options.config },
+    now: () => NOW,
+    ...(reranker === null ? {} : { reranker }),
+    ...(options.variant === undefined ? {} : { variant: options.variant }),
+  });
+  return { retriever, usage: memory.usage, asked };
+}
+
+const ids = (result: { passages: readonly { sourceId: string }[] }) =>
+  result.passages.map((passage) => passage.sourceId.replace("portfolio:project:", ""));
+
+describe("hybrid candidates by reciprocal rank fusion", () => {
+  it("fuses the vector and full-text lists by 1/(60 + rank), best first", async () => {
+    const { retriever } = scripted(
+      {
+        vector: [found("a", 0.9), found("b", 0.8), found("c", 0.7)],
+        text: [found("b", 0.05), found("d", 0.04)],
+      },
+      { variant: "hybrid" },
+    );
+    const result = await retriever.search({ query: "anything" });
+    // b: 1/62 + 1/61; a: 1/61; d: 1/62; c: 1/63.
+    expect(ids(result)).toEqual(["b", "a", "d", "c"]);
+    expect(result.passages[0]?.score).toBeCloseTo(1 / 62 + 1 / 61, 12);
+    expect(result.passages[3]?.score).toBeCloseTo(1 / 63, 12);
+  });
+
+  it("breaks a tie in the fused score by source ID", async () => {
+    const { retriever } = scripted(
+      {
+        vector: [found("c", 0.9), found("b", 0.8), found("a", 0.7)],
+        text: [found("a", 0.05), found("d", 0.04), found("c", 0.03)],
+      },
+      { variant: "hybrid" },
+    );
+    // a and c both 1/61 + 1/63; b and d both 1/62.
+    expect(ids(await retriever.search({ query: "anything" }))).toEqual(["a", "c", "b", "d"]);
+  });
+
+  it("ranks each source once in a list, by its best chunk", async () => {
+    const { retriever } = scripted(
+      {
+        vector: [found("a", 0.9), found("a", 0.85), found("b", 0.8)],
+        text: [found("b", 0.05)],
+      },
+      { variant: "hybrid" },
+    );
+    const result = await retriever.search({ query: "anything" });
+    // b is second in the vector list, not third: 1/62 + 1/61 beats a's 1/61.
+    expect(ids(result)).toEqual(["b", "a"]);
+  });
+
+  it("represents a source by the chunk of the list it ranked best in", async () => {
+    const { retriever } = scripted(
+      {
+        vector: [found("a", 0.9, "vector chunk of a"), found("b", 0.8, "vector chunk of b")],
+        text: [found("b", 0.05, "text chunk of b"), found("a", 0.04, "text chunk of a")],
+      },
+      { variant: "hybrid" },
+    );
+    const result = await retriever.search({ query: "anything" });
+    const texts = Object.fromEntries(result.passages.map((p) => [p.sourceId, p.text]));
+    // a ties with b on rank; a ranked first in the vector list, b first in the text list.
+    expect(texts).toEqual({
+      "portfolio:project:a": "vector chunk of a",
+      "portfolio:project:b": "text chunk of b",
+    });
+  });
+
+  it("takes the pool from each list and keeps the pool's size after fusion", async () => {
+    const { retriever, asked } = scripted(
+      {
+        vector: [found("a", 0.9), found("b", 0.8), found("c", 0.7)],
+        text: [found("d", 0.05), found("e", 0.04), found("f", 0.03)],
+      },
+      { variant: "hybrid", config: { candidatePool: 3, finalPassages: 3 } },
+    );
+    const [pool] = await retriever.candidates([{ query: "anything" }]);
+    expect(asked).toEqual({ nearest: [3], fullText: [3] });
+    expect(pool).toEqual(["portfolio:project:a", "portfolio:project:d", "portfolio:project:b"]);
+  });
+
+  it("uses whichever list found something when the other is empty", async () => {
+    const onlyText = scripted({ vector: [], text: [found("d", 0.05)] }, { variant: "hybrid" });
+    expect(ids(await onlyText.retriever.search({ query: "anything" }))).toEqual(["d"]);
+    const onlyVector = scripted({ vector: [found("a", 0.1)], text: [] }, { variant: "hybrid" });
+    expect(ids(await onlyVector.retriever.search({ query: "anything" }))).toEqual(["a"]);
+  });
+
+  it("applies no relevance floor without the reranker, only the final count", async () => {
+    const { retriever } = scripted(
+      { vector: [found("a", 0.01), found("b", 0.01), found("c", 0.01)], text: [] },
+      { variant: "hybrid", config: { relevanceFloor: 0.9, finalPassages: 2 } },
+    );
+    expect(ids(await retriever.search({ query: "anything" }))).toEqual(["a", "b"]);
+  });
+
+  it("finds no evidence when both lists are empty", async () => {
+    const { retriever } = scripted({ vector: [], text: [] }, { variant: "hybrid" });
+    await expect(retriever.search({ query: "anything" })).resolves.toEqual({
+      status: "no_evidence",
+      passages: [],
+    });
+  });
+});
+
+describe("the reranked search (deployed)", () => {
+  const lists = {
+    vector: [
+      found("a", 0.9, "gamma notes"),
+      found("b", 0.8, "alpha only"),
+      found("c", 0.7, "alpha and beta"),
+    ],
+    text: [found("c", 0.05, "alpha and beta"), found("d", 0.04, "beta only")],
+  };
+
+  it("is the default and orders the fused pool by the reranker's score", async () => {
+    const reranker = createFakeReranker();
+    const { retriever } = scripted(lists, { reranker });
+    const result = await retriever.search({ query: "alpha beta" });
+    expect(SearchResultSchema.parse(result)).toEqual(result);
+    // Fused order c, a, b, d; reranked c (1), then b and d (0.5) in fused order; a (0) is cut.
+    expect(ids(result)).toEqual(["c", "b", "d"]);
+    expect(result.passages.map((passage) => passage.score)).toEqual([1, 0.5, 0.5]);
+    expect(reranker.calls).toBe(1);
+  });
+
+  it("sends the query and the pool's passage texts in fused order, once per search", async () => {
+    const sent: { query: string; documents: readonly string[] }[] = [];
+    const fake = createFakeReranker();
+    const reranker: Reranker = {
+      model: fake.model,
+      rerank: (query, documents, signal) => {
+        sent.push({ query, documents });
+        return fake.rerank(query, documents, signal);
+      },
+    };
+    const { retriever } = scripted(lists, { reranker });
+    await retriever.search({ query: "alpha beta" });
+    expect(sent).toEqual([
+      {
+        query: "alpha beta",
+        documents: ["alpha and beta", "gamma notes", "alpha only", "beta only"],
+      },
+    ]);
+  });
+
+  it("keeps only passages at or above the floor, at most the final count or the asked limit", async () => {
+    const atFloor = scripted(lists, { config: { relevanceFloor: 0.5, finalPassages: 2 } });
+    expect(ids(await atFloor.retriever.search({ query: "alpha beta" }))).toEqual(["c", "b"]);
+    const asked = scripted(lists);
+    expect(ids(await asked.retriever.search({ query: "alpha beta", limit: 1 }))).toEqual(["c"]);
+    const above = scripted(lists, { config: { relevanceFloor: 0.6 } });
+    expect(ids(await above.retriever.search({ query: "alpha beta" }))).toEqual(["c"]);
+  });
+
+  it("finds no evidence when no reranked passage reaches the floor", async () => {
+    const reranker = createFakeReranker();
+    const { retriever } = scripted(lists, { reranker });
+    await expect(retriever.search({ query: "tax deadlines" })).resolves.toEqual({
+      status: "no_evidence",
+      passages: [],
+    });
+    expect(reranker.calls).toBe(1);
+  });
+
+  it("finds no evidence for an empty pool without calling the reranker", async () => {
+    const reranker = createFakeReranker();
+    const { retriever, usage } = scripted({ vector: [], text: [] }, { reranker });
+    await expect(retriever.search({ query: "alpha beta" })).resolves.toEqual({
+      status: "no_evidence",
+      passages: [],
+    });
+    expect(reranker.calls).toBe(0);
+    expect(usage.filter((record) => record.operation === "rerank")).toEqual([]);
+  });
+
+  it("reports an unavailable or missing reranker, never no evidence", async () => {
+    const failing = scripted(lists, { reranker: createFakeReranker({ failing: true }) });
+    await expect(failing.retriever.search({ query: "alpha beta" })).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+    const missing = scripted(lists, { reranker: null });
+    await expect(missing.retriever.search({ query: "alpha beta" })).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+    const short: Reranker = {
+      model: "short",
+      rerank: () => Promise.resolve({ scores: [1], tokens: 1 }),
+    };
+    const tooFew = scripted(lists, { reranker: short });
+    await expect(tooFew.retriever.search({ query: "alpha beta" })).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+  });
+
+  it("records each reranking at the reranker's price and refuses it at the ceiling", async () => {
+    const reranker = createFakeReranker();
+    const { retriever, usage } = scripted(lists, { reranker });
+    await retriever.search({ query: "alpha beta" });
+    const [record] = usage.filter((entry) => entry.operation === "rerank");
+    expect(record?.model).toBe(reranker.model);
+    expect(record?.tokens).toBeGreaterThan(0);
+    expect(record?.costUsd).toBeCloseTo(
+      ((record?.tokens ?? 0) / 1_000_000) * config.rerankPricePerMillionTokensUsd,
+      12,
+    );
+
+    const capped = scripted(lists, { reranker, config: { monthlyCeilingUsd: 0 } });
+    await expect(capped.retriever.search({ query: "alpha beta" })).rejects.toBeInstanceOf(
+      BudgetExhaustedError,
+    );
+    expect(reranker.calls).toBe(1);
+  });
+
+  it("lists the fused pool as candidates without reranking", async () => {
+    const reranker = createFakeReranker();
+    const { retriever } = scripted(lists, { reranker });
+    const [pool] = await retriever.candidates([{ query: "alpha beta" }]);
+    expect(pool).toEqual([
+      "portfolio:project:c",
+      "portfolio:project:a",
+      "portfolio:project:b",
+      "portfolio:project:d",
+    ]);
+    expect(reranker.calls).toBe(0);
+  });
+});
+
+describe("the vector search variant", () => {
+  it("ranks by cosine similarity and applies the floor to it, without the reranker", async () => {
+    const reranker = createFakeReranker();
+    const { retriever } = scripted(
+      { vector: [found("a", 0.9), found("b", 0.3), found("c", 0.1)], text: [found("d", 0.5)] },
+      { variant: "vector", reranker },
+    );
+    const result = await retriever.search({ query: "anything" });
+    expect(ids(result)).toEqual(["a", "b"]);
+    expect(result.passages[0]?.score).toBe(0.9);
+    expect(reranker.calls).toBe(0);
   });
 });
 

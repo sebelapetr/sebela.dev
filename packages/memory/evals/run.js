@@ -11,9 +11,11 @@
 //   node evals/run.js --publish <name> also writes the summary to `evals/results/<name>.json`
 //   node evals/run.js --max-cost-usd <n>
 //                                      the run's spend ceiling, at most and by default USD 1
-//   node evals/run.js --variant <name> the search variant: `vector` (the deployed search, the
-//                                      default) or `fulltext` (the text search baseline, which
-//                                      embeds no query; indexing still embeds the passages)
+//   node evals/run.js --variant <name> the search variant: `reranked` (the deployed search, the
+//                                      default: the hybrid pool scored by the reranker), `hybrid`
+//                                      (the fused pool without the reranker), `vector` (cosine
+//                                      similarity only) or `fulltext` (the text search baseline,
+//                                      which embeds no query; indexing still embeds the passages)
 //   node evals/run.js --plan           print which cases would run and which are pending (free)
 //
 // An unknown option, an unknown or repeated case or a ceiling above USD 1 stops the runner before
@@ -75,11 +77,15 @@ const queryCacheFile = join(reportRoot, "query-cache.json");
 /** Retrieval settings recorded with each run, so results name the configuration they measured. */
 const RECORDED_SETTINGS = [
   "RETRIEVAL_EMBEDDING_MODEL",
+  "RETRIEVAL_RERANK_MODEL",
   "RETRIEVAL_CANDIDATE_POOL",
   "RETRIEVAL_FINAL_PASSAGES",
   "RETRIEVAL_RELEVANCE_FLOOR",
   "RETRIEVAL_EMBEDDING_BATCH_SIZE",
 ];
+
+/** The search variants a run can measure; the first is the deployed one. */
+const SEARCH_VARIANTS = ["reranked", "hybrid", "vector", "fulltext"];
 
 /**
  * Reads and validates the command line. Throws on anything it does not understand.
@@ -114,9 +120,9 @@ export function parseOptions(argv) {
       `--min-interval-ms must be a whole number of milliseconds from 0 to ${String(MAX_MIN_INTERVAL_MS)}.`,
     );
   }
-  const variant = values.variant ?? "vector";
-  if (variant !== "vector" && variant !== "fulltext") {
-    throw new Error("--variant takes `vector` or `fulltext`.");
+  const variant = values.variant ?? "reranked";
+  if (!SEARCH_VARIANTS.includes(variant)) {
+    throw new Error("--variant takes `reranked`, `hybrid`, `vector` or `fulltext`.");
   }
   if (values.publish !== undefined && !/^[a-z0-9][a-z0-9-]*$/.test(values.publish)) {
     throw new Error("--publish takes a lowercase name of letters, digits and hyphens.");
@@ -435,6 +441,18 @@ async function measure(dataset, plan, options, folder) {
  */
 
 /**
+ * What the run's searches cost, all searches together: the query embeddings and the reranking.
+ * Indexing and candidate runs are not part of answering a query.
+ * @param {Usage} usage
+ */
+export function queryCostOf(usage) {
+  return ["search", "rerank"].reduce(
+    (total, operation) => total + (usage.byOperation[operation]?.costUsd ?? 0),
+    0,
+  );
+}
+
+/**
  * @param {import("./plan.js").Dataset} dataset
  * @param {{ run: import("./plan.js").Question[], pending: import("./plan.js").PendingCase[] }} plan
  * @param {ReturnType<typeof parseOptions>} options
@@ -467,16 +485,17 @@ function summarize(dataset, plan, options, report, indexing, usage, queryCache) 
       ...caseVerdict(metrics, observation),
       errored: observation.status === "error",
       returned: observation.passages.map((passage) => passage.sourceId),
+      // The scores let a floor and a final count be calibrated offline from one run.
+      scores: observation.passages.map((passage) => passage.score ?? null),
       metrics,
     };
   });
-  const search = usage.byOperation["search"] ?? { tokens: 0, costUsd: 0 };
   // A search that failed (provider unavailable, budget exhausted, no answer) is not a measurement.
   const failed = cases.some((entry) => entry.errored);
   const scope = options.cases.length === 0 ? "complete" : "partial";
   const metrics = aggregate(
     cases.map((entry) => entry.metrics),
-    { queryCostUsd: search.costUsd },
+    { queryCostUsd: queryCostOf(usage) },
   );
   const gate = gateOf(thresholds, metrics, { variant: options.variant, scope });
   return {

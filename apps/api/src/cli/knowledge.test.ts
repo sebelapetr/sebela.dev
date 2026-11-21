@@ -12,7 +12,7 @@ import {
   type PrivateStorage,
   type RetrievalConfig,
 } from "@sebela/services";
-import { createFakeEmbedder } from "@sebela/services/testing";
+import { createFakeEmbedder, createFakeReranker } from "@sebela/services/testing";
 
 import { openTestBackend, type TestBackend } from "../test-support.js";
 import { runKnowledgeCommand } from "./knowledge.js";
@@ -21,6 +21,8 @@ const config: RetrievalConfig = {
   embeddingModel: "fake",
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 32,
+  rerankModel: "fake-word-overlap",
+  rerankPricePerMillionTokensUsd: 0.05,
   providerTimeoutMs: 1000,
   providerRetries: 0,
   providerMaxRetryWaitMs: 0,
@@ -47,7 +49,9 @@ describe("the knowledge command", () => {
 
   beforeAll(async () => {
     [backend, failing] = await Promise.all([
-      openTestBackend({ retrieval: { config, embedder: createFakeEmbedder() } }),
+      openTestBackend({
+        retrieval: { config, embedder: createFakeEmbedder(), reranker: createFakeReranker() },
+      }),
       openTestBackend({
         retrieval: { config, embedder: createFakeEmbedder({ failing: true, failureStatus: 429 }) },
       }),
@@ -128,6 +132,7 @@ describe("the knowledge command", () => {
     expect(code).toBe(0);
     const usage = json() as { tokens: number; costUsd: number; byOperation: object };
     expect(usage.tokens).toBeGreaterThan(0);
+    expect(usage.byOperation).toHaveProperty("rerank");
     expect(usage.byOperation).toHaveProperty("index");
     expect(usage.byOperation).toHaveProperty("candidates");
   });
@@ -184,7 +189,12 @@ describe("the knowledge command's supplemental documents", () => {
       worktree: null,
     });
     backend = await openTestBackend({
-      retrieval: { config, embedder: createFakeEmbedder(), privateStorage },
+      retrieval: {
+        config,
+        embedder: createFakeEmbedder(),
+        reranker: createFakeReranker(),
+        privateStorage,
+      },
     });
     folder = await mkdtemp(join(tmpdir(), "sebela-knowledge-documents-"));
     await writeFile(join(folder, "handbook-FINAL.md"), handbook);

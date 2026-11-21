@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { SearchResultSchema, retrievalQueryMaxLength } from "@sebela/contracts";
 import { demoSeedFolder, openPrivateStorage, type RetrievalConfig } from "@sebela/services";
-import { createFakeEmbedder } from "@sebela/services/testing";
+import { createFakeEmbedder, createFakeReranker } from "@sebela/services/testing";
 
 import {
   anyText,
@@ -27,6 +27,8 @@ const config: RetrievalConfig = {
   embeddingModel: "fake",
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 32,
+  rerankModel: "fake-word-overlap",
+  rerankPricePerMillionTokensUsd: 0.05,
   providerTimeoutMs: 1000,
   providerRetries: 0,
   providerMaxRetryWaitMs: 0,
@@ -44,7 +46,9 @@ describe("POST /v1/retrieval/search", () => {
 
   beforeAll(async () => {
     [backend, failing] = await Promise.all([
-      openTestBackend({ retrieval: { config, embedder: createFakeEmbedder() } }),
+      openTestBackend({
+        retrieval: { config, embedder: createFakeEmbedder(), reranker: createFakeReranker() },
+      }),
       openTestBackend({ retrieval: { config, embedder: createFakeEmbedder({ failing: true }) } }),
     ]);
     await backend.services.seed.loadSeed(demoSeedFolder);
@@ -179,7 +183,12 @@ describe("supplemental documents in POST /v1/retrieval/search", () => {
       worktree: null,
     });
     backend = await openTestBackend({
-      retrieval: { config, embedder: createFakeEmbedder(), privateStorage },
+      retrieval: {
+        config,
+        embedder: createFakeEmbedder(),
+        reranker: createFakeReranker(),
+        privateStorage,
+      },
     });
     ({ key } = await backend.services.apiKeys.createKey("retrieval documents"));
     const { knowledge } = backend.services;

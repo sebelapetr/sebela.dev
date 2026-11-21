@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createPersistence, readDatabaseConfig, type Persistence } from "@sebela/db";
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
-import { createFakeEmbedder, type Embedder, type RetrievalConfig } from "@sebela/memory";
+import {
+  createFakeEmbedder,
+  createFakeReranker,
+  type Embedder,
+  type RetrievalConfig,
+} from "@sebela/memory";
 
 import { DomainError } from "../../errors.js";
 import { createProfileService } from "../profile/index.js";
@@ -22,6 +27,8 @@ const config: RetrievalConfig = {
   embeddingModel: "fake-hashed-words",
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 16,
+  rerankModel: "fake-word-overlap",
+  rerankPricePerMillionTokensUsd: 0.05,
   providerTimeoutMs: 1000,
   providerRetries: 0,
   providerMaxRetryWaitMs: 0,
@@ -103,6 +110,7 @@ describe("supplemental documents through the knowledge service", () => {
       {
         config,
         embedder,
+        reranker: createFakeReranker(),
         ...(storage === null ? {} : { privateStorage: storage ?? privateStorage }),
         ...rest,
       },

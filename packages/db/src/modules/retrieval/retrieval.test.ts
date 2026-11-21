@@ -252,7 +252,7 @@ describe("retrieval persistence", () => {
   });
 
   it("totals recorded usage since a time, per operation", async () => {
-    const usage = (operation: "index" | "search", tokens: number, occurredAt: string) =>
+    const usage = (operation: "index" | "search" | "rerank", tokens: number, occurredAt: string) =>
       retrieval.recordUsage({
         operation,
         model: MODEL,
@@ -263,10 +263,12 @@ describe("retrieval persistence", () => {
     await usage("index", 1000, "2026-10-31T23:59:59.000Z");
     await usage("index", 2000, "2026-11-01T00:00:00.000Z");
     await usage("search", 10, "2026-11-05T12:00:00.000Z");
+    await usage("rerank", 500, "2026-11-05T12:00:01.000Z");
 
     const totals = await retrieval.usageSince(new Date("2026-11-01T00:00:00.000Z"));
-    expect(totals.tokens).toBe(2010);
-    expect(totals.costUsd).toBeCloseTo(0.00201, 10);
+    expect(totals.tokens).toBe(2510);
+    expect(totals.costUsd).toBeCloseTo(0.00251, 10);
+    expect(totals.byOperation.rerank).toEqual({ tokens: 500, costUsd: 0.0005 });
     expect(totals.byOperation.index.tokens).toBe(2000);
     expect(totals.byOperation.index.costUsd).toBeCloseTo(0.002, 10);
     expect(totals.byOperation.search.tokens).toBe(10);

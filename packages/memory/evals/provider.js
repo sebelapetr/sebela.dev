@@ -63,9 +63,10 @@ async function search(body) {
     return {
       status: payload.status,
       passages: payload.passages.map(
-        (/** @type {{ sourceId: string, path?: string }} */ passage) => ({
+        (/** @type {{ sourceId: string, path?: string, score: number }} */ passage) => ({
           sourceId: passage.sourceId,
           ...(passage.path === undefined ? {} : { path: passage.path }),
+          score: passage.score,
         }),
       ),
       latencyMs,

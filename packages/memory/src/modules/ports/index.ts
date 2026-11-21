@@ -26,7 +26,24 @@ export interface Embedder {
   embed(texts: readonly string[], input: EmbeddingInput, signal?: AbortSignal): Promise<Embedding>;
 }
 
-/** The embedding provider failed or did not answer in time. Never reported as "no evidence". */
+/** The relevance scores of one reranking call, by document index, and the tokens billed. */
+export interface Reranking {
+  /** One score per document, in the order the documents were given; higher is more relevant. */
+  readonly scores: readonly number[];
+  readonly tokens: number;
+}
+
+/**
+ * A cross-encoder reranker: scores a query and each document together. A failure of any kind
+ * (network, timeout, refusal, malformed answer, a score missing) is a `ProviderUnavailableError`.
+ */
+export interface Reranker {
+  /** The provider's model name, for example `rerank-3`. */
+  readonly model: string;
+  rerank(query: string, documents: readonly string[], signal?: AbortSignal): Promise<Reranking>;
+}
+
+/** A provider failed or did not answer in time. Never reported as "no evidence". */
 export class ProviderUnavailableError extends Error {
   override readonly name = "ProviderUnavailableError";
 
@@ -39,13 +56,13 @@ export class ProviderUnavailableError extends Error {
   }
 }
 
-/** The month's embedding spend reached its ceiling; nothing more is sent to the provider. */
+/** The month's provider spend reached its ceiling; nothing more is sent to the provider. */
 export class BudgetExhaustedError extends Error {
   override readonly name = "BudgetExhaustedError";
 }
 
 /** What a provider call was for. */
-export type UsageOperation = "index" | "search" | "candidates";
+export type UsageOperation = "index" | "search" | "candidates" | "rerank";
 
 /** One provider call, recorded whether it served indexing or a search. */
 export interface UsageRecord {
@@ -385,6 +402,10 @@ export interface RetrievalConfig {
   readonly embeddingModel: string;
   /** The provider's list price, used to estimate the cost of every call. */
   readonly embeddingPricePerMillionTokensUsd: number;
+  /** The cross-encoder reranker's model, for example `rerank-3`. */
+  readonly rerankModel: string;
+  /** The reranker's list price, used to estimate the cost of every reranking call. */
+  readonly rerankPricePerMillionTokensUsd: number;
   /** The most texts sent in one embedding call. */
   readonly embeddingBatchSize: number;
   /** How long one provider call may take before it counts as unavailable. */
@@ -396,19 +417,27 @@ export interface RetrievalConfig {
    * exponential backoff used without one is capped at it.
    */
   readonly providerMaxRetryWaitMs: number;
-  /** The month's embedding spend at which nothing more is sent to the provider. */
+  /** The month's provider spend (embedding and reranking) at which nothing more is sent. */
   readonly monthlyCeilingUsd: number;
-  /** How many nearest chunks a search considers. */
+  /**
+   * How many sources the fused candidate pool holds, and how many chunks each first-stage list
+   * (vector and full text) takes before fusion.
+   */
   readonly candidatePool: number;
   /** How many passages a search returns at most. */
   readonly finalPassages: number;
-  /** The least cosine similarity a passage needs; below it the search finds no evidence. */
+  /**
+   * The least reranker score a passage needs; below it the search finds no evidence. The vector
+   * evals variant applies it to the cosine similarity instead.
+   */
   readonly relevanceFloor: number;
 }
 
 const SETTINGS = {
   embeddingModel: "RETRIEVAL_EMBEDDING_MODEL",
   embeddingPricePerMillionTokensUsd: "RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD",
+  rerankModel: "RETRIEVAL_RERANK_MODEL",
+  rerankPricePerMillionTokensUsd: "RETRIEVAL_RERANK_PRICE_PER_MILLION_TOKENS_USD",
   embeddingBatchSize: "RETRIEVAL_EMBEDDING_BATCH_SIZE",
   providerTimeoutMs: "RETRIEVAL_PROVIDER_TIMEOUT_MS",
   providerRetries: "RETRIEVAL_PROVIDER_RETRIES",
@@ -454,10 +483,18 @@ export function readRetrievalConfig(
 
   const embeddingModel = raw(SETTINGS.embeddingModel) ?? "";
   if (embeddingModel === "") problems.push(`${SETTINGS.embeddingModel} must be a model name`);
+  const rerankModel = raw(SETTINGS.rerankModel) ?? "";
+  if (rerankModel === "") problems.push(`${SETTINGS.rerankModel} must be a model name`);
   const config: RetrievalConfig = {
     embeddingModel,
     embeddingPricePerMillionTokensUsd: number(
       SETTINGS.embeddingPricePerMillionTokensUsd,
+      (value) => value >= 0,
+      "a non-negative price",
+    ),
+    rerankModel,
+    rerankPricePerMillionTokensUsd: number(
+      SETTINGS.rerankPricePerMillionTokensUsd,
       (value) => value >= 0,
       "a non-negative price",
     ),

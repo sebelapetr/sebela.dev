@@ -20768,7 +20768,7 @@
             "type": "number",
             "minimum": -1,
             "maximum": 1,
-            "description": "Cosine similarity to the query."
+            "description": "Relevance to the query, higher is better: the reranker's score in the deployed search."
           },
           "path": {
             "type": "string",
@@ -20868,7 +20868,7 @@
             "type": "number",
             "minimum": -1,
             "maximum": 1,
-            "description": "Cosine similarity to the query."
+            "description": "Relevance to the query, higher is better: the reranker's score in the deployed search."
           },
           "provenance": {
             "type": "object",

@@ -31,7 +31,7 @@ export { retrievalDimension } from "./schema.js";
 export type RetrievalSourceKind = "portfolio" | "supplemental";
 
 /** What an embedding provider call served. */
-export type RetrievalUsageOperation = "index" | "search" | "candidates";
+export type RetrievalUsageOperation = "index" | "search" | "candidates" | "rerank";
 
 /** What is stored about an indexed source: enough to tell whether it is current. */
 export interface RetrievalIndexedSource {
@@ -698,6 +698,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         index: { tokens: 0, costUsd: 0 },
         search: { tokens: 0, costUsd: 0 },
         candidates: { tokens: 0, costUsd: 0 },
+        rerank: { tokens: 0, costUsd: 0 },
       } satisfies Record<RetrievalUsageOperation, { tokens: number; costUsd: number }>;
       let tokens = 0;
       let costUsd = 0;
@@ -866,7 +867,12 @@ function workOperationOf(value: string): RetrievalWorkOperation {
   throw new Error(`Unknown work operation ${value}.`);
 }
 
-const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", "candidates"];
+const usageOperations: readonly RetrievalUsageOperation[] = [
+  "index",
+  "search",
+  "candidates",
+  "rerank",
+];
 
 function sourceKindOf(value: string): RetrievalSourceKind {
   if (value === "portfolio" || value === "supplemental") return value;

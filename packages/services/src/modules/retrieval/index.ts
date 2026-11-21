@@ -21,6 +21,7 @@ import {
   createQueryCachingEmbedder,
   createRetriever,
   createVoyageEmbedder,
+  createVoyageReranker,
   DocumentRejectedError,
   contentHashOf,
   defaultDocumentLimits,
@@ -31,6 +32,7 @@ import {
   readRetrievalConfig,
   scheduleChanges,
   type Embedder,
+  type Reranker,
   type IndexReport,
   type PortfolioSnapshot,
   type ProcessOptions,
@@ -214,13 +216,15 @@ export interface KnowledgeServiceOptions {
   readonly config: RetrievalConfig | null;
   /** The embedding provider; without it every provider operation is unavailable. */
   readonly embedder?: Embedder;
+  /** The cross-encoder that ranks the final passages; without it search is unavailable. */
+  readonly reranker?: Reranker;
   /** Where originals of supplemental documents are kept; needed to ingest, show and approve. */
   readonly privateStorage?: PrivateStorage;
   /** Limits of a supplemental document; `defaultDocumentLimits` when absent. */
   readonly documentLimits?: DocumentLimits;
   /**
-   * How search ranks: `vector` (the default and what the site serves) or `fulltext`, the evals'
-   * full-text-only baseline.
+   * How search ranks: `reranked` (the default and what the site serves: the hybrid pool scored by
+   * the reranker) or one of the evals' baselines, `hybrid`, `vector` or `fulltext`.
    */
   readonly searchVariant?: SearchVariant;
 }
@@ -240,7 +244,8 @@ export function createKnowledgeService(
             store,
             embedder,
             config,
-            variant: options.searchVariant ?? "vector",
+            ...(options.reranker === undefined ? {} : { reranker: options.reranker }),
+            variant: options.searchVariant ?? "reranked",
           }),
         };
 
@@ -672,11 +677,11 @@ async function provider<Result>(operation: () => Promise<Result>): Promise<Resul
         error.status === undefined ? "" : `: it answered ${statusClass(error.status)}`;
       throw new DomainError(
         "provider_unavailable",
-        `The embedding provider is unavailable${answered}.`,
+        `The retrieval provider is unavailable${answered}.`,
       );
     }
     if (error instanceof BudgetExhaustedError) {
-      throw new DomainError("budget_exhausted", "The month's embedding budget is exhausted.");
+      throw new DomainError("budget_exhausted", "The month's retrieval budget is exhausted.");
     }
     throw error;
   }
@@ -784,9 +789,10 @@ async function snapshot({ profile, roadmap }: KnowledgeSources): Promise<Portfol
 
 /**
  * The retrieval options of a process from its environment: the `RETRIEVAL_*` settings (none set
- * switches retrieval off) and the Voyage embedder when `VOYAGE_API_KEY` is set. An absolute
+ * switches retrieval off) and, when `VOYAGE_API_KEY` is set, the Voyage embedder and reranker (the
+ * configured `RETRIEVAL_RERANK_MODEL`) on that key. An absolute
  * `RETRIEVAL_QUERY_CACHE_FILE` keeps query embeddings in that file and reuses them, for paid eval
- * runs only, and `RETRIEVAL_EVAL_VARIANT` (`vector` when absent, or `fulltext`) chooses the ranking
+ * runs only, and `RETRIEVAL_EVAL_VARIANT` (`reranked` when absent, `hybrid`, `vector` or `fulltext`) chooses the ranking
  * an eval run measures. Throws an error naming every invalid setting, never a value.
  */
 export function readRetrievalOptions(
@@ -812,13 +818,20 @@ export function readRetrievalOptions(
   return {
     config,
     embedder: cacheFile === "" ? voyage : createQueryCachingEmbedder(voyage, cacheFile),
+    reranker: createVoyageReranker({
+      apiKey,
+      model: config.rerankModel,
+      timeoutMs: config.providerTimeoutMs,
+      retries: config.providerRetries,
+      maxRetryWaitMs: config.providerMaxRetryWaitMs,
+    }),
     searchVariant,
   };
 }
 
 function searchVariantOf(value: string | undefined): SearchVariant {
   const variant = value?.trim() ?? "";
-  if (variant === "" || variant === "vector") return "vector";
-  if (variant === "fulltext") return "fulltext";
-  throw new Error("RETRIEVAL_EVAL_VARIANT must be vector or fulltext.");
+  if (variant === "" || variant === "reranked") return "reranked";
+  if (variant === "hybrid" || variant === "vector" || variant === "fulltext") return variant;
+  throw new Error("RETRIEVAL_EVAL_VARIANT must be reranked, hybrid, vector or fulltext.");
 }

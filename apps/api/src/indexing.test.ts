@@ -1,6 +1,6 @@
 // The knowledge index after content writes: a write through the API queues indexing, a deleted
 // record leaves search at once, and the queue brings the change into search in the background
-// without ever failing or delaying the write. Real Postgres, the fake embedder.
+// without ever failing or delaying the write. Real Postgres, the fake embedder and reranker.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { SearchResultSchema } from "@sebela/contracts";
@@ -11,7 +11,7 @@ import {
   type KnowledgeService,
   type RetrievalConfig,
 } from "@sebela/services";
-import { createFakeEmbedder } from "@sebela/services/testing";
+import { createFakeEmbedder, createFakeReranker } from "@sebela/services/testing";
 
 import {
   createIndexingQueue,
@@ -24,6 +24,8 @@ const config: RetrievalConfig = {
   embeddingModel: "fake",
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 32,
+  rerankModel: "fake-word-overlap",
+  rerankPricePerMillionTokensUsd: 0.05,
   providerTimeoutMs: 1000,
   providerRetries: 0,
   providerMaxRetryWaitMs: 0,
@@ -84,7 +86,9 @@ describe("indexing after content writes", () => {
   const provider = gatedEmbedder();
 
   beforeAll(async () => {
-    backend = await openTestBackend({ retrieval: { config, embedder: provider.embedder } });
+    backend = await openTestBackend({
+      retrieval: { config, embedder: provider.embedder, reranker: createFakeReranker() },
+    });
     await backend.services.seed.loadSeed(demoSeedFolder);
     await backend.services.knowledge.reindexPortfolio();
     auth = bearer((await backend.services.apiKeys.createKey("indexing")).key);
@@ -161,7 +165,7 @@ describe("indexing after content writes", () => {
       processPending: () => {
         runs += 1;
         return Promise.reject(
-          new DomainError("provider_unavailable", "The embedding provider is unavailable."),
+          new DomainError("provider_unavailable", "The retrieval provider is unavailable."),
         );
       },
     });
@@ -198,7 +202,7 @@ describe("indexing after content writes", () => {
       schedule: (changes) => knowledge.schedule(changes),
       processPending: () =>
         Promise.reject(
-          new DomainError("provider_unavailable", "The embedding provider is unavailable."),
+          new DomainError("provider_unavailable", "The retrieval provider is unavailable."),
         ),
     });
 
@@ -303,7 +307,7 @@ describe("indexing after content writes", () => {
         processPending: () => {
           runs += 1;
           return Promise.reject(
-            new DomainError("budget_exhausted", "The month's embedding budget is exhausted."),
+            new DomainError("budget_exhausted", "The month's retrieval budget is exhausted."),
           );
         },
       },

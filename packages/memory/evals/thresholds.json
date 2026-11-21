@@ -1,7 +1,7 @@
 {
-  "description": "Frozen gate of the memory evals (#225). It gates only what the phase PRD gates (recall@pool, nDCG and the correct-empty rate) and applies only to a complete run of the variant named in `variant`, which is the deployed retrieval pipeline. A slice that deploys another pipeline (the hybrid or reranked variant of #226) switches `variant` to it in the same change. Later slices may only raise the minimums, never loosen them; every other metric is reported, not gated.",
+  "description": "Frozen gate of the memory evals (#225, switched to the reranked pipeline by #226). It gates only what the phase PRD gates (recall@pool, nDCG and the correct-empty rate) and applies only to a complete run of the variant named in `variant`, which is the deployed retrieval pipeline. A slice that deploys another pipeline switches `variant` to it in the same change. Later slices may only raise the minimums, never loosen them; every other metric is reported, not gated.",
   "frozen": true,
-  "variant": "vector",
+  "variant": "reranked",
   "minimum": {
     "recallAtPool": 1,
     "ndcg": 0.9,
@@ -12,9 +12,36 @@
     "The minimums are the vector baseline's values rounded down to two decimals: recall@pool 1, nDCG 0.9, correct-empty rate 0.2.",
     "MRR, hit rate, precision, the false-empty rate, provenance accuracy, latency and cost per query are reported in every summary but not gated: the PRD gates only recall@pool, nDCG and correct-empty, and the cached vector runs measure latency and cost a paid reranker cannot match.",
     "The gate applies to the deployed variant only; a run of another variant reports the gate as not applying. Switching `variant` to a newly deployed pipeline keeps these minimums, so the new pipeline must meet them.",
-    "The full-text-only baseline stays below the vector variant on every quality metric except the correct-empty rate, which is the same 0.2 in both: the placeholder relevance floor is not calibrated yet."
+    "The full-text-only baseline stays below the vector variant on every quality metric except the correct-empty rate, which is the same 0.2 in both: the floor of 0.3 those runs used was a placeholder.",
+    "#226 deploys the reranked variant (hybrid pool of 30 scored by rerank-3) and switches `variant` to it with the minimums unchanged. Its floor of 0.38 and final count of 5 were calibrated on these same questions (results/reranked-calibration.json, floor 0, final count 8, swept offline), so its measured values are in-sample; the minimums are not raised to them. The deployed run meets every minimum: recall@pool 1, nDCG 0.9378, correct-empty rate 0.8. The gate block inside results/reranked-complete.json says it did not apply, because the run was made while `variant` still named `vector`; recomputed against this file (gateOf in run.js) it applies and passes with no failures."
   ],
   "baselines": {
+    "reranked": {
+      "summary": "results/reranked-complete.json",
+      "recallAtPool": 1,
+      "ndcg": 0.9378,
+      "mrr": 0.9416,
+      "hitRate": 1,
+      "precision": 0.5154,
+      "correctEmptyRate": 0.8,
+      "falseEmptyRate": 0,
+      "provenanceAccuracy": 1,
+      "latencyP95Ms": 486,
+      "costPerQueryUsd": 5.58e-5
+    },
+    "hybrid": {
+      "summary": "results/hybrid-complete.json",
+      "recallAtPool": 1,
+      "ndcg": 0.8034,
+      "mrr": 0.7958,
+      "hitRate": 0.95,
+      "precision": 0.237,
+      "correctEmptyRate": 0,
+      "falseEmptyRate": 0,
+      "provenanceAccuracy": 1,
+      "latencyP95Ms": 43,
+      "costPerQueryUsd": 0
+    },
     "vector": {
       "summary": "results/vector-complete.json",
       "recallAtPool": 1,

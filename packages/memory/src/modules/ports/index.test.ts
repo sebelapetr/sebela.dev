@@ -5,6 +5,8 @@ import { readRetrievalConfig } from "./index.js";
 const complete = {
   RETRIEVAL_EMBEDDING_MODEL: "voyage-4",
   RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD: "0.06",
+  RETRIEVAL_RERANK_MODEL: "rerank-3",
+  RETRIEVAL_RERANK_PRICE_PER_MILLION_TOKENS_USD: "0.05",
   RETRIEVAL_EMBEDDING_BATCH_SIZE: "64",
   RETRIEVAL_PROVIDER_TIMEOUT_MS: "10000",
   RETRIEVAL_PROVIDER_RETRIES: "2",
@@ -20,6 +22,8 @@ describe("readRetrievalConfig", () => {
     expect(readRetrievalConfig(complete)).toEqual({
       embeddingModel: "voyage-4",
       embeddingPricePerMillionTokensUsd: 0.06,
+      rerankModel: "rerank-3",
+      rerankPricePerMillionTokensUsd: 0.05,
       embeddingBatchSize: 64,
       providerTimeoutMs: 10000,
       providerRetries: 2,
@@ -44,6 +48,8 @@ describe("readRetrievalConfig", () => {
       RETRIEVAL_MONTHLY_CEILING_USD: "-1",
       RETRIEVAL_PROVIDER_RETRIES: "11",
       RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: undefined,
+      RETRIEVAL_RERANK_MODEL: " ",
+      RETRIEVAL_RERANK_PRICE_PER_MILLION_TOKENS_USD: "-0.05",
     };
     for (const name of [
       "RETRIEVAL_CANDIDATE_POOL",
@@ -52,6 +58,8 @@ describe("readRetrievalConfig", () => {
       "RETRIEVAL_MONTHLY_CEILING_USD",
       "RETRIEVAL_PROVIDER_RETRIES",
       "RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS",
+      "RETRIEVAL_RERANK_MODEL",
+      "RETRIEVAL_RERANK_PRICE_PER_MILLION_TOKENS_USD",
     ]) {
       expect(() => readRetrievalConfig(partial)).toThrow(name);
     }

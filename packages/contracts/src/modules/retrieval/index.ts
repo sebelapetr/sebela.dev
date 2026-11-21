@@ -62,7 +62,10 @@ const passageFields = {
   title: z.string().min(1).max(300),
   version: VersionSchema,
   text: z.string().min(1).max(retrievalPassageMaxLength),
-  score: z.number().min(-1).max(1).meta({ description: "Cosine similarity to the query." }),
+  score: z.number().min(-1).max(1).meta({
+    description:
+      "Relevance to the query, higher is better: the reranker's score in the deployed search.",
+  }),
 };
 
 const provenance = <Kind extends z.ZodType<RetrievalContentKind>>(contentKind: Kind) =>

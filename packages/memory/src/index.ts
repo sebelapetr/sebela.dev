@@ -14,6 +14,8 @@ export type {
   NearestChunk,
   NearestQuery,
   PortfolioSnapshot,
+  Reranker,
+  Reranking,
   RetrievalConfig,
   RetrievalStore,
   SourceKind,
@@ -32,11 +34,19 @@ export type { SourceChunk, SourceSection } from "./modules/ingest/index.js";
 export { scheduleChanges } from "./modules/scheduling/index.js";
 export {
   createFakeEmbedder,
+  createFakeReranker,
   createQueryCachingEmbedder,
   createVoyageEmbedder,
+  createVoyageReranker,
   fakeEmbeddingModel,
+  fakeRerankModel,
 } from "./modules/providers/index.js";
-export type { FakeEmbedderOptions, VoyageEmbedderOptions } from "./modules/providers/index.js";
+export type {
+  FakeEmbedderOptions,
+  FakeRerankerOptions,
+  VoyageEmbedderOptions,
+  VoyageRerankerOptions,
+} from "./modules/providers/index.js";
 export { createIndexer, maxWorkAttempts, workBatchLimit } from "./modules/indexing/index.js";
 export type {
   DocumentEmbedding,
