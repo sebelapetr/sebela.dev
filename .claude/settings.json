@@ -116,7 +116,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "backend-developer|frontend-developer|ai-developer",
+        "matcher": "backend-developer|frontend-developer|ai-developer|general-purpose",
         "hooks": [
           {
             "type": "command",
