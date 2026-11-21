@@ -620,7 +620,7 @@
         "portfolio:experience:harbor-retail-senior-developer": 2,
         "document:harbor-retail-cv-2021": 1
       },
-      "note": "The 2021 CV contradicts the structured end date (2022-03-31); the structured fact must rank first."
+      "note": "The 2021 CV contradicts the structured end date (2022-03-31); its contradicting chunk is held back and only its remaining chunk can be found. The case passes whichever of the two relevant sources ranks first; only nDCG rewards the structured experience (relevance 2) ranking above the document, which the vector baseline ranks first."
     },
     {
       "id": "supplemental-loyalty",
