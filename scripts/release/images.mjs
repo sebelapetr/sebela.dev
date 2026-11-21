@@ -8,26 +8,33 @@
 //   SHA=<commit> BUILD='["web"]' node scripts/release/images.mjs build
 //   SHA=<commit> BUILD='["web"]' node scripts/release/images.mjs publish
 //
-// `plan` prints `key=value` lines for $GITHUB_OUTPUT on standard output; every command explains
-// itself on standard error. Plain Node with no dependencies; the commands run git, the checkout's
-// installed Turborepo and the Docker CLI, signed in to GHCR where they read or write it.
+// `plan` and `publish` print `key=value` lines for $GITHUB_OUTPUT on standard output; every
+// command explains itself on standard error. Plain Node with no dependencies; the commands run git,
+// the checkout's installed Turborepo and the Docker CLI, signed in to GHCR where they read or
+// write it.
 //
 // - plan: each service is judged against the commit of its current image (the `current` tag, the
 //   last verified image published from master, by the commit SHA in its revision label). It is
 //   built when it has no current image, or when Turborepo's affected packages between that commit
 //   and SHA (the selection the quality job of CI uses, with every dependent package) include its
-//   app or a root file that enters every image build changed. Otherwise its current image is
-//   reused. So a change whose own release failed or was cancelled is built by the next release.
-//   A current image whose commit is not an ancestor of SHA refuses the release: a rerun of an
-//   older release must not move it backwards. Prints the services to build and reuse, the
-//   complete tag set and whether there is anything to release.
+//   app or a root file that enters every image build changed. As in CI, documentation is no
+//   change (scripts/checks/without-documentation.mjs): Turborepo compares that commit with SHA
+//   without its documentation changes, so a README or AGENTS.md edit builds no image. Otherwise
+//   its current image is reused. So a change whose own release failed or was cancelled is built
+//   by the next release. A current image whose commit is not an ancestor of SHA refuses the
+//   release: a rerun of an older release must not move it backwards. Prints the services to
+//   build and reuse, the complete tag set and whether there is anything to release.
 // - pull: pulls the reused images by their commit tags.
 // - build: builds the images under their GHCR names, tagged with SHA and labelled with it.
 // - publish: checks again that no current image is newer than SHA, pushes the SHA tags of the
-//   built images, then moves their `current` tags.
+//   built images, reads the digest the registry holds for each, then moves their `current` tags.
+//   Prints the digests (service to `sha256:...`), the subjects of the images' build provenance
+//   and SBOM attestations.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
+
+import { withoutDocumentation } from "../checks/without-documentation.mjs";
 
 export const SERVICES = ["api", "web", "mcp-admin"];
 
@@ -54,6 +61,8 @@ const REVISION_LABEL = "org.opencontainers.image.revision";
 const PLATFORM = "linux/arm64";
 
 const COMMIT = /^[0-9a-f]{40}$/;
+
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
 
 const CHECKOUT_ROOT = path.join(import.meta.dirname, "..", "..");
 
@@ -135,6 +144,19 @@ export function revisionLabel(image) {
   const config = image?.config ? image : image?.[PLATFORM];
   const revision = config?.config?.Labels?.[REVISION_LABEL];
   return typeof revision === "string" ? revision : null;
+}
+
+/**
+ * The digest of a pushed image, from `docker buildx imagetools inspect --format '{{json
+ * .Manifest}}'`: the descriptor of the manifest, or the index, that the registry holds for the tag.
+ * Throws when it names no SHA-256 digest.
+ */
+export function manifestDigest(descriptor) {
+  const digest = descriptor?.digest;
+  if (typeof digest !== "string" || !DIGEST.test(digest)) {
+    throw new Error(`The registry names no SHA-256 digest for the image: ${String(digest)}`);
+  }
+  return digest;
 }
 
 /** `key=value` lines for $GITHUB_OUTPUT, every value as JSON. */
@@ -225,29 +247,41 @@ function ancestorOf(sha) {
     }).status === 0;
 }
 
-function affectedSinceFor(sha) {
+/**
+ * For a release of commit `sha`: a function that gives the services a change from a current
+ * image's commit to `sha` affects. Documentation is no change: Turborepo (`turbo`, by default the
+ * checkout's installed one) compares the commit with `sha` without its documentation, and only the
+ * other changed files can enter every image build. Runs Git and Turborepo in `cwd`; `log` explains.
+ */
+export function affectedSinceFor(
+  sha,
+  {
+    cwd = CHECKOUT_ROOT,
+    turbo = path.join(CHECKOUT_ROOT, "node_modules", ".bin", "turbo"),
+    log: say = log,
+  } = {},
+) {
   return (revision) => {
-    const changedFiles = run("git", ["diff", "--name-only", revision, sha])
-      .split("\n")
-      .filter((line) => line !== "");
-    const output = run(
-      path.join(CHECKOUT_ROOT, "node_modules", ".bin", "turbo"),
-      ["query", "affected", "--packages"],
-      {
-        env: {
-          ...process.env,
-          TURBO_TELEMETRY_DISABLED: "1",
-          TURBO_SCM_BASE: revision,
-          TURBO_SCM_HEAD: sha,
-        },
+    // The plan has checked that `revision` is an ancestor of `sha`, so the change always resolves.
+    const change = withoutDocumentation(revision, sha, { cwd });
+    if (change === null) throw new Error(`The change from ${revision} to ${sha} cannot be listed.`);
+    const changedFiles = change.files;
+    const output = run(turbo, ["query", "affected", "--packages"], {
+      cwd,
+      env: {
+        ...process.env,
+        TURBO_TELEMETRY_DISABLED: "1",
+        TURBO_SCM_BASE: revision,
+        TURBO_SCM_HEAD: change.head,
       },
-    );
+    });
     const packages = affectedPackages(JSON.parse(output));
     const services = affectedServices({ packages, changedFiles });
-    log(`Since ${revision}:`);
-    log(`  changed files: ${changedFiles.join(", ") || "none"}`);
-    log(`  affected packages: ${packages.join(", ") || "none"}`);
-    log(`  affected services: ${services.join(", ") || "none"}`);
+    say(`Since ${revision}:`);
+    say(`  documentation, no change: ${change.documentation.join(", ") || "none"}`);
+    say(`  changed files: ${changedFiles.join(", ") || "none"}`);
+    say(`  affected packages: ${packages.join(", ") || "none"}`);
+    say(`  affected services: ${services.join(", ") || "none"}`);
     return services;
   };
 }
@@ -315,15 +349,31 @@ function publishCommand() {
     );
   }
   // Every commit tag first, so a `current` tag never names a commit tag that is not published.
+  const digests = {};
   for (const service of built) {
-    run("docker", ["push", "--quiet", `${imageName(service)}:${sha}`]);
-    log(`Pushed ${imageName(service)}:${sha}`);
+    const reference = `${imageName(service)}:${sha}`;
+    run("docker", ["push", "--quiet", reference]);
+    // As the registry holds it: the subject the attestations are made for.
+    digests[service] = manifestDigest(
+      JSON.parse(
+        run("docker", [
+          "buildx",
+          "imagetools",
+          "inspect",
+          "--format",
+          "{{json .Manifest}}",
+          reference,
+        ]),
+      ),
+    );
+    log(`Pushed ${reference} as ${digests[service]}`);
   }
   for (const service of built) {
     run("docker", ["tag", `${imageName(service)}:${sha}`, `${imageName(service)}:${CURRENT_TAG}`]);
     run("docker", ["push", "--quiet", `${imageName(service)}:${CURRENT_TAG}`]);
     log(`Moved ${imageName(service)}:${CURRENT_TAG} to ${sha}`);
   }
+  process.stdout.write(formatOutputs({ digests }));
 }
 
 const COMMANDS = {

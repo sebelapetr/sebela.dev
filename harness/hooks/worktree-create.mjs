@@ -6,7 +6,7 @@
 // fails the hook and keeps the worktree, so creating it again retries.
 // Must print the worktree path as the last line of stdout; everything else goes to stderr.
 
-import { createWorktree, mainRootFrom } from "../worktree.mjs";
+import { continuedNotice, createWorktree, mainRootFrom } from "../worktree.mjs";
 import { readHookInput } from "./read-input.mjs";
 
 try {
@@ -14,6 +14,9 @@ try {
   if (!input.name) throw new Error("WorktreeCreate input has no name");
   const mainRoot = mainRootFrom(input.cwd ?? process.cwd());
   const result = createWorktree({ branch: input.name, base: "HEAD", mainRoot });
+  if (result.resumed) {
+    process.stderr.write(`${continuedNotice(result.requested, result.resumed)}\n`);
+  }
   process.stderr.write(
     `worktree ${result.name} on slot ${result.slot} with database ${result.database}\n`,
   );

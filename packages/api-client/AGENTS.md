@@ -29,7 +29,7 @@ The API key is sent as `Authorization: Bearer` only to operations whose OpenAPI 
 | Check that the committed files match a regeneration (CI)    | `pnpm check:api-client`                     |
 | Only regenerate the types from the committed document       | `pnpm --filter @sebela/api-client generate` |
 
-`src/generated/openapi.json` is exported from the API's source by `openapi:export` of `@sebela/api`, with no database, configuration or secrets; `src/generated/schema.ts` is generated from it by openapi-typescript (`--default-non-nullable false`). Both are committed, never edited by hand, excluded from ESLint and Prettier and typechecked with the strict configuration. The same inputs always give byte-identical files.
+`src/generated/openapi.json` is exported from the API's source by `openapi:export` of `@sebela/api`, with no database, configuration or secrets; `src/generated/schema.ts` is generated from it by openapi-typescript (`--default-non-nullable false`). Both are committed, never edited by hand, excluded from ESLint and Prettier and typechecked with the strict configuration. The root `.gitattributes` marks them `linguist-generated`, so GitHub collapses them in pull request diffs and leaves them out of the language statistics; it also covers the Python client in its phase-6 and its shared-package location. The same inputs always give byte-identical files.
 
 **Every pull request that adds, removes or changes a route or a contract schema** runs `pnpm generate:api-client`, commits `src/generated/`, exports any new DTO from `src/index.ts` and extends the consumer contract tests in `apps/api/src/client.test.ts`. CI's drift check fails when the committed files differ from a regeneration.
 

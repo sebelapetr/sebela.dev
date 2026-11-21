@@ -243,3 +243,122 @@ test("the requested branch itself, other issues and branches without an issue ar
 test("a local branch is preferred over a remote one of the same issue", () => {
   assert.equal(existingIssueBranch("feat/5-b", ["origin/feat/5-a", "feat/5-c"]), "feat/5-c");
 });
+
+// Issue 323: `docs/15-pages-decisions` was set up on the merged `docs/15-pages-prd`, because the
+// phase number of `.plan/15-pages/` was read as an issue number.
+test("a branch that is not cut from a phase branch continues no other branch", () => {
+  const branches = ["master", "docs/15-pages-prd", "feat/18-postgres", "origin/feat/19-search"];
+  for (const base of ["origin/master", "master", "HEAD", "docs/15-pages-prd"]) {
+    assert.equal(existingIssueBranch("docs/15-pages-decisions", branches, { base }), null, base);
+    assert.equal(existingIssueBranch("fix/18-other-name", branches, { base }), null, base);
+    assert.equal(existingIssueBranch("fix/19-other-name", branches, { base }), null, base);
+  }
+});
+
+test("an issue branch cut from a phase branch, local or remote, continues the issue's branch", () => {
+  const branches = ["master", "phase/02-api-db", "feat/18-postgres", "origin/feat/19-search"];
+  for (const base of ["phase/02-api-db", "origin/phase/02-api-db", "origin/phase/07.1-gateway"]) {
+    assert.equal(
+      existingIssueBranch("fix/18-other-name", branches, { base }),
+      "feat/18-postgres",
+      base,
+    );
+    assert.equal(
+      existingIssueBranch("docs/19-other-name", branches, { base }),
+      "feat/19-search",
+      base,
+    );
+  }
+});
+
+test("a phase branch is never continued on an issue branch of the same number", () => {
+  const branches = ["master", "feat/15-profile-api", "origin/fix/15-profile-api"];
+  assert.equal(existingIssueBranch("phase/15-pages", branches), null);
+  assert.equal(existingIssueBranch("phase/15-pages", branches, { base: "origin/master" }), null);
+  assert.equal(existingIssueBranch("phase/15-pages", branches, { base: "phase/14-search" }), null);
+});
+
+test("an issue branch is never continued on a phase branch of the same number", () => {
+  const branches = ["master", "phase/15-pages", "origin/phase/15-pages", "origin/phase/15-other"];
+  assert.equal(existingIssueBranch("feat/15-profile-api", branches), null);
+  assert.equal(
+    existingIssueBranch("feat/15-profile-api", branches, { base: "origin/phase/15-pages" }),
+    null,
+  );
+});
+
+test("branches named after a phase folder do not share an issue", () => {
+  // Cut from the phase branch itself.
+  assert.equal(
+    existingIssueBranch("docs/15-pages-decisions", ["docs/15-pages-prd", "chore/15-pages"], {
+      base: "origin/phase/15-pages",
+    }),
+    null,
+  );
+  // The phase is known from its branch, whatever the base.
+  for (const phase of ["phase/15-pages", "origin/phase/15-pages"]) {
+    const branches = ["master", phase, "docs/15-pages-prd", "origin/chore/15-pages-plan-done"];
+    assert.equal(existingIssueBranch("docs/15-pages-decisions", branches), null, phase);
+    assert.equal(
+      existingIssueBranch("docs/15-pages-decisions", branches, { base: "phase/14-search" }),
+      null,
+      phase,
+    );
+  }
+  // An issue of the same number under another slug is still an issue.
+  assert.equal(
+    existingIssueBranch("feat/15-profile-api", ["docs/15-pages-prd", "fix/15-profile"], {
+      base: "origin/phase/15-pages",
+    }),
+    "fix/15-profile",
+  );
+});
+
+test("a zero-padded number is a phase number, never an issue number", () => {
+  const branches = ["chore/06-llm-agent-plan-done", "origin/docs/06-llm-agent-prd"];
+  assert.equal(existingIssueBranch("docs/06-llm-agent-decisions", branches), null);
+  assert.equal(
+    existingIssueBranch("docs/06-llm-agent-decisions", branches, { base: "phase/05-chat" }),
+    null,
+  );
+});
+
+test("only the documented branch types carry an issue number", () => {
+  const base = "origin/phase/02-api-db";
+  assert.equal(existingIssueBranch("wip/17-a", ["feat/17-b"], { base }), null);
+  assert.equal(existingIssueBranch("feat/17-a", ["wip/17-b", "release/17-c"], { base }), null);
+  for (const type of ["feat", "fix", "docs", "refactor", "test", "chore", "ci"]) {
+    assert.equal(existingIssueBranch(`${type}/17-a`, ["feat/17-b"], { base }), "feat/17-b", type);
+    assert.equal(existingIssueBranch("feat/17-a", [`${type}/17-b`], { base }), `${type}/17-b`);
+  }
+});
+
+test("a merged branch is not continued", () => {
+  const base = "origin/phase/02-api-db";
+  const asked = [];
+  const merged = (...args) => {
+    asked.push(args);
+    return args[0] === "feat/17-merged" || args[0] === "origin/feat/17-merged-remote";
+  };
+  assert.equal(existingIssueBranch("fix/17-again", ["feat/17-merged"], { base, merged }), null);
+  assert.equal(
+    existingIssueBranch("fix/17-again", ["feat/17-merged", "origin/feat/17-merged-remote"], {
+      base,
+      merged,
+    }),
+    null,
+  );
+  assert.equal(
+    existingIssueBranch(
+      "fix/17-again",
+      ["feat/17-merged", "feat/18-other", "origin/feat/17-merged-remote", "origin/feat/17-open"],
+      { base, merged },
+    ),
+    "feat/17-open",
+  );
+  // Only branches of the same issue are looked at, under the name they were listed with.
+  assert.deepEqual(
+    [...new Set(asked.flat())].sort(),
+    ["feat/17-merged", "origin/feat/17-merged-remote", "origin/feat/17-open"].sort(),
+  );
+});

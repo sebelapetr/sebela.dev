@@ -1,14 +1,19 @@
-# Paid model evals: only the suites a change affects, and not on every push (docs/testing.md,
-# Evals-driven development). The phase loop opens a phase pull request as a draft, which runs no
-# evals; the owner marks it ready for review when the phase is complete, HITL work included, and
-# that runs them once on the final state. Each suite has its own job and its own paths: its folder and what can
-# change its behaviour. A suite runs in full on a pull request into the main branch when it is
-# opened, reopened or marked ready for review and the pull request changes one of its paths, and
-# by hand (workflow_dispatch, one suite or all). New commits on the pull request start no charged
-# run; start one by hand when a fix needs it. Issue pull requests into phase branches never run
-# paid evals; developers run the affected cases locally, where the eval command reads the key from
-# the main checkout's .env.secrets. The key comes from the repository secret ANTHROPIC_API_KEY and
-# is given only to the step that runs the evals.
+# Paid model evals: only on a phase pull request or by hand, only the suites a change affects, and
+# not on every push (docs/testing.md, Evals-driven development). They start by themselves only on a
+# phase pull request, head branch phase/<phase-folder> into the main branch, when it is opened,
+# reopened or marked ready for review and is not a draft; the suites it affects then run in full.
+# The phase loop opens a phase pull request as a draft, which runs no evals; the owner marks it
+# ready for review when the phase is complete, HITL work included, and that runs them once on the
+# final state. New commits on the pull request start no charged run. Every other pull request
+# (a fix, a dependency update, documentation) starts none, whatever it changes: the job
+# `Affected eval suites` ends green without selecting a suite (scripts/checks/paid-evals-trigger.mjs).
+# When such a change, or a fix on a phase pull request, needs a suite, start it by hand
+# (workflow_dispatch, one suite or all: Actions, Model evals, Run workflow, or
+# `gh workflow run model-evals.yml --ref <branch> -f suite=<suite>`); every run is charged. Each
+# suite has its own job and its own paths: its folder and what can change its behaviour. Issue pull
+# requests into phase branches never run paid evals; developers run the affected cases locally,
+# where the eval command reads the key from the main checkout's .env.secrets. The key comes from
+# the repository secret ANTHROPIC_API_KEY and is given only to the step that runs the evals.
 name: Model evals
 
 on:
@@ -34,7 +39,8 @@ permissions:
   contents: read
 
 jobs:
-  # Which suites the pull request affects. A manual run selects them by its input instead.
+  # Which suites the pull request affects: none unless it is a phase pull request. A manual run
+  # selects them by its input instead.
   changes:
     name: Affected eval suites
     # A draft pull request runs no evals: the phase is not complete yet.
@@ -44,10 +50,23 @@ jobs:
       mcp-admin: ${{ steps.affected.outputs.mcp-admin }}
       llm-agent: ${{ steps.affected.outputs.llm-agent }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Only a phase pull request (head branch phase/<phase-folder>) or a manual run may start paid
+      # evals. On any other pull request the next step is skipped, so no suite is selected and
+      # every suite's job is skipped. The head branch is passed as an environment variable, never
+      # written into a shell line.
+      - id: trigger
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/checks/paid-evals-trigger.mjs >> "$GITHUB_OUTPUT"
       - id: affected
+        if: steps.trigger.outputs.paid-evals == 'true'
         env:
           EVENT: ${{ github.event_name }}
           SUITE: ${{ inputs.suite }}
@@ -63,9 +82,14 @@ jobs:
               echo "$name=false"
             fi
           }
-          # MCP Admin: its app, the API it calls, the contracts and client between them, the
-          # services and database behind the API, the lockfile and this workflow.
-          affected mcp-admin '^(apps/mcp-admin/|apps/api/|packages/(contracts|api-client|services|db)/|pnpm-lock\.yaml$|\.github/workflows/model-evals\.yml$)' >> "$GITHUB_OUTPUT"
+          # MCP Admin: its app, its job below, and the routes it calls in the API contract, the API
+          # client and their locked dependencies, decided by scripts/checks/mcp-admin-evals-affected.mjs
+          # (docs/testing.md, CI). A route added for another consumer does not run it.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            affected mcp-admin '' >> "$GITHUB_OUTPUT"
+          else
+            node scripts/checks/mcp-admin-evals-affected.mjs "$BASE" HEAD >> "$GITHUB_OUTPUT"
+          fi
           # Python agent: its package, the API its evals read through (and what is behind it), the
           # contract its content client is generated from, the Python toolchain and lockfiles and
           # this workflow.
@@ -82,9 +106,9 @@ jobs:
       POSTGRES_PASSWORD: ci-only-disposable-password
       DATABASE_PASSWORD: ci-only-disposable-password
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -105,7 +129,7 @@ jobs:
           node evals/run.js
       - name: Redacted eval summary
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mcp-admin-evals
           path: |
@@ -133,13 +157,13 @@ jobs:
       POSTGRES_PASSWORD: ci-only-disposable-password
       DATABASE_PASSWORD: ci-only-disposable-password
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version-file: pyproject.toml
       - run: pnpm install --frozen-lockfile
@@ -190,7 +214,7 @@ jobs:
               print(notice.format(round(spent, 6), round(uncertain, 6), remaining) + " (no summary: read from the ledger)")'
       - name: Redacted eval summary
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: llm-agent-evals
           path: |

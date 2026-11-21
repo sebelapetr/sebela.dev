@@ -42,7 +42,11 @@ The external agent brings its own model. The MCP server returns structured resul
 
 - Deterministic protocol/contract tests with a test FastAPI/API and fictional data: discovery, schemas, pagination, result/source parity with chat tools, invalid and oversized arguments, missing records, timeout and rate limits.
 - Negative tests prove public requests cannot reach generation, content writes, visitor conversations, credentials or raw source storage. Public MCP has no generation service credential.
-- Evals-first for external-agent tool selection and truthful source use; reuse the repository Promptfoo runner and existing fictional cases rather than creating another agent platform.
+- Evals-first for external-agent tool selection and truthful source use, under the owner-approved cost controls of 2026-11-21 ([decision 0026](../../docs/decisions/0026-eval-cost-controls-for-later-phases.md)); gates, thresholds and critical-100% rules are set before implementation and not lowered:
+  - **Deterministic first.** Protocol, schemas, parity with the chat tools, no generation, unknown tool and limits are deterministic tests, not paid cases.
+  - **A small paid set.** About 12 fictional cases × 3 repeats, graded by code: expected tool calls and arguments, cited source IDs. The LLM judge runs only on the truthful-source cases. Reuse the Python Promptfoo runner, its budget module, ledger and allowance, and the existing fictional fixtures rather than creating another agent platform.
+  - **Pinned subject.** Claude Haiku 5.5 for development and the gate, plus one confirmation run with Claude Sonnet 5.5 at the phase PR (about USD 1.3). Use prompt caching on the fixed tool list. While a tool description or schema is still changing, screen with 1 repeat without the judge, then 1 judged repeat; only the final version's 3-repeat run counts for the gate.
+  - **Budget: USD 2.30 for the phase-8 campaign**: USD 1.00 for the Haiku campaign and USD 1.30 for the Sonnet confirmation. The per-run stop of USD 1.00 applies to issue runs, not to the full phase-PR run. Missing keys or an exhausted allowance leave coverage pending, never passed.
 - Verify setup examples with the owner's supported clients and check `/mcp` at the required widths/themes. Include a text-only client path; no MCP Apps prerequisite.
 
 ## Out of Scope

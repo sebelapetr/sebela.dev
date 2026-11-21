@@ -8,3 +8,6 @@ packages/api-client/src/generated/
 
 # Archived phase plans are frozen as they were merged; moving them must not reformat them.
 .plan/done/
+
+# Written by scripts/release/deployment.mjs; each section must stay byte-equal to its GitHub release notes.
+CHANGELOG.md
