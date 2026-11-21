@@ -15,11 +15,18 @@
 # - docker, /apps/*: the base image of every app's Dockerfile, pinned by tag and digest; an update
 #   moves both. Weekly: every update of all Dockerfiles in one pull request, a new digest of the
 #   same tag included (Node.js majors are ignored below).
+# - uv, /: the uv workspace of the Python members (the exact versions in every member's
+#   pyproject.toml and uv.lock). Weekly: minor and patch updates in one pull request, each major
+#   update in its own. Dependabot runs its own, newer uv, which `required-version` in the root
+#   pyproject.toml admits as a lower bound; CI checks the result with the repository's uv
+#   (scripts/checks/uv-version.test.mjs). The build backend uv_build follows that uv version and
+#   moves by hand with it, so it is ignored below. The client generator (openapi-python-client)
+#   and the formatter and linter (Ruff) are kept out of the group: a 0.x minor of either can
+#   change the generated client or the lint result, and would turn the whole group red.
 #
 # Node.js majors are not proposed: the Node.js version follows .nvmrc and `engines` in package.json
 # and moves by hand, with @types/node and the images. A cooldown of seven days lets a new release
-# settle before it is proposed (security updates ignore it). The uv workspace is not covered yet:
-# Dependabot's uv cannot run under its `required-version` pin (docs/git-workflow.md).
+# settle before it is proposed (security updates ignore it).
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -79,6 +86,28 @@ updates:
         update-types:
           - version-update:semver-major
     open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore
+      include: scope
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      uv-minor-patch:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - openapi-python-client
+          - ruff
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: uv-build
+    open-pull-requests-limit: 5
     commit-message:
       prefix: chore
       include: scope
