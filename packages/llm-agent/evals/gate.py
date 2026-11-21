@@ -14,6 +14,7 @@ needs the owner.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -83,7 +84,9 @@ class GateReport:
         }
 
 
-def evaluate_gate(runs: Sequence[CaseRun], selected: Iterable[str]) -> GateReport:
+def evaluate_gate(
+    runs: Sequence[CaseRun], selected: Iterable[str], *, repeats: int = REPEATS
+) -> GateReport:
     selected_ids = tuple(selected)
     failures: list[str] = []
 
@@ -101,9 +104,9 @@ def evaluate_gate(runs: Sequence[CaseRun], selected: Iterable[str]) -> GateRepor
         if case is None or case.status != "implemented":
             failures.append(f"{case_id}: not an implemented case")
             continue
-        repeats = {run.repeat for run in runs if run.case_id == case_id}
-        if len(repeats) < REPEATS:
-            failures.append(f"{case_id}: {len(repeats)} of {REPEATS} repeats ran")
+        ran = {run.repeat for run in runs if run.case_id == case_id}
+        if len(ran) < repeats:
+            failures.append(f"{case_id}: {len(ran)} of {repeats} repeats ran")
 
     counted = [run for run in runs if run.case_id in selected_ids and run.case_id in BY_ID]
     critical_runs = [run for run in counted if BY_ID[run.case_id].critical]
@@ -171,3 +174,15 @@ def evaluate_gate(runs: Sequence[CaseRun], selected: Iterable[str]) -> GateRepor
         selected=selected_ids,
         pending=pending_ids,
     )
+
+
+def latency_percentiles(latencies: Sequence[object]) -> dict[str, int | None]:
+    """Nearest-rank p50 and p95 of the case-runs that measured a latency, in milliseconds."""
+    measured = sorted(value for value in latencies if isinstance(value, int))
+    if not measured:
+        return {"runs": 0, "p50": None, "p95": None}
+
+    def rank(quantile: float) -> int:
+        return measured[max(math.ceil(quantile * len(measured)) - 1, 0)]
+
+    return {"runs": len(measured), "p50": rank(0.50), "p95": rank(0.95)}

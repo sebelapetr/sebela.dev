@@ -56,6 +56,13 @@ class ChatAgent:
         limits: ExecutionLimits | None = None,
         cancel: asyncio.Event | None = None,
     ) -> ChatResult:
+        """Answers `request` within `limits` (the defaults when omitted).
+
+        `limits` is trusted as given and not revalidated: callers pass an `ExecutionLimits` the
+        request schema produced. Only the evals' Main-model comparison constructs a
+        `ComparisonLimits` above the public cost cap; services must not rely on this method to
+        refuse one.
+        """
         result = await self._run(request, limits or ExecutionLimits(), cancel)
         export(self._telemetry, result)
         return result

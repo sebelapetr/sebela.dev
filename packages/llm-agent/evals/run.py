@@ -10,16 +10,23 @@
         grade a stored run's answers again with the current graders: free without `--judge`
         (compatible stored judgements are reused; changed ones stay ungraded and fail); with
         `--judge`, missing or incompatible judgements are bought again (paid)
+    python -m evals.run --compare <candidate> [--case <id>...] --allowance <usd>
+        the fixed comparison subset of `evals/comparison.py` (or a slice of it named with
+        `--case`), 1 repeat per case, with the named candidate as the Main model and its
+        comparison-only execution limits (paid; a screening comparison, never a release pass)
+    python -m evals.run --compare-report <run-folder> [<run-folder>...]
+        the comparison summaries of those runs side by side, slices of one candidate merged (free)
     python -m evals.run --check-fixture
         start and stop the fictional test API and read the fixture through it (free)
 
-An unknown option, an unknown, pending or repeated case, or a regrade with case options stops the
-runner before any setting is read, fixture started or model called.
+An unknown option, an unknown, pending or repeated case, a regrade with case options, or an unknown
+candidate stops the runner before any setting is read, fixture started or model called.
 
 Budget (`evals/budget.py`): every paid command states the campaign's remaining allowance with
 `--allowance`; the run may spend at most that, capped by what this checkout's ledger leaves of the
 cumulative USD 10 ceiling. Before the subject runs, every case-run is reserved at the agent's own
-execution allowance and every judge call at its upper bound; a reservation over the allowance is a
+execution allowance (in a comparison, the candidate's; `comparison.execution_limits`) and every
+judge call at its upper bound; a reservation over the allowance is a
 block (exit 2) before anything is paid. A missing model key is the same visible block, never a
 pass. Unmeasured spend consumes its whole reservation.
 
@@ -54,7 +61,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from evals import budget
+from evals import budget, comparison
 from evals.catalogue import BY_ID as CATALOGUE
 from evals.catalogue import REPEATS, implemented
 from evals.datasets.cases import BY_ID as CASES
@@ -64,7 +71,7 @@ from evals.datasets.cases import (
     FIXTURE_FOLDER,
     FIXTURE_PERSON,
 )
-from evals.gate import CaseRun, evaluate_gate
+from evals.gate import CaseRun, evaluate_gate, latency_percentiles
 from evals.graders import rubric
 from evals.graders.code import fixture_contact, grade_code
 from evals.provider import RECORD_SCHEMA
@@ -103,11 +110,13 @@ class UsageError(Exception):
 
 @dataclass(frozen=True)
 class Plan:
-    mode: str  # "run" | "regrade" | "check-fixture"
+    mode: str  # "run" | "compare" | "compare-report" | "regrade" | "check-fixture"
     cases: tuple[str, ...] = ()
     allowance_usd: float | None = None
     regrade: Path | None = None
     judge: bool = False
+    candidate: str | None = None
+    folders: tuple[Path, ...] = ()
 
 
 def plan(argv: Sequence[str]) -> Plan:
@@ -118,10 +127,27 @@ def plan(argv: Sequence[str]) -> Plan:
     judge = False
     every = False
     check = False
+    compare: str | None = None
+    report: list[str] | None = None
+    others = False
     args = list(argv)
     while args:
         option = args.pop(0)
-        if option in ("--case", "--allowance", "--regrade"):
+        if option != "--compare-report":
+            others = True
+        if option == "--compare-report":
+            if report is not None:
+                raise UsageError("--compare-report given twice")
+            report = []
+            while args and not args[0].startswith("--"):
+                report.append(args.pop(0))
+        elif option == "--compare":
+            if not args or args[0].startswith("--"):
+                raise UsageError("--compare needs a value (a candidate name)")
+            if compare is not None:
+                raise UsageError("--compare given twice")
+            compare = args.pop(0)
+        elif option in ("--case", "--allowance", "--regrade"):
             if not args or args[0].startswith("--"):
                 raise UsageError(f"{option} needs a value")
             value = args.pop(0)
@@ -144,10 +170,57 @@ def plan(argv: Sequence[str]) -> Plan:
         else:
             raise UsageError(f"unknown option {option}")
 
+    if report is not None:
+        if others:
+            raise UsageError("--compare-report takes no other option")
+        if not report:
+            raise UsageError("--compare-report needs one or more run folders")
+        return Plan(mode="compare-report", folders=tuple(Path(folder) for folder in report))
+
     if check:
-        if cases or every or regrade or judge or allowance:
+        if cases or every or regrade or judge or allowance or compare:
             raise UsageError("--check-fixture takes no other option")
         return Plan(mode="check-fixture")
+
+    if compare is not None:
+        if every or regrade or judge:
+            raise UsageError(
+                "--compare runs the fixed subset (or a --case slice of it) with 1 repeat;"
+                " it takes no --all, --regrade or --judge"
+            )
+        try:
+            comparison.candidate(compare)
+        except ValueError as error:
+            raise UsageError(str(error)) from error
+        subset = comparison.subset_ids()
+        named: list[str] = []
+        for case_id in cases:
+            if case_id not in subset:
+                raise UsageError(f"{case_id} is not in the comparison subset")
+            if case_id in named:
+                raise UsageError(f"{case_id} named twice")
+            named.append(case_id)
+        if allowance is None:
+            raise UsageError(
+                "a paid run needs --allowance <usd> (the campaign's remaining allowance)"
+            )
+        chosen = tuple(named) if named else subset
+        reserved = reservation(chosen, repeats=1, execution_usd=execution_usd_for(compare))
+        if reserved > comparison.PER_RUN_LIMIT_USD + 1e-12:
+            pieces = "; ".join(
+                " ".join(f"--case {case_id}" for case_id in piece)
+                for piece in suggested_slices(compare, chosen)
+            )
+            raise UsageError(
+                f"--compare {compare} reserves {reserved:.4f} USD, above the USD"
+                f" {comparison.PER_RUN_LIMIT_USD:.2f} per-run limit; run it in slices: {pieces}"
+            )
+        return Plan(
+            mode="compare",
+            cases=chosen,
+            allowance_usd=_allowance(allowance),
+            candidate=compare,
+        )
 
     usd = _allowance(allowance) if allowance is not None else None
     if regrade is not None:
@@ -199,11 +272,50 @@ JUDGE_CALL_RESERVATION_USD = (
 ) / 1_000_000
 
 
-def reservation(cases: Sequence[str]) -> float:
+def repeats_for(candidate: str | None) -> int:
+    """Independent repeats per case: 1 in a Main-model comparison, `REPEATS` in every other run."""
+    return REPEATS if candidate is None else comparison.COMPARISON_REPEATS
+
+
+def execution_usd_for(candidate: str | None) -> float:
+    """One case-run's cost allowance: the agent's default, or the candidate's in a comparison."""
+    if candidate is None:
+        return budget.SUBJECT_EXECUTION_USD
+    return comparison.execution_limits(candidate).max_cost_usd
+
+
+def reservation(
+    cases: Sequence[str],
+    *,
+    repeats: int = REPEATS,
+    execution_usd: float = budget.SUBJECT_EXECUTION_USD,
+) -> float:
     """What a run of `cases` may cost at most: subject executions plus judge calls."""
-    runs = len(cases) * REPEATS
-    judged = sum(REPEATS for case_id in cases if CASES[case_id].expectation.judged)
-    return runs * budget.SUBJECT_EXECUTION_USD + judged * JUDGE_CALL_RESERVATION_USD
+    runs = len(cases) * repeats
+    judged = sum(repeats for case_id in cases if CASES[case_id].expectation.judged)
+    return runs * execution_usd + judged * JUDGE_CALL_RESERVATION_USD
+
+
+def suggested_slices(
+    candidate: str, cases: Sequence[str] | None = None
+) -> tuple[tuple[str, ...], ...]:
+    """The comparison subset (or `cases`) cut in order into slices whose reservation each stays
+    within the per-run limit; one slice when the whole run fits."""
+    execution_usd = execution_usd_for(candidate)
+    pieces: list[tuple[str, ...]] = []
+    current: list[str] = []
+    for case_id in cases if cases is not None else comparison.subset_ids():
+        grown = [*current, case_id]
+        if current and (
+            reservation(grown, repeats=1, execution_usd=execution_usd)
+            > comparison.PER_RUN_LIMIT_USD + 1e-12
+        ):
+            pieces.append(tuple(current))
+            grown = [case_id]
+        current = grown
+    if current:
+        pieces.append(tuple(current))
+    return tuple(pieces)
 
 
 # --- The fictional test API -----------------------------------------------------------------
@@ -327,19 +439,25 @@ def promptfoo_environment(
     }
 
 
-async def run_promptfoo(output: Path, env: Mapping[str, str]) -> None:
-    pnpm = shutil.which("pnpm")
-    if pnpm is None:
-        raise RuntimeError("pnpm is not on PATH")
-    process = await asyncio.create_subprocess_exec(
-        pnpm,
+def promptfoo_values(
+    api_url: str, selected: Sequence[str], candidate: str | None
+) -> dict[str, str]:
+    """What the provider reads: the test API, the cases and, in a comparison, the candidate."""
+    values = {"LLM_AGENT_API_URL": api_url, "LLM_AGENT_EVAL_CASES": ",".join(selected)}
+    if candidate is not None:
+        values[comparison.ENVIRONMENT] = candidate
+    return values
+
+
+def promptfoo_arguments(output: Path, *, repeats: int = REPEATS) -> list[str]:
+    return [
         "dlx",
         PROMPTFOO,
         "eval",
         "--config",
         "promptfooconfig.yaml",
         "--repeat",
-        str(REPEATS),
+        str(repeats),
         "--max-concurrency",
         "3",
         "--no-cache",
@@ -347,6 +465,16 @@ async def run_promptfoo(output: Path, env: Mapping[str, str]) -> None:
         "--no-table",
         "--output",
         str(output),
+    ]
+
+
+async def run_promptfoo(output: Path, env: Mapping[str, str], *, repeats: int = REPEATS) -> None:
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        raise RuntimeError("pnpm is not on PATH")
+    process = await asyncio.create_subprocess_exec(
+        pnpm,
+        *promptfoo_arguments(output, repeats=repeats),
         cwd=EVALS_FOLDER,
         env=dict(env),
         stdin=subprocess.DEVNULL,
@@ -416,7 +544,15 @@ def current_subject_versions() -> dict[str, Any]:
 
 
 def compatible_record(record: Mapping[str, Any], subject: Mapping[str, Any]) -> str | None:
-    """Why a stored record cannot be regraded with the current dataset and agent, or None."""
+    """Why a stored record cannot be regraded with the current dataset and agent, or None.
+
+    A comparison answer (`comparison.mark`) is always refused: it was produced with another Main
+    stage and 1 repeat and never enters an issue or gate pool.
+    """
+    marked = record.get("comparison")
+    if marked is not None:
+        name = marked.get("candidate") if isinstance(marked, Mapping) else None
+        return f"a comparison answer of {name}; comparison answers never enter a gate pool"
     fingerprint = record.get("fingerprint")
     if not isinstance(fingerprint, dict):
         return "no fingerprint"
@@ -528,33 +664,44 @@ async def grade_record(
     return Graded(run=run, report=report)
 
 
-def subject_cost(record: Mapping[str, Any]) -> tuple[float, bool]:
+def subject_cost(
+    record: Mapping[str, Any], *, execution_usd: float = budget.SUBJECT_EXECUTION_USD
+) -> tuple[float, bool]:
     """The measured cost of one execution, or its whole reservation when unknown/uncertain."""
     result = record.get("result")
     usage = result.get("usage") if isinstance(result, dict) else None
     if not isinstance(usage, dict):
-        return budget.SUBJECT_EXECUTION_USD, True
+        return execution_usd, True
     cost = usage.get("cost_usd")
     if not isinstance(cost, int | float) or not math.isfinite(cost):
-        return budget.SUBJECT_EXECUTION_USD, True
+        return execution_usd, True
     if usage.get("cost_uncertain"):
-        return max(float(cost), budget.SUBJECT_EXECUTION_USD), True
+        return max(float(cost), execution_usd), True
     return float(cost), False
 
 
 # --- Summary --------------------------------------------------------------------------------
 
 
-def latency_percentiles(latencies: Sequence[object]) -> dict[str, int | None]:
-    """Nearest-rank p50 and p95 of the case-runs that measured a latency, in milliseconds."""
-    measured = sorted(value for value in latencies if isinstance(value, int))
-    if not measured:
-        return {"runs": 0, "p50": None, "p95": None}
-
-    def rank(quantile: float) -> int:
-        return measured[max(math.ceil(quantile * len(measured)) - 1, 0)]
-
-    return {"runs": len(measured), "p50": rank(0.50), "p95": rank(0.95)}
+def charge_subject(
+    allowance: budget.Allowance,
+    records: Sequence[Mapping[str, Any]],
+    selected: Sequence[str],
+    *,
+    repeats: int = REPEATS,
+    execution_usd: float = budget.SUBJECT_EXECUTION_USD,
+) -> None:
+    """Charges the measured cost of each record and the whole reservation of each missing run."""
+    ran = {(str(record["case_id"]), int(record["repeat"])) for record in records}
+    for record in records:
+        cost, uncertain = subject_cost(record, execution_usd=execution_usd)
+        allowance.charge(
+            cost, f"subject {record['case_id']}#{record['repeat']}", uncertain=uncertain
+        )
+    for case_id in selected:
+        for repeat in range(1, repeats + 1):
+            if (case_id, repeat) not in ran:
+                allowance.charge(execution_usd, f"subject {case_id}#{repeat}", uncertain=True)
 
 
 def write_summary(
@@ -566,14 +713,33 @@ def write_summary(
     extra_failures: Sequence[str],
     allowance: budget.Allowance | None,
     subject: Mapping[str, Any] | None,
+    candidate: str | None = None,
 ) -> dict[str, Any]:
-    gate = evaluate_gate([item.run for item in graded], selected)
+    runs = [item.run for item in graded]
+    gate = evaluate_gate(runs, selected, repeats=repeats_for(candidate))
     failures = [*gate.failures, *extra_failures]
-    summary = {
+    gate_block = {**gate.as_dict(), "failures": failures}
+    passed = gate.passed and not extra_failures
+    latency = latency_percentiles([item.report.get("latency_ms") for item in graded])
+    result: dict[str, Any] | None = None
+    if candidate is not None:
+        # A screening comparison is never a release gate, whatever its figures are.
+        passed = False
+        gate_block = {**gate_block, "pass": False, "scope": "comparison"}
+        result = comparison.result(
+            candidate,
+            cases=selected,
+            runs=runs,
+            reports=[item.report for item in graded],
+            gate=gate_block,
+            latency=latency,
+            cost_usd=None if allowance is None else allowance.spent_usd,
+        )
+    summary: dict[str, Any] = {
         "mode": mode,
         "at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "pass": gate.passed and not extra_failures,
-        "gate": {**gate.as_dict(), "failures": failures},
+        "pass": passed,
+        "gate": gate_block,
         "dataset_version": DATASET_VERSION,
         "expectations_version": EXPECTATIONS_VERSION,
         "subject": subject,
@@ -591,9 +757,11 @@ def write_summary(
             "uncertain_usd": round(allowance.uncertain_usd, 6),
             "remaining_usd": round(allowance.remaining_usd, 6),
         },
-        "latency_ms": latency_percentiles([item.report.get("latency_ms") for item in graded]),
+        "latency_ms": latency,
         "case_runs": [item.report for item in graded],
     }
+    if result is not None:
+        summary["comparison"] = result
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
@@ -618,8 +786,21 @@ def load_answers(folder: Path) -> list[dict[str, Any]]:
 
 def print_summary(summary: Mapping[str, Any], folder: Path) -> None:
     gate = summary["gate"]
-    verdict = "PASS" if summary["pass"] else "FAIL"
+    compared = summary.get("comparison")
+    if compared is not None:
+        verdict = "comparison (not a gate)"
+    else:
+        verdict = "PASS" if summary["pass"] else "FAIL"
     print(f"llm-agent evals ({summary['mode']}, scope {gate['scope']}): {verdict}")
+    if compared is not None:
+        runs = compared["case_runs"]
+        limit = compared["execution_limit"]
+        print(
+            f"  {compared['candidate']}: case-runs {runs['recorded']} of {runs['expected']}"
+            f" expected; limit_reached {compared['limit_reached']};"
+            f" execution limit {limit['max_cost_usd']:.4f} USD"
+            f" (default {limit['default_usd']:.4f})"
+        )
     print(f"  critical {gate['critical']['passed']}/{gate['critical']['runs']}")
     for language in ("en", "cs"):
         useful = gate["useful"][language]
@@ -670,7 +851,9 @@ async def command_check_fixture() -> int:
     return 0 if not failures else 1
 
 
-async def command_run(selected: Sequence[str], declared_usd: float) -> int:
+async def command_run(
+    selected: Sequence[str], declared_usd: float, *, candidate: str | None = None
+) -> int:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print(
             "blocked: no model key; run through `pnpm --filter @sebela/llm-agent eval`",
@@ -678,8 +861,12 @@ async def command_run(selected: Sequence[str], declared_usd: float) -> int:
         )
         return BLOCKED
     allowance = budget.open_allowance(declared_usd, LEDGER)
-    needed = reservation(selected)
-    allowance.require(needed, f"{len(selected)} case(s) x {REPEATS} repeats")
+    repeats = repeats_for(candidate)
+    execution_usd = execution_usd_for(candidate)
+    needed = reservation(selected, repeats=repeats, execution_usd=execution_usd)
+    allowance.require(needed, f"{len(selected)} case(s) x {repeats} repeat(s)")
+    if candidate is not None:
+        comparison.apply_main(candidate)
     folder = run_folder()
     secrets = secrets_of(os.environ)
     raw = folder / "promptfoo.raw.json"
@@ -697,10 +884,9 @@ async def command_run(selected: Sequence[str], declared_usd: float) -> int:
                 await run_promptfoo(
                     raw,
                     promptfoo_environment(
-                        os.environ,
-                        {"LLM_AGENT_API_URL": api.url, "LLM_AGENT_EVAL_CASES": ",".join(selected)},
-                        state,
+                        os.environ, promptfoo_values(api.url, selected, candidate), state
                     ),
+                    repeats=repeats,
                 )
                 report = json.loads(raw.read_text(encoding="utf-8"))
                 records, errors = records_from_report(report)
@@ -719,18 +905,7 @@ async def command_run(selected: Sequence[str], declared_usd: float) -> int:
         shutil.rmtree(folder / "api", ignore_errors=True)
 
     # Charge the subject: measured cost, or the whole reservation for every unmeasured case-run.
-    ran = {(str(record["case_id"]), int(record["repeat"])) for record in records}
-    for record in records:
-        cost, uncertain = subject_cost(record)
-        allowance.charge(
-            cost, f"subject {record['case_id']}#{record['repeat']}", uncertain=uncertain
-        )
-    for case_id in selected:
-        for repeat in range(1, REPEATS + 1):
-            if (case_id, repeat) not in ran:
-                allowance.charge(
-                    budget.SUBJECT_EXECUTION_USD, f"subject {case_id}#{repeat}", uncertain=True
-                )
+    charge_subject(allowance, records, selected, repeats=repeats, execution_usd=execution_usd)
 
     blocked = False
     if leaked:
@@ -743,6 +918,18 @@ async def command_run(selected: Sequence[str], declared_usd: float) -> int:
         print("blocked: a record contained a credential; nothing was stored", file=sys.stderr)
         blocked = True
         records = []
+    if candidate is not None and records:
+        wrong = comparison.mismatches(candidate, records)
+        if wrong:
+            print(
+                "blocked: a record names another Main stage than the candidate; nothing was stored",
+                file=sys.stderr,
+            )
+            extra.extend(wrong)
+            blocked = True
+            records = []
+        else:
+            comparison.mark(candidate, records)
 
     graded: list[Graded] = []
     judge_model = rubric.anthropic_judge() if records and not blocked else None
@@ -756,17 +943,22 @@ async def command_run(selected: Sequence[str], declared_usd: float) -> int:
         store_answers(folder, records)
     summary = write_summary(
         folder,
-        mode="run",
+        mode="run" if candidate is None else "compare",
         graded=graded,
         selected=selected,
         extra_failures=extra,
         allowance=allowance,
         subject=subject,
+        candidate=candidate,
     )
     budget.record_run(LEDGER, folder.name, allowance, summary["gate"]["scope"])
     print_summary(summary, folder)
     if blocked:
         return BLOCKED
+    if candidate is not None:
+        # A comparison has no gate: it succeeds when every named case-run was recorded and graded
+        # without a run failure, whatever its figures are.
+        return 0 if comparison.complete(summary["comparison"]) and not extra else 1
     return 0 if summary["pass"] else 1
 
 
@@ -818,6 +1010,25 @@ async def command_regrade(source: Path, *, judge: bool, declared_usd: float | No
     return 0 if summary["pass"] else 1
 
 
+def command_compare_report(folders: Sequence[Path]) -> int:
+    """Prints stored comparison summaries side by side; reads files only (free)."""
+    summaries: list[dict[str, Any]] = []
+    for folder in folders:
+        path = folder / "summary.json"
+        if not path.is_file():
+            raise UsageError(f"{folder} has no summary.json")
+        try:
+            summaries.append(json.loads(path.read_text(encoding="utf-8")))
+        except ValueError as error:
+            raise UsageError(f"{path} is not a JSON summary: {error}") from error
+    try:
+        lines = comparison.side_by_side(summaries)
+    except ValueError as error:
+        raise UsageError(str(error)) from error
+    print("\n".join(lines))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         chosen = plan(sys.argv[1:] if argv is None else argv)
@@ -834,8 +1045,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     chosen.regrade, judge=chosen.judge, declared_usd=chosen.allowance_usd
                 )
             )
+        if chosen.mode == "compare-report":
+            return command_compare_report(chosen.folders)
         assert chosen.allowance_usd is not None
-        return asyncio.run(command_run(chosen.cases, chosen.allowance_usd))
+        return asyncio.run(
+            command_run(chosen.cases, chosen.allowance_usd, candidate=chosen.candidate)
+        )
     except (budget.BudgetBlockedError, UsageError) as error:
         print(f"blocked: {error}", file=sys.stderr)
         return BLOCKED

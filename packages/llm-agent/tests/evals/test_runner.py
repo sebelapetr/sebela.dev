@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from evals import budget, catalogue, run
+from evals import budget, catalogue, gate, run
 from evals.datasets.cases import BY_ID
 from evals.graders import code, rubric
 from tests.evals.records import SUBJECT, record
@@ -211,4 +211,4 @@ async def test_the_summary_reports_latency_percentiles_and_no_answer_text(tmp_pa
 
 
 def test_latency_percentiles_without_measurements_are_empty() -> None:
-    assert run.latency_percentiles([None, None]) == {"runs": 0, "p50": None, "p95": None}
+    assert gate.latency_percentiles([None, None]) == {"runs": 0, "p50": None, "p95": None}
