@@ -12,7 +12,11 @@ import {
   type Persistence,
 } from "@sebela/db";
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
-import { createFakeEmbedder, type RetrievalConfig } from "@sebela/memory";
+import {
+  createFakeEmbedder,
+  createQueryCachingEmbedder,
+  type RetrievalConfig,
+} from "@sebela/memory";
 
 import { DomainError } from "../../errors.js";
 import { createProfileService } from "../profile/index.js";
@@ -326,6 +330,45 @@ describe("readRetrievalOptions", () => {
       readRetrievalOptions({ ...settings, RETRIEVAL_FINAL_PASSAGES: "0", VOYAGE_API_KEY: fakeKey });
     } catch (error) {
       expect(String(error)).not.toContain(fakeKey);
+    }
+  });
+
+  it("serves eval queries from the cache file when one is set, and needs an absolute path", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "sebela-query-cache-"));
+    try {
+      const file = join(folder, "queries.json");
+      const voyage = readRetrievalOptions({ ...settings, VOYAGE_API_KEY: fakeKey }).embedder;
+      if (voyage === undefined) throw new Error("a Voyage embedder");
+      const fake = createFakeEmbedder();
+      const prefilled = await createQueryCachingEmbedder(
+        {
+          model: voyage.model,
+          version: voyage.version,
+          dimension: 1024,
+          embed: (texts, input) => fake.embed(texts, input),
+        },
+        file,
+      ).embed(["golden sets"], "query");
+
+      const { embedder } = readRetrievalOptions({
+        ...settings,
+        VOYAGE_API_KEY: fakeKey,
+        RETRIEVAL_QUERY_CACHE_FILE: file,
+      });
+      // The fictional key would be refused by the provider; only the cache can answer.
+      expect(await embedder?.embed(["golden sets"], "query")).toEqual({
+        vectors: prefilled.vectors,
+        tokens: 0,
+      });
+      expect(() =>
+        readRetrievalOptions({
+          ...settings,
+          VOYAGE_API_KEY: fakeKey,
+          RETRIEVAL_QUERY_CACHE_FILE: "queries.json",
+        }),
+      ).toThrow(/RETRIEVAL_QUERY_CACHE_FILE/);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
     }
   });
 });

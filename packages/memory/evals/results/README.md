@@ -16,9 +16,30 @@ measured against these questions.
 
 Paid runs count against the phase 9 ceiling of USD 3, with a stop at USD 1 per run.
 
-| Run                    | Date       | Tokens | Cost (USD) |
-| ---------------------- | ---------- | -----: | ---------: |
-| `vector-baseline.json` | 2026-11-20 |  4,223 |    0.00025 |
+| Run                        | Date       | Tokens | Cost (USD) |
+| -------------------------- | ---------- | -----: | ---------: |
+| `vector-baseline.json`     | 2026-11-20 |  4,223 |    0.00025 |
+| `supplemental-vector.json` | 2026-11-21 |  7,595 |    0.00046 |
 
-Cumulative phase 9 spend after the vector baseline: about USD 0.0023 of USD 3 (the baseline
+`supplemental-vector.json` measures only the six supplemental-document cases, after ingesting
+and approving their fictional documents; all six pass.
+
+## Query cache
+
+Runs keep query embeddings in the checkout's `.tmp/evals/memory/query-cache.json`, so a repeated
+question costs nothing. A run's `candidates` step embeds the questions the cache lacks, and the
+measured searches then find every question there. Each summary records this in
+`spend.queryCache`: the entries at the start, and for the `candidates` and `search` steps how
+many questions came from the cache and how many were embedded. Whenever searches are served
+from the cache, the published `latencyMs` and `costPerQueryUsd` leave out the embedding call:
+they measure retrieval after the query is embedded, not a visitor's uncached search.
+
+In `supplemental-vector.json` the cache started empty, the `candidates` step embedded all six
+questions (63 tokens) and all six searches came from the cache (0 search tokens). That is why
+its p95 latency is 110 ms and its cost per query is 0, against 3,388 ms in the uncached
+`vector-baseline.json`. The run predates the `spend.queryCache` field; its values were added
+afterwards from the run's recorded usage and the cache file, which held exactly those six
+entries.
+
+Cumulative phase 9 spend after the supplemental run: about USD 0.0028 of USD 3 (the runs above
 plus earlier paid runs of the phase).

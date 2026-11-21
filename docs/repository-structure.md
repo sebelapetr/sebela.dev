@@ -168,6 +168,7 @@ packages/services/src/
   modules/media/index.ts            # upload/attachment lifecycle
   modules/roadmap/index.ts          # roadmap operations; private progress.ts derives progress on read
   modules/storage/index.ts          # driver-independent file operations
+  modules/storage/private.ts        # private storage of knowledge originals: no address, never served
   modules/storage/drivers/          # private local and Bunny implementations
   modules/api-keys/index.ts         # generation, verification, revocation
   modules/seed/index.ts             # loading a seed folder through profile, roadmap and media

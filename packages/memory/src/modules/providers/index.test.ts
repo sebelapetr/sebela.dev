@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ProviderUnavailableError } from "../ports/index.js";
 
-import { createFakeEmbedder, createVoyageEmbedder } from "./index.js";
+import { createFakeEmbedder, createQueryCachingEmbedder, createVoyageEmbedder } from "./index.js";
 
 const KEY = "test-voyage-key-not-real";
 
@@ -199,5 +203,68 @@ describe("the Voyage embedder", () => {
     await expect(embedder.embed(["first"], "query")).rejects.toBeInstanceOf(
       ProviderUnavailableError,
     );
+  });
+});
+
+describe("the query-caching embedder", () => {
+  let folder: string;
+  let file: string;
+
+  beforeEach(async () => {
+    folder = await mkdtemp(join(tmpdir(), "sebela-query-cache-"));
+    file = join(folder, "nested", "queries.json");
+  });
+
+  afterEach(async () => {
+    await rm(folder, { recursive: true, force: true });
+  });
+
+  it("embeds each query once across instances and bills only what it sent", async () => {
+    const provider = createFakeEmbedder();
+    const first = createQueryCachingEmbedder(provider, file);
+    expect(first).toMatchObject({ model: provider.model, version: "1", dimension: 1024 });
+
+    const fresh = await first.embed(["golden sets", "refund policy"], "query");
+    expect(fresh.tokens).toBe(4);
+    expect(provider.calls).toBe(1);
+
+    const second = createQueryCachingEmbedder(provider, file);
+    const mixed = await second.embed(
+      ["refund policy", "loyalty programme", "golden sets"],
+      "query",
+    );
+    expect(provider.calls).toBe(2);
+    expect(mixed.tokens).toBe(2);
+    expect(mixed.vectors[0]).toEqual(fresh.vectors[1]);
+    expect(mixed.vectors[2]).toEqual(fresh.vectors[0]);
+
+    const cached = await second.embed(["golden sets"], "query");
+    expect(cached).toEqual({ vectors: [fresh.vectors[0]], tokens: 0 });
+    expect(provider.calls).toBe(2);
+    expect(await readFile(file, "utf8")).not.toContain("golden sets");
+  });
+
+  it("never caches documents and keeps models and versions apart", async () => {
+    const provider = createFakeEmbedder();
+    const cached = createQueryCachingEmbedder(provider, file);
+    await cached.embed(["harbour handbook"], "document");
+    await cached.embed(["harbour handbook"], "document");
+    expect(provider.calls).toBe(2);
+
+    await cached.embed(["harbour handbook"], "query");
+    const revised = createQueryCachingEmbedder(
+      { ...provider, embed: (texts, input) => provider.embed(texts, input), version: "2" },
+      file,
+    );
+    await revised.embed(["harbour handbook"], "query");
+    expect(provider.calls).toBe(4);
+  });
+
+  it("passes a provider failure through and caches nothing", async () => {
+    const cached = createQueryCachingEmbedder(createFakeEmbedder({ failing: true }), file);
+    await expect(cached.embed(["golden sets"], "query")).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+    await expect(readFile(file, "utf8")).rejects.toThrow(/ENOENT/);
   });
 });

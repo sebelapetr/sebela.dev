@@ -18,13 +18,17 @@
 // never passed. Without `VOYAGE_API_KEY` every case is pending and nothing starts.
 //
 // A measured run starts the API's end-to-end server on a temporary database seeded with the
-// fictional demo seed and one ephemeral key, indexes the seed and records each question's
-// candidate pool through the API's knowledge command on that database, then lets Promptfoo send
+// fictional demo seed and one ephemeral key, indexes the seed, ingests and approves every fictional
+// supplemental document of the dataset into a local private storage inside the run's scratch
+// folder, and records each question's candidate pool through the API's knowledge command on that
+// database, then lets Promptfoo send
 // every question to the private search route. The run's spend ceiling is the API's monthly
 // embedding ceiling on the fresh database, so the provider stops being called once it is reached.
 // Promptfoo runs with an allowlisted environment (no provider key, database or other checkout
 // setting); its output and state are scanned for credentials and deleted. The redacted summary goes
-// to the checkout's `.tmp/evals/memory/<stamp>/summary.json`. Needs the running Postgres and a build
+// to the checkout's `.tmp/evals/memory/<stamp>/summary.json`. Query embeddings are kept in
+// `.tmp/evals/memory/query-cache.json` by model, version and text and reused by later runs, so a
+// repeated run embeds only new questions. Needs the running Postgres and a build
 // of the API's packages (`pnpm --filter @sebela/api... build`).
 //
 // Exit codes: 0 measured (and the gate passed or is not frozen), 1 a failure or a failed gate,
@@ -57,6 +61,8 @@ const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const apiFolder = join(repositoryRoot, "apps", "api");
 const seedFolder = join(repositoryRoot, "packages", "db", "seed", "demo");
 const reportRoot = join(repositoryRoot, ".tmp", "evals", "memory");
+/** Query embeddings by model, version and text, reused by every later run of this checkout. */
+const queryCacheFile = join(reportRoot, "query-cache.json");
 
 /** Retrieval settings recorded with each run, so results name the configuration they measured. */
 const RECORDED_SETTINGS = [
@@ -122,7 +128,36 @@ export function providerEnvironment(options) {
     RETRIEVAL_MONTHLY_CEILING_USD: String(options.ceilingUsd),
     RETRIEVAL_PROVIDER_RETRIES: RUN_PROVIDER_RETRIES,
     RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: RUN_PROVIDER_MAX_RETRY_WAIT_MS,
+    RETRIEVAL_QUERY_CACHE_FILE: queryCacheFile,
   };
+}
+
+/**
+ * The knowledge command's arguments that ingest each fictional supplemental document of the
+ * dataset under its slug and its safe display title (never the file name).
+ *
+ * @param {import("./plan.js").Dataset} dataset
+ * @returns {string[][]}
+ */
+export function documentIngests(dataset) {
+  return dataset.documents.map(({ sourceId, title, file }) => [
+    "ingest",
+    join(evalsFolder, "datasets", file),
+    "--slug",
+    sourceId.replace(/^document:/, ""),
+    "--title",
+    title,
+  ]);
+}
+
+/**
+ * The private storage of a run: a local root inside its scratch folder, removed with it.
+ *
+ * @param {string} scratch
+ * @returns {Record<string, string>}
+ */
+export function privateStorageEnvironment(scratch) {
+  return { PRIVATE_STORAGE_DRIVER: "local", PRIVATE_STORAGE_LOCAL_ROOT: join(scratch, "private") };
 }
 
 /**
@@ -137,6 +172,45 @@ export function pendingSummary(options, pending) {
     scope: options.cases.length === 0 ? "complete" : "partial",
     measured: 0,
     pending,
+  };
+}
+
+/**
+ * The number of query embeddings in the cache file; an absent file holds none.
+ *
+ * @type {(file: string) => Promise<number>}
+ */
+export async function cacheEntryCount(file) {
+  /** @type {string} */
+  let text;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return 0;
+    throw error;
+  }
+  const parsed = /** @type {{ entries?: Record<string, unknown> }} */ (JSON.parse(text));
+  return Object.keys(parsed.entries ?? {}).length;
+}
+
+/**
+ * @typedef {{ queries: number, fromCache: number, embedded: number }} StepCacheUse
+ * @typedef {{ entriesAtStart: number, candidates: StepCacheUse, search: StepCacheUse, note: string }} QueryCacheUse
+ */
+
+/**
+ * Which steps' query embeddings came from the cache, from its entry counts around them.
+ *
+ * @type {(queries: number, counts: { start: number, afterCandidates: number, end: number }) => QueryCacheUse}
+ */
+export function queryCacheUse(queries, counts) {
+  /** @type {(added: number) => StepCacheUse} */
+  const step = (added) => ({ queries, fromCache: queries - added, embedded: added });
+  return {
+    entriesAtStart: counts.start,
+    candidates: step(counts.afterCandidates - counts.start),
+    search: step(counts.end - counts.afterCandidates),
+    note: "Cached query embeddings cost nothing and take no provider time, so the latency and cost per query leave out the embedding call for every search served from the cache.",
   };
 }
 
@@ -201,10 +275,26 @@ async function measure(dataset, plan, options, folder) {
     const knowledge = (/** @type {string[]} */ ...args) =>
       runJson(process.execPath, ["--import", "tsx", "src/cli/knowledge.ts", ...args], {
         cwd: apiFolder,
-        env: { ...process.env, ...budget, DATABASE_NAME: api.database },
+        env: {
+          ...process.env,
+          ...budget,
+          ...privateStorageEnvironment(scratch),
+          DATABASE_NAME: api.database,
+        },
       });
     const indexing = await knowledge("reindex");
     await pause();
+    // Each supplemental document is ingested (no provider call) and approved by its exact hash,
+    // which embeds it; a blocked document stops the run, as the knowledge command exits 1.
+    /** @type {unknown[]} */
+    const approvals = [];
+    for (const args of documentIngests(dataset)) {
+      const { version } = /** @type {{ version: { contentHash: string } }} */ (
+        await knowledge(...args)
+      );
+      approvals.push(await knowledge("approve", version.contentHash));
+      await pause();
+    }
     const questionsFile = join(scratch, "questions.json");
     await writeFile(
       questionsFile,
@@ -213,10 +303,12 @@ async function measure(dataset, plan, options, folder) {
       ),
     );
     const poolsFile = join(scratch, "pools.json");
+    const cacheAtStart = await cacheEntryCount(queryCacheFile);
     const candidates = /** @type {{ pools: Record<string, string[]> }} */ (
       await knowledge("candidates", questionsFile)
     );
     await writeFile(poolsFile, JSON.stringify(candidates.pools));
+    const cacheAfterCandidates = await cacheEntryCount(queryCacheFile);
     await pause();
 
     const raw = join(scratch, "promptfoo.json");
@@ -249,7 +341,20 @@ async function measure(dataset, plan, options, folder) {
       throw new Error("Promptfoo's output contained a credential; it was deleted.");
     }
     const usage = /** @type {Usage} */ (await knowledge("usage"));
-    return summarize(dataset, plan, options, report, indexing, usage);
+    const queryCache = queryCacheUse(new Set(plan.run.map((question) => question.query)).size, {
+      start: cacheAtStart,
+      afterCandidates: cacheAfterCandidates,
+      end: await cacheEntryCount(queryCacheFile),
+    });
+    return summarize(
+      dataset,
+      plan,
+      options,
+      report,
+      { portfolio: indexing, approvals },
+      usage,
+      queryCache,
+    );
   } finally {
     await api.stop();
     await rm(scratch, { recursive: true, force: true });
@@ -266,10 +371,12 @@ async function measure(dataset, plan, options, folder) {
  * @param {{ run: import("./plan.js").Question[], pending: import("./plan.js").PendingCase[] }} plan
  * @param {ReturnType<typeof parseOptions>} options
  * @param {any} report Promptfoo's JSON output.
- * @param {unknown} indexing The reindex report.
+ * @param {{ portfolio: unknown, approvals: unknown[] }} indexing The reindex report and the
+ *   supplemental documents' approvals.
  * @param {Usage} usage The temporary database's recorded provider usage.
+ * @param {QueryCacheUse} queryCache Which steps' query embeddings came from the cache.
  */
-function summarize(dataset, plan, options, report, indexing, usage) {
+function summarize(dataset, plan, options, report, indexing, usage, queryCache) {
   /** @type {any[]} */
   const results = report?.results?.results ?? [];
   const cases = plan.run.map((question) => {
@@ -318,7 +425,7 @@ function summarize(dataset, plan, options, report, indexing, usage) {
       { queryCostUsd: search.costUsd },
     ),
     gate: { frozen: false },
-    spend: { ceilingUsd: options.ceilingUsd, indexing, usage },
+    spend: { ceilingUsd: options.ceilingUsd, indexing, usage, queryCache },
     cases,
     pending: plan.pending,
   };

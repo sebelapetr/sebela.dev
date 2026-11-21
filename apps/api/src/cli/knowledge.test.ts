@@ -1,12 +1,17 @@
 // The knowledge maintenance command over a real database with the fake embedder: reindexing,
 // the evals' candidate pools and the month's recorded spend, printed as JSON.
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { demoSeedFolder, type RetrievalConfig } from "@sebela/services";
+import {
+  demoSeedFolder,
+  openPrivateStorage,
+  type PrivateStorage,
+  type RetrievalConfig,
+} from "@sebela/services";
 import { createFakeEmbedder } from "@sebela/services/testing";
 
 import { openTestBackend, type TestBackend } from "../test-support.js";
@@ -136,6 +141,173 @@ describe("the knowledge command", () => {
       ["usage", "extra"],
       ["rebuild", "x"],
       ["pending", "x"],
+    ]) {
+      const { code, err } = await run(args);
+      expect(code, args.join(" ")).toBe(2);
+      expect(err()).toMatch(/^Usage: knowledge/);
+    }
+  });
+});
+
+describe("the knowledge command's supplemental documents", () => {
+  let backend: TestBackend;
+  let folder: string;
+  let privateRoot: string;
+  let privateStorage: PrivateStorage;
+
+  // A fictional document; the e-mail address of the leaky revision is put together at run time.
+  const handbook = [
+    "# Studio handbook",
+    "",
+    "## Opening hours",
+    "",
+    "The fictional studio opens at nine and closes at five on weekdays.",
+    "",
+    "## Refunds",
+    "",
+    "A refund is paid within fourteen days of a written request.",
+    "",
+  ].join("\n");
+  const leaky = `${handbook}\nWrite to ${["front-desk", "studio.example"].join("@")} for help.\n`;
+
+  beforeAll(async () => {
+    privateRoot = await mkdtemp(join(tmpdir(), "sebela-knowledge-private-"));
+    privateStorage = openPrivateStorage({
+      driver: "local",
+      root: privateRoot,
+      environment: "test",
+      worktree: null,
+    });
+    backend = await openTestBackend({
+      retrieval: { config, embedder: createFakeEmbedder(), privateStorage },
+    });
+    folder = await mkdtemp(join(tmpdir(), "sebela-knowledge-documents-"));
+    await writeFile(join(folder, "handbook-FINAL.md"), handbook);
+    await writeFile(join(folder, "leaky.md"), leaky);
+    await writeFile(join(folder, "other.txt"), "Another fictional note about parking.\n");
+  });
+
+  afterAll(async () => {
+    await backend.close();
+    await rm(folder, { recursive: true, force: true });
+    await rm(privateRoot, { recursive: true, force: true });
+  });
+
+  const run = async (args: string[]) => {
+    const captured = capture();
+    const code = await runKnowledgeCommand(args, backend.services, captured.output, folder);
+    return { code, ...captured };
+  };
+
+  interface Version {
+    contentHash: string;
+    status: string;
+    title: string;
+  }
+
+  it("ingests, lists, shows and approves a document by its exact hash", async () => {
+    const ingest = [
+      "ingest",
+      "handbook-FINAL.md",
+      "--slug",
+      "studio-handbook",
+      "--title",
+      "Studio handbook",
+    ];
+    const first = await run(ingest);
+    expect(first.code).toBe(0);
+    const { created, version } = first.json() as { created: boolean; version: Version };
+    expect(created).toBe(true);
+    expect(version).toMatchObject({ status: "pending", title: "Studio handbook" });
+    expect(version).not.toHaveProperty("storageKey");
+
+    const again = await run(ingest);
+    expect(again.code).toBe(0);
+    expect(again.json()).toMatchObject({ created: false, version: { status: "pending" } });
+
+    const listed = await run(["list"]);
+    expect(listed.code).toBe(0);
+    expect((listed.json() as { documents: Version[] }).documents.map((d) => d.contentHash)).toEqual(
+      [version.contentHash],
+    );
+
+    const shown = await run(["show", version.contentHash]);
+    expect(shown.code).toBe(0);
+    const preview = shown.json() as { text: string; chunks: unknown[]; findings: unknown[] };
+    expect(preview.text).toContain("closes at five");
+    expect(preview.chunks.length).toBeGreaterThan(0);
+    expect(preview.findings).toEqual([]);
+
+    const approved = await run(["approve", version.contentHash]);
+    expect(approved.code).toBe(0);
+    expect(approved.json()).toMatchObject({
+      version: { status: "approved" },
+      report: { embedded: expect.any(Number) as number },
+    });
+    const { passages } = await backend.services.knowledge.search({ query: "refund request" });
+    const supplemental = passages.filter((p) => p.sourceKind === "supplemental");
+    expect(supplemental[0]).toMatchObject({ title: "Studio handbook" });
+    expect(supplemental[0]).not.toHaveProperty("path");
+    expect(JSON.stringify(supplemental)).not.toContain("FINAL");
+  });
+
+  it("blocks a document with findings and prints their kinds and lines only", async () => {
+    const blocked = await run(["ingest", "leaky.md", "--slug", "leaky", "--title", "Leaky note"]);
+    expect(blocked.code).toBe(1);
+    expect(blocked.err()).toMatch(/sanitized revision/);
+    const { version } = blocked.json() as { version: Version & { findings: unknown[] } };
+    expect(version.status).toBe("blocked");
+    expect(version.findings).toEqual([{ kind: "email", line: expect.any(Number) as number }]);
+    expect(blocked.err() + JSON.stringify(blocked.json())).not.toContain("front-desk");
+
+    const approval = await run(["approve", version.contentHash]);
+    expect(approval.code).toBe(1);
+    expect(approval.err()).toMatch(/sanitized revision/);
+  });
+
+  it("rejects a pending document and refuses unknown hashes and unreadable files", async () => {
+    const ingested = await run(["ingest", "other.txt", "--slug", "parking", "--title", "Parking"]);
+    const { version } = ingested.json() as { version: Version };
+    const rejected = await run(["reject", version.contentHash]);
+    expect(rejected.code).toBe(0);
+    expect(rejected.json()).toMatchObject({ status: "rejected" });
+
+    const unknown = await run(["show", "0".repeat(64)]);
+    expect(unknown.code).toBe(1);
+    expect(unknown.err()).toMatch(/not found|no document/i);
+
+    const missing = await run(["ingest", "missing.md", "--slug", "missing", "--title", "Missing"]);
+    expect(missing.code).toBe(1);
+    expect(missing.err()).toContain("ENOENT");
+    expect(missing.err()).not.toContain(folder);
+  });
+
+  it("refuses a file over the size limit before reading it", async () => {
+    // A sparse 3 GiB file: reading it whole would fail before any size check.
+    const huge = join(folder, "huge.md");
+    await writeFile(huge, "");
+    await truncate(huge, 3 * 1024 ** 3);
+    try {
+      const refused = await run(["ingest", "huge.md", "--slug", "huge", "--title", "Huge"]);
+      expect(refused.code).toBe(1);
+      expect(refused.err()).toMatch(/larger than 1048576 bytes; split it into smaller documents/);
+      expect(refused.err()).not.toContain(folder);
+    } finally {
+      await rm(huge);
+    }
+  });
+
+  it("prints the usage for incomplete document commands", async () => {
+    for (const args of [
+      ["ingest"],
+      ["ingest", "other.txt"],
+      ["ingest", "other.txt", "--slug", "parking"],
+      ["ingest", "other.txt", "--slug", "parking", "--title"],
+      ["ingest", "other.txt", "--slug", "parking", "--title", "Parking", "--extra", "x"],
+      ["list", "x"],
+      ["show"],
+      ["approve"],
+      ["reject", "a", "b"],
     ]) {
       const { code, err } = await run(args);
       expect(code, args.join(" ")).toBe(2);

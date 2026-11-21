@@ -3,6 +3,7 @@ import {
   asc,
   cosineDistance,
   count,
+  desc,
   eq,
   gt,
   gte,
@@ -14,6 +15,7 @@ import {
 import type { Database } from "../../database.js";
 import {
   chunks,
+  documentVersions,
   embeddings,
   providerUsage,
   sections,
@@ -146,6 +148,46 @@ export interface RetrievalUsageTotals {
 }
 
 /**
+ * Where a supplemental document version stands: `pending` waits for the owner's decision,
+ * `blocked` has sensitivity findings and can never be approved, `approved` is the indexed version
+ * of its source until a revision supersedes it, and `rejected` was refused by the owner.
+ */
+export type RetrievalDocumentStatus =
+  "pending" | "blocked" | "approved" | "rejected" | "superseded";
+
+/** A sensitivity finding of a document version: its kind and line, never the detected value. */
+export interface RetrievalDocumentFinding {
+  readonly kind: string;
+  readonly line: number;
+}
+
+/** One ingested version of a supplemental document, identified by the hash of its bytes. */
+export interface RetrievalDocumentVersion {
+  /** `document:<slug>`. */
+  readonly sourceId: string;
+  /** SHA-256 of the original bytes, lower-case hex. */
+  readonly contentHash: string;
+  readonly title: string;
+  readonly mediaType: string;
+  readonly byteSize: number;
+  /** The private storage key of the original; `null` once it is gone or when it was never kept. */
+  readonly storageKey: string | null;
+  readonly status: RetrievalDocumentStatus;
+  readonly findings: readonly RetrievalDocumentFinding[];
+  readonly sectionCount: number;
+  readonly chunkCount: number;
+  readonly createdAt: Date;
+  /** When it was approved, rejected or superseded. */
+  readonly decidedAt: Date | null;
+}
+
+/** A version as ingestion records it: waiting for a decision, or blocked by findings. */
+export type NewRetrievalDocumentVersion = Omit<
+  RetrievalDocumentVersion,
+  "status" | "createdAt" | "decidedAt"
+> & { readonly status: "pending" | "blocked" };
+
+/**
  * The persistence of the knowledge index and of embedding spend in the private `retrieval` schema.
  * It implements the store port of `@sebela/memory` structurally.
  */
@@ -192,6 +234,29 @@ export interface RetrievalPersistence {
   /** Counts a failed attempt on each item and keeps the error; at `maxAttempts` it is failed. */
   failWork(ids: readonly string[], error: string, maxAttempts: number): Promise<void>;
   workCounts(): Promise<RetrievalWorkCounts>;
+  /**
+   * Records an ingested document version. A version with the same content hash is never recorded
+   * twice: the stored one is returned with `created: false`.
+   */
+  addDocumentVersion(
+    version: NewRetrievalDocumentVersion,
+  ): Promise<{ readonly created: boolean; readonly version: RetrievalDocumentVersion }>;
+  /** The version with this content hash, or `null`. */
+  documentVersion(contentHash: string): Promise<RetrievalDocumentVersion | null>;
+  /** Every recorded version, newest first. */
+  documentVersions(): Promise<RetrievalDocumentVersion[]>;
+  /**
+   * Approves the pending version with this content hash and stores `source` (its embedded
+   * version, which must be of the same source and carry the hash as its version) in one
+   * transaction; the source's earlier approved version becomes superseded. Returns `false` and
+   * stores nothing when no pending version has the hash.
+   */
+  approveDocumentVersion(contentHash: string, source: RetrievalSourceVersion): Promise<boolean>;
+  /**
+   * Rejects the pending or blocked version with this content hash and forgets its storage key;
+   * returns `false` when there is no such version.
+   */
+  rejectDocumentVersion(contentHash: string): Promise<boolean>;
 }
 
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
@@ -244,75 +309,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
             .limit(1);
           if (newer !== undefined) return false;
         }
-        const [stored] = await tx
-          .insert(sources)
-          .values({
-            sourceId: source.sourceId,
-            sourceKind: source.sourceKind,
-            contentKind: source.contentKind,
-          })
-          .onConflictDoUpdate({
-            target: sources.sourceId,
-            set: { sourceKind: source.sourceKind, contentKind: source.contentKind, stale: false },
-          })
-          .returning({ id: sources.id });
-        if (stored === undefined) throw new Error("The source was not stored.");
-        await tx.delete(versions).where(eq(versions.sourceId, stored.id));
-        const [version] = await tx
-          .insert(versions)
-          .values({
-            sourceId: stored.id,
-            version: source.version,
-            title: source.title,
-            path: source.path,
-            model: source.model,
-            modelVersion: source.modelVersion,
-            dimension: source.dimension,
-            indexedAt: source.indexedAt,
-          })
-          .returning({ id: versions.id });
-        if (version === undefined) throw new Error("The version was not stored.");
-        await cacheVectors(
-          tx,
-          new Map(source.chunks.map((chunk) => [chunk.textHash, chunk.vector])),
-          source.model,
-          source.modelVersion,
-        );
-        if (source.sections.length === 0) return true;
-        const storedSections = await tx
-          .insert(sections)
-          .values(
-            source.sections.map((section) => ({
-              versionId: version.id,
-              ordinal: section.ordinal,
-              headingPath: [...section.headingPath],
-              start: section.start,
-              end: section.end,
-            })),
-          )
-          .returning({ id: sections.id, ordinal: sections.ordinal });
-        const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
-        if (source.chunks.length === 0) return true;
-        await tx.insert(chunks).values(
-          source.chunks.map((chunk) => {
-            const sectionId = sectionIds.get(chunk.sectionOrdinal);
-            if (sectionId === undefined) {
-              throw new Error(`Chunk ${String(chunk.ordinal)} names an unknown section.`);
-            }
-            return {
-              versionId: version.id,
-              sectionId,
-              ordinal: chunk.ordinal,
-              text: chunk.text,
-              textHash: chunk.textHash,
-              search: sql`to_tsvector('simple', unaccent(${chunk.text}))`,
-              embedding: [...chunk.vector],
-              model: source.model,
-              modelVersion: source.modelVersion,
-              dimension: source.dimension,
-            };
-          }),
-        );
+        await storeVersion(tx, source);
         return true;
       });
     },
@@ -390,6 +387,93 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         .groupBy(workItems.status);
       const of = (status: string) => rows.find((row) => row.status === status)?.count ?? 0;
       return { pending: of("pending"), failed: of("failed") };
+    },
+
+    async addDocumentVersion(version) {
+      const [added] = await db
+        .insert(documentVersions)
+        .values({
+          sourceId: version.sourceId,
+          contentHash: version.contentHash,
+          title: version.title,
+          mediaType: version.mediaType,
+          byteSize: version.byteSize,
+          storageKey: version.storageKey,
+          status: version.status,
+          findings: version.findings.map(({ kind, line }) => ({ kind, line })),
+          sectionCount: version.sectionCount,
+          chunkCount: version.chunkCount,
+        })
+        .onConflictDoNothing({ target: documentVersions.contentHash })
+        .returning();
+      if (added !== undefined) return { created: true, version: documentVersionOf(added) };
+      const [stored] = await db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.contentHash, version.contentHash));
+      if (stored === undefined) throw new Error("The document version was not stored.");
+      return { created: false, version: documentVersionOf(stored) };
+    },
+
+    async documentVersion(contentHash) {
+      const [row] = await db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.contentHash, contentHash));
+      return row === undefined ? null : documentVersionOf(row);
+    },
+
+    async documentVersions() {
+      const rows = await db.select().from(documentVersions).orderBy(desc(documentVersions.seq));
+      return rows.map(documentVersionOf);
+    },
+
+    async approveDocumentVersion(contentHash, source) {
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(documentVersions)
+          .where(eq(documentVersions.contentHash, contentHash))
+          .for("update");
+        if (row?.status !== "pending") return false;
+        if (
+          source.sourceId !== row.sourceId ||
+          source.version !== row.contentHash ||
+          source.sourceKind !== "supplemental"
+        ) {
+          throw new Error("The indexed version is not the version being approved.");
+        }
+        const decidedAt = new Date();
+        await tx
+          .update(documentVersions)
+          .set({ status: "superseded", decidedAt })
+          .where(
+            and(
+              eq(documentVersions.sourceId, row.sourceId),
+              eq(documentVersions.status, "approved"),
+            ),
+          );
+        await tx
+          .update(documentVersions)
+          .set({ status: "approved", decidedAt })
+          .where(eq(documentVersions.id, row.id));
+        await storeVersion(tx, source);
+        return true;
+      });
+    },
+
+    async rejectDocumentVersion(contentHash) {
+      const rejected = await db
+        .update(documentVersions)
+        .set({ status: "rejected", storageKey: null, decidedAt: new Date() })
+        .where(
+          and(
+            eq(documentVersions.contentHash, contentHash),
+            inArray(documentVersions.status, ["pending", "blocked"]),
+          ),
+        )
+        .returning({ id: documentVersions.id });
+      return rejected.length > 0;
     },
 
     async removeSourcesExcept(sourceKind, sourceIds) {
@@ -481,6 +565,81 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
 
 type Executor = Pick<Database, "insert">;
 
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Stores a source version, its sections and chunks inside the caller's transaction. */
+async function storeVersion(tx: Transaction, source: RetrievalSourceVersion): Promise<void> {
+  const [stored] = await tx
+    .insert(sources)
+    .values({
+      sourceId: source.sourceId,
+      sourceKind: source.sourceKind,
+      contentKind: source.contentKind,
+    })
+    .onConflictDoUpdate({
+      target: sources.sourceId,
+      set: { sourceKind: source.sourceKind, contentKind: source.contentKind, stale: false },
+    })
+    .returning({ id: sources.id });
+  if (stored === undefined) throw new Error("The source was not stored.");
+  await tx.delete(versions).where(eq(versions.sourceId, stored.id));
+  const [version] = await tx
+    .insert(versions)
+    .values({
+      sourceId: stored.id,
+      version: source.version,
+      title: source.title,
+      path: source.path,
+      model: source.model,
+      modelVersion: source.modelVersion,
+      dimension: source.dimension,
+      indexedAt: source.indexedAt,
+    })
+    .returning({ id: versions.id });
+  if (version === undefined) throw new Error("The version was not stored.");
+  await cacheVectors(
+    tx,
+    new Map(source.chunks.map((chunk) => [chunk.textHash, chunk.vector])),
+    source.model,
+    source.modelVersion,
+  );
+  if (source.sections.length === 0) return;
+  const storedSections = await tx
+    .insert(sections)
+    .values(
+      source.sections.map((section) => ({
+        versionId: version.id,
+        ordinal: section.ordinal,
+        headingPath: [...section.headingPath],
+        start: section.start,
+        end: section.end,
+      })),
+    )
+    .returning({ id: sections.id, ordinal: sections.ordinal });
+  const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
+  if (source.chunks.length === 0) return;
+  await tx.insert(chunks).values(
+    source.chunks.map((chunk) => {
+      const sectionId = sectionIds.get(chunk.sectionOrdinal);
+      if (sectionId === undefined) {
+        throw new Error(`Chunk ${String(chunk.ordinal)} names an unknown section.`);
+      }
+      return {
+        versionId: version.id,
+        sectionId,
+        ordinal: chunk.ordinal,
+        text: chunk.text,
+        textHash: chunk.textHash,
+        search: sql`to_tsvector('simple', unaccent(${chunk.text}))`,
+        embedding: [...chunk.vector],
+        model: source.model,
+        modelVersion: source.modelVersion,
+        dimension: source.dimension,
+      };
+    }),
+  );
+}
+
 /**
  * Serialises queueing work, reading the watermark and a conditional replace until the end of the
  * caller's transaction. A work item's `seq` is drawn before its transaction commits, so without the
@@ -521,4 +680,31 @@ const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", 
 function sourceKindOf(value: string): RetrievalSourceKind {
   if (value === "portfolio" || value === "supplemental") return value;
   throw new Error(`Unknown source kind ${value}.`);
+}
+
+const documentStatuses: readonly RetrievalDocumentStatus[] = [
+  "pending",
+  "blocked",
+  "approved",
+  "rejected",
+  "superseded",
+];
+
+function documentVersionOf(row: typeof documentVersions.$inferSelect): RetrievalDocumentVersion {
+  const status = documentStatuses.find((known) => known === row.status);
+  if (status === undefined) throw new Error(`Unknown document status ${row.status}.`);
+  return {
+    sourceId: row.sourceId,
+    contentHash: row.contentHash,
+    title: row.title,
+    mediaType: row.mediaType,
+    byteSize: row.byteSize,
+    storageKey: row.storageKey,
+    status,
+    findings: row.findings.map(({ kind, line }) => ({ kind, line })),
+    sectionCount: row.sectionCount,
+    chunkCount: row.chunkCount,
+    createdAt: row.createdAt,
+    decidedAt: row.decidedAt,
+  };
 }

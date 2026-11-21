@@ -8,6 +8,7 @@ import { openConnection, type Connection } from "../../connection.js";
 import { createTemporaryDatabase, type TemporaryDatabase } from "../../testing.js";
 import {
   createRetrievalPersistence,
+  type NewRetrievalDocumentVersion,
   type RetrievalPersistence,
   type RetrievalSourceVersion,
 } from "./index.js";
@@ -88,7 +89,7 @@ describe("retrieval persistence", () => {
 
   beforeEach(async () => {
     await connection.db.execute(
-      sql`TRUNCATE retrieval.sources, retrieval.provider_usage, retrieval.work_items, retrieval.embeddings CASCADE`,
+      sql`TRUNCATE retrieval.sources, retrieval.provider_usage, retrieval.work_items, retrieval.embeddings, retrieval.document_versions CASCADE`,
     );
   });
 
@@ -400,5 +401,159 @@ describe("retrieval persistence", () => {
       { id: item.id, attempts: 2, failed: true },
     ]);
     expect(await retrieval.workCounts()).toEqual({ pending: 0, failed: 1 });
+  });
+
+  describe("supplemental document versions", () => {
+    const HANDBOOK = "document:harbour-handbook";
+
+    const pending = (
+      content: string,
+      overrides: Partial<NewRetrievalDocumentVersion> = {},
+    ): NewRetrievalDocumentVersion => ({
+      sourceId: HANDBOOK,
+      contentHash: hash(content),
+      title: "Harbour support handbook",
+      mediaType: "text/markdown",
+      byteSize: content.length,
+      storageKey: `development/${hash(content).slice(0, 8)}.md`,
+      status: "pending",
+      findings: [],
+      sectionCount: 1,
+      chunkCount: 1,
+      ...overrides,
+    });
+
+    const documentSource = (content: string): RetrievalSourceVersion =>
+      source(HANDBOOK, {
+        sourceKind: "supplemental",
+        contentKind: "document",
+        title: "Harbour support handbook",
+        path: null,
+        version: hash(content),
+        texts: [[content, vector(3)]],
+      });
+
+    it("adds a version once and returns the stored one for the same bytes", async () => {
+      const first = await retrieval.addDocumentVersion(pending("v1"));
+      expect(first.created).toBe(true);
+      expect(first.version).toMatchObject({
+        sourceId: HANDBOOK,
+        contentHash: hash("v1"),
+        status: "pending",
+        findings: [],
+        decidedAt: null,
+      });
+      expect(first.version.createdAt).toBeInstanceOf(Date);
+
+      const again = await retrieval.addDocumentVersion(pending("v1", { title: "Another title" }));
+      expect(again).toEqual({ created: false, version: first.version });
+      expect(await retrieval.documentVersions()).toHaveLength(1);
+    });
+
+    it("stores a blocked version with its finding kinds and lines and without an original", async () => {
+      const findings = [
+        { kind: "email", line: 3 },
+        { kind: "telephone", line: 7 },
+      ];
+      const { version } = await retrieval.addDocumentVersion(
+        pending("leaky", { status: "blocked", storageKey: null, findings }),
+      );
+      expect(version).toMatchObject({ status: "blocked", storageKey: null, findings });
+      expect(await retrieval.documentVersion(hash("leaky"))).toEqual(version);
+      expect(await retrieval.documentVersion(hash("unknown"))).toBeNull();
+    });
+
+    it("refuses a malformed content hash or title", async () => {
+      await expect(
+        retrieval.addDocumentVersion(pending("v1", { contentHash: "not-a-hash" })),
+      ).rejects.toThrow();
+      await expect(retrieval.addDocumentVersion(pending("v1", { title: "" }))).rejects.toThrow();
+    });
+
+    it("lists versions newest first", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.addDocumentVersion(pending("v2"));
+      expect((await retrieval.documentVersions()).map((version) => version.contentHash)).toEqual([
+        hash("v2"),
+        hash("v1"),
+      ]);
+    });
+
+    it("approves a pending version and makes it searchable in one step", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      expect(await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"))).toBe(true);
+
+      const approved = await retrieval.documentVersion(hash("v1"));
+      expect(approved?.status).toBe("approved");
+      expect(approved?.decidedAt).toBeInstanceOf(Date);
+      const found = await retrieval.nearest({
+        vector: vector(3),
+        model: MODEL,
+        modelVersion: "1",
+        limit: 5,
+      });
+      expect(found).toMatchObject([
+        { sourceId: HANDBOOK, sourceKind: "supplemental", contentKind: "document", path: null },
+      ]);
+    });
+
+    it("approves only a pending version and stores nothing otherwise", async () => {
+      await retrieval.addDocumentVersion(
+        pending("blocked", { status: "blocked", storageKey: null }),
+      );
+      expect(
+        await retrieval.approveDocumentVersion(hash("blocked"), documentSource("blocked")),
+      ).toBe(false);
+      expect(await retrieval.approveDocumentVersion(hash("none"), documentSource("none"))).toBe(
+        false,
+      );
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      expect(await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"))).toBe(false);
+      expect((await retrieval.documentVersion(hash("blocked")))?.status).toBe("blocked");
+      expect(await retrieval.indexedSources()).toHaveLength(1);
+    });
+
+    it("refuses an indexed version that is not the approved bytes", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await expect(
+        retrieval.approveDocumentVersion(hash("v1"), documentSource("other")),
+      ).rejects.toThrow();
+      expect((await retrieval.documentVersion(hash("v1")))?.status).toBe("pending");
+      expect(await retrieval.indexedSources()).toEqual([]);
+    });
+
+    it("supersedes the approved version of the source when a revision is approved", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      await retrieval.addDocumentVersion(pending("v2"));
+      await retrieval.approveDocumentVersion(hash("v2"), documentSource("v2"));
+
+      expect((await retrieval.documentVersion(hash("v1")))?.status).toBe("superseded");
+      expect((await retrieval.documentVersion(hash("v2")))?.status).toBe("approved");
+      expect(await retrieval.indexedSources()).toMatchObject([
+        { sourceId: HANDBOOK, version: hash("v2") },
+      ]);
+    });
+
+    it("rejects a pending or blocked version and forgets its original", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.addDocumentVersion(pending("leaky", { status: "blocked", storageKey: null }));
+      expect(await retrieval.rejectDocumentVersion(hash("v1"))).toBe(true);
+      expect(await retrieval.rejectDocumentVersion(hash("leaky"))).toBe(true);
+      expect(await retrieval.documentVersion(hash("v1"))).toMatchObject({
+        status: "rejected",
+        storageKey: null,
+      });
+      expect(await retrieval.rejectDocumentVersion(hash("v1"))).toBe(false);
+      expect(await retrieval.indexedSources()).toEqual([]);
+    });
+
+    it("does not reject an approved version", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      expect(await retrieval.rejectDocumentVersion(hash("v1"))).toBe(false);
+      expect((await retrieval.documentVersion(hash("v1")))?.status).toBe("approved");
+    });
   });
 });

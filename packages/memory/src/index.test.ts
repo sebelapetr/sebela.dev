@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { SearchResultSchema } from "@sebela/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -14,6 +16,7 @@ import {
   type NearestChunk,
   type NearestQuery,
   type PortfolioSnapshot,
+  type PreparedDocument,
   type RetrievalConfig,
   type RetrievalStore,
   type SourceKind,
@@ -895,5 +898,96 @@ describe("searching the portfolio", () => {
     ]);
     expect(pool.length).toBeGreaterThan(0);
     expect(pool.every((sourceId) => sourceId.startsWith("portfolio:glossary_term:"))).toBe(true);
+  });
+});
+
+/** A prepared supplemental document, as the documents module returns it for an approval. */
+function preparedDocument(texts: readonly string[]): PreparedDocument {
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  return {
+    sourceId: "document:harbour-handbook",
+    title: "Harbour support handbook",
+    mediaType: "text/markdown",
+    extension: "md",
+    contentHash: sha(texts.join("\n")),
+    text: texts.join("\n"),
+    sections: [{ ordinal: 0, headingPath: ["Harbour support handbook"], start: 0, end: 10 }],
+    chunks: texts.map((text, ordinal) => ({
+      sectionOrdinal: 0,
+      ordinal,
+      text,
+      textHash: sha(text),
+    })),
+    findings: [],
+  };
+}
+
+describe("embedding an approved document", () => {
+  it("embeds its chunks in batches and returns a supplemental version without storing it", async () => {
+    const sizes: number[] = [];
+    const fake = createFakeEmbedder();
+    const embedder: Embedder = {
+      model: fake.model,
+      version: fake.version,
+      dimension: fake.dimension,
+      embed: (texts, input, signal) => {
+        sizes.push(texts.length);
+        return fake.embed(texts, input, signal);
+      },
+    };
+    const { indexer, sources, usage } = knowledgeBase({
+      embedder,
+      config: { embeddingBatchSize: 2 },
+    });
+    const document = preparedDocument(["Opening hours", "Refunds", "Escalation", "Refunds"]);
+
+    const { version, report } = await indexer.embedDocument(document);
+
+    expect(sizes).toEqual([2, 1]);
+    expect(report).toMatchObject({ embedded: 3, reused: 1 });
+    expect(report.tokens).toBeGreaterThan(0);
+    expect(usage.filter((record) => record.operation === "index")).toHaveLength(2);
+    expect(version).toMatchObject({
+      sourceId: "document:harbour-handbook",
+      sourceKind: "supplemental",
+      contentKind: "document",
+      title: "Harbour support handbook",
+      path: null,
+      version: document.contentHash,
+      model: embedder.model,
+      modelVersion: embedder.version,
+      dimension: embedder.dimension,
+      indexedAt: NOW,
+      sections: document.sections,
+    });
+    expect(version.chunks.map((chunk) => chunk.vector.length)).toEqual([
+      embedder.dimension,
+      embedder.dimension,
+      embedder.dimension,
+      embedder.dimension,
+    ]);
+    expect(sources.size).toBe(0);
+  });
+
+  it("reuses the cached vectors of a document embedded before", async () => {
+    const embedder = createFakeEmbedder();
+    const { indexer } = knowledgeBase({ embedder });
+    const document = preparedDocument(["Opening hours", "Refunds"]);
+    await indexer.embedDocument(document);
+    const calls = embedder.calls;
+
+    const { report } = await indexer.embedDocument(document);
+
+    expect(embedder.calls).toBe(calls);
+    expect(report).toEqual({ embedded: 0, reused: 2, tokens: 0, costUsd: 0 });
+  });
+
+  it("stops before a batch the monthly ceiling no longer allows", async () => {
+    const embedder = createFakeEmbedder();
+    const { indexer } = knowledgeBase({ embedder, config: { monthlyCeilingUsd: 0 } });
+    await expect(indexer.embedDocument(preparedDocument(["Opening hours"]))).rejects.toBeInstanceOf(
+      BudgetExhaustedError,
+    );
+    expect(embedder.calls).toBe(0);
   });
 });
