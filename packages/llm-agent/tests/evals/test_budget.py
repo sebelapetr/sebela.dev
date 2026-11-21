@@ -396,3 +396,26 @@ def test_runs_recording_at_the_same_time_do_not_lose_each_other_s_entries(
     assert len(runs) == 60
     assert budget.ledger_spent(ledger, "07-ai-service") == pytest.approx(0.6)
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_the_earlier_runs_of_a_worktree_created_again_under_the_same_folder_still_count(
+    tmp_path: Path,
+) -> None:
+    # The worktree feat-1-a was removed and created again: its ledger is empty, but the loop
+    # kept what the first one spent.
+    kept = budget.KeptRuns(
+        _kept(
+            tmp_path / "eval-spend.json",
+            ("feat-1-a", "r1", "issue", 0.9),
+            ("feat-2-b", "r1", "issue", 0.5),
+        ),
+        source="feat-1-a",
+    )
+    ledger = tmp_path / "ledger.json"
+    again = budget.open_allowance(4.0, ledger, P7, "issue", kept=kept)
+    assert again.available_usd == pytest.approx(0.1)
+    again.charge(0.05, "a little more")
+    budget.record_run(ledger, "r2", again, "partial")
+    assert budget.ledger_spent(ledger, "07-ai-service", stage="issue", kept=kept) == pytest.approx(
+        1.45
+    )
