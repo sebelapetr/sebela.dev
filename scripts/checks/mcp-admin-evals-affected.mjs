@@ -8,7 +8,11 @@
 //
 // MCP Admin reaches the API only through the generated client, so it is affected by:
 // - any change under apps/mcp-admin/ (code, tool descriptions, prompts, evals, fixtures,
-//   package.json), and by a change, removal or addition of the `mcp-admin` job in the model evals
+//   package.json), except its documentation: Markdown outside its src/ and evals/ (AGENTS.md,
+//   README.md, docs/), which nothing it runs reads. Markdown in src/ or evals/ counts;
+// - a change to a repository skill its evals give the model (`.claude/skills/<name>/`, for each
+//   `skill: "<name>"` of its eval sources, read by evals/tests.js);
+// - a change, removal or addition of the `mcp-admin` job in the model evals
 //   workflow (its other jobs, the `changes` job and this script decide which suites run, not how
 //   MCP Admin behaves, so they do not count);
 // - a change of a documented route MCP Admin calls in the committed OpenAPI document
@@ -36,11 +40,15 @@ const OPENAPI = "packages/api-client/src/generated/openapi.json";
 const CLIENT = "packages/api-client/src/index.ts";
 const LOCKFILE = "pnpm-lock.yaml";
 const SOURCE_FOLDERS = ["apps/mcp-admin/src", "apps/mcp-admin/evals"];
+const SKILLS = ".claude/skills";
 const WORKFLOW = ".github/workflows/model-evals.yml";
 const WORKFLOW_JOB = "mcp-admin";
 const LOCK_IMPORTERS = ["apps/mcp-admin", "packages/api-client"];
 const PATH_RULES = [
-  { test: (file) => file.startsWith("apps/mcp-admin/"), why: "MCP Admin changed" },
+  {
+    test: (file) => file.startsWith("apps/mcp-admin/") && !isDocumentation(file),
+    why: "MCP Admin changed",
+  },
   {
     test: (file) => file === "packages/api-client/package.json",
     why: "the API client's package changed",
@@ -68,6 +76,21 @@ function show(commit, file) {
     maxBuffer: 256 * 1024 * 1024,
   });
   return result.status === 0 ? result.stdout : undefined;
+}
+
+/** MCP Admin's documentation: Markdown outside the folders its code and evals read from. */
+function isDocumentation(file) {
+  return /\.md$/i.test(file) && !SOURCE_FOLDERS.some((folder) => file.startsWith(`${folder}/`));
+}
+
+/** The repository skills MCP Admin's evals give the model: each `skill: "<name>"`, sorted. */
+export function skillsUsedBy(sources) {
+  const skills = new Set();
+  for (const { name, text } of sources) {
+    if (!isRuntimeSource(name) || !name.startsWith("apps/mcp-admin/evals/")) continue;
+    for (const [, skill] of text.matchAll(/\bskill:\s*["']([a-z0-9-]+)["']/g)) skills.add(skill);
+  }
+  return [...skills].sort();
 }
 
 /** A source file MCP Admin runs, not a test or a test's fake. */
@@ -237,10 +260,25 @@ export function decide(base, head = "HEAD") {
   const files = git(["diff", "--name-only", `${mergeBase}...${head}`])
     .split("\n")
     .filter(Boolean);
+  let headSources;
+  const sources = () =>
+    (headSources ??= git(["ls-tree", "-r", "--name-only", head, "--", ...SOURCE_FOLDERS])
+      .split("\n")
+      .filter((name) => name && isRuntimeSource(name))
+      .map((name) => ({ name, text: show(head, name) ?? "" })));
   const reasons = [];
   for (const file of files) {
     const rule = PATH_RULES.find(({ test }) => test(file));
     if (rule) reasons.push(`${rule.why}: ${file}`);
+  }
+  const skillFiles = files.filter((file) => file.startsWith(`${SKILLS}/`));
+  if (skillFiles.length > 0) {
+    const used = skillsUsedBy(sources());
+    for (const file of skillFiles) {
+      if (used.includes(file.slice(SKILLS.length + 1).split("/")[0])) {
+        reasons.push(`a skill MCP Admin's evals give the model changed: ${file}`);
+      }
+    }
   }
   if (files.includes(WORKFLOW)) {
     const before = workflowJob(show(mergeBase, WORKFLOW), WORKFLOW_JOB);
@@ -276,11 +314,7 @@ export function decide(base, head = "HEAD") {
         // An unreadable document is reported by contractReasons.
       }
     }
-    const sources = git(["ls-tree", "-r", "--name-only", head, "--", ...SOURCE_FOLDERS])
-      .split("\n")
-      .filter((name) => name && isRuntimeSource(name))
-      .map((name) => ({ name, text: show(head, name) ?? "" }));
-    const { called } = routesCalledBy(sources, [...documented]);
+    const { called } = routesCalledBy(sources(), [...documented]);
     reasons.push(...contractReasons(baseText, headText, called));
   }
   return { affected: reasons.length > 0, files, reasons };

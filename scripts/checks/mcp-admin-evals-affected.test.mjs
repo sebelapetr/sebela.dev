@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { routesCalledBy } from "./mcp-admin-evals-affected.mjs";
+import { routesCalledBy, skillsUsedBy } from "./mcp-admin-evals-affected.mjs";
 
 const CHECK = path.join(import.meta.dirname, "mcp-admin-evals-affected.mjs");
 const REPOSITORY = path.resolve(import.meta.dirname, "..", "..");
@@ -166,6 +166,12 @@ function baseFiles() {
     "apps/mcp-admin/package.json": '{ "name": "@sebela/mcp-admin" }\n',
     "apps/mcp-admin/src/modules/content/registry.ts":
       'export const routes = { get: "/v1/person", update: "/v1/projects/{slug}" };\n',
+    // The evals give the model these repository skills (apps/mcp-admin/evals/tests.js).
+    "apps/mcp-admin/evals/scenarios.js":
+      "export const S1 = { skill: \"update-profile\" };\nexport const S2 = { skill: 'diary-entry' };\n",
+    ".claude/skills/update-profile/SKILL.md": "# Update profile\n",
+    ".claude/skills/diary-entry/SKILL.md": "# Diary entry\n",
+    ".claude/skills/tdd/SKILL.md": "# TDD\n",
     "apps/mcp-admin/evals/state.js":
       "export const read = (slug) => fetch(`/v1/projects/${slug}`);\n",
     // Tests and their fakes call routes that MCP Admin itself never calls.
@@ -369,7 +375,8 @@ describe("MCP Admin model evals: affected or not", () => {
     ["its evals", "apps/mcp-admin/evals/catalogue.js"],
     ["its eval fixtures", "apps/mcp-admin/evals/fixtures/s01/person.json"],
     ["its package.json", "apps/mcp-admin/package.json"],
-    ["its documentation", "apps/mcp-admin/AGENTS.md"],
+    ["Markdown its code reads", "apps/mcp-admin/src/modules/tools/descriptions.md"],
+    ["Markdown its evals read", "apps/mcp-admin/evals/fixtures/s02/case-study.md"],
   ]) {
     it(`is affected by a change in apps/mcp-admin/ (${what}) and names the file`, (t) => {
       const result = affected(t, { [file]: "changed\n" });
@@ -377,6 +384,29 @@ describe("MCP Admin model evals: affected or not", () => {
       assert.match(result.output, new RegExp(file.replaceAll(".", "\\.")));
     });
   }
+
+  it("is not affected by its documentation: Markdown outside its src/ and evals/", (t) => {
+    const result = affected(t, {
+      "apps/mcp-admin/AGENTS.md": "changed\n",
+      "apps/mcp-admin/README.md": "changed\n",
+      "apps/mcp-admin/docs/transport.md": "changed\n",
+    });
+    assert.equal(result.affected, false, result.output);
+  });
+
+  it("is affected by a repository skill its evals give the model, and names it", (t) => {
+    for (const skill of ["update-profile", "diary-entry"]) {
+      const file = `.claude/skills/${skill}/SKILL.md`;
+      const result = affected(t, { [file]: "# Changed\n" });
+      assert.equal(result.affected, true, `${skill}\n${result.output}`);
+      assert.match(result.output, new RegExp(skill));
+    }
+  });
+
+  it("is not affected by a repository skill its evals do not use", (t) => {
+    const result = affected(t, { ".claude/skills/tdd/SKILL.md": "# Changed\n" });
+    assert.equal(result.affected, false, result.output);
+  });
 
   it("is affected by a change to the mcp-admin job of the model evals workflow", (t) => {
     const result = affected(t, {
@@ -505,6 +535,17 @@ describe("MCP Admin's called routes in this repository", () => {
       assert.ok(called.includes(route), `${route} is not among ${called.join(", ")}`);
     }
     assert.ok(!called.includes("/v1/retrieval/search"), "retrieval search is not MCP Admin's");
+    // The skills its evals give the model, read from the repository's skill folder.
+    const skills = skillsUsedBy(sources);
+    assert.deepEqual(skills, ["add-event", "diary-entry", "update-cv", "update-profile"]);
+    for (const skill of skills) {
+      assert.ok(fs.existsSync(path.join(REPOSITORY, ".claude/skills", skill, "SKILL.md")), skill);
+    }
+    assert.match(
+      fs.readFileSync(path.join(REPOSITORY, "apps/mcp-admin/evals/tests.js"), "utf8"),
+      /"\.\.\/\.\.\/\.\.\/\.claude\/skills\/"/,
+      "the evals no longer read the skills from .claude/skills/; update the decision",
+    );
     // Wildcard patterns of its own audit lookups are the only literals that name no route; any
     // other unmatched literal means a call the derivation would miss.
     assert.deepEqual(
