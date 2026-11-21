@@ -20,9 +20,9 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 ## Flow for each issue
 
 1. Make sure the phase branch `phase/<phase-folder>` exists; create it from the base branch if this is the first issue of the phase. The base branch is `master` unless you were given another.
-2. Pick an issue of the phase labelled `ready-for-agent` whose blockers are closed. Skip issues labelled `hitl` or `agent-failed`.
+2. Pick an issue of the phase labelled `ready-for-agent` whose blockers are closed. Skip issues labelled `hitl` or `agent-failed`. Read the issue with its comments (`gh issue view <n> --comments`), not the body alone: an `Owner note` in a comment is as binding as the body and may change scope, budget or approvals.
 3. Name the issue branch exactly `<type>/<issue-number>-<short-slug>` (`docs/git-workflow.md`), where `<type>` is the Conventional Commits type of the change — `feat` for new behaviour, also in the trial. Never `issue/`, `trial/` or a name without a slash. First look for earlier work on the issue: a local or remote branch matching `*/<issue-number>-*` (`git branch -a --list '*/<issue-number>-*'`) or a worktree in `node harness/worktree.mjs list`. If one exists, continue on that branch and its worktree instead of creating a new one, and tell the developer what is already committed and what is uncommitted. Otherwise run `git fetch origin`, then create the issue branch and its worktree in one step: `node harness/worktree.mjs create <branch> --base origin/phase/<phase-folder>`. It prints the worktree path, creates the worktree's own database in the shared Postgres, writes the worktree's ports, database name and storage folder to its `.env.local`, then installs the worktree, applies its migrations, prepares its storage folder and loads the demo seed into an empty profile. The owner starts the shared Postgres; if the command fails because it is not running, do not work around it — report that the issue could not start and why. If it fails at a backend stage (install, migration, storage or seed), the worktree is kept: fix the cause or report it, then run the same `create` again to retry. An existing `.env.local` without `STORAGE_WORKTREE` stops the storage stage; delete that file and run `create` again.
-4. Dispatch the developer agent that matches the area: `backend-developer`, `frontend-developer` or `ai-developer`. Give it the issue text, the worktree path and the PRD path. Do not paraphrase the acceptance criteria — pass them as written.
+4. Dispatch the developer agent that matches the area: `backend-developer`, `frontend-developer` or `ai-developer`. Give it the issue text, every owner note from the issue's comments, the worktree path and the PRD path. Do not paraphrase the acceptance criteria or the owner notes — pass them as written. Give the reviewer the same owner notes.
 5. When the developer reports green checks, dispatch the `reviewer` on the same worktree.
 6. If the reviewer returns objections, send them back to the developer unchanged. Repeat until the reviewer approves.
 7. Open the issue pull request against the phase branch, in the format from `docs/git-workflow.md`, with the roles filled in and screenshots attached for UI work.
@@ -34,15 +34,21 @@ Also read `docs/agents.md` and `docs/git-workflow.md` in full — they define th
 
 ## When the phase is done
 
-When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists; never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
+When no ready issue of the phase remains, open the phase pull request from the phase branch to the base branch as a draft (`gh pr create --draft`), or update it if it exists. Before opening it the first time, archive the phase's plan: on a short-lived branch `chore/<phase>-plan-done` from the phase branch, `git mv .plan/<phase> .plan/done/<phase>`, update every reference to the old path (`git grep`), commit (`docs(plan): archive the <phase> plan`) and squash-merge it into the phase branch; skip this when the folder is already in `.plan/done/`. A plan folder may therefore be at `.plan/<phase>/` or `.plan/done/<phase>/`. never mark it ready for review. The owner marks it ready when the phase is complete, HITL issues included, which starts its model evals. List every issue with its pull request, everything that was skipped or failed and why, and every `Follow-up:` line from the phase's issue comments. Then stop. The owner reviews and merges it.
 
 ## When an issue fails
 
 If an issue cannot be finished — the reviewer keeps rejecting, CI cannot be made green, the issue needs a decision the PRD does not contain — do not force it. Comment on the issue with what happened and why. In the phase loop, report `failed` and leave labels to the loop. In an interactive session, tell the owner.
 
-## When the usage limit interrupts an issue
+## When something outside the issue interrupts it
 
-If an agent stops because the usage limit was reached, the issue is not at fault. Keep its worktree and branch, comment on the issue what is done and what remains, and in the phase loop report `interrupted`. The loop waits for the limit and continues the same issue, without marking it.
+If the work on an issue stops for a reason that is not the issue's fault, keep its worktree and branch, comment on the issue what is done and what remains, and in the phase loop report `interrupted` with its `cause`. The loop does not mark the issue in any of these cases.
+
+- `usage_limit`: an agent stopped because the usage limit was reached. The loop waits for the limit and continues the same issue.
+- `safeguard`: a model safeguard refused or stopped an agent (a usage-policy or AUP refusal, an `invalid_request` flagged by the API). The loop retries at once; a second safeguard stop on the same issue stops the loop and alerts the owner.
+- `environment`: the machine cannot run the work, such as low disk, a missing tool or credential, or a guard refusal you cannot work around without breaking a rule. The loop stops and alerts the owner.
+
+Every other outcome reports `cause` as null. If GitHub refuses the phase pull request (for example because the phase branch has no commits beyond the base branch), still report `phase_done` and say why in the summary; the loop checks what exists.
 
 ## Rules
 

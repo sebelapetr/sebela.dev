@@ -187,6 +187,12 @@ export interface WebsiteOptions {
   readonly contentRevalidateSeconds?: number;
   /** The analytics settings (`WEB_ANALYTICS_*`), such as a local stand-in's; none by default. */
   readonly analytics?: { readonly scriptUrl: string; readonly websiteId: string };
+  /**
+   * Whether search engines may index the site (`WEB_INDEXING`). On by default, so the tests see
+   * the metadata of the launched site; `false` leaves it unset, as in a worktree or a production
+   * stack not yet launched.
+   */
+  readonly indexing?: boolean;
 }
 
 /** Serves the built website, reading the API at `apiBaseUrl`. */
@@ -198,6 +204,7 @@ export async function startWebsite(
     invalidationSecret,
     contentRevalidateSeconds,
     analytics,
+    indexing = true,
   }: WebsiteOptions = {},
 ): Promise<Started> {
   const host = required("WEB_HOST");
@@ -216,6 +223,7 @@ export async function startWebsite(
         contentRevalidateSeconds === undefined ? "" : String(contentRevalidateSeconds),
       WEB_ANALYTICS_SCRIPT_URL: analytics?.scriptUrl ?? "",
       WEB_ANALYTICS_WEBSITE_ID: analytics?.websiteId ?? "",
+      WEB_INDEXING: indexing ? "on" : "",
     },
     url,
     "/favicon.ico",

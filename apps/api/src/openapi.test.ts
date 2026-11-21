@@ -876,6 +876,14 @@ describe("the OpenAPI document and the reference", () => {
     expect(operation("GET", "/health").responses["200"]).toBeDefined();
   });
 
+  it("documents the readiness route with its 503", () => {
+    const documented = operation("GET", "/health/ready");
+    expect(documented.operationId).toBe("getReadiness");
+    expect(documented.security).toEqual([]);
+    expect(Object.keys(documented.responses)).toEqual(["200", "400", "429", "500", "503"]);
+    expect(document.components.schemas).toHaveProperty("Readiness");
+  });
+
   it("documents the private authentication check without a body", () => {
     const documented = operation("GET", "/v1/authentication");
     expect(documented.security).toEqual([{ bearerAuth: [] }]);

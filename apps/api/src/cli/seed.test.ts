@@ -600,6 +600,7 @@ describe("the seed CLI", () => {
               }),
             ),
           loadSeedIntoEmpty: () => Promise.reject(new Error("Not used by this test.")),
+          clearContent: () => Promise.reject(new Error("Not used by this test.")),
         },
       };
       const io = capture();

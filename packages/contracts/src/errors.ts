@@ -17,6 +17,8 @@ import { z } from "zod";
  *   declared type or extension does not match its content.
  * - `rate_limited` (429): a rate-limit budget is exhausted; `Retry-After` says when to retry.
  * - `internal_error` (500): an unexpected failure. No stack, SQL or secret is included.
+ * - `unavailable` (503): something the API depends on, such as the database, cannot be reached now;
+ *   the readiness check answers it. No detail of the failure is included.
  */
 export const errorCodes = [
   "validation_failed",
@@ -29,6 +31,7 @@ export const errorCodes = [
   "unsupported_media_type",
   "rate_limited",
   "internal_error",
+  "unavailable",
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];

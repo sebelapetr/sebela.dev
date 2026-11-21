@@ -1,0 +1,85 @@
+{
+  "description": "The shared configuration selects every package, so every image",
+  "changedFiles": ["packages/config/prettier.config.js"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/api",
+            "path": "apps/api",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/api-client",
+            "path": "packages/api-client",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/config",
+            "path": "packages/config",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/contracts",
+            "path": "packages/contracts",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/db",
+            "path": "packages/db",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/mcp-admin",
+            "path": "apps/mcp-admin",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/services",
+            "path": "packages/services",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/ui",
+            "path": "packages/ui",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          },
+          {
+            "name": "@sebela/web",
+            "path": "apps/web",
+            "reason": {
+              "__typename": "RootInternalDepChanged"
+            }
+          }
+        ],
+        "length": 10
+      }
+    }
+  },
+  "services": ["api", "web", "mcp-admin"]
+}

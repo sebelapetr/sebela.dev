@@ -1,6 +1,6 @@
 # llm-agent
 
-The reusable portfolio chat agent: a Python library that answers one visitor question at a time with a guarded, bounded, bilingual (EN/CS) answer over public content reads. Read the root `AGENTS.md` first; this file covers only what is specific to this package. The phase PRD is `.plan/06-llm-agent/prd.md`, and the eval specification is `.plan/06-llm-agent/evals.md`.
+The reusable portfolio chat agent: a Python library that answers one visitor question at a time with a guarded, bounded, bilingual (EN/CS) answer over public content reads. Read the root `AGENTS.md` first; this file covers only what is specific to this package. The phase PRD is `.plan/done/06-llm-agent/prd.md`, and the eval specification is `.plan/done/06-llm-agent/evals.md`.
 
 ## What it is
 
@@ -122,7 +122,7 @@ The evals live in `evals/`:
 - `budget.py` keeps the campaign ledger.
 - `run.py`, `provider.py` and `promptfooconfig.yaml` hold the runner. Promptfoo drives the cases.
 
-Gates (`.plan/06-llm-agent/evals.md`):
+Gates (`.plan/done/06-llm-agent/evals.md`):
 
 - Every critical case passes in 100% of its repeats.
 - Useful ordinary answers reach at least 90%, separately for EN and CS.

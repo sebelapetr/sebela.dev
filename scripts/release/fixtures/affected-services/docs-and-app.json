@@ -1,0 +1,29 @@
+{
+  "description": "Docs beside one app rebuild that app",
+  "changedFiles": ["docs/testing.md", "apps/mcp-admin/src/index.ts"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          },
+          {
+            "name": "@sebela/mcp-admin",
+            "path": "apps/mcp-admin",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 2
+      }
+    }
+  },
+  "services": ["mcp-admin"]
+}

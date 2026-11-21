@@ -6,7 +6,7 @@
 
 The open-source engineering behind Petr Šebela's next professional website.
 
-[![Status: MCP Admin delivered](https://img.shields.io/badge/status-MCP_Admin_delivered-525252?style=flat-square)](.plan/05-mcp-admin/prd.md)
+[![Status: MCP Admin delivered](https://img.shields.io/badge/status-MCP_Admin_delivered-525252?style=flat-square)](.plan/done/05-mcp-admin/prd.md)
 [![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-525252?style=flat-square)](LICENSE)
 
@@ -19,7 +19,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Available on `master`.** The website serves the profile, CV and AI Engineering Roadmap from the content API. The owner can maintain that content through MCP Admin. Visitors can try prepared answers on the Ask page. The next phase adds the Python library for model-generated answers. [Phase 06 specification](.plan/06-llm-agent/prd.md)
+> **Available on `master`.** The website serves the profile, CV and AI Engineering Roadmap from the content API. The owner can maintain that content through MCP Admin. Visitors can try prepared answers on the Ask page. The next phase adds the Python library for model-generated answers. [Phase 06 specification](.plan/done/06-llm-agent/prd.md)
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -110,7 +110,7 @@ The browser reaches the assistant through the website and API. The API owns conv
 
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
-The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/06-llm-agent/prd.md)
+The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/done/06-llm-agent/prd.md)
 
 ### Two servers, two responsibilities
 
@@ -130,25 +130,27 @@ Portfolio API content and owner-approved extra documents are chunked, embedded a
 
 ## Roadmap
 
-Phases 00–05 have merged into `master`. Phase 06 has an approved specification and six published implementation issues. The first public release is scheduled for phase 10. [Phase 06 issues](.plan/06-llm-agent/issues.md)
+Phases 00–05 have merged into `master`. Phase 06 has an approved specification and six published implementation issues. The first public release is scheduled for phase 10. [Phase 06 issues](.plan/done/06-llm-agent/issues.md)
 
-| Phase                       | Deliverable                                                                       | Specification                                                                      |
-| --------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **00 · Overview & harness** | Project design, documentation, agent rules and the unattended development harness | [Overview](.plan/00-overview/prd.md) · [Harness](.plan/00-overview/harness-prd.md) |
-| **00 · Trial**              | A disposable dry run of the orchestration and review workflow                     | [Trial](.plan/00-trial/prd.md)                                                     |
-| **01 · Foundation**         | Monorepo tooling, isolation, guardrails, Docker skeleton and CI                   | [Foundation](.plan/01-foundation/prd.md)                                           |
-| **02 · API & database**     | Profile domain, OpenAPI, authentication and fictional demo data                   | [API & database](.plan/02-api-db/prd.md)                                           |
-| **03 · Website**            | Presentation pages, CV, design system and a chat UI backed by prepared answers    | [Website](.plan/03-web/prd.md)                                                     |
-| **04 · AI Roadmap**         | Learning domain, diary, books, events and roadmap pages                           | [AI Roadmap](.plan/04-ai-roadmap/prd.md)                                           |
-| **05 · Admin MCP**          | Secured content-management tools and content skills                               | [Admin MCP](.plan/05-mcp-admin/prd.md)                                             |
-| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                        | [LLM agent](.plan/06-llm-agent/prd.md)                                             |
-| **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                        | [AI service](.plan/07-ai-service/prd.md)                                           |
-| **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                       | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
-| **09 · RAG**                | Approved-source ingest, private originals, embeddings and retrieval               | [RAG](.plan/09-rag/prd.md)                                                         |
-| **10 · First launch**       | Verified VPS deployment, private admin networking, backups and rollback           | [Delivery](.plan/10-delivery/prd.md)                                               |
-| **11 · Knowledge graph**    | Source-backed relationships and measured graph-assisted retrieval                 | [Knowledge graph](.plan/11-knowledge-graph/prd.md)                                 |
-| **12 · Ontology**           | Semantic constraints and a bounded Auto Ontology experiment                       | [Ontology](.plan/12-ontology/prd.md)                                               |
-| **13 · External MCP UI**    | Verified interactive views with structured/text fallbacks                         | [MCP Apps](.plan/13-mcp-apps/prd.md)                                               |
+| Phase                       | Deliverable                                                                        | Specification                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **00 · Overview & harness** | Project design, documentation, agent rules and the unattended development harness  | [Overview](.plan/00-overview/prd.md) · [Harness](.plan/00-overview/harness-prd.md) |
+| **00 · Trial**              | A disposable dry run of the orchestration and review workflow                      | [Trial](.plan/done/00-trial/prd.md)                                                |
+| **01 · Foundation**         | Monorepo tooling, isolation, guardrails, Docker skeleton and CI                    | [Foundation](.plan/done/01-foundation/prd.md)                                      |
+| **02 · API & database**     | Profile domain, OpenAPI, authentication and fictional demo data                    | [API & database](.plan/done/02-api-db/prd.md)                                      |
+| **03 · Website**            | Presentation pages, CV, design system and a chat UI backed by prepared answers     | [Website](.plan/done/03-web/prd.md)                                                |
+| **04 · AI Roadmap**         | Learning domain, diary, books, events and roadmap pages                            | [AI Roadmap](.plan/done/04-ai-roadmap/prd.md)                                      |
+| **05 · Admin MCP**          | Secured content-management tools and content skills                                | [Admin MCP](.plan/done/05-mcp-admin/prd.md)                                        |
+| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                         | [LLM agent](.plan/done/06-llm-agent/prd.md)                                        |
+| **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                         | [AI service](.plan/07-ai-service/prd.md)                                           |
+| **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                        | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
+| **09 · RAG**                | Approved-source ingest, private originals, embeddings and private retrieval        | [RAG](.plan/09-rag/prd.md)                                                         |
+| **09.1 · RAG integration**  | Public search, agent tool and skill, public MCP search, cited supplemental sources | [RAG integration](.plan/09.1-rag-integration/prd.md)                               |
+| **09.2 · RAG upgrades**     | BM25 ranking and parent-child retrieval, measured                                  | [RAG upgrades](.plan/09.2-rag-upgrades/prd.md)                                     |
+| **10 · Delivery**           | Affected-image builds, VPS deployment with rollback, backups, monitoring           | [Delivery](.plan/done/10-delivery/prd.md)                                          |
+| **11 · Knowledge graph**    | Source-backed relationships and measured graph-assisted retrieval                  | [Knowledge graph](.plan/11-knowledge-graph/prd.md)                                 |
+| **12 · Ontology**           | Semantic constraints and a bounded Auto Ontology experiment                        | [Ontology](.plan/12-ontology/prd.md)                                               |
+| **13 · External MCP UI**    | Verified interactive views with structured/text fallbacks                          | [MCP Apps](.plan/13-mcp-apps/prd.md)                                               |
 
 ## Working on the project
 
@@ -299,7 +301,7 @@ The website reads content only through the public API routes and never holds an 
 - **Analytics are optional.** Without the analytics settings the website sends nothing.
 - **Not deployed.** Production deployment, backups and the launch are phase 10.
 
-The visual direction is binding in [design](docs/design.md). The HTML prototype under [`.plan/03-web/prototype/`](.plan/03-web/prototype/) and other wireframes or mock-ups are illustrative only; where they differ from `docs/design.md` or the implementation, they are not authoritative.
+The visual direction is binding in [design](docs/design.md). The HTML prototype under [`.plan/done/03-web/prototype/`](.plan/done/03-web/prototype/) and other wireframes or mock-ups are illustrative only; where they differ from `docs/design.md` or the implementation, they are not authoritative.
 
 Versions and command details: [repository structure](docs/repository-structure.md#toolchain-and-workspace).
 

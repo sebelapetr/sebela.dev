@@ -1,0 +1,29 @@
+# The production Postgres in miniature for backup.e2e.mjs: the image of the root compose.yaml (the
+# test passes its pinned reference in BACKUP_E2E_POSTGRES_IMAGE) with the superuser, password and
+# cluster database of the test's fictional environment file. The scripts reach it only through
+# `docker compose exec`, as on the server, so nothing is published on the host. The test sets
+# COMPOSE_PROJECT_NAME to a name of its own and removes the project and its volume afterwards.
+
+name: sebela-backup-e2e
+
+services:
+  postgres:
+    image: ${BACKUP_E2E_POSTGRES_IMAGE:?set BACKUP_E2E_POSTGRES_IMAGE}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    stop_grace_period: 5s
+    # Healthy once the server accepts queries over TCP — not only the temporary server of the first
+    # initialisation, which listens on its socket alone — as in the root compose.yaml.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          psql --host 127.0.0.1 --username "$${POSTGRES_USER}" --dbname "$${POSTGRES_DB}" --no-psqlrc
+          --tuples-only --no-align --command "SELECT count(*) FROM pg_available_extensions
+          WHERE name = 'vector'" | grep --quiet --line-regexp 1
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 60s

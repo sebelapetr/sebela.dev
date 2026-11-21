@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import { currentNavigationHref, mainContentId } from "../navigation";
 import { MobileMenu } from "./mobile-menu";
 import { AskLink, HomeLink, NavigationList } from "./navigation-links";
+import { SourceCodeLink } from "./source-code-link";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
  * The site header of every page, sticky at the top: the name that leads home (or "Home" when the
- * profile could not be read), the navigation, "Ask AI" and the theme toggle; below the desktop
- * width, the name, "Ask AI" and a menu. A "Skip to content" link comes first. Not printed.
+ * profile could not be read), the navigation, "Ask AI", the source-code link and the theme toggle;
+ * below the desktop width, the name, "Ask AI" and a menu (which holds the toggle and the
+ * source-code link). A "Skip to content" link comes first. Not printed.
  */
 export function SiteHeader({ name }: { readonly name: string | null }) {
   const current = currentNavigationHref(usePathname());
@@ -30,6 +32,7 @@ export function SiteHeader({ name }: { readonly name: string | null }) {
           </nav>
           <div className="flex shrink-0 items-center gap-2">
             <AskLink current={current} />
+            <SourceCodeLink className="hidden md:inline-flex" />
             <ThemeToggle className="hidden md:inline-flex" />
             <MobileMenu name={name} current={current} />
           </div>

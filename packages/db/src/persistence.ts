@@ -1,7 +1,13 @@
+import { sql } from "drizzle-orm";
+
 import type { DatabaseConfig } from "./config.js";
 import { openConnection } from "./connection.js";
 import { createApiKeyPersistence, type ApiKeyPersistence } from "./modules/api-keys/index.js";
 import { createAuditPersistence, type AuditPersistence } from "./modules/audit/index.js";
+import {
+  createMaintenancePersistence,
+  type MaintenancePersistence,
+} from "./modules/maintenance/index.js";
 import { createProfilePersistence, type ProfilePersistence } from "./modules/profile/index.js";
 import { createRoadmapPersistence, type RoadmapPersistence } from "./modules/roadmap/index.js";
 
@@ -12,6 +18,8 @@ export interface Persistence {
   readonly apiKeys: ApiKeyPersistence;
   /** The private audit of content changes; written only inside `transaction`, with the change. */
   readonly audit: AuditPersistence;
+  /** Whole-database operations of the owner's maintenance commands, such as the demo clear. */
+  readonly maintenance: MaintenancePersistence;
   /**
    * Runs `work` with profile, roadmap and audit persistence inside one database transaction. It commits
    * when the work resolves and rolls every write back when it throws; the work's result or error
@@ -24,6 +32,11 @@ export interface Persistence {
       audit: AuditPersistence,
     ) => Promise<T>,
   ): Promise<T>;
+  /**
+   * Runs the cheapest query the database can answer. Resolves when it answers; rejects when it
+   * cannot be reached or refuses the connection. Reads and changes no data.
+   */
+  ping(): Promise<void>;
   /** Ends the pool. Call once, at shutdown. */
   close(): Promise<void>;
 }
@@ -36,6 +49,7 @@ export function createPersistence(config: DatabaseConfig): Persistence {
     roadmap: createRoadmapPersistence(connection.db),
     apiKeys: createApiKeyPersistence(connection.db),
     audit: createAuditPersistence(connection.db),
+    maintenance: createMaintenancePersistence(connection.db),
     transaction: (work) =>
       connection.db.transaction((tx) =>
         work(
@@ -44,6 +58,9 @@ export function createPersistence(config: DatabaseConfig): Persistence {
           createAuditPersistence(tx),
         ),
       ),
+    ping: async () => {
+      await connection.db.execute(sql`select 1`);
+    },
     close: () => connection.close(),
   };
 }

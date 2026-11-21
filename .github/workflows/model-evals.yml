@@ -26,7 +26,7 @@ on:
       allowance:
         description: >-
           Python agent (llm-agent): the remaining USD allowance of its eval campaign
-          (.plan/06-llm-agent/evals.md). Required when that suite runs; the run spends at most this.
+          (.plan/done/06-llm-agent/evals.md). Required when that suite runs; the run spends at most this.
         type: string
         required: false
 

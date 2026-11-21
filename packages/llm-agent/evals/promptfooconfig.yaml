@@ -1,4 +1,4 @@
-# Model evals of the Python chat agent (.plan/06-llm-agent/evals.md).
+# Model evals of the Python chat agent (.plan/done/06-llm-agent/evals.md).
 #
 # Do not run this file directly: `python -m evals.run` (`pnpm --filter @sebela/llm-agent eval`)
 # starts the fictional test API, selects the cases, sets the allowlisted environment and applies

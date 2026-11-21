@@ -1,0 +1,68 @@
+#!/usr/bin/env node
+// A stand-in for the docker command line, put first on PATH by deploy.test.mjs to exercise
+// infra/scripts/deploy.sh without a Docker daemon. It records every call, with the image tags the
+// process environment hands to Compose, as a JSON line in FAKE_DOCKER_LOG, and answers from the
+// JSON scenario in FAKE_DOCKER_SCENARIO:
+//
+//   migrations  tag of an API image -> the migration files it holds (no entry: the image cannot be read)
+//   unhealthy   tags whose services never become healthy (`compose up --wait` fails)
+//   failMigrate API tags whose one-off migration fails
+//   images      local image references, as `docker image ls` lists them
+//
+// Any other call fails, so the script under test cannot do anything the tests do not expect.
+
+import fs from "node:fs";
+
+const scenario = JSON.parse(fs.readFileSync(process.env.FAKE_DOCKER_SCENARIO ?? "", "utf8"));
+const args = process.argv.slice(2);
+const tags = {
+  api: process.env.API_IMAGE_TAG ?? null,
+  web: process.env.WEB_IMAGE_TAG ?? null,
+  "mcp-admin": process.env.MCP_ADMIN_IMAGE_TAG ?? null,
+};
+fs.appendFileSync(process.env.FAKE_DOCKER_LOG ?? "", `${JSON.stringify({ args, tags })}\n`);
+
+function fail(message) {
+  process.stderr.write(`fake docker: ${message}\n`);
+  process.exit(1);
+}
+
+const tagOf = (reference) => reference.slice(reference.lastIndexOf(":") + 1);
+
+if (args[0] === "compose") {
+  const command = args.find((arg) => ["pull", "run", "up"].includes(arg));
+  if (command === "pull") process.exit(0);
+  if (command === "run") {
+    if (!args.includes("migrate")) fail(`unexpected compose run: ${args.join(" ")}`);
+    if ((scenario.failMigrate ?? []).includes(tags.api)) fail("the migration failed");
+    process.exit(0);
+  }
+  if (command === "up") {
+    const sick = Object.values(tags).filter((tag) => (scenario.unhealthy ?? []).includes(tag));
+    if (sick.length > 0) fail(`a container is unhealthy (${sick.join(", ")})`);
+    process.exit(0);
+  }
+  fail(`unexpected compose call: ${args.join(" ")}`);
+}
+
+if (args[0] === "run") {
+  const entrypoint = args.indexOf("--entrypoint");
+  if (entrypoint === -1 || args[entrypoint + 1] !== "ls") fail(`unexpected run: ${args.join(" ")}`);
+  const files = scenario.migrations?.[tagOf(args[entrypoint + 2] ?? "")];
+  if (!files) fail("the image cannot be read");
+  process.stdout.write(files.map((file) => `${file}\n`).join(""));
+  process.exit(0);
+}
+
+if (args[0] === "image" && args[1] === "ls") {
+  const repository = args.at(-1);
+  const listed = (scenario.images ?? []).filter((reference) =>
+    reference.startsWith(`${repository}:`),
+  );
+  process.stdout.write(listed.map((reference) => `${reference}\n`).join(""));
+  process.exit(0);
+}
+
+if (args[0] === "image" && args[1] === "rm") process.exit(0);
+
+fail(`unexpected call: ${args.join(" ")}`);

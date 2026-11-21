@@ -98,6 +98,9 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
       },
     }),
     "500": error("`internal_error`: an unexpected failure, without details."),
+    ...(route.errors.includes("unavailable")
+      ? { "503": error("`unavailable`: the database cannot be reached now, without details.") }
+      : {}),
   };
 }
 

@@ -289,3 +289,41 @@ test.describe("metadata while the API is unavailable", () => {
     expect(robots.status()).toBe(200);
   });
 });
+
+test.describe("a site not switched to indexing", () => {
+  let api: Started;
+  let website: Started;
+
+  test.beforeAll(async () => {
+    api = await startApi("with-experience");
+    // As in a worktree or a production stack before launch: `WEB_INDEXING` unset.
+    website = await startWebsite(api.url, { siteOrigin: SITE, indexing: false });
+  });
+
+  test.afterAll(async () => {
+    await website.stop();
+    await api.stop();
+  });
+
+  test("every page asks search engines not to index it, in its header and its meta tag", async ({
+    page,
+  }) => {
+    for (const path of ["/", "/experience", "/services", "/cv"]) {
+      const response = await page.goto(`${website.url}${path}`);
+      expect(response?.status(), path).toBe(200);
+      expect(response?.headers()["x-robots-tag"], path).toBe("noindex, nofollow");
+      await expect(page.locator('meta[name="robots"]'), path).toHaveAttribute(
+        "content",
+        "noindex, nofollow",
+      );
+    }
+  });
+
+  test("the indexing files say noindex too, and robots.txt stays readable", async ({ request }) => {
+    for (const path of ["/robots.txt", "/sitemap.xml", "/llms.txt"]) {
+      const response = await request.get(`${website.url}${path}`);
+      expect(response.status(), path).toBe(200);
+      expect(response.headers()["x-robots-tag"], path).toMatch(/noindex/);
+    }
+  });
+});
