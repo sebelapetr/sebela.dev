@@ -1,9 +1,10 @@
 # Quality gate for every pull request and for pushes to the main branch.
 # Node.js comes from .nvmrc and pnpm from the packageManager field of package.json. Every job runs on
 # every event; none is skipped by a path filter, so no required status is ever left waiting.
-# Documentation never counts as a change of an app or package: the quality job runs no package task
-# and the two website jobs report success at once for a change of documentation alone
-# (docs/testing.md, "CI", "Documentation" and "Website jobs").
+# Documentation never counts as a change of an app or package: for a change of documentation alone
+# the quality job runs no package task (nor, on master, the full coverage run) and the two website
+# jobs report success at once (docs/testing.md, "CI", "Documentation", "Website jobs" and
+# "Coverage").
 # What each job checks: docs/testing.md ("CI").
 name: CI
 
@@ -109,11 +110,18 @@ jobs:
       # committed files.
       - name: Generated API client matches the API
         run: pnpm check:api-client
-      # The published coverage figure covers every package: on a push to master the tests of the
-      # packages the push did not affect run too. Those tested above are cache hits, their coverage
-      # reports already on disk. A pull request shows the coverage of what it ran.
+      # The published coverage figure covers every package: on a push to master that changes more
+      # than documentation the tests of the packages the push did not affect run too. Those tested
+      # above are cache hits, their coverage reports already on disk. A push of documentation alone
+      # cannot change the figure: it runs no tests and keeps no site, and the published badge stays.
+      # A pull request shows the coverage of what it ran.
+      - name: Full coverage run on master
+        id: coverage
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node scripts/checks/coverage-full-run.mjs "$TURBO_SCM_BASE" >> "$GITHUB_OUTPUT"
       - name: Tests of every package, for the full coverage figure (master only)
-        if: github.event_name == 'push'
+        if: steps.coverage.outputs.full-run == 'true'
         run: pnpm exec turbo run test
       # The job summary, and the public coverage site: the README badge's endpoint, the figures and
       # a page. On master it is kept as the artifact `coverage`, which coverage-pages.yml publishes
@@ -124,7 +132,7 @@ jobs:
           node scripts/checks/coverage-summary.mjs --site "$RUNNER_TEMP/coverage-site"
           --docs-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/master/docs/testing.md#coverage"
       - name: Coverage site (master only)
-        if: github.event_name == 'push'
+        if: steps.coverage.outputs.full-run == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage

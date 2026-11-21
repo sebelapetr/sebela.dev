@@ -23,14 +23,41 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Publish the coverage site
-    # Only a successful push run of this repository's master. A pull request's CI run, even one
-    # from a fork whose branch is called master, never publishes.
+  # Only a successful push run of this repository's master, and only one that kept the site: a push
+  # of documentation alone keeps none (scripts/checks/coverage-full-run.mjs), and then nothing is
+  # deployed and the published badge stays. A pull request's CI run, even one from a fork whose
+  # branch is called master, never publishes.
+  site:
+    name: Coverage site of the CI run
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      kept: ${{ steps.artifact.outputs.kept }}
+    steps:
+      - name: Whether the run kept the coverage site
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.name == "coverage" and (.expired | not))] | length')
+          if [ "$count" -gt 0 ]; then
+            echo "kept=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The run kept no coverage site (documentation alone changed): nothing to publish."
+            echo "kept=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    name: Publish the coverage site
+    needs: site
+    if: needs.site.outputs.kept == 'true'
     runs-on: ubuntu-latest
     # Reading the CI run's artifact, then the Pages deployment, which signs in with OIDC.
     permissions:
