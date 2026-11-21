@@ -34,8 +34,9 @@
 // step fails. Exits with 1 when a step fails.
 
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { once } from "node:events";
 import fs from "node:fs";
 import net from "node:net";
 import { networkInterfaces } from "node:os";
@@ -171,6 +172,15 @@ function containers() {
     });
 }
 
+/** An error's message with its cause, which carries the reason of a failed `fetch`. */
+function describe(error) {
+  if (!(error instanceof Error)) return String(error);
+  const { cause } = error;
+  if (!(cause instanceof Error)) return error.message;
+  const code = "code" in cause ? ` ${String(cause.code)}` : "";
+  return `${error.message} (${cause.name}: ${cause.message}${code})`;
+}
+
 async function health() {
   const response = await fetch(`${web}/health`, { signal: AbortSignal.timeout(10_000) });
   return { status: response.status, body: await response.json() };
@@ -273,7 +283,9 @@ try {
 
   if (BROWSER) {
     step("the hero's question to the mock Ask page in a browser, with screenshots");
-    const browser = spawnSync(
+    // Asynchronously: a blocked event loop would miss the website closing this process's idle
+    // keep-alive connections meanwhile, and the next request would go out on a closed socket.
+    const browser = spawn(
       process.execPath,
       [PLAYWRIGHT_CLI, "test", "--config", "playwright.complete-stack.config.ts"],
       {
@@ -282,7 +294,8 @@ try {
         stdio: "inherit",
       },
     );
-    assert.equal(browser.status, 0, "the browser checks pass");
+    const [status] = await once(browser, "exit");
+    assert.equal(status, 0, "the browser checks pass");
   }
 
   step("the health route reports each failing part");
@@ -318,9 +331,7 @@ try {
   process.stdout.write("Production stack smoke check passed.\n");
 } catch (error) {
   process.exitCode = 1;
-  process.stderr.write(
-    `Production stack smoke check failed: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+  process.stderr.write(`Production stack smoke check failed: ${describe(error)}\n`);
   try {
     process.stderr.write(
       `${compose(["logs", "--no-color", "migrate", "api", "web", "mcp-admin"])}\n`,
