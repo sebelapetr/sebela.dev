@@ -85,7 +85,6 @@ const DESCRIPTION_MAX = 160;
 export function profileStructuredData(origin: string, profile: StructuredProfile): object {
   const home = `${origin}/`;
   const ids = siteIds(origin);
-  const page = pageText(origin, "home", profile);
   const bio = plainText(profile.shortBio);
   return graph([
     {
@@ -101,7 +100,8 @@ export function profileStructuredData(origin: string, profile: StructuredProfile
       "@type": "ProfilePage",
       "@id": `${home}#profile-page`,
       url: home,
-      name: page.title,
+      // In full: structured data have no length limit, unlike the page's shortened title.
+      name: profile.headline === "" ? profile.name : `${profile.name} · ${profile.headline}`,
       ...(bio === "" ? {} : { description: bio }),
       isPartOf: { "@id": ids.website },
       mainEntity: { "@id": ids.person },

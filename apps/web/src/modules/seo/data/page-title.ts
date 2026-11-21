@@ -1,7 +1,8 @@
 // Page titles short enough for a search result to show whole: `Page · Parent · Person`, with the
 // parent dropped and then the page's name shortened at a word when the title would be too long. The
-// person's name, which names the site, is never shortened. Lengths count characters (code points),
-// so a title never ends in half of a surrogate pair.
+// person's name, which names the site, is never shortened. Lengths count the characters a reader
+// sees (grapheme clusters), so a cut never splits a flag, a joined emoji or an accented letter, and
+// a separator or punctuation left at the cut is dropped before the "…".
 
 /** The longest title, so a search result shows it whole. */
 export const TITLE_MAX = 60;
@@ -37,15 +38,30 @@ export function homepageTitle(name: string, headline: string): string {
   return `${name}${SEPARATOR}${shorten(headline, room)}`;
 }
 
-function length(text: string): number {
-  return Array.from(text).length;
+const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+/** Whitespace, dashes and other punctuation that would dangle before the "…", such as " ·" or " —". */
+const DANGLING_END = /[\s\p{Pd}\p{Po}|]+$/u;
+
+/** The characters a reader sees in `text`, each a whole grapheme cluster. */
+function characters(text: string): string[] {
+  return Array.from(GRAPHEMES.segment(text), (part) => part.segment);
 }
 
-/** `text` within `max` characters: cut at the last word that fits, or inside one long word, then "…". */
+function length(text: string): number {
+  return characters(text).length;
+}
+
+/**
+ * `text` within `max` characters: cut at the last word that fits, or inside one long word, then
+ * "…", with any separator or punctuation left at the cut dropped.
+ */
 function shorten(text: string, max: number): string {
-  const characters = Array.from(text);
-  if (characters.length <= max) return text;
-  const cut = characters.slice(0, max - 1);
-  const space = characters[max - 1] === " " ? cut.length : cut.lastIndexOf(" ");
-  return `${(space > 0 ? cut.slice(0, space) : cut).join("").trimEnd()}…`;
+  const all = characters(text);
+  if (all.length <= max) return text;
+  const cut = all.slice(0, max - 1);
+  const space = all[max - 1] === " " ? cut.length : cut.lastIndexOf(" ");
+  const kept = (space > 0 ? cut.slice(0, space) : cut).join("");
+  const trimmed = kept.replace(DANGLING_END, "");
+  return `${trimmed === "" ? kept.trimEnd() : trimmed}…`;
 }
