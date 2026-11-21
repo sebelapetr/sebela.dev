@@ -85,7 +85,9 @@ function parse(
   bytes: Uint8Array,
   limits: PdfReadLimits,
 ): Promise<PdfWorkerOutput | { readonly reason: "parser_limit" | "too_slow" }> {
-  const copy = bytes.slice();
+  // A copy in its own memory: the worker takes it over, and a Buffer's `slice` would be a view
+  // whose transfer detached the caller's bytes (and the rest of their pool).
+  const copy = new Uint8Array(bytes);
   const input: PdfWorkerInput = {
     bytes: copy,
     maxPages: limits.maxPages,
