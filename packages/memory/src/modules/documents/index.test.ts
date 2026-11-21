@@ -190,7 +190,9 @@ describe("prepareDocument", () => {
     const [first, second] = prepared.chunks.map((chunk) => chunk.text.split("\n")[1] ?? "");
     // The second chunk starts with words from the end of the first one.
     const head = (second ?? "").split(" ").slice(0, 5).join(" ");
-    const overlap = (first ?? "").slice((first ?? "").indexOf(head));
+    const at = (first ?? "").indexOf(head);
+    expect(at).toBeGreaterThan(0);
+    const overlap = (first ?? "").slice(at);
     expect(first?.startsWith(head)).toBe(false);
     expect(overlap.length).toBeGreaterThan(0);
     expect(overlap.length).toBeLessThanOrEqual(200);
@@ -287,6 +289,49 @@ describe("prepareDocument", () => {
     expect(prepared.findings).toContainEqual({ kind, line: 5 });
     expect(JSON.stringify(prepared.findings)).not.toContain(value.slice(0, 12));
     expect(Object.keys(prepared.findings[0] ?? {}).sort()).toEqual(["kind", "line"]);
+  });
+
+  it("reports each finding at its line in the original file", () => {
+    const text = [
+      "",
+      "",
+      "# Fictional notes",
+      "",
+      "Intro of a well-",
+      "known team.",
+      "",
+      "",
+      "",
+      "",
+      "Mail jordan.sample@example.test today.",
+      "Before a form feed.\fCall +420 777 123 456 after it.",
+      "Long-",
+      "distance call 555-010-0199.",
+      "",
+    ].join("\r\n");
+
+    const prepared = prepareDocument(input(text, { fileName: "notes.txt" }));
+
+    expect(prepared.findings).toEqual([
+      { kind: "email", line: 11 },
+      { kind: "telephone", line: 12 },
+      // "Long-" and "distance" are joined; the number is on the second of the two lines.
+      { kind: "telephone", line: 14 },
+    ]);
+  });
+
+  it.each([
+    ["dotted words", "", "a.", 48_000],
+    ["hyphenated words", "", "a-", 48_000],
+    ["a dotted address", "https://", "a.", 48_000],
+    ["token-like words", "", "eyJ-", 48_000],
+    ["connection settings", "", "Host=a;", 400_000],
+  ])("prepares a long run of %s within the processing time", (_name, prefix, unit, size) => {
+    const text = prefix + unit.repeat(Math.ceil(size / unit.length));
+    const started = performance.now();
+
+    expect(rejection(() => prepareDocument(input(text, { fileName: "notes.txt" })))).toBeNull();
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("finds a sensitive value in the display title as line 0", () => {
