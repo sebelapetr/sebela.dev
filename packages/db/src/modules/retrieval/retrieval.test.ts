@@ -465,6 +465,23 @@ describe("retrieval persistence", () => {
       expect(await retrieval.documentVersion(hash("unknown"))).toBeNull();
     });
 
+    it("keeps the page of a PDF version's findings", async () => {
+      const findings = [
+        { kind: "email", page: 2, line: 3 },
+        { kind: "telephone", line: 0 },
+      ];
+      await retrieval.addDocumentVersion(
+        pending("leaky-pdf", {
+          mediaType: "application/pdf",
+          status: "blocked",
+          storageKey: null,
+          findings,
+        }),
+      );
+      expect((await retrieval.documentVersion(hash("leaky-pdf")))?.findings).toEqual(findings);
+      expect((await retrieval.documentVersions())[0]?.findings).toEqual(findings);
+    });
+
     it("refuses a malformed content hash or title", async () => {
       await expect(
         retrieval.addDocumentVersion(pending("v1", { contentHash: "not-a-hash" })),

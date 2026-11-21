@@ -773,7 +773,7 @@ function bunnyPrivateHarness(): Promise<PrivateHarness> {
 }
 
 const privateName =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(md|txt)$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(md|txt|pdf)$/;
 const foreignPrivateName = "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b.md";
 
 describe.each([
@@ -806,6 +806,16 @@ describe.each([
 
     expect(await storage.read(key)).toBeNull();
     expect(await harness.keys()).toEqual([]);
+  });
+
+  it("stores a PDF original under a generated .pdf name", async () => {
+    const storage = harness.open();
+    const bytes = Buffer.from("%PDF-1.4 fictional");
+
+    const key = await storage.store({ bytes, extension: "pdf" });
+
+    expect(key.split("/").at(-1)).toMatch(/\.pdf$/);
+    expect(await storage.read(key)).toEqual(new Uint8Array(bytes));
   });
 
   it("never yields an address of any kind", async () => {
