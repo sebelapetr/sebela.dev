@@ -95,6 +95,7 @@ Reviewed by: <agent>
 Orchestrated by: <agent>
 ```
 
+- `.github/pull_request_template.md` pre-fills these sections for every pull request, with a `## Summary` section for phase pull requests and an `Approved by:` line for whoever approves the merge (the owner for a pull request into `master`).
 - UI changes attach the screenshots at 360, 768 and 1280 px in both themes.
 - A change in behaviour or structure includes the documentation update.
 - Merged by the orchestrator with a **squash merge** when the reviewer has approved and CI is green on the pull request. The result is one commit per issue on the phase branch.

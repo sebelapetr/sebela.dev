@@ -48,7 +48,10 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
-├── .github/workflows/       CI, the image release and the deployment [1, 10]
+├── .github/
+│   ├── workflows/           CI, the image release and the deployment [1, 10]
+│   ├── ISSUE_TEMPLATE/      issue forms (bug report, idea) and links to private security reporting and Discussions
+│   └── pull_request_template.md  sections of a pull request description, with the roles
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
 ├── infra/                   production definition, see infra/README.md [10]
 │   ├── production/          Compose production overrides and the production example settings
@@ -67,6 +70,8 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── .env.secrets.example     the owner's secrets for paid outside services, as placeholders; the real file stays in the main checkout [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
 ├── GLOSSARY.md              canonical domain terms
+├── CONTRIBUTING.md          how the repository is built and how outside contributors can help
+├── SECURITY.md              private vulnerability reporting, scope and safe harbour
 ├── README.md
 └── LICENSE
 ```
