@@ -679,3 +679,32 @@ async def test_a_paid_run_reports_its_spend_line_before_and_after(
     assert cost["campaign_remaining_usd"] == pytest.approx(3.994)
     (entry,) = ledger()
     assert entry["expected_usd"] == pytest.approx(expected, abs=1e-6)
+
+
+# --- The loop's kept runs (issue #384, item 1) --------------------------------------------------
+
+
+async def test_a_run_in_the_loop_counts_the_issue_spend_of_other_worktrees(
+    paid: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    kept = tmp_path / "eval-spend.json"
+    runs = [
+        {
+            "key": f"{source}/r1",
+            "source": source,
+            "run": "r1",
+            "campaign": "07-ai-service",
+            "stage": "issue",
+            "spentUsd": 1.0,
+            "uncertainUsd": 0,
+        }
+        for source in ("feat-1-x", "feat-2-y")
+    ]
+    kept.write_text(json.dumps({"runs": runs}), encoding="utf-8")
+    monkeypatch.setenv(budget.KEPT_RUNS_ENVIRONMENT, str(kept))
+    with pytest.raises(budget.BudgetBlockedError, match="issue runs"):
+        await run.command_run(["S01-en"], 4.0, campaign=P7)
+    assert paid["api_starts"] == 0
+    assert paid["promptfoo"] == []
+    monkeypatch.delenv(budget.KEPT_RUNS_ENVIRONMENT)
+    assert await run.command_run(["S01-en"], 4.0, campaign=P7) in (0, 1)
