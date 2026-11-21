@@ -5,19 +5,25 @@ Fakes only: no model, no key, no API. The paid comparison itself is run by the o
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import contextlib
+import json
+from collections.abc import AsyncIterator, Iterator, Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
-from evals import budget, comparison, run
+from evals import budget, comparison, provider, run
 from evals.catalogue import BY_ID as CATALOGUE
 from evals.datasets.cases import BY_ID as CASES
 from evals.gate import evaluate_gate
 from evals.graders import code, rubric
 from llm_agent import versions
 from llm_agent.models import config
+from llm_agent.reliability.budgets import Budget
+from llm_agent.reliability.stops import LimitReached
 from llm_agent.schemas.requests import ExecutionLimits
 from tests.evals.records import SUBJECT, record
 
@@ -90,11 +96,6 @@ def test_the_subset_is_versioned() -> None:
     assert comparison.COMPARISON_VERSION.startswith("comparison-v")
 
 
-def test_one_candidate_run_of_the_subset_stays_within_the_per_run_limit() -> None:
-    # The owner's per-run limit of USD 1.00 (`packages/llm-agent/AGENTS.md`, Evals).
-    assert run.reservation(SUBSET, repeats=1) <= 1.00
-
-
 # --- The candidates -------------------------------------------------------------------------
 
 
@@ -120,27 +121,6 @@ def test_the_sonnet_candidate_reuses_the_judges_pinned_sonnet_prices() -> None:
     )
 
 
-def test_a_candidate_whose_main_admission_exceeds_the_execution_allowance_is_blocked() -> None:
-    limits = ExecutionLimits()
-    assert comparison.admission_block("haiku-high") is None
-    assert comparison.admission_block("haiku-medium") is None
-    reason = comparison.admission_block("sonnet-medium")
-    assert reason is not None
-    assert f"{limits.max_cost_usd:.4f} USD" in reason
-    assert "owner" in reason
-
-
-def test_the_runner_blocks_that_candidate_before_anything_starts(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    async def never(*args: Any, **kwargs: Any) -> int:
-        raise AssertionError("nothing may start")
-
-    monkeypatch.setattr(run, "command_run", never)
-    assert run.main(["--compare", "sonnet-medium", "--allowance", "1"]) == run.BLOCKED
-    assert "blocked: sonnet-medium" in capsys.readouterr().err
-
-
 # --- The option -----------------------------------------------------------------------------
 
 
@@ -163,8 +143,12 @@ def test_compare_runs_exactly_the_subset_with_the_named_candidate() -> None:
             "--compare given twice",
         ),
         (
-            ["--compare", "haiku-medium", "--case", "S01-en", "--allowance", "1"],
-            "--compare runs the fixed subset",
+            ["--compare", "haiku-medium", "--case", "Q02-en", "--allowance", "1"],
+            "Q02-en is not in the comparison subset",
+        ),
+        (
+            ["--compare", "haiku-medium", "--case", "S01-en", "--case", "S01-en", "--allowance", "1"],
+            "S01-en named twice",
         ),
         (["--compare", "haiku-medium", "--all", "--allowance", "1"], "--compare runs the fixed"),
         (["--compare", "haiku-medium", "--regrade", "x"], "--compare runs the fixed subset"),
@@ -366,25 +350,392 @@ def test_the_report_option_reads_comparison_folders_for_free() -> None:
         run.plan(["--compare-report", "a", "--allowance", "1"])
 
 
-def _summary(candidate: str, effort: str, useful: int) -> dict[str, Any]:
+
+
+def test_compare_may_run_a_slice_of_the_subset_named_with_case() -> None:
+    chosen = run.plan(
+        ["--compare", "sonnet-medium", "--case", "Q01-en", "--case", "Q01-cs", "--allowance", "1"]
+    )
+    assert chosen == run.Plan(
+        mode="compare", cases=("Q01-en", "Q01-cs"), allowance_usd=1.0, candidate="sonnet-medium"
+    )
+
+
+# --- The comparison-only execution limit ----------------------------------------------------
+
+
+def _worst_case(prices: config.Prices) -> float:
+    limits = ExecutionLimits()
+    security = config.STAGES["security"].prices
+    main = limits.main_input_tokens * prices.input + limits.main_output_tokens * prices.output
+    guard = (
+        limits.security_input_tokens * security.input
+        + limits.security_output_tokens * security.output
+    )
+    return (main + guard) / 1_000_000
+
+
+def test_the_public_execution_limits_are_unchanged() -> None:
+    assert ExecutionLimits().max_cost_usd == 0.02
+    assert budget.SUBJECT_EXECUTION_USD == 0.02
+    with pytest.raises(ValidationError):
+        ExecutionLimits(max_cost_usd=0.03)
+    with pytest.raises(ValidationError):
+        ExecutionLimits.model_validate({"max_cost_usd": 0.12})
+
+
+def test_the_haiku_candidates_keep_the_default_limits() -> None:
+    assert comparison.execution_limits("haiku-high") == ExecutionLimits()
+    assert comparison.execution_limits("haiku-medium") == ExecutionLimits()
+    assert _worst_case(config.HAIKU_PRICES) < ExecutionLimits().max_cost_usd
+
+
+def test_the_sonnet_limit_is_derived_from_its_pinned_prices_and_the_caps() -> None:
+    limits = comparison.execution_limits("sonnet-medium")
+    sonnet = comparison.CANDIDATES["sonnet-medium"].prices
+    # One Main call at Sonnet's prices and the 16,000/8,192-token caps plus one Security call.
+    assert limits.max_cost_usd == pytest.approx(_worst_case(sonnet))
+    assert limits.max_cost_usd == pytest.approx((16_000 * 2.0 + 8_192 * 10.0) / 1e6 + 0.000784)
+    assert isinstance(limits, ExecutionLimits)
+    assert limits.model_dump(exclude={"max_cost_usd"}) == ExecutionLimits().model_dump(
+        exclude={"max_cost_usd"}
+    )
+
+
+def test_the_sonnet_limit_admits_a_worst_case_security_and_main_call() -> None:
+    sonnet = comparison.CANDIDATES["sonnet-medium"].prices
+    haiku = config.STAGES["security"].prices
+
+    def admit_both(limits: ExecutionLimits) -> None:
+        allowance = Budget(limits)
+        allowance.admit(input_tokens=4000, input_cap=4000, output_cap=768, prices=haiku)
+        allowance.admit(input_tokens=16_000, input_cap=16_000, output_cap=8192, prices=sonnet)
+
+    admit_both(comparison.execution_limits("sonnet-medium"))
+    with pytest.raises(LimitReached):
+        admit_both(ExecutionLimits())
+
+
+def test_the_runner_no_longer_blocks_sonnet(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+
+    async def fake(selected: Any, declared: float, *, candidate: str | None = None) -> int:
+        seen.update(selected=tuple(selected), declared=declared, candidate=candidate)
+        return 0
+
+    monkeypatch.setattr(run, "command_run", fake)
+    assert run.main(["--compare", "sonnet-medium", "--allowance", "3"]) == 0
+    assert seen == {"selected": SUBSET, "declared": 3.0, "candidate": "sonnet-medium"}
+
+
+def test_the_provider_gets_the_candidates_limits_and_none_otherwise() -> None:
+    limits = comparison.apply_from_environment({comparison.ENVIRONMENT: "sonnet-medium"})
+    assert limits == comparison.execution_limits("sonnet-medium")
+    assert comparison.apply_from_environment({}) is None
+
+
+async def test_the_provider_runs_the_agent_with_the_candidates_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import llm_agent
+
+    seen: list[ExecutionLimits | None] = []
+
+    class Stop(Exception):
+        pass
+
+    class Reader:
+        def __init__(self, url: str) -> None:
+            pass
+
+        async def __aenter__(self) -> Reader:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    class Agent:
+        def __init__(self, **kwargs: Any) -> None:
+            pass
+
+        async def run(self, request: Any, *, limits: ExecutionLimits | None = None) -> Any:
+            seen.append(limits)
+            raise Stop
+
+    monkeypatch.setattr(llm_agent, "ApiContentReader", Reader)
+    monkeypatch.setattr(llm_agent, "ChatAgent", Agent)
+    monkeypatch.setattr(llm_agent, "anthropic_model_factory", lambda: None)
+    monkeypatch.setenv("LLM_AGENT_API_URL", "http://fake.invalid")
+    context = {"vars": {"case_id": "S01-en"}}
+    monkeypatch.setenv(comparison.ENVIRONMENT, "sonnet-medium")
+    with pytest.raises(Stop):
+        await provider.call_api("", {}, context)
+    monkeypatch.delenv(comparison.ENVIRONMENT)
+    with pytest.raises(Stop):
+        await provider.call_api("", {}, context)
+    assert seen == [comparison.execution_limits("sonnet-medium"), None]
+
+
+def test_the_reservation_uses_the_candidates_execution_limit() -> None:
+    sonnet = comparison.execution_limits("sonnet-medium").max_cost_usd
+    assert run.reservation(["S01-en"], repeats=1, execution_usd=sonnet) == pytest.approx(sonnet)
+    assert run.reservation(["Q01-en"], repeats=1, execution_usd=sonnet) == pytest.approx(
+        sonnet + run.JUDGE_CALL_RESERVATION_USD
+    )
+    assert run.reservation(["S01-en"]) == pytest.approx(3 * budget.SUBJECT_EXECUTION_USD)
+
+
+def test_a_missing_or_unmeasured_comparison_run_is_charged_the_candidates_limit() -> None:
+    sonnet = comparison.execution_limits("sonnet-medium").max_cost_usd
+    allowance = budget.Allowance(available_usd=3.0)
+    unknown = record("S01-cs")
+    del unknown["result"]["usage"]
+    run.charge_subject(allowance, [unknown], ["S01-cs", "S01-en"], repeats=1, execution_usd=sonnet)
+    assert allowance.spent_usd == pytest.approx(2 * sonnet)
+    assert allowance.uncertain_usd == pytest.approx(2 * sonnet)
+
+
+# --- The expected measured cost -------------------------------------------------------------
+
+
+def test_the_expected_cost_comes_from_the_pinned_prices_and_the_observed_usage() -> None:
+    sonnet = comparison.CANDIDATES["sonnet-medium"].prices
+    tokens = comparison.OBSERVED_CASE_RUN
+    per_run = (tokens.input_tokens * sonnet.input + tokens.output_tokens * sonnet.output) / 1e6
+    judged = sum(CASES[case_id].expectation.judged for case_id in SUBSET)
+    assert judged == 8
+    expected = len(SUBSET) * per_run + judged * comparison.OBSERVED_JUDGE_USD
+    assert comparison.expected_cost_usd("sonnet-medium", SUBSET) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("name", sorted(comparison.CANDIDATES))
+def test_each_candidates_expected_cost_stays_within_the_per_run_limit(name: str) -> None:
+    # The owner's per-run limit of USD 1.00 (`packages/llm-agent/AGENTS.md`, Evals).
+    assert comparison.expected_cost_usd(name, SUBSET) <= comparison.PER_RUN_LIMIT_USD == 1.00
+
+
+def test_a_haiku_comparison_reserves_within_the_per_run_limit() -> None:
+    for name in ("haiku-high", "haiku-medium"):
+        usd = comparison.execution_limits(name).max_cost_usd
+        assert run.reservation(SUBSET, repeats=1, execution_usd=usd) <= 1.00
+
+
+# --- Records of a comparison ----------------------------------------------------------------
+
+
+def _candidate_record(case_id: str, name: str) -> dict[str, Any]:
+    data = honest_unknown(case_id)
+    stage = comparison.CANDIDATES[name]
+    data["fingerprint"]["subject"] = {
+        **data["fingerprint"]["subject"],
+        "main_model": stage.model,
+        "main_effort": stage.effort,
+    }
+    return data
+
+
+def test_a_record_of_another_main_model_is_refused() -> None:
+    good = _candidate_record("S01-en", "sonnet-medium")
+    wrong = _candidate_record("S01-cs", "haiku-high")
+    assert comparison.mismatches("sonnet-medium", [good]) == []
+    problems = comparison.mismatches("sonnet-medium", [good, wrong])
+    assert len(problems) == 1
+    assert "S01-cs" in problems[0]
+    assert "claude-haiku-5-5 high" in problems[0]
+
+
+def test_comparison_answers_are_marked_and_never_regraded_into_a_gate_pool() -> None:
+    data = record("S01-en")
+    assert run.compatible_record(data, SUBJECT) is None
+    comparison.mark("haiku-high", [data])
+    assert data["comparison"] == {
+        "version": comparison.COMPARISON_VERSION,
+        "candidate": "haiku-high",
+    }
+    reason = run.compatible_record(data, SUBJECT)
+    assert reason is not None
+    assert "comparison" in reason
+
+
+# --- The summary and the printed result -----------------------------------------------------
+
+
+async def test_the_summary_records_the_execution_limit_and_the_expected_runs(
+    tmp_path: Path,
+) -> None:
+    comparison.apply_main("sonnet-medium")
+    stopped = honest_unknown("S01-cs")
+    stopped["result"]["outcome"] = "limit_reached"
+    graded = [
+        await run.grade_record(honest_unknown("S01-en"), judge_model=None, allowance=None),
+        await run.grade_record(stopped, judge_model=None, allowance=None),
+    ]
+    summary = run.write_summary(
+        tmp_path,
+        mode="compare",
+        graded=graded,
+        selected=["S01-en", "S01-cs", "S04-en"],
+        extra_failures=[],
+        allowance=None,
+        subject=run.current_subject_versions(),
+        candidate="sonnet-medium",
+    )
+    result = summary["comparison"]
+    assert result["execution_limit"] == {
+        "max_cost_usd": pytest.approx(comparison.execution_limits("sonnet-medium").max_cost_usd),
+        "default_usd": 0.02,
+    }
+    assert result["cases"] == ["S01-en", "S01-cs", "S04-en"]
+    assert result["case_runs"] == {"expected": 3, "recorded": 2}
+    assert result["limit_reached"] == 1
+
+
+async def test_a_finished_comparison_prints_no_fail_verdict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    graded = [await run.grade_record(honest_unknown("S01-en"), judge_model=None, allowance=None)]
+    summary = run.write_summary(
+        tmp_path,
+        mode="compare",
+        graded=graded,
+        selected=["S01-en", "S01-cs"],
+        extra_failures=[],
+        allowance=None,
+        subject=SUBJECT,
+        candidate="haiku-medium",
+    )
+    run.print_summary(summary, tmp_path)
+    out = capsys.readouterr().out
+    assert "comparison (not a gate)" in out
+    assert "FAIL" not in out
+    assert "case-runs 1 of 2 expected" in out
+
+
+# --- The comparison run, driven with fakes --------------------------------------------------
+
+
+@pytest.fixture
+def fake_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+    """`command_run` with a fake test API and Promptfoo; records the Promptfoo call."""
+    seen: dict[str, Any] = {"promptfoo": [], "records": []}
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key-never-used-0000")
+    monkeypatch.setattr(run, "REPORT_ROOT", tmp_path / "reports")
+    monkeypatch.setattr(run, "LEDGER", tmp_path / "reports" / "ledger.json")
+
+    @contextlib.asynccontextmanager
+    async def api(scratch: Path) -> AsyncIterator[Any]:
+        yield SimpleNamespace(url="http://fake.invalid")
+
+    async def person(url: str) -> dict[str, Any]:
+        return {"name": "fixed"}
+
+    async def promptfoo(output: Path, env: Mapping[str, str], *, repeats: int = 3) -> None:
+        seen["promptfoo"].append({"env": dict(env), "repeats": repeats})
+        results = [
+            {"vars": {"case_id": item["case_id"]}, "response": {"output": json.dumps(item)}}
+            for item in seen["records"]
+        ]
+        output.write_text(json.dumps({"results": {"results": results}}), encoding="utf-8")
+
+    monkeypatch.setattr(run, "start_api", api)
+    monkeypatch.setattr(run, "read_person", person)
+    monkeypatch.setattr(run, "check_fixture_person", lambda person: [])
+    monkeypatch.setattr(run, "run_promptfoo", promptfoo)
+    return seen
+
+
+async def test_a_comparison_run_passes_the_candidate_repeats_once_and_marks_answers(
+    fake_run: dict[str, Any],
+) -> None:
+    selected = ["S01-en", "S01-cs"]
+    fake_run["records"] = [_candidate_record(case_id, "haiku-medium") for case_id in selected]
+    assert await run.command_run(selected, 1.0, candidate="haiku-medium") == 0
+    (call,) = fake_run["promptfoo"]
+    assert call["env"][comparison.ENVIRONMENT] == "haiku-medium"
+    assert call["repeats"] == 1
+    ledger = json.loads(run.LEDGER.read_text(encoding="utf-8"))
+    assert ledger["runs"][0]["scope"] == "comparison"
+    (folder,) = [path for path in run.REPORT_ROOT.iterdir() if path.is_dir()]
+    stored = json.loads((folder / "answers" / "S01-en-1.json").read_text(encoding="utf-8"))
+    assert stored["comparison"]["candidate"] == "haiku-medium"
+    summary = json.loads((folder / "summary.json").read_text(encoding="utf-8"))
+    assert summary["comparison"]["case_runs"] == {"expected": 2, "recorded": 2}
+
+
+async def test_a_comparison_run_with_a_missing_case_run_exits_1(
+    fake_run: dict[str, Any],
+) -> None:
+    fake_run["records"] = [_candidate_record("S01-en", "haiku-medium")]
+    assert await run.command_run(["S01-en", "S01-cs"], 1.0, candidate="haiku-medium") == 1
+
+
+async def test_a_comparison_run_refuses_answers_of_another_main_model(
+    fake_run: dict[str, Any],
+) -> None:
+    fake_run["records"] = [_candidate_record("S01-en", "haiku-high")]
+    assert await run.command_run(["S01-en"], 1.0, candidate="haiku-medium") == run.BLOCKED
+    (folder,) = [path for path in run.REPORT_ROOT.iterdir() if path.is_dir()]
+    assert not (folder / "answers").exists()
+
+
+async def test_a_comparison_over_the_allowance_stops_before_anything_starts(
+    fake_run: dict[str, Any],
+) -> None:
+    with pytest.raises(budget.BudgetBlockedError):
+        await run.command_run(SUBSET, 1.0, candidate="sonnet-medium")
+    assert fake_run["promptfoo"] == []
+    assert not run.LEDGER.exists()
+
+
+# --- The side-by-side report ----------------------------------------------------------------
+
+
+def _summary(
+    name: str, cases: tuple[str, ...] = SUBSET, *, useful: int = 4, cost: float = 0.31
+) -> dict[str, Any]:
+    stage = comparison.CANDIDATES[name]
     ratio = {"passed": useful, "runs": 4, "rate": useful / 4}
     figures = {"useful": ratio, "citations": ratio, "false_blocking": ratio, "critical": ratio}
     return {
         "mode": "compare",
+        "dataset_version": "dataset-x",
+        "expectations_version": "expectations-x",
+        "subject": {
+            "pipeline": "chat-1",
+            "runtime": "r1",
+            "security_model": config.HAIKU,
+            "security_effort": "medium",
+            "main_model": stage.model,
+            "main_effort": stage.effort,
+            "pricing": config.PRICING_VERSION,
+        },
+        "judge": {"model": rubric.JUDGE_MODEL, "effort": rubric.JUDGE_EFFORT, "rubric": "v1"},
+        "case_runs": [{"case": case_id, "latency_ms": 4000} for case_id in cases],
         "comparison": {
             "version": comparison.COMPARISON_VERSION,
-            "candidate": candidate,
-            "main": {"model": config.HAIKU, "effort": effort},
+            "candidate": name,
+            "main": {"model": stage.model, "effort": stage.effort},
+            "security": {"model": config.HAIKU, "effort": "medium"},
+            "judge": {"model": rubric.JUDGE_MODEL, "effort": rubric.JUDGE_EFFORT},
+            "repeats": 1,
+            "subset": list(SUBSET),
+            "cases": list(cases),
+            "case_runs": {"expected": len(cases), "recorded": len(cases)},
+            "limit_reached": 0,
+            "execution_limit": {
+                "max_cost_usd": comparison.execution_limits(name).max_cost_usd,
+                "default_usd": 0.02,
+            },
             "by_language": {"en": figures, "cs": figures},
-            "latency_ms": {"runs": 20, "p50": 4000, "p95": 9000},
-            "cost_usd": 0.31,
+            "latency_ms": {"runs": len(cases), "p50": 4000, "p95": 4000},
+            "cost_usd": cost,
         },
     }
 
 
 def test_the_side_by_side_report_lists_every_candidate_with_its_figures() -> None:
     lines = comparison.side_by_side(
-        [_summary("haiku-high", "high", 4), _summary("haiku-medium", "medium", 3)]
+        [_summary("haiku-high"), _summary("haiku-medium", useful=3), _summary("sonnet-medium")]
     )
     text = "\n".join(lines)
     assert "haiku-high" in text
@@ -392,12 +743,80 @@ def test_the_side_by_side_report_lists_every_candidate_with_its_figures() -> Non
     assert "3/4" in text
     assert "p50 4000" in text
     assert "0.3100" in text
+    assert "execution limit 0.1147 USD" in text
+    assert "case-runs 20 of 20" in text
 
 
 def test_the_side_by_side_report_refuses_a_summary_that_is_no_comparison() -> None:
     with pytest.raises(ValueError, match="not a comparison"):
         comparison.side_by_side([{"mode": "run"}])
-    other = _summary("haiku-high", "high", 4)
+    other = _summary("haiku-high")
     other["comparison"]["version"] = "comparison-v0"
     with pytest.raises(ValueError, match="another comparison version"):
         comparison.side_by_side([other])
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("subject", "runtime"), "r2"),
+        (("subject", "chat_prompt"), "p2"),
+        (("subject", "security_effort"), "high"),
+        (("subject", "pricing"), "anthropic-2027-01-01"),
+        (("dataset_version",), "dataset-y"),
+        (("expectations_version",), "expectations-y"),
+        (("judge", "rubric"), "v2"),
+        (("comparison", "security"), {"model": config.HAIKU, "effort": "high"}),
+    ],
+)
+def test_the_report_refuses_summaries_that_differ_beyond_the_main_stage(
+    path: tuple[str, ...], value: Any
+) -> None:
+    other = _summary("haiku-medium")
+    target = other
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(ValueError, match="differ"):
+        comparison.side_by_side([_summary("haiku-high"), other])
+
+
+def test_the_report_merges_the_slices_of_one_candidate() -> None:
+    first, second = SUBSET[:8], SUBSET[8:]
+    lines = comparison.side_by_side(
+        [
+            _summary("haiku-high"),
+            _summary("sonnet-medium", first, useful=3, cost=0.30),
+            _summary("sonnet-medium", second, useful=4, cost=0.40),
+        ]
+    )
+    text = "\n".join(lines)
+    assert text.count("sonnet-medium") == 1
+    assert "7/8" in text
+    assert "0.7000" in text
+    assert text.count("case-runs 20 of 20") == 2
+
+
+def test_the_report_shows_a_short_candidate_and_refuses_a_repeated_case() -> None:
+    text = "\n".join(comparison.side_by_side([_summary("sonnet-medium", SUBSET[:8])]))
+    assert "case-runs 8 of 20" in text
+    with pytest.raises(ValueError, match="twice"):
+        comparison.side_by_side(
+            [_summary("sonnet-medium", SUBSET[:8]), _summary("sonnet-medium", SUBSET[6:])]
+        )
+
+
+def test_a_corrupt_or_incomplete_summary_is_a_usage_error(tmp_path: Path) -> None:
+    corrupt = tmp_path / "corrupt"
+    corrupt.mkdir()
+    (corrupt / "summary.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(run.UsageError, match="not a JSON"):
+        run.command_compare_report([corrupt])
+    partial = tmp_path / "partial"
+    partial.mkdir()
+    incomplete = _summary("haiku-high")
+    del incomplete["comparison"]["by_language"]
+    (partial / "summary.json").write_text(json.dumps(incomplete), encoding="utf-8")
+    with pytest.raises(run.UsageError, match="incomplete"):
+        run.command_compare_report([partial])
+    assert run.main(["--compare-report", str(partial)]) == run.BLOCKED
