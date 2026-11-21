@@ -259,6 +259,9 @@ function createDocumentReview(
     }
   };
 
+  const blockedMessage =
+    "This version has sensitivity findings; ingest a sanitized revision and approve that.";
+
   return {
     async ingestDocument(input) {
       const privateStorage = storage();
@@ -337,12 +340,7 @@ function createDocumentReview(
 
     async approveDocument(contentHash) {
       const version = await versionOf(contentHash);
-      if (version.status === "blocked") {
-        throw new DomainError(
-          "conflict",
-          "This version has sensitivity findings; ingest a sanitized revision and approve that.",
-        );
-      }
+      if (version.status === "blocked") throw new DomainError("conflict", blockedMessage);
       if (version.status !== "pending") {
         throw new DomainError("conflict", `This version is ${version.status}, not pending.`);
       }
@@ -353,6 +351,8 @@ function createDocumentReview(
           "The stored original no longer has this content hash; ingest the document again.",
         );
       }
+      // The checks may have grown since the version was recorded; it is never embedded with findings.
+      if (prepared.findings.length > 0) throw new DomainError("conflict", blockedMessage);
       const embedding = await provider(() => indexer().embedDocument(prepared));
       if (!(await store.approveDocumentVersion(contentHash, embedding.version))) {
         throw new DomainError("conflict", "This version was decided meanwhile.");
