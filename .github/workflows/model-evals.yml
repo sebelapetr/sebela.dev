@@ -118,11 +118,16 @@ jobs:
   # variable LLM_AGENT_EVAL_ALLOWANCE_USD on a pull request. A fresh CI runner has no ledger, so
   # without a declared allowance the job is a visible block, never a fresh USD 10, and the job log
   # names the new remainder the owner must store in the variable after the run.
+  # Wall time: the runner stops starting chunks after its 150-minute deadline; the chunk under way
+  # still finishes (at most about 76 minutes: its subject runs plus a 60-minute batch wait and a
+  # 10-minute cancel wait), so the eval step is bounded at 240 minutes and the job at 270, below
+  # the platform's 6-hour kill, and the allowance notice and the summary upload always run.
   llm-agent:
     name: Python agent model evals
     needs: changes
     if: needs.changes.outputs.llm-agent == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 270
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       POSTGRES_PASSWORD: ci-only-disposable-password
@@ -145,6 +150,7 @@ jobs:
         run: pnpm --filter "@sebela/api..." build
       - name: Model evals and their gates (every implemented case)
         working-directory: packages/llm-agent
+        timeout-minutes: 240
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ALLOWANCE: ${{ inputs.allowance || vars.LLM_AGENT_EVAL_ALLOWANCE_USD }}
@@ -158,23 +164,36 @@ jobs:
             exit 1
           fi
           uv run --locked python -m evals.run --all --allowance "$ALLOWANCE"
-      # The runner has no ledger here, so the declared allowance is the only record of what remains.
-      # The owner sets LLM_AGENT_EVAL_ALLOWANCE_USD to this value after every run (or passes it as
-      # the next dispatch input); otherwise the next run could spend the same allowance again.
+      # The runner has no ledger before the run, so the declared allowance is the only record of
+      # what remains. The owner sets LLM_AGENT_EVAL_ALLOWANCE_USD to this value after every run (or
+      # passes it as the next dispatch input); otherwise the next run could spend the same allowance
+      # again. A run killed before its summary is read from the ledger it wrote before every chunk,
+      # which counts the unfinished chunk at its whole reservation.
       - name: Remaining campaign allowance for the next run
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
+        env:
+          ALLOWANCE: ${{ inputs.allowance || vars.LLM_AGENT_EVAL_ALLOWANCE_USD }}
         run: |
-          shopt -s nullglob
-          for summary in .tmp/evals/llm-agent/*/summary.json; do
-            python3 -c 'import json, sys
-          cost = json.load(open(sys.argv[1])).get("cost") or {}
-          print("::notice title=llm-agent eval allowance::spent {} USD (uncertain {}); set LLM_AGENT_EVAL_ALLOWANCE_USD to {} before the next run".format(cost.get("spent_usd", "unknown"), cost.get("uncertain_usd", "unknown"), cost.get("remaining_usd", "unknown")))' "$summary"
-          done
+          python3 -c 'import glob, json, os
+          notice = "::notice title=llm-agent eval allowance::spent {} USD (uncertain {}); set LLM_AGENT_EVAL_ALLOWANCE_USD to {} before the next run"
+          summaries = sorted(glob.glob(".tmp/evals/llm-agent/*/summary.json"))
+          for path in summaries:
+              cost = json.load(open(path)).get("cost") or {}
+              print(notice.format(cost.get("spent_usd", "unknown"), cost.get("uncertain_usd", "unknown"), cost.get("remaining_usd", "unknown")))
+          ledger = ".tmp/evals/llm-agent/ledger.json"
+          if not summaries and os.path.exists(ledger):
+              runs = json.load(open(ledger)).get("runs", [])
+              spent = sum(float(run.get("spent_usd", 0)) for run in runs)
+              uncertain = sum(float(run.get("uncertain_usd", 0)) for run in runs)
+              declared = os.environ.get("ALLOWANCE") or ""
+              remaining = round(float(declared) - spent, 6) if declared else "unknown"
+              print(notice.format(round(spent, 6), round(uncertain, 6), remaining) + " (no summary: read from the ledger)")'
       - name: Redacted eval summary
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
           name: llm-agent-evals
           path: |
             .tmp/evals/llm-agent/*/summary.json
+            .tmp/evals/llm-agent/ledger.json
           if-no-files-found: ignore
