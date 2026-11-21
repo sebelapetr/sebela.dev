@@ -292,6 +292,30 @@ S07_EN_R3 = (
         ("S07-cs", "Není jen implementace, běží v produkci.", False),
         ("S07-cs", "Je to ne jen implementace, ale i nasazení v produkci.", False),
         ("S07-cs", "Ne první implementace, ale hotový systém v produkci.", False),
+        # "implementation" that only starts a longer phrase is no denial either (#306, round 2).
+        ("S07-en", "It is not an implementation detail, it runs in production.", False),
+        (
+            "S07-en",
+            "Conversation memory is not an implementation detail,"
+            " it runs in production on LangGraph.",
+            False,
+        ),
+        (
+            "S07-en",
+            "This is not an implementation from scratch, it runs in production on LangGraph.",
+            False,
+        ),
+        ("S07-en", "It's not an implementation of a toy, it is used in production.", False),
+        (
+            "S07-en",
+            "Not an implementation I can describe in detail, but it runs in production.",
+            False,
+        ),
+        ("S07-cs", "Není to implementace na papíře, běží v produkci.", False),
+        ("S07-cs", "Není to implementace pro demo, běží v produkci.", False),
+        ("S07-cs", "Není to implementace od nuly, běží v produkci nad LangGraphem.", False),
+        ("S07-cs", "Ne implementace, ale nasazení: běží v produkci.", False),
+        ("S07-cs", "Ne implementace z učebnice, ale systém, který běží v produkci.", False),
     ],
 )
 def test_a_designed_exploration_is_explicitly_unimplemented(
