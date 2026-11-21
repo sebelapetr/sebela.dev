@@ -71,7 +71,9 @@ jobs:
   # with the commit SHA, starts them all as the production composition with the demo seed and runs
   # the production stack smoke check with the complete-stack browser tests (the mock Ask page; no
   # model is called). Only when that passes are the built images pushed, the very images that were
-  # verified.
+  # verified. Each pushed image then gets a signed SLSA build provenance attestation and an SPDX
+  # SBOM attestation for its pushed digest, stored beside it in GHCR; the job's OIDC token
+  # (`id-token: write`) signs them and `attestations: write` records them.
   images:
     name: Build, verify and publish the images
     needs: plan
@@ -81,6 +83,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     outputs:
       tags: ${{ needs.plan.outputs.tags }}
       built: ${{ needs.plan.outputs.build }}
@@ -137,7 +141,85 @@ jobs:
           ACTOR: ${{ github.actor }}
         run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
       - name: Publish the verified images
-        run: node scripts/release/images.mjs publish
+        id: publish
+        run: node scripts/release/images.mjs publish >> "$GITHUB_OUTPUT"
+      # For the images this run pushed (the output `digests`, service to pushed digest), while the
+      # sign-in to GHCR lasts: the attestations are pushed to the registry beside the image.
+      - name: SBOM of api
+        if: ${{ fromJSON(steps.publish.outputs.digests).api }}
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ghcr.io/sebelapetr/sebela-api@${{ fromJSON(steps.publish.outputs.digests).api }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/sbom-api.spdx.json
+          upload-artifact: false
+      - name: SBOM attestation of api
+        if: ${{ fromJSON(steps.publish.outputs.digests).api }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/sebelapetr/sebela-api
+          subject-digest: ${{ fromJSON(steps.publish.outputs.digests).api }}
+          sbom-path: ${{ runner.temp }}/sbom-api.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Build provenance attestation of api
+        if: ${{ fromJSON(steps.publish.outputs.digests).api }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/sebelapetr/sebela-api
+          subject-digest: ${{ fromJSON(steps.publish.outputs.digests).api }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: SBOM of web
+        if: ${{ fromJSON(steps.publish.outputs.digests).web }}
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ghcr.io/sebelapetr/sebela-web@${{ fromJSON(steps.publish.outputs.digests).web }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/sbom-web.spdx.json
+          upload-artifact: false
+      - name: SBOM attestation of web
+        if: ${{ fromJSON(steps.publish.outputs.digests).web }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/sebelapetr/sebela-web
+          subject-digest: ${{ fromJSON(steps.publish.outputs.digests).web }}
+          sbom-path: ${{ runner.temp }}/sbom-web.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Build provenance attestation of web
+        if: ${{ fromJSON(steps.publish.outputs.digests).web }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/sebelapetr/sebela-web
+          subject-digest: ${{ fromJSON(steps.publish.outputs.digests).web }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: SBOM of mcp-admin
+        if: ${{ fromJSON(steps.publish.outputs.digests)['mcp-admin'] }}
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ghcr.io/sebelapetr/sebela-mcp-admin@${{ fromJSON(steps.publish.outputs.digests)['mcp-admin'] }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/sbom-mcp-admin.spdx.json
+          upload-artifact: false
+      - name: SBOM attestation of mcp-admin
+        if: ${{ fromJSON(steps.publish.outputs.digests)['mcp-admin'] }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/sebelapetr/sebela-mcp-admin
+          subject-digest: ${{ fromJSON(steps.publish.outputs.digests)['mcp-admin'] }}
+          sbom-path: ${{ runner.temp }}/sbom-mcp-admin.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Build provenance attestation of mcp-admin
+        if: ${{ fromJSON(steps.publish.outputs.digests)['mcp-admin'] }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/sebelapetr/sebela-mcp-admin
+          subject-digest: ${{ fromJSON(steps.publish.outputs.digests)['mcp-admin'] }}
+          push-to-registry: true
+          create-storage-record: false
       - name: Sign out of GHCR after publishing
         if: ${{ always() }}
         run: docker logout ghcr.io

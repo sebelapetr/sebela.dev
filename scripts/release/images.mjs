@@ -8,9 +8,10 @@
 //   SHA=<commit> BUILD='["web"]' node scripts/release/images.mjs build
 //   SHA=<commit> BUILD='["web"]' node scripts/release/images.mjs publish
 //
-// `plan` prints `key=value` lines for $GITHUB_OUTPUT on standard output; every command explains
-// itself on standard error. Plain Node with no dependencies; the commands run git, the checkout's
-// installed Turborepo and the Docker CLI, signed in to GHCR where they read or write it.
+// `plan` and `publish` print `key=value` lines for $GITHUB_OUTPUT on standard output; every
+// command explains itself on standard error. Plain Node with no dependencies; the commands run git,
+// the checkout's installed Turborepo and the Docker CLI, signed in to GHCR where they read or
+// write it.
 //
 // - plan: each service is judged against the commit of its current image (the `current` tag, the
 //   last verified image published from master, by the commit SHA in its revision label). It is
@@ -24,7 +25,9 @@
 // - pull: pulls the reused images by their commit tags.
 // - build: builds the images under their GHCR names, tagged with SHA and labelled with it.
 // - publish: checks again that no current image is newer than SHA, pushes the SHA tags of the
-//   built images, then moves their `current` tags.
+//   built images, reads the digest the registry holds for each, then moves their `current` tags.
+//   Prints the digests (service to `sha256:...`), the subjects of the images' build provenance
+//   and SBOM attestations.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
@@ -54,6 +57,8 @@ const REVISION_LABEL = "org.opencontainers.image.revision";
 const PLATFORM = "linux/arm64";
 
 const COMMIT = /^[0-9a-f]{40}$/;
+
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
 
 const CHECKOUT_ROOT = path.join(import.meta.dirname, "..", "..");
 
@@ -135,6 +140,19 @@ export function revisionLabel(image) {
   const config = image?.config ? image : image?.[PLATFORM];
   const revision = config?.config?.Labels?.[REVISION_LABEL];
   return typeof revision === "string" ? revision : null;
+}
+
+/**
+ * The digest of a pushed image, from `docker buildx imagetools inspect --format '{{json
+ * .Manifest}}'`: the descriptor of the manifest, or the index, that the registry holds for the tag.
+ * Throws when it names no SHA-256 digest.
+ */
+export function manifestDigest(descriptor) {
+  const digest = descriptor?.digest;
+  if (typeof digest !== "string" || !DIGEST.test(digest)) {
+    throw new Error(`The registry names no SHA-256 digest for the image: ${String(digest)}`);
+  }
+  return digest;
 }
 
 /** `key=value` lines for $GITHUB_OUTPUT, every value as JSON. */
@@ -315,15 +333,31 @@ function publishCommand() {
     );
   }
   // Every commit tag first, so a `current` tag never names a commit tag that is not published.
+  const digests = {};
   for (const service of built) {
-    run("docker", ["push", "--quiet", `${imageName(service)}:${sha}`]);
-    log(`Pushed ${imageName(service)}:${sha}`);
+    const reference = `${imageName(service)}:${sha}`;
+    run("docker", ["push", "--quiet", reference]);
+    // As the registry holds it: the subject the attestations are made for.
+    digests[service] = manifestDigest(
+      JSON.parse(
+        run("docker", [
+          "buildx",
+          "imagetools",
+          "inspect",
+          "--format",
+          "{{json .Manifest}}",
+          reference,
+        ]),
+      ),
+    );
+    log(`Pushed ${reference} as ${digests[service]}`);
   }
   for (const service of built) {
     run("docker", ["tag", `${imageName(service)}:${sha}`, `${imageName(service)}:${CURRENT_TAG}`]);
     run("docker", ["push", "--quiet", `${imageName(service)}:${CURRENT_TAG}`]);
     log(`Moved ${imageName(service)}:${CURRENT_TAG} to ${sha}`);
   }
+  process.stdout.write(formatOutputs({ digests }));
 }
 
 const COMMANDS = {
