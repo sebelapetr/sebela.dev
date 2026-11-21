@@ -903,9 +903,18 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
 // read (grep, cat, …) may mention them.
 const PHASE_PR_STAGE = /--stage(?:\s+|=)(['"]?)phase-pr\1(?=$|[\s;&|)])/;
 const EVAL_VARIABLES = "SEBELA_EVAL_(?:CAMPAIGN|KEPT_RUNS)";
-const EVAL_VARIABLE_CHANGED = new RegExp(
-  `\\b${EVAL_VARIABLES}\\s*=|\\bunset\\b[^;&|\\n]*\\b${EVAL_VARIABLES}\\b|(?:^|\\s)(?:-u\\s*|--unset[=\\s])${EVAL_VARIABLES}\\b`,
-);
+const EVAL_VARIABLE = new RegExp(`\\b${EVAL_VARIABLES}\\b`);
+const EVAL_VARIABLE_ASSIGNED = new RegExp(`\\b${EVAL_VARIABLES}\\s*=`);
+const EVAL_VARIABLE_DROPPED = new RegExp(`(?:^|\\s)(?:-u\\s*|--unset[=\\s])${EVAL_VARIABLES}\\b`);
+// Read one simple command at a time, with patterns that cannot backtrack over each other: an
+// assignment, env's -u/--unset, or `unset` and the variable in the same simple command.
+function changesEvalVariable(command) {
+  if (!EVAL_VARIABLE.test(command)) return false;
+  if (EVAL_VARIABLE_ASSIGNED.test(command) || EVAL_VARIABLE_DROPPED.test(command)) return true;
+  return command
+    .split(/[;&|(){}\n]/)
+    .some((simple) => EVAL_VARIABLE.test(simple) && simple.split(/\s/).includes("unset"));
+}
 const PHASE_PR_STAGE_REASON =
   "A paid eval run with `--stage phase-pr` is the phase pull request's run: it belongs to CI, after the owner marks the phase pull request ready, and is never started by an agent (docs/testing.md, Running paid evals; docs/permissions.md). Run the issue's affected cases with `--stage issue`, within the stops for issue runs.";
 const EVAL_VARIABLE_REASON =
@@ -913,7 +922,7 @@ const EVAL_VARIABLE_REASON =
 
 function checkEvalStage(command, { restricted }) {
   const stage = PHASE_PR_STAGE.test(command);
-  if (!stage && !EVAL_VARIABLE_CHANGED.test(command)) return null;
+  if (!stage && !changesEvalVariable(command)) return null;
   if (isReadOnlyCommand(command)) return null;
   const reason = stage ? PHASE_PR_STAGE_REASON : EVAL_VARIABLE_REASON;
   return restricted ? deny(reason) : { reason, decision: "ask" };

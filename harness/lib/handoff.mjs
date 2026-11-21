@@ -50,10 +50,28 @@ function stringsIn(value, found = []) {
 
 // What changes files for certain: the edit tools, and a shell command that runs `git commit`.
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-const GIT_COMMIT = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit(?=\s|$)/;
+// Whether a shell command runs `git commit`. Read word by word, never with a pattern that can
+// backtrack: in each simple command (between ; & | ( and newlines) the word `git`, then git's own
+// options — `-C <dir>` and `-c <setting>` with their value — and then the subcommand.
+const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c"]);
+function runsGitCommit(command) {
+  for (const simple of String(command).split(/[;&|(\n]/)) {
+    const words = simple.split(/\s/).filter(Boolean);
+    for (let i = 0; i < words.length; i += 1) {
+      if (words[i] !== "git" && !words[i].endsWith("/git")) continue;
+      let next = i + 1;
+      while (next < words.length && words[next].startsWith("-")) {
+        next += GIT_OPTIONS_WITH_VALUE.has(words[next]) ? 2 : 1;
+      }
+      if (words[next] === "commit") return true;
+      i = next;
+    }
+  }
+  return false;
+}
 const editsOrCommits = (block) =>
   EDIT_TOOLS.has(block.name) ||
-  (block.name === "Bash" && GIT_COMMIT.test(String(block.input?.command ?? "")));
+  (block.name === "Bash" && runsGitCommit(block.input?.command ?? ""));
 
 function* toolUses(transcriptText) {
   for (const line of String(transcriptText).split("\n")) {
