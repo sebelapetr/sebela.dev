@@ -17,13 +17,13 @@
 //   last verified image published from master, by the commit SHA in its revision label). It is
 //   built when it has no current image, or when Turborepo's affected packages between that commit
 //   and SHA (the selection the quality job of CI uses, with every dependent package) include its
-//   app or a root file that enters every image build changed. As in CI, documentation is no change
-//   (scripts/checks/without-documentation.mjs): Turborepo compares that commit with SHA without
-//   its documentation changes, so a README or AGENTS.md edit builds no image. Otherwise its current image is
-//   reused. So a change whose own release failed or was cancelled is built by the next release.
-//   A current image whose commit is not an ancestor of SHA refuses the release: a rerun of an
-//   older release must not move it backwards. Prints the services to build and reuse, the
-//   complete tag set and whether there is anything to release.
+//   app or a root file that enters every image build changed. As in CI, documentation is no
+//   change (scripts/checks/without-documentation.mjs): Turborepo compares that commit with SHA
+//   without its documentation changes, so a README or AGENTS.md edit builds no image. Otherwise
+//   its current image is reused. So a change whose own release failed or was cancelled is built
+//   by the next release. A current image whose commit is not an ancestor of SHA refuses the
+//   release: a rerun of an older release must not move it backwards. Prints the services to
+//   build and reuse, the complete tag set and whether there is anything to release.
 // - pull: pulls the reused images by their commit tags.
 // - build: builds the images under their GHCR names, tagged with SHA and labelled with it.
 // - publish: checks again that no current image is newer than SHA, pushes the SHA tags of the
@@ -247,31 +247,41 @@ function ancestorOf(sha) {
     }).status === 0;
 }
 
-function affectedSinceFor(sha) {
+/**
+ * For a release of commit `sha`: a function that gives the services a change from a current
+ * image's commit to `sha` affects. Documentation is no change: Turborepo (`turbo`, by default the
+ * checkout's installed one) compares the commit with `sha` without its documentation, and only the
+ * other changed files can enter every image build. Runs Git and Turborepo in `cwd`; `log` explains.
+ */
+export function affectedSinceFor(
+  sha,
+  {
+    cwd = CHECKOUT_ROOT,
+    turbo = path.join(CHECKOUT_ROOT, "node_modules", ".bin", "turbo"),
+    log: say = log,
+  } = {},
+) {
   return (revision) => {
     // The plan has checked that `revision` is an ancestor of `sha`, so the change always resolves.
-    const change = withoutDocumentation(revision, sha, { cwd: CHECKOUT_ROOT });
+    const change = withoutDocumentation(revision, sha, { cwd });
     if (change === null) throw new Error(`The change from ${revision} to ${sha} cannot be listed.`);
     const changedFiles = change.files;
-    const output = run(
-      path.join(CHECKOUT_ROOT, "node_modules", ".bin", "turbo"),
-      ["query", "affected", "--packages"],
-      {
-        env: {
-          ...process.env,
-          TURBO_TELEMETRY_DISABLED: "1",
-          TURBO_SCM_BASE: revision,
-          TURBO_SCM_HEAD: change.head,
-        },
+    const output = run(turbo, ["query", "affected", "--packages"], {
+      cwd,
+      env: {
+        ...process.env,
+        TURBO_TELEMETRY_DISABLED: "1",
+        TURBO_SCM_BASE: revision,
+        TURBO_SCM_HEAD: change.head,
       },
-    );
+    });
     const packages = affectedPackages(JSON.parse(output));
     const services = affectedServices({ packages, changedFiles });
-    log(`Since ${revision}:`);
-    log(`  documentation, no change: ${change.documentation.join(", ") || "none"}`);
-    log(`  changed files: ${changedFiles.join(", ") || "none"}`);
-    log(`  affected packages: ${packages.join(", ") || "none"}`);
-    log(`  affected services: ${services.join(", ") || "none"}`);
+    say(`Since ${revision}:`);
+    say(`  documentation, no change: ${change.documentation.join(", ") || "none"}`);
+    say(`  changed files: ${changedFiles.join(", ") || "none"}`);
+    say(`  affected packages: ${packages.join(", ") || "none"}`);
+    say(`  affected services: ${services.join(", ") || "none"}`);
     return services;
   };
 }

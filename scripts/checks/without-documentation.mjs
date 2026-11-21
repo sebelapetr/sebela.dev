@@ -28,7 +28,7 @@ import { pathToFileURL } from "node:url";
 
 import { isDocumentation } from "../../harness/lib/documentation.mjs";
 
-/** Whether a changed file is documentation; the one rule, shared with the developer handoff hook. */
+/** Whether a changed file is documentation: the one rule, shared with the handoff hook. */
 export { isDocumentation };
 
 const USAGE =
@@ -36,7 +36,8 @@ const USAGE =
   "  head:  a commit like <head> with its documentation changes left out, for TURBO_SCM_HEAD\n" +
   "  files: the changed files that are not documentation\n";
 
-// A fixed identity and date: the runners have no Git user, and the same change gives the same commit.
+// A fixed identity and date: the runners have no Git user, and the same change gives the same
+// commit.
 const IDENTITY = {
   GIT_AUTHOR_NAME: "documentation filter",
   GIT_AUTHOR_EMAIL: "documentation-filter@example.invalid",

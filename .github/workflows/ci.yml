@@ -61,8 +61,9 @@ jobs:
 
   # The root checks on every run, then lint (including the import-boundaries rule), typecheck, test
   # and build of the packages the change affects, documentation not counted. The comparison base is
-  # the pull request's base or the commit before the push; full history makes it resolvable. When Turborepo cannot resolve it
-  # (a new branch, a rewritten history) it treats every package as affected.
+  # the pull request's base or the commit before the push; full history makes it resolvable. When
+  # Turborepo cannot resolve it (a new branch, a rewritten history) it treats every package as
+  # affected.
   # The backend integration tests need a real Postgres: the `postgres` service of compose.yaml, with
   # the documented settings of .env.example and a password that exists only in this job. Each test
   # file creates and drops its own temporary database in it.

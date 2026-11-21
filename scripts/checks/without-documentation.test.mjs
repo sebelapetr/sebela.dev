@@ -25,9 +25,13 @@ function write(root, file, text) {
   fs.writeFileSync(path.join(root, file), text);
 }
 
-/** A repository with a base commit of code and documentation; `change` edits it for the head. */
-function repository(change) {
+/**
+ * A repository with a base commit of code and documentation; `change` edits it for the head. It is
+ * removed after the test `t`.
+ */
+function repository(t, change) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "without-documentation-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   git(root, "init", "--quiet", "--initial-branch=main");
   git(root, "config", "user.email", "fixture@example.invalid");
   git(root, "config", "user.name", "Fixture");
@@ -60,8 +64,8 @@ function diff(root, from, to) {
 }
 
 describe("the change without its documentation", () => {
-  it("leaves no file changed when only documentation changed", () => {
-    const { root, base, head } = repository((dir) => {
+  it("leaves no file changed when only documentation changed", (t) => {
+    const { root, base, head } = repository(t, (dir) => {
       write(dir, "apps/api/AGENTS.md", "# API, edited\n");
       write(dir, "docs/new.md", "# New\n");
       fs.rmSync(path.join(dir, "docs/old.md"));
@@ -77,8 +81,8 @@ describe("the change without its documentation", () => {
     assert.match(result.stderr, /docs\/old\.md/);
   });
 
-  it("keeps the code of a mixed change and drops its documentation", () => {
-    const { root, base } = repository((dir) => {
+  it("keeps the code of a mixed change and drops its documentation", (t) => {
+    const { root, base } = repository(t, (dir) => {
       write(dir, "apps/api/src/app.ts", "export const app = 2;\n");
       write(dir, "apps/api/AGENTS.md", "# API, edited\n");
     });
@@ -92,15 +96,15 @@ describe("the change without its documentation", () => {
     assert.equal(files.stdout, "apps/api/src/app.ts\n");
   });
 
-  it("is the head itself when no documentation changed", () => {
-    const { root, base, head } = repository((dir) => {
+  it("is the head itself when no documentation changed", (t) => {
+    const { root, base, head } = repository(t, (dir) => {
       write(dir, "apps/api/src/app.ts", "export const app = 2;\n");
     });
     assert.equal(run(root, "head", base).stdout.trim(), head);
   });
 
-  it("compares from the merge base, as Turborepo does", () => {
-    const { root, base, head } = repository((dir) => {
+  it("compares from the merge base, as Turborepo does", (t) => {
+    const { root, base, head } = repository(t, (dir) => {
       write(dir, "docs/testing.md", "# Testing, edited\n");
     });
     // The base branch moves on with a code change the head does not have.
@@ -114,15 +118,15 @@ describe("the change without its documentation", () => {
     assert.equal(run(root, "files", movedBase).stdout, "");
   });
 
-  it("gives the same commit for the same change", () => {
-    const { root, base } = repository((dir) => {
+  it("gives the same commit for the same change", (t) => {
+    const { root, base } = repository(t, (dir) => {
       write(dir, "docs/testing.md", "# Testing, edited\n");
     });
     assert.equal(run(root, "head", base).stdout, run(root, "head", base).stdout);
   });
 
-  it("names a head other than HEAD", () => {
-    const { root, base, head } = repository((dir) => {
+  it("names a head other than HEAD", (t) => {
+    const { root, base, head } = repository(t, (dir) => {
       write(dir, "docs/testing.md", "# Testing, edited\n");
     });
     git(root, "checkout", "--quiet", base);
@@ -131,8 +135,8 @@ describe("the change without its documentation", () => {
     assert.deepEqual(diff(root, base, filtered), []);
   });
 
-  it("leaves the head as it is when the base cannot be resolved", () => {
-    const { root, head } = repository(() => {});
+  it("leaves the head as it is when the base cannot be resolved", (t) => {
+    const { root, head } = repository(t, () => {});
     for (const base of ["", "0000000000000000000000000000000000000000", "f".repeat(40)]) {
       const result = run(root, "head", base);
       assert.equal(result.status, 0, result.stderr);
@@ -141,15 +145,15 @@ describe("the change without its documentation", () => {
     }
   });
 
-  it("fails the file list when the base cannot be resolved, so callers run in full", () => {
-    const { root } = repository(() => {});
+  it("fails the file list when the base cannot be resolved, so callers run in full", (t) => {
+    const { root } = repository(t, () => {});
     const result = run(root, "files", "f".repeat(40));
     assert.equal(result.status, 1);
     assert.equal(result.stdout, "");
   });
 
-  it("refuses wrong usage", () => {
-    const { root } = repository(() => {});
+  it("refuses wrong usage", (t) => {
+    const { root } = repository(t, () => {});
     assert.equal(run(root).status, 2);
     assert.equal(run(root, "other", "HEAD").status, 2);
   });
