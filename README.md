@@ -117,6 +117,8 @@ Answers include typed blocks such as experience, services, roadmap items and sou
 
 The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/done/06-llm-agent/prd.md)
 
+What the phase 6 evals measured, what failed on the way and what they do not test: [phase 06 evaluation report](docs/evals/06-llm-agent.md).
+
 ### Two servers, two responsibilities
 
 |                    | Public MCP                                                                        | Content-management MCP                                    |
