@@ -63,6 +63,8 @@ jobs:
     outputs:
       mcp-admin: ${{ steps.affected.outputs.mcp-admin }}
       llm-agent: ${{ steps.affected.outputs.llm-agent }}
+      # The eval campaign of a phase pull request: its phase folder, validated by the trigger check.
+      campaign: ${{ steps.trigger.outputs.campaign }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -153,9 +155,10 @@ jobs:
   # The Python chat agent (packages/llm-agent): every implemented case, 3 repeats each, with its
   # gates. Cases still pending are listed in the report and never pass. The run names its phase
   # campaign, which has its own ceiling (packages/llm-agent/evals/budget.py; decision 0026): on a
-  # phase pull request the phase folder of its head branch phase/<phase-folder>, at the stage
-  # `phase-pr`; on a manual run the `campaign` and `stage` inputs. A missing or unknown campaign is
-  # a visible block; no run falls back to another campaign's ceiling. The run spends at most the
+  # phase pull request the phase folder of its head branch phase/<phase-folder>, named by the
+  # trigger check of the `changes` job, at the stage `phase-pr`; on a manual run the `campaign`
+  # and `stage` inputs. A missing or unknown campaign is a visible block; no run falls back to
+  # another campaign's ceiling. The run spends at most the
   # declared remaining allowance of that campaign: the manual run's `allowance` input, or the
   # repository variable LLM_AGENT_EVAL_ALLOWANCE_USD on a pull request, which the owner sets to
   # the campaign's remainder before marking the phase pull request ready. A fresh CI runner has no
@@ -198,7 +201,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ALLOWANCE: ${{ inputs.allowance || vars.LLM_AGENT_EVAL_ALLOWANCE_USD }}
           EVENT: ${{ github.event_name }}
-          HEAD_REF: ${{ github.head_ref }}
+          PHASE_CAMPAIGN: ${{ needs.changes.outputs.campaign }}
           CAMPAIGN_INPUT: ${{ inputs.campaign }}
           STAGE_INPUT: ${{ inputs.stage }}
         run: |
@@ -210,10 +213,10 @@ jobs:
             echo "::error::No remaining campaign allowance is declared (input allowance or variable LLM_AGENT_EVAL_ALLOWANCE_USD)."
             exit 1
           fi
-          # The head branch is text a contributor chooses: it is only passed on as one quoted
-          # argument, and the runner refuses a name that is not a known campaign.
+          # On a phase pull request the campaign is the phase folder the trigger check validated;
+          # the runner refuses a name that is not a known campaign.
           if [ "$EVENT" = "pull_request" ]; then
-            CAMPAIGN="${HEAD_REF#phase/}"
+            CAMPAIGN="$PHASE_CAMPAIGN"
             STAGE="phase-pr"
           else
             CAMPAIGN="$CAMPAIGN_INPUT"
