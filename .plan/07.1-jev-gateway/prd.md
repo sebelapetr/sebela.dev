@@ -55,7 +55,7 @@ question -> deterministic validation -> classifier (config: haiku | jev) -> ALLO
 - Gates are phase 6's, unchanged: every critical case-run passes, at most 5% falsely blocked legitimate questions per language, plus the end-to-end useful-answer floors with each classifier in place. A classifier that misses any gate in either language is not switched on.
 - Report per language: accuracy against expected verdicts, false blocks, `UNCERTAIN` rate, calibration (expected calibration error), p50/p95 latency of the classification and of the first answer event, and cost per classification.
 - The switch is a recorded owner decision (decision record) with the report linked; until then Haiku stays the configured classifier.
-- Paid spend for this phase is at most USD 2 (Haiku comparison runs; Jev's cost is negligible), counted against the existing eval campaign.
+- Paid spend for this phase is at most USD 2.00 (Haiku comparison runs; Jev's cost is negligible), as its own phase-7.1 eval campaign ([decision 0026](../../docs/decisions/0026-eval-cost-controls-for-later-phases.md)), separate from the phase-6 and phase-7 campaigns.
 
 ## Testing Decisions
 

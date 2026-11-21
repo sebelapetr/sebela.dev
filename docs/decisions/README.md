@@ -43,3 +43,4 @@ Date: YYYY-MM-DD
 | 0022 | [RAG is split into a private knowledge base and a later integration phase](0022-rag-split-knowledge-base-and-integration.md) |
 | 0023 | [Incremental delivery on merge, behind the server's nginx, at sebela.dev](0023-incremental-delivery-on-merge.md)             |
 | 0025 | [A deployment brings the server's checkout to the release commit](0025-deployment-brings-the-checkout-to-the-release.md)     |
+| 0026 | [Eval cost controls for phases 7, 7.1 and 8](0026-eval-cost-controls-for-later-phases.md)                                    |
