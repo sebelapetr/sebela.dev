@@ -1221,7 +1221,13 @@ async def command_run(
             file=sys.stderr,
         )
         return BLOCKED
-    allowance = budget.open_allowance(declared_usd, LEDGER, campaign, stage)
+    allowance = budget.open_allowance(
+        declared_usd,
+        LEDGER,
+        campaign,
+        stage,
+        kept=budget.kept_runs(os.environ, REPOSITORY_ROOT),
+    )
     repeats = repeats_for(candidate)
     execution_usd = execution_usd_for(candidate)
     pieces = chunks(selected, repeats=repeats)
@@ -1471,7 +1477,11 @@ async def command_regrade(
         assert declared_usd is not None
         # A paid regrade without a named campaign is a block, like every paid command.
         allowance = budget.open_allowance(
-            declared_usd, LEDGER, campaign or budget.campaign(None), stage
+            declared_usd,
+            LEDGER,
+            campaign or budget.campaign(None),
+            stage,
+            kept=budget.kept_runs(os.environ, REPOSITORY_ROOT),
         )
         expected = expected_usd(selected, judge_mode=judge_mode, subject=False)
         print(budget.spend_line(allowance, expected_usd=expected))
