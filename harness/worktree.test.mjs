@@ -531,7 +531,7 @@ test("a branch whose number is a phase number is created as requested (issue 323
 });
 
 test("a branch cut from the checked-out branch continues an issue only on a phase branch", (t) => {
-  const { mainRoot, create } = fixture(t);
+  const { mainRoot, create, remove } = fixture(t);
   const earlier = create("feat/17-hardcoded-config-check");
   commitFile(earlier.path, "earlier-work");
 
@@ -539,6 +539,7 @@ test("a branch cut from the checked-out branch continues an issue only on a phas
   const fromMaster = create("feat/17-from-master");
   assert.equal(fromMaster.resumed, undefined);
   assert.equal(branchExists(mainRoot, "feat/17-from-master"), true);
+  remove("feat/17-from-master", { deleteBranch: true });
 
   gitIn(mainRoot, "checkout", "-b", PHASE);
   const fromPhase = create("feat/17-from-phase");
