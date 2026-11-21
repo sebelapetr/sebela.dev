@@ -219,10 +219,12 @@ export function gradeE02(output, context) {
  * @returns {string}
  */
 function evalServerName() {
-  const config = readFileSync(new URL("./promptfooconfig.yaml", import.meta.url), "utf8");
-  const name = /^\s+mcp:\n(?:\s+.*\n)*?\s+server:\n\s+name:\s*([A-Za-z0-9_-]+)\s*$/m.exec(
-    config,
-  )?.[1];
+  const lines = readFileSync(new URL("./promptfooconfig.yaml", import.meta.url), "utf8")
+    .split("\n")
+    .map((line) => line.trim());
+  const mcp = lines.indexOf("mcp:");
+  const server = mcp < 0 ? -1 : lines.indexOf("server:", mcp);
+  const name = server < 0 ? undefined : lines[server + 1]?.match(/^name:\s*([A-Za-z0-9_-]+)$/)?.[1];
   if (!name) throw new Error("promptfooconfig.yaml names no MCP server.");
   return name;
 }
