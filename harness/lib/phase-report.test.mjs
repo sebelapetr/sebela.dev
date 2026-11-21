@@ -176,3 +176,74 @@ test("a continued agent counts as another round of it", () => {
   ]);
   assert.deepEqual(counts, { reviewer: 2 });
 });
+
+// --- eval spend (issue #371) -------------------------------------------------------
+
+test("the report carries the spend line of every iteration with a paid run and the last one", () => {
+  const line = (text) => ({ line: text });
+  const report = renderReport({
+    phase: "07-ai-service",
+    iterations: [
+      {
+        iteration: 1,
+        outcome: "merged",
+        issue: 301,
+        costUsd: 1,
+        minutes: 1,
+        spend: {
+          ...line(
+            "spend: no paid eval run; 4.0000 USD of the 07-ai-service ceiling (4.00 USD) remain",
+          ),
+          paid: false,
+        },
+      },
+      {
+        iteration: 2,
+        outcome: "merged",
+        issue: 302,
+        costUsd: 1,
+        minutes: 1,
+        spend: {
+          ...line(
+            "spend: expected 0.3000 USD, actual 0.2200 USD (uncertain 0.0200) in 1 paid run; 3.7800 USD of the 07-ai-service ceiling (4.00 USD) remain",
+          ),
+          paid: true,
+        },
+      },
+      {
+        iteration: 3,
+        outcome: "merged",
+        issue: 303,
+        costUsd: 1,
+        minutes: 1,
+        spend: {
+          ...line(
+            "spend: no paid eval run; 3.7800 USD of the 07-ai-service ceiling (4.00 USD) remain",
+          ),
+          paid: false,
+        },
+      },
+    ],
+    steward: [],
+    memory: [],
+    suggestions: null,
+  });
+  const section = report.split("## Eval spend")[1].split("##")[0];
+  assert.match(
+    section,
+    /At the last iteration: no paid eval run; 3\.7800 USD of the 07-ai-service ceiling/,
+  );
+  assert.match(section, /- #302 \(iteration 2\): expected 0\.3000 USD, actual 0\.2200 USD/);
+  assert.doesNotMatch(section, /#301/);
+});
+
+test("a phase whose iterations logged no spend says it is unknown, not zero", () => {
+  const report = renderReport({
+    phase: "p",
+    iterations: [{ iteration: 1, outcome: "merged", issue: 1, costUsd: 1, minutes: 1 }],
+    steward: [],
+    memory: [],
+    suggestions: null,
+  });
+  assert.match(report.split("## Eval spend")[1], /Unknown: no iteration logged its eval spend/);
+});
