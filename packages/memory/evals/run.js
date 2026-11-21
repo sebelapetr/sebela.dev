@@ -18,13 +18,17 @@
 // never passed. Without `VOYAGE_API_KEY` every case is pending and nothing starts.
 //
 // A measured run starts the API's end-to-end server on a temporary database seeded with the
-// fictional demo seed and one ephemeral key, indexes the seed and records each question's
-// candidate pool through the API's knowledge command on that database, then lets Promptfoo send
+// fictional demo seed and one ephemeral key, indexes the seed, ingests and approves every fictional
+// supplemental document of the dataset into a local private storage inside the run's scratch
+// folder, and records each question's candidate pool through the API's knowledge command on that
+// database, then lets Promptfoo send
 // every question to the private search route. The run's spend ceiling is the API's monthly
 // embedding ceiling on the fresh database, so the provider stops being called once it is reached.
 // Promptfoo runs with an allowlisted environment (no provider key, database or other checkout
 // setting); its output and state are scanned for credentials and deleted. The redacted summary goes
-// to the checkout's `.tmp/evals/memory/<stamp>/summary.json`. Needs the running Postgres and a build
+// to the checkout's `.tmp/evals/memory/<stamp>/summary.json`. Query embeddings are kept in
+// `.tmp/evals/memory/query-cache.json` by model, version and text and reused by later runs, so a
+// repeated run embeds only new questions. Needs the running Postgres and a build
 // of the API's packages (`pnpm --filter @sebela/api... build`).
 //
 // Exit codes: 0 measured (and the gate passed or is not frozen), 1 a failure or a failed gate,

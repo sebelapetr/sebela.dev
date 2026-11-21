@@ -69,8 +69,8 @@ const QuestionsSchema = z.array(
 
 /**
  * Runs the knowledge command and returns the exit code: 0 on success, 1 when the provider is
- * unavailable, the budget is spent or the questions file is unreadable, 2 for bad usage. Prints
- * results as JSON, never queries or settings.
+ * unavailable, the budget is spent, the questions or document file is unreadable, or a document is
+ * refused or blocked, 2 for bad usage. Prints results as JSON, never queries, settings or keys.
  */
 export async function runKnowledgeCommand(
   args: readonly string[],
