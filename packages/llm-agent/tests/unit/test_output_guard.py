@@ -67,7 +67,9 @@ def test_the_removal_is_linear_in_the_text(text: str) -> None:
     started = time.perf_counter()
     without_unknown_refs(text, KNOWN)
     review(draft(text[:8000]), evidence("src-1"), contact=None, prompt_texts=())
-    assert time.perf_counter() - started < 0.1
+    # The scan takes a few milliseconds here; a backtracking repair took seconds to hours. The
+    # bound is generous so that a loaded machine does not fail the test.
+    assert time.perf_counter() - started < 0.5
 
 
 # --- No forged ref is reassembled --------------------------------------------------------------
@@ -80,6 +82,8 @@ def test_the_removal_is_linear_in_the_text(text: str) -> None:
         ("Source src-[]99, src-98.", "Source src-[]99."),
         ("src-[ ; ]99 (src-98)", "src-[ ; ]99"),
         ("Ilsa (src-1) src-(src-98)99 wrote it.", "Ilsa (src-1) wrote it."),
+        ("I cannot cite src-(src-98)-99.", "I cannot cite."),
+        ("Ilsa wrote it (src-1src-99).", "Ilsa wrote it (src-1)."),
     ],
 )
 def test_a_removal_never_reassembles_an_unknown_ref(written: str, shown: str) -> None:
@@ -152,6 +156,9 @@ def test_a_text_without_an_unknown_ref_is_returned_unchanged() -> None:
         ("Ilsa wrote it (src\u20111, Src\u22122).", "Ilsa wrote it (src-1, src-2)."),
         ("Ilsa wrote it (\uff53\uff52\uff43\uff0d\uff11).", "Ilsa wrote it (src-1)."),
         ("Ilsa wrote it (src-\u200b1).", "Ilsa wrote it (src-1)."),
+        ("Ilsa wrote it (src\ufe0f-1).", "Ilsa wrote it (src-1)."),
+        ("Ilsa wrote it (s\u034frc\u3164-1).", "Ilsa wrote it (src-1)."),
+        ("Ilsa wrote it (src - 1).", "Ilsa wrote it (src-1)."),
     ],
 )
 def test_a_valid_ref_in_any_case_or_dash_is_kept_in_its_canonical_form(
@@ -176,6 +183,20 @@ def test_a_valid_ref_in_any_case_or_dash_is_kept_in_its_canonical_form(
         "src99",
         "src-99a",
         "src-10",
+        # Invisible characters that are not format characters (#306, round 2).
+        "src\ufe0f-99",
+        "s\ufe0frc-99",
+        "src\u034f-99",
+        "src\u3164-99",
+        "src\u115f-99",
+        "src\uffa0-99",
+        "src\u2800-99",
+        "src\U000e0100-99",
+        # A short run of separators.
+        "src--99",
+        "src -99",
+        "src - 99",
+        "src  99",
     ],
 )
 def test_an_unknown_ref_in_any_variant_is_removed(forged: str) -> None:
@@ -190,6 +211,8 @@ def test_an_unknown_ref_in_any_variant_is_removed(forged: str) -> None:
         "The resources (src) are listed.",
         "A subsrc-99 is part of a word.",
         "src-x is no ref.",
+        "A caf\u00e9\u0301 is not touched, src - x neither.",
+        "Too many separators: src - - 99 is no ref.",
     ],
 )
 def test_ordinary_words_are_not_refs(text: str) -> None:
