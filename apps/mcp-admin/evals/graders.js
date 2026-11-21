@@ -28,6 +28,12 @@
 
 import { E23_HEADLINE, J1, J2, OTHER_CLIENT, R1, R2, matchesRule, scenarios } from "./scenarios.js";
 
+/** The entity names this server's tools take (stub). */
+/** @type {readonly string[]} */
+export const SERVER_ENTITY_NAMES = Object.freeze([]);
+/** The eval's MCP server name (stub). */
+export const EVAL_SERVER_NAME = "";
+
 /** The read-only tools. */
 export const READ_ONLY_TOOLS = Object.freeze([
   "get",

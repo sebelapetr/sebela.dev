@@ -58,8 +58,10 @@ import {
   gradeE33,
   gradeE34,
   gradeE35,
+  EVAL_SERVER_NAME,
   GRADER_VERSIONS,
   parseToolOutput,
+  SERVER_ENTITY_NAMES,
   type ToolCall,
 } from "./graders.js";
 import {
@@ -112,6 +114,7 @@ import {
   type ContentState,
 } from "./state.js";
 import generateTests, { skillText } from "./tests.js";
+import { ENTITIES } from "../src/modules/content/index.js";
 
 const person = {
   name: "Mira Tolland",
@@ -452,6 +455,52 @@ describe("E02: describe the project contract", () => {
       "`experience`, and its case study is the separate entity `case-study`. Recent edits are in `recent_changes`.";
     expect(gradeE02(answer, context(call("describe", { entity: "project" }, withProse)))).toEqual(
       expect.objectContaining({ pass: true }),
+    );
+  });
+
+  it("knows the entity names this server's tools take and the eval's server name", () => {
+    expect(new Set(SERVER_ENTITY_NAMES)).toEqual(new Set(ENTITIES));
+    expect(EVAL_SERVER_NAME).toBe("sebela-admin");
+  });
+
+  it("accepts this server's entity names, and fails an invented look-alike", () => {
+    const base = "`name`, `summary` and `startedOn`; a project belongs to an `experience`.";
+    for (const entity of ["current-focus", "roadmap-project-idea", "roadmap-time-entry"]) {
+      expect(gradeE02(`${base} See also \`${entity}\`.`, context(described))).toEqual(
+        expect.objectContaining({ pass: true }),
+      );
+    }
+    for (const lookAlike of ["current-focuses", "roadmap-project-ideas", "roadmap_project_idea"]) {
+      expect(gradeE02(`${base} See also \`${lookAlike}\`.`, context(described))).toEqual(
+        expect.objectContaining({
+          pass: false,
+          reason: expect.stringContaining(lookAlike) as unknown,
+        }),
+      );
+    }
+  });
+
+  it("accepts the eval's server name, and fails an invented look-alike", () => {
+    const base = "`name`, `summary` and `startedOn`; a project belongs to an `experience`.";
+    expect(gradeE02(`${base} I read it from \`sebela-admin\`.`, context(described))).toEqual(
+      expect.objectContaining({ pass: true }),
+    );
+    expect(gradeE02(`${base} I read it from \`sebela-admin-server\`.`, context(described))).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: expect.stringContaining("sebela-admin-server") as unknown,
+      }),
+    );
+  });
+
+  it("fails on a guessed field with a doubled separator", () => {
+    const answer =
+      "You can edit `name`, `summary`, `startedOn` and `start__date`. A project belongs to an `experience`.";
+    expect(gradeE02(answer, context(described))).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: expect.stringContaining("start__date") as unknown,
+      }),
     );
   });
 
