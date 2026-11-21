@@ -97,8 +97,11 @@ if (process.env.CLAUDE_STUB === "hang") {
   const child = spawn(
     process.execPath,
     ["-e", "process.on('SIGINT', () => {}); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
-    { stdio: "ignore" },
+    // Its own session and process group, as Claude Code's Bash tool starts every command: a
+    // signal to the orchestrator's process group does not reach it.
+    { stdio: "ignore", detached: true },
   );
+  child.unref();
   fs.writeFileSync(path.join(dir, "eval-child.pid"), String(child.pid));
   const ledger = path.join(root, ".worktrees", "feat-301-chat", ".tmp", "evals", "llm-agent", "ledger.json");
   fs.mkdirSync(path.dirname(ledger), { recursive: true });

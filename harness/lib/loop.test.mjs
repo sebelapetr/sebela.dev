@@ -5,6 +5,7 @@ import {
   RETRY_LABEL,
   RUN_REPORT_SCHEMA,
   classifyRun,
+  descendantsOf,
   decideNext,
   noteAfter,
   ownerNoteSection,
@@ -607,4 +608,35 @@ test("the spend comment carries no private path", () => {
   });
   assert.ok(!comment.includes("volume-17"));
   assert.match(comment, /<checkout>\/\.worktrees\/x/);
+});
+
+// --- everything a run started (review round 1 of #392, item 4) -----------------------
+
+test("the descendants of a run are found through the parent of each process", () => {
+  const processes = [
+    { pid: 1, ppid: 0, pgid: 1 },
+    { pid: 100, ppid: 1, pgid: 100 }, // the loop
+    { pid: 200, ppid: 100, pgid: 200 }, // the orchestrator
+    { pid: 210, ppid: 200, pgid: 200 }, // a helper in its group
+    { pid: 300, ppid: 200, pgid: 300 }, // a command in its own session
+    { pid: 310, ppid: 300, pgid: 300 }, // what that command started
+    { pid: 320, ppid: 310, pgid: 320 }, // and a session of its own below that
+    { pid: 400, ppid: 100, pgid: 100 }, // the loop's own helper
+    { pid: 500, ppid: 1, pgid: 500 }, // someone else's
+  ];
+  assert.deepEqual(
+    descendantsOf(processes, 200).map((process) => process.pid),
+    [210, 300, 310, 320],
+  );
+  assert.deepEqual(descendantsOf(processes, 320), []);
+  assert.deepEqual(descendantsOf(processes, 999), []);
+  // A process list that names a process as its own ancestor does not hang the walk.
+  const looped = [
+    { pid: 2, ppid: 3, pgid: 2 },
+    { pid: 3, ppid: 2, pgid: 3 },
+  ];
+  assert.deepEqual(
+    descendantsOf(looped, 2).map((process) => process.pid),
+    [3],
+  );
 });
