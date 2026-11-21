@@ -35,6 +35,33 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
         (["--regrade", "x", "--allowance", "1"], "--allowance applies only"),
         (["--judge", "--case", "S01-en", "--allowance", "1"], "--judge applies only to --regrade"),
         (["--check-fixture", "--case", "S01-en"], "--check-fixture takes no other option"),
+        (["--check-fixture", "--judge-mode", "direct"], "--check-fixture takes no other option"),
+        (["--regrade", "x", "--judge-mode", "direct"], "--judge-mode applies only"),
+        (["--case", "S01-en", "--allowance", "1", "--judge-mode", "cheap"], "batch or direct"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes"], "needs a value"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes", "0"], "positive number"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes", "abc"], "positive number"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes", "nan"], "positive number"),
+        (
+            ["--case", "S01-en", "--allowance", "1"] + ["--deadline-minutes", "5"] * 2,
+            "--deadline-minutes given twice",
+        ),
+        (["--regrade", "x", "--deadline-minutes", "5"], "--deadline-minutes applies only"),
+        (["--check-fixture", "--deadline-minutes", "5"], "--check-fixture takes no other option"),
+        (["--case", "S01-en", "--allowance", "1", "--judge-mode"], "--judge-mode needs a value"),
+        (
+            [
+                "--case",
+                "S01-en",
+                "--allowance",
+                "1",
+                "--judge-mode",
+                "batch",
+                "--judge-mode",
+                "direct",
+            ],
+            "--judge-mode given twice",
+        ),
         ([], "name the cases"),
     ],
 )
@@ -57,6 +84,43 @@ def test_a_valid_paid_run_and_a_free_regrade() -> None:
     assert run.plan(["--all", "--allowance", "1"]).cases[0] == "Q01-en"
     assert run.plan(["--regrade", "folder"]).judge is False
     assert run.plan(["--check-fixture"]).mode == "check-fixture"
+
+
+def test_a_paid_run_has_an_overall_deadline_that_can_be_set() -> None:
+    assert run.DEADLINE_MINUTES == 150
+    paid = ["--case", "S01-en", "--allowance", "1"]
+    assert run.plan(paid).deadline_minutes == run.DEADLINE_MINUTES
+    assert run.plan([*paid, "--deadline-minutes", "30"]).deadline_minutes == 30
+    judged = ["--regrade", "x", "--judge", "--allowance", "1", "--deadline-minutes", "5.5"]
+    assert run.plan(judged).deadline_minutes == 5.5
+
+
+def test_the_judge_runs_as_a_batch_unless_direct_mode_is_asked_for() -> None:
+    assert run.plan(["--case", "Q01-en", "--allowance", "1"]).judge_mode == "batch"
+    direct = ["--case", "Q01-en", "--allowance", "1", "--judge-mode", "direct"]
+    assert run.plan(direct).judge_mode == "direct"
+    regrade = ["--regrade", "x", "--judge", "--allowance", "1", "--judge-mode", "direct"]
+    assert run.plan(regrade).judge_mode == "direct"
+    compare = ["--compare", "haiku-medium", "--allowance", "1", "--judge-mode", "direct"]
+    assert run.plan(compare).judge_mode == "direct"
+
+
+def test_a_judge_call_is_reserved_with_a_one_hour_cache_write_and_the_full_output() -> None:
+    direct = (
+        8_000 * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
+        + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
+    ) / 1_000_000
+    assert pytest.approx(direct) == run.JUDGE_DIRECT_CALL_RESERVATION_USD
+    # The default batch mode: the same upper bound at the batch discount.
+    assert pytest.approx(direct * rubric.JUDGE_BATCH_DISCOUNT) == run.JUDGE_CALL_RESERVATION_USD
+    assert run.judge_call_reservation_usd("batch") == run.JUDGE_CALL_RESERVATION_USD
+    assert run.judge_call_reservation_usd("direct") == run.JUDGE_DIRECT_CALL_RESERVATION_USD
+
+
+def test_the_direct_judge_mode_reserves_the_undiscounted_judge_calls() -> None:
+    assert run.reservation(["Q01-en"], judge_mode="direct") == pytest.approx(
+        3 * budget.SUBJECT_EXECUTION_USD + 3 * run.JUDGE_DIRECT_CALL_RESERVATION_USD
+    )
 
 
 def test_the_reservation_covers_every_subject_execution_and_judge_call() -> None:

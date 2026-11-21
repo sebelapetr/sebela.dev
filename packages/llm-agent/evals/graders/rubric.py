@@ -11,6 +11,9 @@ structured verdict; the pass decision is computed here in code, never taken from
 
 A judgement is stored with the hash of its input, the rubric version and the judge settings; the
 runner reuses it only when all three match (`compatible`). Judging again is a paid call.
+
+Paid runs judge through the Message Batches API (`batch_params`, run by `evals.judging`); the
+direct call (`judge`) is the debugging path. Both send the same instructions and input.
 """
 
 from __future__ import annotations
@@ -32,10 +35,18 @@ JUDGE_EFFORT: Final = "medium"
 #: Output cap of one judge call, including adaptive thinking.
 JUDGE_MAX_TOKENS = 4096
 JUDGE_TIMEOUT_SECONDS = 60.0
-#: USD per million tokens (checked 2026-11-19); cache writes cost 1.25x input.
+#: USD per million tokens (checked 2026-11-19).
 JUDGE_PRICE_INPUT = 2.0
 JUDGE_PRICE_OUTPUT = 10.0
 JUDGE_PRICING_VERSION = "anthropic-2026-11-19"
+#: Prompt-caching multipliers of the input price (Anthropic prompt caching pricing): a 5-minute
+#: cache write costs 1.25x, a 1-hour write 2x. A cache read is priced at 0.1x, the conservative
+#: side of the published read price, so the ledger never under-reports it.
+JUDGE_CACHE_WRITE_5M = 1.25
+JUDGE_CACHE_WRITE_1H = 2.0
+JUDGE_CACHE_READ = 0.1
+#: The Message Batches API charges half the price of every token, cached ones included.
+JUDGE_BATCH_DISCOUNT = 0.5
 
 JUDGE_INSTRUCTIONS = """\
 You grade one answer of a portfolio chat assistant for an offline evaluation.
@@ -249,56 +260,184 @@ class JudgeFailedError(Exception):
 async def judge(
     model: JudgeModel, case: EvalCase, record: Mapping[str, Any], *, reserved_usd: float
 ) -> Judgement:
-    """Asks the judge once and returns the storable judgement with its measured cost."""
+    """Asks the judge once and returns the storable judgement with its measured cost.
+
+    The fixed instructions and the case block carry a (5-minute) cache breakpoint, so the
+    repeats of one case judged in a row read the shared prefix from the cache.
+    """
     payload = judge_input(case, record)
     message = await model.ainvoke(
         [
-            SystemMessage(JUDGE_INSTRUCTIONS),
-            HumanMessage(json.dumps(payload, ensure_ascii=False, indent=2)),
+            SystemMessage(content=[_instructions_block(ttl=None)]),
+            HumanMessage(content=judge_blocks(payload, ttl=None)),  # type: ignore[arg-type]
         ]
     )
-    cost = _cost(message, reserved_usd)
+    usage = getattr(message, "usage_metadata", None)
+    cost = langchain_usage(usage).usd(batch=False) if usage else reserved_usd
+    return judgement_from_text(_text(message), payload, cost)
+
+
+def judgement_from_text(
+    text: str, payload: Mapping[str, Any], cost: float, *, batch_id: str | None = None
+) -> Judgement:
+    """The storable judgement of a judge reply; `batch_id` names the batch that produced it.
+
+    Raises `JudgeFailedError` (naming the measured cost) when the reply is no valid verdict.
+    """
     try:
-        verdict = JudgeVerdict.model_validate_json(_text(message))
+        verdict = JudgeVerdict.model_validate_json(text)
     except ValidationError as error:
         raise JudgeFailedError(f"invalid judge verdict ({cost:.6f} USD)") from error
-    return Judgement(
-        stored={
-            "rubric_version": RUBRIC_VERSION,
-            "judge_model": JUDGE_MODEL,
-            "judge_effort": JUDGE_EFFORT,
-            "pricing_version": JUDGE_PRICING_VERSION,
-            "input_hash": input_hash(payload),
-            "verdict": verdict.model_dump(mode="json"),
-            "cost_usd": cost,
+    stored: dict[str, Any] = {
+        "rubric_version": RUBRIC_VERSION,
+        "judge_model": JUDGE_MODEL,
+        "judge_effort": JUDGE_EFFORT,
+        "pricing_version": JUDGE_PRICING_VERSION,
+        "input_hash": input_hash(payload),
+        "verdict": verdict.model_dump(mode="json"),
+        "cost_usd": cost,
+        "batch": batch_id is not None,
+    }
+    if batch_id is not None:
+        stored["batch_id"] = batch_id
+    return Judgement(stored=stored, cost_usd=cost)
+
+
+Ttl = Literal["1h"] | None
+
+
+def _cache_control(ttl: Ttl) -> dict[str, str]:
+    return {"type": "ephemeral"} if ttl is None else {"type": "ephemeral", "ttl": ttl}
+
+
+def _instructions_block(*, ttl: Ttl) -> dict[str, Any]:
+    return {"type": "text", "text": JUDGE_INSTRUCTIONS, "cache_control": _cache_control(ttl)}
+
+
+def judge_blocks(payload: Mapping[str, Any], *, ttl: Ttl) -> list[dict[str, Any]]:
+    """The judge input as two text blocks: the case (cache breakpoint) and then the answer.
+
+    The case block holds everything but the answer, so the repeats of one case share the cached
+    prefix; together the blocks carry exactly `payload` (`sent_payload`), and the input hash is
+    computed on `payload`, so the split does not change which stored judgements are compatible.
+    """
+    case_part = {key: value for key, value in payload.items() if key != "answer"}
+    return [
+        {
+            "type": "text",
+            "text": json.dumps(case_part, ensure_ascii=False, indent=2),
+            "cache_control": _cache_control(ttl),
         },
-        cost_usd=cost,
+        {
+            "type": "text",
+            "text": json.dumps({"answer": payload.get("answer")}, ensure_ascii=False, indent=2),
+        },
+    ]
+
+
+def sent_payload(blocks: Sequence[Any]) -> dict[str, Any]:
+    """The judge input the blocks carry, merged back into one object."""
+    merged: dict[str, Any] = {}
+    for block in blocks:
+        if isinstance(block, dict) and block.get("type") == "text":
+            merged.update(json.loads(str(block["text"])))
+    return merged
+
+
+def batch_params(case: EvalCase, record: Mapping[str, Any]) -> dict[str, Any]:
+    """The Messages API parameters of one batched judge request (1-hour cache breakpoints).
+
+    Same model, effort, output cap, schema, instructions and input as the direct judge.
+    """
+    return {
+        "model": JUDGE_MODEL,
+        "max_tokens": JUDGE_MAX_TOKENS,
+        "thinking": {"type": "adaptive"},
+        "output_config": {
+            "effort": JUDGE_EFFORT,
+            "format": {"type": "json_schema", "schema": judge_response_schema()},
+        },
+        "system": [_instructions_block(ttl="1h")],
+        "messages": [
+            {"role": "user", "content": judge_blocks(judge_input(case, record), ttl="1h")}
+        ],
+    }
+
+
+@dataclass(frozen=True)
+class JudgeUsage:
+    """The tokens of one judge reply, split by how each is priced."""
+
+    plain: int = 0
+    cache_read: int = 0
+    cache_write_5m: int = 0
+    cache_write_1h: int = 0
+    output: int = 0
+
+    def usd(self, *, batch: bool) -> float:
+        full = (
+            self.plain * JUDGE_PRICE_INPUT
+            + self.cache_read * JUDGE_PRICE_INPUT * JUDGE_CACHE_READ
+            + self.cache_write_5m * JUDGE_PRICE_INPUT * JUDGE_CACHE_WRITE_5M
+            + self.cache_write_1h * JUDGE_PRICE_INPUT * JUDGE_CACHE_WRITE_1H
+            + self.output * JUDGE_PRICE_OUTPUT
+        ) / 1_000_000
+        return full * JUDGE_BATCH_DISCOUNT if batch else full
+
+
+def langchain_usage(usage: Mapping[str, Any]) -> JudgeUsage:
+    """LangChain `usage_metadata`: `input_tokens` includes cache reads and writes.
+
+    When the write is split by TTL, LangChain reports the ephemeral keys and a zero generic
+    `cache_creation`; an unsplit write is priced as a 1-hour write (the upper bound).
+    """
+    details = usage.get("input_token_details") or {}
+    read = int(details.get("cache_read") or 0)
+    write_5m = int(details.get("ephemeral_5m_input_tokens") or 0)
+    write_1h = int(details.get("ephemeral_1h_input_tokens") or 0)
+    unsplit = int(details.get("cache_creation") or 0)
+    plain = int(usage.get("input_tokens") or 0) - read - write_5m - write_1h - unsplit
+    return JudgeUsage(
+        plain=max(plain, 0),
+        cache_read=read,
+        cache_write_5m=write_5m,
+        cache_write_1h=write_1h + unsplit,
+        output=int(usage.get("output_tokens") or 0),
     )
 
 
-def reservation_usd(case: EvalCase, record: Mapping[str, Any]) -> float:
-    """A conservative upper bound of one judge call: generous input estimate, full output cap."""
+def api_usage(usage: Mapping[str, Any]) -> JudgeUsage:
+    """A raw Messages API usage block: `input_tokens` is the uncached remainder.
+
+    A cache write without the TTL split is priced as a 1-hour write (the upper bound).
+    """
+    written = int(usage.get("cache_creation_input_tokens") or 0)
+    split = usage.get("cache_creation")
+    if isinstance(split, Mapping):
+        write_5m = int(split.get("ephemeral_5m_input_tokens") or 0)
+        write_1h = int(split.get("ephemeral_1h_input_tokens") or 0)
+        write_1h += max(written - write_5m - write_1h, 0)
+    else:
+        write_5m, write_1h = 0, written
+    return JudgeUsage(
+        plain=int(usage.get("input_tokens") or 0),
+        cache_read=int(usage.get("cache_read_input_tokens") or 0),
+        cache_write_5m=write_5m,
+        cache_write_1h=write_1h,
+        output=int(usage.get("output_tokens") or 0),
+    )
+
+
+def reservation_usd(case: EvalCase, record: Mapping[str, Any], *, batch: bool = False) -> float:
+    """A conservative upper bound of one judge call: generous input estimate, all of it priced as a
+    1-hour cache write, and the full output cap. A batched request is billed at the batch discount
+    on every token, cache writes included, so its bound is discounted too; a direct call's is not.
+    """
     payload = json.dumps(judge_input(case, record), ensure_ascii=False) + JUDGE_INSTRUCTIONS
     input_tokens = len(payload.encode()) // 2 + 500
-    return (
-        input_tokens * JUDGE_PRICE_INPUT * 1.25 + JUDGE_MAX_TOKENS * JUDGE_PRICE_OUTPUT
-    ) / 1_000_000
-
-
-def _cost(message: BaseMessage, reserved_usd: float) -> float:
-    usage = getattr(message, "usage_metadata", None)
-    if not usage:
-        return reserved_usd
-    details = usage.get("input_token_details") or {}
-    cache_read = int(details.get("cache_read") or 0)
-    cache_write = int(details.get("cache_creation") or 0)
-    plain = int(usage.get("input_tokens") or 0) - cache_read - cache_write
-    return (
-        plain * JUDGE_PRICE_INPUT
-        + cache_read * JUDGE_PRICE_INPUT * 0.1
-        + cache_write * JUDGE_PRICE_INPUT * 1.25
-        + int(usage.get("output_tokens") or 0) * JUDGE_PRICE_OUTPUT
-    ) / 1_000_000
+    input_usd = input_tokens * JUDGE_PRICE_INPUT * JUDGE_CACHE_WRITE_1H
+    full = (input_usd + JUDGE_MAX_TOKENS * JUDGE_PRICE_OUTPUT) / 1_000_000
+    return full * JUDGE_BATCH_DISCOUNT if batch else full
 
 
 def _text(message: BaseMessage) -> str:

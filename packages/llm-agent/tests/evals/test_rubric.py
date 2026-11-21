@@ -115,11 +115,17 @@ async def test_the_judge_sees_only_question_evidence_and_answer_and_its_cost_is_
     )
     judge = FakeJudge(message)
     judgement = await rubric.judge(judge, CASE, record("Q01-en"), reserved_usd=1.0)
-    sent = json.loads(str(judge.calls[0][1].content))
+    system, human = judge.calls[0]
+    assert system.content == [
+        {"type": "text", "text": rubric.JUDGE_INSTRUCTIONS, "cache_control": {"type": "ephemeral"}}
+    ]
+    assert isinstance(human.content, list)
+    sent = rubric.sent_payload(human.content)
     assert set(sent) == {"question", "expected_language", "today", "evidence", "answer"}
     assert sent["today"] == FIXED_TODAY.isoformat()
     assert judgement.cost_usd == pytest.approx((1000 * 2 + 200 * 10) / 1_000_000)
     assert judgement.stored["verdict"]["relevant"] is True
+    assert judgement.stored["batch"] is False
 
 
 async def test_an_invalid_verdict_raises_and_unknown_usage_costs_the_reservation() -> None:
@@ -134,3 +140,57 @@ async def test_an_invalid_verdict_raises_and_unknown_usage_costs_the_reservation
 def test_the_judge_reservation_covers_the_full_output_cap() -> None:
     reserved = rubric.reservation_usd(CASE, record("Q01-en"))
     assert reserved >= rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT / 1_000_000
+
+
+def test_the_reservation_prices_the_input_as_a_one_hour_cache_write() -> None:
+    data = record("Q01-en")
+    payload = json.dumps(rubric.judge_input(CASE, data), ensure_ascii=False)
+    tokens = len((payload + rubric.JUDGE_INSTRUCTIONS).encode()) // 2 + 500
+    expected = (
+        tokens * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
+        + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
+    ) / 1_000_000
+    # A direct call has no discount; a batched request is billed at the batch discount, which
+    # applies to every token, cache writes included, so its upper bound is discounted too.
+    assert rubric.reservation_usd(CASE, data) == pytest.approx(expected)
+    assert rubric.reservation_usd(CASE, data, batch=False) == pytest.approx(expected)
+    assert rubric.reservation_usd(CASE, data, batch=True) == pytest.approx(
+        expected * rubric.JUDGE_BATCH_DISCOUNT
+    )
+
+
+def test_the_cache_and_batch_multipliers_are_the_documented_ones() -> None:
+    assert rubric.JUDGE_CACHE_WRITE_5M == 1.25
+    assert rubric.JUDGE_CACHE_WRITE_1H == 2.0
+    assert rubric.JUDGE_CACHE_READ == 0.1
+    assert rubric.JUDGE_BATCH_DISCOUNT == 0.5
+
+
+async def test_a_one_hour_cache_write_reported_through_langchain_is_priced_at_2x() -> None:
+    # LangChain adds cache reads and writes to `input_tokens` and, when the write is split by TTL,
+    # zeroes the generic `cache_creation` and reports the ephemeral keys instead.
+    usage = {
+        "input_tokens": 3600,
+        "output_tokens": 200,
+        "total_tokens": 3800,
+        "input_token_details": {
+            "cache_read": 500,
+            "cache_creation": 0,
+            "ephemeral_5m_input_tokens": 100,
+            "ephemeral_1h_input_tokens": 2000,
+        },
+    }
+    message = AIMessage(content=verdict().model_dump_json(), usage_metadata=usage)
+    judgement = await rubric.judge(FakeJudge(message), CASE, record("Q01-en"), reserved_usd=1.0)
+    expected = (1000 * 2.0 + 500 * 0.2 + 100 * 2.5 + 2000 * 4.0 + 200 * 10) / 1_000_000
+    assert judgement.cost_usd == pytest.approx(expected)
+
+
+def test_the_answer_block_is_separate_so_repeats_share_the_cached_prefix() -> None:
+    first, second = (
+        rubric.judge_blocks(rubric.judge_input(CASE, record("Q01-en", text=text)), ttl=None)
+        for text in ("One answer.", "Another answer.")
+    )
+    assert first[0] == second[0]
+    assert first[1] != second[1]
+    assert first[0]["cache_control"] == {"type": "ephemeral"}
