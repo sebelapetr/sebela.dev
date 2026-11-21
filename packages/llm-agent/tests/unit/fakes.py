@@ -635,16 +635,18 @@ def draft(
     language: str = "en",
     refs: Sequence[str] = ("src-1",),
     show_contact: bool = False,
+    unpublished: bool | None = None,
 ) -> AIMessage:
-    return message(
-        {
-            "outcome": outcome,
-            "language": language,
-            "text": text,
-            "source_refs": list(refs),
-            "show_contact": show_contact,
-        }
-    )
+    payload: dict[str, Any] = {
+        "outcome": outcome,
+        "language": language,
+        "text": text,
+        "source_refs": list(refs),
+        "show_contact": show_contact,
+    }
+    if unpublished is not None:
+        payload["unpublished"] = unpublished
+    return message(payload)
 
 
 def tools(*names: str, args: dict[str, Any] | None = None) -> AIMessage:
