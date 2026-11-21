@@ -1054,3 +1054,61 @@ test("gh flags between gh, pr and the verb do not get a state change past the gu
     assert.equal(bash(command, interactive)?.decision, "ask", command);
   }
 });
+
+// --- smaller routes (issue #384, item 12) -------------------------------------------
+
+test("a pull request verb or number hidden in a variable is unidentifiable", () => {
+  for (const command of [
+    "V=ready; gh pr $V 50",
+    "gh pr ${VERB} 50",
+    "gh pr `echo ready` 50",
+    "gh pr $(echo close) 50",
+    "N=50; gh pr ready $N",
+    'gh pr close "$NUMBER"',
+  ]) {
+    assert.match(bash(command, asSubagent)?.reason ?? "", /Could not confirm/, command);
+    assert.equal(bash(command, interactive)?.decision, "ask", command);
+  }
+  // Variables elsewhere in a gh call are no state change.
+  assert.equal(bash('gh pr view "$NUMBER" --json state', asSubagent), null);
+  assert.equal(bash('gh pr comment 51 --body "$TEXT"', asSubagent), null);
+});
+
+test("merging a phase pull request through the merge endpoint is refused", () => {
+  for (const command of [
+    "gh api -X PUT repos/sebelapetr/sebela.dev/pulls/50/merge",
+    "gh api --method PUT /repos/{owner}/{repo}/pulls/50/merge -f merge_method=merge",
+    "gh api repos/sebelapetr/sebela.dev/pulls/50/merge -X PUT",
+    "gh api repos/sebelapetr/sebela.dev/pulls/77/merge --method=PUT",
+  ]) {
+    assert.match(bash(command, asSubagent)?.reason ?? "", /phase pull request/, command);
+    assert.equal(bash(command, interactive)?.decision, "ask", command);
+  }
+  // Asking whether it is merged is a read.
+  assert.equal(bash("gh api repos/sebelapetr/sebela.dev/pulls/50/merge", asSubagent), null);
+});
+
+test("a pull request body that mentions a state change on its own line is no state change", () => {
+  for (const command of [
+    'gh pr create --base phase/07-ai-service --head feat/12-thing --title x --body "Steps:\ngh pr close 50\ngh pr ready 50"',
+    "gh pr comment 51 --body 'The owner then runs\ngh pr ready 50\nand merges.'",
+    'gh issue comment 12 --body "Loop note:\n  gh pr create --head phase/07-ai-service --title x"',
+    "git commit -m 'docs: explain\n\ngh pr reopen 50 is the owner'\\''s'",
+  ]) {
+    assert.equal(bash(command, inLoop), null, command);
+    assert.equal(bash(command, asSubagent), null, command);
+  }
+});
+
+test("a state change inside a command substitution in quotes still counts", () => {
+  for (const command of [
+    'echo "$(gh pr ready 50)"',
+    'echo "state: `gh pr close 50`"',
+    'echo "first\n$(true; gh pr reopen 50)"',
+    "sh -c 'true'; gh pr ready 50",
+    'echo "x" && gh pr ready 50',
+    'echo "it\'s" ; gh pr ready 50',
+  ]) {
+    assert.match(bash(command, inLoop)?.reason ?? "", /phase pull request/, command);
+  }
+});

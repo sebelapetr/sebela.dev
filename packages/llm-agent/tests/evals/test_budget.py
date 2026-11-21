@@ -358,3 +358,41 @@ def test_the_loop_names_its_kept_record_in_the_environment(tmp_path: Path) -> No
     assert budget.kept_runs(env, main) == budget.KeptRuns(path, source="the main checkout")
     assert budget.kept_runs({}, worktree) is None
     assert budget.kept_runs({budget.KEPT_RUNS_ENVIRONMENT: " "}, worktree) is None
+
+
+# --- Concurrent runs in one checkout (issue #384, item 12) --------------------------------------
+
+
+def test_runs_recording_at_the_same_time_do_not_lose_each_other_s_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+    import time
+
+    ledger = tmp_path / "ledger.json"
+    real_loads = json.loads
+
+    def slow_loads(text: str) -> object:
+        # Widens the window between reading the ledger and writing it back.
+        data = real_loads(text)
+        time.sleep(0.002)
+        return data
+
+    monkeypatch.setattr(budget.json, "loads", slow_loads)
+
+    def record(worker: int) -> None:
+        for number in range(15):
+            allowance = budget.Allowance(available_usd=1.0, campaign=P7, stage="issue")
+            allowance.charge(0.01, "work")
+            budget.record_run(ledger, f"run-{worker}-{number}", allowance, "partial")
+
+    workers = [threading.Thread(target=record, args=(worker,)) for worker in range(4)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    monkeypatch.setattr(budget.json, "loads", real_loads)
+    runs = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
+    assert len(runs) == 60
+    assert budget.ledger_spent(ledger, "07-ai-service") == pytest.approx(0.6)
+    assert not list(tmp_path.glob("*.tmp"))
