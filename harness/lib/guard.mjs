@@ -638,13 +638,119 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
   return null;
 }
 
-// Returns null when the call may proceed, or { reason } when it must be refused.
+// The phase pull request stays a draft until the owner switches it: marking it ready starts the
+// paid model evals of the phase, once, on its final state (docs/git-workflow.md, Phase pull
+// request). No agent marks a pull request whose head is `phase/*` ready, closes or reopens it —
+// with `gh pr ready|close|reopen` or the same change through `gh api`. In the loop and in a
+// subagent the call is refused; in an interactive main session the owner is asked, so the change
+// happens only on the owner's own confirmation. A pull request that cannot be identified is
+// treated like a phase pull request.
+const PR_STATE = new RegExp(`${AT_COMMAND}gh\\s+pr\\s+(ready|close|reopen)\\b([^;&|\\n]*)`, "g");
+const GH_API = new RegExp(`${AT_COMMAND}gh\\s+api\\b([^;&|\\n]*)`, "g");
+const PR_STATE_OPTIONS_WITH_VALUE = new Set(["-c", "--comment"]);
+const PR_STATE_MUTATIONS =
+  /\b(markPullRequestReadyForReview|convertPullRequestToDraft|closePullRequest|reopenPullRequest|mergePullRequest|enablePullRequestAutoMerge)\b/;
+const PHASE_PR_REASON =
+  "The phase pull request stays a draft until the owner switches it: no agent marks a phase pull request ready, closes or reopens it (docs/git-workflow.md, Phase pull request; docs/permissions.md). Marking it ready starts the phase's paid model evals. Leave it as it is, report what is done and let the owner change its state.";
+const PHASE_PR_UNKNOWN =
+  "Could not confirm that this is not a phase pull request, so its state is not changed (docs/permissions.md). Name a pull request of this repository by its number, without --repo; to close an issue use `gh issue close <number>`.";
+
+const isPhaseBranch = (name) => /^(?:[^:/\s]+:)?phase\/\S+$/.test(name ?? "");
+
+// The words of one command's arguments, quotes removed; null when a quote is left open.
+function argumentWords(text) {
+  const words = [];
+  let word = null;
+  let quote = null;
+  for (const char of text) {
+    if (quote) {
+      if (char === quote) quote = null;
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      word ??= "";
+    } else if (/\s/.test(char)) {
+      if (word !== null) words.push(word);
+      word = null;
+    } else word = (word ?? "") + char;
+  }
+  if (quote) return null;
+  if (word !== null) words.push(word);
+  return words;
+}
+
+function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranch }) {
+  // Only the owner, asked in an interactive main session, can let such a change through.
+  const refuse = (reason) => (restricted ? deny(reason) : { reason, decision: "ask" });
+  const headOf = (selector) => {
+    try {
+      return lookupPrHead(selector) || null;
+    } catch {
+      return null;
+    }
+  };
+  const elsewhere = /\bGH_(REPO|HOST)=/.test(fullCommand);
+
+  for (const [, , args] of fullCommand.matchAll(PR_STATE)) {
+    const words = argumentWords(args);
+    if (words === null || elsewhere || words.some((word) => /^(--repo|-R)(=|$)/.test(word))) {
+      return refuse(PHASE_PR_UNKNOWN);
+    }
+    let selector = null;
+    for (let i = 0; i < words.length && selector === null; i += 1) {
+      if (PR_STATE_OPTIONS_WITH_VALUE.has(words[i])) i += 1;
+      else if (!words[i].startsWith("-")) selector = words[i];
+    }
+    let head;
+    if (selector === null) {
+      // Without a selector gh acts on the pull request of the checked-out branch.
+      if (!currentBranch || MOVES.test(fullCommand)) return refuse(PHASE_PR_UNKNOWN);
+      head = currentBranch;
+    } else if (isPhaseBranch(selector)) {
+      head = selector;
+    } else {
+      head = headOf(selector);
+      if (!head) return refuse(PHASE_PR_UNKNOWN);
+    }
+    if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
+  }
+
+  for (const [, args] of fullCommand.matchAll(GH_API)) {
+    if (/(^|[\s/'"])graphql(?=$|[\s'"])/.test(args)) {
+      // A mutation names its pull request by a node ID, and a query read from a file cannot be
+      // seen at all: neither can be matched to a pull request, so both count as a phase one.
+      if (PR_STATE_MUTATIONS.test(args) || /(=@|--input\b)/.test(args)) {
+        return refuse(PHASE_PR_REASON);
+      }
+      if (/\bupdatePullRequest\b/.test(args) && /\bstate\b/.test(args)) {
+        return refuse(PHASE_PR_REASON);
+      }
+      continue;
+    }
+    const number = /(?:^|[\s/'"])(?:pulls|issues)\/(\d+)(?=$|[\s'"?])/.exec(args)?.[1];
+    if (!number) continue;
+    const changesState =
+      /(?:^|\s)(?:-f|-F|--field|--raw-field)[\s=]*['"]?(?:state|draft)=/.test(args) ||
+      /(?:^|\s)--input\b/.test(args);
+    if (!changesState) continue;
+    if (elsewhere) return refuse(PHASE_PR_UNKNOWN);
+    const head = headOf(number);
+    if (!head) return refuse(PHASE_PR_UNKNOWN);
+    if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
+  }
+  return null;
+}
+
+// Returns null when the call may proceed, { reason } when it must be refused, or
+// { reason, decision: "ask" } when only the owner's confirmation may let it through.
 //   toolName, toolInput   from the hook input
 //   mainRoot              absolute path of the main checkout
 //   cwd                   directory the session runs in
 //   isSubagent            the call comes from a subagent
 //   unattended            the call comes from the phase loop
 //   lookupPrBase(number)  returns the base branch of a pull request
+//   lookupPrHead(selector) returns the head branch of a pull request named by number, URL or
+//                         branch; throws or returns nothing when it cannot be found
 //   currentBranch         branch checked out where the command runs
 //   realpath(path)        resolves symbolic links; null when a link cannot be resolved
 //   worktreeRoot          Git-confirmed root of the worktree containing the session
@@ -656,6 +762,7 @@ export function evaluateToolCall({
   isSubagent = false,
   unattended = false,
   lookupPrBase = () => null,
+  lookupPrHead = () => null,
   currentBranch = null,
   realpath = (p) => p,
   worktreeRoot = null,
@@ -708,7 +815,9 @@ export function evaluateToolCall({
       );
     }
     return (
-      checkPush(command, { currentBranch }) ?? checkMerge(command, { isSubagent, lookupPrBase })
+      checkPhasePrState(command, { restricted, lookupPrHead, currentBranch }) ??
+      checkPush(command, { currentBranch }) ??
+      checkMerge(command, { isSubagent, lookupPrBase })
     );
   }
 
