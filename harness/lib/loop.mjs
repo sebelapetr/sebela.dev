@@ -210,23 +210,74 @@ export function noteAfter(note, next) {
   return next === "wait" ? (note ?? null) : null;
 }
 
+// Issue comments, pull requests and notifications are public or leave the machine; where the
+// checkout lives, who works on the machine and what it is called are private (docs/permissions.md,
+// Private infrastructure details). Text that came from a model or from the machine — a stop
+// reason, a spend line — passes through here first:
+//   - the main checkout's path becomes `<checkout>`, also in the form Claude Code encodes it in
+//     (every other character a hyphen); what follows it inside the repository stays readable;
+//   - any path in a home folder, the owner's or another, becomes `<home path>`;
+//   - any other path on the volume the checkout is on becomes `<private path>`;
+//   - the machine's name becomes `<host>`.
+//   private  { mainRoot, home, host } — what to hide; without it only home folders are known
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const PATH_REST = String.raw`[^\s'"\`(),;:]*`;
+const HOME_PATH = new RegExp(
+  String.raw`(?<![\w.<>-])(?:~(?=/)|/(?:home|Users)/[^/\s'"\`(),;:]+|/root(?![\w.-]))${PATH_REST}`,
+  "g",
+);
+
+export function scrubPrivate(text, { mainRoot = null, home = null, host = null } = {}) {
+  let out = String(text ?? "");
+  const all = (needle, placeholder) => {
+    if (needle) out = out.split(needle).join(placeholder);
+  };
+  const root = mainRoot ? mainRoot.replace(/\/+$/, "") : null;
+  if (root && root !== "/") {
+    all(root, "<checkout>");
+    all(root.replace(/[^a-zA-Z0-9]/g, "-"), "<checkout>");
+  }
+  if (home && home !== "/") {
+    out = out.replace(
+      new RegExp(`${escapeRegExp(home.replace(/\/+$/, ""))}${PATH_REST}`, "g"),
+      "<home path>",
+    );
+  }
+  out = out.replace(HOME_PATH, "<home path>");
+  if (root) {
+    const volume = root.split("/").slice(0, 3).join("/");
+    if (volume.split("/").length === 3) {
+      out = out.replace(
+        new RegExp(`(?<![\\w.<>-])${escapeRegExp(volume)}(?![\\w.-])${PATH_REST}`, "g"),
+        "<private path>",
+      );
+    }
+  }
+  if (host && host !== "localhost") {
+    out = out.replace(new RegExp(`(?<![\\w.-])${escapeRegExp(host)}(?![\\w-])`, "g"), "<host>");
+  }
+  return out;
+}
+
 // What the loop says when the steward stops it (harness/lib/steward.mjs, decideStop): by its
 // rules — a reached or projected eval ceiling, a run past the per-run stop, an unexpected paid CI
 // run, a nearly full disk — or by the steward model's judgement that the work is inefficient.
 //   stop    { by: "rules" | "model", reason }
 //   issue   the issue being worked on, or null
 //   spend   the spend line at the stop, or null
+//   private what scrubPrivate hides: a model wrote the reason, and it may quote a path
 // Returns { log, alert: [line], comment }: the comment goes on the issue, where the next run and
-// the owner find it.
-export function stewardStop({ stop, issue, spend }) {
+// the owner find it. Nothing in it names a private path or the machine.
+export function stewardStop({ stop, issue, spend, private: hidden = {} }) {
   const onIssue = issue ? ` on #${issue}` : "";
   const who = stop.by === "model" ? "the steward model" : "the steward's rules";
+  const reason = scrubPrivate(stop.reason, hidden);
   return {
-    log: `stopping: ${who} stopped the loop${onIssue}: ${stop.reason}`,
-    alert: [`the steward stopped the loop${onIssue}`, stop.reason],
+    log: `stopping: ${who} stopped the loop${onIssue}: ${reason}`,
+    alert: [`the steward stopped the loop${onIssue}`, reason],
     comment: [
-      `Loop note: ${who} stopped the phase loop: ${stop.reason}.`,
-      ...(spend ? [spend] : []),
+      `Loop note: ${who} stopped the phase loop: ${reason}.`,
+      ...(spend ? [scrubPrivate(spend, hidden)] : []),
       "The worktree and branch are kept. Run the loop again when this is resolved.",
     ].join("\n\n"),
   };
@@ -234,8 +285,10 @@ export function stewardStop({ stop, issue, spend }) {
 
 // The issue comment after an iteration that paid for model evals: its spend line (expected
 // before, actual after, the remainder of the phase ceiling). Null when nothing was paid.
-export function spendComment({ line, paid, iteration }) {
-  return paid ? `Loop note: paid eval spend of iteration ${iteration}.\n\n${line}` : null;
+export function spendComment({ line, paid, iteration, private: hidden = {} }) {
+  return paid
+    ? `Loop note: paid eval spend of iteration ${iteration}.\n\n${scrubPrivate(line, hidden)}`
+    : null;
 }
 
 // What the loop tells the owner after a phase_done report, from what GitHub shows then:
