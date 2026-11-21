@@ -249,6 +249,19 @@ def test_the_main_agent_must_say_whether_its_text_states_an_unpublished_fact() -
     assert "- unpublished:" in CHAT_PROMPT
 
 
+def test_the_unpublished_flag_covers_only_the_fact_the_visitor_asked_for() -> None:
+    field = CHAT_PROMPT.split("- unpublished:", 1)[1]
+    flat = " ".join(field.split())
+    assert "the specific fact the visitor asked for" in flat
+    for excluded in (
+        "a missing date or other detail the visitor did not ask for",
+        "saying the records list nothing more",
+        "correcting a false premise",
+        "hedging",
+    ):
+        assert excluded in flat
+
+
 async def test_an_unknown_answer_whose_contact_read_fails_is_unavailable() -> None:
     models = ScriptedModels(
         security=[verdict()],
