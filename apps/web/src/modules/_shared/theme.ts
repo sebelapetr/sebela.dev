@@ -1,6 +1,8 @@
 // The colour theme: the system's preference until the visitor chooses, then the choice, kept in
 // the browser's storage. Never throws when the storage is missing or refused.
 
+import { scriptStringLiteral } from "./inline-script";
+
 /** A colour theme. */
 export type Theme = "light" | "dark";
 
@@ -68,9 +70,10 @@ export function applyThemeChoice(root: ThemeRoot, theme: Theme): void {
 /**
  * The inline script that applies a stored choice before the first paint. It repeats
  * `readThemeChoice` and `applyThemeChoice` in plain script, because it runs before any bundle.
+ * Its values are written as inline-script string literals, so none can end the script element.
  */
-export const themeScript = `(function(){try{var t=window.localStorage.getItem(${JSON.stringify(
+export const themeScript = `(function(){try{var t=window.localStorage.getItem(${scriptStringLiteral(
   themeStorageKey,
-)});if(t==="light"||t==="dark"){document.documentElement.setAttribute(${JSON.stringify(
+)});if(t==="light"||t==="dark"){document.documentElement.setAttribute(${scriptStringLiteral(
   themeAttribute,
 )},t);}}catch(e){}})();`;
