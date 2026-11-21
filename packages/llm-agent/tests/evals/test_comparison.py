@@ -842,7 +842,7 @@ def test_the_side_by_side_report_lists_every_candidate_with_its_figures() -> Non
     assert "3/4" in text
     assert "p50 4000" in text
     assert "0.3100" in text
-    assert "execution limit 0.1147 USD" in text
+    assert "execution limit 0.2606 USD" in text
     assert "case-runs 20 of 20" in text
 
 

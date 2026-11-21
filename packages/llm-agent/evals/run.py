@@ -204,9 +204,20 @@ def plan(argv: Sequence[str]) -> Plan:
             raise UsageError(
                 "a paid run needs --allowance <usd> (the campaign's remaining allowance)"
             )
+        chosen = tuple(named) if named else subset
+        reserved = reservation(chosen, repeats=1, execution_usd=execution_usd_for(compare))
+        if reserved > comparison.PER_RUN_LIMIT_USD + 1e-12:
+            pieces = "; ".join(
+                " ".join(f"--case {case_id}" for case_id in piece)
+                for piece in suggested_slices(compare, chosen)
+            )
+            raise UsageError(
+                f"--compare {compare} reserves {reserved:.4f} USD, above the USD"
+                f" {comparison.PER_RUN_LIMIT_USD:.2f} per-run limit; run it in slices: {pieces}"
+            )
         return Plan(
             mode="compare",
-            cases=tuple(named) if named else subset,
+            cases=chosen,
             allowance_usd=_allowance(allowance),
             candidate=compare,
         )
@@ -283,6 +294,28 @@ def reservation(
     runs = len(cases) * repeats
     judged = sum(repeats for case_id in cases if CASES[case_id].expectation.judged)
     return runs * execution_usd + judged * JUDGE_CALL_RESERVATION_USD
+
+
+def suggested_slices(
+    candidate: str, cases: Sequence[str] | None = None
+) -> tuple[tuple[str, ...], ...]:
+    """The comparison subset (or `cases`) cut in order into slices whose reservation each stays
+    within the per-run limit; one slice when the whole run fits."""
+    execution_usd = execution_usd_for(candidate)
+    pieces: list[tuple[str, ...]] = []
+    current: list[str] = []
+    for case_id in cases if cases is not None else comparison.subset_ids():
+        grown = [*current, case_id]
+        if current and (
+            reservation(grown, repeats=1, execution_usd=execution_usd)
+            > comparison.PER_RUN_LIMIT_USD + 1e-12
+        ):
+            pieces.append(tuple(current))
+            grown = [case_id]
+        current = grown
+    if current:
+        pieces.append(tuple(current))
+    return tuple(pieces)
 
 
 # --- The fictional test API -----------------------------------------------------------------

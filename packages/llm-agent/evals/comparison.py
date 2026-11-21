@@ -19,14 +19,19 @@ versions) and in the Promptfoo provider (for the real calls), which reads its na
 candidate; the recorded `main_model` and `main_effort` tell the runs apart.
 
 Execution limit: each case-run gets the candidate's comparison-only limits (`execution_limits`).
-A candidate whose worst-case single Main call plus one Security call fits the public default
-(`ExecutionLimits().max_cost_usd`, USD 0.02) runs with the default limits unchanged. Otherwise its
-cost allowance is that worst case, derived from its pinned prices and the per-call input and
-output caps, so a Main admission at the caps is never refused for the limit alone; every other
-limit stays the default. These limits are internal to the evals (`ComparisonLimits`): the public
-request schema still refuses more than USD 0.02, and production and every ordinary run keep the
-defaults. Budget checks spend plus a full reservation, so a later Main decision of an expensive
-candidate can still stop with `limit_reached`; the summary counts those runs. Making such a
+The worst case covers one Security call at its caps and every allowed Main decision
+(`main_decisions`), each at the per-call input cap as tool results grow the context, the Main
+input bounded by the execution's input cap and the Main output by its aggregate output cap, at the
+candidate's pinned prices. The budget reserves the whole output cap before every decision, so this
+is what an answer that uses its tools needs. A candidate whose worst case fits the public default
+(`ExecutionLimits().max_cost_usd`, USD 0.02) runs with the default limits unchanged; otherwise its
+cost allowance is that worst case and every other limit stays the default. Retries are not added:
+a retry after an attempt of unknown usage may still stop as `limit_reached`, as it does under the
+defaults, and the summary counts those runs. These limits are internal to the evals
+(`ComparisonLimits`): the public request schema still refuses more than USD 0.02, and production
+and every ordinary run keep the defaults. A comparison whose reservation exceeds the owner's
+per-run limit (`PER_RUN_LIMIT_USD`) is refused with the slices that fit
+(`evals.run.suggested_slices`). Making such a
 candidate the Main default is a separate, versioned configuration change with its own limit
 decision.
 
@@ -125,13 +130,19 @@ class ComparisonLimits(ExecutionLimits):
 
 
 def worst_case_usd(name: str) -> float:
-    """One Main admission at the per-call caps at the candidate's prices plus one Security call."""
+    """Security at its caps plus every allowed Main decision at the per-call caps, at the
+    candidate's prices; Main input and output are bounded by the execution's aggregate caps."""
     limits = ExecutionLimits()
     main = candidate(name).prices
     security = STAGES["security"].prices
+    main_input = min(
+        limits.main_decisions * limits.main_input_tokens,
+        limits.max_input_tokens - limits.security_input_tokens,
+    )
+    main_output = min(limits.main_decisions * limits.main_output_tokens, limits.max_output_tokens)
     return (
-        limits.main_input_tokens * main.input
-        + limits.main_output_tokens * main.output
+        main_input * main.input
+        + main_output * main.output
         + limits.security_input_tokens * security.input
         + limits.security_output_tokens * security.output
     ) / 1_000_000
@@ -139,7 +150,7 @@ def worst_case_usd(name: str) -> float:
 
 def execution_limits(name: str) -> ExecutionLimits:
     """The candidate's comparison-only limits: the defaults, or a cost allowance that covers
-    its worst-case Main call plus Security when the default would refuse it."""
+    its worst-case Main decisions plus Security when the default would refuse them."""
     default = ExecutionLimits()
     worst = worst_case_usd(name)
     if worst <= default.max_cost_usd:
