@@ -16,7 +16,7 @@ T = TypeVar("T", bound="ExperienceCreate")
 class ExperienceCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         title (str):
         kind (ExperienceCreateKind): A `main_job`, a `side_project` or an `own_business`.
         started_on (datetime.date): The first day of the role, an ISO date.

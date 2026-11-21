@@ -12,7 +12,7 @@ T = TypeVar("T", bound="RoadmapBookResource")
 class RoadmapBookResource:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         module (str): The slug of its module.
         area (str): The slug of its module's area.

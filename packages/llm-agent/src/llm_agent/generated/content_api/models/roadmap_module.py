@@ -15,7 +15,7 @@ class RoadmapModule:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         area (str): The slug of the area it belongs to.
         name (str):
         description (None | str): Markdown; `null` when there is none.

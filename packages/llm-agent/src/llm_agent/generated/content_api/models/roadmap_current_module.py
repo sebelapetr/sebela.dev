@@ -19,7 +19,7 @@ class RoadmapCurrentModule:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         description (None | str): Markdown; `null` when there is none.
         position (int): Ascending order among its siblings; ties are ordered by slug.

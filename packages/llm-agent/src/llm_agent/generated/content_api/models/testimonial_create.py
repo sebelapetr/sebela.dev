@@ -15,7 +15,7 @@ T = TypeVar("T", bound="TestimonialCreate")
 class TestimonialCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         experience (str): The slug of the existing experience the testimonial belongs to. On an update it moves the
             testimonial to that experience.
         quote (str): What the author said, plain text without quotation marks.

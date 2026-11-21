@@ -13,7 +13,7 @@ class LearningTimeResourceModule:
     """The module the resource is in now.
 
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
     """
 

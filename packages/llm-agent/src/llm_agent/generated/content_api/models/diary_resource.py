@@ -14,7 +14,7 @@ T = TypeVar("T", bound="DiaryResource")
 class DiaryResource:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         type_ (DiaryResourceType):
         link (None | str): `null` when the resource has no link.

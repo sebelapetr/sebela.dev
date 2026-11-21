@@ -16,7 +16,7 @@ T = TypeVar("T", bound="ServiceEvidenceExploration")
 class ServiceEvidenceExploration:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         summary (str): Markdown.
         status (ServiceEvidenceExplorationStatus): How far the exploration got, exactly as stored; never shown stronger.

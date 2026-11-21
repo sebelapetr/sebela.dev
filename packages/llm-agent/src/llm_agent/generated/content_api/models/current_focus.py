@@ -20,7 +20,7 @@ class CurrentFocus:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         title (str): What is being worked on or learned now.
         description (str): Markdown.
         link (None | str): An absolute `http` or `https` address with more about the focus; `null` when there is none.

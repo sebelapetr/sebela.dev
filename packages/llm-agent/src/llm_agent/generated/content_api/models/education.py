@@ -17,7 +17,7 @@ class Education:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         kind (EducationKind): `school` (a formal study programme), `course`, `certification` or `milestone` (any other
             learning achievement).
         title (str):

@@ -12,7 +12,7 @@ T = TypeVar("T", bound="ServiceEvidenceProject")
 class ServiceEvidenceProject:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         summary (str): Markdown.
         experience (str): The slug of the experience it belongs to.

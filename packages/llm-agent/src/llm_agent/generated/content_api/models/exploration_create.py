@@ -16,7 +16,7 @@ T = TypeVar("T", bound="ExplorationCreate")
 class ExplorationCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         summary (str): Markdown.
         status (ExplorationCreateStatus): How far the exploration got: `built` (it exists and runs), `tested` (it was
