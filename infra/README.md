@@ -154,7 +154,7 @@ Why nginx and not the website sets the page rule, and the details of each row: `
 Owner checklist, once after the release that brings the rule:
 
 1. **nginx.** Copy the http-context part (the two `map` blocks) and the server block's `add_header Cache-Control` and the location's `proxy_hide_header Cache-Control` of `nginx/sebela.dev.conf` into the live site, then `nginx -t` and reload nginx.
-2. **The CDN.** On the pull zone of the site:
+2. **The CDN.** In the CDN settings of the site:
    - honour the origin's `Cache-Control` (no forced cache time that overrides it, no "cache everything"), so an answer without the public rule is not kept;
    - serve stale content on an origin error or timeout (`stale-if-error`), and keep `stale-while-revalidate` if it is offered;
    - keep the query string in the cache key for every path: `/_next/image` needs `url`, `w` and `q`, and a navigation's `_rsc` argument must never fall onto the page's cached copy; do not strip or sort away the query;
