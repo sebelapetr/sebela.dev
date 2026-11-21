@@ -2,17 +2,18 @@
 
 The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/done/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
 
-| Path                       | What it is                                                                                                             |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `production/compose.yaml`  | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                            |
-| `production/.env.example`  | Every production setting, as a documented placeholder; the real file lives only on the server                          |
-| `nginx/sebela.dev.conf`    | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website |
-| `scripts/deploy.sh`        | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                        |
-| `scripts/backup.sh`        | The encrypted backup of the production database to the `sebela-backups` zone, with retention                           |
-| `scripts/restore.sh`       | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                         |
-| `scripts/clear-demo.sh`    | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                  |
-| `scripts/backup-common.sh` | The settings and storage helpers the three scripts above share (sourced, never run)                                    |
-| `crons.txt`                | The server's scheduled jobs, entered once in the hosting panel: the nightly backup                                     |
+| Path                              | What it is                                                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `production/compose.yaml`         | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                            |
+| `production/.env.example`         | Every production setting, as a documented placeholder; the real file lives only on the server                          |
+| `nginx/sebela.dev.conf`           | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website |
+| `scripts/deploy.sh`               | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                        |
+| `scripts/backup.sh`               | The encrypted backup of the production database to the `sebela-backups` zone, with retention                           |
+| `scripts/restore.sh`              | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                         |
+| `scripts/clear-demo.sh`           | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                  |
+| `scripts/bunny-edge-addresses.sh` | Writes the Bunny CDN edge addresses nginx trusts for the visitor's address, then tests and reloads nginx (root, daily) |
+| `scripts/backup-common.sh`        | The settings and storage helpers the three scripts above share (sourced, never run)                                    |
+| `crons.txt`                       | The server's scheduled jobs, entered once in the hosting panel: the nightly backup                                     |
 
 ## The production stack
 
@@ -123,7 +124,7 @@ Facts this composition relies on:
 - **First start, in order.** (1) The production environment file is in place. (2) `docker compose ... up --detach --wait postgres` initialises the volume. (3) The superuser creates the `vector` extension and the application role (below). (4) `docker compose ... up --detach --wait` runs the migration, which must finish successfully before the API starts, then the API, the website and MCP Admin.
 - **Production environment file.** Created from `production/.env.example`, mode 600, owner `deploy`; every `replace-with-...` value replaced. It never enters Git, an image or a log.
 - **Database role and pgvector.** `POSTGRES_USER` is the cluster's superuser and only initialises the volume. Once, after the first start of Postgres, the superuser creates the `vector` extension in `DATABASE_NAME` and the application role `DATABASE_USER` that owns that database; the migration and the API connect only as that role.
-- **nginx.** The hosting panel's site for `sebela.dev` with its Let's Encrypt certificate takes `nginx/sebela.dev.conf`, with the website's `WEB_PORT`, the certificate paths and the CDN edge address file in place of its placeholders.
+- **nginx.** The hosting panel's site for `sebela.dev` with its Let's Encrypt certificate takes `nginx/sebela.dev.conf`, with the website's `WEB_PORT` and the certificate paths in place of its placeholders, and includes the CDN edge address file of `scripts/bunny-edge-addresses.sh` (Open points).
 - **GHCR packages.** The release workflow creates `sebela-api`, `sebela-web` and `sebela-mcp-admin` on its first publish, linked to the repository by their source label. Once, the owner sets each package's visibility to public in its package settings, so the server pulls without a registry login.
 - **Analytics.** On the Umami Cloud account, the website is created for `sebela.dev`; its tracker script address (`https://cloud.umami.is/script.js`) goes into `WEB_ANALYTICS_SCRIPT_URL` and its website ID into `WEB_ANALYTICS_WEBSITE_ID`, both public values. They stay empty until the owner turns analytics on.
 
@@ -131,7 +132,12 @@ Facts this composition relies on:
 
 ### The visitor's address behind Bunny CDN
 
-The nginx request budget counts per visitor only when nginx trusts Bunny's edges to name the visitor (`real_ip_header`, `set_real_ip_from`). The server preparation confirms which header Bunny sets for the visitor's address, creates the file of edge addresses the configuration includes from Bunny's published list, and decides how that list is refreshed. Until then the limit counts per CDN edge.
+Decided: Bunny sends the visitor's address in `X-Real-IP`, and the site's server block trusts it only from Bunny's edge addresses (`real_ip_header X-Real-IP` and the included `set_real_ip_from` list, `nginx/sebela.dev.conf`), so the request budget counts per visitor. `scripts/bunny-edge-addresses.sh` writes that list from Bunny's published IPv4 and IPv6 edge lists to `/etc/nginx/bunny-edge-addresses.conf`, keeps only bare addresses, refuses a short or failed answer and restores the previous file when `nginx -t` rejects the new one; it reloads nginx only after the test passes. The owner installs it once as root and runs it daily from root's crontab:
+
+```sh
+install -m 755 <checkout>/infra/scripts/bunny-edge-addresses.sh /usr/local/sbin/bunny-edge-addresses
+15 4 * * * /usr/local/sbin/bunny-edge-addresses 2>&1 | logger --tag bunny-edge
+```
 
 ### Owner's commands over SSH
 
