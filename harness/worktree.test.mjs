@@ -103,8 +103,17 @@ function fixture(t, env = {}) {
   const mainRoot = mainCheckout(t);
   const databases = fakeDatabases();
   const backend = fakeBackend(databases);
-  const create = (branch = "fix/fixture") =>
-    createWorktree({ mainRoot, branch, env, databases, backend });
+  const notices = [];
+  const create = (branch = "fix/fixture", options = {}) =>
+    createWorktree({
+      mainRoot,
+      branch,
+      env,
+      databases,
+      backend,
+      notice: (message) => notices.push(message),
+      ...options,
+    });
   const remove = (target = "fix/fixture", options = {}) =>
     removeWorktree({ mainRoot, target, databases, backend, ...options });
   const worktree = create();
@@ -114,6 +123,7 @@ function fixture(t, env = {}) {
     backend,
     create,
     remove,
+    notices,
     worktree,
     envPath: path.join(worktree.path, ".env.local"),
   };
@@ -442,28 +452,172 @@ test("removing a worktree again is harmless", (t) => {
   assert.deepEqual(listWorktrees({ mainRoot }), []);
 });
 
-test("creating a worktree for an issue with an earlier branch continues that branch", (t) => {
-  const { mainRoot, create, worktree } = fixture(t);
-  const earlier = create("feat/17-hardcoded-config-check");
-  execFileSync("git", [
-    "-C",
-    earlier.path,
-    "-c",
-    "user.name=F",
-    "-c",
-    "user.email=f@example.invalid",
-    "commit",
-    "--allow-empty",
-    "-m",
-    "earlier work",
-  ]);
+// --- continuing an interrupted issue's branch ----------------------------------------
 
-  const again = create("feat/17-reject-hardcoded-endpoints");
+const PHASE = "phase/02-api-db";
+
+function gitIn(root, ...args) {
+  return execFileSync(
+    "git",
+    [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "-C",
+      root,
+      ...args,
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  ).trim();
+}
+
+function commitFile(root, file, message = `add ${file}`) {
+  fs.writeFileSync(path.join(root, file), `${file}\n`);
+  gitIn(root, "add", file);
+  gitIn(root, "commit", "-m", message);
+}
+
+test("creating a worktree for an issue with an earlier branch continues that branch", (t) => {
+  const { mainRoot, create, notices, worktree } = fixture(t);
+  gitIn(mainRoot, "branch", PHASE);
+  const earlier = create("feat/17-hardcoded-config-check", { base: PHASE });
+  commitFile(earlier.path, "earlier-work");
+  assert.deepEqual(notices, []);
+
+  const again = create("feat/17-reject-hardcoded-endpoints", { base: PHASE });
 
   assert.equal(again.path, earlier.path);
   assert.equal(again.resumed, "feat/17-hardcoded-config-check");
   assert.equal(branchExists(mainRoot, "feat/17-reject-hardcoded-endpoints"), false);
   assert.equal(listWorktrees({ mainRoot }).length, 2, `${worktree.name} and the earlier one only`);
+});
+
+test("continuing another branch is announced with the requested and the continued branch", (t) => {
+  const { mainRoot, create, notices, backend } = fixture(t);
+  gitIn(mainRoot, "branch", PHASE);
+  const earlier = create("feat/17-hardcoded-config-check", { base: PHASE });
+  commitFile(earlier.path, "earlier-work");
+
+  // Announced before the backend stages, so a failing stage cannot hide it.
+  backend.failing = "migration";
+  assert.throws(() => create("fix/17-reject-hardcoded-endpoints", { base: PHASE }), /migration/);
+
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /fix\/17-reject-hardcoded-endpoints/);
+  assert.match(notices[0], /feat\/17-hardcoded-config-check/);
+  assert.match(notices[0], /not created/);
+});
+
+test("a branch whose number is a phase number is created as requested (issue 323)", (t) => {
+  const { mainRoot, create, notices } = fixture(t);
+  const prd = create("docs/15-pages-prd", { base: "master" });
+  commitFile(prd.path, "prd");
+
+  const decisions = create("docs/15-pages-decisions", { base: "master" });
+
+  assert.equal(decisions.name, "docs-15-pages-decisions");
+  assert.notEqual(decisions.path, prd.path);
+  assert.equal(decisions.resumed, undefined);
+  assert.equal(gitIn(decisions.path, "branch", "--show-current"), "docs/15-pages-decisions");
+  assert.equal(
+    gitIn(mainRoot, "rev-parse", "docs/15-pages-decisions"),
+    gitIn(mainRoot, "rev-parse", "master"),
+    "cut from the base",
+  );
+  assert.deepEqual(notices, []);
+});
+
+test("a branch cut from the checked-out branch continues an issue only on a phase branch", (t) => {
+  const { mainRoot, create, remove } = fixture(t);
+  const earlier = create("feat/17-hardcoded-config-check");
+  commitFile(earlier.path, "earlier-work");
+
+  // The main checkout is on master: not an issue branch by the documented convention.
+  const fromMaster = create("feat/17-from-master");
+  assert.equal(fromMaster.resumed, undefined);
+  assert.equal(branchExists(mainRoot, "feat/17-from-master"), true);
+  remove("feat/17-from-master", { deleteBranch: true });
+
+  gitIn(mainRoot, "checkout", "-b", PHASE);
+  const fromPhase = create("feat/17-from-phase");
+  assert.equal(fromPhase.resumed, "feat/17-hardcoded-config-check");
+  assert.equal(branchExists(mainRoot, "feat/17-from-phase"), false);
+});
+
+test("a phase branch and an issue branch of the same number never continue each other", (t) => {
+  const { mainRoot, create, notices } = fixture(t);
+  gitIn(mainRoot, "branch", PHASE);
+  const issue = create("feat/15-profile-api", { base: PHASE });
+  commitFile(issue.path, "issue-work");
+
+  const phase = create("phase/15-pages", { base: "master" });
+  assert.equal(phase.resumed, undefined);
+  assert.equal(gitIn(phase.path, "branch", "--show-current"), "phase/15-pages");
+
+  const other = create("fix/15-profile-fields", { base: "phase/15-pages" });
+  assert.equal(other.resumed, "feat/15-profile-api", "the issue's branch, not the phase branch");
+
+  const docs = create("docs/15-pages-decisions", { base: "phase/15-pages" });
+  assert.equal(docs.resumed, undefined);
+  assert.equal(gitIn(docs.path, "branch", "--show-current"), "docs/15-pages-decisions");
+  assert.equal(notices.length, 1);
+});
+
+test("a branch merged into the base is not continued", (t) => {
+  const { mainRoot, create, remove } = fixture(t);
+  gitIn(mainRoot, "checkout", "-b", PHASE);
+  const earlier = create("feat/17-hardcoded-config-check", { base: PHASE });
+  commitFile(earlier.path, "earlier-work");
+  remove("feat/17-hardcoded-config-check");
+  gitIn(mainRoot, "merge", "--no-ff", "-m", "merge", "feat/17-hardcoded-config-check");
+
+  const again = create("fix/17-follow-up", { base: PHASE });
+
+  assert.equal(again.resumed, undefined);
+  assert.equal(gitIn(again.path, "branch", "--show-current"), "fix/17-follow-up");
+  assert.equal(
+    gitIn(mainRoot, "rev-parse", "fix/17-follow-up"),
+    gitIn(mainRoot, "rev-parse", PHASE),
+  );
+});
+
+test("a branch squash-merged into the base is not continued", (t) => {
+  const { mainRoot, create, remove } = fixture(t);
+  gitIn(mainRoot, "checkout", "-b", PHASE);
+  const earlier = create("feat/17-hardcoded-config-check", { base: PHASE });
+  commitFile(earlier.path, "earlier-work");
+  commitFile(earlier.path, "more-work");
+  remove("feat/17-hardcoded-config-check");
+  // The phase branch moves on, then takes the issue as one squashed commit, then moves on again.
+  commitFile(mainRoot, "other-issue");
+  gitIn(mainRoot, "merge", "--squash", "feat/17-hardcoded-config-check");
+  gitIn(mainRoot, "commit", "-m", "feat: squashed issue");
+  commitFile(mainRoot, "later-issue");
+
+  const again = create("fix/17-follow-up", { base: PHASE });
+
+  assert.equal(again.resumed, undefined);
+  assert.equal(gitIn(again.path, "branch", "--show-current"), "fix/17-follow-up");
+});
+
+test("an interrupted branch without a commit is continued while its worktree exists", (t) => {
+  const { mainRoot, create, remove } = fixture(t);
+  gitIn(mainRoot, "branch", PHASE);
+  const earlier = create("feat/17-hardcoded-config-check", { base: PHASE });
+  fs.writeFileSync(path.join(earlier.path, "uncommitted-work"), "work\n");
+
+  const again = create("feat/17-reject-hardcoded-endpoints", { base: PHASE });
+  assert.equal(again.path, earlier.path);
+  assert.equal(again.resumed, "feat/17-hardcoded-config-check");
+
+  // Without a worktree and without a commit of its own there is nothing to continue.
+  remove("feat/17-hardcoded-config-check", { force: true });
+  const fresh = create("feat/17-reject-hardcoded-endpoints", { base: PHASE });
+  assert.equal(fresh.resumed, undefined);
+  assert.equal(branchExists(mainRoot, "feat/17-reject-hardcoded-endpoints"), true);
 });
 
 // --- backend maintenance: migrations, seed and storage -----------------------------
