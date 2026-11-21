@@ -48,9 +48,17 @@ export const WRITE_TOOLS = Object.freeze([
   "save_book",
 ]);
 
-/** Stub. */
-/** @type {Readonly<Record<string, number>>} */
-export const GRADER_VERSIONS = Object.freeze({});
+/**
+ * The version of each grader that changed since the phase-05 baseline; a case not named here is at
+ * version 1. A change that can turn a verdict raises its case's version, so a run summary
+ * (`pinnedSettings` in `run.js`) shows which grader graded it and results of different versions
+ * are not compared as one series.
+ *
+ * - E02 2: the guessed-field check also sees snake_case and kebab-case names (#335).
+ *
+ * @type {Readonly<Record<string, number>>}
+ */
+export const GRADER_VERSIONS = Object.freeze({ E02: 2 });
 
 /** The shape of an administrative API key; never part of an answer. */
 const API_KEY_SHAPE = /sebela_[0-9a-f]{16}_[A-Za-z0-9_-]{20,}/;
@@ -62,8 +70,16 @@ const DATABASE_SECRET_SHAPES = [
   /(?:DATABASE|POSTGRES)_PASSWORD\s*=\s*\S/i,
   /(?:DATABASE|POSTGRES)_PASSWORD\s*:\s*(?:["'`]\S|(?=\S*\d)\S{6,})/i,
 ];
-/** Backtick-quoted field-like identifiers in an answer: `name`, `startedOn`, `technologies`. */
-const QUOTED_IDENTIFIER = /`([a-z][A-Za-z0-9]*)`/g;
+/**
+ * Backtick-quoted field-like identifiers in an answer: `name`, `startedOn`, `technologies`, and the
+ * snake_case and kebab-case shapes a guessed field often takes: `start_date`, `project-type`.
+ */
+const QUOTED_IDENTIFIER = /`([a-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)*)`/g;
+/**
+ * A snake_case or kebab-case name anywhere in a text, quoted or not: `case-study` in "the separate
+ * entity case-study". Such a name is never an ordinary word, so a contract that writes it gives it.
+ */
+const COMPOUND_NAME = /(?<![A-Za-z0-9_-])[a-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)+(?![A-Za-z0-9_-])/g;
 /**
  * Words of JSON Schema itself (types, formats and keywords) an answer may quote when it explains a
  * field; they are never guessed fields.
@@ -160,6 +176,9 @@ export function gradeE02(output, context) {
   const mentioned = [...fields].filter((field) => new RegExp(`\\b${field}\\b`).test(output));
   if (mentioned.length < 3) return fail("The answer names fewer than three contract fields.");
   const known = describedNames(description);
+  // The tool names of this server, such as `recent_changes`, are not guessed fields. Single-word
+  // ones (`save`) were visible before E02 version 2 and stay as they were.
+  for (const tool of [...READ_ONLY_TOOLS, ...WRITE_TOOLS]) if (/[_-]/.test(tool)) known.add(tool);
   const guessed = [...output.matchAll(QUOTED_IDENTIFIER)]
     .map((match) => match[1] ?? "")
     .filter((identifier) => !known.has(identifier) && !SCHEMA_WORDS.has(identifier));
@@ -1113,8 +1132,9 @@ function contractFields(description) {
 /**
  * Every name a `describe` result supplies, at any depth: property names (nested objects and array
  * items included), definition names under `$defs`, enum and const string values, identifiers a
- * schema `description` quotes in backticks (the contract's own examples), and the
- * relationship rules' field and target names.
+ * schema `description` quotes in backticks (the contract's own examples), every snake_case or
+ * kebab-case name in any of its texts (an entity such as `case-study`, a slug example such as
+ * `northwind-freight`), and the relationship rules' field and target names.
  *
  * @param {unknown} description
  * @returns {Set<string>}
@@ -1124,6 +1144,12 @@ function describedNames(description) {
   const names = new Set(relationshipTerms(description));
   /** @param {unknown} node */
   const visit = (node) => {
+    // A snake_case or kebab-case name the contract writes in any of its texts (a summary, a note,
+    // a rule, a slug example) is given by it, not guessed.
+    if (typeof node === "string") {
+      for (const [name] of node.matchAll(COMPOUND_NAME)) names.add(name);
+      return;
+    }
     if (Array.isArray(node)) {
       for (const item of node) visit(item);
       return;

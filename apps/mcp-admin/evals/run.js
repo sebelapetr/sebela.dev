@@ -51,7 +51,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { catalogue, gates } from "./catalogue.js";
+import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { startClientAdapter } from "./client.js";
 import { fixtureFolder, startApi, startMcp } from "./fixture.js";
 import { evaluateGate } from "./gate.js";
@@ -632,6 +632,9 @@ async function regradeFolder(folder) {
     of: original.startedAt,
     scope: original.scope,
     model: MODEL,
+    // The graders of this regrade and of the original run (absent before grader versions).
+    graders: pinnedSettings().graders,
+    originalGraders: original?.pinned?.graders ?? null,
     gate,
     runs,
   };
@@ -644,8 +647,8 @@ async function regradeFolder(folder) {
 }
 
 /**
- * The settings a run is pinned to, recorded in its summary so results of different settings are
- * never compared as one series.
+ * The settings a run is pinned to, the grader version of every implemented case included,
+ * recorded in its summary so results of different settings are never compared as one series.
  */
 export function pinnedSettings() {
   return {
@@ -662,7 +665,10 @@ export function pinnedSettings() {
     repeats: gates.repeats,
     caseRunConcurrency: CASE_RUN_CONCURRENCY,
     noncriticalFloor: gates.noncriticalFloor,
-    graders: /** @type {Record<string, number>} */ ({}),
+    // Each implemented case's grader version (`GRADER_VERSIONS` in graders.js).
+    graders: Object.fromEntries(
+      implementedCases().map((entry) => [entry.id, graders.GRADER_VERSIONS[entry.id] ?? 1]),
+    ),
   };
 }
 
