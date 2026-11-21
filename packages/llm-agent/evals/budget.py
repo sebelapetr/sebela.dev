@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-#: The owner-approved initial campaign ceiling (`.plan/06-llm-agent/evals.md`).
+#: The owner-approved initial campaign ceiling (`.plan/done/06-llm-agent/evals.md`).
 CAMPAIGN_CEILING_USD = 10.0
 #: The subject's own allowance per execution (the agent enforces it; `AgentConfig`).
 SUBJECT_EXECUTION_USD = 0.02

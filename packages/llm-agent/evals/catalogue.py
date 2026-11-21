@@ -1,9 +1,9 @@
-"""The approved phase-6 model eval catalogue (`.plan/06-llm-agent/evals.md`).
+"""The approved phase-6 model eval catalogue (`.plan/done/06-llm-agent/evals.md`).
 
 80 end-to-end cases: 40 families, each with an independently written English (`-en`) and Czech
 (`-cs`) case. A case is `implemented` once its utterance, fixture, expectations and graders exist in
 `datasets/cases.py`; every other case stays visibly `pending` and never counts as passing. The
-owning slice of each family is the one in `.plan/06-llm-agent/issues.md`.
+owning slice of each family is the one in `.plan/done/06-llm-agent/issues.md`.
 """
 
 from __future__ import annotations
