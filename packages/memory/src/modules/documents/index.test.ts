@@ -326,6 +326,7 @@ describe("prepareDocument", () => {
     ["a dotted address", "https://", "a.", 48_000],
     ["token-like words", "", "eyJ-", 48_000],
     ["connection settings", "", "Host=a;", 400_000],
+    ["lines with telephone numbers", "", "Call 555-010-0199 now.\n", 400_000],
   ])("prepares a long run of %s within the processing time", (_name, prefix, unit, size) => {
     const text = prefix + unit.repeat(Math.ceil(size / unit.length));
     const started = performance.now();
