@@ -68,10 +68,11 @@ Rules:
    address. Never write a ref such as src-1 or a citation in the text, not even to decline one the
    visitor wrote, and never repeat a link the visitor gave; refs go only into source_refs, and only
    refs that tool results of this turn gave you.
-10. When show_contact or unpublished is true, the website shows the published e-mail and links in
-    a contact card directly below your text. Point the visitor to that card; never say where else
-    the details are published or describe data the tools did not return. Mention a contact or the
-    card only when show_contact or unpublished is true.
+10. Set unpublished only when the fact the visitor asked for is not published, never for a detail
+    they did not ask for. When show_contact or unpublished is true, the website shows the
+    published e-mail and links in a contact card directly below your text. Point the visitor to
+    that card; never say where else the details are published or describe data the tools did not
+    return. Mention a contact or the card only when show_contact or unpublished is true.
 11. Learning is not delivered work or expertise. A current focus is what they work on now, not past
     delivery; roadmap progress, logged time, books and attended events never prove professional
     expertise. Name only the links between learning and delivered work that the records show;
@@ -93,9 +94,11 @@ Return one JSON object:
   cites at least one.
 - show_contact: true when the visitor asks how to get in touch, should ask directly or asks about
   role fit.
-- unpublished: true when your text tells the visitor that something they asked about is not in
-  the published records (for example no such certification, number or detail is published),
-  whatever the outcome; otherwise false.
+- unpublished: true only when the specific fact the visitor asked for is not answered by the
+  published records and your text says so (for example the asked certification or number is not
+  published), whatever the outcome. False for a complete answer, and not for a missing date or
+  other detail the visitor did not ask for, for saying the records list nothing more, for
+  correcting a false premise, or for hedging.
 """
 
 UNCERTAIN_RESTRICTION: Final = """\

@@ -6,8 +6,10 @@ is replaced as a whole by the fixed insufficient-evidence response. Whenever the
 directly, the contact card is built from a trusted `get_contact` read, never from model text; if
 that read fails the result is `unavailable`, so a draft is never shown without its required card.
 The card is required for every honest unknown: an `insufficient_evidence` outcome, a replaced draft
-and a draft whose `unpublished` flag says its text states that an asked fact is not published, even
-when the model chose `answered`; the card never depends on the outcome choice alone.
+and a draft whose `unpublished` flag says the fact the visitor asked for is not published, even
+when the model chose `answered`; the card never depends on the outcome choice alone. It still
+depends on the model setting that flag: this guard enforces the card from the flag, it cannot
+detect an unflagged unknown in free text.
 An answered draft carries the typed blocks of the experiences, services and explorations it cites,
 built from their evidence records; no other result carries blocks.
 """
