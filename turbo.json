@@ -14,6 +14,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "env": ["TEST_COVERAGE"],
       "passThroughEnv": [
         "POSTGRES_HOST",
         "POSTGRES_PORT",
@@ -24,6 +25,7 @@
     },
     "@sebela/mcp-admin#test": {
       "dependsOn": ["^build", "@sebela/api#build"],
+      "env": ["TEST_COVERAGE"],
       "passThroughEnv": [
         "POSTGRES_HOST",
         "POSTGRES_PORT",

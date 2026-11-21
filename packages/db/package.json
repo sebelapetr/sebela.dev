@@ -32,6 +32,7 @@
     "@sebela/config": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "catalog:",
     "drizzle-kit": "0.31.11",
     "eslint": "catalog:",
     "typescript": "catalog:",
