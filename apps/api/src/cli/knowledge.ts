@@ -4,7 +4,7 @@
 // through the services, so it needs no running server and no API key. Run it only
 // while no API serves the same database, which works through the queue itself.
 // Every answer is one JSON document on stdout.
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -13,6 +13,7 @@ import { z } from "zod";
 import { SearchRequestSchema } from "@sebela/contracts";
 import {
   DomainError,
+  defaultDocumentLimits,
   openPrivateStorage,
   openServices,
   readDatabaseConfig,
@@ -120,7 +121,16 @@ export async function runKnowledgeCommand(
     }
     const ingest = command === "ingest" ? ingestArguments(rest) : null;
     if (ingest !== null) {
-      const bytes = await readFile(resolve(cwd, ingest.file));
+      const path = resolve(cwd, ingest.file);
+      // The size is checked before the file is read, so a huge file is never loaded.
+      const { maxBytes } = defaultDocumentLimits;
+      if ((await stat(path)).size > maxBytes) {
+        throw new DomainError(
+          "payload_too_large",
+          `The file is larger than ${String(maxBytes)} bytes; split it into smaller documents.`,
+        );
+      }
+      const bytes = await readFile(path);
       const ingested = await services.knowledge.ingestDocument({
         slug: ingest.slug,
         title: ingest.title,
