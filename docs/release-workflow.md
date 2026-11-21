@@ -37,6 +37,19 @@ Built, verified and published by `.github/workflows/release.yml` on every push t
 - **Built natively** on GitHub's arm64 runners, the server's architecture; nothing is built on the server.
 - **Verified before publishing.** The new images and the current images of the unchanged services start as the production composition with the demo seed, and the production stack smoke check and the complete-stack browser tests run against it, with the model faked (the mock Ask page). Images that fail are never pushed.
 - **Published** to GHCR as public packages: the commit SHA tags first, then `current`. The workflow's only credential is its `GITHUB_TOKEN`, with `packages: write` only in that job; the Docker sign-in to GHCR exists only around pulling the reused images and publishing, not during the builds and tests. The tag set of every service is the job's output `tags` (JSON, service to tag) for the deployment.
+- **Attested.** Every image a release pushes gets, for its pushed digest, a signed [SLSA build provenance](https://slsa.dev/provenance/) attestation (`actions/attest-build-provenance`) and an attestation of its SPDX SBOM (generated from the pushed image by `anchore/sbom-action`, attested by `actions/attest`); both are pushed to GHCR beside the image. `publish` prints the pushed digests as the job's step output `digests` (JSON, service to `sha256:...`), and only those images are attested: a reused image keeps the attestations of the release that built it. The job signs with its OIDC token, so `id-token: write` and `attestations: write`, like `packages: write`, exist only in that job. Anyone can verify an image and read its SBOM with the GitHub CLI:
+
+  ```sh
+  # The provenance: built by this repository's release workflow, from the commit in the tag.
+  gh attestation verify oci://ghcr.io/sebelapetr/sebela-api:<sha> --owner sebelapetr
+  # The SBOM: verify its attestation and print the SPDX document.
+  gh attestation verify oci://ghcr.io/sebelapetr/sebela-api:<sha> --owner sebelapetr \
+    --predicate-type https://spdx.dev/Document/v2.3 --format json \
+    --jq '.[].verificationResult.statement.predicate'
+  ```
+
+  The same works for `sebela-web` and `sebela-mcp-admin`, and for the `current` tag. Adding `--signer-workflow sebelapetr/sebela.dev/.github/workflows/release.yml` also checks that the release workflow, not another workflow of the repository, built it.
+
 - **One release at a time.** GitHub lets the running release finish and cancels a release still waiting when a newer push queues. Nothing is lost by that: the newer release builds everything that changed since the current images.
 - **`current` moves on publishing**, before the images are deployed. A failed deployment therefore leaves `current` on images that are not running; the next release still builds everything that changed since them, and the server runs whatever its record of verified releases names (Deployment).
 
