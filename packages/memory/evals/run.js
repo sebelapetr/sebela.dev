@@ -35,7 +35,7 @@
 // of the API's packages (`pnpm --filter @sebela/api... build`).
 //
 // The gate (`thresholds.json`) applies once it is frozen, and only to a complete run of the
-// variant it names; the summary records whether it applied and what failed.
+// deployed variant it names; the summary records whether it applied and what failed.
 //
 // Exit codes: 0 measured (and the gate passed or does not apply), 1 a failure or a failed gate,
 // 2 nothing was measured (every selected case is pending).

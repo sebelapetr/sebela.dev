@@ -54,7 +54,10 @@ with the same settings. `vector-baseline.json` is the earlier vector run over th
 questions, kept for comparison. The vector variant is the deployed one: nDCG 0.91 against 0.63,
 recall at the pool 1 against 0.84, and no false empty against 0.025.
 
-`../thresholds.json` freezes the gate from `vector-complete.json`: the quality minimums are its
-values rounded down to two decimals, the false-empty rate stays at 0, and latency and cost per
-query get headroom (the file states the method and both baselines). A complete vector run must
-pass it; a later slice may only raise it.
+`../thresholds.json` freezes the gate from `vector-complete.json`: it gates only what the phase PRD
+gates, recall at the pool, nDCG and the correct-empty rate, at its values rounded down to two
+decimals; every other metric is reported, not gated (the file states the method and both
+baselines). The gate applies to a complete run of the deployed variant the file names, now
+`vector`; a slice that deploys another pipeline (the hybrid or reranked variant) switches
+`variant` to it in the same change, and the new pipeline must meet the same minimums. A later
+slice may only raise them.
