@@ -1,6 +1,6 @@
 // The knowledge maintenance command over a real database with the fake embedder: reindexing,
 // the evals' candidate pools and the month's recorded spend, printed as JSON.
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -280,6 +280,21 @@ describe("the knowledge command's supplemental documents", () => {
     expect(missing.code).toBe(1);
     expect(missing.err()).toContain("ENOENT");
     expect(missing.err()).not.toContain(folder);
+  });
+
+  it("refuses a file over the size limit before reading it", async () => {
+    // A sparse 3 GiB file: reading it whole would fail before any size check.
+    const huge = join(folder, "huge.md");
+    await writeFile(huge, "");
+    await truncate(huge, 3 * 1024 ** 3);
+    try {
+      const refused = await run(["ingest", "huge.md", "--slug", "huge", "--title", "Huge"]);
+      expect(refused.code).toBe(1);
+      expect(refused.err()).toMatch(/larger than 1048576 bytes; split it into smaller documents/);
+      expect(refused.err()).not.toContain(folder);
+    } finally {
+      await rm(huge);
+    }
   });
 
   it("prints the usage for incomplete document commands", async () => {
