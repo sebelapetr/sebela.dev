@@ -78,7 +78,7 @@ The `Commit messages` workflow (`.github/workflows/commit-messages.yml`, `script
 
 - Opened by the orchestrator against the phase branch once checks are green and the reviewer has approved.
 - Title in Conventional Commits form — it becomes the squash commit message.
-- Description:
+- Description, the sections of `.github/pull_request_template.md`, which pre-fills them for every pull request:
 
 ```
 Closes #<issue>
@@ -86,15 +86,21 @@ Closes #<issue>
 ## What changed
 <two or three sentences>
 
-## How it was verified
+## How it was tested
 <tests, screenshots, evals>
 
+## Docs updated
+<documents changed with the behaviour, or "none needed" and why>
+
 ## Roles
-Implemented by: <agent>
-Reviewed by: <agent>
+Implemented by: <agent or person>
+Reviewed by: <agent or person>
+Approved by: <agent or person>
 Orchestrated by: <agent>
 ```
 
+- **Roles.** Every pull request names who implemented, who reviewed and who approved it (`AGENTS.md`, Git). For an issue pull request the approval is the reviewer agent's; for a pull request into `master` it is the owner's, written as `pending (owner)` until the owner approves. `Orchestrated by` is added only to issue pull requests that the orchestrator opens from the phase loop.
+- A phase pull request also starts with a `## Summary` section: one paragraph on what the phase delivers.
 - UI changes attach the screenshots at 360, 768 and 1280 px in both themes.
 - A change in behaviour or structure includes the documentation update.
 - Merged by the orchestrator with a **squash merge** when the reviewer has approved and CI is green on the pull request. The result is one commit per issue on the phase branch.

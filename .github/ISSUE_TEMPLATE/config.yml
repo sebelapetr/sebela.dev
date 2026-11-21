@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/sebelapetr/sebela.dev/security/advisories/new
+    about: Report vulnerabilities privately, never in a public issue. See SECURITY.md.
+  - name: Ask a question or discuss an idea
+    url: https://github.com/sebelapetr/sebela.dev/discussions
+    about: Questions about the code, the architecture or the agent workflow belong in Discussions.
