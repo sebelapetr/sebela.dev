@@ -77,12 +77,18 @@ from .person import Person
 from .person_create import PersonCreate
 from .person_link import PersonLink
 from .person_update import PersonUpdate
+from .portfolio_passage import PortfolioPassage
+from .portfolio_passage_provenance import PortfolioPassageProvenance
+from .portfolio_passage_provenance_content_kind import (
+    PortfolioPassageProvenanceContentKind,
+)
 from .project import Project
 from .project_create import ProjectCreate
 from .project_link import ProjectLink
 from .project_update import ProjectUpdate
 from .readiness import Readiness
 from .recent_changes import RecentChanges
+from .retrieval_content_kind import RetrievalContentKind
 from .roadmap import Roadmap
 from .roadmap_area import RoadmapArea
 from .roadmap_area_create import RoadmapAreaCreate
@@ -136,6 +142,9 @@ from .roadmap_tree_module import RoadmapTreeModule
 from .roadmap_tree_resource import RoadmapTreeResource
 from .roadmap_tree_resource_status import RoadmapTreeResourceStatus
 from .roadmap_tree_resource_type import RoadmapTreeResourceType
+from .search_request import SearchRequest
+from .search_result_type_0 import SearchResultType0
+from .search_result_type_1 import SearchResultType1
 from .service import Service
 from .service_create import ServiceCreate
 from .service_evidence_exploration import ServiceEvidenceExploration
@@ -147,6 +156,8 @@ from .service_link_evidence import ServiceLinkEvidence
 from .service_project_evidence import ServiceProjectEvidence
 from .service_project_evidence_input import ServiceProjectEvidenceInput
 from .service_update import ServiceUpdate
+from .supplemental_passage import SupplementalPassage
+from .supplemental_passage_provenance import SupplementalPassageProvenance
 from .technology import Technology
 from .technology_create import TechnologyCreate
 from .technology_create_group_type_0 import TechnologyCreateGroupType0
@@ -245,12 +256,16 @@ __all__ = (
     "PersonCreate",
     "PersonLink",
     "PersonUpdate",
+    "PortfolioPassage",
+    "PortfolioPassageProvenance",
+    "PortfolioPassageProvenanceContentKind",
     "Project",
     "ProjectCreate",
     "ProjectLink",
     "ProjectUpdate",
     "Readiness",
     "RecentChanges",
+    "RetrievalContentKind",
     "Roadmap",
     "RoadmapArea",
     "RoadmapAreaCreate",
@@ -304,6 +319,9 @@ __all__ = (
     "RoadmapTreeResource",
     "RoadmapTreeResourceStatus",
     "RoadmapTreeResourceType",
+    "SearchRequest",
+    "SearchResultType0",
+    "SearchResultType1",
     "Service",
     "ServiceCreate",
     "ServiceEvidenceExploration",
@@ -315,6 +333,8 @@ __all__ = (
     "ServiceProjectEvidence",
     "ServiceProjectEvidenceInput",
     "ServiceUpdate",
+    "SupplementalPassage",
+    "SupplementalPassageProvenance",
     "Technology",
     "TechnologyCreate",
     "TechnologyCreateGroupType0",

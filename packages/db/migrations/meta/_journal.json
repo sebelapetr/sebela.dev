@@ -148,6 +148,41 @@
       "when": 1795100853630,
       "tag": "0020_content-audit",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795183755110,
+      "tag": "0021_retrieval",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795216078291,
+      "tag": "0022_retrieval_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795220562407,
+      "tag": "0023_retrieval_document_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795226908818,
+      "tag": "0024_document_withdrawal_and_conflicts",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795234417034,
+      "tag": "0025_provider_usage_rerank",
+      "breakpoints": true
     }
   ]
 }

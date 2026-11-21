@@ -1310,6 +1310,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/retrieval/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search the indexed knowledge
+         * @description Embeds a query of at most 500 characters and returns up to 8 passages of the indexed public portfolio, best first, each with its source, version, canonical site path and provenance, optionally only of the given content kinds. When no passage reaches the configured relevance floor the result is `no_evidence`. A provider that is not configured, fails or times out, or a month's spend at its ceiling, is a 503 and never no evidence. It reads only and changes no content.
+         */
+        post: operations["searchKnowledge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -2333,6 +2353,17 @@ export interface components {
             /** @description Ascending order in its list; ties are ordered by slug. */
             position?: number;
         };
+        /** @description A search of the indexed knowledge. */
+        SearchRequest: {
+            /** @description The question or keywords, at most 500 characters after trimming. */
+            query: string;
+            /** @description Only passages of these content kinds; every kind when absent. */
+            kinds?: components["schemas"]["RetrievalContentKind"][];
+            /** @description The most passages to return; the configured number when absent. */
+            limit?: number;
+        };
+        /** @enum {string} */
+        RetrievalContentKind: "profile" | "experience" | "project" | "case_study" | "exploration" | "service" | "education" | "roadmap_area" | "roadmap_module" | "roadmap_resource" | "diary_day" | "book" | "event" | "glossary_term" | "document";
         Health: {
             /** @constant */
             status: "ok";
@@ -2341,7 +2372,7 @@ export interface components {
         ErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "validation_failed" | "malformed_json" | "credentials_in_url" | "unauthorized" | "not_found" | "conflict" | "payload_too_large" | "unsupported_media_type" | "rate_limited" | "internal_error" | "unavailable";
+                code: "validation_failed" | "malformed_json" | "credentials_in_url" | "unauthorized" | "not_found" | "conflict" | "payload_too_large" | "unsupported_media_type" | "rate_limited" | "internal_error" | "provider_unavailable" | "budget_exhausted" | "unavailable";
                 message: string;
                 fields?: components["schemas"]["ErrorField"][];
             };
@@ -3431,6 +3462,70 @@ export interface components {
             after: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** @description The passages answering the query, best first, or no evidence when none reaches the relevance floor. A failing provider is an error, never no evidence. */
+        SearchResult: {
+            /** @constant */
+            status: "found";
+            passages: components["schemas"]["Passage"][];
+        } | {
+            /** @constant */
+            status: "no_evidence";
+            passages: components["schemas"]["Passage"][];
+        };
+        Passage: components["schemas"]["PortfolioPassage"] | components["schemas"]["SupplementalPassage"];
+        /** @description A passage of a public portfolio record. */
+        PortfolioPassage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            sourceKind: "portfolio";
+            /** @description `portfolio:<content kind>:<slug or date>` of the public record. */
+            sourceId: string;
+            title: string;
+            /** @description SHA-256 of the indexed source text; changes when the source changes. */
+            version: string;
+            text: string;
+            /** @description Relevance to the query, higher is better: the reranker's score in the deployed search. */
+            score: number;
+            /**
+             * Format: starts_with
+             * @description The canonical site path of the record, never an absolute URL.
+             */
+            path: string;
+            provenance: {
+                /** @enum {string} */
+                contentKind: "profile" | "experience" | "project" | "case_study" | "exploration" | "service" | "education" | "roadmap_area" | "roadmap_module" | "roadmap_resource" | "diary_day" | "book" | "event" | "glossary_term";
+                /** @description The headings from the source title down to the passage's section. */
+                sectionPath: string[];
+                /** Format: date-time */
+                indexedAt: string;
+            };
+        };
+        /** @description A passage of an approved supplemental document: a label, never a link. */
+        SupplementalPassage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            sourceKind: "supplemental";
+            /** @description `document:<slug>`, an opaque identifier; never an address. */
+            sourceId: string;
+            title: string;
+            /** @description SHA-256 of the indexed source text; changes when the source changes. */
+            version: string;
+            text: string;
+            /** @description Relevance to the query, higher is better: the reranker's score in the deployed search. */
+            score: number;
+            provenance: {
+                /** @constant */
+                contentKind: "document";
+                /** @description The headings from the source title down to the passage's section. */
+                sectionPath: string[];
+                /** Format: date-time */
+                indexedAt: string;
+            };
         };
     };
     responses: never;
@@ -12450,6 +12545,97 @@ export interface operations {
             };
             /** @description `internal_error`: an unexpected failure, without details. */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    searchKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchRequest"];
+            };
+        };
+        responses: {
+            /** @description The passages or no evidence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the API key is missing, malformed, unknown or revoked. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `provider_unavailable`: an outside provider the route needs is not configured, failed or did not answer in time; `budget_exhausted`: the month's spend on it reached its ceiling. Never reported as an empty result. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

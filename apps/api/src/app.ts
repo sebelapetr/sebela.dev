@@ -12,6 +12,7 @@ import {
 } from "@sebela/contracts";
 import type {
   AuditService,
+  KnowledgeService,
   MediaService,
   ProfileService,
   RoadmapService,
@@ -30,6 +31,7 @@ import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.j
 import { auditRoutes } from "./modules/audit/index.js";
 import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
+import { retrievalRoutes } from "./modules/retrieval/index.js";
 import { roadmapRoutes } from "./modules/roadmap/index.js";
 import { createOpenApiDocument } from "./openapi.js";
 import {
@@ -68,13 +70,21 @@ const property = (value: unknown, name: string): unknown =>
 const text = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
+/** Whether a route changes content: every method but `GET`, unless the route is `readOnly`. */
+const writes = <Route extends Pick<RouteDocumentation, "method" | "readOnly">>(
+  route: Route,
+): route is Route & { readonly method: Exclude<RouteDocumentation["method"], "GET"> } =>
+  route.method !== "GET" && route.readOnly !== true;
+
 /**
  * How a write route is audited: its own `audit`, or else as its content domain, for the person or
  * the record its `slug`, `id` or `date` path parameter names, or for a create the record its
  * result's `slug` or `id` names. `null` for a read.
  */
-function auditOf(route: Pick<RouteDefinition, "method" | "content" | "audit">): RouteAudit | null {
-  if (route.method === "GET" || !route.content) return null;
+function auditOf(
+  route: Pick<RouteDefinition, "method" | "readOnly" | "content" | "audit">,
+): RouteAudit | null {
+  if (!writes(route) || !route.content) return null;
   if (route.audit) return route.audit;
   const entity = route.content;
   const addressed = (params: unknown) => {
@@ -107,7 +117,7 @@ function changesOf(
   params: unknown,
   result: unknown,
 ): ContentChange[] | null {
-  if (route.method === "GET" || !route.content) return null;
+  if (!writes(route) || !route.content) return null;
   const records: readonly unknown[] = route.records
     ? route.records({ params, result })
     : [
@@ -134,17 +144,18 @@ function changesOf(
 export interface AppDependencies {
   readonly services: Pick<
     Services,
-    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "health"
+    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "knowledge" | "health"
   >;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
   readonly now?: () => number;
   readonly log?: Logger;
   /**
-   * Called after every committed write, never after a failed one; a failure is logged by the
-   * error's name only and never fails or rolls back the write.
+   * Called after every committed write, never after a failed one, each notifier in order; a
+   * failure is logged by the error's name only and never fails or rolls back the write, nor keeps
+   * a later notifier from being called.
    */
-  readonly onWrite?: WriteNotifier;
+  readonly onWrite?: WriteNotifier | readonly WriteNotifier[];
 }
 
 /** A route as it is registered and documented. */
@@ -237,12 +248,13 @@ type OpenApiDocument = ReturnType<typeof createOpenApiDocument>;
 
 /** The module routes, in registration and documentation order. */
 const moduleRoutes = (
-  services: Pick<Services, "profile" | "media" | "roadmap" | "audit">,
+  services: Pick<Services, "profile" | "media" | "roadmap" | "audit" | "knowledge">,
 ): RouteDefinition[] => [
   ...profileRoutes(services.profile),
   ...mediaRoutes(services.media),
   ...roadmapRoutes(services.roadmap),
   ...auditRoutes(services.audit),
+  ...retrievalRoutes(services.knowledge),
 ];
 
 /** Every documented route, in the order of the OpenAPI document. */
@@ -393,6 +405,26 @@ const describingAudit: AuditService = {
   recentChanges: documentationOnly,
 };
 
+/** A knowledge service for describing routes; describing never calls it. */
+const describingKnowledge: KnowledgeService = {
+  reindexPortfolio: documentationOnly,
+  rebuildPortfolio: documentationOnly,
+  schedule: documentationOnly,
+  processPending: documentationOnly,
+  pending: documentationOnly,
+  search: documentationOnly,
+  candidates: documentationOnly,
+  usage: documentationOnly,
+  ingestDocument: documentationOnly,
+  listDocuments: documentationOnly,
+  showDocument: documentationOnly,
+  approveDocument: documentationOnly,
+  rejectDocument: documentationOnly,
+  withdrawDocument: documentationOnly,
+  deleteDocument: documentationOnly,
+  rebuildIndex: documentationOnly,
+};
+
 /**
  * The OpenAPI document that `createApp` serves at `/openapi.json`, built without services,
  * configuration or a database. Deterministic: the same routes and schemas give the same document.
@@ -405,6 +437,7 @@ export function describeApi(): OpenApiDocument {
         media: describingMedia,
         roadmap: describingRoadmap,
         audit: describingAudit,
+        knowledge: describingKnowledge,
       }),
     ),
   );
@@ -431,7 +464,12 @@ const writeLog: Logger = (line) => {
 export function createApp(dependencies: AppDependencies): Api {
   const { services, config } = dependencies;
   const log = dependencies.log ?? writeLog;
-  const onWrite = dependencies.onWrite ?? (() => Promise.resolve());
+  const onWrite: readonly WriteNotifier[] =
+    dependencies.onWrite === undefined
+      ? []
+      : typeof dependencies.onWrite === "function"
+        ? [dependencies.onWrite]
+        : dependencies.onWrite;
   const limits = createRateLimits(config, dependencies.now ?? Date.now);
   const app = new Hono<ApiEnv>();
   const modules = moduleRoutes(services);
@@ -455,17 +493,19 @@ export function createApp(dependencies: AppDependencies): Api {
     );
 
   const notify = async (event: WriteEvent) => {
-    try {
-      await onWrite(event);
-    } catch (error) {
-      // The error's name only: a notifier's message may carry content or its destination.
-      const name = error instanceof Error ? error.name : "error";
-      log(redact(`error notifying ${event.method} ${event.path}: ${name}`));
+    for (const notifier of onWrite) {
+      try {
+        await notifier(event);
+      } catch (error) {
+        // The error's name only: a notifier's message may carry content or its destination.
+        const name = error instanceof Error ? error.name : "error";
+        log(redact(`error notifying ${event.method} ${event.path}: ${name}`));
+      }
     }
   };
 
   const register = (route: RouteDefinition, index: number) => {
-    if (route.method !== "GET" && !route.content) {
+    if (writes(route) && !route.content) {
       throw new Error(`The write route ${route.operationId} declares no content domain.`);
     }
     const audit = auditOf(route);
@@ -485,7 +525,11 @@ export function createApp(dependencies: AppDependencies): Api {
               entity: audit.entity,
               records: audit.records(params, body),
               run: (content) => {
-                const bound = moduleRoutes({ ...content, audit: services.audit })[index];
+                const bound = moduleRoutes({
+                  ...content,
+                  audit: services.audit,
+                  knowledge: services.knowledge,
+                })[index];
                 if (bound?.operationId !== route.operationId) {
                   throw new Error(
                     `The route ${route.operationId} is not bound in its transaction.`,
@@ -496,7 +540,7 @@ export function createApp(dependencies: AppDependencies): Api {
               recordsOf: (done) => audit.recordsOf?.(done) ?? [],
             });
       // Reached only once the write and its audit have committed; a failed write throws before it.
-      if (route.method !== "GET") {
+      if (writes(route)) {
         const changes = changesOf(route, params, result);
         if (changes) {
           for (const change of changes) {

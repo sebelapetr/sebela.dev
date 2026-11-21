@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, rm, rmdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-import { fileNameOf, newKey, type KeyPrefix, type StoredExtension } from "../keys.js";
+import { fileNameOf, newKey, storedExtensions, type KeyPrefix } from "../keys.js";
 import { markerName, type NamespaceStore } from "../namespace.js";
 
 const { O_CREAT, O_EXCL, O_NOFOLLOW, O_RDONLY, O_WRONLY } = constants;
@@ -14,9 +14,13 @@ const hasCode = (error: unknown, ...codes: string[]) =>
  * Files on local disk below `root`, in one folder per prefix segment. The root is resolved once;
  * every prefix folder must be a real folder, never a symbolic link, and files are created
  * exclusively and opened without following links, so nothing is written, read or removed outside
- * the prefix and no existing file is replaced.
+ * the prefix and no existing file is replaced. Only names with one of `extensions` are keys.
  */
-export function createLocalDriver(root: string, prefix: KeyPrefix) {
+export function createLocalDriver(
+  root: string,
+  prefix: KeyPrefix,
+  extensions: readonly string[] = storedExtensions,
+) {
   let resolvedRoot: Promise<string> | undefined;
 
   const rootFolder = () => {
@@ -48,13 +52,13 @@ export function createLocalDriver(root: string, prefix: KeyPrefix) {
   };
 
   const pathOf = async (key: string, create: boolean): Promise<string | null> => {
-    const name = fileNameOf(prefix, key);
+    const name = fileNameOf(prefix, key, extensions);
     return name === null ? null : join(await prefixFolder(create), name);
   };
 
   return {
-    async store(file: { bytes: Uint8Array; extension: StoredExtension }): Promise<string> {
-      const key = newKey(prefix, file.extension);
+    async store(file: { bytes: Uint8Array; extension: string }): Promise<string> {
+      const key = newKey(prefix, file.extension, extensions);
       const path = await pathOf(key, true);
       if (path === null) throw new Error("A generated key is outside the prefix.");
       const handle = await open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o640);

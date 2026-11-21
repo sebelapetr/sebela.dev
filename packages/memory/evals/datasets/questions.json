@@ -1,0 +1,698 @@
+{
+  "description": "Fictional EN/CS retrieval questions over the demo seed and the fictional supplemental documents (.plan/done/09-rag/prd.md, Evals and measurement). Relevance: 2 = the source answers the question, 1 = related context, 0 (absent) = irrelevant. A question with no relevant source must return no evidence.",
+  "version": 1,
+  "sources": {
+    "document:harbor-retail-cv-2021": {
+      "path": null
+    },
+    "document:northgate-evaluation-talk": {
+      "path": null
+    },
+    "document:reading-assistant-retrospective": {
+      "path": null
+    },
+    "document:support-handbook-excerpt": {
+      "path": null
+    },
+    "portfolio:book:fictional-vector-search-handbook": {
+      "path": "/ai-roadmap/bookshelf/fictional-vector-search-handbook"
+    },
+    "portfolio:case_study:editorial-workbench": {
+      "path": "/experience#case-study-editorial-workbench"
+    },
+    "portfolio:case_study:reading-assistant": {
+      "path": "/experience#case-study-reading-assistant"
+    },
+    "portfolio:diary_day:2025-02-10": {
+      "path": "/ai-roadmap/diary/2025-02-10"
+    },
+    "portfolio:diary_day:2025-02-14": {
+      "path": "/ai-roadmap/diary/2025-02-14"
+    },
+    "portfolio:diary_day:2025-02-18": {
+      "path": "/ai-roadmap/diary/2025-02-18"
+    },
+    "portfolio:education:cloud-architect-certification": {
+      "path": "/cv"
+    },
+    "portfolio:education:harbour-university-bachelor": {
+      "path": "/cv"
+    },
+    "portfolio:education:harbour-university-informatics": {
+      "path": "/cv"
+    },
+    "portfolio:education:llm-evaluation-course": {
+      "path": "/cv"
+    },
+    "portfolio:event:retrieval-summit": {
+      "path": "/ai-roadmap/events"
+    },
+    "portfolio:event:year-end-agents-workshop": {
+      "path": "/ai-roadmap/events"
+    },
+    "portfolio:experience:harbor-retail-senior-developer": {
+      "path": "/experience#experience-harbor-retail-senior-developer"
+    },
+    "portfolio:experience:lumen-press-staff-engineer": {
+      "path": "/experience#experience-lumen-press-staff-engineer"
+    },
+    "portfolio:experience:northwind-freight-developer": {
+      "path": "/experience#experience-northwind-freight-developer"
+    },
+    "portfolio:experience:open-shelf-maintainer": {
+      "path": "/experience#experience-open-shelf-maintainer"
+    },
+    "portfolio:experience:quill-studio-consulting": {
+      "path": "/experience#experience-quill-studio-consulting"
+    },
+    "portfolio:exploration:chunking-benchmark": {
+      "path": "/experience#exploration-chunking-benchmark"
+    },
+    "portfolio:exploration:citation-checker": {
+      "path": "/experience#exploration-citation-checker"
+    },
+    "portfolio:exploration:eval-dashboard": {
+      "path": "/experience#exploration-eval-dashboard"
+    },
+    "portfolio:exploration:tool-permission-model": {
+      "path": "/experience#exploration-tool-permission-model"
+    },
+    "portfolio:glossary_term:embedding": {
+      "path": "/ai-roadmap"
+    },
+    "portfolio:glossary_term:eval": {
+      "path": "/ai-roadmap"
+    },
+    "portfolio:glossary_term:grounding": {
+      "path": "/ai-roadmap"
+    },
+    "portfolio:profile:person": {
+      "path": "/"
+    },
+    "portfolio:project:architecture-review-kit": {
+      "path": "/experience#project-architecture-review-kit"
+    },
+    "portfolio:project:booking-portal": {
+      "path": "/experience#project-booking-portal"
+    },
+    "portfolio:project:community-catalogue": {
+      "path": "/experience#project-community-catalogue"
+    },
+    "portfolio:project:document-assistant-prototype": {
+      "path": "/experience#project-document-assistant-prototype"
+    },
+    "portfolio:project:editorial-workbench": {
+      "path": "/experience#project-editorial-workbench"
+    },
+    "portfolio:project:reading-assistant": {
+      "path": "/experience#project-reading-assistant"
+    },
+    "portfolio:project:store-replatforming": {
+      "path": "/experience#project-store-replatforming"
+    },
+    "portfolio:project:warehouse-picking": {
+      "path": "/experience#project-warehouse-picking"
+    },
+    "portfolio:roadmap_area:agents-in-production": {
+      "path": "/ai-roadmap/agents-in-production"
+    },
+    "portfolio:roadmap_area:retrieval-systems": {
+      "path": "/ai-roadmap/retrieval-systems"
+    },
+    "portfolio:roadmap_module:agent-loops": {
+      "path": "/ai-roadmap/agents-in-production/agent-loops"
+    },
+    "portfolio:roadmap_module:chunking-strategies": {
+      "path": "/ai-roadmap/retrieval-systems/chunking-strategies"
+    },
+    "portfolio:roadmap_module:embeddings": {
+      "path": "/ai-roadmap/foundations/embeddings"
+    },
+    "portfolio:roadmap_module:guardrails-basics": {
+      "path": "/ai-roadmap/agents-in-production/guardrails-basics"
+    },
+    "portfolio:roadmap_module:search-fundamentals": {
+      "path": "/ai-roadmap/retrieval-systems/search-fundamentals"
+    },
+    "portfolio:roadmap_resource:chunking-experiments": {
+      "path": "/ai-roadmap/retrieval-systems/chunking-strategies#resource-chunking-experiments"
+    },
+    "portfolio:roadmap_resource:hybrid-search-playlist": {
+      "path": "/ai-roadmap/retrieval-systems/search-fundamentals#resource-hybrid-search-playlist"
+    },
+    "portfolio:roadmap_resource:red-team-exercise": {
+      "path": "/ai-roadmap/agents-in-production/guardrails-basics#resource-red-team-exercise"
+    },
+    "portfolio:roadmap_resource:tokenization-notes": {
+      "path": "/ai-roadmap/foundations/llm-basics#resource-tokenization-notes"
+    },
+    "portfolio:roadmap_resource:transformer-explainer": {
+      "path": "/ai-roadmap/foundations/llm-basics#resource-transformer-explainer"
+    },
+    "portfolio:roadmap_resource:vector-search-handbook-reading": {
+      "path": "/ai-roadmap/foundations/embeddings#resource-vector-search-handbook-reading"
+    },
+    "portfolio:service:ai-assistant-prototype": {
+      "path": "/services#service-ai-assistant-prototype"
+    },
+    "portfolio:service:architecture-review": {
+      "path": "/services#service-architecture-review"
+    },
+    "portfolio:service:evaluation-setup": {
+      "path": "/services#service-evaluation-setup"
+    },
+    "document:riverbend-workshop-handout": {
+      "path": null
+    }
+  },
+  "documents": [
+    {
+      "sourceId": "document:northgate-evaluation-talk",
+      "title": "Notes from a talk at the Northgate Engineering meetup",
+      "file": "documents/northgate-evaluation-talk.md"
+    },
+    {
+      "sourceId": "document:harbor-retail-cv-2021",
+      "title": "Alex Novara — CV (2021 edition)",
+      "file": "documents/harbor-retail-cv-2021.md"
+    },
+    {
+      "sourceId": "document:support-handbook-excerpt",
+      "title": "Support handbook excerpt",
+      "file": "documents/support-handbook-excerpt.md"
+    },
+    {
+      "sourceId": "document:reading-assistant-retrospective",
+      "title": "Retrospektiva asistenta pro čtenáře",
+      "file": "documents/reading-assistant-retrospective.md"
+    },
+    {
+      "sourceId": "document:riverbend-workshop-handout",
+      "title": "Retrieval Evaluation Workshop",
+      "file": "documents/riverbend-workshop-handout.pdf"
+    }
+  ],
+  "questions": [
+    {
+      "id": "portfolio-lumen-role",
+      "language": "en",
+      "category": "exact-name",
+      "query": "What does Alex do at Lumen Press?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:experience:lumen-press-staff-engineer": 2,
+        "portfolio:project:reading-assistant": 1,
+        "portfolio:project:editorial-workbench": 1
+      }
+    },
+    {
+      "id": "portfolio-career-start",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Kde Alex začínal svou kariéru?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:experience:northwind-freight-developer": 2,
+        "portfolio:profile:person": 2,
+        "portfolio:project:booking-portal": 1
+      }
+    },
+    {
+      "id": "portfolio-archive-questions",
+      "language": "en",
+      "category": "paraphrase",
+      "query": "Which project answers readers' questions from the publisher's archive?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:project:reading-assistant": 2,
+        "portfolio:case_study:reading-assistant": 2,
+        "portfolio:experience:lumen-press-staff-engineer": 1
+      }
+    },
+    {
+      "id": "portfolio-chunking-comparison",
+      "language": "en",
+      "category": "cross-record",
+      "query": "How were the chunking strategies compared?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:exploration:chunking-benchmark": 2,
+        "portfolio:case_study:reading-assistant": 2,
+        "portfolio:roadmap_module:chunking-strategies": 1,
+        "portfolio:roadmap_resource:chunking-experiments": 1
+      }
+    },
+    {
+      "id": "portfolio-review-duration",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Jak dlouho trvá revize architektury?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:service:architecture-review": 2,
+        "portfolio:project:architecture-review-kit": 2
+      }
+    },
+    {
+      "id": "portfolio-handbook-service",
+      "language": "en",
+      "category": "paraphrase",
+      "query": "What can Alex build for a small firm whose staff cannot find answers in its handbooks?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:service:ai-assistant-prototype": 2,
+        "portfolio:project:document-assistant-prototype": 2,
+        "portfolio:experience:quill-studio-consulting": 1
+      }
+    },
+    {
+      "id": "portfolio-permission-model",
+      "language": "en",
+      "category": "exact-name",
+      "query": "Tool permission model",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:exploration:tool-permission-model": 2
+      }
+    },
+    {
+      "id": "portfolio-summit-takeaways",
+      "language": "en",
+      "category": "roadmap",
+      "query": "What did Alex take away from the retrieval summit?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:event:retrieval-summit": 2
+      }
+    },
+    {
+      "id": "portfolio-attention-notes",
+      "language": "cs",
+      "category": "diary",
+      "query": "Co si Alex poznamenal o attention, když začal s transformerem?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:diary_day:2025-02-10": 2,
+        "portfolio:roadmap_resource:transformer-explainer": 1,
+        "portfolio:diary_day:2025-02-14": 1
+      }
+    },
+    {
+      "id": "portfolio-grounding",
+      "language": "en",
+      "category": "exact-name",
+      "query": "What is grounding?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:glossary_term:grounding": 2,
+        "portfolio:exploration:citation-checker": 1
+      }
+    },
+    {
+      "id": "portfolio-embedding-term",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Co je to embedding?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:glossary_term:embedding": 2,
+        "portfolio:roadmap_module:embeddings": 1
+      }
+    },
+    {
+      "id": "portfolio-vector-book",
+      "language": "en",
+      "category": "roadmap",
+      "query": "What stayed with Alex from the vector search handbook?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:book:fictional-vector-search-handbook": 2,
+        "portfolio:roadmap_resource:vector-search-handbook-reading": 1
+      }
+    },
+    {
+      "id": "portfolio-degrees",
+      "language": "en",
+      "category": "exact-name",
+      "query": "Which university degrees does Alex hold?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:education:harbour-university-informatics": 2,
+        "portfolio:education:harbour-university-bachelor": 2
+      }
+    },
+    {
+      "id": "portfolio-certification",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Jakou certifikaci Alex získal?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:education:cloud-architect-certification": 2
+      }
+    },
+    {
+      "id": "portfolio-checkout-outages",
+      "language": "en",
+      "category": "paraphrase",
+      "query": "How did the store move to a new platform without breaking checkout?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:project:store-replatforming": 2,
+        "portfolio:experience:harbor-retail-senior-developer": 1
+      }
+    },
+    {
+      "id": "portfolio-picking-walks",
+      "language": "en",
+      "category": "exact-name",
+      "query": "How much less do warehouse pickers walk?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:project:warehouse-picking": 2
+      }
+    },
+    {
+      "id": "portfolio-editor-testimonial",
+      "language": "en",
+      "category": "cross-record",
+      "query": "What did the editor-in-chief of Lumen Press say about Alex?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:experience:lumen-press-staff-engineer": 2
+      },
+      "note": "Testimonials are a section of their experience source."
+    },
+    {
+      "id": "portfolio-who-is-alex",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Kdo je Alex Novara?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:profile:person": 2
+      }
+    },
+    {
+      "id": "portfolio-collaboration-steps",
+      "language": "en",
+      "category": "paraphrase",
+      "query": "How does working together with Alex go, step by step?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:profile:person": 2
+      }
+    },
+    {
+      "id": "portfolio-availability",
+      "language": "en",
+      "category": "paraphrase",
+      "query": "Is Alex available for a consulting engagement?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:profile:person": 2,
+        "portfolio:experience:quill-studio-consulting": 1
+      }
+    },
+    {
+      "id": "portfolio-hybrid-playlist",
+      "language": "cs",
+      "category": "roadmap",
+      "query": "Co obsahuje playlist o hybridním vyhledávání?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:roadmap_resource:hybrid-search-playlist": 2,
+        "portfolio:roadmap_module:search-fundamentals": 1,
+        "portfolio:event:retrieval-summit": 1
+      }
+    },
+    {
+      "id": "portfolio-retrieval-area",
+      "language": "en",
+      "category": "roadmap",
+      "query": "What is the retrieval systems area of the roadmap about?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:roadmap_area:retrieval-systems": 2,
+        "portfolio:roadmap_module:search-fundamentals": 1
+      }
+    },
+    {
+      "id": "portfolio-agent-loops",
+      "language": "en",
+      "category": "roadmap",
+      "query": "When should an agent loop stop?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:roadmap_module:agent-loops": 2,
+        "portfolio:roadmap_area:agents-in-production": 1
+      }
+    },
+    {
+      "id": "portfolio-new-year-workshop",
+      "language": "cs",
+      "category": "roadmap",
+      "query": "Co Alex dělal na workshopu o agentech na přelomu roku?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:event:year-end-agents-workshop": 2
+      }
+    },
+    {
+      "id": "portfolio-bpe-by-hand",
+      "language": "en",
+      "category": "diary",
+      "query": "When did Alex do byte-pair encoding by hand?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:diary_day:2025-02-18": 2,
+        "portfolio:roadmap_resource:tokenization-notes": 1
+      }
+    },
+    {
+      "id": "portfolio-score-tracking",
+      "language": "en",
+      "category": "paraphrase",
+      "query": "Which experiment tracks evaluation scores across prompt and model changes?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:exploration:eval-dashboard": 2,
+        "portfolio:service:evaluation-setup": 1
+      }
+    },
+    {
+      "id": "portfolio-evaluation-service",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Co dostanu, když si objednám nastavení evaluací?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:service:evaluation-setup": 2
+      }
+    },
+    {
+      "id": "portfolio-workbench-outcome",
+      "language": "en",
+      "category": "exact-name",
+      "query": "How did the editorial workbench change publishing?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:project:editorial-workbench": 2,
+        "portfolio:case_study:editorial-workbench": 2
+      }
+    },
+    {
+      "id": "portfolio-citation-checker",
+      "language": "en",
+      "category": "exact-name",
+      "query": "What is the citation checker?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:exploration:citation-checker": 2,
+        "portfolio:glossary_term:grounding": 1
+      }
+    },
+    {
+      "id": "portfolio-community-catalogue",
+      "language": "en",
+      "category": "cross-record",
+      "query": "Who maintains the catalogue for community libraries?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:experience:open-shelf-maintainer": 2,
+        "portfolio:project:community-catalogue": 2
+      }
+    },
+    {
+      "id": "portfolio-studies",
+      "language": "cs",
+      "category": "paraphrase",
+      "query": "Kde Alex studoval?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:education:harbour-university-informatics": 2,
+        "portfolio:education:harbour-university-bachelor": 2
+      }
+    },
+    {
+      "id": "portfolio-pgvector-work",
+      "language": "en",
+      "category": "cross-record",
+      "query": "Where has Alex used pgvector?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:project:reading-assistant": 2,
+        "portfolio:exploration:chunking-benchmark": 2,
+        "portfolio:experience:lumen-press-staff-engineer": 1
+      }
+    },
+    {
+      "id": "portfolio-red-team",
+      "language": "en",
+      "category": "roadmap",
+      "query": "Is there a plan to try to break the guardrails?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:roadmap_resource:red-team-exercise": 2,
+        "portfolio:roadmap_module:guardrails-basics": 1
+      }
+    },
+    {
+      "id": "portfolio-eval-term",
+      "language": "en",
+      "category": "exact-name",
+      "query": "What does the word eval mean here?",
+      "requires": "portfolio",
+      "relevance": {
+        "portfolio:glossary_term:eval": 2,
+        "portfolio:education:llm-evaluation-course": 1
+      }
+    },
+    {
+      "id": "no-answer-football",
+      "language": "en",
+      "category": "no-answer",
+      "query": "What is Alex's favourite football club?",
+      "requires": "portfolio",
+      "relevance": {}
+    },
+    {
+      "id": "no-answer-hourly-rate",
+      "language": "cs",
+      "category": "no-answer",
+      "query": "Kolik Alex účtuje za hodinu práce?",
+      "requires": "portfolio",
+      "relevance": {}
+    },
+    {
+      "id": "no-answer-rust-operators",
+      "language": "en",
+      "category": "no-answer",
+      "query": "Has Alex written Kubernetes operators in Rust?",
+      "requires": "portfolio",
+      "relevance": {}
+    },
+    {
+      "id": "no-answer-recipe",
+      "language": "cs",
+      "category": "no-answer",
+      "query": "Jaký je nejlepší recept na svíčkovou?",
+      "requires": "portfolio",
+      "relevance": {}
+    },
+    {
+      "id": "no-answer-mobile-games",
+      "language": "en",
+      "category": "no-answer",
+      "query": "Which mobile games has Alex published?",
+      "requires": "portfolio",
+      "relevance": {}
+    },
+    {
+      "id": "supplemental-golden-sets",
+      "language": "en",
+      "category": "supplemental",
+      "query": "What did Alex say about golden sets in the Northgate talk?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:northgate-evaluation-talk": 2
+      }
+    },
+    {
+      "id": "supplemental-harbor-end",
+      "language": "en",
+      "category": "conflict",
+      "query": "When did Alex leave Harbor Retail?",
+      "requires": "supplemental",
+      "relevance": {
+        "portfolio:experience:harbor-retail-senior-developer": 2,
+        "document:harbor-retail-cv-2021": 1
+      },
+      "note": "The 2021 CV contradicts the structured end date (2022-03-31); its contradicting chunk is held back and only its remaining chunk can be found. The case passes whichever of the two relevant sources ranks first; only nDCG rewards the structured experience (relevance 2) ranking above the document, which the vector baseline ranks first."
+    },
+    {
+      "id": "supplemental-loyalty",
+      "language": "en",
+      "category": "supplemental",
+      "query": "Did Alex build a loyalty programme?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:harbor-retail-cv-2021": 2
+      }
+    },
+    {
+      "id": "supplemental-refunds",
+      "language": "en",
+      "category": "injection",
+      "query": "What does the support handbook say about refunds?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:support-handbook-excerpt": 2
+      },
+      "note": "The document carries injected instructions; retrieval returns it as data."
+    },
+    {
+      "id": "supplemental-launch-delay",
+      "language": "cs",
+      "category": "supplemental",
+      "query": "Proč se spuštění asistenta pro čtenáře zpozdilo?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:reading-assistant-retrospective": 2,
+        "portfolio:case_study:reading-assistant": 1
+      }
+    },
+    {
+      "id": "supplemental-czech-golden-set",
+      "language": "en",
+      "category": "supplemental",
+      "query": "Why did the first golden set overrate the assistant?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:northgate-evaluation-talk": 2
+      }
+    },
+    {
+      "id": "supplemental-pdf-chunk-size",
+      "language": "en",
+      "category": "supplemental",
+      "query": "What chunk size did Alex recommend in the Riverbend workshop?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:riverbend-workshop-handout": 2
+      },
+      "note": "Answered only by the fictional PDF handout (#227): its text layer, without the running header and page numbers."
+    },
+    {
+      "id": "supplemental-pdf-afternoon",
+      "language": "en",
+      "category": "supplemental",
+      "query": "What did the workshop participants do after lunch?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:riverbend-workshop-handout": 2
+      },
+      "note": "Answered by the second page of the fictional PDF handout (#227)."
+    }
+  ]
+}

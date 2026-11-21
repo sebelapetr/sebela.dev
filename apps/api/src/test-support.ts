@@ -12,6 +12,7 @@ import {
   type CleanupFailure,
   type MediaLimits,
   type Services,
+  type ServicesOptions,
 } from "@sebela/services";
 
 import { createApp, type Api, type AppDependencies } from "./app.js";
@@ -78,12 +79,19 @@ export interface TestBackend {
   close(): Promise<void>;
 }
 
-export async function openTestBackend(options: { now?: () => Date } = {}): Promise<TestBackend> {
+export interface TestBackendOptions {
+  readonly now?: () => Date;
+  /** Retrieval settings and the embedding provider; without them retrieval is unavailable. */
+  readonly retrieval?: ServicesOptions["retrieval"];
+}
+
+export async function openTestBackend(options: TestBackendOptions = {}): Promise<TestBackend> {
   const database = await createTemporaryDatabase(readDatabaseConfig(process.env));
   const storageRoot = await mkdtemp(join(tmpdir(), "sebela-api-media-"));
   const cleanupFailures: CleanupFailure[] = [];
   const services = openServices(database.config, {
     ...(options.now ? { apiKeys: { now: options.now } } : {}),
+    ...(options.retrieval ? { retrieval: options.retrieval } : {}),
     media: {
       config: {
         storage: {

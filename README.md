@@ -144,7 +144,7 @@ Phases 00–05 have merged into `master`. Phase 06 has an approved specification
 | **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                         | [LLM agent](.plan/done/06-llm-agent/prd.md)                                        |
 | **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                         | [AI service](.plan/07-ai-service/prd.md)                                           |
 | **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                        | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
-| **09 · RAG**                | Approved-source ingest, private originals, embeddings and private retrieval        | [RAG](.plan/09-rag/prd.md)                                                         |
+| **09 · RAG**                | Approved-source ingest, private originals, embeddings and private retrieval        | [RAG](.plan/done/09-rag/prd.md)                                                    |
 | **09.1 · RAG integration**  | Public search, agent tool and skill, public MCP search, cited supplemental sources | [RAG integration](.plan/09.1-rag-integration/prd.md)                               |
 | **09.2 · RAG upgrades**     | BM25 ranking and parent-child retrieval, measured                                  | [RAG upgrades](.plan/09.2-rag-upgrades/prd.md)                                     |
 | **10 · Delivery**           | Affected-image builds, VPS deployment with rollback, backups, monitoring           | [Delivery](.plan/done/10-delivery/prd.md)                                          |

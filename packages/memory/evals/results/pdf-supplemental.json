@@ -1,0 +1,269 @@
+{
+  "status": "measured",
+  "scope": "partial",
+  "variant": "reranked",
+  "runAt": "2026-11-21T06:30:32.229Z",
+  "settings": {
+    "RETRIEVAL_EMBEDDING_MODEL": "voyage-4",
+    "RETRIEVAL_RERANK_MODEL": "rerank-3",
+    "RETRIEVAL_CANDIDATE_POOL": "30",
+    "RETRIEVAL_FINAL_PASSAGES": "5",
+    "RETRIEVAL_RELEVANCE_FLOOR": "0.38",
+    "RETRIEVAL_EMBEDDING_BATCH_SIZE": "128"
+  },
+  "pacing": {
+    "minIntervalMs": 21000,
+    "providerRetries": 6,
+    "maxRetryWaitMs": 60000
+  },
+  "measured": 2,
+  "passed": 2,
+  "metrics": {
+    "questions": 2,
+    "recallAtPool": 1,
+    "ndcg": 1,
+    "precision": 0.75,
+    "mrr": 1,
+    "hitRate": 1,
+    "correctEmptyRate": null,
+    "falseEmptyRate": 0,
+    "provenanceAccuracy": 1,
+    "latencyMs": {
+      "p50": 283,
+      "p95": 392
+    },
+    "costPerQueryUsd": 0.000064025
+  },
+  "gate": {
+    "frozen": true,
+    "applies": false,
+    "reason": "The gate applies only to a complete run of the reranked variant."
+  },
+  "spend": {
+    "ceilingUsd": 1,
+    "indexing": {
+      "portfolio": {
+        "sources": 90,
+        "updated": 80,
+        "removed": 0,
+        "embedded": 4,
+        "reused": 96,
+        "tokens": 105,
+        "costUsd": 0.0000063,
+        "completed": 0,
+        "remaining": {
+          "pending": 0,
+          "failed": 0
+        }
+      },
+      "approvals": [
+        {
+          "version": {
+            "sourceId": "document:northgate-evaluation-talk",
+            "contentHash": "c64f2bafedd3cb79eea2bca44640aec4ba09d3656235433a3b7a0b52720c20d1",
+            "title": "Notes from a talk at the Northgate Engineering meetup",
+            "mediaType": "text/markdown",
+            "byteSize": 532,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T06:27:15.503Z",
+            "decidedAt": "2026-11-21T06:27:18.260Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 131,
+            "costUsd": 0.000007860000000000001
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:harbor-retail-cv-2021",
+            "contentHash": "72e3f46bfe41d37f24e033825ff4777caa791a88417e7434677f6dd572dfb3ff",
+            "title": "Alex Novara — CV (2021 edition)",
+            "mediaType": "text/markdown",
+            "byteSize": 422,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [
+              {
+                "kind": "date",
+                "chunkOrdinal": 1,
+                "sourceId": "portfolio:experience:harbor-retail-senior-developer",
+                "claim": "2023",
+                "fact": "2019-02-01 to 2022-03-31"
+              }
+            ],
+            "sectionCount": 4,
+            "chunkCount": 4,
+            "createdAt": "2026-11-21T06:27:40.912Z",
+            "decidedAt": "2026-11-21T06:27:43.027Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 101,
+            "costUsd": 0.00000606
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:support-handbook-excerpt",
+            "contentHash": "1dfd18eae21142d4ed12a3553c576e36fc4250afb4c4142a66a0aaec5e2c2c75",
+            "title": "Support handbook excerpt",
+            "mediaType": "text/markdown",
+            "byteSize": 483,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T06:28:05.727Z",
+            "decidedAt": "2026-11-21T06:28:07.856Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 97,
+            "costUsd": 0.00000582
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:reading-assistant-retrospective",
+            "contentHash": "1cbbcc93c38945044676df49007e34a75b198ab743e6b2d10d74e141d97ecf1e",
+            "title": "Retrospektiva asistenta pro čtenáře",
+            "mediaType": "text/markdown",
+            "byteSize": 537,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T06:28:30.474Z",
+            "decidedAt": "2026-11-21T06:28:32.958Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 222,
+            "costUsd": 0.00001332
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:riverbend-workshop-handout",
+            "contentHash": "4131e8aa8d64d05f8e00b69771a3a3f90a4ba233a2938fb2b1800d3a78f70708",
+            "title": "Retrieval Evaluation Workshop",
+            "mediaType": "application/pdf",
+            "byteSize": 2711,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 4,
+            "chunkCount": 4,
+            "createdAt": "2026-11-21T06:28:57.101Z",
+            "decidedAt": "2026-11-21T06:29:00.932Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 4,
+            "reused": 0,
+            "tokens": 140,
+            "costUsd": 0.0000084
+          }
+        }
+      ]
+    },
+    "usage": {
+      "tokens": 6858,
+      "costUsd": 0.00038586999999999996,
+      "byOperation": {
+        "index": {
+          "tokens": 4277,
+          "costUsd": 0.00025662
+        },
+        "search": {
+          "tokens": 0,
+          "costUsd": 0
+        },
+        "candidates": {
+          "tokens": 20,
+          "costUsd": 0.0000012
+        },
+        "rerank": {
+          "tokens": 2561,
+          "costUsd": 0.00012805
+        }
+      }
+    },
+    "queryCache": {
+      "entriesAtStart": 0,
+      "candidates": {
+        "queries": 2,
+        "fromCache": 0,
+        "embedded": 2
+      },
+      "search": {
+        "queries": 2,
+        "fromCache": 2,
+        "embedded": 0
+      },
+      "note": "Cached query embeddings cost nothing and take no provider time, so the latency and cost per query leave out the embedding call for every search served from the cache."
+    }
+  },
+  "cases": [
+    {
+      "id": "supplemental-pdf-chunk-size",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": ["document:riverbend-workshop-handout"],
+      "scores": [0.8332381248474121],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 1,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 392
+      }
+    },
+    {
+      "id": "supplemental-pdf-afternoon",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": ["document:riverbend-workshop-handout", "portfolio:diary_day:2025-02-12"],
+      "scores": [0.9033464789390564, 0.38817450404167175],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 283
+      }
+    }
+  ],
+  "pending": []
+}

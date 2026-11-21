@@ -10,6 +10,7 @@
     "build": "tsc --project tsconfig.build.json",
     "clear-content": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/clear-content.js",
     "dev": "pnpm --silent --filter \"@sebela/api^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --watch --import tsx src/server.ts",
+    "knowledge": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/knowledge.js",
     "lint": "eslint .",
     "media": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/media.js",
     "openapi:export": "pnpm --silent --filter \"@sebela/api...\" build && node dist/cli/openapi.js",

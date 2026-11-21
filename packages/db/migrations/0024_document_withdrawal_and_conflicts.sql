@@ -1,0 +1,3 @@
+ALTER TABLE "retrieval"."document_versions" DROP CONSTRAINT "document_versions_status_known";--> statement-breakpoint
+ALTER TABLE "retrieval"."document_versions" ADD COLUMN "conflicts" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "retrieval"."document_versions" ADD CONSTRAINT "document_versions_status_known" CHECK ("retrieval"."document_versions"."status" IN ('pending', 'blocked', 'approved', 'rejected', 'superseded', 'withdrawn'));

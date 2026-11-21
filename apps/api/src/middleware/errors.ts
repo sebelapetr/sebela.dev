@@ -30,6 +30,8 @@ const domainStatus = {
   validation_failed: 400,
   payload_too_large: 413,
   unsupported_media_type: 415,
+  provider_unavailable: 503,
+  budget_exhausted: 503,
 } as const satisfies Record<DomainError["code"], ContentfulStatusCode>;
 
 function send(c: Context, error: ApiError) {

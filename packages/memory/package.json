@@ -1,0 +1,36 @@
+{
+  "name": "@sebela/memory",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The knowledge and retrieval layer: portfolio ingest, embedding indexing and passage search behind ports.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "eval": "node ../../harness/with-secrets.mjs -- node evals/run.js",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@sebela/contracts": "workspace:*",
+    "pdfjs-dist": "6.5.438"
+  },
+  "devDependencies": {
+    "@sebela/config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
