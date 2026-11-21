@@ -643,6 +643,29 @@ async function regradeFolder(folder) {
   if (!gate.pass) process.exitCode = 1;
 }
 
+/**
+ * The settings a run is pinned to, recorded in its summary so results of different settings are
+ * never compared as one series.
+ */
+export function pinnedSettings() {
+  return {
+    promptfoo: PROMPTFOO,
+    provider: `anthropic:messages:${MODEL}`,
+    effort: "medium",
+    promptCaching: true,
+    maxTokens: 4096,
+    maxToolCalls: 6,
+    timeoutMs: 120000,
+    clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
+    dataset:
+      "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases), fixtures/s04 (S04 cases)",
+    repeats: gates.repeats,
+    caseRunConcurrency: CASE_RUN_CONCURRENCY,
+    noncriticalFloor: gates.noncriticalFloor,
+    graders: /** @type {Record<string, number>} */ ({}),
+  };
+}
+
 async function main() {
   // Invalid options stop the runner before any setting is read or fixture started.
   const plan = planRun(process.argv.slice(2));
@@ -698,21 +721,7 @@ async function main() {
   const summary = {
     startedAt,
     scope: plan.partial ? { partial: true, cases: plan.partial.cases } : { partial: false },
-    pinned: {
-      promptfoo: PROMPTFOO,
-      provider: `anthropic:messages:${MODEL}`,
-      effort: "medium",
-      promptCaching: true,
-      maxTokens: 4096,
-      maxToolCalls: 6,
-      timeoutMs: 120000,
-      clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
-      dataset:
-        "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases), fixtures/s04 (S04 cases)",
-      repeats: gates.repeats,
-      caseRunConcurrency: CASE_RUN_CONCURRENCY,
-      noncriticalFloor: gates.noncriticalFloor,
-    },
+    pinned: pinnedSettings(),
     gate,
     usage: totals(runs),
     runs,

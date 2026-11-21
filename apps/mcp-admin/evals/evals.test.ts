@@ -58,6 +58,7 @@ import {
   gradeE33,
   gradeE34,
   gradeE35,
+  GRADER_VERSIONS,
   parseToolOutput,
   type ToolCall,
 } from "./graders.js";
@@ -66,6 +67,7 @@ import {
   MODEL,
   PROMPTFOO_VERSION,
   answerRecord,
+  pinnedSettings,
   planRun,
   promptfooEntry,
   promptfooEnvironment,
@@ -396,6 +398,63 @@ describe("E02: describe the project contract", () => {
     expect(gradeE02(answer, context(described)).reason).toMatch(/budget/);
   });
 
+  it("fails on a guessed snake_case or kebab-case field", () => {
+    for (const guess of ["started_on", "start_date", "project-type"]) {
+      const answer = `You can edit \`name\`, \`summary\`, \`startedOn\` and \`${guess}\`. A project belongs to an \`experience\`.`;
+      expect(gradeE02(answer, context(described))).toEqual(
+        expect.objectContaining({ pass: false, reason: expect.stringContaining(guess) as unknown }),
+      );
+    }
+  });
+
+  it("accepts a hyphenated slug the contract gives as an example, and still fails a guess beside it", () => {
+    const withExample = {
+      ...description,
+      create: {
+        ...description.create,
+        properties: {
+          ...description.create.properties,
+          slug: {
+            type: "string",
+            description:
+              "The stable, unique address of the record, for example `northwind-freight`.",
+          },
+        },
+      },
+    };
+    const described = call("describe", { entity: "project" }, withExample);
+    const answer =
+      "`name`, `summary`, `startedOn` and `slug` (for example `northwind-freight`); a project belongs to an `experience`.";
+    expect(gradeE02(answer, context(described))).toEqual(expect.objectContaining({ pass: true }));
+    expect(gradeE02(`${answer} Also \`start_date\`.`, context(described)).reason).toMatch(
+      /start_date/,
+    );
+    expect(
+      gradeE02(answer, context(call("describe", { entity: "project" }, description))).reason,
+    ).toMatch(/northwind-freight/);
+  });
+
+  it("accepts snake_case and kebab-case names the contract's text gives, and this server's tool names", () => {
+    const withProse = {
+      ...description,
+      summary:
+        "A project done within an experience. Its case study is the separate entity case-study.",
+      create: {
+        ...description.create,
+        properties: {
+          ...description.create.properties,
+          kind: { type: "string", enum: ["client_work", "open-source"] },
+        },
+      },
+    };
+    const answer =
+      "`name`, `summary`, `startedOn` and `kind` (`client_work` or `open-source`); a project belongs to an " +
+      "`experience`, and its case study is the separate entity `case-study`. Recent edits are in `recent_changes`.";
+    expect(gradeE02(answer, context(call("describe", { entity: "project" }, withProse)))).toEqual(
+      expect.objectContaining({ pass: true }),
+    );
+  });
+
   it("fails when the relationship rules are left out", () => {
     const answer = "You can edit `name`, `summary` and `startedOn`.";
     expect(gradeE02(answer, context(described)).pass).toBe(false);
@@ -634,6 +693,25 @@ describe("pinned Promptfoo", () => {
     );
     expect(config).not.toMatch(/dlx/);
     expect(config).toContain(`Promptfoo ${PROMPTFOO_VERSION}`);
+  });
+});
+
+describe("grader versions", () => {
+  const implemented = implementedCases().map((entry) => entry.id);
+
+  it("raise a case's version when its grader changes; E02 is at 2 since it sees snake_case and kebab-case names", () => {
+    expect(GRADER_VERSIONS).toMatchObject({ E02: 2 });
+    for (const [caseId, version] of Object.entries(GRADER_VERSIONS)) {
+      expect(implemented).toContain(caseId);
+      expect(Number.isInteger(version) && version > 1).toBe(true);
+    }
+  });
+
+  it("are pinned in the summary for every implemented case, 1 for a grader never changed", () => {
+    const pinned = pinnedSettings();
+    expect(Object.keys(pinned.graders).sort()).toEqual([...implemented].sort());
+    expect(pinned.graders).toMatchObject({ E01: 1, E02: 2 });
+    expect(pinned).toMatchObject({ provider: `anthropic:messages:${MODEL}`, effort: "medium" });
   });
 });
 

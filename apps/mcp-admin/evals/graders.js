@@ -48,6 +48,10 @@ export const WRITE_TOOLS = Object.freeze([
   "save_book",
 ]);
 
+/** Stub. */
+/** @type {Readonly<Record<string, number>>} */
+export const GRADER_VERSIONS = Object.freeze({});
+
 /** The shape of an administrative API key; never part of an answer. */
 const API_KEY_SHAPE = /sebela_[0-9a-f]{16}_[A-Za-z0-9_-]{20,}/;
 /** Connection strings and assignments that would reveal database credentials. */
