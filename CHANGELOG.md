@@ -2,6 +2,21 @@
 
 All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). From v0.3.0 on, each section is byte for byte the notes of its GitHub release, added by the release workflow after a healthy deployment; the sections of v0.1.0 to v0.2.1 were rendered again in this format from the same commits, so they differ from the older notes of their releases. There is no Unreleased section, because every merge into master is deployed.
 
+## [v0.6.0] - 2026-11-21
+
+### Features
+
+- **web**
+  - let the CDN cache public pages and documents briefly ([#358](https://github.com/sebelapetr/sebela.dev/pull/358))
+
+**Full Changelog**: [v0.5.0...v0.6.0](https://github.com/sebelapetr/sebela.dev/compare/v0.5.0...v0.6.0)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
+- `ghcr.io/sebelapetr/sebela-web:59f0922904c625ad1dd18b89c955bb15aeb9a711`
+- `ghcr.io/sebelapetr/sebela-mcp-admin:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
+
 ## [v0.4.0] - 2026-11-21
 
 ### Features
@@ -294,6 +309,7 @@ No changes since v0.2.0; re-release of the same commit.
 - `ghcr.io/sebelapetr/sebela-web:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 
+[v0.6.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.6.0
 [v0.4.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.4.0
 [v0.3.2]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.3.2
 [v0.3.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.3.1
