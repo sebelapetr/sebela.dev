@@ -12,6 +12,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   FAILED_LABEL,
@@ -35,6 +36,7 @@ import { quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import {
   checkOnce,
   failedIssues,
+  keptRunsFile,
   phaseProgressNow,
   phaseSpend,
   stopsBeforeIteration,
@@ -50,6 +52,9 @@ function parseArgs(argv) {
     // The steward checks a running iteration this often: an issue, and any paid run in it, is in
     // progress for as long as the iteration runs.
     stewardMinutes: 5,
+    // After a stop the orchestrator's run gets an interrupt, then after this long a terminate
+    // and after as long again a kill.
+    stopGraceSeconds: 30,
     notify: true,
     note: null,
     _: [],
@@ -61,6 +66,7 @@ function parseArgs(argv) {
     else if (arg === "--max-failures") options.maxFailures = Number(argv[++i]);
     else if (arg === "--max-iterations") options.maxIterations = Number(argv[++i]);
     else if (arg === "--steward-minutes") options.stewardMinutes = Number(argv[++i]);
+    else if (arg === "--stop-grace-seconds") options.stopGraceSeconds = Number(argv[++i]);
     else if (arg === "--no-notify") options.notify = false;
     else if (arg === "--note") options.note = argv[++i] ?? "";
     else options._.push(arg);
@@ -110,8 +116,37 @@ Nobody can answer questions in this run. Never wait for input; when something ne
 Finish with the structured report.${ownerNoteSection(note)}`;
 }
 
-// `control.stop` is set to a function that ends the run (the steward's stop).
-function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId, control }) {
+// Sends a signal to the orchestrator's whole process group: the orchestrator, its subagents'
+// commands and whatever those started, a paid eval command included. Returns whether anything
+// was there to take it.
+function signalRun(child, signal) {
+  try {
+    process.kill(-child.pid, signal);
+    return true;
+  } catch {
+    try {
+      return child.kill(signal);
+    } catch {
+      return false;
+    }
+  }
+}
+
+// `control.stop` is set to a function that ends the run (the steward's stop): an interrupt, then
+// a terminate after `graceMs` and a kill after as long again, each to the run's whole process
+// group, until nothing of it is left. One interrupt alone can be ignored or lost, and a command
+// the orchestrator started must not go on spending after the loop has stopped.
+function runOrchestrator({
+  mainRoot,
+  phase,
+  base,
+  note,
+  iteration,
+  sessionId,
+  control,
+  logDir,
+  graceMs,
+}) {
   const args = [
     "-p",
     prompt({ phase, base, note }),
@@ -153,21 +188,59 @@ function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId, co
         // The phase names its eval campaign: a paid eval run in this loop spends from this
         // phase's ceiling or is refused (packages/llm-agent/evals/budget.py).
         SEBELA_EVAL_CAMPAIGN: phase,
+        // The loop's record of the paid runs of every checkout: the runner adds the other
+        // worktrees' runs to its own ledger, so the cumulative stops hold across them.
+        SEBELA_EVAL_KEPT_RUNS: keptRunsFile(logDir),
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
         ENABLE_CLAUDEAI_MCP_SERVERS: "false",
       },
       stdio: ["ignore", "pipe", "pipe"],
+      // Its own process group, so a stop reaches everything the run started. Ctrl+C in the
+      // loop's terminal no longer reaches it by itself; the loop passes it on below.
+      detached: true,
     });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr += chunk));
-    const stop = () => child.kill("SIGINT");
-    control.stop = stop;
-    process.once("SIGINT", stop);
-    child.on("close", (exitCode) => {
-      control.stop = () => {};
-      process.removeListener("SIGINT", stop);
+    const interrupt = () => signalRun(child, "SIGINT");
+    const timers = [];
+    let ending = null;
+    // Resolves when nothing of the run's process group is left.
+    const end = () => {
+      ending ??= new Promise((done) => {
+        signalRun(child, "SIGINT");
+        const finish = () => {
+          for (const timer of timers) clearTimeout(timer);
+          clearInterval(watch);
+          done();
+        };
+        timers.push(setTimeout(() => signalRun(child, "SIGTERM"), graceMs));
+        timers.push(setTimeout(() => signalRun(child, "SIGKILL"), 2 * graceMs));
+        // A last look after the kill, so the loop never waits for ever.
+        timers.push(setTimeout(finish, 2 * graceMs + 2_000));
+        const watch = setInterval(() => {
+          if (!signalRun(child, 0)) finish();
+        }, 200);
+      });
+      return ending;
+    };
+    control.stop = end;
+    // The loop being ended from outside ends the run with it.
+    const leave = () => {
+      signalRun(child, "SIGTERM");
+      process.exit(143);
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", leave);
+    process.once("SIGHUP", leave);
+    child.on("close", async (exitCode) => {
+      control.stop = () => ending ?? Promise.resolve();
+      process.removeListener("SIGINT", interrupt);
+      process.removeListener("SIGTERM", leave);
+      process.removeListener("SIGHUP", leave);
+      // After a stop, what the orchestrator had started is ended before the loop goes on.
+      if (ending) await ending;
       resolve({ exitCode, stdout, stderr });
     });
   });
@@ -329,7 +402,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.phase || (options.note !== null && !options.note.trim())) {
     console.error(
-      'usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--steward-minutes N] [--max-failures N] [--no-notify] [--note "<text>"]',
+      'usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--steward-minutes N] [--stop-grace-seconds N] [--max-failures N] [--no-notify] [--note "<text>"]',
     );
     process.exit(64);
   }
@@ -351,9 +424,17 @@ async function main() {
   };
   const spendNow = () => phaseSpend({ mainRoot, phase: options.phase, logDir });
   // Ends the loop for a stop by the steward: the log, the notification and a note on the issue.
+  // What must not reach an issue comment or a notification: where the checkout lives, the home
+  // folder and the machine's name (docs/permissions.md, Private infrastructure details).
+  const hidden = { mainRoot, home: os.homedir(), host: os.hostname() };
   const stopForSteward = (stop, issue) => {
-    const message = stewardStop({ stop, issue, spend: spendLine(spendNow(), null) });
-    log(`${RED}${message.log}${RESET} See ${logDir}.`);
+    const message = stewardStop({
+      stop,
+      issue,
+      spend: spendLine(spendNow(), null),
+      private: hidden,
+    });
+    log(`${RED}${message.log}${RESET} See ${path.relative(mainRoot, logDir)}.`);
     if (issue && !commentOnIssue(issue, message.comment)) {
       log(`  could not comment on #${issue}`);
     }
@@ -424,6 +505,8 @@ async function main() {
       iteration,
       sessionId,
       control,
+      logDir,
+      graceMs: options.stopGraceSeconds * 1000,
     });
     stopSteward();
     stopWatcher();
@@ -488,7 +571,12 @@ async function main() {
     log(`iteration ${iteration}: ${what} -> ${decision.next}`);
     log(`iteration ${iteration}: ${spend.line}`);
     if (run.kind === "crash") log(`  ${run.detail}`);
-    const spendNote = spendComment({ line: spend.line, paid: spend.paid, iteration });
+    const spendNote = spendComment({
+      line: spend.line,
+      paid: spend.paid,
+      iteration,
+      private: hidden,
+    });
     if (spendNote && workedOn && !commentOnIssue(workedOn, spendNote)) {
       log(`  could not comment the spend line on #${workedOn}`);
     }
