@@ -1,0 +1,8 @@
+{
+  "name": "@sebela/image-pnpm",
+  "private": true,
+  "description": "pnpm for the container images, installed with `npm ci` so that it is verified by hash (infra/README.md, pnpm in the images).",
+  "dependencies": {
+    "pnpm": "12.21.0"
+  }
+}

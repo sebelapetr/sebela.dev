@@ -17,8 +17,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # WEB_BUILD_STANDALONE in next.config.ts). Lifecycle scripts are skipped: the root `prepare`
 # installs Git hooks.
 FROM base AS build
-# pnpm exactly as `packageManager` in package.json.
-RUN npm install --global pnpm@12.21.0 && npm cache clean --force
+# pnpm exactly as `packageManager` in package.json, installed with `npm ci` from infra/pnpm, whose
+# lockfile pins it and its native executables by integrity hash (infra/README.md, pnpm in the images).
+COPY infra/pnpm/package.json infra/pnpm/package-lock.json /opt/pnpm/
+RUN npm ci --prefix /opt/pnpm --omit=dev --no-audit --no-fund && npm cache clean --force \
+  && ln -s /opt/pnpm/node_modules/.bin/pnpm /usr/local/bin/pnpm
 COPY . .
 RUN pnpm install --frozen-lockfile --ignore-scripts --filter "@sebela/web..." \
   && WEB_BUILD_STANDALONE=1 pnpm --filter "@sebela/web..." build
