@@ -39,6 +39,9 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 
 - Every issue branch is worked on in its own worktree under `.worktrees/`, created and removed with the scripts described in `docs/repository-structure.md`.
 - App and package code is never edited in the main checkout. Planning files, docs and agent configuration may be.
+- The main checkout may be behind `origin/master`. Run `git fetch origin`, then analyse and branch from `origin/<base>`, not from the files of the local checkout.
+- The harness has 9 slots (`MAX_SLOTS`, `harness/lib/slots.mjs`), often all taken. A change that needs no database (documentation, CI, scripts) may use a plain `git worktree add .worktrees/<name> -b <branch> origin/<base>` in an interactive session instead of a slot; never under `/tmp`. Remove it with `git worktree remove` when done and keep the branch. Anything that runs tests against a database uses a slot (`node harness/worktree.mjs create`). The phase loop always uses slots.
+- After a merge, worktrees, branches and databases are removed only on the owner's instruction, except that the orchestrator removes its own issue's worktree, storage folder, database and local branch as its last step for that issue (`.claude/agents/orchestrator.md`, step 10).
 
 ## Commits
 

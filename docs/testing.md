@@ -58,6 +58,17 @@ MCP tools and AI features are developed evals-first.
 - Measure attack success from outcomes and executed tool calls, plus legitimate-question false positives, latency and cost. Passing a finite safety suite is a release gate, not proof of absolute security.
 - Use fictional adversarial fixtures. Real visitor/owner data never enters committed regression datasets.
 
+### Running paid evals
+
+A paid run is money of the owner's. These rules hold for every suite.
+
+- **When they start by themselves.** Only on a phase pull request (head `phase/<folder>` into `master`) when it is opened, reopened or marked ready for review, or by manual dispatch (CI, below). A phase pull request is therefore never closed, reopened or switched between draft and ready without the owner's explicit word.
+- **Go-ahead.** A paid run, local or by hand in CI, starts only after the owner agrees, with its expected cost and the remaining campaign allowance stated first.
+- **Order of work.** Fix the known failures first; run only the affected cases as a targeted check (`--case`); run the full catalogue last. When only a code grader or an expectation changed and the runtime fingerprint is unchanged, regrade the saved answers (`--regrade <run folder>`, free) instead of generating again; a changed judge rubric or judge model needs a paid rejudge (`--regrade <run folder> --judge`). The options of the Python suite: `packages/llm-agent/AGENTS.md`, Evals (arrives with phase 6).
+- **A changed check.** A grader or expectation change that makes a failing answer pass is a weakened check until shown otherwise: it needs the owner's approval recorded on the issue (`AGENTS.md`, hard rule 9), negative tests written first, and a reviewer who compares the base and the changed grader on adversarial inputs.
+- **During a long run** the orchestrator watches the real spend in the eval ledger and stops at a limit the owner stated. Do not project a full `llm-agent` run linearly from its first chunk: the judged cases run first, so that overestimates.
+- **After every run** update the repository variable `LLM_AGENT_EVAL_ALLOWANCE_USD` to the remaining allowance. Uncertain spend (reserved, interrupted) counts as spent.
+
 ### Memory evals
 
 The retrieval evals of `packages/memory/evals/` (`packages/memory/AGENTS.md`, Evals) measure search without an LLM judge: recall@pool over graded relevance, nDCG, precision, MRR, correct and false empty results below the relevance floor, provenance accuracy, latency and cost per query.
