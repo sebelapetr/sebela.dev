@@ -248,13 +248,16 @@ test("spend projected past the ceiling stops the loop before it gets there", () 
   assert.match(hardStops(facts)[0].reason, /4\.3000 USD/);
 });
 
-test("an issue run past the per-run stop stops the loop; the phase-PR run is not bound", () => {
+test("an issue run past the per-run stop stops the loop", () => {
   const over = { run: "r9", source: "feat-1-x", stage: "issue", scope: "partial", spentUsd: 1.2 };
   const facts = { ...efficient, spend: spend({ recent: [over] }) };
   assert.deepEqual(codes(hardStops(facts)), ["run-stop"]);
   assert.match(hardStops(facts)[0].reason, /r9/);
   const phasePr = { ...over, stage: "phase-pr" };
-  assert.deepEqual(hardStops({ ...efficient, spend: spend({ recent: [phasePr] }) }), []);
+  // The per-run stop does not bind it; that it ran locally at all is its own stop (#384).
+  assert.deepEqual(codes(hardStops({ ...efficient, spend: spend({ recent: [phasePr] }) })), [
+    "phase-pr-run",
+  ]);
   const within = { ...over, spentUsd: 1 };
   assert.deepEqual(hardStops({ ...efficient, spend: spend({ recent: [within] }) }), []);
 });

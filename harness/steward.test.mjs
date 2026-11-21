@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { machineFacts, phaseSpend } from "./steward.mjs";
+import { hardStops } from "./lib/steward.mjs";
+import { keptRunsFile, machineFacts, phaseSpend } from "./steward.mjs";
 
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-steward-"));
 after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -120,4 +121,40 @@ test("the machine's load, cores and free disk space are read", () => {
   assert.ok(facts.freeDiskGb === null || facts.freeDiskGb >= 0);
   assert.ok(facts.load1 === null || facts.load1 >= 0);
   assert.equal(machineFacts(path.join(fixture, "missing")).cores, facts.cores);
+});
+
+// --- the gaps of the first guards (issue #384) -------------------------------------
+
+test("three issue worktrees of USD 1.00 each stop the loop at the issue stop", () => {
+  const { mainRoot, logDir, worktree } = checkout("issue-stop");
+  for (const name of ["feat-1-x", "feat-2-y", "feat-3-z"]) {
+    write(ledgerOf(worktree(name)), JSON.stringify({ runs: [run("r1", 1)] }));
+  }
+  const spend = phaseSpend({ mainRoot, phase: PHASE, logDir });
+  assert.equal(spend.issueSpentUsd, 3);
+  const stops = hardStops({ spend });
+  assert.deepEqual(
+    stops.map((stop) => stop.code),
+    ["issue-stop"],
+  );
+  // The record the eval runner reads names every worktree's run.
+  const kept = JSON.parse(fs.readFileSync(keptRunsFile(logDir), "utf8")).runs;
+  assert.deepEqual(
+    kept.map((item) => [item.source, item.run, item.campaign, item.stage, item.spentUsd]),
+    ["feat-1-x", "feat-2-y", "feat-3-z"].map((name) => [name, "r1", PHASE, "issue", 1]),
+  );
+});
+
+test("a run interrupted long ago is no longer projected", () => {
+  const { mainRoot, logDir } = checkout("stale");
+  const stale = run("m1", 3.5, {
+    stage: "phase-pr",
+    scope: "running",
+    expected_usd: 4.4,
+    at: "2026-01-01T10:00:00+00:00",
+  });
+  write(ledgerOf(mainRoot), JSON.stringify({ runs: [stale] }));
+  const spend = phaseSpend({ mainRoot, phase: PHASE, logDir });
+  assert.equal(spend.projectedUsd, 3.5);
+  assert.deepEqual(hardStops({ spend }), []);
 });

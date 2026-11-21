@@ -352,8 +352,8 @@ test("recent runs of another phase's campaign are listed, not dropped", () => {
   assert.deepEqual(
     spend.foreign.map((run) => [run.run, run.source, run.campaign, run.spentUsd]),
     [
-      ["legacy", "feat-301-chat", "06-llm-agent", 1],
       ["other", "feat-301-chat", "08-mcp-public", 0.4],
+      ["legacy", "feat-301-chat", "06-llm-agent", 1],
     ],
   );
   assert.equal(spend.spentUsd, 0.2);

@@ -27,6 +27,7 @@ import {
 } from "./lib/steward.mjs";
 import { countDispatches } from "./lib/phase-report.mjs";
 import { currentWork, describeWork, phaseProgress } from "./lib/progress.mjs";
+import { worktreeDirName } from "./lib/slots.mjs";
 import { ledgerRuns, mergeRuns, parseCampaigns, summarizeSpend } from "./lib/spend.mjs";
 import { askAgent, quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { listWorktrees } from "./worktree.mjs";
@@ -155,6 +156,12 @@ const LEDGER_FILE = [".tmp", "evals", "llm-agent", "ledger.json"];
 // The runs the loop has seen, kept beside its logs: a worktree's ledger goes with the worktree.
 const KEPT_RUNS = "eval-spend.json";
 
+// Where the loop keeps them. The loop gives this path to the orchestrator's run as
+// SEBELA_EVAL_KEPT_RUNS, and the eval runner adds the other checkouts' runs in it to its own
+// ledger (packages/llm-agent/evals/budget.py), so the ceiling and the cumulative stop for issue
+// runs hold across the issue worktrees between the steward's checks too.
+export const keptRunsFile = (logDir) => path.join(logDir, KEPT_RUNS);
+
 // A file's text; undefined when it does not exist, null when it cannot be read.
 function textOf(file) {
   try {
@@ -200,7 +207,7 @@ export function phaseSpend({ mainRoot, phase, logDir, since = null }) {
       seen.push(...runs);
     }
   }
-  const keptFile = path.join(logDir, KEPT_RUNS);
+  const keptFile = keptRunsFile(logDir);
   const keptText = textOf(keptFile);
   let kept = [];
   if (keptText !== undefined) {
@@ -226,7 +233,7 @@ export function phaseSpend({ mainRoot, phase, logDir, since = null }) {
       }
     }
   }
-  return summarizeSpend({ phase, campaigns, runs, found, unreadable, since });
+  return summarizeSpend({ phase, campaigns, runs, found, unreadable, since, now: Date.now() });
 }
 
 // --- paid CI runs -----------------------------------------------------------------
@@ -333,8 +340,10 @@ export function stopsBeforeIteration({ mainRoot, phase, logDir, state }) {
   const facts = {
     spend: phaseSpend({ mainRoot, phase, logDir }),
     paidCi: paidCi({ phase, since: state.loopStartedAt, state }),
+    // Between iterations nothing is cut off, so one low disk reading is enough to stop.
     machine: machineFacts(mainRoot),
   };
+  state.freeDiskGb = facts.machine.freeDiskGb;
   return decideStop({ hard: hardStops(facts), report: null });
 }
 
@@ -427,7 +436,7 @@ function askModel({ mainRoot, phase, facts, findings, triggers, transcript }) {
 const SEVERITY = { ok: 0, warn: 1, problem: 2 };
 
 // One check. `state` carries what earlier checks saw: { lastModelAt, lastModelCodes, lastCheckAt,
-// loopStartedAt, seenMerged, seenCi, ciJobs }. Returns the verdict; its `stop` is null or why the
+// loopStartedAt, seenMerged, seenCi, ciJobs, freeDiskGb }. Returns the verdict; its `stop` is null or why the
 // loop must stop ({ by, code, reason }).
 export async function checkOnce({
   mainRoot,
@@ -454,6 +463,9 @@ export async function checkOnce({
   const leftover = merged.filter((name) => state.seenMerged?.has(name));
   state.seenMerged = new Set(merged);
 
+  const work = currentWork(main ?? []);
+  const machine = { ...machineFacts(mainRoot), freeDiskGbBefore: state.freeDiskGb ?? null };
+  state.freeDiskGb = machine.freeDiskGb;
   const facts = {
     iterationMinutes: Math.round((now - iterationStartedAt) / 60_000),
     idleMinutes: idle.length ? Math.min(...idle) : null,
@@ -469,7 +481,10 @@ export async function checkOnce({
     postgres: postgresHealth(mainRoot),
     leftoverWorktrees: leftover,
     newFailedIssues: failedIssues(phase).filter((n) => !failedAtStart.includes(n)),
-    work: currentWork(main ?? []),
+    work,
+    // The folder of the worktree the loop's issue is worked on in, when the orchestrator has
+    // created it: a paid run of another campaign there is this loop's doing.
+    worktree: work.branch ? worktreeDirName(work.branch) : null,
     progress: phaseProgressNow(phase),
     // Spend and efficiency. The runs listed as recent are those written since the last check.
     spend: phaseSpend({
@@ -481,7 +496,7 @@ export async function checkOnce({
     paidCi: paidCi({ phase, since: state.loopStartedAt ?? iterationStartedAt, state }),
     usage: usageFacts({ dir, sessionId, main }),
     reviewRounds: main ? (countDispatches(main).reviewer ?? 0) : null,
-    machine: machineFacts(mainRoot),
+    machine,
     fullSuites: runningSuites(),
   };
   state.lastCheckAt = now;
