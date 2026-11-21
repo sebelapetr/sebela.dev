@@ -154,8 +154,6 @@ export function createIndexer(options: IndexerOptions): Indexer {
     const missing = [...texts.entries()];
     const chunkCount = stale.reduce((sum, source) => sum + source.chunks.length, 0);
 
-    let tokens = 0;
-    let costUsd = 0;
     let pending = stale;
     const storeComplete = async () => {
       const waiting: PortfolioSource[] = [];
@@ -169,6 +167,30 @@ export function createIndexer(options: IndexerOptions): Indexer {
       pending = waiting;
     };
     await storeComplete();
+    const { tokens, costUsd } = await embedMissing(missing, vectors, storeComplete);
+
+    return {
+      sources: sources.length,
+      updated: stale.length,
+      removed,
+      embedded: missing.length,
+      reused: chunkCount - missing.length,
+      tokens,
+      costUsd,
+    };
+  }
+
+  /**
+   * Embeds the missing texts in batches, checking the ceiling before each, adds every returned
+   * vector to `vectors`, caches each batch at once and then calls `afterBatch`.
+   */
+  async function embedMissing(
+    missing: readonly (readonly [string, string])[],
+    vectors: Map<string, readonly number[]>,
+    afterBatch: () => Promise<void> = () => Promise.resolve(),
+  ): Promise<{ tokens: number; costUsd: number }> {
+    let tokens = 0;
+    let costUsd = 0;
     for (let start = 0; start < missing.length; start += config.embeddingBatchSize) {
       const batch = missing.slice(start, start + config.embeddingBatchSize);
       const embedding = await spend.embed(
@@ -187,17 +209,47 @@ export function createIndexer(options: IndexerOptions): Indexer {
       costUsd += embedding.costUsd;
       // Cached before anything else can fail, so an interrupted run never pays for them again.
       await store.storeVectors(fresh, embedder.model, embedder.version);
-      await storeComplete();
+      await afterBatch();
     }
+    return { tokens, costUsd };
+  }
 
+  async function embedDocument(document: PreparedDocument): Promise<DocumentEmbedding> {
+    const hashes = [...new Set(document.chunks.map((chunk) => chunk.textHash))];
+    const vectors = new Map(await store.vectorsByHash(hashes, embedder.model, embedder.version));
+    const texts = new Map<string, string>();
+    for (const chunk of document.chunks) {
+      if (!vectors.has(chunk.textHash)) texts.set(chunk.textHash, chunk.text);
+    }
+    const missing = [...texts.entries()];
+    const { tokens, costUsd } = await embedMissing(missing, vectors);
     return {
-      sources: sources.length,
-      updated: stale.length,
-      removed,
-      embedded: missing.length,
-      reused: chunkCount - missing.length,
-      tokens,
-      costUsd,
+      version: {
+        sourceId: document.sourceId,
+        sourceKind: "supplemental",
+        contentKind: "document",
+        title: document.title,
+        path: null,
+        version: document.contentHash,
+        model: embedder.model,
+        modelVersion: embedder.version,
+        dimension: embedder.dimension,
+        indexedAt: now(),
+        sections: document.sections,
+        chunks: document.chunks.map((chunk) => ({
+          sectionOrdinal: chunk.sectionOrdinal,
+          ordinal: chunk.ordinal,
+          text: chunk.text,
+          textHash: chunk.textHash,
+          vector: vectors.get(chunk.textHash) ?? [],
+        })),
+      },
+      report: {
+        embedded: missing.length,
+        reused: document.chunks.length - missing.length,
+        tokens,
+        costUsd,
+      },
     };
   }
 
@@ -233,7 +285,7 @@ export function createIndexer(options: IndexerOptions): Indexer {
     reindexPortfolio: (snapshot) => reconcile(snapshot, false),
     rebuildPortfolio: (snapshot) => reconcile(snapshot, true),
     processPending,
-    embedDocument: () => Promise.reject(new Error("not implemented")),
+    embedDocument,
     usage: () => spend.thisMonth(),
   };
 }

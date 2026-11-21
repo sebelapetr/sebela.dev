@@ -188,8 +188,13 @@ describe("prepareDocument", () => {
       expect(chunk.text.startsWith("Fictional notes / Long\n")).toBe(true);
     }
     const [first, second] = prepared.chunks.map((chunk) => chunk.text.split("\n")[1] ?? "");
-    const tail = (first ?? "").split(" ").slice(-5).join(" ");
-    expect(second?.startsWith(tail)).toBe(true);
+    // The second chunk starts with words from the end of the first one.
+    const head = (second ?? "").split(" ").slice(0, 5).join(" ");
+    const overlap = (first ?? "").slice((first ?? "").indexOf(head));
+    expect(first?.startsWith(head)).toBe(false);
+    expect(overlap.length).toBeGreaterThan(0);
+    expect(overlap.length).toBeLessThanOrEqual(200);
+    expect(second?.startsWith(overlap)).toBe(true);
   });
 
   it("treats plain text as one section below the title", () => {
