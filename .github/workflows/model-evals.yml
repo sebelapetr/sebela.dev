@@ -21,8 +21,14 @@ on:
       suite:
         description: Which eval suite to run
         type: choice
-        options: [all, mcp-admin]
+        options: [all, mcp-admin, llm-agent]
         default: all
+      allowance:
+        description: >-
+          Python agent (llm-agent): the remaining USD allowance of its eval campaign
+          (.plan/done/06-llm-agent/evals.md). Required when that suite runs; the run spends at most this.
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -36,6 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       mcp-admin: ${{ steps.affected.outputs.mcp-admin }}
+      llm-agent: ${{ steps.affected.outputs.llm-agent }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,6 +66,10 @@ jobs:
           # MCP Admin: its app, the API it calls, the contracts and client between them, the
           # services and database behind the API, the lockfile and this workflow.
           affected mcp-admin '^(apps/mcp-admin/|apps/api/|packages/(contracts|api-client|services|db)/|pnpm-lock\.yaml$|\.github/workflows/model-evals\.yml$)' >> "$GITHUB_OUTPUT"
+          # Python agent: its package, the API its evals read through (and what is behind it), the
+          # contract its content client is generated from, the Python toolchain and lockfiles and
+          # this workflow.
+          affected llm-agent '^(packages/llm-agent/|apps/api/|packages/(contracts|api-client|services|db)/|pyproject\.toml$|uv\.lock$|\.python-version$|pnpm-lock\.yaml$|\.github/workflows/model-evals\.yml$)' >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
   mcp-admin:
@@ -99,4 +110,71 @@ jobs:
           name: mcp-admin-evals
           path: |
             .tmp/evals/mcp-admin/*/summary.json
+          if-no-files-found: ignore
+
+  # The Python chat agent (packages/llm-agent): every implemented case, 3 repeats each, with its
+  # gates. Cases still pending are listed in the report and never pass. The run spends at most the
+  # declared remaining campaign allowance: the manual run's `allowance` input, or the repository
+  # variable LLM_AGENT_EVAL_ALLOWANCE_USD on a pull request. A fresh CI runner has no ledger, so
+  # without a declared allowance the job is a visible block, never a fresh USD 10, and the job log
+  # names the new remainder the owner must store in the variable after the run.
+  llm-agent:
+    name: Python agent model evals
+    needs: changes
+    if: needs.changes.outputs.llm-agent == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      POSTGRES_PASSWORD: ci-only-disposable-password
+      DATABASE_PASSWORD: ci-only-disposable-password
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version-file: pyproject.toml
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --locked --all-packages
+      - name: Postgres for the evals' API
+        run: docker compose --env-file .env.example up --detach --wait
+      - name: Build the API and what it depends on
+        run: pnpm --filter "@sebela/api..." build
+      - name: Model evals and their gates (every implemented case)
+        working-directory: packages/llm-agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ALLOWANCE: ${{ inputs.allowance || vars.LLM_AGENT_EVAL_ALLOWANCE_USD }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::The repository secret ANTHROPIC_API_KEY is not set."
+            exit 1
+          fi
+          if [ -z "$ALLOWANCE" ]; then
+            echo "::error::No remaining campaign allowance is declared (input allowance or variable LLM_AGENT_EVAL_ALLOWANCE_USD)."
+            exit 1
+          fi
+          uv run --locked python -m evals.run --all --allowance "$ALLOWANCE"
+      # The runner has no ledger here, so the declared allowance is the only record of what remains.
+      # The owner sets LLM_AGENT_EVAL_ALLOWANCE_USD to this value after every run (or passes it as
+      # the next dispatch input); otherwise the next run could spend the same allowance again.
+      - name: Remaining campaign allowance for the next run
+        if: ${{ !cancelled() }}
+        run: |
+          shopt -s nullglob
+          for summary in .tmp/evals/llm-agent/*/summary.json; do
+            python3 -c 'import json, sys
+          cost = json.load(open(sys.argv[1])).get("cost") or {}
+          print("::notice title=llm-agent eval allowance::spent {} USD (uncertain {}); set LLM_AGENT_EVAL_ALLOWANCE_USD to {} before the next run".format(cost.get("spent_usd", "unknown"), cost.get("uncertain_usd", "unknown"), cost.get("remaining_usd", "unknown")))' "$summary"
+          done
+      - name: Redacted eval summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: llm-agent-evals
+          path: |
+            .tmp/evals/llm-agent/*/summary.json
           if-no-files-found: ignore

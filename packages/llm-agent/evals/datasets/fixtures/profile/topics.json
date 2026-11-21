@@ -1,0 +1,5 @@
+[
+  { "slug": "retrieval", "name": "Retrieval", "position": 0 },
+  { "slug": "evaluation", "name": "Evaluation", "position": 1 },
+  { "slug": "agents", "name": "Agents", "position": 2 }
+]

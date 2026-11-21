@@ -1,0 +1,17 @@
+[
+  {
+    "slug": "evaluation-harness-for-other-teams",
+    "title": "Opening the evaluation harness to other teams",
+    "description": "Turning the fictional evaluation harness into a shared release gate that other product teams at Brindle Labs can run on their own model features.",
+    "position": 0,
+    "project": "evaluation-harness",
+    "topics": ["evaluation"]
+  },
+  {
+    "slug": "learning-agent-guardrails",
+    "title": "Learning how tool-using agents stay safe",
+    "description": "Studying tool loops, permission models and guardrails for agents on the AI Roadmap.",
+    "position": 1,
+    "topics": ["agents"]
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "slug": "port-wren-university-computer-science",
+    "kind": "school",
+    "title": "Computer science, bachelor's degree",
+    "institution": "Port Wren University",
+    "startedOn": "2012-09-01",
+    "endedOn": "2015-06-30",
+    "position": 0
+  },
+  {
+    "slug": "retrieval-evaluation-course",
+    "kind": "course",
+    "title": "Evaluating retrieval systems",
+    "institution": "Example Learning Commons",
+    "startedOn": null,
+    "endedOn": "2022-11-30",
+    "position": 1
+  }
+]

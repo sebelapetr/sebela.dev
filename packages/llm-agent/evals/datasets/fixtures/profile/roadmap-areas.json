@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "retrieval-engineering",
+    "name": "Retrieval engineering",
+    "description": "Search that finds the right passages, and the measurements that show it did.",
+    "weight": 40,
+    "position": 0
+  },
+  {
+    "slug": "agent-systems",
+    "name": "Agent systems",
+    "description": "Models that call tools in a loop, and the limits that keep them safe.",
+    "weight": 60,
+    "position": 1
+  }
+]

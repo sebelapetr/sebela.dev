@@ -1,0 +1,92 @@
+[
+  {
+    "slug": "bm25-refresher",
+    "module": "hybrid-search",
+    "name": "BM25 refresher notes",
+    "type": "text",
+    "status": "completed",
+    "estimatedMinutes": 45,
+    "startedAt": "2026-01-12T18:00:00.000Z",
+    "finishedAt": "2026-01-12T19:00:00.000Z",
+    "position": 0,
+    "topics": ["retrieval"]
+  },
+  {
+    "slug": "vector-index-course",
+    "module": "hybrid-search",
+    "name": "Vector index course",
+    "type": "video",
+    "status": "completed",
+    "estimatedMinutes": 120,
+    "startedAt": "2026-01-20T17:30:00.000Z",
+    "finishedAt": "2026-01-20T19:30:00.000Z",
+    "position": 1,
+    "topics": ["retrieval"]
+  },
+  {
+    "slug": "ranking-metrics-notes",
+    "module": "retrieval-evaluation",
+    "name": "Ranking metrics notes",
+    "type": "text",
+    "status": "in-progress",
+    "estimatedMinutes": 180,
+    "startedAt": "2026-03-02T17:00:00.000Z",
+    "position": 0,
+    "topics": ["retrieval", "evaluation"]
+  },
+  {
+    "slug": "search-evaluation-handbook",
+    "module": "retrieval-evaluation",
+    "name": "Reading the search evaluation handbook",
+    "type": "book",
+    "status": "in-progress",
+    "estimatedMinutes": 600,
+    "startedAt": "2026-02-02T19:00:00.000Z",
+    "position": 1,
+    "book": "fictional-search-evaluation-handbook",
+    "topics": ["evaluation"]
+  },
+  {
+    "slug": "function-calling-tutorial",
+    "module": "tool-use-basics",
+    "name": "Function calling tutorial",
+    "type": "youtube-video",
+    "status": "completed",
+    "estimatedMinutes": 90,
+    "startedAt": "2026-02-03T18:00:00.000Z",
+    "finishedAt": "2026-02-03T19:30:00.000Z",
+    "position": 0,
+    "topics": ["agents"]
+  },
+  {
+    "slug": "agent-loop-project",
+    "module": "tool-use-basics",
+    "name": "Agent loop practice project",
+    "type": "project",
+    "status": "in-progress",
+    "estimatedMinutes": 240,
+    "startedAt": "2026-03-09T22:30:00.000Z",
+    "position": 1,
+    "topics": ["agents"]
+  },
+  {
+    "slug": "permission-models-paper",
+    "module": "agent-guardrails",
+    "name": "Permission models for agents",
+    "type": "text",
+    "status": "planned",
+    "estimatedMinutes": 60,
+    "position": 0,
+    "topics": ["agents"]
+  },
+  {
+    "slug": "guardrails-talk-recording",
+    "module": "agent-guardrails",
+    "name": "Guardrails talk recording",
+    "type": "video",
+    "status": "planned",
+    "estimatedMinutes": 40,
+    "position": 1,
+    "topics": ["agents"]
+  }
+]
