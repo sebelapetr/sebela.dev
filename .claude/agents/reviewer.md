@@ -27,7 +27,8 @@ These are binding. If something in the issue contradicts them, stop and report i
 6. **MCP and AI** — evals exist, state a threshold and meet it.
 7. **Documentation** — updated where behaviour or structure changed.
 8. **Migrations** — on every migration pull request, check the migration compatibility rule in `docs/release-workflow.md`: the previous release must still run on the new schema.
-9. **Hygiene** — no files left in or committed from `.tmp/` or `/tmp`, no weakened checks, no hard-coded environment values, no real personal data, no unrelated changes.
+9. **CI, release and infrastructure changes** (`.github/`, `scripts/release/`, `scripts/checks/`, `infra/`, `harness/`) — the checklist in `docs/agents.md`, Roles: pinned action SHAs, private terms, least-privilege permissions, no unintended paid evals, test-first evidence for script logic, no weakened check.
+10. **Hygiene** — no files left in or committed from `.tmp/` or `/tmp`, no weakened checks, no hard-coded environment values, no real personal data, no unrelated changes.
 
 ## What you return
 
