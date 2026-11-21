@@ -11,6 +11,9 @@
 //   node evals/run.js --publish <name> also writes the summary to `evals/results/<name>.json`
 //   node evals/run.js --max-cost-usd <n>
 //                                      the run's spend ceiling, at most and by default USD 1
+//   node evals/run.js --variant <name> the search variant: `vector` (the deployed search, the
+//                                      default) or `fulltext` (the text search baseline, which
+//                                      embeds no query; indexing still embeds the passages)
 //   node evals/run.js --plan           print which cases would run and which are pending (free)
 //
 // An unknown option, an unknown or repeated case or a ceiling above USD 1 stops the runner before
@@ -31,7 +34,10 @@
 // repeated run embeds only new questions. Needs the running Postgres and a build
 // of the API's packages (`pnpm --filter @sebela/api... build`).
 //
-// Exit codes: 0 measured (and the gate passed or is not frozen), 1 a failure or a failed gate,
+// The gate (`thresholds.json`) applies once it is frozen, and only to a complete run of the
+// variant it names; the summary records whether it applied and what failed.
+//
+// Exit codes: 0 measured (and the gate passed or does not apply), 1 a failure or a failed gate,
 // 2 nothing was measured (every selected case is pending).
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -61,6 +67,8 @@ const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const apiFolder = join(repositoryRoot, "apps", "api");
 const seedFolder = join(repositoryRoot, "packages", "db", "seed", "demo");
 const reportRoot = join(repositoryRoot, ".tmp", "evals", "memory");
+/** The frozen gate of the evals; read once, it may only be raised. */
+const thresholds = JSON.parse(await readFile(join(evalsFolder, "thresholds.json"), "utf8"));
 /** Query embeddings by model, version and text, reused by every later run of this checkout. */
 const queryCacheFile = join(reportRoot, "query-cache.json");
 
@@ -106,6 +114,10 @@ export function parseOptions(argv) {
       `--min-interval-ms must be a whole number of milliseconds from 0 to ${String(MAX_MIN_INTERVAL_MS)}.`,
     );
   }
+  const variant = values.variant ?? "vector";
+  if (variant !== "vector" && variant !== "fulltext") {
+    throw new Error("--variant takes `vector` or `fulltext`.");
+  }
   if (values.publish !== undefined && !/^[a-z0-9][a-z0-9-]*$/.test(values.publish)) {
     throw new Error("--publish takes a lowercase name of letters, digits and hyphens.");
   }
@@ -115,7 +127,7 @@ export function parseOptions(argv) {
     ceilingUsd: ceiling,
     planOnly: values.plan ?? false,
     minIntervalMs: interval,
-    variant: "vector",
+    variant,
   };
 }
 
@@ -131,6 +143,7 @@ export function providerEnvironment(options) {
     RETRIEVAL_PROVIDER_RETRIES: RUN_PROVIDER_RETRIES,
     RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: RUN_PROVIDER_MAX_RETRY_WAIT_MS,
     RETRIEVAL_QUERY_CACHE_FILE: queryCacheFile,
+    RETRIEVAL_EVAL_VARIANT: options.variant,
   };
 }
 
@@ -139,14 +152,53 @@ export function providerEnvironment(options) {
  * @typedef {{ frozen: boolean, applies?: boolean, reason?: string, passed?: boolean, failures?: GateFailure[] }} Gate
  */
 
-/**
- * The gate of a run's metrics against the thresholds (not yet implemented).
- *
- * @type {(thresholds: unknown, metrics: unknown, run: { variant: string, scope: string }) => Gate}
- */
-export const gateOf = () => {
-  throw new Error("not implemented");
+/** The aggregate metric a threshold bounds, by the threshold's name. */
+const GATED_METRICS = {
+  /** @param {Record<string, any>} metrics */
+  latencyP95Ms: (metrics) => metrics["latencyMs"]?.p95 ?? null,
 };
+
+/**
+ * The gate of a run's aggregate metrics against the thresholds. Not frozen: no gate. Frozen, it
+ * applies only to a complete run of the variant it names; then every set (non-null) minimum and
+ * maximum must hold, and a metric that was not measured fails.
+ *
+ * @param {{ frozen: boolean, variant?: string, minimum?: Record<string, number | null>, maximum?: Record<string, number | null> }} thresholds
+ * @param {Record<string, any>} metrics
+ * @param {{ variant: string, scope: string }} run
+ * @returns {Gate}
+ */
+export function gateOf(thresholds, metrics, run) {
+  if (!thresholds.frozen) return { frozen: false };
+  if (run.scope !== "complete" || run.variant !== thresholds.variant) {
+    return {
+      frozen: true,
+      applies: false,
+      reason: `The gate applies only to a complete run of the ${String(thresholds.variant)} variant.`,
+    };
+  }
+  /** @param {string} name */
+  const valueOf = (name) => {
+    const read = /** @type {Record<string, (m: Record<string, any>) => unknown>} */ (GATED_METRICS)[
+      name
+    ];
+    const value = read === undefined ? metrics[name] : read(metrics);
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+  /** @type {GateFailure[]} */
+  const failures = [];
+  for (const [metric, minimum] of Object.entries(thresholds.minimum ?? {})) {
+    if (minimum === null) continue;
+    const value = valueOf(metric);
+    if (value === null || value < minimum) failures.push({ metric, value, minimum });
+  }
+  for (const [metric, maximum] of Object.entries(thresholds.maximum ?? {})) {
+    if (maximum === null) continue;
+    const value = valueOf(metric);
+    if (value === null || value > maximum) failures.push({ metric, value, maximum });
+  }
+  return { frozen: true, applies: true, passed: failures.length === 0, failures };
+}
 
 /**
  * The knowledge command's arguments that ingest each fictional supplemental document of the
@@ -264,7 +316,7 @@ async function main() {
     await writeFile(join(evalsFolder, "results", `${options.publish}.json`), text);
   }
   process.stdout.write(text);
-  process.exitCode = summary.status === "measured" ? 0 : 1;
+  process.exitCode = summary.status === "measured" && summary.gate.passed !== false ? 0 : 1;
 }
 
 /**
@@ -421,10 +473,16 @@ function summarize(dataset, plan, options, report, indexing, usage, queryCache) 
   const search = usage.byOperation["search"] ?? { tokens: 0, costUsd: 0 };
   // A search that failed (provider unavailable, budget exhausted, no answer) is not a measurement.
   const failed = cases.some((entry) => entry.errored);
+  const scope = options.cases.length === 0 ? "complete" : "partial";
+  const metrics = aggregate(
+    cases.map((entry) => entry.metrics),
+    { queryCostUsd: search.costUsd },
+  );
+  const gate = gateOf(thresholds, metrics, { variant: options.variant, scope });
   return {
     status: failed ? "failed" : "measured",
-    scope: options.cases.length === 0 ? "complete" : "partial",
-    variant: "vector",
+    scope,
+    variant: options.variant,
     runAt: new Date().toISOString(),
     settings: Object.fromEntries(
       RECORDED_SETTINGS.map((name) => [name, process.env[name] ?? null]),
@@ -436,11 +494,8 @@ function summarize(dataset, plan, options, report, indexing, usage, queryCache) 
     },
     measured: cases.length,
     passed: cases.filter((entry) => entry.pass).length,
-    metrics: aggregate(
-      cases.map((entry) => entry.metrics),
-      { queryCostUsd: search.costUsd },
-    ),
-    gate: { frozen: false },
+    metrics,
+    gate,
     spend: { ceilingUsd: options.ceilingUsd, indexing, usage, queryCache },
     cases,
     pending: plan.pending,

@@ -25,6 +25,7 @@ import {
   contentHashOf,
   defaultDocumentLimits,
   documentSourceId,
+  findConflicts,
   prepareDocument,
   sensitivityKinds,
   readRetrievalConfig,
@@ -43,6 +44,7 @@ import {
   type SensitivityKind,
   type SensitivityFinding,
   type SourceChunk,
+  type SearchVariant,
   type SourceSection,
   type RetrievalConfig,
   type RetrievalStore,
@@ -200,6 +202,11 @@ export interface KnowledgeServiceOptions {
   readonly privateStorage?: PrivateStorage;
   /** Limits of a supplemental document; `defaultDocumentLimits` when absent. */
   readonly documentLimits?: DocumentLimits;
+  /**
+   * How search ranks: `vector` (the default and what the site serves) or `fulltext`, the evals'
+   * full-text-only baseline.
+   */
+  readonly searchVariant?: SearchVariant;
 }
 
 export function createKnowledgeService(
@@ -213,7 +220,12 @@ export function createKnowledgeService(
       ? null
       : {
           indexer: createIndexer({ store, embedder, config }),
-          retriever: createRetriever({ store, embedder, config }),
+          retriever: createRetriever({
+            store,
+            embedder,
+            config,
+            variant: options.searchVariant ?? "vector",
+          }),
         };
 
   const ready = () => {
@@ -238,9 +250,20 @@ export function createKnowledgeService(
     search: (request) => provider(() => ready().retriever.search(request)),
     candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
-    rebuildIndex: () => Promise.reject(new Error("not implemented")),
-    ...createDocumentReview(sources.store, options, () => ready().indexer),
+    ...createDocumentReview(sources.store, options, {
+      indexer: () => ready().indexer,
+      snapshot: () => snapshot(sources),
+      rebuildPortfolio: () =>
+        provider(async () => ready().indexer.rebuildPortfolio(await snapshot(sources))),
+    }),
   };
+}
+
+interface DocumentReviewDependencies {
+  readonly indexer: () => Indexer;
+  /** The public portfolio the conflict checks compare against. */
+  readonly snapshot: () => Promise<PortfolioSnapshot>;
+  readonly rebuildPortfolio: () => Promise<IndexReport>;
 }
 
 type DocumentReview = Pick<
@@ -252,13 +275,17 @@ type DocumentReview = Pick<
   | "rejectDocument"
   | "withdrawDocument"
   | "deleteDocument"
+  | "rebuildIndex"
 >;
 
-/** The owner's review of supplemental documents: ingest, preview, approve and reject. */
+/**
+ * The owner's review of supplemental documents: ingest, preview, approve, reject, withdraw and
+ * delete, and the rebuild that restores the approved ones.
+ */
 function createDocumentReview(
   store: RetrievalPersistence,
   options: KnowledgeServiceOptions,
-  indexer: () => Indexer,
+  { indexer, snapshot: facts, rebuildPortfolio }: DocumentReviewDependencies,
 ): DocumentReview {
   const limits = options.documentLimits ?? defaultDocumentLimits;
 
@@ -305,6 +332,25 @@ function createDocumentReview(
       }
       throw error;
     }
+  };
+
+  /**
+   * The chunks that conflict with the API facts and the document without them: the API facts come
+   * first, so a conflicting chunk is recorded but never embedded or searchable.
+   */
+  const checked = async (prepared: PreparedDocument) => {
+    const conflicts = findConflicts(prepared.chunks, await facts());
+    const excluded = new Set(conflicts.map((conflict) => conflict.chunkOrdinal));
+    const searchable: PreparedDocument = {
+      ...prepared,
+      chunks: prepared.chunks.filter((chunk) => !excluded.has(chunk.ordinal)),
+    };
+    return { conflicts, searchable, excluded: excluded.size };
+  };
+
+  /** Deletes originals no version references any more; a failure leaves an unreferenced file. */
+  const deleteOriginals = async (keys: readonly (string | null)[]) => {
+    for (const key of keys) if (key !== null) await storage().delete(key);
   };
 
   const blockedMessage =
@@ -401,10 +447,16 @@ function createDocumentReview(
       }
       // The checks may have grown since the version was recorded; it is never embedded with findings.
       if (prepared.findings.length > 0) throw new DomainError("conflict", blockedMessage);
-      const embedding = await provider(() => indexer().embedDocument(prepared));
-      if (!(await store.approveDocumentVersion(contentHash, embedding.version))) {
+      const { conflicts, searchable } = await checked(prepared);
+      const embedding = await provider(() => indexer().embedDocument(searchable));
+      const superseded = (await store.documentVersions()).filter(
+        (other) => other.sourceId === version.sourceId && other.status === "approved",
+      );
+      if (!(await store.approveDocumentVersion(contentHash, embedding.version, conflicts))) {
         throw new DomainError("conflict", "This version was decided meanwhile.");
       }
+      // The superseded version's chunks left with the approval; its original is not referenced now.
+      await deleteOriginals(superseded.map((other) => other.storageKey));
       return { version: withoutKey(await versionOf(contentHash)), report: embedding.report };
     },
 
@@ -423,8 +475,78 @@ function createDocumentReview(
       return withoutKey(await versionOf(contentHash));
     },
 
-    withdrawDocument: () => Promise.reject(new Error("not implemented")),
-    deleteDocument: () => Promise.reject(new Error("not implemented")),
+    async withdrawDocument(contentHash) {
+      const version = await versionOf(contentHash);
+      if (version.status !== "approved") {
+        throw new DomainError(
+          "conflict",
+          `This version is ${version.status}; only an approved one is withdrawn.`,
+        );
+      }
+      // Search loses the source in the transaction; the original goes only once nothing refers to it.
+      if (!(await store.withdrawDocumentVersion(contentHash))) {
+        throw new DomainError("conflict", "This version was decided meanwhile.");
+      }
+      await deleteOriginals([version.storageKey]);
+      return withoutKey(await versionOf(contentHash));
+    },
+
+    async deleteDocument(slug) {
+      const sourceId = documentSourceId(slug);
+      if (sourceId === null) {
+        throw new DomainError(
+          "validation_failed",
+          "The slug must be lower-case letters and digits in words joined by hyphens.",
+        );
+      }
+      const versions = (await store.documentVersions()).filter(
+        (version) => version.sourceId === sourceId,
+      );
+      if (versions.length === 0) throw new DomainError("not_found", "No document has this slug.");
+      await deleteOriginals(await store.deleteDocumentSource(sourceId));
+      return { sourceId, deletedVersions: versions.length };
+    },
+
+    async rebuildIndex() {
+      const portfolio = await rebuildPortfolio();
+      const documents = {
+        restored: 0,
+        missing: 0,
+        conflicts: 0,
+        embedded: 0,
+        reused: 0,
+        tokens: 0,
+        costUsd: 0,
+      };
+      const restored: string[] = [];
+      const approved = (await store.documentVersions()).filter(
+        (version) => version.status === "approved",
+      );
+      for (const version of approved) {
+        const prepared = await reprepare(version);
+        if (prepared === null || prepared.findings.length > 0) {
+          documents.missing += 1;
+          continue;
+        }
+        const { conflicts, searchable, excluded } = await checked(prepared);
+        const embedding = await provider(() => indexer().embedDocument(searchable));
+        if (
+          !(await store.reindexApprovedDocument(version.contentHash, embedding.version, conflicts))
+        ) {
+          continue;
+        }
+        restored.push(version.sourceId);
+        documents.restored += 1;
+        documents.conflicts += excluded;
+        documents.embedded += embedding.report.embedded;
+        documents.reused += embedding.report.reused;
+        documents.tokens += embedding.report.tokens;
+        documents.costUsd += embedding.report.costUsd;
+      }
+      // Only what was restored stays: a missing original or an undecided source is never published.
+      await store.removeSourcesExcept("supplemental", restored);
+      return { portfolio, documents };
+    },
   };
 }
 
@@ -594,14 +716,17 @@ async function snapshot({ profile, roadmap }: KnowledgeSources): Promise<Portfol
  * The retrieval options of a process from its environment: the `RETRIEVAL_*` settings (none set
  * switches retrieval off) and the Voyage embedder when `VOYAGE_API_KEY` is set. An absolute
  * `RETRIEVAL_QUERY_CACHE_FILE` keeps query embeddings in that file and reuses them, for paid eval
- * runs only. Throws an error naming every invalid setting, never a value.
+ * runs only, and `RETRIEVAL_EVAL_VARIANT` (`vector` when absent, or `fulltext`) chooses the ranking
+ * an eval run measures. Throws an error naming every invalid setting, never a value.
  */
 export function readRetrievalOptions(
   env: Readonly<Record<string, string | undefined>>,
 ): KnowledgeServiceOptions {
   const config = readRetrievalConfig(env);
+  const searchVariant = searchVariantOf(env["RETRIEVAL_EVAL_VARIANT"]);
   const apiKey = env["VOYAGE_API_KEY"]?.trim() ?? "";
-  if (config === null || apiKey === "") return { config };
+  if (config === null) return { config };
+  if (apiKey === "") return { config, searchVariant };
   const cacheFile = env["RETRIEVAL_QUERY_CACHE_FILE"]?.trim() ?? "";
   if (cacheFile !== "" && !isAbsolute(cacheFile)) {
     throw new Error("RETRIEVAL_QUERY_CACHE_FILE must be an absolute path.");
@@ -617,5 +742,13 @@ export function readRetrievalOptions(
   return {
     config,
     embedder: cacheFile === "" ? voyage : createQueryCachingEmbedder(voyage, cacheFile),
+    searchVariant,
   };
+}
+
+function searchVariantOf(value: string | undefined): SearchVariant {
+  const variant = value?.trim() ?? "";
+  if (variant === "" || variant === "vector") return "vector";
+  if (variant === "fulltext") return "fulltext";
+  throw new Error("RETRIEVAL_EVAL_VARIANT must be vector or fulltext.");
 }

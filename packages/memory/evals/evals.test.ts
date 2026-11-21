@@ -162,6 +162,7 @@ describe("the runner's options", () => {
       RETRIEVAL_QUERY_CACHE_FILE: expect.stringMatching(
         /[/\\]\.tmp[/\\]evals[/\\]memory[/\\]query-cache\.json$/,
       ) as string,
+      RETRIEVAL_EVAL_VARIANT: "vector",
     });
   });
 

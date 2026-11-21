@@ -1,7 +1,7 @@
 // Maintenance adapter for the knowledge base: works through queued indexing work, rebuilds the
-// portfolio index, lists the evals' candidate pools, prints the month's recorded provider spend
-// and takes supplemental documents through ingest, preview and the owner's decision, straight
-// through the services, so it needs no running server and no API key. Run it only
+// index from the portfolio and the approved originals, lists the evals' candidate pools, prints
+// the month's recorded provider spend and takes supplemental documents through ingest, preview,
+// the owner's decision, withdrawal and deletion, straight through the services, so it needs no running server and no API key. Run it only
 // while no API serves the same database, which works through the queue itself.
 // Every answer is one JSON document on stdout.
 import { readFile, stat } from "node:fs/promises";
@@ -32,8 +32,11 @@ const USAGE = `Usage: knowledge <command>
   reindex                 Works through all queued indexing work, failed items included, and
                           brings the index in step with the portfolio, embedding only what
                           changed; prints the report with what is still queued.
-  rebuild                 Stores every portfolio source again, as after an embedding model or
-                          version change, embedding each text at most once per model.
+  rebuild                 Rebuilds the whole index, as after an embedding model or version change
+                          or a lost index: every portfolio source and every approved document
+                          from its retained original, embedding each text at most once per model.
+                          Pending, rejected, superseded and withdrawn versions stay unpublished;
+                          prints { portfolio, documents }.
   pending                 Prints { pending, failed }: the queued indexing work.
   candidates <questions>  Prints { pools: { <id>: [sourceId, ...] } }: each question's candidate
                           pool, best first, without the relevance floor. <questions> is a JSON file
@@ -49,6 +52,10 @@ const USAGE = `Usage: knowledge <command>
   approve <hash>          Embeds the pending version with exactly this content hash and makes it
                           searchable, superseding the earlier approved version.
   reject <hash>           Rejects a pending or blocked version and deletes its original.
+  withdraw <hash>         Takes the approved version out of search at once, without the provider,
+                          and deletes its original; the version stays listed as withdrawn.
+  delete <slug>           Deletes the document completely: every version, its chunks and every
+                          original; prints { sourceId, deletedVersions }.
 `;
 
 /** The commands that need private storage. */
@@ -58,6 +65,9 @@ const documentCommands: ReadonlySet<string> = new Set([
   "show",
   "approve",
   "reject",
+  "withdraw",
+  "delete",
+  "rebuild",
 ]);
 
 const QuestionsSchema = z.array(
@@ -89,7 +99,7 @@ export async function runKnowledgeCommand(
       return 0;
     }
     if (command === "rebuild" && rest.length === 0) {
-      print(await services.knowledge.rebuildPortfolio());
+      print(await services.knowledge.rebuildIndex());
       return 0;
     }
     if (command === "pending" && rest.length === 0) {
@@ -116,6 +126,14 @@ export async function runKnowledgeCommand(
       }
       if (command === "reject") {
         print(await services.knowledge.rejectDocument(hash));
+        return 0;
+      }
+      if (command === "withdraw") {
+        print(await services.knowledge.withdrawDocument(hash));
+        return 0;
+      }
+      if (command === "delete") {
+        print(await services.knowledge.deleteDocument(hash));
         return 0;
       }
     }

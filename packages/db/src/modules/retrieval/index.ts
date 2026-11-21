@@ -202,7 +202,7 @@ export interface RetrievalDocumentVersion {
   readonly sectionCount: number;
   readonly chunkCount: number;
   readonly createdAt: Date;
-  /** When it was approved, rejected or superseded. */
+  /** When it was approved, rejected, superseded or withdrawn. */
   readonly decidedAt: Date | null;
 }
 
@@ -485,7 +485,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       return rows.map(documentVersionOf);
     },
 
-    async approveDocumentVersion(contentHash, source) {
+    async approveDocumentVersion(contentHash, source, conflicts = []) {
       return db.transaction(async (tx) => {
         const [row] = await tx
           .select()
@@ -493,17 +493,11 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           .where(eq(documentVersions.contentHash, contentHash))
           .for("update");
         if (row?.status !== "pending") return false;
-        if (
-          source.sourceId !== row.sourceId ||
-          source.version !== row.contentHash ||
-          source.sourceKind !== "supplemental"
-        ) {
-          throw new Error("The indexed version is not the version being approved.");
-        }
+        assertSourceOf(row, source);
         const decidedAt = new Date();
         await tx
           .update(documentVersions)
-          .set({ status: "superseded", decidedAt })
+          .set({ status: "superseded", storageKey: null, decidedAt })
           .where(
             and(
               eq(documentVersions.sourceId, row.sourceId),
@@ -512,7 +506,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           );
         await tx
           .update(documentVersions)
-          .set({ status: "approved", decidedAt })
+          .set({ status: "approved", conflicts: conflictsOf(conflicts), decidedAt })
           .where(eq(documentVersions.id, row.id));
         await storeVersion(tx, source);
         return true;
@@ -533,10 +527,93 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       return rejected.length > 0;
     },
 
-    withdrawDocumentVersion: () => Promise.reject(new Error("not implemented")),
-    deleteDocumentSource: () => Promise.reject(new Error("not implemented")),
-    reindexApprovedDocument: () => Promise.reject(new Error("not implemented")),
-    fullText: () => Promise.reject(new Error("not implemented")),
+    async withdrawDocumentVersion(contentHash) {
+      return db.transaction(async (tx) => {
+        const [withdrawn] = await tx
+          .update(documentVersions)
+          .set({ status: "withdrawn", storageKey: null, decidedAt: new Date() })
+          .where(
+            and(
+              eq(documentVersions.contentHash, contentHash),
+              eq(documentVersions.status, "approved"),
+            ),
+          )
+          .returning({ sourceId: documentVersions.sourceId });
+        if (withdrawn === undefined) return false;
+        await tx
+          .delete(sources)
+          .where(
+            and(eq(sources.sourceId, withdrawn.sourceId), eq(sources.sourceKind, "supplemental")),
+          );
+        return true;
+      });
+    },
+
+    async deleteDocumentSource(sourceId) {
+      return db.transaction(async (tx) => {
+        const deleted = await tx
+          .delete(documentVersions)
+          .where(eq(documentVersions.sourceId, sourceId))
+          .returning({ storageKey: documentVersions.storageKey });
+        await tx
+          .delete(sources)
+          .where(and(eq(sources.sourceId, sourceId), eq(sources.sourceKind, "supplemental")));
+        return deleted.flatMap((row) => (row.storageKey === null ? [] : [row.storageKey]));
+      });
+    },
+
+    async reindexApprovedDocument(contentHash, source, conflicts) {
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(documentVersions)
+          .where(eq(documentVersions.contentHash, contentHash))
+          .for("update");
+        if (row?.status !== "approved") return false;
+        assertSourceOf(row, source);
+        await tx
+          .update(documentVersions)
+          .set({ conflicts: conflictsOf(conflicts) })
+          .where(eq(documentVersions.id, row.id));
+        await storeVersion(tx, source);
+        return true;
+      });
+    },
+
+    async fullText(query) {
+      if (query.query.trim() === "") return [];
+      // Any of the query's words: the plain query's AND operators become OR, so a question is not
+      // required to repeat every word of a passage.
+      const tsquery = sql`replace(plainto_tsquery('simple', unaccent(${query.query}))::text, '&', '|')::tsquery`;
+      const rank = sql<number>`ts_rank(${chunks.search}, ${tsquery})::float8`;
+      const rows = await db
+        .select({
+          sourceId: sources.sourceId,
+          sourceKind: sources.sourceKind,
+          contentKind: sources.contentKind,
+          title: versions.title,
+          path: versions.path,
+          version: versions.version,
+          text: chunks.text,
+          headingPath: sections.headingPath,
+          indexedAt: versions.indexedAt,
+          similarity: rank,
+        })
+        .from(chunks)
+        .innerJoin(versions, eq(versions.id, chunks.versionId))
+        .innerJoin(sources, eq(sources.id, versions.sourceId))
+        .innerJoin(sections, eq(sections.id, chunks.sectionId))
+        .where(
+          and(
+            eq(sources.stale, false),
+            sql`${chunks.search} @@ ${tsquery}`,
+            query.kinds === undefined ? undefined : inArray(sources.contentKind, [...query.kinds]),
+          ),
+        )
+        .orderBy(desc(rank), asc(sources.sourceId), asc(chunks.ordinal))
+        .limit(query.limit);
+      return rows.map((row) => ({ ...row, sourceKind: sourceKindOf(row.sourceKind) }));
+    },
 
     async removeSourcesExcept(sourceKind, sourceIds) {
       const removed = await db
@@ -750,7 +827,29 @@ const documentStatuses: readonly RetrievalDocumentStatus[] = [
   "approved",
   "rejected",
   "superseded",
+  "withdrawn",
 ];
+
+/** Refuses to index a source that is not the supplemental version of this row. */
+function assertSourceOf(row: typeof documentVersions.$inferSelect, source: RetrievalSourceVersion) {
+  if (
+    source.sourceId !== row.sourceId ||
+    source.version !== row.contentHash ||
+    source.sourceKind !== "supplemental"
+  ) {
+    throw new Error("The indexed version is not the version being approved.");
+  }
+}
+
+function conflictsOf(conflicts: readonly RetrievalDocumentConflict[]) {
+  return conflicts.map(({ kind, chunkOrdinal, sourceId, claim, fact }) => ({
+    kind,
+    chunkOrdinal,
+    sourceId,
+    claim,
+    fact,
+  }));
+}
 
 function documentVersionOf(row: typeof documentVersions.$inferSelect): RetrievalDocumentVersion {
   const status = documentStatuses.find((known) => known === row.status);
@@ -764,7 +863,7 @@ function documentVersionOf(row: typeof documentVersions.$inferSelect): Retrieval
     storageKey: row.storageKey,
     status,
     findings: row.findings.map(({ kind, line }) => ({ kind, line })),
-    conflicts: [],
+    conflicts: conflictsOf(row.conflicts),
     sectionCount: row.sectionCount,
     chunkCount: row.chunkCount,
     createdAt: row.createdAt,
