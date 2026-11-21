@@ -60,19 +60,28 @@ class Campaign:
     run_stop_usd: float | None = None
 
 
-#: The owner-approved campaigns. Phase 6 is finished and keeps the ceiling the owner set for it
-#: (USD 10 raised to USD 13 in issue #183) and the rules it ran under; phases 7, 7.1 and 8 follow
-#: decision 0026, point 7. A new phase gets its campaign here when its budget is approved.
-CAMPAIGNS: Final[Mapping[str, Campaign]] = MappingProxyType(
-    {
-        entry.name: entry
-        for entry in (
-            Campaign("06-llm-agent", ceiling_usd=13.00),
-            Campaign("07-ai-service", ceiling_usd=4.00, issue_stop_usd=1.50, run_stop_usd=1.00),
-            Campaign("07.1-jev-gateway", ceiling_usd=2.00, run_stop_usd=1.00),
-            Campaign("08-mcp-public", ceiling_usd=2.30, run_stop_usd=1.00),
-        )
-    }
+def _load_campaigns(path: Path) -> Mapping[str, Campaign]:
+    data: dict[str, dict[str, float | None]] = json.loads(path.read_text(encoding="utf-8"))
+    return MappingProxyType(
+        {
+            name: Campaign(
+                name,
+                ceiling_usd=float(entry["ceiling_usd"] or 0.0),
+                issue_stop_usd=entry["issue_stop_usd"],
+                run_stop_usd=entry["run_stop_usd"],
+            )
+            for name, entry in data.items()
+        }
+    )
+
+
+#: The owner-approved campaigns, in `campaigns.json` beside this module, which the phase loop's
+#: steward reads too (`harness/lib/spend.mjs`). Phase 6 is finished and keeps the ceiling the
+#: owner set for it (USD 10 raised to USD 13 in issue #183) and the rules it ran under; phases 7,
+#: 7.1 and 8 follow decision 0026, point 7. A new phase gets its campaign there when its budget
+#: is approved; a campaign without a positive ceiling can spend nothing.
+CAMPAIGNS: Final[Mapping[str, Campaign]] = _load_campaigns(
+    Path(__file__).with_name("campaigns.json")
 )
 
 

@@ -1,0 +1,6 @@
+{
+  "06-llm-agent": { "ceiling_usd": 13.0, "issue_stop_usd": null, "run_stop_usd": null },
+  "07-ai-service": { "ceiling_usd": 4.0, "issue_stop_usd": 1.5, "run_stop_usd": 1.0 },
+  "07.1-jev-gateway": { "ceiling_usd": 2.0, "issue_stop_usd": null, "run_stop_usd": 1.0 },
+  "08-mcp-public": { "ceiling_usd": 2.3, "issue_stop_usd": null, "run_stop_usd": 1.0 }
+}
