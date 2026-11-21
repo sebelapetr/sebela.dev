@@ -44,6 +44,7 @@ Paid runs count against the phase 9 ceiling of USD 3, with a stop at USD 1 per r
 | `reranked-calibration.json` | 2026-11-21 | 57,688 |    0.00296 |
 | `reranked-complete.json`    | 2026-11-21 | 54,312 |    0.00276 |
 | `pdf-supplemental.json`     | 2026-11-21 |  6,858 |    0.00039 |
+| `pdf-affected.json`         | 2026-11-21 | 19,209 |    0.00100 |
 
 `supplemental-vector.json` measures only the six supplemental-document cases, after ingesting
 and approving their fictional documents; all six pass.
@@ -52,6 +53,14 @@ and approving their fictional documents; all six pass.
 (`supplemental-pdf-chunk-size`, `supplemental-pdf-afternoon`) with the deployed reranked search.
 The PDF is ingested like the Markdown documents, approved without findings into 4 sections and
 4 chunks, and both cases pass with the PDF as the top source.
+
+`pdf-affected.json` measures, with the deployed reranked search, the thirteen cases the PDF's
+chunks can reach: its two cases, the six portfolio questions on chunking, evaluation and
+workshops, and the five no-answer questions. Twelve pass. `portfolio-summit-takeaways` still
+passes but ranks the PDF's take-away section above the summit (nDCG 0.63 against 1.00 in
+`reranked-complete.json`); the other five portfolio questions keep their scores. The correct-empty
+rate stays at 0.8 (four of five): `no-answer-hourly-rate` returns the support handbook and the
+profile exactly as in `reranked-complete.json`, not the PDF.
 
 ## Query cache
 
@@ -74,8 +83,8 @@ Cumulative phase 9 spend after the two baselines of #225: about USD 0.0033 of US
 above plus earlier paid runs of the phase). The full-text baseline embeds only while indexing.
 The three runs of #226 add about USD 0.0060, so the cumulative phase 9 spend is about
 USD 0.0093 of USD 3. Their reranker calls (50,175 tokens per complete run) are most of it. The
-PDF run of #227 adds about USD 0.0004, so the cumulative phase 9 spend is about USD 0.0097 of
-USD 3.
+two PDF runs of #227 add about USD 0.0014, so the cumulative phase 9 spend is about
+USD 0.0107 of USD 3.
 
 `reranked-calibration.json` records 7,513 index tokens against 4,137 in the other complete runs,
 and its portfolio reindex reports 132 chunks embedded and none reused. Every run indexes a fresh
