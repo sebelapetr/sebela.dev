@@ -38,6 +38,7 @@
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-react-hooks": "7.1.1",
+    "fast-check": "catalog:",
     "postcss": "8.5.33",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
