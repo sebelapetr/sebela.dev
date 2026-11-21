@@ -1,4 +1,7 @@
 import { existsSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -19,11 +22,13 @@ import { SEARCHABLE, loadDataset, planCases } from "./plan.js";
 import {
   DEFAULT_MIN_INTERVAL_MS,
   RUN_CEILING_USD,
+  cacheEntryCount,
   documentIngests,
   parseOptions,
   privateStorageEnvironment,
   pendingSummary,
   providerEnvironment,
+  queryCacheUse,
 } from "./run.js";
 
 const dataset = loadDataset();
@@ -189,6 +194,31 @@ describe("the runner's options", () => {
     expect(parseOptions(["--publish", "vector-baseline", "--case", "a"]).publish).toBe(
       "vector-baseline",
     );
+  });
+
+  it("counts the query cache's entries, and an absent cache as empty", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "memory-eval-cache-"));
+    try {
+      const file = join(folder, "query-cache.json");
+      expect(await cacheEntryCount(file)).toBe(0);
+      await writeFile(file, JSON.stringify({ format: 1, entries: { a: [1], b: [2] } }));
+      expect(await cacheEntryCount(file)).toBe(2);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  });
+
+  it("records which steps' query embeddings came from the cache", () => {
+    const use = queryCacheUse(6, { start: 0, afterCandidates: 6, end: 6 });
+    expect(use.entriesAtStart).toBe(0);
+    expect(use.candidates).toEqual({ queries: 6, fromCache: 0, embedded: 6 });
+    expect(use.search).toEqual({ queries: 6, fromCache: 6, embedded: 0 });
+    expect(use.note).toMatch(/latency and cost per query leave out the embedding call/);
+    expect(queryCacheUse(4, { start: 9, afterCandidates: 10, end: 11 }).search).toEqual({
+      queries: 4,
+      fromCache: 3,
+      embedded: 1,
+    });
   });
 
   it("reports a run without measurable cases as pending, not passed", () => {

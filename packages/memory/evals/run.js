@@ -175,6 +175,27 @@ export function pendingSummary(options, pending) {
   };
 }
 
+/**
+ * The number of query embeddings in the cache file; an absent file holds none.
+ *
+ * @type {(file: string) => Promise<number>}
+ */
+export const cacheEntryCount = () => Promise.reject(new Error("not implemented"));
+
+/**
+ * @typedef {{ queries: number, fromCache: number, embedded: number }} StepCacheUse
+ * @typedef {{ entriesAtStart: number, candidates: StepCacheUse, search: StepCacheUse, note: string }} QueryCacheUse
+ */
+
+/**
+ * Which steps' query embeddings came from the cache, from its entry counts around them.
+ *
+ * @type {(queries: number, counts: { start: number, afterCandidates: number, end: number }) => QueryCacheUse}
+ */
+export const queryCacheUse = () => {
+  throw new Error("not implemented");
+};
+
 async function main() {
   const options = parseOptions(process.argv.slice(2));
   const dataset = loadDataset();
