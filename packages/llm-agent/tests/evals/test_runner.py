@@ -78,12 +78,20 @@ def test_the_judge_runs_as_a_batch_unless_direct_mode_is_asked_for() -> None:
 
 
 def test_a_judge_call_is_reserved_with_a_one_hour_cache_write_and_the_full_output() -> None:
-    assert run.JUDGE_CALL_RESERVATION_USD == pytest.approx(
-        (
-            8_000 * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
-            + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
-        )
-        / 1_000_000
+    direct = (
+        8_000 * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
+        + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
+    ) / 1_000_000
+    assert run.JUDGE_DIRECT_CALL_RESERVATION_USD == pytest.approx(direct)
+    # The default batch mode: the same upper bound at the batch discount.
+    assert run.JUDGE_CALL_RESERVATION_USD == pytest.approx(direct * rubric.JUDGE_BATCH_DISCOUNT)
+    assert run.judge_call_reservation_usd("batch") == run.JUDGE_CALL_RESERVATION_USD
+    assert run.judge_call_reservation_usd("direct") == run.JUDGE_DIRECT_CALL_RESERVATION_USD
+
+
+def test_the_direct_judge_mode_reserves_the_undiscounted_judge_calls() -> None:
+    assert run.reservation(["Q01-en"], judge_mode="direct") == pytest.approx(
+        3 * budget.SUBJECT_EXECUTION_USD + 3 * run.JUDGE_DIRECT_CALL_RESERVATION_USD
     )
 
 

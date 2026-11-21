@@ -150,8 +150,13 @@ def test_the_reservation_prices_the_input_as_a_one_hour_cache_write() -> None:
         tokens * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
         + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
     ) / 1_000_000
-    # No batch discount: a reservation stays an upper bound in either judge mode.
+    # A direct call has no discount; a batched request is billed at the batch discount, which
+    # applies to every token, cache writes included, so its upper bound is discounted too.
     assert rubric.reservation_usd(CASE, data) == pytest.approx(expected)
+    assert rubric.reservation_usd(CASE, data, batch=False) == pytest.approx(expected)
+    assert rubric.reservation_usd(CASE, data, batch=True) == pytest.approx(
+        expected * rubric.JUDGE_BATCH_DISCOUNT
+    )
 
 
 def test_the_cache_and_batch_multipliers_are_the_documented_ones() -> None:

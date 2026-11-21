@@ -68,7 +68,7 @@ class FakeBatches:
     def __init__(
         self, results: list[dict[str, Any]], *, polls: int = 1, never_ends: bool = False
     ) -> None:
-        self.results = results
+        self.stored = results
         self.polls = polls
         self.never_ends = never_ends
         self.created: list[list[dict[str, Any]]] = []
@@ -86,7 +86,7 @@ class FakeBatches:
 
     async def results(self, message_batch_id: str) -> AsyncIterator[Any]:
         async def stream() -> AsyncIterator[Any]:
-            for item in self.results:
+            for item in self.stored:
                 yield item
 
         return stream()
@@ -143,6 +143,16 @@ def test_a_custom_id_is_stable_per_case_run_and_valid_for_the_batch_api() -> Non
     assert first.custom_id == again.custom_id == "Q01-en-r2"
     assert judging.custom_id("Q01 en/x", 1) == "Q01_en_x-r1"
     assert len(judging.custom_id("Q" * 100, 3)) <= 64
+
+
+def test_a_request_is_reserved_at_the_price_of_its_judge_mode() -> None:
+    data = record("Q01-en")
+    assert judging.request(CASE, data).reserved_usd == pytest.approx(
+        rubric.reservation_usd(CASE, data, batch=True)
+    )
+    assert judging.request(CASE, data, batch=False).reserved_usd == pytest.approx(
+        rubric.reservation_usd(CASE, data, batch=False)
+    )
 
 
 def test_a_batch_request_asks_the_pinned_judge_with_the_same_instructions_and_input() -> None:
