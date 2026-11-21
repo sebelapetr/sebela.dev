@@ -131,6 +131,51 @@ function allBranches(mainRoot) {
     .map((ref) => ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, ""));
 }
 
+// The ref a new branch is cut from, by name: `HEAD` is the branch the main checkout is on.
+function baseName(mainRoot, base) {
+  if (base !== "HEAD") return base;
+  try {
+    return git(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: mainRoot });
+  } catch {
+    return base;
+  }
+}
+
+function checkedOutBranches(mainRoot) {
+  return git(["worktree", "list", "--porcelain"], { cwd: mainRoot })
+    .split("\n")
+    .filter((line) => line.startsWith("branch refs/heads/"))
+    .map((line) => line.slice("branch refs/heads/".length));
+}
+
+// Whether `base` already holds the work of a branch (`<name>` or `origin/<name>`): the branch is
+// an ancestor of it, or its changes since the common ancestor are in it as one commit, which is
+// what a squash merge leaves. A local branch with a worktree counts as unfinished whatever it
+// holds: an interrupted agent may not have committed yet.
+function mergedInto(mainRoot, name, base) {
+  const remote = name.startsWith("origin/");
+  if (!remote && checkedOutBranches(mainRoot).includes(name)) return false;
+  const ref = remote ? `refs/remotes/${name}` : `refs/heads/${name}`;
+  if (gitSucceeds(["merge-base", "--is-ancestor", ref, base], mainRoot)) return true;
+  try {
+    const fork = git(["merge-base", ref, base], { cwd: mainRoot });
+    // The branch as one commit; `git cherry` marks it `-` when the base has an equal change.
+    const squashed = git(["commit-tree", `${ref}^{tree}`, "-p", fork, "-m", "squashed"], {
+      cwd: mainRoot,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "worktree",
+        GIT_AUTHOR_EMAIL: "worktree@example.invalid",
+        GIT_COMMITTER_NAME: "worktree",
+        GIT_COMMITTER_EMAIL: "worktree@example.invalid",
+      },
+    });
+    return git(["cherry", base, squashed], { cwd: mainRoot }).startsWith("-");
+  } catch {
+    return false;
+  }
+}
+
 // Creates the worktree of `branch` (or reuses it), gives it a slot, its own database and its own
 // role, and only then writes its environment file with the role's credentials and its own storage
 // folder. Then the backend stages run in the worktree (lib/backend.mjs): install, migrations,
@@ -142,6 +187,12 @@ function allBranches(mainRoot) {
 // ensured, whatever this call added is undone (a new worktree and branch, a new slot) and the
 // error is thrown; an existing worktree keeps its slot and its environment file. The password is
 // written only to the environment file, never returned.
+//
+// The branch is created as requested, with one exception, for an interrupted issue of the phase
+// loop: when it does not exist and is cut from a phase branch, an unmerged branch of the same
+// issue under another name is continued instead (existingIssueBranch in lib/slots.mjs has the
+// whole rule). That is told to `notice` before anything is set up, naming both branches, and is
+// in the result as `requested` and `resumed`.
 export function createWorktree({
   branch: requested,
   base = "HEAD",
@@ -149,6 +200,7 @@ export function createWorktree({
   env = process.env,
   databases = defaultDatabases(env),
   backend = backendMaintenance({ env }),
+  notice = (message) => console.error(message),
 }) {
   // Configuration is validated before anything is created.
   const settings = loadSettings(env);
@@ -168,8 +220,12 @@ export function createWorktree({
   fs.mkdirSync(p.dir, { recursive: true });
   const resumed = branchExistsIn(mainRoot, requested)
     ? null
-    : existingIssueBranch(requested, allBranches(mainRoot));
+    : existingIssueBranch(requested, allBranches(mainRoot), {
+        base: baseName(mainRoot, base),
+        merged: (name) => mergedInto(mainRoot, name, base),
+      });
   const branch = resumed ?? requested;
+  if (resumed) notice(continuedNotice(requested, resumed));
   const name = worktreeDirName(branch);
   const database = databaseName(name);
   const worktreePath = path.join(p.dir, name);
@@ -254,7 +310,16 @@ export function createWorktree({
   }
 
   backend.setup({ root: worktreePath, owner: name });
-  return { path: worktreePath, slot, name, database, ...(resumed ? { resumed } : {}) };
+  return { path: worktreePath, slot, name, database, ...(resumed ? { requested, resumed } : {}) };
+}
+
+// What a caller is told when it does not get the branch it asked for.
+export function continuedNotice(requested, resumed) {
+  return (
+    `NOTICE: branch ${requested} was not created. Continuing branch ${resumed} instead: ` +
+    `an earlier, unmerged branch of the same issue. To start ${requested} anyway, merge, ` +
+    `rename or delete ${resumed} first.`
+  );
 }
 
 // The same server-only signing secret for the API's sender and the website's receiver.
@@ -362,7 +427,8 @@ function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
   if (command === "create" && options._[0]) {
     const result = createWorktree({ branch: options._[0], base: options.base });
-    if (result.resumed) console.error(`issue already has branch ${result.resumed}; continuing it`);
+    // Said again after the set-up output, next to the path the caller reads.
+    if (result.resumed) console.error(continuedNotice(result.requested, result.resumed));
     console.error(
       `worktree ${result.name} on slot ${result.slot} with database ${result.database}`,
     );

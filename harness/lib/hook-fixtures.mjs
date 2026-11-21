@@ -4,6 +4,7 @@
 //
 // Fake Prettier formats *.js, *.md and *.json: runs of spaces become one space, trailing spaces go
 // and the file ends with one newline. Content containing SYNTAX-ERROR fails like a parse error.
+// With --check it names each file that is not formatted, as the real one does, and changes none.
 // Fake ESLint reports every JavaScript file containing `debugger`. Fake Turborepo fails when the
 // file `turbo-fails` exists in the directory it runs in. Every call is logged to tool-calls.jsonl
 // in that directory as { tool, args, cwd }.
@@ -61,6 +62,22 @@ if (info !== undefined) {
     const after = format(file, before);
     if (after !== before) fs.writeFileSync(file, after);
   }
+} else if (args.includes("--check")) {
+  // As the real one: 1 when a file is not formatted, 2 when one cannot be parsed or has no parser.
+  let status = 0;
+  for (const file of files) {
+    if (!supported(file)) {
+      if (args.includes("--ignore-unknown")) continue;
+      process.stderr.write("[error] No parser could be inferred for file \"" + file + "\".\n");
+      process.exit(2);
+    }
+    const before = fs.readFileSync(file, "utf8");
+    if (format(file, before) !== before) {
+      process.stderr.write("[warn] " + file + "\n");
+      status = 1;
+    }
+  }
+  process.exit(status);
 } else {
   process.stderr.write("fake prettier: unsupported call\n");
   process.exit(2);

@@ -3,12 +3,21 @@
 # "Deployment"; infra/README.md, "Deployment"). Run only as the forced command of the `deploy`
 # user's SSH key, or by the owner on the server. The only input is one of:
 #
-#   deploy api=<commit> web=<commit> mcp-admin=<commit>   the verified tag set of the release job
-#   rollback                                              back to the previous verified release
+#   deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit>
+#             the release commit and the verified tag set of the release job
+#   rollback  back to the previous verified release
 #
 # As the forced command the input is SSH_ORIGINAL_COMMAND and arguments are ignored; otherwise it
-# is the arguments. Every service is named exactly once, with a full 40-character commit SHA. Any
-# other input is refused before anything runs, so the key can do nothing but deploy or roll back.
+# is the arguments. The release commit and every service are named exactly once, each with a full
+# 40-character commit SHA. Any other input is refused before anything runs, so the key can do
+# nothing but deploy or roll back.
+#
+# A deployment first brings this checkout to the release commit, so the script, the Compose files
+# and the backup script of the release are the ones that run: it fetches origin, refuses a commit
+# that is not on origin/master and a checkout with local modifications (nothing changed either
+# way), checks the commit out detached and runs the checked-out deploy.sh again, once, with
+# DEPLOY_RELEASE_CHECKED_OUT set to the commit; that run checks the checkout is at the commit and
+# goes on. A rollback leaves the checkout as it is.
 #
 # A deployment pulls the images, backs up first when the release adds a migration (DEPLOY_BACKUP,
 # which reads the same DEPLOY_ENV_FILE; without an executable backup script such a release is
@@ -17,6 +26,14 @@
 # health check fails it starts the previous release again and exits non-zero. A healthy release is
 # appended to the record of verified releases, and local images of releases older than the
 # previous one are removed.
+#
+# Before any of that, and before a rollback starts anything, the script checks that the current
+# user can keep the state: the state folder writable, the record a readable and writable file when
+# it exists, the lock openable. Otherwise it stops with nothing changed. Should the record still
+# not take the change after a healthy start, the release keeps running (it is not rolled back for
+# a bookkeeping fault), no image is removed, and the script says what is running, which line the
+# record lacks or still holds, and exits non-zero, so the job fails and publishes no version until
+# the record is right.
 #
 # Settings, from the environment (the forced command sets the first two):
 #   DEPLOY_ENV_FILE      the production environment file (infra/production/.env.example)
@@ -34,7 +51,7 @@ SERVICES=(api web mcp-admin)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MIGRATIONS_DIR=/app/packages/db/migrations
-USAGE="usage: deploy api=<commit> web=<commit> mcp-admin=<commit> | rollback"
+USAGE="usage: deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> | rollback"
 
 say() { printf 'deploy: %s\n' "$*" >&2; }
 fail() {
@@ -86,10 +103,22 @@ describe_set() {
 }
 
 declare -A target=()
+release=""
 command="${words[0]}"
 case "$command" in
   deploy)
-    parse_set target "${words[@]:1}"
+    service_words=()
+    for word in "${words[@]:1}"; do
+      if [[ "$word" == release=* ]]; then
+        [[ -z "$release" ]] || fail "release commit named twice"
+        [[ "$word" =~ ^release=([0-9a-f]{40})$ ]] || fail "not a release commit SHA: $word"
+        release="${BASH_REMATCH[1]}"
+      else
+        service_words+=("$word")
+      fi
+    done
+    [[ -n "$release" ]] || fail "missing release commit: $USAGE"
+    parse_set target "${service_words[@]}"
     ;;
   rollback)
     ((${#words[@]} == 1)) || fail "$USAGE"
@@ -111,9 +140,57 @@ WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-300}"
 [[ "$WAIT_TIMEOUT" =~ ^[0-9]+$ ]] || fail "DEPLOY_WAIT_TIMEOUT is not a number of seconds"
 export COMPOSE_FILE="${COMPOSE_FILE:-$CHECKOUT/compose.yaml:$CHECKOUT/infra/production/compose.yaml}"
 RELEASES="$DEPLOY_STATE_DIR/releases"
+LOCK="$DEPLOY_STATE_DIR/lock"
 
-exec 9>"$DEPLOY_STATE_DIR/lock"
-flock --nonblock 9 || fail "another deployment is running"
+# --- The state ---------------------------------------------------------------------------------
+
+# Checked before anything changes: a rollback and the fallback of a failed deployment start what
+# the record names, so a release that cannot be recorded must not be started. The messages name
+# the user and never a path: the output of a deployment is a public log.
+WHOAMI="$(id -un 2>/dev/null)" || WHOAMI="the current user"
+[[ -w "$DEPLOY_STATE_DIR" && -x "$DEPLOY_STATE_DIR" ]] ||
+  fail "the state folder is not writable by $WHOAMI; nothing changed"
+if [[ -e "$RELEASES" || -L "$RELEASES" ]]; then
+  [[ -f "$RELEASES" ]] || fail "the record of verified releases is not a file; nothing changed"
+  [[ -r "$RELEASES" && -w "$RELEASES" ]] ||
+    fail "the record of verified releases is not writable by $WHOAMI; nothing changed"
+fi
+[[ ! -e "$LOCK" || (-f "$LOCK" && -w "$LOCK") ]] ||
+  fail "the lock of the state folder cannot be opened by $WHOAMI; nothing changed"
+{ exec 9>"$LOCK"; } 2>/dev/null ||
+  fail "the lock of the state folder cannot be opened by $WHOAMI; nothing changed"
+flock --nonblock 9 || fail "another deployment is running; nothing changed"
+
+# --- The checkout ------------------------------------------------------------------------------
+
+checkout_git() { git -C "$CHECKOUT" "$@"; }
+
+# Brings the checkout to the release commit and runs the release's deploy.sh in place of this one.
+# Only a commit on origin/master is checked out, so the input cannot choose code of its own. The
+# function is read whole before it runs, and exec replaces this process, so nothing of this file is
+# read after the checkout changed it. The re-executed script opens the lock again, which closes
+# this one's.
+checkout_release() {
+  if [[ -n "${DEPLOY_RELEASE_CHECKED_OUT:-}" ]]; then
+    [[ "$DEPLOY_RELEASE_CHECKED_OUT" == "$release" &&
+      "$(checkout_git rev-parse HEAD 2>/dev/null)" == "$release" ]] ||
+      fail "the checkout is not at the release commit $release; nothing changed"
+    return 0
+  fi
+  checkout_git fetch --quiet origin || fail "cannot fetch origin; nothing changed"
+  checkout_git merge-base --is-ancestor "$release" refs/remotes/origin/master 2>/dev/null ||
+    fail "the release commit $release is not on origin/master; nothing changed"
+  local changes
+  changes="$(checkout_git status --porcelain --untracked-files=no)" ||
+    fail "cannot read the state of the checkout; nothing changed"
+  [[ -z "$changes" ]] || fail "the checkout has local modifications; nothing changed"
+  checkout_git -c advice.detachedHead=false checkout --quiet --detach "$release" ||
+    fail "cannot check out the release commit $release; nothing changed"
+  say "the checkout is at the release commit $release"
+  DEPLOY_RELEASE_CHECKED_OUT="$release" exec bash "$CHECKOUT/infra/scripts/deploy.sh" "$@"
+}
+
+[[ "$command" != deploy ]] || checkout_release "$@"
 
 # --- Steps -------------------------------------------------------------------------------------
 
@@ -197,7 +274,15 @@ if [[ "$command" == rollback ]]; then
   say "rolling back from $current_line to $previous_line"
   use_set target
   if start; then
-    grep . "$RELEASES" | head -n -1 >"$RELEASES.new" && mv "$RELEASES.new" "$RELEASES"
+    if ! { grep . "$RELEASES" | head -n -1 >"$RELEASES.new" && mv "$RELEASES.new" "$RELEASES"; } \
+      2>/dev/null; then
+      say "the previous release is running, but the record still names the newer release as the" \
+        "current one: $WHOAMI could not rewrite the record of verified releases"
+      say "do not roll back again; make the state folder and the record writable for $WHOAMI," \
+        "then remove this last line from the record:"
+      say "  $current_line"
+      exit 1
+    fi
     say "the previous release is running: $previous_line"
     prune
     exit 0
@@ -223,7 +308,20 @@ if adds_migration; then
 fi
 
 if compose run --rm --no-TTY migrate && start; then
-  [[ "$target_line" == "$current_line" ]] || printf '%s\n' "$target_line" >>"$RELEASES"
+  # The services are healthy on the new release and the migration is applied: starting the
+  # previous release again would add an interruption and repair nothing, so a record that cannot
+  # be written is reported and left to the owner, and the images stay for whatever comes next.
+  if [[ "$target_line" != "$current_line" ]] &&
+    ! { printf '%s\n' "$target_line" >>"$RELEASES"; } 2>/dev/null; then
+    say "the release is healthy and is running but is NOT recorded: $WHOAMI could not write the" \
+      "record of verified releases"
+    say "until it is recorded, a rollback and the fallback of a failed deployment start the" \
+      "wrong release"
+    say "make the record writable for $WHOAMI, then run this deployment again or append this" \
+      "line to the record:"
+    say "  $target_line"
+    exit 1
+  fi
   say "healthy: $target_line"
   prune
   exit 0

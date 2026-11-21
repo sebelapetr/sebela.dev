@@ -1,0 +1,34 @@
+name: Idea or feature
+description: Suggest an improvement to the website, the AI features, the tooling or the docs.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Larger work is planned in phases (`.plan/`), so an accepted idea may land in a later phase rather than straight away. For an open-ended question, [Discussions](https://github.com/sebelapetr/sebela.dev/discussions) may suit better.
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: What should exist or change. Name the page, route, tool or file if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The problem it solves or who it helps.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional. How it could work, and any constraint you see (the API trust boundary, privacy, cost).
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      description: Optional. How we would know it is done.
+      placeholder: |
+        - [ ] …

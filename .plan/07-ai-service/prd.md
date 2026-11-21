@@ -10,6 +10,8 @@
 
 Implementation breakdown: [7 published issues](issues.md), with prerequisites and the final owner acceptance gate. Publication starts no implementation or paid run.
 
+Eval cost controls amended on 2026-11-21 by the owner's approval of eight points ([decision 0026](../../docs/decisions/0026-eval-cost-controls-for-later-phases.md)): screening runs during issue work, deterministic C01/C02/C08 mechanics, one Python runner and CI job, a fake model in development, a fixed latency workload and a USD 4.00 phase-7 campaign. Gates, thresholds and critical-100% rules are unchanged.
+
 This change specifies future implementation. It delivers no server, migration, model download, executable eval or passing baseline. The [evaluation specification](evals.md) defines acceptance. Phase 6's three-stage agent and its current issues remain unchanged; phase-7 extensions are implemented after that dependency is accepted.
 
 ## Problem Statement
@@ -94,7 +96,7 @@ The builder chooses exact route spelling while retaining these separate operatio
 - Separate AI OpenAPI document with Pydantic validation. Generate Python content/control models from the TypeScript API document and the API's AI-client types from FastAPI where needed; pin generators and check drift. Public capabilities reuse package implementations and public source schemas rather than importing another app or cloning tool logic.
 - Reuse phase-3 ordered start/text/block/sources/related/terminal semantics and validate all payloads. Add a small typed progress/operation-status extension where necessary. Use SSE over authenticated fetch for delivery; framing stays in the adapter. Client disconnection ends observation, not execution. Cursor/state recovery cannot replay a paid POST.
 - Emit initial status promptly (target within one second under the declared workload) and bounded progress/keepalive frequently enough to avoid the mock's 20-second quiet-time timeout. Explicitly update/test that timeout contract; progress cannot extend the operation deadline. No raw draft, tool text or hidden reasoning is a public progress event.
-- Buffer the answer until Output Guard passes; then deliver approved content. Interrupted delivery recovers the stored answer rather than regenerating it. Target p95 approved-content latency remains at most 20 seconds on a versioned representative EN/CS workload; measure first status separately.
+- Buffer the answer until Output Guard passes; then deliver approved content. Interrupted delivery recovers the stored answer rather than regenerating it. Target p95 approved-content latency remains at most 20 seconds on the fixed latency workload of [evals.md](evals.md) (the 20 `comparison-v1` EN/CS cases); measure first status separately.
 - Keep internal reason codes for invalid input, ownership, rate/busy, security block/unavailable, provider/tool failure, budget/deadline, invalid output, cancellation and internal failure. Map them explicitly into a validated public contract instead of letting the mock's narrower codes silently discard new failures. Refusals are distinct from infrastructure failure; messages expose no stack traces or credentials.
 
 ## Bot checks, quotas and spend
@@ -114,7 +116,8 @@ The builder chooses exact route spelling while retaining these separate operatio
 - Derive fingerprints with keyed pseudonymization; keep them outside conversations with short expiry covering only the quota window. Do not retain raw IPs for analytics, put fingerprints in Langfuse or treat a shared IP as a person. Reset/deletion/cookie cycling does not reset global/fingerprint safeguards. Persist counters/reservations sufficiently to preserve limits across restart.
 - Reserve conservative whole-operation cost atomically before paid work. Sum committed, active and uncertain spend against both global windows; never free uncertain spend on disconnect/restart or retry. Before admission, also reserve the same conservative operation ceiling in every UTC day/month in which a model call could start before its absolute deadline (at most two adjacent days/months for this 60-second operation). This avoids unreserved work across midnight without a per-call network reauthorization protocol. Settle reported usage by model-call start time; keep full uncertain reservations in affected windows when attribution is unknown. This is the application ledger policy, not a guarantee about the provider invoice date. Test boundary races.
 - Enforce caller-granted allowance before every provider call, including retries, compaction and guard refusal usage. No overlapping SDK/graph retries or automatic cross-model fallback. Reconcile once idempotently, with pricing version and estimated/reported/uncertain amounts; repeated callbacks cannot double-charge or refund.
-- Offline production grading has its own explicitly granted batch budget and is disabled until invoked. It is not a visitor operation or an implicit unlimited background cost. Development/acceptance evals retain the separate initial USD 10 whole-campaign policy from phase 6; do not reset that allowance per issue/worktree/CI run.
+- Offline production grading has its own explicitly granted batch budget and is disabled until invoked. It is not a visitor operation or an implicit unlimited background cost. Development/acceptance evals have their own phase-7 campaign of USD 4.00 ([evals.md](evals.md), Run policy and budgets), separate from phase 6's campaign; do not reset that allowance per issue/worktree/CI run.
+- Development uses a fake model by default. The local AI service and development stacks never call the paid provider unless explicitly enabled through `harness/with-secrets.mjs` with a flag, and then under a development runtime ceiling of about USD 0.25 per UTC day. Tests and Playwright use fakes.
 
 ## Context, usage UI and slash commands
 
@@ -168,7 +171,7 @@ apps/ai-service/
     generated/control_api/              # native generated API control client
     schemas/{requests.py,responses.py}
   tests/{unit/,integration/}
-  evals/{promptfooconfig.yaml,datasets/,graders/}
+  evals/                                 # only if needed: HTTP-specific cases, never the phase-6 catalogue
 
 packages/llm-agent/src/llm_agent/
   context/{history.py,tokens.py,compact.py}    # extend phase-6 context entry
@@ -177,6 +180,7 @@ packages/llm-agent/src/llm_agent/
   observability/{__init__.py,tracing.py,telemetry.py}
   observability/pseudonymization/{__init__.py,policy.py,detector.py}
   # existing graph/stages/model gateway/read tools remain the shared implementation
+packages/llm-agent/evals/                # phase-7 paid cases join the phase-6 runner, budget module and ledger
 
 apps/api/src/
   modules/chat/{index.ts,routes.ts,identity.ts,runtime-client.ts}
@@ -201,9 +205,9 @@ Add FastAPI's Dockerfile/Compose profile, configurable addresses, worktree slots
 
 ## Testing and acceptance
 
-Follow [evals.md](evals.md): deterministic tests first for contracts, ownership, state, grants, quotas/reservations, bot checks, deletion and failures; fictional eval cases before compact/masking behaviour. Ordinary tests use fakes. EN/CS quality gates from phase 6 remain required; do not rerun automatic reference-model sweeps.
+Follow [evals.md](evals.md): deterministic tests first for contracts, ownership, state, grants, quotas/reservations, bot checks, deletion and failures, including the mechanical C01/C02/C08 scenarios; fictional eval cases before compact/masking behaviour. Ordinary tests use fakes. EN/CS quality gates from phase 6 remain required; do not rerun automatic reference-model sweeps.
 
-Per issue, run only affected paid cases with recorded scope. At the phase PR into `master`, run the complete affected phase-6 suite plus the implemented phase-7 extension, three repeats, then owner human grading. Preserve the existing workflow: opened/reopened/ready-for-review on affected master PRs, or explicit manual dispatch; no charged run on each push or issue PR into the phase branch. Share the initial campaign allowance and saved-answer/regrade/secret-wrapper rules.
+Per issue, run only affected paid cases with recorded scope. While a prompt or schema is still changing, screen with 1 repeat without the judge, then 1 judged repeat; only the final version's run with 3 repeats and the pinned judge counts for the issue's gate, and screening answers are never pooled into a gate. A rerun of affected phase-6 cases during issue work runs only their code-graded critical cases; judged ordinary cases wait for the phase-PR run (the #182 precedent). At the phase PR into `master`, run the complete phase-6 suite plus the implemented phase-7 extension, three repeats, in one run of the Python agent runner, then owner human grading on 12 answers taken from that stored run. The Python agent eval job runs on a PR into `master` when it is opened/reopened/marked ready and the change touches the agent package, its prompts/evals or the API operations it calls, or by explicit manual dispatch; no charged run on each push or issue PR into the phase branch. Keep the saved-answer/regrade/secret-wrapper rules and the phase-6 cost controls (batch judge, caching, per-chunk reservation, early stop, deadline).
 
 Owner acceptance records the final model/effort, measured ARM64 resource envelope or explicit metadata-only fallback, Turnstile/Langfuse configuration, 30-day deletion proof, real browser recovery and the linked human score record. An approval click or passing fake suite is not evidence of paid quality, production capacity or privacy perfection. Missing keys, exhausted budget and unperformed server measurements remain pending.
 
