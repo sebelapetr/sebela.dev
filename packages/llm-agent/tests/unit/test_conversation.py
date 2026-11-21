@@ -512,23 +512,52 @@ PATHOLOGICAL = (
 )
 
 
+def _processor_seconds(question: str, times: int) -> float:
+    """The processor time of this process that choosing the language `times` times takes."""
+    history = (exchange(language="cs"),)
+    started = time.process_time()
+    for _ in range(times):
+        select_language(question, history)
+    return time.process_time() - started
+
+
 @pytest.mark.parametrize("prefix", PATHOLOGICAL, ids=range(len(PATHOLOGICAL)))
-def test_choosing_the_language_takes_bounded_time_on_the_longest_question(prefix: str) -> None:
-    question = (prefix + " x")[: MAX_QUESTION_CHARS - 1] + "x"
+def test_choosing_the_language_grows_linearly_up_to_the_longest_question(prefix: str) -> None:
+    def question_of(size: int) -> str:
+        return (prefix + " x")[: size - 1] + "x"
+
+    quarter = question_of(MAX_QUESTION_CHARS // 4)
+    whole = question_of(MAX_QUESTION_CHARS)
 
     def expire(_signum: int, _frame: object) -> None:
-        raise TimeoutError("select_language exceeded 1 s")
+        raise TimeoutError("choosing the language hangs")
 
+    # The growth from a quarter of the longest question to all of it, not a limit on the time, so
+    # a busy machine or the coverage tracer, which makes every line slower by a similar factor,
+    # does not fail the test: four times the length takes about four times as long when the work
+    # is linear and sixteen times when it is quadratic (docs/testing.md, Coverage). It is measured
+    # in processor time of this process, which the other processes on the machine do not take
+    # from. After a warm-up of both lengths, the quarter is chosen as often as it takes for a
+    # sample to last 20 ms, so a short pause does not decide the ratio, and the whole as often
+    # again; the fastest of three rounds, taken in turns, is the least disturbed. A limit of eight
+    # catches quadratic or worse growth. Catastrophic backtracking never returns: the alarm, a
+    # guard against a hang only and no limit on the speed, ends the test then.
     previous = signal.signal(signal.SIGALRM, expire)
-    signal.setitimer(signal.ITIMER_REAL, 1.0)
+    signal.setitimer(signal.ITIMER_REAL, 60.0)
     try:
-        started = time.perf_counter()
-        select_language(question, (exchange(language="cs"),))
-        elapsed = time.perf_counter() - started
+        _processor_seconds(quarter, 1)
+        _processor_seconds(whole, 1)
+        times = 1
+        while _processor_seconds(quarter, times) < 0.02:
+            times *= 2
+        fastest_quarter = fastest_whole = float("inf")
+        for _ in range(3):
+            fastest_quarter = min(fastest_quarter, _processor_seconds(quarter, times))
+            fastest_whole = min(fastest_whole, _processor_seconds(whole, times))
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
-    assert elapsed < 0.5
+    assert fastest_whole / fastest_quarter < 8
 
 
 @pytest.mark.parametrize("question", TO_CZECH)
