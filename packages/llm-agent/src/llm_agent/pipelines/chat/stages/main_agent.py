@@ -1,8 +1,10 @@
 """Main Agent: Haiku 5.5 at medium effort answers with the read tools and returns a draft.
 
 The draft is held back for the Output Guard. The loop is bounded by the decision and tool caps
-(restricted after an `UNCERTAIN` verdict): a decision that still asks for tools when no further
-decision is allowed stops as `main_decisions`, and more tool requests than the cap as `tool_calls`.
+(restricted after an `UNCERTAIN` verdict). The last allowed decision is answer-only: the tools
+stay defined but the model may not call one, so it answers from the evidence already read. A
+reply that still asks for tools then stops as `main_decisions`, and more tool requests than the
+cap as `tool_calls`.
 A provider refusal or a `refused` draft declines the request; anything that is not a valid draft
 stops as `invalid_output`.
 
@@ -126,6 +128,8 @@ async def _loop(execution: Execution, context: _Context, *, uncertain: bool) -> 
             messages,
             schema=DRAFT_SCHEMA,
             tools=TOOL_SPECS,
+            # The last allowed decision may not ask for tools: it answers from what was read.
+            answer_only=decision == decisions,
             input_cap=limits.main_input_tokens,
             output_cap=limits.main_output_tokens,
             attempt_s=limits.main_attempt_s,
@@ -140,6 +144,7 @@ async def _loop(execution: Execution, context: _Context, *, uncertain: bool) -> 
             draft = _draft(reply_text(reply))
             return None if draft.outcome == "refused" else draft
         if decision == decisions:
+            # Only if the provider ignores the answer-only tool choice.
             raise LimitReached("main_decisions")
         if executed + len(calls) > tool_cap:
             raise LimitReached("tool_calls")

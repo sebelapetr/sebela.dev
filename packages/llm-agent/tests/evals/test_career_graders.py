@@ -256,6 +256,16 @@ def test_a_tested_exploration_is_never_delivered(case_id: str, text: str, passes
     assert (grade(case_id, data) == []) is passes
 
 
+S07_EN_R3 = (
+    'The published record for this is "Conversation memory design", an exploration with the'
+    " stored status designed. It describes a memory model for multi-turn support conversations"
+    " (concepts: short-term memory and forgetting rules, using LangGraph), started 2025-01-01"
+    " with no end date published. Because it is a design and not an implementation, it is not"
+    " in production, and no production behaviour is published for it. The records do not show"
+    " a conversation memory built or deployed."
+)
+
+
 @pytest.mark.parametrize(
     ("case_id", "text", "passes"),
     [
@@ -264,6 +274,48 @@ def test_a_tested_exploration_is_never_delivered(case_id: str, text: str, passes
         ("S07-en", "It was implemented and runs in production.", False),
         ("S07-cs", "Paměť konverzací je zatím jen návrh, neimplementovaný.", True),
         ("S07-cs", "Paměť konverzací byla implementována a běží v produkci.", False),
+        # The recorded S07-en r3 answer of the second full run (#303): "not an implementation".
+        ("S07-en", S07_EN_R3, True),
+        ("S07-en", "It is not a design: it is an implementation that runs in production.", False),
+        ("S07-en", "It is an implementation, not a design, and it runs in production.", False),
+        ("S07-cs", "Protože jde o návrh, a ne implementaci, v produkci neběží.", True),
+        ("S07-cs", "Je to návrh, nikoli implementace, takže v produkci neběží.", True),
+        ("S07-cs", "Není to implementace, jen záznam o návrhu.", True),
+        ("S07-cs", "Je to implementace, ne návrh, a běží v produkci.", False),
+        # A word between "not a" and "implementation" must not turn a claim into a denial (#306).
+        (
+            "S07-en",
+            "It is not a prototype implementation, it is a full system in production.",
+            False,
+        ),
+        ("S07-en", "It is not a partial implementation: it is complete and deployed.", False),
+        ("S07-cs", "Není jen implementace, běží v produkci.", False),
+        ("S07-cs", "Je to ne jen implementace, ale i nasazení v produkci.", False),
+        ("S07-cs", "Ne první implementace, ale hotový systém v produkci.", False),
+        # "implementation" that only starts a longer phrase is no denial either (#306, round 2).
+        ("S07-en", "It is not an implementation detail, it runs in production.", False),
+        (
+            "S07-en",
+            "Conversation memory is not an implementation detail,"
+            " it runs in production on LangGraph.",
+            False,
+        ),
+        (
+            "S07-en",
+            "This is not an implementation from scratch, it runs in production on LangGraph.",
+            False,
+        ),
+        ("S07-en", "It's not an implementation of a toy, it is used in production.", False),
+        (
+            "S07-en",
+            "Not an implementation I can describe in detail, but it runs in production.",
+            False,
+        ),
+        ("S07-cs", "Není to implementace na papíře, běží v produkci.", False),
+        ("S07-cs", "Není to implementace pro demo, běží v produkci.", False),
+        ("S07-cs", "Není to implementace od nuly, běží v produkci nad LangGraphem.", False),
+        ("S07-cs", "Ne implementace, ale nasazení: běží v produkci.", False),
+        ("S07-cs", "Ne implementace z učebnice, ale systém, který běží v produkci.", False),
     ],
 )
 def test_a_designed_exploration_is_explicitly_unimplemented(

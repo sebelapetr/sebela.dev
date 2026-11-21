@@ -3,21 +3,23 @@
 A stage asks for one completion; this module owns everything around it. The provider-facing model
 is built per attempt by a `ModelFactory` from a validated `ModelCall`, so tests substitute scripted
 models and production uses `anthropic_model_factory()` (LangChain's ChatAnthropic with SDK retries
-disabled). Every attempt is admitted against the execution budget first and bounded by its stage
-timeout and the execution deadline, and is recorded as a `model.<stage>` span with its model,
-effort, attempt number and the provider-reported tokens (thinking tokens are part of the output
-tokens; the provider does not report them separately).
+disabled; an answer-only call keeps its tools defined with `tool_choice` `none`). Every attempt is
+admitted against the execution budget first and bounded by its stage timeout and the execution
+deadline, and is recorded as a `model.<stage>` span with its model, effort, attempt number and the
+provider-reported tokens (thinking tokens are part of the output tokens; the provider does not
+report them separately). A reply the stage's validity check rejects is an `invalid` attempt and
+uses the single retry exactly as a transient failure does.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Protocol
 
 import anthropic
 from langchain_core.messages import BaseMessage
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from llm_agent.context.tokens import request_tokens
 from llm_agent.models.config import STAGES, Effort, Stage
@@ -48,6 +50,15 @@ class ModelCall(BaseModel):
     tools: tuple[dict[str, Any], ...] = ()
     #: The JSON schema the provider must return (structured output).
     response_schema: dict[str, Any]
+    #: The tools stay defined (the history's tool calls need them) but the model may not call one
+    #: (`tool_choice` `none`): the reply is a final answer. Used for the last Main decision.
+    answer_only: bool = False
+
+    @model_validator(mode="after")
+    def _answer_only_needs_tools(self) -> ModelCall:
+        if self.answer_only and not self.tools:
+            raise ValueError("answer_only applies to a call with tools")
+        return self
 
 
 class ChatModel(Protocol):
@@ -78,7 +89,8 @@ def anthropic_model_factory() -> ModelFactory:
         }
         model = ChatAnthropic(**settings)
         if call.tools:
-            bound: ChatModel = model.bind_tools(list(call.tools))
+            choice = {"type": "none"} if call.answer_only else None
+            bound: ChatModel = model.bind_tools(list(call.tools), tool_choice=choice)
             return bound
         return model
 
@@ -103,10 +115,19 @@ class Gateway:
         *,
         schema: Mapping[str, Any],
         tools: Sequence[Mapping[str, Any]] = (),
+        answer_only: bool = False,
+        valid: Callable[[BaseMessage], bool] | None = None,
         input_cap: int,
         output_cap: int,
         attempt_s: float,
     ) -> BaseMessage:
+        """One completion within the execution's admission, deadline and single retry.
+
+        `answer_only` forbids tool calls on this attempt (the tools stay defined). `valid`, when
+        given, judges a reply: an invalid one is recorded as an `invalid` attempt and retried once
+        under the same retry allowance, deadline and admission as a transient failure; when no
+        retry is left the invalid reply is returned for the stage to reject.
+        """
         config = STAGES[stage]
         attempt = 0
         while True:
@@ -129,6 +150,7 @@ class Gateway:
                     timeout_s=max(timeout, 0.001),
                     tools=tuple(dict(tool) for tool in tools),
                     response_schema=dict(schema),
+                    answer_only=answer_only,
                 )
             )
             span = f"model.{stage}"
@@ -159,8 +181,15 @@ class Gateway:
                     if usage
                     else _NO_TOKENS
                 )
-                self._tracer.finish(span, "ok", started, **labels, **tokens)
-                return reply
+                if valid is None or valid(reply):
+                    self._tracer.finish(span, "ok", started, **labels, **tokens)
+                    return reply
+                self._tracer.finish(span, "invalid", started, **labels, **tokens)
+                # The pause the retry would need must fit the deadline, as for a transient failure.
+                if self._deadline.remaining() <= RETRY_BACKOFF_S or not self._budget.allow_retry():
+                    return reply
+                await asyncio.sleep(RETRY_BACKOFF_S)
+                continue
             status = "transient_error" if is_transient(failure) else "error"
             if isinstance(failure, TimeoutError):
                 status = "timeout"
