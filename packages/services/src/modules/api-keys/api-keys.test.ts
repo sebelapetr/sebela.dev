@@ -5,6 +5,16 @@ import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/test
 
 import { createApiKeyService, type ApiKeyService } from "./index.js";
 
+// A key is `sebela_<16 hex public id>_<43 base64url secret>`; the secret itself may contain `_`.
+const KEY_PARTS = /^(sebela_[0-9a-f]{16}_)([A-Za-z0-9_-]{43})$/;
+
+/** The public part and the secret of a key; throws on anything not key-shaped. */
+function partsOf(key: string): { head: string; secret: string } {
+  const [, head, secret] = KEY_PARTS.exec(key) ?? [];
+  if (head === undefined || secret === undefined) throw new Error("Not a key-shaped value.");
+  return { head, secret };
+}
+
 describe("API-key service", () => {
   let database: TemporaryDatabase;
   let persistence: Persistence;
@@ -39,7 +49,8 @@ describe("API-key service", () => {
 
     const entry = listed.find((key) => key.id === created.metadata.id);
     expect(entry).toEqual(created.metadata);
-    const secret = created.key.split("_")[2] ?? "";
+    const { secret } = partsOf(created.key);
+    expect(JSON.stringify(listed)).not.toContain(created.key);
     expect(JSON.stringify(listed)).not.toContain(secret);
     for (const key of listed) {
       expect(Object.keys(key).sort()).toEqual([
@@ -69,8 +80,8 @@ describe("API-key service", () => {
 
   it("refuses missing, malformed, unknown and tampered keys alike", async () => {
     const created = await apiKeys.createKey("other");
-    const [prefix, publicId, secret = ""] = created.key.split("_");
-    const tampered = `${prefix ?? ""}_${publicId ?? ""}_${secret.slice(0, -1)}${secret.endsWith("A") ? "B" : "A"}`;
+    const { head, secret } = partsOf(created.key);
+    const tampered = `${head}${secret.slice(0, -1)}${secret.endsWith("A") ? "B" : "A"}`;
     const unknown = `sebela_${"0".repeat(16)}_${"A".repeat(43)}`;
 
     for (const presented of [undefined, "", "not-a-key", `${created.key}x`, tampered, unknown]) {

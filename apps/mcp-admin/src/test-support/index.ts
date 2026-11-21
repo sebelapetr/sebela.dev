@@ -19,6 +19,23 @@ export const KEY_A = `sebela_${"a".repeat(16)}_${"A".repeat(43)}`;
 export const KEY_B = `sebela_${"b".repeat(16)}_${"B".repeat(43)}`;
 /** Key-shaped, but never valid. */
 export const UNKNOWN_KEY = `sebela_${"0".repeat(16)}_${"Z".repeat(43)}`;
+/**
+ * Key-shaped and never valid, with `_` and `-` in its secret (the base64url alphabet allows both)
+ * and `_` as its first character, so the secret cannot be found by splitting the key on `_`.
+ */
+export const UNDERSCORE_SECRET_KEY = `sebela_${"0".repeat(16)}_${"_u".repeat(20)}-_1`;
+
+const KEY_SHAPE = /^sebela_[0-9a-f]{16}_([A-Za-z0-9_-]{43})$/;
+
+/**
+ * The secret part of a key: everything after `sebela_<16 hex public id>_`, whatever characters it
+ * holds. Throws on anything not key-shaped, so a leak assertion never silently checks a fragment.
+ */
+export function secretOf(key: string): string {
+  const secret = KEY_SHAPE.exec(key)?.[1];
+  if (secret === undefined) throw new Error("Not a key-shaped value.");
+  return secret;
+}
 
 export const fictionalPerson = {
   name: "Ilsa Marrow",
