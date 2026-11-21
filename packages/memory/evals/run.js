@@ -89,6 +89,7 @@ export function parseOptions(argv) {
       "max-cost-usd": { type: "string" },
       "min-interval-ms": { type: "string" },
       plan: { type: "boolean" },
+      variant: { type: "string" },
     },
   });
   const ceiling =
@@ -114,6 +115,7 @@ export function parseOptions(argv) {
     ceilingUsd: ceiling,
     planOnly: values.plan ?? false,
     minIntervalMs: interval,
+    variant: "vector",
   };
 }
 
@@ -131,6 +133,20 @@ export function providerEnvironment(options) {
     RETRIEVAL_QUERY_CACHE_FILE: queryCacheFile,
   };
 }
+
+/**
+ * @typedef {{ metric: string, value: number | null, minimum?: number, maximum?: number }} GateFailure
+ * @typedef {{ frozen: boolean, applies?: boolean, reason?: string, passed?: boolean, failures?: GateFailure[] }} Gate
+ */
+
+/**
+ * The gate of a run's metrics against the thresholds (not yet implemented).
+ *
+ * @type {(thresholds: unknown, metrics: unknown, run: { variant: string, scope: string }) => Gate}
+ */
+export const gateOf = () => {
+  throw new Error("not implemented");
+};
 
 /**
  * The knowledge command's arguments that ingest each fictional supplemental document of the

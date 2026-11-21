@@ -94,12 +94,17 @@ describe("the knowledge command", () => {
     expect((await run(["pending"])).json()).toEqual({ pending: 0, failed: 0 });
   });
 
-  it("rebuilds the portfolio from the embedding cache without embedding again", async () => {
+  it("rebuilds the index from the embedding cache without embedding again", async () => {
     const { code, json } = await run(["rebuild"]);
     expect(code).toBe(0);
-    const report = json() as { sources: number; updated: number; embedded: number };
-    expect(report.updated).toBe(report.sources);
-    expect(report.embedded).toBe(0);
+    const report = json() as {
+      portfolio: { sources: number; updated: number; embedded: number };
+      documents: { restored: number; embedded: number };
+    };
+    expect(report.portfolio.updated).toBe(report.portfolio.sources);
+    expect(report.portfolio.embedded).toBe(0);
+    // Without approved documents the rebuild needs no private storage.
+    expect(report.documents).toMatchObject({ restored: 0, embedded: 0 });
   });
 
   it("prints each question's candidate pool by its ID", async () => {
@@ -282,6 +287,44 @@ describe("the knowledge command's supplemental documents", () => {
     expect(missing.err()).not.toContain(folder);
   });
 
+  it("rebuilds the approved document, withdraws it and deletes the document", async () => {
+    const approved = (
+      (await run(["list"])).json() as { documents: (Version & { sourceId: string })[] }
+    ).documents.find((document) => document.status === "approved");
+    if (approved === undefined) throw new Error("The handbook was not approved.");
+    const supplemental = async () =>
+      (await backend.services.knowledge.search({ query: "refund request" })).passages.filter(
+        (passage) => passage.sourceKind === "supplemental",
+      );
+
+    const rebuilt = await run(["rebuild"]);
+    expect(rebuilt.code).toBe(0);
+    expect(rebuilt.json()).toMatchObject({ documents: { restored: 1, missing: 0, conflicts: 0 } });
+    expect(await supplemental()).toHaveLength(1);
+
+    const withdrawn = await run(["withdraw", approved.contentHash]);
+    expect(withdrawn.code).toBe(0);
+    expect(withdrawn.json()).toMatchObject({
+      contentHash: approved.contentHash,
+      status: "withdrawn",
+    });
+    expect(await supplemental()).toEqual([]);
+    const again = await run(["withdraw", approved.contentHash]);
+    expect(again.code).toBe(1);
+    expect(again.err()).toMatch(/withdrawn/);
+
+    const deleted = await run(["delete", "studio-handbook"]);
+    expect(deleted.code).toBe(0);
+    expect(deleted.json()).toEqual({ sourceId: "document:studio-handbook", deletedVersions: 1 });
+    const listed = (await run(["list"])).json() as { documents: { sourceId: string }[] };
+    expect(listed.documents.map((document) => document.sourceId)).not.toContain(
+      "document:studio-handbook",
+    );
+    const unknown = await run(["delete", "studio-handbook"]);
+    expect(unknown.code).toBe(1);
+    expect(unknown.err()).toMatch(/no document|not found/i);
+  });
+
   it("refuses a file over the size limit before reading it", async () => {
     // A sparse 3 GiB file: reading it whole would fail before any size check.
     const huge = join(folder, "huge.md");
@@ -308,6 +351,10 @@ describe("the knowledge command's supplemental documents", () => {
       ["show"],
       ["approve"],
       ["reject", "a", "b"],
+      ["withdraw"],
+      ["withdraw", "a", "b"],
+      ["delete"],
+      ["delete", "a", "b"],
     ]) {
       const { code, err } = await run(args);
       expect(code, args.join(" ")).toBe(2);

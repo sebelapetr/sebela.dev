@@ -114,6 +114,14 @@ export interface RetrievalNearestQuery {
   readonly limit: number;
 }
 
+/** A full-text query over the chunks: any of the query's words, ranked by `ts_rank`. */
+export interface RetrievalFullTextQuery {
+  readonly query: string;
+  /** Only chunks of sources with these content kinds; every kind when absent. */
+  readonly kinds?: readonly string[];
+  readonly limit: number;
+}
+
 /** A chunk found by cosine distance, with its source. */
 export interface RetrievalNearestChunk {
   readonly sourceId: string;
@@ -125,7 +133,7 @@ export interface RetrievalNearestChunk {
   readonly text: string;
   readonly headingPath: readonly string[];
   readonly indexedAt: Date;
-  /** 1 minus the cosine distance. */
+  /** 1 minus the cosine distance; for a full-text match, its `ts_rank`. */
   readonly similarity: number;
 }
 
@@ -150,10 +158,25 @@ export interface RetrievalUsageTotals {
 /**
  * Where a supplemental document version stands: `pending` waits for the owner's decision,
  * `blocked` has sensitivity findings and can never be approved, `approved` is the indexed version
- * of its source until a revision supersedes it, and `rejected` was refused by the owner.
+ * of its source until a revision supersedes it, `rejected` was refused by the owner and
+ * `withdrawn` was taken out of search by the owner after its approval. Rejected, superseded and
+ * withdrawn are final.
  */
 export type RetrievalDocumentStatus =
-  "pending" | "blocked" | "approved" | "rejected" | "superseded";
+  "pending" | "blocked" | "approved" | "rejected" | "superseded" | "withdrawn";
+
+/**
+ * A chunk of an approved version that contradicts the structured portfolio facts and is therefore
+ * left out of search: its kind (`date`, `role_title`, `technology`), the chunk's ordinal, the
+ * portfolio source it contradicts, the claim found in the chunk and the fact it contradicts.
+ */
+export interface RetrievalDocumentConflict {
+  readonly kind: string;
+  readonly chunkOrdinal: number;
+  readonly sourceId: string;
+  readonly claim: string;
+  readonly fact: string;
+}
 
 /** A sensitivity finding of a document version: its kind and line, never the detected value. */
 export interface RetrievalDocumentFinding {
@@ -174,6 +197,8 @@ export interface RetrievalDocumentVersion {
   readonly storageKey: string | null;
   readonly status: RetrievalDocumentStatus;
   readonly findings: readonly RetrievalDocumentFinding[];
+  /** The conflicts recorded when it was approved or last rebuilt; empty before. */
+  readonly conflicts: readonly RetrievalDocumentConflict[];
   readonly sectionCount: number;
   readonly chunkCount: number;
   readonly createdAt: Date;
@@ -184,7 +209,7 @@ export interface RetrievalDocumentVersion {
 /** A version as ingestion records it: waiting for a decision, or blocked by findings. */
 export type NewRetrievalDocumentVersion = Omit<
   RetrievalDocumentVersion,
-  "status" | "createdAt" | "decidedAt"
+  "status" | "createdAt" | "decidedAt" | "conflicts"
 > & { readonly status: "pending" | "blocked" };
 
 /**
@@ -223,6 +248,11 @@ export interface RetrievalPersistence {
   usageSince(since: Date): Promise<RetrievalUsageTotals>;
   /** The nearest chunks of non-stale versions by cosine distance, nearest first. */
   nearest(query: RetrievalNearestQuery): Promise<RetrievalNearestChunk[]>;
+  /**
+   * The chunks of non-stale versions matching any word of the query in the `simple`, unaccented
+   * text search configuration, best `ts_rank` first; the rank is reported as the similarity.
+   */
+  fullText(query: RetrievalFullTextQuery): Promise<RetrievalNearestChunk[]>;
   /** Removes and marks stale the named sources and queues the items, in one transaction. */
   scheduleWork(work: RetrievalScheduledWork): Promise<void>;
   /** The newest work queued so far; covers every `scheduleWork` committed before it. */
@@ -246,12 +276,39 @@ export interface RetrievalPersistence {
   /** Every recorded version, newest first. */
   documentVersions(): Promise<RetrievalDocumentVersion[]>;
   /**
-   * Approves the pending version with this content hash and stores `source` (its embedded
-   * version, which must be of the same source and carry the hash as its version) in one
-   * transaction; the source's earlier approved version becomes superseded. Returns `false` and
-   * stores nothing when no pending version has the hash.
+   * Approves the pending version with this content hash with its recorded conflicts and stores
+   * `source` (its embedded version, which must be of the same source and carry the hash as its
+   * version, without the conflicting chunks) in one transaction; the source's earlier approved
+   * version becomes superseded and forgets its storage key, so its chunks and original are no
+   * longer referenced. Returns `false` and stores nothing when no pending version has the hash.
    */
-  approveDocumentVersion(contentHash: string, source: RetrievalSourceVersion): Promise<boolean>;
+  approveDocumentVersion(
+    contentHash: string,
+    source: RetrievalSourceVersion,
+    conflicts?: readonly RetrievalDocumentConflict[],
+  ): Promise<boolean>;
+  /**
+   * Withdraws the approved version with this content hash: in one transaction it becomes
+   * `withdrawn`, forgets its storage key and its source leaves the index. Returns `false` when no
+   * approved version has the hash.
+   */
+  withdrawDocumentVersion(contentHash: string): Promise<boolean>;
+  /**
+   * Deletes every version of the source and its indexed chunks in one transaction; returns the
+   * storage keys the versions still held, so their originals can be deleted. Empty when the source
+   * had no versions.
+   */
+  deleteDocumentSource(sourceId: string): Promise<string[]>;
+  /**
+   * Stores `source` again for the approved version with this content hash and records its
+   * conflicts, in one transaction that holds the version's row; returns `false` and stores nothing
+   * when the version is no longer approved (it was withdrawn, superseded or deleted meanwhile).
+   */
+  reindexApprovedDocument(
+    contentHash: string,
+    source: RetrievalSourceVersion,
+    conflicts: readonly RetrievalDocumentConflict[],
+  ): Promise<boolean>;
   /**
    * Rejects the pending or blocked version with this content hash and forgets its storage key;
    * returns `false` when there is no such version.
@@ -475,6 +532,11 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         .returning({ id: documentVersions.id });
       return rejected.length > 0;
     },
+
+    withdrawDocumentVersion: () => Promise.reject(new Error("not implemented")),
+    deleteDocumentSource: () => Promise.reject(new Error("not implemented")),
+    reindexApprovedDocument: () => Promise.reject(new Error("not implemented")),
+    fullText: () => Promise.reject(new Error("not implemented")),
 
     async removeSourcesExcept(sourceKind, sourceIds) {
       const removed = await db
@@ -702,6 +764,7 @@ function documentVersionOf(row: typeof documentVersions.$inferSelect): Retrieval
     storageKey: row.storageKey,
     status,
     findings: row.findings.map(({ kind, line }) => ({ kind, line })),
+    conflicts: [],
     sectionCount: row.sectionCount,
     chunkCount: row.chunkCount,
     createdAt: row.createdAt,

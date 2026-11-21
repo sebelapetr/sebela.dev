@@ -400,6 +400,9 @@ const describingKnowledge: KnowledgeService = {
   showDocument: documentationOnly,
   approveDocument: documentationOnly,
   rejectDocument: documentationOnly,
+  withdrawDocument: documentationOnly,
+  deleteDocument: documentationOnly,
+  rebuildIndex: documentationOnly,
 };
 
 /**

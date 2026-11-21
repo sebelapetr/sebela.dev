@@ -19,11 +19,20 @@ import {
 } from "../ports/index.js";
 import { createSpend } from "../spend/index.js";
 
+/**
+ * How the candidate pool is found: `vector` (the deployed search) by cosine distance of the
+ * embedded query, `fulltext` (the evals' baseline) by text search rank without calling the provider
+ * and without the relevance floor, which is a cosine similarity.
+ */
+export type SearchVariant = "vector" | "fulltext";
+
 export interface RetrieverOptions {
   readonly store: RetrievalStore;
   readonly embedder: Embedder;
   readonly config: RetrievalConfig;
   readonly now?: () => Date;
+  /** `vector` when absent. */
+  readonly variant?: SearchVariant;
 }
 
 export interface Retriever {

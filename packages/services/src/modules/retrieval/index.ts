@@ -115,6 +115,47 @@ export interface KnowledgeService {
   approveDocument(contentHash: string): Promise<DocumentApproval>;
   /** Rejects a pending or blocked version and deletes its original; a decided one is a `conflict`. */
   rejectDocument(contentHash: string): Promise<DocumentVersion>;
+  /**
+   * Withdraws the approved version with this content hash: its source leaves search at once and
+   * its original is deleted. Needs no provider. A version that is not approved is a `conflict`;
+   * an unknown hash `not_found`.
+   */
+  withdrawDocument(contentHash: string): Promise<DocumentVersion>;
+  /**
+   * Deletes the supplemental document with this slug completely: every version, its chunks and
+   * every original. Needs no provider. A slug without versions is `not_found`.
+   */
+  deleteDocument(slug: string): Promise<DocumentDeletion>;
+  /**
+   * Rebuilds the whole index from the current portfolio and the retained originals of the
+   * approved versions, keeping each version's approval; a pending, blocked, rejected, superseded
+   * or withdrawn version is never published, and a supplemental source without an approved
+   * version leaves the index. Conflicts are checked again against the current facts. An approved
+   * version whose original is gone or changed is counted `missing` and leaves search.
+   */
+  rebuildIndex(): Promise<IndexRebuild>;
+}
+
+export interface DocumentDeletion {
+  readonly sourceId: string;
+  /** How many versions were deleted. */
+  readonly deletedVersions: number;
+}
+
+export interface IndexRebuild {
+  readonly portfolio: IndexReport;
+  readonly documents: {
+    /** Approved versions stored again. */
+    readonly restored: number;
+    /** Approved versions whose original was gone or no longer had its hash. */
+    readonly missing: number;
+    /** Conflicting chunks left out of search. */
+    readonly conflicts: number;
+    readonly embedded: number;
+    readonly reused: number;
+    readonly tokens: number;
+    readonly costUsd: number;
+  };
 }
 
 /** An ingested document version as the owner reviews it; the storage key stays inside. */
@@ -197,13 +238,20 @@ export function createKnowledgeService(
     search: (request) => provider(() => ready().retriever.search(request)),
     candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
+    rebuildIndex: () => Promise.reject(new Error("not implemented")),
     ...createDocumentReview(sources.store, options, () => ready().indexer),
   };
 }
 
 type DocumentReview = Pick<
   KnowledgeService,
-  "ingestDocument" | "listDocuments" | "showDocument" | "approveDocument" | "rejectDocument"
+  | "ingestDocument"
+  | "listDocuments"
+  | "showDocument"
+  | "approveDocument"
+  | "rejectDocument"
+  | "withdrawDocument"
+  | "deleteDocument"
 >;
 
 /** The owner's review of supplemental documents: ingest, preview, approve and reject. */
@@ -374,6 +422,9 @@ function createDocumentReview(
       }
       return withoutKey(await versionOf(contentHash));
     },
+
+    withdrawDocument: () => Promise.reject(new Error("not implemented")),
+    deleteDocument: () => Promise.reject(new Error("not implemented")),
   };
 }
 
@@ -400,6 +451,7 @@ function withoutKey(version: RetrievalDocumentVersion): DocumentVersion {
     byteSize: version.byteSize,
     status: version.status,
     findings: version.findings,
+    conflicts: version.conflicts,
     sectionCount: version.sectionCount,
     chunkCount: version.chunkCount,
     createdAt: version.createdAt,
@@ -473,6 +525,11 @@ function narrowStore(persistence: RetrievalPersistence): RetrievalStore {
     usageSince: (since) => persistence.usageSince(since),
     nearest: async (query) =>
       (await persistence.nearest(query)).map((chunk) => ({
+        ...chunk,
+        contentKind: contentKindOf(chunk.contentKind),
+      })),
+    fullText: async (query) =>
+      (await persistence.fullText(query)).map((chunk) => ({
         ...chunk,
         contentKind: contentKindOf(chunk.contentKind),
       })),
