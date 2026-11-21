@@ -8,7 +8,66 @@ import type { HomepageProfile } from "../../profile";
 export type StructuredProfile = Pick<
   HomepageProfile,
   "name" | "headline" | "shortBio" | "photo" | "contact"
->;
+> & {
+  readonly experiences: readonly StructuredRole[];
+  readonly technologies: readonly { readonly name: string }[];
+};
+
+/** A role of the person's, as the person's structured data reads it. */
+export interface StructuredRole {
+  readonly slug: string;
+  readonly title: string;
+  readonly kind: "main_job" | "side_project" | "own_business";
+  readonly endedOn: string | null;
+  readonly summary: string;
+  readonly organization: { readonly name: string; readonly website: string | null };
+}
+
+export interface StructuredExperience {
+  readonly name: string;
+  readonly headline: string;
+  readonly experiences: readonly StructuredRole[];
+  readonly technologies: readonly { readonly name: string }[];
+}
+
+export interface StructuredServices {
+  readonly name: string;
+  readonly headline: string;
+  readonly intro: string | null;
+  readonly services: readonly {
+    readonly slug: string;
+    readonly name: string;
+    readonly summary: string;
+    readonly audience: string;
+  }[];
+}
+
+export interface StructuredCv {
+  readonly name: string;
+  readonly headline: string;
+  readonly shortBio: string;
+  readonly contact: HomepageProfile["contact"];
+  readonly experiences: readonly StructuredRole[];
+  readonly technologies: {
+    readonly primary: {
+      readonly core: readonly { readonly name: string }[];
+      readonly aiEngineeringFocus: readonly { readonly name: string }[];
+    };
+    readonly secondary: readonly { readonly name: string }[];
+  };
+}
+
+export function experienceStructuredData(origin: string, content: StructuredExperience): object {
+  throw new Error("not implemented", { cause: [origin, content] });
+}
+
+export function servicesStructuredData(origin: string, content: StructuredServices): object {
+  throw new Error("not implemented", { cause: [origin, content] });
+}
+
+export function cvStructuredData(origin: string, content: StructuredCv): object {
+  throw new Error("not implemented", { cause: [origin, content] });
+}
 
 /** The schema.org graph of the homepage on `origin`: a WebSite, a ProfilePage and a Person. */
 export function profileStructuredData(origin: string, profile: StructuredProfile): object {
