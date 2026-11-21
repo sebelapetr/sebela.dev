@@ -2,7 +2,7 @@
 
 // The question set and which of its cases the system can answer yet. A case whose capability is
 // not searchable is reported pending — never passed — until the slice that adds it
-// (.plan/09-rag/prd.md).
+// (.plan/done/09-rag/prd.md).
 import { readFileSync } from "node:fs";
 
 /**

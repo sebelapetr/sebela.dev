@@ -1,6 +1,6 @@
 // @ts-check
 
-// Retrieval metrics of the memory evals (.plan/09-rag/prd.md, Evals and measurement). Pure
+// Retrieval metrics of the memory evals (.plan/done/09-rag/prd.md, Evals and measurement). Pure
 // functions over source IDs and the dataset's graded relevance (2 = answers the question, 1 =
 // related context, absent = irrelevant); the runner and the Promptfoo grader share them.
 

@@ -4,7 +4,7 @@ The knowledge and retrieval layer: portfolio ingest, embedding indexing and pass
 
 ## What it is
 
-A library called only by the API backend through `@sebela/services` (dependency table in `docs/repository-structure.md`). It may import `@sebela/contracts` and `@sebela/config` only; it never imports `@sebela/db`. `packages/db` implements its persistence ports and `packages/services` composes it with them and the Voyage adapter (`.plan/09-rag/prd.md`).
+A library called only by the API backend through `@sebela/services` (dependency table in `docs/repository-structure.md`). It may import `@sebela/contracts` and `@sebela/config` only; it never imports `@sebela/db`. `packages/db` implements its persistence ports and `packages/services` composes it with them and the Voyage adapter (`.plan/done/09-rag/prd.md`).
 
 Its one outside runtime dependency is the PDF parser `pdfjs-dist`, pinned exactly at 6.5.438 (Apache-2.0 licence, Mozilla). It is plain JavaScript, so it runs unchanged on ARM64 in the API container (checked for #227). Its optional native canvas `@napi-rs/canvas`, used only to render pages, is excluded in `pnpm-workspace.yaml` (`ignoredOptionalDependencies`), because ingest only reads the text layer. A version change of the parser is a reviewed change of this pin.
 

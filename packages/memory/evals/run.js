@@ -1,6 +1,6 @@
 // @ts-check
 
-// Runs the retrieval evals of the knowledge base (.plan/09-rag/prd.md, Evals and measurement).
+// Runs the retrieval evals of the knowledge base (.plan/done/09-rag/prd.md, Evals and measurement).
 //
 //   node evals/run.js                  every case (paid: indexing and query embeddings; run it as
 //                                      `pnpm --filter @sebela/memory eval`, which supplies the key

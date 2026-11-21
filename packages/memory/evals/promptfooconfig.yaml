@@ -1,4 +1,4 @@
-# Retrieval evals of the knowledge base (.plan/09-rag/prd.md, Evals and measurement).
+# Retrieval evals of the knowledge base (.plan/done/09-rag/prd.md, Evals and measurement).
 #
 # Do not run this file directly: `node evals/run.js` starts the API on a temporary database seeded
 # with the fictional demo seed, indexes it, records the candidate pools and passes the route's
