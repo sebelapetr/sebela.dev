@@ -25,18 +25,25 @@ SLICE_03 = ("Q08", "Q09", "Q10", "Q11", "Q12", "Q13", "S05")
 SLICE_04 = ("Q17", "Q18", "S17")
 
 
-def test_the_first_four_slices_implement_exactly_their_62_cases() -> None:
+SLICE_05 = ("Q19", "Q20", "S09", "S12", "S13", "S14", "S15", "S16", "S18")
+
+
+def test_the_five_slices_implement_all_80_cases_and_none_is_pending() -> None:
     expected = {
         f"{family}-{language}"
-        for family in (*SLICE_01, *SLICE_02, *SLICE_03, *SLICE_04)
+        for family in (*SLICE_01, *SLICE_02, *SLICE_03, *SLICE_04, *SLICE_05)
         for language in ("en", "cs")
     }
     assert {case.id for case in implemented()} == expected
-    assert len(pending()) == 18
+    assert len(expected) == 80
+    assert pending() == ()
     assert {BY_ID[f"{family}-en"].slice for family in SLICE_02} == {"S02"}
     assert {BY_ID[f"{family}-cs"].slice for family in SLICE_03} == {"S03"}
     assert {BY_ID[f"{family}-{lang}"].slice for family in SLICE_04 for lang in ("en", "cs")} == {
         "S04"
+    }
+    assert {BY_ID[f"{family}-{lang}"].slice for family in SLICE_05 for lang in ("en", "cs")} == {
+        "S05"
     }
 
 

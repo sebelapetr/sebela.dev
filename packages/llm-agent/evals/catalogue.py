@@ -66,7 +66,7 @@ CRITICAL_FAMILIES: dict[str, tuple[Slice, str]] = {
 }
 
 #: The families whose cases this checkout implements (S01 / #178, S02 / #179, S03 / #180,
-#: S04 / #181).
+#: S04 / #181, S05 / #182): all 40.
 IMPLEMENTED_FAMILIES = frozenset(
     {
         *("Q01", "Q14", "S01", "S08", "S11", "S19"),
@@ -74,6 +74,7 @@ IMPLEMENTED_FAMILIES = frozenset(
         *("S02", "S03", "S04", "S06", "S07", "S10", "S20"),
         *("Q08", "Q09", "Q10", "Q11", "Q12", "Q13", "S05"),
         *("Q17", "Q18", "S17"),
+        *("Q19", "Q20", "S09", "S12", "S13", "S14", "S15", "S16", "S18"),
     }
 )
 

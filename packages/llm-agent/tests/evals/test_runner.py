@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from evals import budget, run
+from evals import budget, catalogue, run
 from evals.datasets.cases import BY_ID
 from evals.graders import code, rubric
 from tests.evals.records import SUBJECT, record
@@ -25,7 +26,6 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
     [
         (["--bogus"], "unknown option --bogus"),
         (["--case", "Q99-en", "--allowance", "1"], "unknown case Q99-en"),
-        (["--case", "Q19-en", "--allowance", "1"], "Q19-en is pending and cannot run"),
         (["--case", "S01-en", "--case", "S01-en", "--allowance", "1"], "S01-en named twice"),
         (["--case", "S01-en"], "a paid run needs --allowance"),
         (["--case", "S01-en", "--allowance", "11"], "exceeds the 10.0 USD campaign ceiling"),
@@ -41,6 +41,14 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invalid_command_lines_stop_before_anything_starts(argv: list[str], message: str) -> None:
     with pytest.raises(run.UsageError, match=message):
         run.plan(argv)
+
+
+def test_a_pending_case_cannot_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `evals.run` reads the catalogue's own mapping, so the case turns pending for the runner.
+    pending = replace(catalogue.BY_ID["Q19-en"], status="pending")
+    monkeypatch.setitem(catalogue.BY_ID, "Q19-en", pending)
+    with pytest.raises(run.UsageError, match="Q19-en is pending and cannot run"):
+        run.plan(["--case", "Q19-en", "--allowance", "1"])
 
 
 def test_a_valid_paid_run_and_a_free_regrade() -> None:
