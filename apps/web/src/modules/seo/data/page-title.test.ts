@@ -9,6 +9,20 @@ function length(text: string): number {
   return Array.from(text).length;
 }
 
+const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+/** The characters a reader sees, each a whole grapheme cluster. */
+function graphemes(text: string): string[] {
+  return Array.from(GRAPHEMES.segment(text), (part) => part.segment);
+}
+
+/** The shortened page name of a `pageTitle`, without its "…" and the person. */
+function shortenedPage(title: string): string {
+  const page = title.slice(0, title.indexOf(` · ${NAME}`));
+  expect(page.endsWith("…")).toBe(true);
+  return page.slice(0, -1);
+}
+
 describe("pageTitle", () => {
   it("names the page, then the site's person, joined by a middle dot", () => {
     expect(pageTitle(NAME, "Experience")).toBe("Experience · Robin Example");
@@ -46,6 +60,37 @@ describe("pageTitle", () => {
     expect(title).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
   });
 
+  it("never splits a flag, whose two code points read as one character", () => {
+    const page = shortenedPage(pageTitle(NAME, "🇨🇿".repeat(40)));
+    expect(graphemes(page).every((character) => character === "🇨🇿")).toBe(true);
+  });
+
+  it("never splits a joined emoji sequence", () => {
+    const page = shortenedPage(pageTitle(NAME, "👩‍💻".repeat(40)));
+    expect(graphemes(page).every((character) => character === "👩‍💻")).toBe(true);
+  });
+
+  it("never parts a letter from its combining accent", () => {
+    const page = shortenedPage(pageTitle(NAME, "e\u0301".repeat(60)));
+    expect(graphemes(page).every((character) => character === "e\u0301")).toBe(true);
+  });
+
+  it("drops a separator left at the cut", () => {
+    const page = "Reliable platforms for fictional teams in · and so much more";
+    expect(pageTitle(NAME, page)).toBe(
+      "Reliable platforms for fictional teams in… · Robin Example",
+    );
+  });
+
+  it("drops a dash or other punctuation left at the cut", () => {
+    expect(pageTitle(NAME, "A fictional page that is long enough here — to be cut")).toBe(
+      "A fictional page that is long enough here… · Robin Example",
+    );
+    expect(pageTitle(NAME, "A fictional page that is long enough here, so it is cut")).toBe(
+      "A fictional page that is long enough here… · Robin Example",
+    );
+  });
+
   it("keeps the person's name whole even when it alone is long", () => {
     const name = "Robin Alexandra Montgomery-Example of the Fictional Valley";
     const title = pageTitle(name, "Experience");
@@ -72,6 +117,12 @@ describe("homepageTitle", () => {
     );
     expect(length(title)).toBeLessThanOrEqual(TITLE_MAX);
     expect(title).toBe("Robin Example · Fictional engineer who builds calm software…");
+  });
+
+  it("drops a separator left at the cut of the headline", () => {
+    expect(
+      homepageTitle(NAME, "Fictional engineer for reliable platforms · and many other things"),
+    ).toBe("Robin Example · Fictional engineer for reliable platforms…");
   });
 
   it("is only the name when no descriptor of any use fits beside it", () => {

@@ -171,6 +171,13 @@ describe("profileStructuredData", () => {
     expect(person).not.toHaveProperty("knowsAbout");
   });
 
+  it("names the profile page with the whole headline, which structured data need not shorten", () => {
+    const headline =
+      "Fictional engineer who builds calm software for logistics, health care and public services";
+    const data = profileStructuredData(ORIGIN, profile({ headline }));
+    expect(node(data, "ProfilePage")["name"]).toBe(`Robin Example · ${headline}`);
+  });
+
   it("links the site and the profile page to the person on the configured origin", () => {
     const data = profileStructuredData("http://other.example.test", profile());
     expect(node(data, "WebSite")).toEqual({
