@@ -387,22 +387,28 @@ describe("prepareDocument", () => {
       // machine does not fail the test: four times the length takes about four times as long when
       // the work is linear and sixteen times when it is quadratic. It is measured in processor
       // time of this test process, which the other processes on the machine do not take from, as
-      // wall-clock time of a longer run would lose more to them than that of a shorter one. A
-      // quarter is prepared as often as it takes to last a measurable while, so a pause of a
-      // millisecond does not decide the ratio, and the whole run as often again. The fastest of a
-      // few rounds, taken in turns after the warm-up, is the least disturbed by garbage collection.
+      // wall-clock time of a longer run would lose more to them than that of a shorter one. After
+      // a warm-up of both lengths, a quarter is prepared as often as it takes for a warm sample to
+      // last 50 ms, so a pause of a few milliseconds does not decide the ratio, and the whole run
+      // as often again. The fastest of five rounds, taken in turns, is the least disturbed by
+      // garbage collection. A limit of eight catches quadratic or worse growth that dominates the
+      // run, and catastrophic backtracking is refused as `too_slow` on the way; it does not catch
+      // n log n growth, is at its edge for n^1.5, and does not catch a slowdown by a constant
+      // factor, which only the module's own 10 s limit bounds.
+      await timeOf(quarter, 1);
+      await timeOf(whole, 1);
       let times = 1;
-      while ((await timeOf(quarter, times)) < 20) times *= 2;
+      while ((await timeOf(quarter, times)) < 50) times *= 2;
       let fastestQuarter = Number.POSITIVE_INFINITY;
       let fastestWhole = Number.POSITIVE_INFINITY;
-      for (let round = 0; round < 3; round += 1) {
+      for (let round = 0; round < 5; round += 1) {
         fastestQuarter = Math.min(fastestQuarter, await timeOf(quarter, times));
         fastestWhole = Math.min(fastestWhole, await timeOf(whole, times));
       }
 
       expect(fastestWhole / fastestQuarter).toBeLessThan(8);
     },
-    // The rounds take about a second alone but several beside other test suites; the timeout only
+    // The rounds take a few seconds alone and more beside other test suites; the timeout only
     // guards against a hang and is no limit on the speed.
     30_000,
   );
