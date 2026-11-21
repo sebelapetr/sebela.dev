@@ -352,6 +352,7 @@ MCP Admin has deterministic integration tests against the real API and a Promptf
 | [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations           |
 | [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries     |
 | [Release workflow](docs/release-workflow.md)                                                         | Planned deployment, backups and rollback               |
+| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                     |
 
 ## License
 
