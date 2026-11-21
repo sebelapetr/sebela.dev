@@ -246,7 +246,8 @@ describe("the knowledge command's supplemental documents", () => {
     });
     const { passages } = await backend.services.knowledge.search({ query: "refund request" });
     const supplemental = passages.filter((p) => p.sourceKind === "supplemental");
-    expect(supplemental[0]).toMatchObject({ title: "Studio handbook", path: null });
+    expect(supplemental[0]).toMatchObject({ title: "Studio handbook" });
+    expect(supplemental[0]).not.toHaveProperty("path");
     expect(JSON.stringify(supplemental)).not.toContain("FINAL");
   });
 
