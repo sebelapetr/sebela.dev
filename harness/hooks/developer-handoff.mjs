@@ -8,15 +8,21 @@
 //   failing (stop_hook_active), the failure is reported instead of blocking again, so the hook
 //   cannot keep a developer in an endless loop.
 //
+// A general agent (`general-purpose`) does the work no developer agent owns: `.github/`,
+// `scripts/`, `infra/` and `harness/` (docs/agents.md, Roles). It gets the same gate when a
+// worktree it worked in has changes under one of those folders, and none otherwise: a general
+// agent that researched, or changed only documentation, hands back unchecked.
+//
 // Other agents and the main session are not checked. Checks that cannot run count as failing.
 
 import path from "node:path";
 import fs from "node:fs";
-import { checkHandoff } from "../lib/handoff.mjs";
+import { GENERAL_AGENT_AREAS, checkHandoff } from "../lib/handoff.mjs";
 import { mainRootFrom } from "../worktree.mjs";
 import { readHookInput } from "./read-input.mjs";
 
 const DEVELOPERS = new Set(["backend-developer", "frontend-developer", "ai-developer"]);
+const GENERAL = "general-purpose";
 
 // Claude Code keeps a subagent's transcript in `<session>/subagents/agent-<id>.jsonl` next to the
 // session transcript; SubagentStop names it, PreToolUse only names the session's.
@@ -36,11 +42,16 @@ function failureReport(input) {
     transcriptText = fs.readFileSync(transcriptOf(input), "utf8");
   } catch (error) {
     throw new Error(
-      `could not read the developer's transcript to find its worktree (${error.message})`,
+      `could not read the agent's transcript to find its worktree (${error.message})`,
       { cause: error },
     );
   }
-  const { results } = checkHandoff({ mainRoot, cwd: input.cwd, transcriptText });
+  const { results } = checkHandoff({
+    mainRoot,
+    cwd: input.cwd,
+    transcriptText,
+    areas: input.agent_type === GENERAL ? GENERAL_AGENT_AREAS : null,
+  });
   const failed = results.filter((result) => !result.ok);
   if (!failed.length) return null;
   return failed
@@ -63,7 +74,7 @@ const input = await readHookInput().catch((error) => {
   process.exit(1);
 });
 
-if (DEVELOPERS.has(input.agent_type)) {
+if (DEVELOPERS.has(input.agent_type) || input.agent_type === GENERAL) {
   let report;
   try {
     report = failureReport(input);

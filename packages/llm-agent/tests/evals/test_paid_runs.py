@@ -32,6 +32,8 @@ VERDICT = {
     "note": "",
 }
 TOKENS = {"input_tokens": 1000, "output_tokens": 200}
+P6 = budget.campaign("06-llm-agent")
+P7 = budget.campaign("07-ai-service")
 
 
 def verdict_text() -> str:
@@ -173,7 +175,7 @@ async def test_a_run_that_never_started_promptfoo_is_charged_nothing(
         paid["person"] = {"name": "someone else"}
     else:
         paid[failing] = True
-    assert await run.command_run(["S01-en", "S01-cs"], 1.0) == run.BLOCKED
+    assert await run.command_run(["S01-en", "S01-cs"], 1.0, campaign=P6) == run.BLOCKED
     assert paid["promptfoo"] == []
     (entry,) = ledger()
     assert entry["scope"] == "not started"
@@ -187,7 +189,7 @@ async def test_a_run_that_never_started_promptfoo_is_charged_nothing(
 
 
 async def test_a_started_run_is_charged_and_records_that_it_started(paid: dict[str, Any]) -> None:
-    assert await run.command_run(["S01-en"], 1.0) in (0, 1)
+    assert await run.command_run(["S01-en"], 1.0, campaign=P6) in (0, 1)
     summary = summary_of()
     assert summary["started"] is True
     (entry,) = ledger()
@@ -202,7 +204,7 @@ async def test_a_run_starts_with_an_early_chunk_of_six_case_runs_then_the_rest(
     paid: dict[str, Any],
 ) -> None:
     selected = ["S01-en", "S01-cs", "S02-en", "S02-cs", "S03-en"]
-    await run.command_run(selected, 1.0)
+    await run.command_run(selected, 1.0, campaign=P6)
     assert [call["cases"] for call in paid["promptfoo"]] == [
         ["S01-en", "S01-cs"],
         ["S02-en", "S02-cs", "S03-en"],
@@ -255,7 +257,7 @@ async def test_a_full_run_starts_under_a_realistic_allowance_and_runs_chunk_by_c
     assert len(selected) == 80
     # The whole run would reserve about USD 9.18; each chunk is reserved just before it starts.
     assert run.reservation(selected) > 2.0
-    assert await run.command_run(selected, 2.0) in (0, 1)
+    assert await run.command_run(selected, 2.0, campaign=P6) in (0, 1)
     expected = run.chunks(selected, repeats=3)
     assert len(expected) > 2
     assert [tuple(call["cases"]) for call in paid["promptfoo"]] == list(expected)
@@ -282,7 +284,7 @@ async def test_an_allowance_exhausted_mid_run_leaves_the_rest_pending(
     paid["answer"] = costing(budget.SUBJECT_EXECUTION_USD)
     first, second = run.reservation(pieces[0]), run.reservation(pieces[1])
     allowance = first + second + 0.1  # the third chunk needs 0.18
-    assert await run.command_run(selected, allowance) == run.BLOCKED
+    assert await run.command_run(selected, allowance, campaign=P6) == run.BLOCKED
     assert [tuple(call["cases"]) for call in paid["promptfoo"]] == [pieces[0], pieces[1]]
     assert "stopped: allowance" in capsys.readouterr().err
     summary = summary_of()
@@ -301,7 +303,7 @@ async def test_an_allowance_below_the_first_chunk_is_refused_before_anything_sta
     selected = unjudged(4)
     first = run.reservation(run.chunks(selected, repeats=3)[0])
     with pytest.raises(budget.BudgetBlockedError):
-        await run.command_run(selected, first - 0.01)
+        await run.command_run(selected, first - 0.01, campaign=P6)
     assert paid["api_starts"] == 0
     assert paid["promptfoo"] == []
 
@@ -315,7 +317,7 @@ async def test_two_stopped_case_runs_in_the_early_chunk_stop_the_run_with_the_re
 
     paid["answer"] = answer
     selected = ["S01-en", "S01-cs", "S02-en", "S02-cs"]
-    assert await run.command_run(selected, 1.0) == run.BLOCKED
+    assert await run.command_run(selected, 1.0, campaign=P6) == run.BLOCKED
     assert [call["cases"] for call in paid["promptfoo"]] == [["S01-en", "S01-cs"]]
     assert "stopped:" in capsys.readouterr().err
     summary = summary_of()
@@ -338,7 +340,7 @@ async def test_uncertain_cost_above_a_tenth_of_the_measured_cost_stops_the_run(
         return data
 
     paid["answer"] = answer
-    assert await run.command_run(["S01-en", "S01-cs", "S02-en"], 1.0) == run.BLOCKED
+    assert await run.command_run(["S01-en", "S01-cs", "S02-en"], 1.0, campaign=P6) == run.BLOCKED
     assert len(paid["promptfoo"]) == 1
     summary = summary_of()
     assert "uncertain cost" in summary["stopped"]
@@ -347,7 +349,7 @@ async def test_uncertain_cost_above_a_tenth_of_the_measured_cost_stops_the_run(
 
 async def test_a_single_chunk_run_needs_no_anomaly_stop(paid: dict[str, Any]) -> None:
     paid["answer"] = lambda case_id, repeat: record(case_id, repeat=repeat, outcome="limit_reached")
-    assert await run.command_run(["S01-en", "S01-cs"], 1.0) == 1
+    assert await run.command_run(["S01-en", "S01-cs"], 1.0, campaign=P6) == 1
     summary = summary_of()
     assert summary["stopped"] is None
     assert summary["pending"] == []
@@ -357,7 +359,7 @@ async def test_a_single_chunk_run_needs_no_anomaly_stop(paid: dict[str, Any]) ->
 
 
 async def test_a_judged_run_judges_each_chunk_in_one_batch(paid: dict[str, Any]) -> None:
-    await run.command_run(["Q01-en", "Q01-cs", "Q02-en"], 1.0)
+    await run.command_run(["Q01-en", "Q01-cs", "Q02-en"], 1.0, campaign=P6)
     batches: AnsweringBatches = paid["batches"]
     assert [len(sent) for sent in batches.created] == [6, 3]
     assert batches.created[0][0]["custom_id"] == "Q01-en-r1"
@@ -372,7 +374,7 @@ async def test_a_failed_judge_request_in_the_early_chunk_stops_the_run(
     paid: dict[str, Any],
 ) -> None:
     paid["batches"].errored = ("Q01-cs-r2",)
-    assert await run.command_run(["Q01-en", "Q01-cs", "Q02-en"], 1.0) == run.BLOCKED
+    assert await run.command_run(["Q01-en", "Q01-cs", "Q02-en"], 1.0, campaign=P6) == run.BLOCKED
     assert len(paid["promptfoo"]) == 1
     summary = summary_of()
     assert summary["stopped"] == "1 judge request(s) failed"
@@ -399,7 +401,7 @@ async def test_the_direct_judge_mode_calls_the_judge_model_per_request(
             )
 
     monkeypatch.setattr(rubric, "anthropic_judge", lambda: Judge())
-    await run.command_run(["Q01-en"], 1.0, judge_mode="direct")
+    await run.command_run(["Q01-en"], 1.0, judge_mode="direct", campaign=P6)
     assert len(calls) == 3
     assert paid["batches"].created == []
     stored = json.loads((only_folder() / "answers" / "Q01-en-1.json").read_text(encoding="utf-8"))
@@ -426,7 +428,9 @@ async def test_a_paid_regrade_stops_after_the_early_requests_when_a_judge_reques
         ],
     )
     paid["batches"].errored = ("Q01-en-r1",)
-    assert await run.command_regrade(source, judge=True, declared_usd=1.0) == run.BLOCKED
+    assert (
+        await run.command_regrade(source, judge=True, declared_usd=1.0, campaign=P6) == run.BLOCKED
+    )
     batches: AnsweringBatches = paid["batches"]
     assert [len(sent) for sent in batches.created] == [6]
     summary = summary_of()
@@ -451,7 +455,10 @@ async def test_a_paid_regrade_reserves_each_chunk_and_stops_when_the_next_one_do
         for item in stored
         if str(item["case_id"]) in pieces[0]
     )
-    assert await run.command_regrade(source, judge=True, declared_usd=first + 0.05) == run.BLOCKED
+    assert (
+        await run.command_regrade(source, judge=True, declared_usd=first + 0.05, campaign=P6)
+        == run.BLOCKED
+    )
     batches: AnsweringBatches = paid["batches"]
     assert [len(sent) for sent in batches.created] == [6]
     summary = summary_of()
@@ -484,7 +491,7 @@ async def test_an_interrupted_chunk_is_counted_at_its_reservation_in_the_ledger(
 
     paid["on_promptfoo"] = interrupt_the_second_chunk
     with pytest.raises(Interrupted):
-        await run.command_run(selected, 2.0)
+        await run.command_run(selected, 2.0, campaign=P6)
     (entry,) = ledger()
     second = run.reservation(pieces[1])
     assert entry["scope"] == "running"
@@ -493,7 +500,7 @@ async def test_an_interrupted_chunk_is_counted_at_its_reservation_in_the_ledger(
     assert entry["uncertain_usd"] == pytest.approx(second, abs=1e-5)
     assert [chunk["cases"] for chunk in entry["chunks"]] == [list(pieces[0]), list(pieces[1])]
     assert entry["chunks"][1]["provisional"] is True
-    assert budget.ledger_spent(run.LEDGER) == pytest.approx(entry["spent_usd"])
+    assert budget.ledger_spent(run.LEDGER, "06-llm-agent") == pytest.approx(entry["spent_usd"])
 
 
 async def test_an_interrupted_regrade_chunk_is_counted_at_its_reservation_in_the_ledger(
@@ -517,7 +524,7 @@ async def test_an_interrupted_regrade_chunk_is_counted_at_its_reservation_in_the
     batches = InterruptingSecondBatch()
     monkeypatch.setattr(judging, "anthropic_batches", lambda: batches)
     with pytest.raises(Interrupted):
-        await run.command_regrade(source, judge=True, declared_usd=2.0)
+        await run.command_regrade(source, judge=True, declared_usd=2.0, campaign=P6)
     second = sum(
         judging.request(CASES[str(item["case_id"])], item).reserved_usd
         for item in stored
@@ -542,7 +549,7 @@ async def test_a_run_past_its_deadline_leaves_the_remaining_chunks_pending(
         now[0] += 40.0
 
     paid["on_promptfoo"] = forty_seconds_per_chunk
-    assert await run.command_run(selected, 2.0, deadline_minutes=1.0) == run.BLOCKED
+    assert await run.command_run(selected, 2.0, deadline_minutes=1.0, campaign=P6) == run.BLOCKED
     assert [tuple(call["cases"]) for call in paid["promptfoo"]] == [pieces[0], pieces[1]]
     assert "stopped: deadline" in capsys.readouterr().err
     summary = summary_of()
@@ -579,7 +586,9 @@ async def test_a_paid_regrade_past_its_deadline_leaves_the_remaining_chunks_pend
     batches = SlowBatches()
     monkeypatch.setattr(judging, "anthropic_batches", lambda: batches)
     assert (
-        await run.command_regrade(source, judge=True, declared_usd=2.0, deadline_minutes=1.0)
+        await run.command_regrade(
+            source, judge=True, declared_usd=2.0, deadline_minutes=1.0, campaign=P6
+        )
         == run.BLOCKED
     )
     assert [len(sent) for sent in batches.created] == [6]
@@ -589,3 +598,84 @@ async def test_a_paid_regrade_past_its_deadline_leaves_the_remaining_chunks_pend
     (entry,) = ledger()
     assert len(entry["chunks"]) == 1
     assert "provisional_usd" not in entry
+
+
+# --- A ceiling per phase campaign (issue #371) ------------------------------------------------
+
+
+async def test_an_issue_run_of_phase_7_stops_at_the_per_run_stop_with_the_rest_pending(
+    paid: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    selected = unjudged(30)
+    pieces = run.chunks(selected, repeats=3)
+    paid["answer"] = costing(budget.SUBJECT_EXECUTION_USD)
+    # Every case-run costs its whole USD 0.02: 6 in the early chunk, then 12 per chunk. The
+    # declared USD 4.00 is the whole campaign, but an issue run may spend USD 1.00.
+    assert await run.command_run(selected, 4.0, campaign=P7) == run.BLOCKED
+    ran = [tuple(call["cases"]) for call in paid["promptfoo"]]
+    # 0.12 + 3 x 0.24 = 0.84 is spent; the next chunk's 0.24 would pass the stop.
+    assert ran == list(pieces[:4])
+    assert "stopped: allowance" in capsys.readouterr().err
+    summary = summary_of()
+    assert summary["pass"] is False
+    assert summary["pending"] == [case for piece in pieces[4:] for case in piece]
+    (entry,) = ledger()
+    assert entry["spent_usd"] == pytest.approx(0.84)
+    assert (entry["campaign"], entry["stage"]) == ("07-ai-service", "issue")
+
+
+async def test_the_phase_pr_run_is_not_bound_by_the_per_run_stop(paid: dict[str, Any]) -> None:
+    selected = unjudged(30)
+    paid["answer"] = costing(budget.SUBJECT_EXECUTION_USD)
+    assert await run.command_run(selected, 4.0, campaign=P7, stage="phase-pr") in (0, 1)
+    summary = summary_of()
+    assert summary["pending"] == []
+    (entry,) = ledger()
+    assert entry["spent_usd"] == pytest.approx(90 * 0.02)
+    assert entry["stage"] == "phase-pr"
+
+
+async def test_issue_runs_cannot_spend_the_phase_pr_reserve(paid: dict[str, Any]) -> None:
+    earlier = budget.open_allowance(4.0, run.LEDGER, P7, "issue")
+    earlier.charge(1.0, "an earlier issue run")
+    budget.record_run(run.LEDGER, "earlier-1", earlier, "partial")
+    again = budget.open_allowance(4.0, run.LEDGER, P7, "issue")
+    again.charge(0.5, "another issue run")
+    budget.record_run(run.LEDGER, "earlier-2", again, "partial")
+    with pytest.raises(budget.BudgetBlockedError, match="issue runs"):
+        await run.command_run(["S01-en"], 4.0, campaign=P7)
+    assert paid["api_starts"] == 0
+    assert paid["promptfoo"] == []
+
+
+async def test_the_spend_of_another_campaign_does_not_block_a_run(paid: dict[str, Any]) -> None:
+    earlier = budget.open_allowance(13.0, run.LEDGER, P6, "issue")
+    earlier.charge(13.0, "the whole phase-6 campaign")
+    budget.record_run(run.LEDGER, "phase-6", earlier, "full")
+    with pytest.raises(budget.BudgetBlockedError, match=r"06-llm-agent.*exhausted"):
+        await run.command_run(["S01-en"], 1.0, campaign=P6)
+    assert await run.command_run(["S01-en"], 1.0, campaign=P7) in (0, 1)
+
+
+async def test_a_paid_run_reports_its_spend_line_before_and_after(
+    paid: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    await run.command_run(["S01-en", "S01-cs"], 1.0, campaign=P7)
+    expected = run.expected_usd(["S01-en", "S01-cs"], repeats=3)
+    out = capsys.readouterr().out
+    assert (
+        f"spend: expected {expected:.4f} USD before the run;"
+        " 4.0000 USD of the 07-ai-service ceiling (4.00 USD) remain"
+    ) in out
+    assert (
+        f"spend: expected {expected:.4f} USD, actual 0.0060 USD (uncertain 0.0000);"
+        " 3.9940 USD of the 07-ai-service ceiling (4.00 USD) remain"
+    ) in out
+    cost = summary_of()["cost"]
+    assert cost["campaign"] == "07-ai-service"
+    assert cost["stage"] == "issue"
+    assert cost["ceiling_usd"] == 4.0
+    assert cost["expected_usd"] == pytest.approx(expected)
+    assert cost["campaign_remaining_usd"] == pytest.approx(3.994)
+    (entry,) = ledger()
+    assert entry["expected_usd"] == pytest.approx(expected, abs=1e-6)

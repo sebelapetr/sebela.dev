@@ -1,5 +1,6 @@
 // The checks a developer agent must pass before it hands off its work: lint and typecheck of the
-// parts it changed, in the worktree it changed them in (docs/permissions.md, "Hooks").
+// parts it changed, in the worktree it changed them in (docs/permissions.md, "Hooks"). A general
+// agent passes the same checks when it changed CI, script, infrastructure or harness files.
 //
 // checkHandoff finds the worktrees from the agent's own actions (files it edited or wrote, commands
 // it ran) and the session's directory, selects in each the workspace packages changed since the
@@ -23,6 +24,9 @@ const WORKSPACE_FILES = new Set([
   ".nvmrc",
 ]);
 const MEMBER_FOLDERS = ["apps", "packages"];
+// What no developer agent owns and a general agent changes (docs/agents.md, Roles): CI, scripts,
+// infrastructure and the harness. A general agent's handoff is checked when it changed these.
+export const GENERAL_AGENT_AREAS = Object.freeze([".github/", "scripts/", "infra/", "harness/"]);
 // The branches an issue branch is cut from (docs/git-workflow.md).
 const BASE_REFS = [
   "refs/heads/master",
@@ -78,10 +82,14 @@ export function worktreesNamedIn(transcriptText, mainRoot) {
 // { all: true } when the change base is unknown (null) or workspace-wide configuration changed,
 // otherwise { all: false, packages } with the names of the changed members, sorted. Root files
 // need no package and documentation (documentation.mjs) counts as no change; the root checks
-// always run.
-export function selectChecks(changedFiles, members) {
+// always run. With `areas` (path prefixes) there is something to check only when a changed file
+// lies in one of them; an unknown change base still selects everything.
+export function selectChecks(changedFiles, members, { areas = null } = {}) {
   if (changedFiles === null) return { all: true };
   if (!changedFiles.length) return null;
+  if (areas && !changedFiles.some((file) => areas.some((area) => file.startsWith(area)))) {
+    return null;
+  }
   const packages = new Set();
   for (const file of changedFiles) {
     if (WORKSPACE_FILES.has(file)) return { all: true };
@@ -182,9 +190,10 @@ const tail = (text) => text.split("\n").slice(-REPORT_LINES).join("\n");
 
 // Runs the handoff checks. `transcriptText` is the agent's transcript, `cwd` the directory its
 // session runs in. Returns { results } with one { worktree, command, ok, report } per worktree
-// that has changes; no results when the agent changed nothing. Throws when the worktrees or their
-// changes cannot be determined.
-export function checkHandoff({ mainRoot, cwd, transcriptText, env = process.env }) {
+// that has changes; no results when the agent changed nothing. With `areas`, a worktree is checked
+// only when its changes touch one of those path prefixes (selectChecks). Throws when the
+// worktrees or their changes cannot be determined.
+export function checkHandoff({ mainRoot, cwd, transcriptText, env = process.env, areas = null }) {
   const roots = [];
   for (const candidate of [cwd, ...worktreesNamedIn(transcriptText, mainRoot)]) {
     if (!candidate || !fs.existsSync(candidate)) continue;
@@ -196,7 +205,7 @@ export function checkHandoff({ mainRoot, cwd, transcriptText, env = process.env 
 
   const results = [];
   for (const worktree of roots) {
-    const selection = selectChecks(changedFiles(worktree), workspaceMembers(worktree));
+    const selection = selectChecks(changedFiles(worktree), workspaceMembers(worktree), { areas });
     if (!selection) continue;
     const args = turboArguments(selection);
     const command = `turbo ${args.join(" ")}`;

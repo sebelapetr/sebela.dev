@@ -28,7 +28,26 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
         (["--case", "Q99-en", "--allowance", "1"], "unknown case Q99-en"),
         (["--case", "S01-en", "--case", "S01-en", "--allowance", "1"], "S01-en named twice"),
         (["--case", "S01-en"], "a paid run needs --allowance"),
-        (["--case", "S01-en", "--allowance", "11"], "exceeds the 10.0 USD campaign ceiling"),
+        (
+            ["--case", "S01-en", "--allowance", "14"],
+            "exceeds the 13.00 USD ceiling of the 06-llm-agent",
+        ),
+        (["--case", "S01-en", "--allowance", "1", "--campaign"], "--campaign needs a value"),
+        (
+            ["--case", "S01-en", "--allowance", "1", "--campaign", "07-ai-service"],
+            "differs from SEBELA_EVAL_CAMPAIGN",
+        ),
+        (["--case", "S01-en", "--allowance", "1", "--stage"], "--stage needs a value"),
+        (
+            ["--case", "S01-en", "--allowance", "1", "--stage", "full"],
+            "--stage is issue or phase-pr",
+        ),
+        (["--regrade", "x", "--stage", "phase-pr"], "--stage applies only"),
+        (["--regrade", "x", "--campaign", "06-llm-agent"], "--campaign applies only"),
+        (
+            ["--check-fixture", "--campaign", "06-llm-agent"],
+            "--check-fixture takes no other option",
+        ),
         (["--case"], "--case needs a value"),
         (["--regrade", "x", "--case", "S01-en"], "takes no --case or --all"),
         (["--regrade", "x", "--judge"], "--judge is paid and needs --allowance"),
@@ -80,10 +99,60 @@ def test_a_pending_case_cannot_run(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_a_valid_paid_run_and_a_free_regrade() -> None:
     chosen = run.plan(["--case", "S01-en", "--case", "Q01-cs", "--allowance", "2.5"])
-    assert chosen == run.Plan(mode="run", cases=("S01-en", "Q01-cs"), allowance_usd=2.5)
+    assert chosen == run.Plan(
+        mode="run",
+        cases=("S01-en", "Q01-cs"),
+        allowance_usd=2.5,
+        campaign=budget.campaign("06-llm-agent"),
+        stage="issue",
+    )
     assert run.plan(["--all", "--allowance", "1"]).cases[0] == "Q01-en"
     assert run.plan(["--regrade", "folder"]).judge is False
     assert run.plan(["--check-fixture"]).mode == "check-fixture"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--case", "S01-en", "--allowance", "1"],
+        ["--all", "--allowance", "1"],
+        ["--regrade", "x", "--judge", "--allowance", "1"],
+        ["--compare", "haiku-medium", "--case", "Q01-en", "--allowance", "1"],
+    ],
+)
+def test_a_paid_command_that_names_no_campaign_is_refused(
+    argv: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(budget.CAMPAIGN_ENVIRONMENT)
+    with pytest.raises(run.UsageError, match="names no campaign"):
+        run.plan(argv)
+    with pytest.raises(run.UsageError, match="unknown campaign 09-rag"):
+        run.plan([*argv, "--campaign", "09-rag"])
+    # Free commands need none.
+    assert run.plan(["--regrade", "folder"]).campaign is None
+    assert run.plan(["--check-fixture"]).campaign is None
+
+
+def test_a_paid_command_names_its_campaign_and_stage(monkeypatch: pytest.MonkeyPatch) -> None:
+    paid = ["--case", "S01-en", "--allowance", "1"]
+    monkeypatch.setenv(budget.CAMPAIGN_ENVIRONMENT, "07-ai-service")
+    assert run.plan(paid).campaign == budget.campaign("07-ai-service")
+    assert run.plan(paid).stage == "issue"
+    assert run.plan([*paid, "--stage", "phase-pr"]).stage == "phase-pr"
+    monkeypatch.delenv(budget.CAMPAIGN_ENVIRONMENT)
+    named = run.plan([*paid, "--campaign", "08-mcp-public"])
+    assert named.campaign == budget.campaign("08-mcp-public")
+    # The allowance is checked against the named campaign's ceiling, not a larger one.
+    with pytest.raises(run.UsageError, match=r"2\.30 USD ceiling of the 08-mcp-public"):
+        run.plan(["--case", "S01-en", "--allowance", "4", "--campaign", "08-mcp-public"])
+    with pytest.raises(run.UsageError, match=r"4\.00 USD ceiling of the 07-ai-service"):
+        run.plan(["--case", "S01-en", "--campaign", "07-ai-service", "--allowance", "10"])
+
+
+def test_the_expected_cost_of_the_full_run_matches_the_documented_estimate() -> None:
+    every = [case.id for case in catalogue.implemented()]
+    assert run.expected_usd(every, repeats=3) == pytest.approx(1.07, abs=0.02)
+    assert run.expected_usd(every, repeats=3, judge_mode="direct") == pytest.approx(1.77, abs=0.03)
 
 
 def test_a_paid_run_has_an_overall_deadline_that_can_be_set() -> None:

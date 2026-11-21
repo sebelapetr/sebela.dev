@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectChecks, turboArguments, worktreesNamedIn } from "./handoff.mjs";
+import { GENERAL_AGENT_AREAS, selectChecks, turboArguments, worktreesNamedIn } from "./handoff.mjs";
 
 const MAIN = "/work/sebela";
 const MEMBERS = [
@@ -148,4 +148,39 @@ test("Turborepo runs lint and typecheck of the selected packages, their dependen
   assert.deepEqual(turboArguments({ all: false, packages: [] }).slice(-1), ["--filter=//"]);
   assert.ok(!turboArguments({ all: true }).some((arg) => arg.startsWith("--filter")));
   assert.ok(!turboArguments({ all: true }).includes("test"));
+});
+
+// --- a general agent's handoff (issue #371) ------------------------------------------
+
+test("a general agent is checked only when it changed CI, script, infrastructure or harness files", () => {
+  const areas = GENERAL_AGENT_AREAS;
+  assert.deepEqual(areas, [".github/", "scripts/", "infra/", "harness/"]);
+  for (const file of [
+    ".github/workflows/ci.yml",
+    "scripts/checks/formatting.mjs",
+    "infra/production/compose.yaml",
+    "harness/lib/loop.mjs",
+  ]) {
+    assert.deepEqual(selectChecks([file], MEMBERS, { areas }), { all: false, packages: [] }, file);
+  }
+  // Its package changes are checked with them, as a developer's are.
+  assert.deepEqual(selectChecks(["harness/steward.mjs", "apps/web/x.ts"], MEMBERS, { areas }), {
+    all: false,
+    packages: ["@fixture/web"],
+  });
+  assert.deepEqual(selectChecks(["harness/x.mjs", "turbo.json"], MEMBERS, { areas }), {
+    all: true,
+  });
+});
+
+test("a general agent that changed none of those areas has nothing to check", () => {
+  const areas = GENERAL_AGENT_AREAS;
+  assert.equal(selectChecks(["apps/web/x.ts", "docs/agents.md"], MEMBERS, { areas }), null);
+  assert.equal(
+    selectChecks(["myharness/x.mjs", "apps/web/scripts/x.ts"], MEMBERS, { areas }),
+    null,
+  );
+  assert.equal(selectChecks([], MEMBERS, { areas }), null);
+  // Without a change base nothing says the areas are untouched: everything is checked.
+  assert.deepEqual(selectChecks(null, MEMBERS, { areas }), { all: true });
 });

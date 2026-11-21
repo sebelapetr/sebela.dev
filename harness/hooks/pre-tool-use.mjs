@@ -20,6 +20,19 @@ function lookupPrBase(number) {
   ).trim();
 }
 
+// The head branch of a pull request named by its number, URL or branch.
+function lookupPrHead(selector) {
+  return execFileSync(
+    "gh",
+    ["pr", "view", String(selector), "--json", "headRefName", "-q", ".headRefName"],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 15_000,
+    },
+  ).trim();
+}
+
 function isLink(target) {
   try {
     return fs.lstatSync(target).isSymbolicLink();
@@ -88,6 +101,7 @@ try {
     isSubagent: Boolean(input.agent_id),
     unattended: process.env.SEBELA_UNATTENDED === "1",
     lookupPrBase,
+    lookupPrHead,
     realpath,
     currentBranch: isBash ? currentBranchIn(cwd) : null,
   });
@@ -96,7 +110,9 @@ try {
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
-          permissionDecision: "deny",
+          // "ask" hands the decision to the owner in an interactive session; everything else is
+          // refused.
+          permissionDecision: verdict.decision === "ask" ? "ask" : "deny",
           permissionDecisionReason: verdict.reason,
         },
       }),

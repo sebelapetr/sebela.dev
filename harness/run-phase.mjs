@@ -2,7 +2,7 @@
 // The phase loop: runs the orchestrator unattended, one issue per iteration, until the phase is done.
 // Design: .plan/00-overview/harness-prd.md. Decisions: ./lib/loop.mjs.
 //
-//   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10] [--steward-minutes 15]
+//   node harness/run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes 10] [--steward-minutes 5]
 //                                       [--max-failures 3] [--max-iterations 50] [--no-notify]
 //                                       [--note "<text for the orchestrator>"]
 //
@@ -22,14 +22,23 @@ import {
   noteAfter,
   ownerNoteSection,
   phaseEnd,
+  spendComment,
+  stewardStop,
 } from "./lib/loop.mjs";
 import { newProblem, notify } from "./lib/notify.mjs";
 import { currentWork, workChange } from "./lib/progress.mjs";
 import { formatCost, iterationStats } from "./lib/phase-report.mjs";
+import { spendChange, spendLine } from "./lib/spend.mjs";
 import { writePhaseReport } from "./phase-report.mjs";
 import { checkReadiness } from "./preflight.mjs";
 import { quiet, readLines, transcriptDir } from "./run-tools.mjs";
-import { checkOnce, failedIssues, phaseProgressNow } from "./steward.mjs";
+import {
+  checkOnce,
+  failedIssues,
+  phaseProgressNow,
+  phaseSpend,
+  stopsBeforeIteration,
+} from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
 function parseArgs(argv) {
@@ -38,7 +47,9 @@ function parseArgs(argv) {
     waitMinutes: 10,
     maxFailures: 3,
     maxIterations: 50,
-    stewardMinutes: 15,
+    // The steward checks a running iteration this often: an issue, and any paid run in it, is in
+    // progress for as long as the iteration runs.
+    stewardMinutes: 5,
     notify: true,
     note: null,
     _: [],
@@ -83,7 +94,7 @@ Handle exactly ONE issue, following your agent definition, docs/agents.md and do
 1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
 2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. Always read the issue with its comments (\`gh issue view <n> --comments\`): an \`Owner note\` there is binding, and you pass every owner note to the developer and the reviewer as written. An issue labelled \`agent-retry\` failed once before: its comments say why. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
 3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
-4. If no such issue is left, archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. If GitHub refuses the pull request (for example because the phase branch has no commits beyond ${base}), still report phase_done and say why in the summary. Never mark it ready for review: the owner does that when the phase is complete, HITL issues included, which starts its model evals.
+4. If no such issue is left, archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. If GitHub refuses the pull request (for example because the phase branch has no commits beyond ${base}), still report phase_done and say why in the summary. Never mark it ready for review, close or reopen it, whatever state you find it in: the owner switches it when the phase is complete, HITL issues included, which starts its paid model evals once. The guard refuses those commands.
 5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
 6. If the work on the issue stops for a reason outside the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted with its cause:
    - usage_limit: the usage limit was reached. The loop waits and continues the same issue.
@@ -91,13 +102,16 @@ Handle exactly ONE issue, following your agent definition, docs/agents.md and do
    - environment: the machine cannot run the work, such as low disk, a missing tool or credential, or a guard refusal you cannot work around without breaking a rule. The loop stops and tells the owner.
    For every other outcome the cause is null.
 
+Paid model evals: a paid eval command names this phase's campaign and its stage (\`--campaign ${phase} --stage issue\`; the variable SEBELA_EVAL_CAMPAIGN is set to ${phase} in this run) and spends from that campaign's own ceiling only (docs/testing.md, Running paid evals). Pass that to the developer. After a paid run, put the runner's final \`spend:\` line (expected before, actual after, remainder of the phase ceiling) into the issue comment and your report summary. A steward watches spend and efficiency and stops the loop when a ceiling or stop is reached or the work is wasteful: prefer a targeted check or a free \`--regrade\` to a full run, never repeat a paid run with unchanged input, and never run several full test suites at once.
+
 Write the report summary in English; it goes to the loop's log.
 
 Nobody can answer questions in this run. Never wait for input; when something needs the owner, record it on the issue.
 Finish with the structured report.${ownerNoteSection(note)}`;
 }
 
-function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId }) {
+// `control.stop` is set to a function that ends the run (the steward's stop).
+function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId, control }) {
   const args = [
     "-p",
     prompt({ phase, base, note }),
@@ -136,6 +150,9 @@ function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId }) 
       env: {
         ...process.env,
         SEBELA_UNATTENDED: "1",
+        // The phase names its eval campaign: a paid eval run in this loop spends from this
+        // phase's ceiling or is refused (packages/llm-agent/evals/budget.py).
+        SEBELA_EVAL_CAMPAIGN: phase,
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
         ENABLE_CLAUDEAI_MCP_SERVERS: "false",
       },
@@ -146,8 +163,10 @@ function runOrchestrator({ mainRoot, phase, base, note, iteration, sessionId }) 
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr += chunk));
     const stop = () => child.kill("SIGINT");
+    control.stop = stop;
     process.once("SIGINT", stop);
     child.on("close", (exitCode) => {
+      control.stop = () => {};
       process.removeListener("SIGINT", stop);
       resolve({ exitCode, stdout, stderr });
     });
@@ -228,6 +247,16 @@ function stopMessage(decision, run, consecutiveFailures) {
   };
 }
 
+// A note on the issue, where the next run and the owner find it; a failure to post is only logged.
+function commentOnIssue(issue, body) {
+  try {
+    execFileSync("gh", ["issue", "comment", String(issue), "--body", body], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function addLabel(issue, label) {
   // An issue that has failed for good is no longer up for a retry.
   const remove = label === FAILED_LABEL ? ["--remove-label", RETRY_LABEL] : [];
@@ -248,7 +277,8 @@ const sleep = (ms) =>
   });
 
 // Checks the running iteration every few minutes and prints one line; never blocks the loop.
-function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardState }) {
+// When a check says the loop must stop, `onStop` is called once with why.
+function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardState, onStop }) {
   if (!(options.stewardMinutes > 0)) return () => {};
   const iterationStartedAt = Date.now();
   let running = false;
@@ -269,6 +299,7 @@ function startSteward({ mainRoot, phase, sessionId, logDir, options, stewardStat
         alert(options, ["[steward] problem", verdict.findings.join("; ")]);
       }
       stewardState.lastStatus = verdict.status;
+      if (verdict.stop) onStop(verdict.stop);
     } catch (error) {
       log(`steward check failed: ${error.message}`);
     } finally {
@@ -298,7 +329,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.phase || (options.note !== null && !options.note.trim())) {
     console.error(
-      'usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--max-failures N] [--no-notify] [--note "<text>"]',
+      'usage: run-phase.mjs <phase-folder> [--base <branch>] [--wait-minutes N] [--steward-minutes N] [--max-failures N] [--no-notify] [--note "<text>"]',
     );
     process.exit(64);
   }
@@ -312,8 +343,23 @@ async function main() {
     wakeUp();
   });
 
-  // The steward compares with what had already failed when the loop started.
-  const stewardState = { failedAtStart: failedIssues(options.phase) };
+  // The steward compares with what had already failed when the loop started, and counts paid CI
+  // runs from then on.
+  const stewardState = {
+    failedAtStart: failedIssues(options.phase),
+    loopStartedAt: Date.now(),
+  };
+  const spendNow = () => phaseSpend({ mainRoot, phase: options.phase, logDir });
+  // Ends the loop for a stop by the steward: the log, the notification and a note on the issue.
+  const stopForSteward = (stop, issue) => {
+    const message = stewardStop({ stop, issue, spend: spendLine(spendNow(), null) });
+    log(`${RED}${message.log}${RESET} See ${logDir}.`);
+    if (issue && !commentOnIssue(issue, message.comment)) {
+      log(`  could not comment on #${issue}`);
+    }
+    alert(options, message.alert);
+    process.exitCode = 1;
+  };
   let consecutiveFailures = 0;
   // The safeguard stop of the run before, if any; a second one on the same issue stops the loop.
   let lastSafeguard = null;
@@ -334,11 +380,29 @@ async function main() {
       process.exitCode = 1;
       return;
     }
+    // A hard stop that is already there — the eval ceiling reached, an unexpected paid CI run, a
+    // nearly full disk — stops the loop before an agent is started for nothing.
+    if (options.stewardMinutes > 0) {
+      const stop = stopsBeforeIteration({
+        mainRoot,
+        phase: options.phase,
+        logDir,
+        state: stewardState,
+      });
+      if (stop) {
+        stopForSteward(stop, null);
+        return;
+      }
+    }
+    const spendBefore = spendNow();
+    if (iteration === 1) log(spendLine(spendBefore, null));
     const progress = phaseProgressNow(options.phase);
     const done = progress ? ` (${progress.closed}/${progress.total} issues closed)` : "";
     log(`iteration ${iteration}: starting the orchestrator for ${options.phase}${done}`);
     const sessionId = randomUUID();
     const stopWatcher = startWatcher({ mainRoot, sessionId, iteration });
+    const control = { stop: () => {} };
+    let stewardStopped = null;
     const stopSteward = startSteward({
       mainRoot,
       phase: options.phase,
@@ -346,6 +410,11 @@ async function main() {
       logDir,
       options,
       stewardState,
+      onStop: (stop) => {
+        if (stewardStopped) return;
+        stewardStopped = stop;
+        control.stop();
+      },
     });
     const raw = await runOrchestrator({
       mainRoot,
@@ -354,10 +423,42 @@ async function main() {
       note,
       iteration,
       sessionId,
+      control,
     });
     stopSteward();
     stopWatcher();
     const run = classifyRun(raw);
+
+    // The spend line of every iteration: expected before, actual after, what is left of the
+    // phase ceiling. It goes to the log, the iteration's record and, after a paid run, the issue.
+    const spendAfter = spendNow();
+    const paid = spendChange(spendBefore, spendAfter);
+    const spend = { line: spendLine(spendAfter, paid), paid: paid !== null, summary: spendAfter };
+    const transcript = readLines(path.join(transcriptDir(mainRoot), `${sessionId}.jsonl`)) ?? [];
+    const workedOn = (run.kind === "report" ? run.issue : null) ?? currentWork(transcript).issue;
+
+    if (stewardStopped) {
+      // The run was ended from outside: it says nothing about the issue, so nothing is labelled.
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      fs.writeFileSync(
+        path.join(logDir, `${stamp}-${iteration}.json`),
+        JSON.stringify(
+          {
+            iteration,
+            run,
+            decision: { next: "stop", reason: "steward" },
+            stewardStopped,
+            spend,
+            raw,
+          },
+          null,
+          2,
+        ),
+      );
+      log(`iteration ${iteration}: ${spend.line}`);
+      stopForSteward(stewardStopped, workedOn);
+      return;
+    }
 
     const labels =
       run.kind === "report" && run.outcome === "failed" && run.issue ? issueLabels(run.issue) : [];
@@ -375,7 +476,7 @@ async function main() {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     fs.writeFileSync(
       path.join(logDir, `${stamp}-${iteration}.json`),
-      JSON.stringify({ iteration, run, decision, raw }, null, 2),
+      JSON.stringify({ iteration, run, decision, spend, raw }, null, 2),
     );
 
     const cost = formatCost(iterationStats({ iteration, run, raw }));
@@ -385,7 +486,12 @@ async function main() {
         ? `${run.outcome}${run.cause ? ` (${run.cause})` : ""}${run.issue ? ` #${run.issue}` : ""}${spent}: ${run.summary}`
         : `${run.kind}${spent}`;
     log(`iteration ${iteration}: ${what} -> ${decision.next}`);
+    log(`iteration ${iteration}: ${spend.line}`);
     if (run.kind === "crash") log(`  ${run.detail}`);
+    const spendNote = spendComment({ line: spend.line, paid: spend.paid, iteration });
+    if (spendNote && workedOn && !commentOnIssue(workedOn, spendNote)) {
+      log(`  could not comment the spend line on #${workedOn}`);
+    }
 
     if (decision.label) {
       addLabel(run.issue, decision.label);

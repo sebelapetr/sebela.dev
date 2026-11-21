@@ -212,3 +212,61 @@ test("missing tools in the worktree refuse the handback and say how to install t
     /pnpm install --frozen-lockfile/,
   );
 });
+
+// --- a general agent's handoff (issue #371) ------------------------------------------
+
+test("a general agent that changed harness, script, CI or infrastructure files is checked", () => {
+  const infra = path.join(main, ".worktrees", "ci-3-fixture");
+  git(main, "worktree", "add", "-b", "ci/3-fixture", infra, "phase/01-fixture");
+  installFakeTools(infra, { turbo: true });
+  write(infra, "harness/lib/thing.mjs");
+  fs.writeFileSync(path.join(infra, "turbo-fails"), "");
+  transcript("gen1", [["Write", { file_path: path.join(infra, "harness/lib/thing.mjs") }]]);
+  const output = handback("general-purpose", "gen1");
+  assert.equal(output.hookSpecificOutput.permissionDecision, "deny");
+  assert.match(output.hookSpecificOutput.permissionDecisionReason, /TS2322/);
+  const stopped = runHook({
+    hook_event_name: "SubagentStop",
+    agent_id: "gen1",
+    agent_type: "general-purpose",
+    agent_transcript_path: transcript("gen1", [
+      ["Bash", { command: `cd ${infra} && node --test harness/` }],
+    ]),
+    stop_hook_active: false,
+  });
+  assert.equal(stopped.decision, "block");
+  fs.rmSync(path.join(infra, "turbo-fails"));
+  assert.equal(handback("general-purpose", "gen1"), null);
+  const calls = toolCalls(infra).filter((call) => call.tool === "turbo");
+  assert.deepEqual(calls.at(-1).args.slice(0, 5), [
+    "run",
+    "lint",
+    "typecheck",
+    "lint:root",
+    "check:config",
+  ]);
+});
+
+test("a general agent that changed no such file is not checked", () => {
+  failing(true);
+  // The worktree holds only app and package changes: a general agent that looked into it, or
+  // researched there, hands back unchecked.
+  transcript("gen2", [["Bash", { command: `cd ${worktree} && git status` }]]);
+  assert.equal(handback("general-purpose", "gen2"), null);
+  assert.equal(turboCalls().length, 0);
+});
+
+test("the settings run the handoff hook when a general agent stops", () => {
+  const settings = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, "../../.claude/settings.json"), "utf8"),
+  );
+  const stopHook = settings.hooks.SubagentStop.find((entry) =>
+    entry.hooks.some((hook) => hook.command.includes("developer-handoff.mjs")),
+  );
+  assert.deepEqual(stopHook.matcher.split("|"), [
+    "backend-developer",
+    "frontend-developer",
+    "ai-developer",
+    "general-purpose",
+  ]);
+});

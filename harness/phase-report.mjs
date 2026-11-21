@@ -4,7 +4,7 @@
 //   node harness/phase-report.mjs <phase-folder> [--no-model]
 //
 // Reads the loop's logs in .worktrees/logs/<phase>/ and the transcripts they name, and writes
-// report.md next to them: cost and time per issue, review rounds, the steward's findings, guard
+// report.md next to them: cost and time per issue, review rounds, eval spend, the steward's findings, guard
 // refusals and the agent memory that changed. The `retrospective` agent then suggests what of
 // that memory belongs in docs. Rules: lib/phase-report.mjs; intent: docs/agents.md.
 
@@ -85,14 +85,15 @@ export async function writePhaseReport({ mainRoot, phase, model = true }) {
     .filter((name) => ITERATION_LOG.test(name))
     .sort();
   const iterations = files.map((name) => {
-    const stats = iterationStats(JSON.parse(fs.readFileSync(path.join(logDir, name), "utf8")));
+    const log = JSON.parse(fs.readFileSync(path.join(logDir, name), "utf8"));
+    const stats = iterationStats(log);
     const { main, subagents } = stats.sessionId
       ? sessionLines(dir, stats.sessionId)
       : { main: [], subagents: [] };
     const refusals = [main, ...subagents].flatMap(
       (lines) => summarizeTranscript(lines, { windowMinutes: Infinity }).refusals,
     );
-    return { ...stats, dispatches: countDispatches(main), refusals };
+    return { ...stats, dispatches: countDispatches(main), refusals, spend: log.spend ?? null };
   });
   const steward = (readLines(path.join(logDir, "steward.jsonl")) ?? []).flatMap((line) => {
     try {

@@ -73,3 +73,58 @@ test("permission settings leave scoped local environment access to the guard", (
   assert.ok(!settings.permissions.deny.includes("Read(**/.env.local)"));
   assert.ok(settings.permissions.deny.includes("Read(**/.env.production)"));
 });
+
+// --- the state of a phase pull request (issue #371) --------------------------
+
+// A stand-in for gh on the PATH: `gh pr view <selector> --json headRefName -q .headRefName`
+// answers the head branch the fixture gives that pull request, and fails for any other.
+const bin = path.join(fixture, "bin");
+fs.mkdirSync(bin);
+fs.writeFileSync(
+  path.join(bin, "gh"),
+  '#!/bin/sh\ncase "$3" in\n  50) echo phase/07-ai-service ;;\n  51) echo feat/12-thing ;;\n  *) exit 1 ;;\nesac\n',
+  { mode: 0o755 },
+);
+
+function shellVerdict(command, { unattended = false, subagent = false } = {}) {
+  const env = { ...process.env, CLAUDE_PROJECT_DIR: repo, PATH: `${bin}:${process.env.PATH}` };
+  delete env.SEBELA_UNATTENDED;
+  if (unattended) env.SEBELA_UNATTENDED = "1";
+  const run = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("./pre-tool-use.mjs", import.meta.url))],
+    {
+      cwd: worktree,
+      env,
+      input: JSON.stringify({
+        cwd: worktree,
+        ...(subagent ? { agent_id: "fixture" } : {}),
+        tool_name: "Bash",
+        tool_input: { command },
+      }),
+      encoding: "utf8",
+    },
+  );
+  assert.equal(run.status, 0, run.stderr);
+  return run.stdout ? JSON.parse(run.stdout).hookSpecificOutput : { permissionDecision: "allow" };
+}
+
+test("the hook refuses a loop step that changes the state of a phase pull request", () => {
+  for (const command of ["gh pr ready 50", "gh pr close 50", "gh pr reopen 50"]) {
+    for (const session of [{ unattended: true }, { subagent: true }]) {
+      const output = shellVerdict(command, session);
+      assert.equal(output.permissionDecision, "deny", command);
+      assert.match(output.permissionDecisionReason, /phase pull request/);
+    }
+  }
+  assert.equal(shellVerdict("gh pr ready 51", { unattended: true }).permissionDecision, "allow");
+  // A pull request gh cannot find is not assumed to be harmless.
+  assert.equal(shellVerdict("gh pr ready 52", { unattended: true }).permissionDecision, "deny");
+});
+
+test("the hook asks the owner in an interactive session instead of refusing", () => {
+  const output = shellVerdict("gh pr ready 50");
+  assert.equal(output.permissionDecision, "ask");
+  assert.match(output.permissionDecisionReason, /phase pull request/);
+  assert.equal(shellVerdict("gh pr close 51").permissionDecision, "allow");
+});

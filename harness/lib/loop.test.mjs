@@ -9,6 +9,8 @@ import {
   noteAfter,
   ownerNoteSection,
   phaseEnd,
+  spendComment,
+  stewardStop,
 } from "./loop.mjs";
 
 const success = (report) =>
@@ -472,4 +474,58 @@ test("open issues gh could not list are said to be unknown", () => {
   const end = phaseEnd({ pullRequest: { number: 240 }, openIssues: null });
   assert.equal(end.status, "done");
   assert.match(end.log.join("\n"), /could not list/);
+});
+
+// --- a stop by the steward (issue #371) ---------------------------------------------
+
+test("a hard stop by the steward says what stopped the loop and what was spent", () => {
+  const message = stewardStop({
+    stop: {
+      by: "rules",
+      code: "ceiling",
+      reason: "the 4.00 USD ceiling of the 07-ai-service eval campaign is reached",
+    },
+    issue: 301,
+    spend: "spend: no paid eval run; 0.0000 USD of the 07-ai-service ceiling (4.00 USD) remain",
+  });
+  assert.match(
+    message.log,
+    /^stopping: the steward's rules stopped the loop on #301: the 4\.00 USD ceiling/,
+  );
+  assert.deepEqual(message.alert, [
+    "the steward stopped the loop on #301",
+    "the 4.00 USD ceiling of the 07-ai-service eval campaign is reached",
+  ]);
+  assert.match(message.comment, /^Loop note: the steward's rules stopped the phase loop/);
+  assert.match(
+    message.comment,
+    /the 4\.00 USD ceiling of the 07-ai-service eval campaign is reached/,
+  );
+  assert.match(message.comment, /spend: no paid eval run; 0\.0000 USD/);
+  assert.match(message.comment, /worktree and branch are kept/);
+});
+
+test("a stop by the steward model is named as its judgement", () => {
+  const message = stewardStop({
+    stop: {
+      by: "model",
+      code: "efficiency",
+      reason: "the same paid run was repeated without a changed input",
+    },
+    issue: null,
+    spend: null,
+  });
+  assert.match(message.log, /^stopping: the steward model stopped the loop: the same paid run/);
+  assert.equal(message.alert[0], "the steward stopped the loop");
+  assert.doesNotMatch(message.comment, /spend:/);
+});
+
+test("a paid run of an iteration is noted on its issue with the spend line", () => {
+  const line =
+    "spend: expected 0.3000 USD, actual 0.2200 USD (uncertain 0.0200) in 1 paid run; 3.7800 USD of the 07-ai-service ceiling (4.00 USD) remain";
+  assert.equal(
+    spendComment({ line, paid: true, iteration: 4 }),
+    `Loop note: paid eval spend of iteration 4.\n\n${line}`,
+  );
+  assert.equal(spendComment({ line, paid: false, iteration: 4 }), null);
 });

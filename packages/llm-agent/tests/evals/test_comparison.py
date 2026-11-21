@@ -30,6 +30,7 @@ from llm_agent.reliability.stops import LimitReached
 from llm_agent.schemas.requests import ExecutionLimits
 from tests.evals.records import SUBJECT, record
 
+P6 = budget.campaign("06-llm-agent")
 SUBSET = tuple(case.id for case in comparison.SUBSET)
 
 
@@ -131,7 +132,12 @@ def test_the_sonnet_candidate_reuses_the_judges_pinned_sonnet_prices() -> None:
 def test_compare_runs_exactly_the_subset_with_the_named_candidate() -> None:
     chosen = run.plan(["--compare", "haiku-medium", "--allowance", "1"])
     assert chosen == run.Plan(
-        mode="compare", cases=SUBSET, allowance_usd=1.0, candidate="haiku-medium"
+        mode="compare",
+        cases=SUBSET,
+        allowance_usd=1.0,
+        candidate="haiku-medium",
+        campaign=P6,
+        stage="issue",
     )
 
 
@@ -368,7 +374,12 @@ def test_compare_may_run_a_slice_of_the_subset_named_with_case() -> None:
         ["--compare", "sonnet-medium", "--case", "Q01-en", "--case", "Q01-cs", "--allowance", "1"]
     )
     assert chosen == run.Plan(
-        mode="compare", cases=("Q01-en", "Q01-cs"), allowance_usd=1.0, candidate="sonnet-medium"
+        mode="compare",
+        cases=("Q01-en", "Q01-cs"),
+        allowance_usd=1.0,
+        candidate="sonnet-medium",
+        campaign=P6,
+        stage="issue",
     )
 
 
@@ -517,6 +528,8 @@ def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
         selected: Any,
         declared: float,
         *,
+        campaign: budget.Campaign,
+        stage: str = "",
         candidate: str | None = None,
         judge_mode: str = "",
         deadline_minutes: float = 0.0,
@@ -524,6 +537,8 @@ def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
         seen.update(
             selected=tuple(selected),
             declared=declared,
+            campaign=campaign.name,
+            stage=stage,
             candidate=candidate,
             judge_mode=judge_mode,
             deadline_minutes=deadline_minutes,
@@ -539,6 +554,8 @@ def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seen == {
         "selected": piece,
         "declared": 1.0,
+        "campaign": "06-llm-agent",
+        "stage": "issue",
         "candidate": "sonnet-medium",
         "judge_mode": "batch",
         "deadline_minutes": run.DEADLINE_MINUTES,
@@ -770,7 +787,7 @@ async def test_a_comparison_run_passes_the_candidate_repeats_once_and_marks_answ
 ) -> None:
     selected = ["S01-en", "S01-cs"]
     fake_run["records"] = [_candidate_record(case_id, "haiku-medium") for case_id in selected]
-    assert await run.command_run(selected, 1.0, candidate="haiku-medium") == 0
+    assert await run.command_run(selected, 1.0, candidate="haiku-medium", campaign=P6) == 0
     (call,) = fake_run["promptfoo"]
     assert call["env"][comparison.ENVIRONMENT] == "haiku-medium"
     assert call["repeats"] == 1
@@ -787,14 +804,18 @@ async def test_a_comparison_run_with_a_missing_case_run_exits_1(
     fake_run: dict[str, Any],
 ) -> None:
     fake_run["records"] = [_candidate_record("S01-en", "haiku-medium")]
-    assert await run.command_run(["S01-en", "S01-cs"], 1.0, candidate="haiku-medium") == 1
+    assert (
+        await run.command_run(["S01-en", "S01-cs"], 1.0, candidate="haiku-medium", campaign=P6) == 1
+    )
 
 
 async def test_a_comparison_run_refuses_answers_of_another_main_model(
     fake_run: dict[str, Any],
 ) -> None:
     fake_run["records"] = [_candidate_record("S01-en", "haiku-high")]
-    assert await run.command_run(["S01-en"], 1.0, candidate="haiku-medium") == run.BLOCKED
+    assert (
+        await run.command_run(["S01-en"], 1.0, candidate="haiku-medium", campaign=P6) == run.BLOCKED
+    )
     (folder,) = [path for path in run.REPORT_ROOT.iterdir() if path.is_dir()]
     assert not (folder / "answers").exists()
 
@@ -803,7 +824,7 @@ async def test_a_comparison_over_the_allowance_stops_before_anything_starts(
     fake_run: dict[str, Any],
 ) -> None:
     with pytest.raises(budget.BudgetBlockedError):
-        await run.command_run(SUBSET, 1.0, candidate="sonnet-medium")
+        await run.command_run(SUBSET, 1.0, candidate="sonnet-medium", campaign=P6)
     assert fake_run["promptfoo"] == []
     assert not run.LEDGER.exists()
 

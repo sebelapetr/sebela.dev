@@ -789,3 +789,122 @@ test("the owner's interactive session may operate production", () => {
   assert.equal(bash("docker logs sebela-production-web-1"), null);
   assert.equal(bash("infra/scripts/deploy.sh rollback"), null);
 });
+
+// --- the state of a phase pull request (issue #371) --------------------------
+
+const heads = (table) => (selector) => {
+  if (!(selector in table)) throw new Error("no such pull request");
+  return table[selector];
+};
+const phaseHeads = heads({ 50: "phase/07-ai-service", 51: "feat/12-thing" });
+const inLoop = { unattended: true, lookupPrHead: phaseHeads };
+const asSubagent = { isSubagent: true, lookupPrHead: phaseHeads };
+const interactive = { lookupPrHead: phaseHeads };
+
+test("the loop never marks a phase pull request ready, closes or reopens it", () => {
+  for (const command of [
+    "gh pr ready 50",
+    "gh pr ready 50 --undo",
+    "gh pr close 50",
+    "gh pr close 50 --comment 'done' --delete-branch",
+    "gh pr reopen 50",
+    "cd x && gh pr ready 50",
+    "gh pr checks 50 --watch; gh pr ready 50",
+    "GH_PAGER=cat gh pr ready 50",
+  ]) {
+    for (const session of [inLoop, asSubagent, { ...inLoop, isSubagent: true }]) {
+      const verdict = bash(command, session);
+      assert.match(verdict?.reason ?? "", /phase pull request/, command);
+      assert.notEqual(verdict.decision, "ask", command);
+    }
+  }
+});
+
+test("in an interactive session the owner is asked before a phase pull request changes state", () => {
+  for (const command of ["gh pr ready 50", "gh pr close 50", "gh pr reopen 50"]) {
+    const verdict = bash(command, interactive);
+    assert.equal(verdict?.decision, "ask", command);
+    assert.match(verdict.reason, /phase pull request/);
+    assert.match(verdict.reason, /owner/);
+  }
+});
+
+test("the state of an issue pull request may change", () => {
+  for (const session of [inLoop, asSubagent, interactive]) {
+    assert.equal(bash("gh pr ready 51", session), null);
+    assert.equal(bash("gh pr close 51 --delete-branch", session), null);
+    assert.equal(bash("gh pr reopen 51", session), null);
+  }
+});
+
+test("a phase pull request named by its branch or URL is recognised", () => {
+  const lookupPrHead = heads({
+    "https://github.com/sebelapetr/sebela.dev/pull/50": "phase/07-ai-service",
+  });
+  assert.ok(bash("gh pr ready phase/07-ai-service", { unattended: true, lookupPrHead }));
+  assert.ok(bash("gh pr close 'phase/07-ai-service'", { unattended: true, lookupPrHead }));
+  assert.ok(
+    bash("gh pr ready https://github.com/sebelapetr/sebela.dev/pull/50", {
+      unattended: true,
+      lookupPrHead,
+    }),
+  );
+});
+
+test("a state change without a named pull request acts on the checked-out branch", () => {
+  const lookupPrHead = heads({});
+  assert.ok(bash("gh pr ready", { ...inLoop, lookupPrHead, currentBranch: "phase/07-ai-service" }));
+  assert.equal(
+    bash("gh pr ready", { ...inLoop, lookupPrHead, currentBranch: "feat/12-thing" }),
+    null,
+  );
+  // The branch is unknown, or the command moves elsewhere first: refused.
+  assert.ok(bash("gh pr ready", { ...inLoop, lookupPrHead }));
+  assert.ok(bash("cd ../x && gh pr close", { ...inLoop, lookupPrHead, currentBranch: "feat/1-x" }));
+});
+
+test("a state change whose pull request cannot be confirmed is refused", () => {
+  assert.match(bash("gh pr ready 77", inLoop).reason, /Could not confirm/);
+  assert.match(bash("gh pr close 77", asSubagent).reason, /Could not confirm/);
+  assert.equal(bash("gh pr close 77", interactive).decision, "ask");
+  assert.ok(bash("gh pr ready 51 --repo someone/else", inLoop));
+  assert.ok(bash("gh pr ready 51 -R someone/else", asSubagent));
+  assert.ok(bash("GH_REPO=someone/else gh pr ready 51", asSubagent));
+});
+
+test("the same state changes through gh api are refused for a phase pull request", () => {
+  for (const command of [
+    "gh api repos/sebelapetr/sebela.dev/pulls/50 -X PATCH -f state=closed",
+    "gh api -X PATCH repos/sebelapetr/sebela.dev/pulls/50 -f state=open",
+    "gh api --method PATCH /repos/sebelapetr/sebela.dev/issues/50 -f state=closed",
+    "gh api repos/{owner}/{repo}/pulls/50 --method PATCH --field state=closed",
+    "gh api repos/sebelapetr/sebela.dev/pulls/50 -X PATCH -F draft=false",
+    "gh api repos/sebelapetr/sebela.dev/pulls/50 -X PATCH --input body.json",
+    "gh api graphql -f query='mutation { markPullRequestReadyForReview(input: {pullRequestId: \"PR_x\"}) { clientMutationId } }'",
+    "gh api graphql -f query='mutation { closePullRequest(input: {pullRequestId: \"PR_x\"}) { clientMutationId } }'",
+    "gh api graphql -f query='mutation { reopenPullRequest(input: {pullRequestId: \"PR_x\"}) { clientMutationId } }'",
+    "gh api graphql -f query='mutation { convertPullRequestToDraft(input: {pullRequestId: \"PR_x\"}) { clientMutationId } }'",
+    "gh api graphql -F query=@mutation.graphql",
+  ]) {
+    assert.match(bash(command, asSubagent)?.reason ?? "", /phase pull request/, command);
+    assert.equal(bash(command, interactive)?.decision, "ask", command);
+  }
+});
+
+test("reading a pull request through gh api and changing an issue pull request stay allowed", () => {
+  for (const command of [
+    "gh api repos/sebelapetr/sebela.dev/pulls/50",
+    "gh api repos/sebelapetr/sebela.dev/pulls/50/comments",
+    "gh api repos/sebelapetr/sebela.dev/pulls/50/reviews -X POST -f event=COMMENT -f body=ok",
+    "gh api repos/sebelapetr/sebela.dev/pulls/51 -X PATCH -f state=closed",
+    "gh api repos/sebelapetr/sebela.dev/pulls/50 -X PATCH -f title='A better title'",
+    "gh api graphql -f query='query { viewer { login } }'",
+    "gh pr view 50 --json state",
+    "gh pr edit 50 --body-file .tmp/body.md",
+    "gh pr create --draft --base master --head phase/07-ai-service --title x --body y",
+    "echo 'the owner runs gh pr ready 50'",
+  ]) {
+    assert.equal(bash(command, asSubagent), null, command);
+    assert.equal(bash(command, interactive), null, command);
+  }
+});

@@ -88,6 +88,21 @@ export function renderReport({ phase, iterations, steward, memory, suggestions }
     );
   }
 
+  // The spend line the loop logged with each iteration (harness/lib/spend.mjs): the state at the
+  // last one, and every iteration that paid for model evals.
+  out.push("", "## Eval spend", "");
+  const withSpend = iterations.filter((it) => it.spend?.line);
+  const text = (it) => it.spend.line.replace(/^spend: /, "");
+  if (withSpend.length === 0) out.push("Unknown: no iteration logged its eval spend.");
+  else out.push(`At the last iteration: ${text(withSpend.at(-1))}.`);
+  const paid = withSpend.filter((it) => it.spend.paid);
+  if (paid.length > 0) out.push("");
+  for (const it of paid) {
+    out.push(
+      `- ${it.issue === null || it.issue === undefined ? "no issue" : `#${it.issue}`} (iteration ${it.iteration}): ${text(it)}`,
+    );
+  }
+
   out.push("", "## Steward", "");
   const counts = { ok: 0, warn: 0, problem: 0 };
   const findings = new Set();

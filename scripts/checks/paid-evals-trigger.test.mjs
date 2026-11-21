@@ -11,7 +11,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { workflowJob } from "./mcp-admin-evals-affected.mjs";
-import { startsPaidEvals } from "./paid-evals-trigger.mjs";
+import { phaseCampaign, startsPaidEvals } from "./paid-evals-trigger.mjs";
 
 const CHECK = path.join(import.meta.dirname, "paid-evals-trigger.mjs");
 const REPOSITORY = path.resolve(import.meta.dirname, "..", "..");
@@ -75,12 +75,50 @@ describe("paid model evals: which events may start them", () => {
   });
 });
 
+describe("paid model evals: the eval campaign of a phase pull request", () => {
+  it("is the phase folder of the head branch", () => {
+    assert.equal(
+      phaseCampaign({ event: "pull_request", headRef: "phase/07-ai-service" }),
+      "07-ai-service",
+    );
+    assert.equal(
+      phaseCampaign({ event: "pull_request", headRef: "phase/07.1-jev-gateway" }),
+      "07.1-jev-gateway",
+    );
+  });
+
+  it("is none for anything that is not a phase pull request", () => {
+    for (const [event, headRef] of [
+      ["workflow_dispatch", "phase/07-ai-service"],
+      ["pull_request", "fix/371-thing"],
+      ["pull_request", "phase/07-ai-service/extra"],
+      ["pull_request", "phase/07 ai\ncampaign=06-llm-agent"],
+      ["pull_request", undefined],
+      ["push", "phase/07-ai-service"],
+    ]) {
+      assert.equal(phaseCampaign({ event, headRef }), null, `${event} ${headRef}`);
+    }
+  });
+});
+
 describe("paid model evals: the command the workflow runs", () => {
   it("prints paid-evals=true for a phase pull request and names the branch", () => {
     const result = run({ EVENT: "pull_request", HEAD_REF: "phase/06-llm-agent" });
     assert.equal(result.status, 0, result.output);
-    assert.equal(result.stdout, "paid-evals=true\n");
+    // The second line names the eval campaign of the phase: its phase folder.
+    assert.equal(result.stdout, "paid-evals=true\ncampaign=06-llm-agent\n");
     assert.match(result.output, /phase\/06-llm-agent/);
+  });
+
+  it("names no campaign for a run started by hand or for any other pull request", () => {
+    for (const variables of [
+      { EVENT: "workflow_dispatch" },
+      { EVENT: "workflow_dispatch", HEAD_REF: "phase/07-ai-service" },
+      { EVENT: "pull_request", HEAD_REF: "fix/371-thing" },
+      { EVENT: "push", HEAD_REF: "phase/07-ai-service" },
+    ]) {
+      assert.doesNotMatch(run(variables).stdout, /campaign=/, JSON.stringify(variables));
+    }
   });
 
   it("prints paid-evals=false for an ordinary pull request and says how to run a suite by hand", () => {
@@ -193,5 +231,18 @@ describe("paid model evals: the repository's workflow", () => {
   it("never puts the head branch into a shell line, only into an environment variable", () => {
     const uses = workflow.split("\n").filter((line) => /head_ref|head\.ref/.test(line));
     assert.deepEqual(uses, ["          HEAD_REF: ${{ github.head_ref }}"]);
+  });
+
+  it("gives the Python agent job the campaign this check names, and a stage", () => {
+    assert.match(changes, /^ {6}campaign: \$\{\{ steps\.trigger\.outputs\.campaign \}\}$/m);
+    const job = workflowJob(workflow, "llm-agent");
+    assert.match(job, /^ {10}PHASE_CAMPAIGN: \$\{\{ needs\.changes\.outputs\.campaign \}\}$/m);
+    const command = job.split("\n").find((line) => line.includes("python -m evals.run --all"));
+    assert.match(command, /--campaign "\$CAMPAIGN" --stage "\$STAGE" --allowance "\$ALLOWANCE"$/);
+    assert.match(
+      job,
+      /No eval campaign is named/,
+      "a run without a campaign must be a visible block",
+    );
   });
 });
