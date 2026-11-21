@@ -565,6 +565,10 @@ test.describe("the roadmap overview", () => {
       const preview = await request.get(`${website.url}/og${path}`);
       expect(preview.status(), path).toBe(200);
       expect(preview.headers()["content-type"], path).toBe("image/png");
+      // The CDN keeps a preview as briefly as the pages (infra/README.md, CDN caching).
+      expect(preview.headers()["cache-control"], path).toBe(
+        "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400",
+      );
     }
     for (const path of ["/og/ai-roadmap/no-such-area", "/og/ai-roadmap/orbit-foundations/nope"]) {
       expect((await request.get(`${website.url}${path}`)).status(), path).toBe(404);

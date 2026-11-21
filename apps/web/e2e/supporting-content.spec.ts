@@ -485,6 +485,10 @@ test.describe("the assembled AI Roadmap", () => {
       const preview = await request.get(`${website.url}/og${path}`);
       expect(preview.status(), path).toBe(200);
       expect(preview.headers()["content-type"], path).toBe("image/png");
+      // The CDN keeps a preview as briefly as the pages (infra/README.md, CDN caching).
+      expect(preview.headers()["cache-control"], path).toBe(
+        "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400",
+      );
     }
 
     // The reading guide is the person's article, based on the talk it summarises.

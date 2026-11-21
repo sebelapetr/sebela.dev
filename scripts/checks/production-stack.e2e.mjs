@@ -27,8 +27,10 @@
 //   interface, and that pages show the seed with `noindex` and without the analytics script;
 // - runs the reference reverse-proxy configuration (infra/nginx/sebela.dev.conf) in a throwaway nginx
 //   container in front of the website, with a self-signed certificate, and checks its shared-cache
-//   rule: a page answered 200 gets the public rule, while a 404, a client navigation, Ask and the
-//   health route never get it and keep the website's own header;
+//   rule: a page answered 200 gets the public rule; a client navigation (also Next's header-less 307
+//   to its `_rsc` URL), a 404, Ask, a POST, the closed internal route and the proxy's own 502 while
+//   the website is unreachable get `no-store`; the website's own header stays on the health route
+//   and robots.txt;
 // - with --browser, the hero's question to the mock Ask page in a browser (no model is called);
 // - checks that the website's /health reports the database failing when Postgres is stopped and the
 //   API failing when the API is stopped;
@@ -203,7 +205,7 @@ async function health() {
  * an empty edge-address include mounted at the paths the configuration names. Returns a function
  * that requests a path through the proxy's TLS site and gives the status and headers.
  */
-function startReverseProxy(folder, webContainer, webContainerPort) {
+function startReverseProxy(folder, webContainer, webContainerPort, suffix = "reverse-proxy") {
   const reference = fs.readFileSync(PROXY_FILE, "utf8");
   const one = (pattern) => {
     const match = pattern.exec(reference);
@@ -244,7 +246,7 @@ function startReverseProxy(folder, webContainer, webContainerPort) {
     "-out",
     mounts[1][0],
   ]);
-  const name = `${env.COMPOSE_PROJECT_NAME}-reverse-proxy`;
+  const name = `${env.COMPOSE_PROJECT_NAME}-${suffix}`;
   run("docker", [
     "run",
     "--detach",
@@ -383,14 +385,19 @@ try {
     assert.ok(!html.includes("data-website-id"), `${pathname} loads no analytics script`);
   }
 
-  step("the reference reverse proxy gives pages the shared-cache rule and nothing else");
+  step(
+    "the reference reverse proxy gives pages the shared-cache rule and everything else no-store",
+  );
   const proxyFolder = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-reverse-proxy-"));
-  const webContainer = containers().find((entry) => entry.Service === "web")?.ID;
-  assert.ok(webContainer, "the website container is listed");
-  const webContainerPort = JSON.parse(compose(["config", "--format", "json"])).services.web
-    .environment.WEB_PORT;
-  const proxy = startReverseProxy(proxyFolder, webContainer, String(webContainerPort));
+  const proxies = [];
   try {
+    const webContainer = containers().find((entry) => entry.Service === "web")?.ID;
+    assert.ok(webContainer, "the website container is listed");
+    const webContainerPort = String(
+      JSON.parse(compose(["config", "--format", "json"])).services.web.environment.WEB_PORT,
+    );
+    const proxy = startReverseProxy(proxyFolder, webContainer, webContainerPort);
+    proxies.push(proxy);
     await waitFor(() => {
       try {
         return proxy.request("/health").status === 200;
@@ -398,58 +405,88 @@ try {
         return false;
       }
     }, "the reverse proxy did not answer");
-    const expectations = [
-      // [what, path, curl options, status (null: whatever the website answers), public rule]
-      ["a page", "/", [], 200, true],
-      ["another page, HEAD", "/experience", ["--head"], 200, true],
-      ["a client navigation", "/experience", ["--header", "RSC: 1"], null, false],
-      [
-        "a prefetch",
-        "/experience",
-        ["--header", "RSC: 1", "--header", "Next-Router-Prefetch: 1"],
-        null,
-        false,
-      ],
-      ["a navigation payload by argument", "/experience?_rsc=smoke", [], null, false],
-      ["a missing page", "/no-such-page", [], 404, false],
-      ["Ask", "/ask", [], 200, false],
-      ["the health route", "/health", [], 200, false],
-    ];
-    for (const [what, pathname, options, status, isPublic] of expectations) {
-      const answer = proxy.request(pathname, options);
-      const cacheControl = answer.headers.get("cache-control") ?? "";
-      if (status !== null) {
-        assert.equal(answer.status, status, `${what} (${pathname}) answers ${String(status)}`);
-      }
-      if (isPublic) {
-        assert.equal(cacheControl, PUBLIC_RULE, `${what} gets the public rule`);
-      } else {
-        // Never the public rule. Next may redirect a navigation without a matching `_rsc` value,
-        // and a redirect carries whatever the website sends; an answer with content is no-store.
-        assert.notEqual(cacheControl, PUBLIC_RULE, `${what} (${pathname}) gets no public rule`);
-        if (answer.status === 200) {
-          assert.match(
-            cacheControl,
-            /\bno-store\b/u,
-            `${what} (${pathname}) keeps the website's no-store, got "${cacheControl}"`,
-          );
-        }
-      }
+    const expectSecurityHeaders = (what, answer) => {
       assert.equal(
         answer.headers.get("x-frame-options"),
         "DENY",
         `${what} keeps the security headers`,
       );
+    };
+    const expectations = [
+      // [what, path, curl options, status (null: whatever the website answers), Cache-Control]
+      ["a page", "/", [], 200, PUBLIC_RULE],
+      ["another page, HEAD", "/experience", ["--head"], 200, PUBLIC_RULE],
+      // Next answers a navigation without a matching `_rsc` value with a 307 to its `_rsc` URL and
+      // no Cache-Control. Its cache key is the page's own, so the proxy must mark it no-store; the
+      // status is asserted so that a change in Next's behaviour is noticed.
+      ["a client navigation", "/experience", ["--header", "RSC: 1"], 307, "no-store"],
+      [
+        "a prefetch",
+        "/experience",
+        ["--header", "RSC: 1", "--header", "Next-Router-Prefetch: 1"],
+        null,
+        "no-store",
+      ],
+      ["a navigation payload by argument", "/experience?_rsc=smoke", [], null, "no-store"],
+      ["an empty navigation argument", "/experience?smoke=1&_rsc", [], null, "no-store"],
+      ["a missing page", "/no-such-page", [], 404, "no-store"],
+      ["Ask", "/ask", [], 200, "no-store"],
+      ["a POST", "/", ["--request", "POST"], null, "no-store"],
+      ["the closed internal route", "/internal/invalidation", [], 404, "no-store"],
+    ];
+    for (const [what, pathname, options, status, rule] of expectations) {
+      const answer = proxy.request(pathname, options);
+      const cacheControl = answer.headers.get("cache-control") ?? "";
+      if (status !== null) {
+        assert.equal(answer.status, status, `${what} (${pathname}) answers ${String(status)}`);
+      }
+      if (rule === PUBLIC_RULE) {
+        assert.equal(cacheControl, PUBLIC_RULE, `${what} gets the public rule`);
+      } else {
+        assert.match(
+          cacheControl,
+          /\bno-store\b/u,
+          `${what} (${pathname}, ${String(answer.status)}) is no-store, got "${cacheControl}"`,
+        );
+      }
+      expectSecurityHeaders(what, answer);
     }
+    const health = proxy.request("/health");
+    assert.match(
+      health.headers.get("cache-control") ?? "",
+      /\bno-store\b/u,
+      "the health route keeps the website's no-store",
+    );
     const robots = proxy.request("/robots.txt");
     assert.equal(robots.headers.get("cache-control"), PUBLIC_RULE, "robots.txt keeps its own rule");
-    assert.equal(
-      proxy.request("/internal/invalidation").status,
-      404,
-      "the internal route is closed",
-    );
-  } finally {
+    // A Set-Cookie answer is not checked here: no route of the website sets a cookie.
+
+    // The proxy's own 502: the same configuration with an upstream port nothing listens on.
     proxy.stop();
+    const unreachable = startReverseProxy(
+      proxyFolder,
+      webContainer,
+      String(Number(webContainerPort) + 1),
+      "reverse-proxy-unreachable",
+    );
+    proxies.push(unreachable);
+    let badGateway = { status: 0, headers: new Map() };
+    await waitFor(() => {
+      try {
+        badGateway = unreachable.request("/");
+        return badGateway.status === 502;
+      } catch {
+        return false;
+      }
+    }, "the reverse proxy without its upstream did not answer 502");
+    assert.match(
+      badGateway.headers.get("cache-control") ?? "",
+      /\bno-store\b/u,
+      "the proxy's own 502 is no-store",
+    );
+    expectSecurityHeaders("the proxy's own 502", badGateway);
+  } finally {
+    for (const proxy of proxies) proxy.stop();
     fs.rmSync(proxyFolder, { recursive: true, force: true });
   }
 
