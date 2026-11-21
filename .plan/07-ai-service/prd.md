@@ -123,7 +123,7 @@ The builder chooses exact route spelling while retaining these separate operatio
 - Add a discreet read-only model/effort label and expandable usage panel beside the existing composer. Values come from canonical API policy/operation snapshots; initially one configured model/effort, no selectable controls or client-side authority. Show historical answers' actual model when configuration changes.
 
 ```text
-Model: Haiku 5.5    Effort: high                 [illustrative configuration]
+Model: Haiku 5.5    Effort: medium                 [illustrative configuration]
 Last 2 hours       6 / 10 operations             60%
 Today             6 / 30 operations             20%
 Last request context  12k / 16k input tokens     75%
