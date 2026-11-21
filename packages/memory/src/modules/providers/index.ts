@@ -59,6 +59,11 @@ export function createFakeEmbedder(
   };
 }
 
+/** Not implemented yet. */
+export const createQueryCachingEmbedder: (embedder: Embedder, file: string) => Embedder = (
+  embedder,
+) => embedder;
+
 /** Lower-cased words without diacritics. */
 function words(text: string): string[] {
   return (

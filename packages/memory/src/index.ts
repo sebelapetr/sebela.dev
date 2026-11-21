@@ -31,6 +31,7 @@ export type { SourceChunk, SourceSection } from "./modules/ingest/index.js";
 export { scheduleChanges } from "./modules/scheduling/index.js";
 export {
   createFakeEmbedder,
+  createQueryCachingEmbedder,
   createVoyageEmbedder,
   fakeEmbeddingModel,
 } from "./modules/providers/index.js";

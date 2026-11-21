@@ -19,7 +19,9 @@ import { SEARCHABLE, loadDataset, planCases } from "./plan.js";
 import {
   DEFAULT_MIN_INTERVAL_MS,
   RUN_CEILING_USD,
+  documentIngests,
   parseOptions,
+  privateStorageEnvironment,
   pendingSummary,
   providerEnvironment,
 } from "./run.js";
@@ -123,7 +125,8 @@ describe("the case plan", () => {
   });
 
   it("uses the searchable capabilities of the current slice", () => {
-    expect([...SEARCHABLE]).toEqual(["portfolio"]);
+    expect([...SEARCHABLE]).toEqual(["portfolio", "supplemental"]);
+    expect(planCases(dataset, []).pending).toEqual([]);
   });
 });
 
@@ -150,6 +153,33 @@ describe("the runner's options", () => {
       RETRIEVAL_MONTHLY_CEILING_USD: "0.5",
       RETRIEVAL_PROVIDER_RETRIES: "6",
       RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: "60000",
+      RETRIEVAL_QUERY_CACHE_FILE: expect.stringMatching(
+        /[/\\]\.tmp[/\\]evals[/\\]memory[/\\]query-cache\.json$/,
+      ) as string,
+    });
+  });
+
+  it("ingests every supplemental document under its slug and safe title", () => {
+    const ingests = documentIngests(dataset);
+    expect(ingests).toHaveLength(dataset.documents.length);
+    for (const [index, document] of dataset.documents.entries()) {
+      const args = ingests[index] ?? [];
+      expect(args).toEqual([
+        "ingest",
+        expect.stringMatching(/datasets[/\\]documents[/\\][a-z0-9-]+\.md$/) as string,
+        "--slug",
+        document.sourceId.replace(/^document:/, ""),
+        "--title",
+        document.title,
+      ]);
+      expect(existsSync(args[1] ?? "")).toBe(true);
+    }
+  });
+
+  it("keeps the run's originals in a local private storage inside its scratch folder", () => {
+    expect(privateStorageEnvironment("/scratch")).toEqual({
+      PRIVATE_STORAGE_DRIVER: "local",
+      PRIVATE_STORAGE_LOCAL_ROOT: expect.stringMatching(/^[/\\]scratch[/\\]private$/) as string,
     });
   });
 

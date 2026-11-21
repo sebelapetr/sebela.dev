@@ -126,6 +126,26 @@ export function providerEnvironment(options) {
 }
 
 /**
+ * Not implemented yet.
+ *
+ * @param {import("./plan.js").Dataset} dataset
+ * @returns {string[][]}
+ */
+export function documentIngests(dataset) {
+  return dataset.documents.length < 0 ? [] : [];
+}
+
+/**
+ * Not implemented yet.
+ *
+ * @param {string} scratch
+ * @returns {Record<string, string>}
+ */
+export function privateStorageEnvironment(scratch) {
+  return scratch === "" ? {} : {};
+}
+
+/**
  * The redacted summary of a run in which nothing was measured.
  *
  * @param {{ cases: readonly string[] }} options
