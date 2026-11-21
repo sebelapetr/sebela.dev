@@ -190,10 +190,12 @@ def kept_runs(env: Mapping[str, str], checkout: Path) -> KeptRuns | None:
     return KeptRuns(Path(path), source=source)
 
 
-def _kept_spent(kept: KeptRuns, name: str, stage: str | None) -> float:
-    """What the loop's record counts for the campaign in the other checkouts. This checkout's
-    runs are read from its own ledger, which is newer. A record that does not exist yet adds
-    nothing; one that cannot be read is a block, never zero."""
+def _kept_spent(kept: KeptRuns, name: str, stage: str | None, local: frozenset[str]) -> float:
+    """What the loop's record counts for the campaign beyond this checkout's own ledger: the
+    runs of the other checkouts, and the runs of an earlier worktree in this folder that the
+    ledger no longer holds. A run whose id is in the ledger (`local`) is read from there, which
+    is newer. A record that does not exist yet adds nothing; one that cannot be read is a block,
+    never zero."""
     if not kept.path.exists():
         return 0.0
     try:
@@ -201,12 +203,15 @@ def _kept_spent(kept: KeptRuns, name: str, stage: str | None) -> float:
         runs = data["runs"]
         total = 0.0
         for entry in runs:
-            if entry["source"] == kept.source or entry.get("campaign") != name:
+            source, run, spent = entry["source"], entry["run"], float(entry["spentUsd"])
+            if entry.get("campaign") != name:
+                continue
+            if source == kept.source and run in local:
                 continue
             if stage is not None and entry.get("stage") != stage:
                 continue
-            total += float(entry["spentUsd"])
-    except (OSError, ValueError, TypeError, KeyError) as error:
+            total += spent
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
         raise BudgetBlockedError(
             f"the phase loop's kept record of paid runs ({kept.path.name}) cannot be read;"
             " spend in other worktrees is unknown, so no paid run starts"
@@ -226,16 +231,17 @@ def ledger_spent(
     ledger: Path, name: str, *, stage: str | None = None, kept: KeptRuns | None = None
 ) -> float:
     """What the ledger counts as spent in the campaign `name` (of one stage when given), plus,
-    in the phase loop, what the loop's kept record counts in the other checkouts (`kept`).
+    in the phase loop, what the loop's kept record counts beyond this ledger (`kept`).
     Entries written before campaigns were named belong to phase 6."""
-    elsewhere = _kept_spent(kept, name, stage) if kept is not None else 0.0
-    if not ledger.exists():
-        return elsewhere
-    data = json.loads(ledger.read_text(encoding="utf-8"))
+    runs: list[dict[str, Any]] = []
+    if ledger.exists():
+        runs = json.loads(ledger.read_text(encoding="utf-8")).get("runs", [])
+    local = frozenset(str(entry.get("run")) for entry in runs)
+    elsewhere = _kept_spent(kept, name, stage, local) if kept is not None else 0.0
     return elsewhere + float(
         sum(
             float(entry.get("spent_usd", 0))
-            for entry in data.get("runs", [])
+            for entry in runs
             if _campaign_of(entry) == name and (stage is None or entry.get("stage") == stage)
         )
     )

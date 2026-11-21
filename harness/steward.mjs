@@ -210,25 +210,35 @@ export function phaseSpend({ mainRoot, phase, logDir, since = null }) {
   const keptFile = keptRunsFile(logDir);
   const keptText = textOf(keptFile);
   let kept = [];
+  let keptBroken = false;
   if (keptText !== undefined) {
     try {
       kept = JSON.parse(keptText).runs;
       if (!Array.isArray(kept)) throw new Error("no runs");
       found += 1;
     } catch {
+      // A check that was killed while writing, or a damaged file: said at this check, and the
+      // record is started again from the ledgers that are there, so the eval runner — which
+      // refuses to run on a record it cannot read — is not blocked for good.
       kept = [];
-      unreadable.push("the loop's kept runs");
+      keptBroken = true;
+      unreadable.push(
+        "the loop's kept runs (started again; earlier runs of removed worktrees are lost)",
+      );
     }
   }
   const runs = mergeRuns(kept, seen);
-  // An unreadable record is left as it is for the owner to look at, never overwritten.
-  if (runs.length > 0 && !unreadable.includes("the loop's kept runs")) {
+  if (runs.length > 0 || keptBroken) {
     const next = `${JSON.stringify({ runs }, null, 2)}\n`;
     if (next !== keptText) {
+      // Written beside the record and moved over it in one step: a reader never sees half.
+      const scratch = `${keptFile}.${process.pid}.tmp`;
       try {
         fs.mkdirSync(logDir, { recursive: true });
-        fs.writeFileSync(keptFile, next);
+        fs.writeFileSync(scratch, next);
+        fs.renameSync(scratch, keptFile);
       } catch {
+        fs.rmSync(scratch, { force: true });
         // the next check tries again
       }
     }
