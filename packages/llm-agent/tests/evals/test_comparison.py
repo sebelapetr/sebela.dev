@@ -18,11 +18,13 @@ from pydantic import ValidationError
 
 from evals import budget, comparison, provider, run
 from evals.catalogue import BY_ID as CATALOGUE
+from evals.comparison import ComparisonLimits
 from evals.datasets.cases import BY_ID as CASES
 from evals.gate import evaluate_gate
 from evals.graders import code, rubric
 from llm_agent import versions
 from llm_agent.models import config
+from llm_agent.models.usage import MeasuredUsage
 from llm_agent.reliability.budgets import Budget
 from llm_agent.reliability.stops import LimitReached
 from llm_agent.schemas.requests import ExecutionLimits
@@ -373,9 +375,16 @@ def test_compare_may_run_a_slice_of_the_subset_named_with_case() -> None:
 
 
 def _worst_case(prices: config.Prices) -> float:
+    """Security at its caps plus every allowed Main decision at the per-call caps, the Main
+    input bounded by the execution's input cap and the Main output by its output cap."""
     limits = ExecutionLimits()
     security = config.STAGES["security"].prices
-    main = limits.main_input_tokens * prices.input + limits.main_output_tokens * prices.output
+    main_input = min(
+        limits.main_decisions * limits.main_input_tokens,
+        limits.max_input_tokens - limits.security_input_tokens,
+    )
+    main_output = min(limits.main_decisions * limits.main_output_tokens, limits.max_output_tokens)
+    main = main_input * prices.input + main_output * prices.output
     guard = (
         limits.security_input_tokens * security.input
         + limits.security_output_tokens * security.output
@@ -401,30 +410,106 @@ def test_the_haiku_candidates_keep_the_default_limits() -> None:
 def test_the_sonnet_limit_is_derived_from_its_pinned_prices_and_the_caps() -> None:
     limits = comparison.execution_limits("sonnet-medium")
     sonnet = comparison.CANDIDATES["sonnet-medium"].prices
-    # One Main call at Sonnet's prices and the 16,000/8,192-token caps plus one Security call.
+    # Three Main decisions (48,000 input tokens, 16,384 output tokens across them) at Sonnet's
+    # prices plus one Security call.
     assert limits.max_cost_usd == pytest.approx(_worst_case(sonnet))
-    assert limits.max_cost_usd == pytest.approx((16_000 * 2.0 + 8_192 * 10.0) / 1e6 + 0.000784)
+    assert limits.max_cost_usd == pytest.approx((48_000 * 2.0 + 16_384 * 10.0) / 1e6 + 0.000784)
     assert isinstance(limits, ExecutionLimits)
     assert limits.model_dump(exclude={"max_cost_usd"}) == ExecutionLimits().model_dump(
         exclude={"max_cost_usd"}
     )
 
 
-def test_the_sonnet_limit_admits_a_worst_case_security_and_main_call() -> None:
+def _tool_using_answer(limits: ExecutionLimits, *, tool_tokens: int, output: int) -> int:
+    """Drives the real Budget through Security and every Main decision of a tool-using answer,
+    each tool result growing the next decision's input; returns the admitted decisions."""
     sonnet = comparison.CANDIDATES["sonnet-medium"].prices
     haiku = config.STAGES["security"].prices
+    allowance = Budget(limits)
+    guard = allowance.admit(input_tokens=1200, input_cap=4000, output_cap=768, prices=haiku)
+    allowance.settle(guard, MeasuredUsage(input_tokens=1200, output_tokens=80))
+    context = 3000
+    admitted = 0
+    for _ in range(limits.main_decisions):
+        decision = allowance.admit(
+            input_tokens=context, input_cap=limits.main_input_tokens, output_cap=8192, prices=sonnet
+        )
+        allowance.settle(decision, MeasuredUsage(input_tokens=context, output_tokens=output))
+        admitted += 1
+        context = min(context + output + tool_tokens, limits.main_input_tokens)
+    return admitted
 
-    def admit_both(limits: ExecutionLimits) -> None:
-        allowance = Budget(limits)
-        allowance.admit(input_tokens=4000, input_cap=4000, output_cap=768, prices=haiku)
-        allowance.admit(input_tokens=16_000, input_cap=16_000, output_cap=8192, prices=sonnet)
 
-    admit_both(comparison.execution_limits("sonnet-medium"))
-    with pytest.raises(LimitReached):
-        admit_both(ExecutionLimits())
+def test_the_sonnet_limit_admits_every_main_decision_of_a_tool_using_answer() -> None:
+    limits = comparison.execution_limits("sonnet-medium")
+    assert _tool_using_answer(limits, tool_tokens=3000, output=300) == limits.main_decisions == 3
+    # Tool results that fill the Main context up to its cap still fit.
+    assert _tool_using_answer(limits, tool_tokens=5000, output=600) == 3
 
 
-def test_the_runner_no_longer_blocks_sonnet(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_limit_for_one_main_call_refuses_the_second_decision() -> None:
+    one_call = ComparisonLimits(max_cost_usd=(16_000 * 2.0 + 8_192 * 10.0) / 1e6 + 0.000784)
+    with pytest.raises(LimitReached) as stopped:
+        _tool_using_answer(one_call, tool_tokens=3000, output=300)
+    assert stopped.value.reason == "cost_allowance"
+
+
+def test_the_sonnet_limit_never_stops_a_main_decision_on_cost_at_the_full_caps() -> None:
+    # Every attempt at its input cap and its whole admitted output: the token caps stop the
+    # execution before the cost allowance does.
+    limits = comparison.execution_limits("sonnet-medium")
+    sonnet = comparison.CANDIDATES["sonnet-medium"].prices
+    haiku = config.STAGES["security"].prices
+    allowance = Budget(limits)
+    guard = allowance.admit(input_tokens=4000, input_cap=4000, output_cap=768, prices=haiku)
+    allowance.settle(guard, MeasuredUsage(input_tokens=4000, output_tokens=guard.max_tokens))
+
+    def decide() -> None:
+        decision = allowance.admit(
+            input_tokens=16_000, input_cap=16_000, output_cap=8192, prices=sonnet
+        )
+        allowance.settle(
+            decision, MeasuredUsage(input_tokens=16_000, output_tokens=decision.max_tokens)
+        )
+
+    decide()
+    decide()
+    assert limits.main_decisions == 3
+    with pytest.raises(LimitReached) as stopped:
+        decide()
+    assert stopped.value.reason == "output_tokens"
+
+
+def test_the_whole_sonnet_subset_is_refused_above_the_per_run_limit() -> None:
+    usd = run.reservation(
+        SUBSET, repeats=1, execution_usd=comparison.execution_limits("sonnet-medium").max_cost_usd
+    )
+    assert usd > comparison.PER_RUN_LIMIT_USD
+    with pytest.raises(run.UsageError, match=r"above the USD 1\.00 per-run limit") as refused:
+        run.plan(["--compare", "sonnet-medium", "--allowance", "6"])
+    for piece in run.suggested_slices("sonnet-medium"):
+        assert " ".join(f"--case {case_id}" for case_id in piece) in str(refused.value)
+
+
+def test_the_suggested_sonnet_slices_cover_the_subset_within_the_per_run_limit() -> None:
+    pieces = run.suggested_slices("sonnet-medium")
+    assert tuple(case_id for piece in pieces for case_id in piece) == SUBSET
+    usd = comparison.execution_limits("sonnet-medium").max_cost_usd
+    for piece in pieces:
+        assert run.reservation(piece, repeats=1, execution_usd=usd) <= 1.00
+        args = ["--compare", "sonnet-medium", "--allowance", "1"]
+        for case_id in piece:
+            args += ["--case", case_id]
+        assert run.plan(args).cases == piece
+    assert len(pieces) == 7
+
+
+def test_a_haiku_subset_needs_no_slices() -> None:
+    assert run.suggested_slices("haiku-high") == (SUBSET,)
+    assert run.suggested_slices("haiku-medium") == (SUBSET,)
+
+
+def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
 
     async def fake(selected: Any, declared: float, *, candidate: str | None = None) -> int:
@@ -432,8 +517,13 @@ def test_the_runner_no_longer_blocks_sonnet(monkeypatch: pytest.MonkeyPatch) -> 
         return 0
 
     monkeypatch.setattr(run, "command_run", fake)
-    assert run.main(["--compare", "sonnet-medium", "--allowance", "3"]) == 0
-    assert seen == {"selected": SUBSET, "declared": 3.0, "candidate": "sonnet-medium"}
+    piece = run.suggested_slices("sonnet-medium")[0]
+    args = ["--compare", "sonnet-medium", "--allowance", "1"]
+    for case_id in piece:
+        args += ["--case", case_id]
+    assert run.main(args) == 0
+    assert seen == {"selected": piece, "declared": 1.0, "candidate": "sonnet-medium"}
+    assert run.main(["--compare", "sonnet-medium", "--allowance", "6"]) == run.BLOCKED
 
 
 def test_the_provider_gets_the_candidates_limits_and_none_otherwise() -> None:
