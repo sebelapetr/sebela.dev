@@ -177,7 +177,7 @@ test.describe("the homepage's narrative read from the API", () => {
     await hydrated(page);
     await region(page, "Now").getByRole("link", { name: "AI Roadmap" }).click();
     await expect(page).toHaveURL(/\/ai-roadmap$/u);
-    await expect(page).toHaveTitle("AI Engineering Roadmap — Casey Morrow");
+    await expect(page).toHaveTitle("AI Engineering Roadmap · Casey Morrow");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "AI Engineering Roadmap for Experienced Developers",
     );

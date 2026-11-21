@@ -144,7 +144,7 @@ test.describe("CV and its PDF read from the API", () => {
   }) => {
     const response = await page.goto(`${website.url}/cv`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle("CV — Casey Morrow");
+    await expect(page).toHaveTitle("CV · Casey Morrow");
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Casey Morrow");
     const contacts = page.getByRole("list", { name: "Contacts" });

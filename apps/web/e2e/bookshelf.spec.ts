@@ -154,7 +154,7 @@ test.describe("the bookshelf", () => {
   }) => {
     const response = await page.goto(`${website.url}${shelf}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Bookshelf — AI Engineering Roadmap — ${name}`);
+    await expect(page).toHaveTitle(`Bookshelf · AI Engineering Roadmap · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bookshelf");
     await expect(
@@ -207,9 +207,7 @@ test.describe("the bookshelf", () => {
   }) => {
     const response = await page.goto(`${website.url}${completedBook}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(
-      `The Quiet Orbit Handbook — Bookshelf — AI Engineering Roadmap — ${name}`,
-    );
+    await expect(page).toHaveTitle(`The Quiet Orbit Handbook · Bookshelf · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("The Quiet Orbit Handbook");
     await expect(
