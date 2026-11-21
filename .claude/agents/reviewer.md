@@ -26,7 +26,8 @@ These are binding. If something in the issue contradicts them, stop and report i
 5. **UI** — screenshots exist at 360, 768 and 1280 px in light and dark mode, and you have looked at them: no horizontal scroll, nothing clipped, consistent with `docs/design.md`.
 6. **MCP and AI** — evals exist, state a threshold and meet it.
 7. **Documentation** — updated where behaviour or structure changed.
-8. **Hygiene** — no files left in or committed from `.tmp/` or `/tmp`, no weakened checks, no hard-coded environment values, no real personal data, no unrelated changes.
+8. **Migrations** — on every migration pull request, check the migration compatibility rule in `docs/release-workflow.md`: the previous release must still run on the new schema.
+9. **Hygiene** — no files left in or committed from `.tmp/` or `/tmp`, no weakened checks, no hard-coded environment values, no real personal data, no unrelated changes.
 
 ## What you return
 

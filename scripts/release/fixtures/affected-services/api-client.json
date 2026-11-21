@@ -1,0 +1,43 @@
+{
+  "description": "The generated client is in every image",
+  "changedFiles": ["packages/api-client/src/index.ts"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "@sebela/api",
+            "path": "apps/api",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          },
+          {
+            "name": "@sebela/api-client",
+            "path": "packages/api-client",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          },
+          {
+            "name": "@sebela/mcp-admin",
+            "path": "apps/mcp-admin",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          },
+          {
+            "name": "@sebela/web",
+            "path": "apps/web",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          }
+        ],
+        "length": 4
+      }
+    }
+  },
+  "services": ["api", "web", "mcp-admin"]
+}

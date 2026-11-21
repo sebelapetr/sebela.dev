@@ -42,8 +42,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - run: node --test scripts/checks/
+      - run: node --test scripts/
       - run: node scripts/checks/hardcoded-config.mjs
+      # The private terms are a repository secret, never in the repository (docs/permissions.md).
+      - run: node scripts/checks/private-terms.mjs
+        env:
+          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
 
   # The root checks on every run, then lint (including the import-boundaries rule), typecheck, test
   # and build of the packages the change affects. The comparison base is the pull request's base or
@@ -194,6 +198,54 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: node scripts/checks/api-stack.e2e.mjs
+
+  # The production composition (compose.yaml with infra/production/compose.yaml): builds the API,
+  # website and MCP Admin images under their GHCR names, checks them and the fixture image with the
+  # image-content check, starts them from the production example settings with the demo seed, and
+  # checks health, that only the website is published and only on loopback, noindex without
+  # analytics, the website's health route with Postgres and then the API stopped, and that no secret
+  # is logged. Removed at the end. Plain Node and Docker, no installed dependencies.
+  production-stack:
+    name: Production stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/checks/production-stack.e2e.mjs
+
+  # The deployment script infra/scripts/deploy.sh against a disposable Compose project of tiny
+  # busybox images committed per release (nothing is built): a first and a second healthy release,
+  # a deliberately unhealthy one that ends with the second running again, a new migration refused
+  # without a backup script, and the rollback command. Removed at the end. Plain Node and Docker.
+  deployment:
+    name: Simulated deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/release/deploy.e2e.mjs
+
+  # The backup and restore round trip of infra/scripts/backup.sh and restore.sh against a
+  # disposable Postgres of the production image with a fictional database owned by the application
+  # role (pgvector column included), a key generated for the run and the fake storage zone: dump,
+  # encrypt, upload and heartbeat; list, fetch, decrypt in the test, restore with equal row counts
+  # and the same vectors, refuse an existing database without --replace, drop. Removed at the end.
+  # Plain Node, Docker and age.
+  backup:
+    name: Backup and restore round trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: age
+        run: sudo apt-get update && sudo apt-get install --yes age
+      - run: node scripts/release/backup.e2e.mjs
 
   # The complete containerised stack of compose.yaml (profiles `api` and `web`): two disposable
   # Compose projects side by side, each with its own ports, volumes, storage folder and secrets,

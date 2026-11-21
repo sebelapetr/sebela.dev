@@ -1,0 +1,22 @@
+{
+  "description": "The root manifest (its pnpm settings) enters every build, though Turborepo selects only the root package",
+  "changedFiles": ["package.json"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": ["api", "web", "mcp-admin"]
+}

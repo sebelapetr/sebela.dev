@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { readAnalyticsConfig, readInvalidationSecret, readWebConfig } from "./config";
+import {
+  readAnalyticsConfig,
+  readIndexingConfig,
+  readInvalidationSecret,
+  readWebConfig,
+} from "./config";
 
 const SITE = { WEB_SITE_ORIGIN: "https://site.example.test" };
 const API = { WEB_API_BASE_URL: "http://api.example.test" };
@@ -368,4 +373,25 @@ describe("readAnalyticsConfig", () => {
       expect(message).not.toContain(value);
     },
   );
+});
+
+describe("readIndexingConfig", () => {
+  it("keeps the site out of search engines when WEB_INDEXING is unset, empty or off", () => {
+    expect(readIndexingConfig({})).toBe(false);
+    expect(readIndexingConfig({ WEB_INDEXING: "" })).toBe(false);
+    expect(readIndexingConfig({ WEB_INDEXING: "off" })).toBe(false);
+  });
+
+  it("lets search engines index the site only when WEB_INDEXING is on", () => {
+    expect(readIndexingConfig({ WEB_INDEXING: "on" })).toBe(true);
+  });
+
+  it("refuses any other value, naming the variable and never its value", () => {
+    for (const value of ["true", "ON", "1", "yes", " on"]) {
+      expect(() => readIndexingConfig({ WEB_INDEXING: value })).toThrow(
+        /WEB_INDEXING must be on or off/,
+      );
+    }
+    expect(() => readIndexingConfig({ WEB_INDEXING: "s3cret" })).not.toThrow(/s3cret/);
+  });
 });

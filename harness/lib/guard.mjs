@@ -503,6 +503,38 @@ function changesSharedStack(command) {
   return false;
 }
 
+// The production stack (`infra/`) may run on a machine where agents work, and access to Docker
+// reaches every container on it: an agent never runs Docker against the production project, the
+// production composition or its containers, and never runs the operating scripts (deploy, backup,
+// restore, demo clear). Reading those files and the composition's tests stays allowed.
+const PRODUCTION_PROJECT = "sebela-production";
+const DOCKER_CALL = new RegExp(
+  `${AT_COMMAND}(?:sudo\\s+(?:-\\S+\\s+)*)?(?:docker|docker-compose)\\b([^;&|\\n]*)`,
+  "g",
+);
+const PRODUCTION_SCRIPT = new RegExp(
+  `${AT_COMMAND}(?:sudo\\s+(?:-\\S+(?:\\s+[^-\\s]\\S*)?\\s+)*)?(?:(?:ba|z)?sh\\s+)?\\S*infra/scripts/(?:deploy|backup|restore|clear-demo)\\.sh\\b`,
+);
+const PRODUCTION_REASON =
+  "Agents do not operate the production stack: no Docker command against the `sebela-production` project, the production composition or its containers, and no deploy, backup, restore or demo-clear script (docs/permissions.md). Read the files, run `node --test scripts/checks/` or `pnpm test:production-stack`, which use a disposable project, and leave operating production to the owner.";
+
+function touchesProduction(command, assignments = "") {
+  if (PRODUCTION_SCRIPT.test(command)) return true;
+  for (const match of command.matchAll(DOCKER_CALL)) {
+    const before = command.slice(Math.max(0, match.index - 200), match.index);
+    const args = match[1] ?? "";
+    if (new RegExp(`(?:^|[^\\w-])${PRODUCTION_PROJECT}(?![\\w])`).test(args)) return true;
+    if (/infra\/production\/compose\.ya?ml/.test(args)) return true;
+    if (
+      new RegExp(`COMPOSE_PROJECT_NAME=${PRODUCTION_PROJECT}\\b`).test(
+        before + match[0] + assignments,
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
 // The command may run somewhere other than the directory the hook looked at.
 const MOVES =
   /(^|[;&|(\n]\s*)(cd|pushd)\s|\s-C\s|--git-dir=|--work-tree=|\bGIT_DIR=|\bGIT_WORK_TREE=/;
@@ -668,6 +700,7 @@ export function evaluateToolCall({
     if (unattended && (UNATTENDED_FORBIDDEN.test(command) || changesGitConfig(command))) {
       return deny(SETTINGS_REASON);
     }
+    if (restricted && touchesProduction(command)) return deny(PRODUCTION_REASON);
     if (restricted && changesSharedStack(command)) return deny(SHARED_STACK_REASON);
     if (restricted && mentionsContext(command)) {
       return deny(

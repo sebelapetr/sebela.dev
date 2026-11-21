@@ -2,7 +2,8 @@
 # apps/web/Dockerfile, apps/mcp-admin/Dockerfile, built from the repository root) is an allowlist:
 # the workspace manifests, the three apps and the packages they are built from. Environment files,
 # private notes (.context/), worktrees, scratch files, test results and build output never enter an
-# image.
+# image, and of the seeds only the fictional demo does (scripts/checks/image-content.mjs checks
+# the built images for all of these).
 *
 !package.json
 !pnpm-lock.yaml
@@ -19,3 +20,6 @@
 **/playwright-report/
 **/.env
 **/.env.*
+packages/db/seed/*
+!packages/db/seed/README.md
+!packages/db/seed/demo/

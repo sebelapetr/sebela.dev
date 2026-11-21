@@ -11,12 +11,13 @@
     "lint": "turbo run lint lint:root check:config",
     "lint:root": "eslint .",
     "check:config": "node scripts/checks/hardcoded-config.mjs",
+    "check:private-terms": "node harness/with-secrets.mjs -- node scripts/checks/private-terms.mjs",
     "generate:api-client": "pnpm --silent --filter @sebela/api openapi:export ../../packages/api-client/src/generated/openapi.json && pnpm --silent --filter @sebela/api-client generate",
     "check:api-client": "node scripts/checks/generated-drift.mjs packages/api-client/src/generated -- pnpm --silent generate:api-client",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test test:harness test:checks",
     "test:harness": "node --test harness/",
-    "test:checks": "node --test scripts/checks/",
+    "test:checks": "node --test scripts/",
     "test:e2e": "turbo run test:e2e",
     "build": "turbo run build",
     "ci:root": "turbo run lint:root check:config test:harness test:checks --continue",
@@ -27,6 +28,7 @@
     "stack:logs": "docker compose --profile api --profile web logs",
     "stack:down": "docker compose --profile api --profile web rm --stop --force web api migrate",
     "test:api-stack": "node scripts/checks/api-stack.e2e.mjs",
+    "test:production-stack": "node scripts/checks/production-stack.e2e.mjs",
     "test:web-stack": "node scripts/checks/web-stack.e2e.mjs"
   },
   "devDependencies": {

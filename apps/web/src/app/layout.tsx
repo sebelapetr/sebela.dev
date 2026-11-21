@@ -6,11 +6,13 @@ import "@sebela/ui/globals.css";
 
 import { themeScript } from "../modules/_shared";
 import { Analytics } from "../modules/analytics";
+import { indexingPageMetadata } from "../modules/indexing";
 
-// Page titles and descriptions come from the API on each page; this is only the fallback.
-export const metadata: Metadata = {
-  title: "sebela.dev",
-};
+// Page titles and descriptions come from the API on each page; this is only the fallback. While
+// `WEB_INDEXING` is not on, every page also asks not to be indexed (read per request).
+export function generateMetadata(): Metadata {
+  return { title: "sebela.dev", ...indexingPageMetadata() };
+}
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (

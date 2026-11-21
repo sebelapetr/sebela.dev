@@ -38,4 +38,8 @@ COPY --from=build /app/apps/mcp-admin/dist apps/mcp-admin/dist
 
 USER node
 WORKDIR /app/apps/mcp-admin
+# Healthy once the server answers its health route, which needs no key and calls no API; the same
+# check as compose.yaml, which overrides it.
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=30s --start-interval=1s \
+  CMD ["node", "--eval", "fetch(\"http://127.0.0.1:\" + process.env.MCP_ADMIN_PORT + \"/health\").then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node", "dist/server.js"]

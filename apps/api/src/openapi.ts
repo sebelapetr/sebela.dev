@@ -106,7 +106,9 @@ function responses(route: RouteDocumentation): ZodOpenApiOperationObject["respon
               "ceiling. Never reported as an empty result.",
           ),
         }
-      : {}),
+      : route.errors.includes("unavailable")
+        ? { "503": error("`unavailable`: the database cannot be reached now, without details.") }
+        : {}),
   };
 }
 

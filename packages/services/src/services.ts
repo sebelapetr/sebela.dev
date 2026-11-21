@@ -6,6 +6,7 @@ import {
   type ApiKeyServiceOptions,
 } from "./modules/api-keys/index.js";
 import { createAuditService, type AuditService } from "./modules/audit/index.js";
+import { createHealthService, type HealthService } from "./modules/health/index.js";
 import {
   createMediaService,
   type CleanupFailure,
@@ -36,6 +37,8 @@ export interface Services {
   readonly knowledge: KnowledgeService;
   /** Loads a seed folder through the services above; needs media to be configured. */
   readonly seed: SeedService;
+  /** Whether the database answers now, for readiness checks; never throws. */
+  readonly health: HealthService;
   /** Ends the connection pool. Call once, at shutdown. */
   close(): Promise<void>;
 }
@@ -62,7 +65,11 @@ const unconfigured = (): never => {
   throw new Error("Media storage is not configured.");
 };
 
-const unconfiguredSeed: SeedService = { loadSeed: unconfigured, loadSeedIntoEmpty: unconfigured };
+const unconfiguredSeed: SeedService = {
+  loadSeed: unconfigured,
+  loadSeedIntoEmpty: unconfigured,
+  clearContent: unconfigured,
+};
 
 /** Composes the services over a migrated database. Connects on the first operation. */
 export function openServices(config: DatabaseConfig, options: ServicesOptions = {}): Services {
@@ -107,6 +114,7 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
       mediaOptions === undefined
         ? unconfiguredSeed
         : createSeedService(persistence, { ...mediaOptions, ...profileOptions }),
+    health: createHealthService(persistence),
     close: () => persistence.close(),
   };
 }

@@ -34,6 +34,7 @@ export type {
   RetrievalWorkOperation,
 } from "./modules/retrieval/index.js";
 export type { AuditEntryInput, AuditEntryRecord, AuditPersistence } from "./modules/audit/index.js";
+export type { MaintenancePersistence } from "./modules/maintenance/index.js";
 export type {
   CaseStudyFields,
   CaseStudyPersistence,

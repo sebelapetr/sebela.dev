@@ -39,7 +39,8 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   └── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API and website stack smoke checks — plain Node, no dependencies [1, 2]
+│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy and the image-content check — plain Node, no dependencies [1, 2, 10]
+│   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version and release notes; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
 ├── .claude/
@@ -47,9 +48,12 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── rules/               short rules that point to the relevant docs; path-scoped ones load in their area [0, 1]
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
-├── .github/workflows/       CI [1]
+├── .github/workflows/       CI, the image release and the deployment [1, 10]
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
-├── compose.prod.yaml        production overrides [10]
+├── infra/                   production definition, see infra/README.md [10]
+│   ├── production/          Compose production overrides and the production example settings
+│   ├── nginx/               reference configuration of the server's nginx site
+│   └── scripts/             server scripts: deploy.sh, the deployment and rollback run as the deploy user's forced SSH command
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
 ├── pnpm-lock.yaml           committed lockfile [1]
@@ -58,7 +62,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
-├── .dockerignore            allowlist of the image build context: manifests, apps/api, packages [2]
+├── .dockerignore            allowlist of the image build context: manifests, apps, packages; of the seeds only the demo seed [2, 10]
 ├── .env.example             every setting with a comment and an example value; placeholders only [1]
 ├── .env.secrets.example     the owner's secrets for paid outside services, as placeholders; the real file stays in the main checkout [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
@@ -114,7 +118,7 @@ Run from the repository root. Turborepo runs a task in every package that define
 | `pnpm test:harness`              | Only the harness tests, through `node --test harness/`                                                                                                                                                                                                                                    |
 | `pnpm check:config`              | Only the hard-coded configuration check, through `node scripts/checks/hardcoded-config.mjs`. It scans the whole repository on every run and is never cached.                                                                                                                              |
 | `pnpm test:e2e`                  | `test:e2e` of every package that has it, after its `build` and the API's: the website's browser tests against a real API on a temporary database (`apps/web/AGENTS.md`, Tests). Needs the running Postgres and Chromium; never cached. CI runs it in the job `Website end to end`         |
-| `pnpm test:checks`               | Only the tests of the repository checks, through `node --test scripts/checks/`                                                                                                                                                                                                            |
+| `pnpm test:checks`               | Only the tests of the repository checks and the release decisions, through `node --test scripts/`                                                                                                                                                                                         |
 | `pnpm ci:root`                   | The root tasks as CI runs them on every change: `lint:root`, `check:config`, `test:harness` and `test:checks`                                                                                                                                                                             |
 | `pnpm ci:affected`               | `lint`, `typecheck`, `test` and `build` of the [affected packages](#affected-packages) only, as CI runs them; locally set `TURBO_SCM_BASE` to the branch's base, for example `TURBO_SCM_BASE=origin/phase/01-foundation`                                                                  |
 | `pnpm generate:api-client`       | Exports the API's OpenAPI document from its source (`openapi:export` of `@sebela/api`, no database, configuration or secrets) into `packages/api-client/src/generated/openapi.json` and regenerates the client types beside it; see `packages/api-client/AGENTS.md`                       |
@@ -126,9 +130,10 @@ Run from the repository root. Turborepo runs a task in every package that define
 | `pnpm stack:down`                | Stops and removes the website, API and migration containers; the shared Postgres keeps running                                                                                                                                                                                            |
 | `pnpm test:api-stack`            | The [API stack smoke check](testing.md#ci), `node scripts/checks/api-stack.e2e.mjs`; needs Docker and is not part of `pnpm test`                                                                                                                                                          |
 | `pnpm test:web-stack`            | The [website stack smoke check](testing.md#ci), `node scripts/checks/web-stack.e2e.mjs`: two disposable complete stacks side by side, then the complete-stack browser tests of `apps/web`; needs Docker and Chromium and is not part of `pnpm test`                                       |
+| `pnpm test:production-stack`     | The [production stack smoke check](testing.md#ci), `node scripts/checks/production-stack.e2e.mjs`: the images built, checked for forbidden files and started as the production composition with the demo seed; needs Docker and is not part of `pnpm test`                                |
 | `pnpm run prepare`               | Only the Git hooks installer, through `node harness/git-hooks/install.mjs`; pnpm runs it itself when an installation installs something                                                                                                                                                   |
 
-The harness (`harness/`) and the repository checks (`scripts/checks/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/checks/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. One repository check, MCP Admin's Compose policy (`compose-policy.test.mjs`), also needs the Docker CLI, which renders `compose.yaml` without contacting a daemon; it lives here because it reads root files only, which select no package. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
+The harness (`harness/`), the repository checks (`scripts/checks/`) and the release decisions (`scripts/release/`) stay plain Node with no dependencies: their tests run with Node's built-in test runner, and `node --test harness/`, `node --test scripts/` and `node scripts/checks/hardcoded-config.mjs` work without `pnpm install`. ESLint checks their files as a development tool; they never import anything from the workspace. Two repository checks, MCP Admin's Compose policy (`compose-policy.test.mjs`) and the production composition policy (`production-stack.test.mjs`, rendering `compose.yaml` with `infra/production/compose.yaml`), also need the Docker CLI, which renders the files without contacting a daemon; they live here because they read root files only, which select no package. The CI commit-message check (`scripts/checks/commit-messages.mjs`) imports the rule of the `commit-msg` hook from `harness/lib/commit-message.mjs`, so the hook and CI apply one set of rules. The hooks of the harness still use the workspace's tools, Prettier, ESLint and Turborepo, but only as programs: they start the executables that `pnpm install` put into the checkout's `node_modules/.bin`, in that checkout (`harness/lib/workspace-tools.mjs`), and their tests use fake executables instead. The fixtures of the hard-coded configuration check (`scripts/checks/fixtures/`) are sample files in several languages and are excluded from root ESLint, as the import-boundaries fixtures are from the lint of `@sebela/config`.
 
 A task with no package defining it, such as `build` before the first package with a build step, runs nothing and succeeds. Packages are not created, and scripts are not added, only to give a task something to do.
 
@@ -140,7 +145,7 @@ A task with no package defining it, such as `build` before the first package wit
 
 `turbo run … --affected` selects the packages changed between a comparison base (`TURBO_SCM_BASE`) and `HEAD`, together with every package that depends on them. Turborepo widens that selection itself:
 
-- A change to `turbo.json`, the root `package.json` or a file of `globalDependencies` in `turbo.json` (`.nvmrc`, `pnpm-workspace.yaml`) selects every package.
+- A change to `turbo.json` or a file of `globalDependencies` in `turbo.json` (`.nvmrc`, `pnpm-workspace.yaml`) selects every package. A change to the root `package.json` selects only the root package (`//`), whose tasks CI runs on every change; the release workflow treats it as a change to every image (`docs/release-workflow.md`, Images).
 - A change to the lockfile selects the packages whose external dependencies changed.
 - The root depends on `@sebela/config`, so a change to the shared configuration selects every package, its consumers included.
 - A base Turborepo cannot resolve in the checkout — a new branch, a rewritten history, a shallow clone — selects every package.
@@ -157,7 +162,7 @@ apps/api/src/
   config.ts                         # validated runtime configuration
   routing.ts, openapi.ts            # route descriptions and the generated OpenAPI document
   middleware/                       # HTTP authentication, limits, errors
-  cli/                              # maintenance adapters using services: api-keys, seed, storage, media, knowledge, openapi
+  cli/                              # maintenance adapters using services: api-keys, seed, clear-content, storage, media, knowledge, openapi
   modules/profile/index.ts          # profile HTTP entry
   modules/media/index.ts            # media HTTP entry
   modules/roadmap/index.ts          # roadmap HTTP entry
@@ -364,12 +369,12 @@ This covers application code, tests and scripts alike, including the harness and
 
 "Assigned" below means `=` (also after a type annotation, such as `port: number =` or `WORKER_PORT: int =`, and for a parameter default), `:` in an object literal, `??=` and `||=`; in the shell only `=`.
 
-| Rule                  | What it finds                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`                | A port-named variable or key (`API_PORT`, `PGPORT`, `port`, `api_port`, `apiPort`) assigned a number of two to five digits; an explicit port in a URL (`scheme://host:<number>`); `.listen(<number>)`; `--port <number>` and `-p <number>`. Port `0`, "any free port", is allowed.                                                                                         |
-| `local-host`          | `localhost`, `127.x.x.x`, `0.0.0.0` and a quoted or bracketed `::1`.                                                                                                                                                                                                                                                                                                       |
-| `database-name`       | A database-named variable or key (`DATABASE_NAME`, `POSTGRES_DB`, `PGDATABASE`, `database`, `dbName`) assigned a string literal; the database of a connection URL (`postgres://…/<name>`); `CREATE`, `DROP` or `ALTER DATABASE <name>`; in shell commands also `createdb` and `dropdb <name>` and `psql`, `pg_dump` or `pg_restore` with `-d <name>` or `--dbname`.        |
-| `environment-default` | A port, host, database, URL or DSN variable read from the environment with a literal fallback: `process.env.API_PORT ?? …`, `env["API_URL"] \|\| …`, `os.getenv("API_HOST", …)` (also with `default=`), `os.environ.get(…, …)`, `os.environ.setdefault("DB_HOST", …)`, `${WEB_PORT:-…}`. The value belongs in `.env.example`; the code fails when the variable is not set. |
+| Rule                  | What it finds                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`                | A port-named variable or key (`API_PORT`, `PGPORT`, `port`, `api_port`, `apiPort`) assigned a number of two to five digits; an explicit port in a URL (`scheme://host:<number>`); `.listen(<number>)`; `--port <number>` and `-p <number>`. Port `0`, "any free port", is allowed.                                                                                  |
+| `local-host`          | `localhost`, `127.x.x.x`, `0.0.0.0` and a quoted or bracketed `::1`.                                                                                                                                                                                                                                                                                                |
+| `database-name`       | A database-named variable or key (`DATABASE_NAME`, `POSTGRES_DB`, `PGDATABASE`, `database`, `dbName`) assigned a string literal; the database of a connection URL (`postgres://…/<name>`); `CREATE`, `DROP` or `ALTER DATABASE <name>`; in shell commands also `createdb` and `dropdb <name>` and `psql`, `pg_dump` or `pg_restore` with `-d <name>` or `--dbname`. |
+| `environment-default` | A port, host, database, URL or DSN variable read from the environment with a literal fallback: `process.env.API_PORT ?? …`, `env["API_URL"] \                                                                                                                                                                                                                       | \   | …`, `os.getenv("API_HOST", …)`(also with`default=`), `os.environ.get(…, …)`, `os.environ.setdefault("DB_HOST", …)`, `${WEB_PORT:-…}`. The value belongs in `.env.example`; the code fails when the variable is not set. |
 
 A value built from the environment passes: `Number(process.env.API_PORT)`, `` `http://${host}:${port}` ``, `os.environ["DATABASE_URL"]`, `createdb "$DATABASE_NAME"`, `next dev --port $WEB_PORT`.
 

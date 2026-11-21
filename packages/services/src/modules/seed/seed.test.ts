@@ -373,9 +373,12 @@ describe("seed service", () => {
       onCleanupFailure: (failure) => failures.push(failure),
     });
 
-  const seed = (over: Pick<Persistence, "profile" | "roadmap" | "transaction"> = persistence) =>
+  const seed = (
+    over: Pick<Persistence, "profile" | "roadmap" | "transaction" | "maintenance"> = persistence,
+    storage: OpenedStorage = opened,
+  ) =>
     createSeedService(over, {
-      storage: opened,
+      storage,
       limits,
       onCleanupFailure: (failure) => failures.push(failure),
     });
@@ -1725,9 +1728,10 @@ describe("seed service", () => {
 
   describe("a failure while writing", () => {
     it("rolls every write back, the roadmap last, and removes the files it stored", async () => {
-      const failing: Pick<Persistence, "profile" | "roadmap" | "transaction"> = {
+      const failing: Pick<Persistence, "profile" | "roadmap" | "transaction" | "maintenance"> = {
         profile: persistence.profile,
         roadmap: persistence.roadmap,
+        maintenance: persistence.maintenance,
         transaction: (work) =>
           persistence.transaction(
             (profileInTransaction, roadmapInTransaction, auditInTransaction) =>
@@ -1754,9 +1758,10 @@ describe("seed service", () => {
       const before = await snapshot();
       const changed = fixture();
       changed["files/cover.png"] = otherCover;
-      const failing: Pick<Persistence, "profile" | "roadmap" | "transaction"> = {
+      const failing: Pick<Persistence, "profile" | "roadmap" | "transaction" | "maintenance"> = {
         profile: persistence.profile,
         roadmap: persistence.roadmap,
+        maintenance: persistence.maintenance,
         transaction: (work) =>
           persistence.transaction(
             (profileInTransaction, roadmapInTransaction, auditInTransaction) =>
@@ -1776,6 +1781,50 @@ describe("seed service", () => {
 
       expect(await snapshot()).toEqual(before);
       expect(await filesBelow(storageFolder)).toHaveLength(5);
+    });
+  });
+
+  describe("clearing the content", () => {
+    it("empties the profile, the roadmap and the media files, ready for a new load", async () => {
+      await load(fixture());
+
+      await expect(seed().clearContent()).resolves.toEqual({ media: { removed: 5, failed: 0 } });
+
+      await expectEmpty();
+      expect(failures).toEqual([]);
+      const folder = await writeSeed(await mkdtemp(join(seedFolder, "again-")), fixture());
+      await expect(seed().loadSeedIntoEmpty(folder)).resolves.not.toBeNull();
+    });
+
+    it("reports a file it cannot remove and still clears every record", async () => {
+      await load(fixture());
+      const [kept] = (await media().listMedia()).map((item) => item.key);
+      const refusing: OpenedStorage = {
+        files: opened.files,
+        storage: {
+          store: (file) => opened.storage.store(file),
+          publicAddress: (key) => opened.storage.publicAddress(key),
+          delete: (key) =>
+            key === kept
+              ? Promise.reject(new Error("A fictional storage failure."))
+              : opened.storage.delete(key),
+        },
+      };
+
+      await expect(seed(persistence, refusing).clearContent()).resolves.toEqual({
+        media: { removed: 4, failed: 1 },
+      });
+
+      expect(failures).toEqual([
+        { operation: "delete", key: kept, error: new Error("A fictional storage failure.") },
+      ]);
+      expect(await media().listMedia()).toEqual([]);
+      expect(await filesBelow(storageFolder)).toHaveLength(1);
+    });
+
+    it("changes nothing in an empty database", async () => {
+      await expect(seed().clearContent()).resolves.toEqual({ media: { removed: 0, failed: 0 } });
+      await expectEmpty();
     });
   });
 });

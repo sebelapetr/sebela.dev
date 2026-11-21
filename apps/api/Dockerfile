@@ -49,4 +49,8 @@ COPY --from=build /app/apps/api/dist apps/api/dist
 RUN mkdir -p /var/lib/sebela/media && chown node:node /var/lib/sebela/media
 USER node
 WORKDIR /app/apps/api
+# Healthy once the server answers its health route (which does not touch the database); the same
+# check as compose.yaml, which overrides it.
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=30s --start-interval=1s \
+  CMD ["node", "--eval", "fetch(\"http://127.0.0.1:\" + process.env.API_PORT + \"/health\").then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node", "dist/server.js"]

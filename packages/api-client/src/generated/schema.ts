@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness
+         * @description Answers whether the API can serve content now: it checks that the database answers within a short time. For uptime monitoring and the website's health check; never cached. Shares the health budget.
+         */
+        get: operations["getReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/authentication": {
         parameters: {
             query?: never;
@@ -2352,7 +2372,7 @@ export interface components {
         ErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "validation_failed" | "malformed_json" | "credentials_in_url" | "unauthorized" | "not_found" | "conflict" | "payload_too_large" | "unsupported_media_type" | "rate_limited" | "internal_error" | "provider_unavailable" | "budget_exhausted";
+                code: "validation_failed" | "malformed_json" | "credentials_in_url" | "unauthorized" | "not_found" | "conflict" | "payload_too_large" | "unsupported_media_type" | "rate_limited" | "internal_error" | "provider_unavailable" | "budget_exhausted" | "unavailable";
                 message: string;
                 fields?: components["schemas"]["ErrorField"][];
             };
@@ -2361,6 +2381,10 @@ export interface components {
             /** @description Dot-separated path of the field, empty for the body. */
             path: string;
             message: string;
+        };
+        Readiness: {
+            /** @constant */
+            status: "ready";
         };
         AuthenticationCheck: {
             /** @constant */
@@ -3553,6 +3577,64 @@ export interface operations {
             };
             /** @description `internal_error`: an unexpected failure, without details. */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The API and its database answer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readiness"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the database cannot be reached now, without details. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

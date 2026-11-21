@@ -20,6 +20,8 @@ import { z } from "zod";
  * - `provider_unavailable` (503): an outside provider the operation needs, such as the embedding
  *   provider of a search, is not configured, failed or timed out. Never reported as no result.
  * - `budget_exhausted` (503): the month's spend on an outside provider reached its ceiling.
+ * - `unavailable` (503): something the API depends on, such as the database, cannot be reached now;
+ *   the readiness check answers it. No detail of the failure is included.
  */
 export const errorCodes = [
   "validation_failed",
@@ -34,6 +36,7 @@ export const errorCodes = [
   "internal_error",
   "provider_unavailable",
   "budget_exhausted",
+  "unavailable",
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];

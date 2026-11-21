@@ -1,0 +1,22 @@
+{
+  "description": "A change to a workflow alone builds nothing: no image contains it",
+  "changedFiles": [".github/workflows/ci.yml"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": []
+}

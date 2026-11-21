@@ -1,0 +1,50 @@
+{
+  "description": "A change to a shared package rebuilds every service that depends on it",
+  "changedFiles": ["packages/contracts/src/index.ts"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "@sebela/api",
+            "path": "apps/api",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          },
+          {
+            "name": "@sebela/contracts",
+            "path": "packages/contracts",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          },
+          {
+            "name": "@sebela/mcp-admin",
+            "path": "apps/mcp-admin",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          },
+          {
+            "name": "@sebela/services",
+            "path": "packages/services",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          },
+          {
+            "name": "@sebela/web",
+            "path": "apps/web",
+            "reason": {
+              "__typename": "DependencyChanged"
+            }
+          }
+        ],
+        "length": 5
+      }
+    }
+  },
+  "services": ["api", "web", "mcp-admin"]
+}
