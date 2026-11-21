@@ -582,6 +582,40 @@ describe("prepareDocument with a PDF", () => {
     expect(await rejection(() => prepareDocument(pdf(report), { limits }))).toBe("parser_limit");
   });
 
+  it("stops the parser when a small compressed stream decodes beyond its memory limit", async () => {
+    // About 300 KB of compressed content that decodes to 300 MiB of spaces: buffers outside the
+    // parser's JavaScript heap, which its heap limit alone does not hold.
+    const bomb = fixturePdf([{ lines: [body] }], { inflatedSpaces: 300 * 1_048_576 });
+    const limits = { ...defaultDocumentLimits, maxParserMemoryMb: 64 };
+
+    expect(bomb.length).toBeLessThan(defaultDocumentLimits.maxPdfBytes);
+    expect(await rejection(() => prepareDocument(pdf(bomb), { limits }))).toBe("parser_limit");
+  }, 30_000);
+
+  it("accepts a word processor's export: compressed streams and a Type0 font with Czech text", async () => {
+    const exported = fixturePdf(
+      [
+        {
+          lines: [
+            { text: "Zpráva z terénu", size: 18 },
+            { text: "Průzkum pokryl tři údolí a jejich měřicí stanice." },
+            { text: "Metody", size: 14 },
+            { text: "Každou stanici jsme navštívili jednou týdně." },
+          ],
+        },
+      ],
+      { wordProcessor: true },
+    );
+
+    const prepared = await prepareDocument(pdf(exported));
+
+    expect(prepared.findings).toEqual([]);
+    expect(prepared.chunks.map((chunk) => chunk.text)).toEqual([
+      "Fictional notes / Zpráva z terénu\nPrůzkum pokryl tři údolí a jejich měřicí stanice.",
+      "Fictional notes / Zpráva z terénu / Metody\nKaždou stanici jsme navštívili jednou týdně.",
+    ]);
+  });
+
   it("is the default limits' choice: 10 MiB, 100 pages, 256 MiB of parser memory", () => {
     expect(defaultDocumentLimits).toMatchObject({
       maxPdfBytes: 10_485_760,
