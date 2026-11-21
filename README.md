@@ -86,16 +86,16 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 
 ### Stack
 
-| Area             | Technology                                                          | Status                                                                                                        |
-| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier            | Delivered                                                                                                     |
-| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide       | Delivered; the chat answers from prepared scenarios until phase 7                                             |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                               | Delivered; the TypeScript client is generated, the Python client follows in phase 6                           |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search | Delivered, with private retrieval behind an authenticated route (phase 9); public search follows in phase 9.1 |
-| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic  | Planned (phase 7)                                                                                             |
-| Verification     | Node's test runner, Vitest, Playwright, Promptfoo                   | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                      |
-| Observability    | Langfuse for AI traces, cost and scoring                            | Planned                                                                                                       |
-| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                 | Delivered: merges into `master` deploy automatically, with rollback and backups, then a release (phase 10).   |
+| Area             | Technology                                                                       | Status                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                         | Delivered                                                                                                     |
+| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide                    | Delivered; the chat answers from prepared scenarios until phase 7                                             |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                                            | Delivered; the TypeScript client is generated, the Python client follows in phase 6                           |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search              | Delivered, with private retrieval behind an authenticated route (phase 9); public search follows in phase 9.1 |
+| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic               | Planned (phase 7)                                                                                             |
+| Verification     | Node's test runner, Vitest with fast-check property tests, Playwright, Promptfoo | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                      |
+| Observability    | Langfuse for AI traces, cost and scoring                                         | Planned                                                                                                       |
+| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                              | Delivered: merges into `master` deploy automatically, with rollback and backups, then a release (phase 10).   |
 
 The visual direction is editorial and monochrome: strong typography, generous whitespace, light and dark themes. See [design](docs/design.md).
 
