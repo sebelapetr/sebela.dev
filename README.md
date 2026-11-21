@@ -6,8 +6,10 @@
 
 The open-source engineering behind Petr Šebela's next professional website.
 
-[![Status: MCP Admin delivered](https://img.shields.io/badge/status-MCP_Admin_delivered-525252?style=flat-square)](.plan/done/05-mcp-admin/prd.md)
+[![Latest release](https://img.shields.io/github/v/release/sebelapetr/sebela.dev?style=flat-square&label=release)](https://github.com/sebelapetr/sebela.dev/releases)
+[![Live: sebela.dev](https://img.shields.io/badge/live-sebela.dev-525252?style=flat-square)](https://sebela.dev)
 [![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/release.yml?branch=master&style=flat-square&label=deploy)](https://github.com/sebelapetr/sebela.dev/actions/workflows/release.yml)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-525252?style=flat-square)](LICENSE)
 
 [The idea](#the-idea) · [Architecture](#architecture) · [AI & MCP](#ai--mcp) · [Roadmap](#roadmap) · [Getting started](#working-on-the-project) · [Documentation](#documentation)
@@ -19,7 +21,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Available on `master`.** The website serves the profile, CV and AI Engineering Roadmap from the content API. The owner can maintain that content through MCP Admin. Visitors can try prepared answers on the Ask page. The next phase adds the Python library for model-generated answers. [Phase 06 specification](.plan/06-llm-agent/prd.md)
+> **Live at [sebela.dev](https://sebela.dev) with the fictional demo content.** A merge into `master` that changes a service deploys automatically, and each healthy deployment is published as a GitHub release; the site stays `noindex` until the launch with real content. The website serves the profile, CV and AI Engineering Roadmap from the content API, and the owner maintains that content through MCP Admin. A private knowledge base indexes portfolio content and approved documents behind an authenticated search route. Visitors can try prepared answers on the Ask page. The Python library for model-generated answers (phase 06) is in acceptance. [Phase 06 specification](.plan/06-llm-agent/prd.md)
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -81,23 +83,23 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 
 ### Stack
 
-| Area             | Technology                                                          | Status                                                                                                       |
-| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier            | Delivered                                                                                                    |
-| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide       | Delivered; the chat answers from prepared scenarios until phase 7                                            |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                               | Delivered; the TypeScript client is generated, the Python client follows in phase 6                          |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search | PostgreSQL with pgvector and Drizzle delivered; retrieval planned (phase 9)                                  |
-| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic  | Planned (phase 7)                                                                                            |
-| Verification     | Node's test runner, Vitest, Playwright, Promptfoo                   | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                     |
-| Observability    | Langfuse for AI traces, cost and scoring                            | Planned                                                                                                      |
-| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                 | Local containers for PostgreSQL, the API, the website and MCP Admin. VPS deployment is planned for phase 10. |
+| Area             | Technology                                                          | Status                                                                                                        |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier            | Delivered                                                                                                     |
+| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide       | Delivered; the chat answers from prepared scenarios until phase 7                                             |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                               | Delivered; the TypeScript client is generated, the Python client follows in phase 6                           |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search | Delivered, with private retrieval behind an authenticated route (phase 9); public search follows in phase 9.1 |
+| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic  | Planned (phase 7)                                                                                             |
+| Verification     | Node's test runner, Vitest, Playwright, Promptfoo                   | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                      |
+| Observability    | Langfuse for AI traces, cost and scoring                            | Planned                                                                                                       |
+| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                 | Delivered: merges into `master` deploy automatically, with rollback and backups, then a release (phase 10).   |
 
 The visual direction is editorial and monochrome: strong typography, generous whitespace, light and dark themes. See [design](docs/design.md).
 
 ## AI & MCP
 
 > [!NOTE]
-> **MCP Admin is available.** The owner's agents can update profile content, upload media and log learning sessions. The visitor assistant, public MCP server and retrieval pipeline are planned for phases 6–9.
+> **MCP Admin and the private knowledge base are available.** The owner's agents can update profile content, upload media and log learning sessions, and portfolio content and approved documents are indexed for authenticated search. The visitor assistant (phases 6–7), public MCP server (phase 8) and public search (phase 9.1) are next.
 
 ### Planned visitor assistant
 
@@ -124,13 +126,13 @@ The approved phase 6 design defines three stages (Security Gateway, Main Agent a
 
 MCP Admin supports Streamable HTTP with a bearer key. The owner's content skills cover profile and CV updates, diary entries and events. [Client setup](apps/mcp-admin/AGENTS.md#connecting-a-client) · [Tool reference](apps/mcp-admin/AGENTS.md#tools)
 
-### Planned retrieval
+### Retrieval
 
-Portfolio API content and owner-approved extra documents are chunked, embedded and indexed in a separate schema of the existing PostgreSQL/pgvector. Terminal ingest accepts Markdown, TXT and text-layer PDF, with local sensitivity checks and owner approval before external embedding calls/public indexing. Originals stay in private Bunny Storage or a private local root through the existing drivers. Measure full-text/vector/hybrid variants with known-source questions; rebuild from API data and retained approved originals. Graph and ontology extend this knowledge base after launch; visitor history stays a separate API responsibility.
+Portfolio API content and owner-approved extra documents are chunked, embedded and indexed in a separate schema of the existing PostgreSQL/pgvector. Terminal ingest accepts Markdown, TXT and text-layer PDF, with local sensitivity checks and owner approval before external embedding calls/public indexing. Originals stay in private Bunny Storage or a private local root through the existing drivers. Measure full-text/vector/hybrid variants with known-source questions; rebuild from API data and retained approved originals. Phase 9.1 connects it to the assistant and public MCP. Graph and ontology extend this knowledge base after launch; visitor history stays a separate API responsibility.
 
 ## Roadmap
 
-Phases 00–05 have merged into `master`. Phase 06 has an approved specification and six published implementation issues. The first public release is scheduled for phase 10. [Phase 06 issues](.plan/06-llm-agent/issues.md)
+Phases 00–05, 09 and 10 have merged into `master`, and the site is deployed at [sebela.dev](https://sebela.dev) with the fictional demo content. Phase 06 is implemented and in acceptance. Phases 07, 08, 09.1 and 09.2 are next; the public launch with real content is the last step of phase 09.1. [Phase 06 issues](.plan/06-llm-agent/issues.md)
 
 | Phase                       | Deliverable                                                                        | Specification                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -143,6 +145,7 @@ Phases 00–05 have merged into `master`. Phase 06 has an approved specification
 | **05 · Admin MCP**          | Secured content-management tools and content skills                                | [Admin MCP](.plan/done/05-mcp-admin/prd.md)                                        |
 | **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                         | [LLM agent](.plan/06-llm-agent/prd.md)                                             |
 | **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                         | [AI service](.plan/07-ai-service/prd.md)                                           |
+| **07.1 · Jev gateway**      | A measured Jev classifier for the Security Gateway behind a switchable adapter     | [Jev gateway](.plan/07.1-jev-gateway/prd.md)                                       |
 | **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                        | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
 | **09 · RAG**                | Approved-source ingest, private originals, embeddings and private retrieval        | [RAG](.plan/done/09-rag/prd.md)                                                    |
 | **09.1 · RAG integration**  | Public search, agent tool and skill, public MCP search, cited supplemental sources | [RAG integration](.plan/09.1-rag-integration/prd.md)                               |
@@ -151,6 +154,7 @@ Phases 00–05 have merged into `master`. Phase 06 has an approved specification
 | **11 · Knowledge graph**    | Source-backed relationships and measured graph-assisted retrieval                  | [Knowledge graph](.plan/11-knowledge-graph/prd.md)                                 |
 | **12 · Ontology**           | Semantic constraints and a bounded Auto Ontology experiment                        | [Ontology](.plan/12-ontology/prd.md)                                               |
 | **13 · External MCP UI**    | Verified interactive views with structured/text fallbacks                          | [MCP Apps](.plan/13-mcp-apps/prd.md)                                               |
+| **14 · Floorplan**          | A public, interactive map of the architecture                                      | [Floorplan](.plan/14-floorplan/prd.md)                                             |
 
 ## Working on the project
 
@@ -299,7 +303,7 @@ The website reads content only through the public API routes and never holds an 
 - **The chat is a mock.** Ask streams prepared answers from deterministic scenarios in the browser; no model, conversation storage or rate limit exists until phase 7 replaces the adapter ([extension points](apps/web/AGENTS.md#extension-points)).
 - **AI Engineering Roadmap.** Browse learning areas, modules and resources at `/ai-roadmap`. Follow logged sessions in the diary and statistics, explore the bookshelf and reading guide, or find events at `/ai-roadmap/events`. The Ask page can show current learning activity from the API.
 - **Analytics are optional.** Without the analytics settings the website sends nothing.
-- **Not deployed.** Production deployment, backups and the launch are phase 10.
+- **Deployed with demo content.** [sebela.dev](https://sebela.dev) runs the fictional demo profile and sends `noindex` until the launch with real content ([release workflow](docs/release-workflow.md)).
 
 The visual direction is binding in [design](docs/design.md). The HTML prototype under [`.plan/done/03-web/prototype/`](.plan/done/03-web/prototype/) and other wireframes or mock-ups are illustrative only; where they differ from `docs/design.md` or the implementation, they are not authoritative.
 
@@ -351,7 +355,7 @@ MCP Admin has deterministic integration tests against the real API and a Promptf
 | [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements   |
 | [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations           |
 | [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries     |
-| [Release workflow](docs/release-workflow.md)                                                         | Planned deployment, backups and rollback               |
+| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback             |
 | [Changelog](CHANGELOG.md)                                                                            | What each released version brought                     |
 
 ## License
