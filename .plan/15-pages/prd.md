@@ -2,7 +2,7 @@
 
 |            |                                                                                                                                                                                                                                     |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Owner decisions of 2026-11-21 applied (issue #189; the four open questions are closed, see Further Notes); the issue breakdown awaits the owner's approval before it is published                                                   |
+| Status     | Owner decisions of 2026-11-21 applied (issue #189; the four open questions are closed, see Further Notes); the issue breakdown was published on 2026-11-21 (#319, #320, #321; see issues.md)                                        |
 | Date       | 2026-11-21                                                                                                                                                                                                                          |
 | Parent     | `.plan/00-overview/prd.md`                                                                                                                                                                                                          |
 | Depends on | Phases 2, 3 and 5 (merged). Prerequisite for starting: the phase 6 pull request (#274) merged into `master` by the owner. Independent of phases 7–14 and may run before them; intended to run beside phase 7                        |
@@ -115,7 +115,7 @@ Tests check external behaviour (HTTP answers, tool results, rendered pages), not
 ## Further Notes
 
 - Issue #189 stays the HITL issue for the text itself. This phase delivers the mechanism and the demo page; publishing the owner's real page through Admin MCP is the owner's step that closes #189. The last issue of this phase references it.
-- The proposed breakdown is in [issues.md](issues.md), a draft that is not published; it is published with the `to-issues` skill once the owner approves it.
+- The breakdown is in [issues.md](issues.md); the owner approved it and it was published with the `to-issues` skill on 2026-11-21 (#319, #320, #321).
 - Owner decisions (2026-11-21) on the four questions this PRD left open:
   1. **Footer.** Only pages marked for the footer get a footer row: one boolean field on the page, `inFooter`, default `false`. This stays a very simple CMS for a few specific pages: no navigation integration, no menus, no ordering field, no hierarchy; the website just reads the data. The footer order is the API's fixed order (title, then slug).
   2. **"Last updated".** The record's last change (`updatedAt`), as proposed. No owner-set date.
