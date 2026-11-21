@@ -62,36 +62,74 @@ def failed(custom_id: str, kind: str) -> dict[str, Any]:
     return {"custom_id": custom_id, "result": {"type": kind}}
 
 
+class StatusError(Exception):
+    """An API error with an HTTP status, as the SDK raises (`APIStatusError.status_code`)."""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"HTTP {status_code}")
+        self.status_code = status_code
+
+
 class FakeBatches:
-    """The four batch calls the judge uses; ends after `polls` retrievals unless `never_ends`."""
+    """The four batch calls the judge uses; ends after `polls` retrievals unless `never_ends`.
+
+    A cancelled batch ends at the next retrieval unless `stuck`. `failures` names, per call, the
+    errors that call raises first (one per attempt) before it answers normally.
+    """
 
     def __init__(
-        self, results: list[dict[str, Any]], *, polls: int = 1, never_ends: bool = False
+        self,
+        results: list[dict[str, Any]],
+        *,
+        polls: int = 1,
+        never_ends: bool = False,
+        stuck: bool = False,
+        failures: dict[str, list[Exception]] | None = None,
     ) -> None:
         self.stored = results
         self.polls = polls
         self.never_ends = never_ends
+        self.stuck = stuck
+        self.failures = {name: list(errors) for name, errors in (failures or {}).items()}
+        self.calls: dict[str, int] = {}
         self.created: list[list[dict[str, Any]]] = []
         self.retrieved = 0
         self.cancelled: list[str] = []
 
+    def _attempt(self, name: str) -> None:
+        self.calls[name] = self.calls.get(name, 0) + 1
+        pending = self.failures.get(name)
+        if pending:
+            raise pending.pop(0)
+
     async def create(self, *, requests: list[dict[str, Any]]) -> Any:
+        self._attempt("create")
         self.created.append(list(requests))
         return {"id": "msgbatch_fake01", "processing_status": "in_progress"}
 
     async def retrieve(self, message_batch_id: str) -> Any:
+        self._attempt("retrieve")
         self.retrieved += 1
-        ended = not self.never_ends and self.retrieved >= self.polls
+        if self.cancelled:
+            ended = not self.stuck
+        else:
+            ended = not self.never_ends and self.retrieved >= self.polls
         return {"id": message_batch_id, "processing_status": "ended" if ended else "in_progress"}
 
     async def results(self, message_batch_id: str) -> AsyncIterator[Any]:
+        self._attempt("results")
+        failing = self.failures.get("results-stream")
+
         async def stream() -> AsyncIterator[Any]:
-            for item in self.stored:
+            for index, item in enumerate(self.stored):
+                if index == 1 and failing:
+                    raise failing.pop(0)
                 yield item
 
         return stream()
 
     async def cancel(self, message_batch_id: str) -> Any:
+        self._attempt("cancel")
         self.cancelled.append(message_batch_id)
         return {"id": message_batch_id, "processing_status": "canceling"}
 
@@ -270,6 +308,129 @@ async def test_a_batch_that_does_not_end_in_time_is_cancelled_and_never_passes()
     assert all(outcome.judgement is None for outcome in outcomes.values())
     assert all("did not end" in str(outcome.failure) for outcome in outcomes.values())
     assert allowance.uncertain_usd == pytest.approx(sum(item.reserved_usd for item in wanted))
+
+
+async def test_after_a_timeout_the_results_that_succeeded_are_kept_at_their_measured_cost() -> None:
+    wanted = requests(("Q01-en", 1), ("Q01-en", 2))
+    tokens = usage(plain=1000, output=200)
+    batches = FakeBatches(
+        [succeeded("Q01-en-r1", rubric_text(), tokens), failed("Q01-en-r2", "canceled")],
+        never_ends=True,
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance, max_wait_seconds=600)
+    assert batches.cancelled == ["msgbatch_fake01"]
+    kept = outcomes["Q01-en-r1"]
+    assert kept.failure is None
+    assert kept.judgement is not None
+    lost = outcomes["Q01-en-r2"]
+    assert lost.judgement is None
+    assert "did not end" in str(lost.failure)
+    assert allowance.uncertain_usd == pytest.approx(wanted[1].reserved_usd)
+    measured = (1000 * 2 + 200 * 10) / 1e6 * 0.5
+    assert allowance.spent_usd == pytest.approx(wanted[1].reserved_usd + measured)
+
+
+async def test_a_cancelled_batch_that_never_ends_charges_every_reservation_as_uncertain() -> None:
+    wanted = requests(("Q01-en", 1))
+    batches = FakeBatches(
+        [succeeded("Q01-en-r1", rubric_text(), usage(plain=10, output=10))],
+        never_ends=True,
+        stuck=True,
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance, max_wait_seconds=600)
+    assert outcomes["Q01-en-r1"].judgement is None
+    assert "did not end" in str(outcomes["Q01-en-r1"].failure)
+    assert "results" not in batches.calls
+    assert allowance.uncertain_usd == pytest.approx(wanted[0].reserved_usd)
+
+
+@pytest.mark.parametrize(
+    "error", [StatusError(529), StatusError(500), StatusError(429), ConnectionError("reset")]
+)
+async def test_a_transient_failure_of_a_status_poll_is_retried(error: Exception) -> None:
+    wanted = requests(("Q01-en", 1))
+    tokens = usage(plain=1000, output=200)
+    batches = FakeBatches(
+        [succeeded("Q01-en-r1", rubric_text(), tokens)], failures={"retrieve": [error]}
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance)
+    assert outcomes["Q01-en-r1"].failure is None
+    assert batches.calls["retrieve"] == 2
+    assert batches.cancelled == []
+    assert allowance.uncertain_usd == 0.0
+    assert allowance.spent_usd == pytest.approx((1000 * 2 + 200 * 10) / 1e6 * 0.5)
+
+
+async def test_a_transient_failure_while_reading_the_results_reads_them_again() -> None:
+    wanted = requests(("Q01-en", 1), ("Q01-en", 2))
+    tokens = usage(plain=1000, output=200)
+    batches = FakeBatches(
+        [succeeded(item.custom_id, rubric_text(), tokens) for item in wanted],
+        failures={"results": [StatusError(529)], "results-stream": [StatusError(502)]},
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance)
+    assert all(outcome.failure is None for outcome in outcomes.values())
+    assert batches.calls["results"] == 3
+    assert allowance.uncertain_usd == 0.0
+    # Each result is charged once, however often the results were read.
+    assert allowance.spent_usd == pytest.approx(2 * (1000 * 2 + 200 * 10) / 1e6 * 0.5)
+
+
+async def test_a_batch_whose_state_cannot_be_read_is_charged_uncertain_after_bounded_retries() -> (
+    None
+):
+    wanted = requests(("Q01-en", 1))
+    attempts = 1 + len(judging.RETRY_DELAYS_SECONDS)
+    batches = FakeBatches(
+        [], failures={"retrieve": [StatusError(503) for _ in range(attempts + 5)]}
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance)
+    assert batches.calls["retrieve"] == attempts
+    assert "failed" in str(outcomes["Q01-en-r1"].failure)
+    assert allowance.uncertain_usd == pytest.approx(wanted[0].reserved_usd)
+
+
+def test_retries_are_bounded_with_a_growing_backoff() -> None:
+    delays = judging.RETRY_DELAYS_SECONDS
+    assert 1 <= len(delays) <= 6
+    assert list(delays) == sorted(delays)
+    assert sum(delays) <= 300
+
+
+async def test_a_permanent_error_of_a_status_poll_is_not_retried() -> None:
+    wanted = requests(("Q01-en", 1))
+    batches = FakeBatches([], failures={"retrieve": [StatusError(404)]})
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance)
+    assert batches.calls["retrieve"] == 1
+    assert outcomes["Q01-en-r1"].judgement is None
+    assert allowance.uncertain_usd == pytest.approx(wanted[0].reserved_usd)
+
+
+async def test_batch_creation_is_retried_only_when_the_api_refused_it() -> None:
+    # 429 and 529 prove the batch was not created; a lost connection proves nothing.
+    wanted = requests(("Q01-en", 1))
+    refused = FakeBatches(
+        [succeeded("Q01-en-r1", rubric_text(), usage(plain=10, output=10))],
+        failures={"create": [StatusError(529), StatusError(429)]},
+    )
+    outcomes = await run_batch(refused, wanted, budget.Allowance(available_usd=5.0))
+    assert refused.calls["create"] == 3
+    assert len(refused.created) == 1
+    assert outcomes["Q01-en-r1"].failure is None
+
+    for unclear in (ConnectionError("reset"), StatusError(500)):
+        lost = FakeBatches([], failures={"create": [unclear]})
+        allowance = budget.Allowance(available_usd=5.0)
+        outcomes = await run_batch(lost, wanted, allowance)
+        assert lost.calls["create"] == 1
+        assert outcomes["Q01-en-r1"].failure is not None
+        assert allowance.uncertain_usd == pytest.approx(wanted[0].reserved_usd)
 
 
 def test_the_bounded_wait_is_one_hour() -> None:
