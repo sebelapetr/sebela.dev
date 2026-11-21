@@ -39,7 +39,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check, the pinned-actions check, whether a change runs the MCP Admin model evals, and the change without its documentation that CI and the release plan compare — plain Node, no dependencies [1, 2, 10]
+│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check, the pinned-actions check, whether a change runs the MCP Admin model evals, the change without its documentation that CI and the release plan compare, and the test coverage summary — plain Node, no dependencies [1, 2, 10]
 │   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version, release notes and changelog; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
