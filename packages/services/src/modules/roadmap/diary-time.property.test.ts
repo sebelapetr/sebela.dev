@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, it } from "vitest";
 
-import { diaryDateOf, elapsedSeconds, splitIntoDiaryDays, totalSeconds } from "./diary-time.js";
+import { elapsedSeconds, splitIntoDiaryDays, totalSeconds } from "./diary-time.js";
 
 /** Fixed, so a run is as long on every machine; a failure prints the seed that reproduces it. */
 const numRuns = 300;
@@ -9,6 +9,41 @@ const numRuns = 300;
 const SECOND = 1000;
 const HOUR = 3600 * SECOND;
 const DAY = 24 * HOUR;
+
+/**
+ * The properties' own reading of the Prague calendar date, independent of the module's
+ * `diaryDateOf`, so a module that read dates in another time zone fails them.
+ */
+const pragueCalendar = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Prague",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** The Prague calendar date of the instant, `YYYY-MM-DD`. */
+function pragueDateOf(instant: number): string {
+  const parts = pragueCalendar.formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/**
+ * The Prague midnight that starts the instant's Prague date. Prague is one or two hours ahead
+ * of UTC and never changes its offset at midnight, so exactly one of the two candidates is the
+ * first second of that date.
+ */
+function pragueMidnightOf(instant: number): number {
+  const date = pragueDateOf(instant);
+  const midnight = ["+01:00", "+02:00"]
+    .map((offset) => Date.parse(`${date}T00:00:00${offset}`))
+    .find(
+      (candidate) => pragueDateOf(candidate) === date && pragueDateOf(candidate - SECOND) !== date,
+    );
+  if (midnight === undefined) throw new Error(`no Prague midnight found for ${date}`);
+  return midnight;
+}
 
 /** The instant of the last Sunday of the month at 01:00 UTC, when Prague changes its offset. */
 function lastSundayAtOne(year: number, month: number): number {
@@ -36,9 +71,9 @@ const nearOffsetChange = fc
   })
   .map(({ year, month, shift }) => lastSundayAtOne(year, month) + shift);
 
-/** An instant within two hours of a Prague midnight, on either side. */
+/** An instant within two hours of a Prague midnight, on either side, in winter and in summer. */
 const nearMidnight = anyInstant.chain((instant) => {
-  const midnight = Date.parse(`${diaryDateOf(new Date(instant))}T00:00:00+01:00`);
+  const midnight = pragueMidnightOf(instant);
   return wholeSeconds(midnight - 2 * HOUR, midnight + 2 * HOUR);
 });
 
@@ -87,8 +122,8 @@ describe("splitIntoDiaryDays (properties)", () => {
         const pieces = splitIntoDiaryDays(startedAt, endedAt);
         return pieces.every(
           (piece, index) =>
-            diaryDateOf(piece.startedAt) === piece.date &&
-            diaryDateOf(new Date(piece.endedAt.getTime() - 1)) === piece.date &&
+            pragueDateOf(piece.startedAt.getTime()) === piece.date &&
+            pragueDateOf(piece.endedAt.getTime() - 1) === piece.date &&
             (index === 0 || nextDate(pieces[index - 1]?.date ?? "") === piece.date),
         );
       }),
@@ -104,8 +139,8 @@ describe("splitIntoDiaryDays (properties)", () => {
           .slice(0, -1)
           .every(
             (piece) =>
-              diaryDateOf(piece.endedAt) === nextDate(piece.date) &&
-              diaryDateOf(new Date(piece.endedAt.getTime() - 1)) === piece.date,
+              pragueDateOf(piece.endedAt.getTime()) === nextDate(piece.date) &&
+              pragueDateOf(piece.endedAt.getTime() - 1) === piece.date,
           );
       }),
       { numRuns },
