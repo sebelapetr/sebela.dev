@@ -41,3 +41,22 @@ def test_a_reservation_over_the_remainder_blocks_and_uncertain_spend_is_tracked(
     assert allowance.uncertain_usd == pytest.approx(0.02)
     with pytest.raises(budget.BudgetBlockedError):
         allowance.require(0.6, "too much")
+
+
+def test_a_run_rewrites_its_own_ledger_entry_with_every_chunk(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    allowance = budget.open_allowance(5.0, ledger)
+    allowance.charge(0.3, "chunk 1")
+    chunks = [{"cases": ["a"], "reserved_usd": 0.5, "spent_usd": 0.3, "uncertain_usd": 0.0}]
+    budget.record_run(ledger, "run-1", allowance, "running", chunks=chunks)
+    allowance.charge(0.2, "chunk 2")
+    chunks.append({"cases": ["b"], "reserved_usd": 0.5, "spent_usd": 0.2, "uncertain_usd": 0.0})
+    budget.record_run(ledger, "run-1", allowance, "full", chunks=chunks)
+    assert budget.ledger_spent(ledger) == pytest.approx(0.5)
+    again = budget.open_allowance(5.0, ledger)
+    assert again.available_usd == pytest.approx(5.0)
+    import json
+
+    (entry,) = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
+    assert entry["scope"] == "full"
+    assert [chunk["cases"] for chunk in entry["chunks"]] == [["a"], ["b"]]

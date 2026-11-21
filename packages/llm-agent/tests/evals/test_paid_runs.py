@@ -1,8 +1,9 @@
 """The paid-run controls of `command_run`, driven with fakes only (no model, no key, no API).
 
-Runs that never started are not charged; a run is split into an early chunk and the rest, and an
-anomaly in the early chunk stops it with the remaining cases pending; judging goes through one
-batch per chunk (or the direct debugging path).
+Runs that never started are not charged; a run is split into an early chunk of 6 case-runs and
+bounded chunks of about 12, each reserved just before it starts; an anomaly in the early chunk or
+an allowance that no longer covers the next chunk stops it with the remaining cases pending;
+judging goes through one batch per chunk (or the direct debugging path).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from evals import judging, run
+from evals import budget, judging, run
 from evals.graders import code, rubric
 from tests.evals.records import record
 
@@ -94,6 +95,7 @@ def paid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
         "answer": lambda case_id, repeat: record(case_id, repeat=repeat),
         "batches": batches,
         "person": {"name": "fixed"},
+        "api_starts": 0,
     }
     monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key-never-used-0000")
     monkeypatch.setattr(run, "REPORT_ROOT", tmp_path / "reports")
@@ -101,6 +103,7 @@ def paid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
 
     @contextlib.asynccontextmanager
     async def api(scratch: Path) -> AsyncIterator[Any]:
+        seen["api_starts"] += 1
         if seen.get("api_fails"):
             raise RuntimeError("the test API did not start")
         yield SimpleNamespace(url="http://fake.invalid")
@@ -204,12 +207,96 @@ async def test_a_run_starts_with_an_early_chunk_of_six_case_runs_then_the_rest(
 
 
 async def test_a_comparison_starts_with_six_cases_at_one_repeat(paid: dict[str, Any]) -> None:
-    assert run.first_chunk(["a", "b", "c", "d", "e", "f", "g"], repeats=1) == (
+    assert run.chunks(["a", "b", "c", "d", "e", "f", "g"], repeats=1) == (
         ("a", "b", "c", "d", "e", "f"),
         ("g",),
     )
-    assert run.first_chunk(["a", "b"], repeats=3) == (("a", "b"),)
-    assert run.first_chunk(["a", "b", "c"], repeats=3) == (("a", "b"), ("c",))
+    assert run.chunks(["a", "b"], repeats=3) == (("a", "b"),)
+    assert run.chunks(["a", "b", "c"], repeats=3) == (("a", "b"), ("c",))
+
+
+def test_after_the_early_chunk_a_run_continues_in_chunks_of_about_twelve_case_runs() -> None:
+    names = [f"c{index:02d}" for index in range(20)]
+    assert [len(chunk) for chunk in run.chunks(names[:11], repeats=3)] == [2, 4, 4, 1]
+    assert [len(chunk) for chunk in run.chunks(names, repeats=1)] == [6, 12, 2]
+    assert run.CHUNK_CASE_RUNS == 12
+    for repeats in (1, 3):
+        pieces = run.chunks(names, repeats=repeats)
+        assert [name for piece in pieces for name in piece] == names
+        assert all(len(piece) * repeats <= run.CHUNK_CASE_RUNS for piece in pieces)
+
+
+def unjudged(count: int) -> list[str]:
+    ids = [case.id for case in run.implemented() if not run.CASES[case.id].expectation.judged]
+    assert len(ids) >= count
+    return ids[:count]
+
+
+def costing(usd: float) -> Callable[[str, int], dict[str, Any]]:
+    def answer(case_id: str, repeat: int) -> dict[str, Any]:
+        data = record(case_id, repeat=repeat)
+        data["result"]["usage"] = {**data["result"]["usage"], "cost_usd": usd}
+        return data
+
+    return answer
+
+
+async def test_a_full_run_starts_under_a_realistic_allowance_and_runs_chunk_by_chunk(
+    paid: dict[str, Any],
+) -> None:
+    selected = [case.id for case in run.implemented()]
+    assert len(selected) == 80
+    # The whole run would reserve about USD 9.18; each chunk is reserved just before it starts.
+    assert run.reservation(selected) > 2.0
+    assert await run.command_run(selected, 2.0) in (0, 1)
+    expected = run.chunks(selected, repeats=3)
+    assert len(expected) > 2
+    assert [tuple(call["cases"]) for call in paid["promptfoo"]] == list(expected)
+    assert paid["api_starts"] == 1  # one test API serves every chunk
+    summary = summary_of()
+    assert summary["pending"] == []
+    assert summary["stopped"] is None
+    assert len(summary["case_runs"]) == 240
+    (entry,) = ledger()
+    assert [chunk["cases"] for chunk in entry["chunks"]] == [list(chunk) for chunk in expected]
+    for chunk, piece in zip(entry["chunks"], expected, strict=True):
+        assert chunk["reserved_usd"] == pytest.approx(run.reservation(piece), abs=1e-6)
+    assert sum(chunk["spent_usd"] for chunk in entry["chunks"]) == pytest.approx(
+        entry["spent_usd"], abs=1e-5
+    )
+
+
+async def test_an_allowance_exhausted_mid_run_leaves_the_rest_pending(
+    paid: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    selected = unjudged(9)
+    pieces = run.chunks(selected, repeats=3)
+    assert [len(piece) for piece in pieces] == [2, 4, 3]
+    paid["answer"] = costing(budget.SUBJECT_EXECUTION_USD)
+    first, second = run.reservation(pieces[0]), run.reservation(pieces[1])
+    allowance = first + second + 0.1  # the third chunk needs 0.18
+    assert await run.command_run(selected, allowance) == run.BLOCKED
+    assert [tuple(call["cases"]) for call in paid["promptfoo"]] == [pieces[0], pieces[1]]
+    assert "stopped: allowance" in capsys.readouterr().err
+    summary = summary_of()
+    assert summary["pending"] == list(pieces[2])
+    assert summary["stopped"].startswith("allowance")
+    assert summary["pass"] is False
+    assert {item["case"] for item in summary["case_runs"]} == set(pieces[0] + pieces[1])
+    (entry,) = ledger()
+    assert entry["spent_usd"] == pytest.approx(first + second)
+    assert len(entry["chunks"]) == 2
+
+
+async def test_an_allowance_below_the_first_chunk_is_refused_before_anything_starts(
+    paid: dict[str, Any],
+) -> None:
+    selected = unjudged(4)
+    first = run.reservation(run.chunks(selected, repeats=3)[0])
+    with pytest.raises(budget.BudgetBlockedError):
+        await run.command_run(selected, first - 0.01)
+    assert paid["api_starts"] == 0
+    assert paid["promptfoo"] == []
 
 
 async def test_two_stopped_case_runs_in_the_early_chunk_stop_the_run_with_the_rest_pending(
@@ -338,3 +425,31 @@ async def test_a_paid_regrade_stops_after_the_early_requests_when_a_judge_reques
     summary = summary_of()
     assert summary["stopped"] == "1 judge request(s) failed"
     assert summary["pending"] == ["Q02-en"]
+
+
+async def test_a_paid_regrade_reserves_each_chunk_and_stops_when_the_next_one_does_not_fit(
+    paid: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from tests.evals.records import SUBJECT
+
+    monkeypatch.setattr(run, "current_subject_versions", lambda: SUBJECT)
+    judged = [case.id for case in run.implemented() if run.CASES[case.id].expectation.judged][:6]
+    stored = [record(case_id, repeat=repeat) for case_id in judged for repeat in (1, 2, 3)]
+    source = tmp_path / "source"
+    run.store_answers(source, stored)
+    pieces = run.chunks(judged, repeats=3)
+    assert [len(piece) for piece in pieces] == [2, 4]
+    first = sum(
+        judging.request(run.CASES[str(item["case_id"])], item).reserved_usd
+        for item in stored
+        if item["case_id"] in pieces[0]
+    )
+    assert await run.command_regrade(source, judge=True, declared_usd=first + 0.05) == run.BLOCKED
+    batches: AnsweringBatches = paid["batches"]
+    assert [len(sent) for sent in batches.created] == [6]
+    summary = summary_of()
+    assert summary["stopped"].startswith("allowance")
+    assert summary["pending"] == list(pieces[1])
+    assert summary["pass"] is False
+    (entry,) = ledger()
+    assert len(entry["chunks"]) == 1
