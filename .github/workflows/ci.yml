@@ -1,8 +1,9 @@
 # Quality gate for every pull request and for pushes to the main branch.
 # Node.js comes from .nvmrc and pnpm from the packageManager field of package.json. Every job runs on
-# every event; none is skipped by a path filter, so no required status is ever left waiting. The two
-# website jobs report success at once when the change touches only files that cannot change the
-# website (docs/testing.md, "CI", "Website jobs").
+# every event; none is skipped by a path filter, so no required status is ever left waiting.
+# Documentation never counts as a change of an app or package: the quality job runs no package task
+# and the two website jobs report success at once for a change of documentation alone
+# (docs/testing.md, "CI", "Documentation" and "Website jobs").
 # What each job checks: docs/testing.md ("CI").
 name: CI
 
@@ -59,9 +60,10 @@ jobs:
           PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
 
   # The root checks on every run, then lint (including the import-boundaries rule), typecheck, test
-  # and build of the packages the change affects. The comparison base is the pull request's base or
-  # the commit before the push; full history makes it resolvable. When Turborepo cannot resolve it
-  # (a new branch, a rewritten history) it treats every package as affected.
+  # and build of the packages the change affects, documentation not counted. The comparison base is
+  # the pull request's base or the commit before the push; full history makes it resolvable. When
+  # Turborepo cannot resolve it (a new branch, a rewritten history) it treats every package as
+  # affected.
   # The backend integration tests need a real Postgres: the `postgres` service of compose.yaml, with
   # the documented settings of .env.example and a password that exists only in this job. Each test
   # file creates and drops its own temporary database in it.
@@ -87,6 +89,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Postgres for the integration tests
         run: docker compose --env-file .env.example up --detach --wait
+      # Documentation is no change of an app or package (docs/testing.md, CI): from here on
+      # Turborepo compares the base with the head without its documentation changes, a commit
+      # made for this run. With no resolvable base it stays HEAD, and every package is affected.
+      - name: The change without its documentation
+        run: |
+          head=$(node scripts/checks/without-documentation.mjs head "$TURBO_SCM_BASE")
+          echo "TURBO_SCM_HEAD=$head" >> "$GITHUB_ENV"
       - name: Affected packages and why
         run: pnpm exec turbo query affected --packages
       - name: Root checks (root lint, hard-coded configuration, harness and check tests)
@@ -117,22 +126,25 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-      # Success at once, without a browser, when every changed file is one that cannot change the
-      # website: docs, plans, agent configuration, the harness, the MCP and AI apps and packages,
-      # Markdown anywhere, and the eval and commit-message workflows. Anything else, a new branch or
-      # an unknown base runs the job in full.
+      # Success at once, without a browser, when every changed file is documentation
+      # (scripts/checks/without-documentation.mjs: Markdown anywhere, docs/ and .plan/, but not
+      # Markdown that code reads) or one that cannot change the website: agent configuration, the
+      # harness, the MCP and AI apps and packages, and the eval and commit-message workflows.
+      # Anything else, a new branch or an unknown base runs the job in full.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
       - name: Website affected
         id: website
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: |
-          unaffected='^(docs/|\.plan/|\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)|(^|/)[^/]+\.md$'
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+          unaffected='^(\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)'
+          if ! changed=$(node scripts/checks/without-documentation.mjs files "$BASE"); then
             echo "No comparison base: the website job runs in full."
             echo "affected=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE "$unaffected"; then
-            echo "Only files that cannot change the website changed; nothing to run:"
-            printf '%s\n' "$changed"
+          elif [ -z "$changed" ] || ! printf '%s\n' "$changed" | grep -qvE "$unaffected"; then
+            echo "Only documentation and files that cannot change the website changed; nothing to run."
             echo "affected=false" >> "$GITHUB_OUTPUT"
           else
             echo "affected=true" >> "$GITHUB_OUTPUT"
@@ -271,22 +283,25 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-      # Success at once, without a browser, when every changed file is one that cannot change the
-      # website: docs, plans, agent configuration, the harness, the MCP and AI apps and packages,
-      # Markdown anywhere, and the eval and commit-message workflows. Anything else, a new branch or
-      # an unknown base runs the job in full.
+      # Success at once, without a browser, when every changed file is documentation
+      # (scripts/checks/without-documentation.mjs: Markdown anywhere, docs/ and .plan/, but not
+      # Markdown that code reads) or one that cannot change the website: agent configuration, the
+      # harness, the MCP and AI apps and packages, and the eval and commit-message workflows.
+      # Anything else, a new branch or an unknown base runs the job in full.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
       - name: Website affected
         id: website
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: |
-          unaffected='^(docs/|\.plan/|\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)|(^|/)[^/]+\.md$'
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! changed=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+          unaffected='^(\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)'
+          if ! changed=$(node scripts/checks/without-documentation.mjs files "$BASE"); then
             echo "No comparison base: the website job runs in full."
             echo "affected=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE "$unaffected"; then
-            echo "Only files that cannot change the website changed; nothing to run:"
-            printf '%s\n' "$changed"
+          elif [ -z "$changed" ] || ! printf '%s\n' "$changed" | grep -qvE "$unaffected"; then
+            echo "Only documentation and files that cannot change the website changed; nothing to run."
             echo "affected=false" >> "$GITHUB_OUTPUT"
           else
             echo "affected=true" >> "$GITHUB_OUTPUT"

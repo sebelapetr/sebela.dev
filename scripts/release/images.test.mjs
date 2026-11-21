@@ -8,7 +8,7 @@
 // arguments (and, for `publish`, answers as a registry would).
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +18,7 @@ import {
   SERVICES,
   affectedPackages,
   affectedServices,
+  affectedSinceFor,
   formatOutputs,
   manifestDigest,
   releasePlan,
@@ -231,6 +232,82 @@ describe("no release loop", () => {
     });
     assert.deepEqual(plan.build, []);
     assert.match(formatOutputs({ ...plan, release: plan.build.length > 0 }), /^release=false$/m);
+  });
+});
+
+// The affected services of a change from a current image's commit, on a disposable Git repository
+// with a stand-in `turbo` that records the comparison it is given and answers with the apps whose
+// files differ in it. Documentation is no change: Turborepo is handed the change without it.
+describe("affected since a current image", () => {
+  function git(cwd, ...args) {
+    return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  }
+
+  function write(root, file, text) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text);
+  }
+
+  function setup(t, change) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "images-affected-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    git(root, "init", "--quiet", "--initial-branch=main");
+    git(root, "config", "user.email", "fixture@example.invalid");
+    git(root, "config", "user.name", "Fixture");
+    write(root, "apps/api/src/app.ts", "export const app = 1;\n");
+    write(root, "apps/api/AGENTS.md", "# API\n");
+    git(root, "add", "--all");
+    git(root, "commit", "--quiet", "--message", "base");
+    const base = git(root, "rev-parse", "HEAD");
+    change(root);
+    git(root, "add", "--all");
+    git(root, "commit", "--quiet", "--message", "head");
+    const head = git(root, "rev-parse", "HEAD");
+
+    const record = path.join(root, ".git", "turbo-calls.json");
+    const turbo = path.join(root, ".git", "turbo");
+    fs.writeFileSync(
+      turbo,
+      `#!${process.execPath}
+const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
+const { TURBO_SCM_BASE: base, TURBO_SCM_HEAD: head } = process.env;
+const files = execFileSync("git", ["diff", "--name-only", base + "..." + head], { encoding: "utf8" })
+  .split("\\n").filter(Boolean);
+fs.writeFileSync(${JSON.stringify(record)}, JSON.stringify({ args: process.argv.slice(2), base, head, files }));
+const apps = [...new Set(files.filter((f) => f.startsWith("apps/")).map((f) => f.split("/")[1]))];
+process.stdout.write(JSON.stringify({ data: { affectedPackages: { items: apps.map((app) => ({ name: "@sebela/" + app })) } } }));
+`,
+    );
+    fs.chmodSync(turbo, 0o755);
+    const lines = [];
+    const services = affectedSinceFor(head, { cwd: root, turbo, log: (line) => lines.push(line) })(
+      base,
+    );
+    return { base, head, services, lines, call: JSON.parse(fs.readFileSync(record, "utf8")) };
+  }
+
+  it("builds no image for a change of documentation alone", (t) => {
+    const { base, head, services, lines, call } = setup(t, (root) => {
+      write(root, "apps/api/AGENTS.md", "# API, edited\n");
+    });
+    assert.deepEqual(services, []);
+    assert.deepEqual(call.args, ["query", "affected", "--packages"]);
+    assert.equal(call.base, base);
+    assert.notEqual(call.head, head);
+    assert.deepEqual(call.files, []);
+    assert.ok(lines.includes("  documentation, no change: apps/api/AGENTS.md"), lines.join("\n"));
+    assert.ok(lines.includes("  changed files: none"), lines.join("\n"));
+  });
+
+  it("builds the app whose code changed beside its documentation", (t) => {
+    const { services, lines, call } = setup(t, (root) => {
+      write(root, "apps/api/AGENTS.md", "# API, edited\n");
+      write(root, "apps/api/src/app.ts", "export const app = 2;\n");
+    });
+    assert.deepEqual(services, ["api"]);
+    assert.deepEqual(call.files, ["apps/api/src/app.ts"]);
+    assert.ok(lines.includes("  changed files: apps/api/src/app.ts"), lines.join("\n"));
   });
 });
 
