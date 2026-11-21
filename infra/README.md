@@ -180,13 +180,13 @@ Owner checklist, once after the release that brings the rule. **The order matter
    Browsers must see the origin's `Cache-Control`: `curl -sI https://sebela.dev/llms.txt` shows exactly the public rule above. Another value (such as a bare `public, max-age=...` with a different time, or one without `s-maxage`) is the CDN's rewritten value, and the browser-facing setting still overrides the origin.
 
 3. **nginx.** Check first that the live `location /` of the site, which the hosting panel manages outside this repository, has no `add_header` of its own: nginx drops every inherited server-level `add_header` in a location that has one, and with `proxy_hide_header Cache-Control` every proxied answer would then leave without `Cache-Control` and without the security headers. `nginx -T` prints the live configuration; read the site's `location /` block in it, and move any `add_header` there into the server block. Then copy the http-context part (the four `map` blocks) and the server block's `add_header Cache-Control` and the location's `proxy_hide_header Cache-Control` of `nginx/sebela.dev.conf` into the live site, run `nginx -t` and reload nginx.
-4. **Checks after the deployment.** Each command shows the row's `cache-control`; the CDN's own cache-status header shows a hit on the second request of a public row and never on a `no-store` one:
+4. **Checks after the deployment.** Each command shows the row's `cache-control`; the CDN's own cache-status header shows a hit on the second request of a public row and never on a `no-store` one. The two navigation lines carry a unique query value because the CDN varies its key only on `Accept-Encoding`: without it, it could answer the `RSC` request from its cached `/experience` page with the public rule, and a correct setup would look broken.
 
    ```sh
    curl -sI https://sebela.dev/ | grep -i cache-control                       # the public rule
    curl -sI https://sebela.dev/experience | grep -i cache-control             # the public rule
-   curl -sI -H 'RSC: 1' https://sebela.dev/experience | grep -iE '^HTTP|cache-control' # 307, no-store
-   curl -sI 'https://sebela.dev/experience?_rsc=check' | grep -i cache-control # no-store
+   curl -sI -H 'RSC: 1' "https://sebela.dev/experience?probe=$(date +%s)" | grep -iE '^HTTP|cache-control' # 307, no-store
+   curl -sI "https://sebela.dev/experience?_rsc=$(date +%s)" | grep -i cache-control # no-store
    curl -sI https://sebela.dev/no-such-page | grep -i cache-control           # no-store (404)
    curl -sI https://sebela.dev/ask | grep -i cache-control                    # no-store
    curl -sI https://sebela.dev/robots.txt | grep -i cache-control             # the public rule
