@@ -10,7 +10,7 @@ export type Method = "GET" | "POST" | "PATCH" | "DELETE";
 export type RateBudget = keyof Omit<ApiConfig["rateLimits"], "key" | "maxTrackedCallers">;
 
 /** The domain errors a route can answer with, beyond the errors every route shares. */
-export type RouteError = "not_found" | "conflict" | "unavailable";
+export type RouteError = "not_found" | "conflict" | "unavailable" | "provider_unavailable";
 
 /** What the OpenAPI document says about a route. */
 export interface RouteDocumentation {
@@ -24,7 +24,12 @@ export interface RouteDocumentation {
   /** The per-client budget, when it is not the one of its access, for example `upload`. */
   readonly budget?: RateBudget;
   /**
-   * The content domain a write route changes, required on every write. After the write commits, the
+   * A `POST` that only reads, such as a search whose query is too rich for a URL. It declares no
+   * content domain and is neither audited nor announced as a content change.
+   */
+  readonly readOnly?: true;
+  /**
+   * The content domain a write route changes, required on every write that is not `readOnly`. After the write commits, the
    * app reports it with the record from the `slug` or `id` path parameter or the result, or with
    * each record the route's `records` names.
    */

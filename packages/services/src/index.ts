@@ -31,8 +31,18 @@ export type {
   SeedService,
   SeedServiceOptions,
 } from "./modules/seed/index.js";
-export { openStorageNamespace, readStorageConfig } from "./modules/storage/index.js";
-export type { StorageConfig, StorageNamespace } from "./modules/storage/index.js";
+export {
+  openPrivateStorage,
+  openStorageNamespace,
+  readPrivateStorageConfig,
+  readStorageConfig,
+} from "./modules/storage/index.js";
+export type {
+  PrivateStorage,
+  PrivateStorageConfig,
+  StorageConfig,
+  StorageNamespace,
+} from "./modules/storage/index.js";
 export type {
   ApiKeyInfo,
   ApiKeyService,
@@ -57,3 +67,24 @@ export type {
   SupportingContent,
   TimeEntryDeletion,
 } from "./modules/roadmap/index.js";
+export { readRetrievalOptions } from "./modules/retrieval/index.js";
+export type {
+  Embedder,
+  IndexReport,
+  ProcessOptions,
+  QueueReport,
+  RetrievalConfig,
+  UsageTotals,
+  WorkCounts,
+} from "@sebela/memory";
+export { defaultDocumentLimits, documentTypeOf } from "@sebela/memory";
+export type { DocumentLimits, SensitivityFinding } from "@sebela/memory";
+export type {
+  DocumentApproval,
+  DocumentIngest,
+  DocumentPreview,
+  DocumentVersion,
+  KnowledgeService,
+  KnowledgeServiceOptions,
+  KnowledgeSources,
+} from "./modules/retrieval/index.js";

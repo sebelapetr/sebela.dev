@@ -32,6 +32,7 @@ COPY --from=build /app/packages/api-client/package.json packages/api-client/
 COPY --from=build /app/packages/config/package.json packages/config/
 COPY --from=build /app/packages/contracts/package.json packages/contracts/
 COPY --from=build /app/packages/db/package.json packages/db/
+COPY --from=build /app/packages/memory/package.json packages/memory/
 COPY --from=build /app/packages/services/package.json packages/services/
 RUN pnpm install --frozen-lockfile --ignore-scripts --prod --filter "@sebela/api..." \
   && pnpm store prune
@@ -39,6 +40,7 @@ COPY --from=build /app/packages/contracts/dist packages/contracts/dist
 COPY --from=build /app/packages/db/dist packages/db/dist
 COPY --from=build /app/packages/db/migrations packages/db/migrations
 COPY --from=build /app/packages/db/seed packages/db/seed
+COPY --from=build /app/packages/memory/dist packages/memory/dist
 COPY --from=build /app/packages/services/dist packages/services/dist
 COPY --from=build /app/apps/api/dist apps/api/dist
 

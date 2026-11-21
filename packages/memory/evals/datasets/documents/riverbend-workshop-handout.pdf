@@ -1,0 +1,75 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R 10 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<<  /Length 238 >>
+stream
+/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Fixture def 1 begincodespacerange <00> <FF> endcodespacerange 1 beginbfrange <20> <7E> <E000> endbfrange endcmap CMapName currentdict /CMap defineresource pop end end
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 4 0 R >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 4 >>
+stream
+Ä†¿‡
+endstream
+endobj
+7 0 obj
+<<  /Length 721 >>
+stream
+BT /F1 11 Tf 72 740 Td (Riverbend Data Guild - workshop handout) Tj ET
+BT /F1 20 Tf 72 722 Td (Retrieval Evaluation Workshop) Tj ET
+BT /F1 11 Tf 72 690 Td (A fictional one-day workshop that Alex Novara ran for the Riverbend Data Guild.) Tj ET
+BT /F1 11 Tf 72 672 Td (Participants brought their own document collections and left with a small, re-) Tj ET
+BT /F1 11 Tf 72 654 Td (peatable evaluation of their search.) Tj ET
+BT /F1 15 Tf 72 636 Td (Morning: chunking) Tj ET
+BT /F1 11 Tf 72 612 Td (Alex recommended chunks of about four hundred tokens with a short overlap, and) Tj ET
+BT /F1 11 Tf 72 594 Td (keeping the heading path of each section at the top of every chunk.) Tj ET
+BT /F1 11 Tf 72 576 Td (Page 1 of 2) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<<  /Length 532 >>
+stream
+BT /F1 11 Tf 72 740 Td (Riverbend Data Guild - workshop handout) Tj ET
+BT /F1 15 Tf 72 722 Td (Afternoon: the judged question set) Tj ET
+BT /F1 11 Tf 72 698 Td (After lunch each participant wrote twenty questions about their own collection) Tj ET
+BT /F1 11 Tf 72 680 Td (and graded which passages answer them, then compared two rankings by nDCG.) Tj ET
+BT /F1 15 Tf 72 662 Td (Take-away) Tj ET
+BT /F1 11 Tf 72 638 Td (Measure before tuning: a change that is not measured is a guess.) Tj ET
+BT /F1 11 Tf 72 620 Td (Page 2 of 2) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000122 00000 n 
+0000000219 00000 n 
+0000000509 00000 n 
+0000000596 00000 n 
+0000000743 00000 n 
+0000001516 00000 n 
+0000001678 00000 n 
+0000002262 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+2425
+%%EOF

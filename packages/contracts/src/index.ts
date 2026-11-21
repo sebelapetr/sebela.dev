@@ -338,3 +338,27 @@ export type {
   ChatSubmission,
   ChatTerminal,
 } from "./modules/chat/index.js";
+export {
+  PassageSchema,
+  PortfolioPassageSchema,
+  SearchRequestSchema,
+  SearchResultSchema,
+  SupplementalPassageSchema,
+  portfolioSourceId,
+  portfolioSourcePath,
+  retrievalContentKinds,
+  retrievalMaxPassages,
+  retrievalPassageMaxLength,
+  retrievalQueryMaxLength,
+} from "./modules/retrieval/index.js";
+export type {
+  Passage,
+  PassageProvenance,
+  PortfolioContentKind,
+  PortfolioPassage,
+  PortfolioSourceAddress,
+  RetrievalContentKind,
+  SearchRequest,
+  SearchResult,
+  SupplementalPassage,
+} from "./modules/retrieval/index.js";

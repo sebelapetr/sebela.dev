@@ -5,7 +5,10 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import {
   type BunnyS3StorageConfig,
+  openPrivateStorage,
   openStorage,
+  type PrivateStorage,
+  readPrivateStorageConfig,
   readStorageConfig,
   type Storage,
 } from "./index.js";
@@ -83,5 +86,52 @@ describe.skipIf(!enabled)("bunny-s3 storage against a development zone", () => {
     await expect(
       storage.delete(`development/another-worktree/${crypto.randomUUID()}.pdf`),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * Opt-in: runs against a real private development zone only when
+ * `PRIVATE_STORAGE_BUNNY_INTEGRATION=1` and the `PRIVATE_STORAGE_BUNNY_*` variables are set, with
+ * dedicated development keys (see docs/testing.md). Everything is written below a fresh
+ * `development/integration-<random>/` prefix, and only the keys this run created are deleted.
+ */
+const privateEnabled = process.env["PRIVATE_STORAGE_BUNNY_INTEGRATION"] === "1";
+
+describe.skipIf(!privateEnabled)("bunny-s3 private storage against a development zone", () => {
+  const worktree = `integration-${randomBytes(6).toString("hex")}`;
+  const created = new Set<string>();
+  let storage: PrivateStorage | undefined;
+
+  const open = (): PrivateStorage => {
+    storage ??= openPrivateStorage(
+      readPrivateStorageConfig({
+        ...process.env,
+        PRIVATE_STORAGE_DRIVER: "bunny-s3",
+        STORAGE_ENVIRONMENT: "development",
+        STORAGE_WORKTREE: worktree,
+      }),
+    );
+    return storage;
+  };
+
+  afterAll(async () => {
+    for (const key of created) await open().delete(key);
+  });
+
+  it("stores, reads and deletes a private original under the worktree prefix", async () => {
+    const bytes = new TextEncoder().encode(`fictional private file ${worktree}\n`);
+
+    const key = await open().store({ bytes, extension: "md" });
+    created.add(key);
+
+    expect(key).toMatch(new RegExp(`^development/${worktree}/[0-9a-f-]{36}\\.md$`));
+    expect(await open().read(key)).toEqual(bytes);
+    await open().delete(key);
+    expect(await open().read(key)).toBeNull();
+    created.delete(key);
+  });
+
+  it("reads nothing outside the worktree prefix", async () => {
+    expect(await open().read(`development/another-worktree/${crypto.randomUUID()}.md`)).toBeNull();
   });
 });

@@ -1,0 +1,2 @@
+ALTER TABLE "retrieval"."provider_usage" DROP CONSTRAINT "provider_usage_operation_known";--> statement-breakpoint
+ALTER TABLE "retrieval"."provider_usage" ADD CONSTRAINT "provider_usage_operation_known" CHECK ("retrieval"."provider_usage"."operation" IN ('index', 'search', 'candidates', 'rerank'));

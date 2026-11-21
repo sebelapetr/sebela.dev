@@ -9,6 +9,10 @@ import {
   type MaintenancePersistence,
 } from "./modules/maintenance/index.js";
 import { createProfilePersistence, type ProfilePersistence } from "./modules/profile/index.js";
+import {
+  createRetrievalPersistence,
+  type RetrievalPersistence,
+} from "./modules/retrieval/index.js";
 import { createRoadmapPersistence, type RoadmapPersistence } from "./modules/roadmap/index.js";
 
 /** Every persistence operation of the backend over one connection pool. */
@@ -18,6 +22,8 @@ export interface Persistence {
   readonly apiKeys: ApiKeyPersistence;
   /** The private audit of content changes; written only inside `transaction`, with the change. */
   readonly audit: AuditPersistence;
+  /** The private knowledge index and its embedding spend. */
+  readonly retrieval: RetrievalPersistence;
   /** Whole-database operations of the owner's maintenance commands, such as the demo clear. */
   readonly maintenance: MaintenancePersistence;
   /**
@@ -49,6 +55,7 @@ export function createPersistence(config: DatabaseConfig): Persistence {
     roadmap: createRoadmapPersistence(connection.db),
     apiKeys: createApiKeyPersistence(connection.db),
     audit: createAuditPersistence(connection.db),
+    retrieval: createRetrievalPersistence(connection.db),
     maintenance: createMaintenancePersistence(connection.db),
     transaction: (work) =>
       connection.db.transaction((tx) =>

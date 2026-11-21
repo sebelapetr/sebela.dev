@@ -18,11 +18,17 @@ import { join, resolve } from "node:path";
 
 import { serve } from "@hono/node-server";
 
-import { openServices, readDatabaseConfig, readMediaConfig } from "@sebela/services";
+import {
+  openServices,
+  readDatabaseConfig,
+  readMediaConfig,
+  readRetrievalOptions,
+} from "@sebela/services";
 import { createTemporaryDatabase } from "@sebela/services/testing";
 
 import { createApp, type Logger } from "../app.js";
 import { readApiConfig } from "../config.js";
+import { createIndexingQueue } from "../modules/indexing/index.js";
 import { createWebsiteInvalidation } from "../modules/invalidation/index.js";
 import { logCleanupFailure } from "../modules/media/index.js";
 
@@ -55,6 +61,7 @@ async function main() {
     await rm(storageRoot, { recursive: true, force: true });
   };
 
+  const retrieval = readRetrievalOptions(process.env);
   let services: ReturnType<typeof openServices>;
   try {
     services = openServices(database.config, {
@@ -69,6 +76,7 @@ async function main() {
         }),
         onCleanupFailure: logCleanupFailure(log),
       },
+      retrieval,
     });
     await services.seed.loadSeed(seedFolder);
     const keyFile = process.env["API_E2E_KEY_FILE"];
@@ -98,6 +106,11 @@ async function main() {
     throw error;
   }
 
+  // Keeps the knowledge index current after committed content writes, when a provider is set.
+  const indexing =
+    retrieval.config !== null && retrieval.embedder !== undefined
+      ? createIndexingQueue({ knowledge: services.knowledge, log })
+      : null;
   // Signed notifications to the website after committed content writes, when configured.
   const invalidation = config.websiteInvalidation
     ? createWebsiteInvalidation({ ...config.websiteInvalidation, log })
@@ -106,18 +119,20 @@ async function main() {
     services,
     config,
     log,
-    ...(invalidation ? { onWrite: invalidation.notify } : {}),
+    onWrite: [indexing?.notify, invalidation?.notify].filter((notify) => notify !== undefined),
   });
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
     log(`e2e API listening on http://${host}:${String(info.port)}`);
   });
+  indexing?.start();
 
   let stopping = false;
   const stop = () => {
     if (stopping) return;
     stopping = true;
     server.close(() => {
-      Promise.all([invalidation?.close(), services.close()])
+      Promise.all([indexing?.close(), invalidation?.close()])
+        .then(() => services.close())
         .then(cleanUp)
         .then(
           () => process.exit(0),
