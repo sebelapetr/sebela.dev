@@ -27,6 +27,14 @@
 # appended to the record of verified releases, and local images of releases older than the
 # previous one are removed.
 #
+# Before any of that, and before a rollback starts anything, the script checks that the current
+# user can keep the state: the state folder writable, the record a readable and writable file when
+# it exists, the lock openable. Otherwise it stops with nothing changed. Should the record still
+# not take the change after a healthy start, the release keeps running (it is not rolled back for
+# a bookkeeping fault), no image is removed, and the script says what is running, which line the
+# record lacks or still holds, and exits non-zero, so the job fails and publishes no version until
+# the record is right.
+#
 # Settings, from the environment (the forced command sets the first two):
 #   DEPLOY_ENV_FILE      the production environment file (infra/production/.env.example)
 #   DEPLOY_STATE_DIR     where the record of verified releases (`releases`) and the lock live
@@ -132,9 +140,26 @@ WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-300}"
 [[ "$WAIT_TIMEOUT" =~ ^[0-9]+$ ]] || fail "DEPLOY_WAIT_TIMEOUT is not a number of seconds"
 export COMPOSE_FILE="${COMPOSE_FILE:-$CHECKOUT/compose.yaml:$CHECKOUT/infra/production/compose.yaml}"
 RELEASES="$DEPLOY_STATE_DIR/releases"
+LOCK="$DEPLOY_STATE_DIR/lock"
 
-exec 9>"$DEPLOY_STATE_DIR/lock"
-flock --nonblock 9 || fail "another deployment is running"
+# --- The state ---------------------------------------------------------------------------------
+
+# Checked before anything changes: a rollback and the fallback of a failed deployment start what
+# the record names, so a release that cannot be recorded must not be started. The messages name
+# the user and never a path: the output of a deployment is a public log.
+WHOAMI="$(id -un 2>/dev/null)" || WHOAMI="the current user"
+[[ -w "$DEPLOY_STATE_DIR" && -x "$DEPLOY_STATE_DIR" ]] ||
+  fail "the state folder is not writable by $WHOAMI; nothing changed"
+if [[ -e "$RELEASES" || -L "$RELEASES" ]]; then
+  [[ -f "$RELEASES" ]] || fail "the record of verified releases is not a file; nothing changed"
+  [[ -r "$RELEASES" && -w "$RELEASES" ]] ||
+    fail "the record of verified releases is not writable by $WHOAMI; nothing changed"
+fi
+[[ ! -e "$LOCK" || (-f "$LOCK" && -w "$LOCK") ]] ||
+  fail "the lock of the state folder cannot be opened by $WHOAMI; nothing changed"
+{ exec 9>"$LOCK"; } 2>/dev/null ||
+  fail "the lock of the state folder cannot be opened by $WHOAMI; nothing changed"
+flock --nonblock 9 || fail "another deployment is running; nothing changed"
 
 # --- The checkout ------------------------------------------------------------------------------
 
@@ -249,7 +274,15 @@ if [[ "$command" == rollback ]]; then
   say "rolling back from $current_line to $previous_line"
   use_set target
   if start; then
-    grep . "$RELEASES" | head -n -1 >"$RELEASES.new" && mv "$RELEASES.new" "$RELEASES"
+    if ! { grep . "$RELEASES" | head -n -1 >"$RELEASES.new" && mv "$RELEASES.new" "$RELEASES"; } \
+      2>/dev/null; then
+      say "the previous release is running, but the record still names the newer release as the" \
+        "current one: $WHOAMI could not rewrite the record of verified releases"
+      say "do not roll back again; make the state folder and the record writable for $WHOAMI," \
+        "then remove this last line from the record:"
+      say "  $current_line"
+      exit 1
+    fi
     say "the previous release is running: $previous_line"
     prune
     exit 0
@@ -275,7 +308,20 @@ if adds_migration; then
 fi
 
 if compose run --rm --no-TTY migrate && start; then
-  [[ "$target_line" == "$current_line" ]] || printf '%s\n' "$target_line" >>"$RELEASES"
+  # The services are healthy on the new release and the migration is applied: starting the
+  # previous release again would add an interruption and repair nothing, so a record that cannot
+  # be written is reported and left to the owner, and the images stay for whatever comes next.
+  if [[ "$target_line" != "$current_line" ]] &&
+    ! { printf '%s\n' "$target_line" >>"$RELEASES"; } 2>/dev/null; then
+    say "the release is healthy and is running but is NOT recorded: $WHOAMI could not write the" \
+      "record of verified releases"
+    say "until it is recorded, a rollback and the fallback of a failed deployment start the" \
+      "wrong release"
+    say "make the record writable for $WHOAMI, then run this deployment again or append this" \
+      "line to the record:"
+    say "  $target_line"
+    exit 1
+  fi
   say "healthy: $target_line"
   prune
   exit 0

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { coverage } from "@sebela/config/vitest";
 import { defineConfig } from "vitest/config";
 
 // Integration tests connect with this checkout's database settings. `process.loadEnvFile` keeps a
@@ -15,6 +16,7 @@ for (const name of [".env.local", ".env", ".env.example"]) {
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    coverage: coverage(),
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },

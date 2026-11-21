@@ -25,6 +25,7 @@
     "@modelcontextprotocol/client": "2.4.0",
     "@sebela/config": "workspace:*",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "promptfoo": "0.126.0",
     "typescript": "catalog:",

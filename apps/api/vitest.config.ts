@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { coverage } from "@sebela/config/vitest";
 import { defineConfig } from "vitest/config";
 
 // Integration tests connect with this checkout's database settings. `process.loadEnvFile` keeps a
@@ -15,6 +16,7 @@ for (const name of [".env.local", ".env", ".env.example"]) {
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    coverage: coverage(),
     // Two minutes: the test that sends a request to every private route takes about 28 s on a slow
     // host and timed out under load at the former 30 s (owner's decision, 2026-11-17).
     testTimeout: 120_000,

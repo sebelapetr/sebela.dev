@@ -97,6 +97,12 @@ function network(routes: { cv: Route; file?: Route; fileUrl?: string }) {
   return { client, fetchFile, requests };
 }
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("readCvPdfFile", () => {
   it("reads the current PDF's bytes from the file the CV names", async () => {
     const { client, fetchFile } = network({ cv: () => json(cv()), file: () => pdfFile() });
@@ -295,7 +301,9 @@ describe("readCvPdfFile", () => {
       cv: () => json(cv()),
       file: (request) =>
         new Promise<Response>((_resolve, reject) => {
+          hanging.add(request);
           request.signal.addEventListener("abort", () => {
+            hanging.delete(request);
             reject(request.signal.reason as Error);
           });
         }),

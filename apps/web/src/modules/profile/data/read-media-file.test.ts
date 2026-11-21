@@ -23,6 +23,12 @@ function file(bytes: Uint8Array<ArrayBuffer> = PNG, contentType = "image/png", s
   return new Response(bytes, { status, headers: { "Content-Type": contentType } });
 }
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("readMediaFile", () => {
   it("serves a stored image's bytes from the read address, with its type", async () => {
     const { fetchFile, requests } = storage();
@@ -149,7 +155,9 @@ describe("readMediaFile", () => {
     const { fetchFile } = storage(
       (request) =>
         new Promise<Response>((_resolve, reject) => {
+          hanging.add(request);
           request.signal.addEventListener("abort", () => {
+            hanging.delete(request);
             reject(request.signal.reason as Error);
           });
         }),

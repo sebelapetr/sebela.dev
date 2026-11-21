@@ -73,6 +73,12 @@ function clientWith(routes: Record<string, Route>) {
   return { client, requests };
 }
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("loadServices", () => {
   it("returns the services in the API's order with the person's services prose", async () => {
     const services = [service("automation"), service("software"), service("ai")];
@@ -189,7 +195,9 @@ describe("loadServices", () => {
   it("gives up on an API that does not answer in time", async () => {
     const hang: Route = (request) =>
       new Promise<Response>((_resolve, reject) => {
+        hanging.add(request);
         request.signal.addEventListener("abort", () => {
+          hanging.delete(request);
           reject(request.signal.reason as Error);
         });
       });
