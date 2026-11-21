@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // A stand-in for the docker command line, put first on PATH by deploy.test.mjs to exercise
 // infra/scripts/deploy.sh without a Docker daemon. It records every call, with the image tags the
-// process environment hands to Compose, as a JSON line in FAKE_DOCKER_LOG, and answers from the
+// process environment hands to Compose and the first line of each Compose file it names (the
+// label of the test checkout's commit, fixtures/deploy-checkout.mjs), as a JSON line in
+// FAKE_DOCKER_LOG, and answers from the
 // JSON scenario in FAKE_DOCKER_SCENARIO:
 //
 //   migrations  tag of an API image -> the migration files it holds (no entry: the image cannot be read)
@@ -20,7 +22,14 @@ const tags = {
   web: process.env.WEB_IMAGE_TAG ?? null,
   "mcp-admin": process.env.MCP_ADMIN_IMAGE_TAG ?? null,
 };
-fs.appendFileSync(process.env.FAKE_DOCKER_LOG ?? "", `${JSON.stringify({ args, tags })}\n`);
+const composeFiles = (process.env.COMPOSE_FILE ?? "")
+  .split(":")
+  .filter(Boolean)
+  .map((file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n")[0] : null));
+fs.appendFileSync(
+  process.env.FAKE_DOCKER_LOG ?? "",
+  `${JSON.stringify({ args, tags, composeFiles })}\n`,
+);
 
 function fail(message) {
   process.stderr.write(`fake docker: ${message}\n`);

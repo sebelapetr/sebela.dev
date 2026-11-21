@@ -3,10 +3,11 @@
 // and the version and changelog of the GitHub release made after a healthy deployment. Plain Node
 // without dependencies; tested in deployment.test.mjs. The release workflow runs it as
 //
-//   TAGS='{"api":"<commit>",...}' node scripts/release/deployment.mjs input
+//   SHA=<commit> TAGS='{"api":"<commit>",...}' node scripts/release/deployment.mjs input
 //   SHA=<commit> TAGS='{...}' NOTES_FILE=<path> node scripts/release/deployment.mjs notes
 //
-// `input` prints the forced-command input. `notes` writes the release notes of the commits since
+// `input` prints the forced-command input, which names SHA as the release commit the server's
+// checkout is brought to. `notes` writes the release notes of the commits since
 // the last version tag merged into SHA to NOTES_FILE and prints `release=true` and
 // `version=<tag>` for $GITHUB_OUTPUT. When SHA already carries a version tag (a rerun of a
 // released commit), it writes no notes, prints `release=false` and `version=<that tag>` and says
@@ -24,10 +25,14 @@ const CONVENTIONAL = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?: (?<de
 
 /**
  * The forced-command input that deploys `tags`, a map of every service to the commit SHA of its
- * image. Throws on a missing or unknown service or a tag that is not a commit SHA; the server's
- * script checks the same again.
+ * image, from `release`, the release commit whose repository files the server's checkout is brought
+ * to. Throws on a release or a tag that is not a commit SHA and on a missing or unknown service;
+ * the server's script checks the same again.
  */
-export function deployInput(tags) {
+export function deployInput(tags, release) {
+  if (typeof release !== "string" || !COMMIT.test(release)) {
+    throw new Error(`The release commit is not a commit SHA: ${String(release)}`);
+  }
   if (tags === null || typeof tags !== "object" || Array.isArray(tags)) {
     throw new Error("The tag set is not an object of services and tags.");
   }
@@ -40,7 +45,7 @@ export function deployInput(tags) {
     }
     return `${service}=${tag}`;
   });
-  return ["deploy", ...words].join(" ");
+  return ["deploy", `release=${release}`, ...words].join(" ");
 }
 
 /**
@@ -138,7 +143,7 @@ function tagsFromEnvironment() {
 }
 
 function inputCommand() {
-  process.stdout.write(`${deployInput(tagsFromEnvironment())}\n`);
+  process.stdout.write(`${deployInput(tagsFromEnvironment(), process.env.SHA)}\n`);
 }
 
 function notesCommand() {
@@ -147,7 +152,7 @@ function notesCommand() {
   if (!COMMIT.test(sha)) throw new Error("Set SHA to the release commit.");
   if (!notesFile) throw new Error("Set NOTES_FILE to where the notes go.");
   const tags = tagsFromEnvironment();
-  deployInput(tags);
+  deployInput(tags, sha);
   const released = releasedVersion(git(["tag", "--list", "v*", "--points-at", sha]).split("\n"));
   if (released) {
     const message = `The commit ${sha} is already released as ${released}; no new version is published.`;
