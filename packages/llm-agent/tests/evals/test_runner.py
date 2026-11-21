@@ -38,6 +38,16 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
         (["--check-fixture", "--judge-mode", "direct"], "--check-fixture takes no other option"),
         (["--regrade", "x", "--judge-mode", "direct"], "--judge-mode applies only"),
         (["--case", "S01-en", "--allowance", "1", "--judge-mode", "cheap"], "batch or direct"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes"], "needs a value"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes", "0"], "positive number"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes", "abc"], "positive number"),
+        (["--case", "S01-en", "--allowance", "1", "--deadline-minutes", "nan"], "positive number"),
+        (
+            ["--case", "S01-en", "--allowance", "1"] + ["--deadline-minutes", "5"] * 2,
+            "--deadline-minutes given twice",
+        ),
+        (["--regrade", "x", "--deadline-minutes", "5"], "--deadline-minutes applies only"),
+        (["--check-fixture", "--deadline-minutes", "5"], "--check-fixture takes no other option"),
         (["--case", "S01-en", "--allowance", "1", "--judge-mode"], "--judge-mode needs a value"),
         (
             [
@@ -74,6 +84,15 @@ def test_a_valid_paid_run_and_a_free_regrade() -> None:
     assert run.plan(["--all", "--allowance", "1"]).cases[0] == "Q01-en"
     assert run.plan(["--regrade", "folder"]).judge is False
     assert run.plan(["--check-fixture"]).mode == "check-fixture"
+
+
+def test_a_paid_run_has_an_overall_deadline_that_can_be_set() -> None:
+    assert run.DEADLINE_MINUTES == 150
+    paid = ["--case", "S01-en", "--allowance", "1"]
+    assert run.plan(paid).deadline_minutes == run.DEADLINE_MINUTES
+    assert run.plan([*paid, "--deadline-minutes", "30"]).deadline_minutes == 30
+    judged = ["--regrade", "x", "--judge", "--allowance", "1", "--deadline-minutes", "5.5"]
+    assert run.plan(judged).deadline_minutes == 5.5
 
 
 def test_the_judge_runs_as_a_batch_unless_direct_mode_is_asked_for() -> None:

@@ -346,6 +346,48 @@ async def test_a_cancelled_batch_that_never_ends_charges_every_reservation_as_un
     assert allowance.uncertain_usd == pytest.approx(wanted[0].reserved_usd)
 
 
+class EndsAfterACancelAttempt(FakeBatches):
+    """A batch that never ends by itself but has ended once a cancel was attempted (even one
+    that failed)."""
+
+    async def retrieve(self, message_batch_id: str) -> Any:
+        self._attempt("retrieve")
+        ended = self.calls.get("cancel", 0) > 0
+        return {"id": message_batch_id, "processing_status": "ended" if ended else "in_progress"}
+
+
+async def test_after_a_failed_cancel_a_batch_that_has_ended_is_read_and_charged() -> None:
+    wanted = requests(("Q01-en", 1), ("Q01-en", 2))
+    tokens = usage(plain=1000, output=200)
+    batches = EndsAfterACancelAttempt(
+        [succeeded("Q01-en-r1", rubric_text(), tokens), failed("Q01-en-r2", "canceled")],
+        failures={"cancel": [StatusError(400)]},
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance, max_wait_seconds=600)
+    assert batches.calls["cancel"] == 1
+    assert outcomes["Q01-en-r1"].judgement is not None
+    assert "did not end" in str(outcomes["Q01-en-r2"].failure)
+    measured = (1000 * 2 + 200 * 10) / 1e6 * 0.5
+    assert allowance.uncertain_usd == pytest.approx(wanted[1].reserved_usd)
+    assert allowance.spent_usd == pytest.approx(wanted[1].reserved_usd + measured)
+
+
+async def test_after_a_failed_cancel_a_batch_still_running_is_charged_uncertain() -> None:
+    wanted = requests(("Q01-en", 1))
+    batches = FakeBatches(
+        [succeeded("Q01-en-r1", rubric_text(), usage(plain=10, output=10))],
+        never_ends=True,
+        failures={"cancel": [StatusError(400)]},
+    )
+    allowance = budget.Allowance(available_usd=5.0)
+    outcomes = await run_batch(batches, wanted, allowance, max_wait_seconds=600)
+    assert outcomes["Q01-en-r1"].judgement is None
+    assert "did not end" in str(outcomes["Q01-en-r1"].failure)
+    assert "results" not in batches.calls
+    assert allowance.uncertain_usd == pytest.approx(wanted[0].reserved_usd)
+
+
 @pytest.mark.parametrize(
     "error", [StatusError(529), StatusError(500), StatusError(429), ConnectionError("reset")]
 )

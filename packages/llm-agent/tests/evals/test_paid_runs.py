@@ -90,6 +90,8 @@ def paid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
 
     `seen["answer"]` builds the record of one case-run; the fake Promptfoo answers exactly the
     cases its environment names, `repeats` times each, like the provider does.
+    `seen["on_promptfoo"]` is called with the number of each Promptfoo run as it starts (to move
+    a clock or to interrupt the run).
     """
     batches = AnsweringBatches()
     seen: dict[str, Any] = {
@@ -118,6 +120,9 @@ def paid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     async def promptfoo(output: Path, env: Mapping[str, str], *, repeats: int = 3) -> None:
         cases = env["LLM_AGENT_EVAL_CASES"].split(",")
         seen["promptfoo"].append({"cases": cases, "repeats": repeats})
+        hook: Callable[[int], None] | None = seen.get("on_promptfoo")
+        if hook is not None:
+            hook(len(seen["promptfoo"]))
         answer: Callable[[str, int], dict[str, Any]] = seen["answer"]
         results = [
             {
@@ -457,3 +462,130 @@ async def test_a_paid_regrade_reserves_each_chunk_and_stops_when_the_next_one_do
     (entry,) = ledger()
     assert len(entry["chunks"]) == 1
     assert sorted(entry["chunks"][0]["cases"]) == sorted(pieces[0])
+
+
+# --- An interrupted chunk is counted; an overall deadline ends a run --------------------------
+
+
+class Interrupted(BaseException):
+    """Stands in for Ctrl-C or a killed job: it escapes every `except Exception`."""
+
+
+async def test_an_interrupted_chunk_is_counted_at_its_reservation_in_the_ledger(
+    paid: dict[str, Any],
+) -> None:
+    selected = unjudged(9)
+    pieces = run.chunks(selected, repeats=3)
+    paid["answer"] = costing(0.01)
+
+    def interrupt_the_second_chunk(call: int) -> None:
+        if call == 2:
+            raise Interrupted
+
+    paid["on_promptfoo"] = interrupt_the_second_chunk
+    with pytest.raises(Interrupted):
+        await run.command_run(selected, 2.0)
+    (entry,) = ledger()
+    second = run.reservation(pieces[1])
+    assert entry["scope"] == "running"
+    assert entry["provisional_usd"] == pytest.approx(second, abs=1e-6)
+    assert entry["spent_usd"] == pytest.approx(6 * 0.01 + second, abs=1e-5)
+    assert entry["uncertain_usd"] == pytest.approx(second, abs=1e-5)
+    assert [chunk["cases"] for chunk in entry["chunks"]] == [list(pieces[0]), list(pieces[1])]
+    assert entry["chunks"][1]["provisional"] is True
+    assert budget.ledger_spent(run.LEDGER) == pytest.approx(entry["spent_usd"])
+
+
+async def test_an_interrupted_regrade_chunk_is_counted_at_its_reservation_in_the_ledger(
+    paid: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from tests.evals.records import SUBJECT
+
+    monkeypatch.setattr(run, "current_subject_versions", lambda: SUBJECT)
+    judged = [case.id for case in implemented() if CASES[case.id].expectation.judged][:6]
+    stored = [record(case_id, repeat=repeat) for case_id in judged for repeat in (1, 2, 3)]
+    source = tmp_path / "source"
+    run.store_answers(source, stored)
+    pieces = run.chunks(judged, repeats=3)
+
+    class InterruptingSecondBatch(AnsweringBatches):
+        async def create(self, *, requests: list[dict[str, Any]]) -> Any:
+            if self.created:
+                raise Interrupted
+            return await super().create(requests=requests)
+
+    batches = InterruptingSecondBatch()
+    monkeypatch.setattr(judging, "anthropic_batches", lambda: batches)
+    with pytest.raises(Interrupted):
+        await run.command_regrade(source, judge=True, declared_usd=2.0)
+    second = sum(
+        judging.request(CASES[str(item["case_id"])], item).reserved_usd
+        for item in stored
+        if str(item["case_id"]) in pieces[1]
+    )
+    (entry,) = ledger()
+    assert entry["provisional_usd"] == pytest.approx(second, abs=1e-6)
+    assert entry["uncertain_usd"] == pytest.approx(second, abs=1e-5)
+    assert len(entry["chunks"]) == 2
+    assert entry["spent_usd"] == pytest.approx(entry["chunks"][0]["spent_usd"] + second, abs=1e-5)
+
+
+async def test_a_run_past_its_deadline_leaves_the_remaining_chunks_pending(
+    paid: dict[str, Any], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    selected = unjudged(9)
+    pieces = run.chunks(selected, repeats=3)
+    now = [0.0]
+    monkeypatch.setattr(run, "clock", lambda: now[0])
+
+    def forty_seconds_per_chunk(call: int) -> None:
+        now[0] += 40.0
+
+    paid["on_promptfoo"] = forty_seconds_per_chunk
+    assert await run.command_run(selected, 2.0, deadline_minutes=1.0) == run.BLOCKED
+    assert [tuple(call["cases"]) for call in paid["promptfoo"]] == [pieces[0], pieces[1]]
+    assert "stopped: deadline" in capsys.readouterr().err
+    summary = summary_of()
+    assert summary["pending"] == list(pieces[2])
+    assert summary["stopped"].startswith("deadline")
+    assert summary["pass"] is False
+    (entry,) = ledger()
+    assert entry["scope"] not in ("running", "not started")
+    assert len(entry["chunks"]) == 2
+    # Each finished chunk replaced its provisional charge with what it measured.
+    assert "provisional_usd" not in entry
+    assert not any(chunk.get("provisional") for chunk in entry["chunks"])
+
+
+async def test_a_paid_regrade_past_its_deadline_leaves_the_remaining_chunks_pending(
+    paid: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from tests.evals.records import SUBJECT
+
+    monkeypatch.setattr(run, "current_subject_versions", lambda: SUBJECT)
+    judged = [case.id for case in implemented() if CASES[case.id].expectation.judged][:6]
+    stored = [record(case_id, repeat=repeat) for case_id in judged for repeat in (1, 2, 3)]
+    source = tmp_path / "source"
+    run.store_answers(source, stored)
+    pieces = run.chunks(judged, repeats=3)
+    now = [0.0]
+    monkeypatch.setattr(run, "clock", lambda: now[0])
+
+    class SlowBatches(AnsweringBatches):
+        async def create(self, *, requests: list[dict[str, Any]]) -> Any:
+            now[0] += 120.0
+            return await super().create(requests=requests)
+
+    batches = SlowBatches()
+    monkeypatch.setattr(judging, "anthropic_batches", lambda: batches)
+    assert (
+        await run.command_regrade(source, judge=True, declared_usd=2.0, deadline_minutes=1.0)
+        == run.BLOCKED
+    )
+    assert [len(sent) for sent in batches.created] == [6]
+    summary = summary_of()
+    assert summary["stopped"].startswith("deadline")
+    assert sorted(summary["pending"]) == sorted(pieces[1])
+    (entry,) = ledger()
+    assert len(entry["chunks"]) == 1
+    assert "provisional_usd" not in entry
