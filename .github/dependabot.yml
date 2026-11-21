@@ -1,7 +1,10 @@
 # Dependabot keeps the GitHub Actions of .github/workflows/ current. Every action is pinned to a
 # full commit SHA with its version as a trailing comment (scripts/checks/pinned-actions.mjs);
 # Dependabot updates both. Once a month, all updates in one pull request whose commit header is
-# `ci: bump ...` (docs/testing.md, CI). npm and Python dependencies are not covered yet.
+# `ci: bump ...` (docs/testing.md, CI). The only npm directory covered is infra/pnpm, the hash-pinned
+# pnpm of the container images (infra/README.md, pnpm in the images): its monthly `chore(deps): bump ...`
+# pull request also has to move `packageManager` in package.json, which scripts/checks/image-pnpm.test.mjs
+# enforces. The workspace's npm and Python dependencies are not covered yet.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -14,3 +17,10 @@ updates:
           - "*"
     commit-message:
       prefix: ci
+  - package-ecosystem: npm
+    directory: /infra/pnpm
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+      include: scope

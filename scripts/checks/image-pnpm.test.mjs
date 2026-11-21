@@ -24,7 +24,11 @@ const dockerfiles = readdirSync(path.join(root, "apps"), { withFileTypes: true }
 describe("pnpm in the images", () => {
   it("is the exact version of packageManager", () => {
     assert.ok(pnpmVersion, `packageManager is not an exact pnpm version: ${packageManager}`);
-    assert.deepEqual(manifest.dependencies, { pnpm: pnpmVersion });
+    assert.deepEqual(
+      manifest.dependencies,
+      { pnpm: pnpmVersion },
+      "infra/pnpm and packageManager in package.json must name the same pnpm; move both together",
+    );
     assert.equal(lockfile.packages[""].dependencies.pnpm, pnpmVersion);
     assert.equal(lockfile.packages["node_modules/pnpm"].version, pnpmVersion);
   });

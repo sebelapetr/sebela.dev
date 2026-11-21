@@ -51,7 +51,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── .github/
 │   ├── workflows/           CI, the image release and the deployment [1, 10], the OpenSSF Scorecard
 │   ├── CODEOWNERS           the owner as code owner of everything (review requested, not required)
-│   ├── dependabot.yml       monthly grouped updates of the pinned GitHub Actions
+│   ├── dependabot.yml       monthly updates of the pinned GitHub Actions and the images' pnpm
 │   ├── ISSUE_TEMPLATE/      issue forms (bug report, idea) and links to private security reporting and Discussions
 │   └── pull_request_template.md  sections of a pull request description, with the roles
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
