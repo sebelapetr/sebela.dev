@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { cpuUsage } from "node:process";
 
 import { describe, expect, it } from "vitest";
 
@@ -120,6 +121,15 @@ describe("documentTypeOf", () => {
     expect(documentTypeOf(name)).toBeNull();
   });
 });
+
+/**
+ * The timeout of a test that reads PDFs. Each reading starts a fresh worker thread that loads the
+ * parser (about 3.5 MB of JavaScript) for that one file: about 0.2 to 0.4 s on an idle machine, but
+ * several seconds beside other test suites, so Vitest's 5 s default fails a test that reads two.
+ * It is three readings at the module's own limit, which `too_slow` still holds each reading to, so
+ * it guards against a hang and is no limit on the speed.
+ */
+const pdfTestTimeout = 3 * defaultDocumentLimits.maxProcessingMs;
 
 describe("prepareDocument", () => {
   it("hashes the exact original bytes", async () => {
@@ -352,15 +362,50 @@ describe("prepareDocument", () => {
     ["token-like words", "", "eyJ-", 48_000],
     ["connection settings", "", "Host=a;", 400_000],
     ["lines with telephone numbers", "", "Call 555-010-0199 now.\n", 400_000],
-  ])("prepares a long run of %s within the processing time", async (_name, prefix, unit, size) => {
-    const text = prefix + unit.repeat(Math.ceil(size / unit.length));
-    const started = performance.now();
+  ])(
+    "prepares a long run of %s within the processing time, in time linear in its length",
+    async (_name, prefix, unit, size) => {
+      const textOf = (length: number) => prefix + unit.repeat(Math.ceil(length / unit.length));
+      const quarter = textOf(size / 4);
+      const whole = textOf(size);
+      /**
+       * The processor time in milliseconds that `times` preparations take; none may be refused,
+       * also not as `too_slow`.
+       */
+      const timeOf = async (text: string, times: number) => {
+        const started = cpuUsage();
+        for (let time = 0; time < times; time += 1) {
+          expect(
+            await rejection(() => prepareDocument(input(text, { fileName: "notes.txt" }))),
+          ).toBeNull();
+        }
+        const { user, system } = cpuUsage(started);
+        return (user + system) / 1000;
+      };
 
-    expect(
-      await rejection(() => prepareDocument(input(text, { fileName: "notes.txt" }))),
-    ).toBeNull();
-    expect(performance.now() - started).toBeLessThan(1000);
-  });
+      // The growth from a quarter of the run to all of it, not a limit on the time, so a busy
+      // machine does not fail the test: four times the length takes about four times as long when
+      // the work is linear and sixteen times when it is quadratic. It is measured in processor
+      // time of this test process, which the other processes on the machine do not take from, as
+      // wall-clock time of a longer run would lose more to them than that of a shorter one. A
+      // quarter is prepared as often as it takes to last a measurable while, so a pause of a
+      // millisecond does not decide the ratio, and the whole run as often again. The fastest of a
+      // few rounds, taken in turns after the warm-up, is the least disturbed by garbage collection.
+      let times = 1;
+      while ((await timeOf(quarter, times)) < 20) times *= 2;
+      let fastestQuarter = Number.POSITIVE_INFINITY;
+      let fastestWhole = Number.POSITIVE_INFINITY;
+      for (let round = 0; round < 3; round += 1) {
+        fastestQuarter = Math.min(fastestQuarter, await timeOf(quarter, times));
+        fastestWhole = Math.min(fastestWhole, await timeOf(whole, times));
+      }
+
+      expect(fastestWhole / fastestQuarter).toBeLessThan(8);
+    },
+    // The rounds take about a second alone but several beside other test suites; the timeout only
+    // guards against a hang and is no limit on the speed.
+    30_000,
+  );
 
   it("finds a sensitive value in the display title as line 0", async () => {
     const prepared = await prepareDocument(
@@ -382,30 +427,34 @@ describe("prepareDocument", () => {
     expect((await prepareDocument(input(text))).findings).toEqual([]);
   });
 
-  it("finds nothing in the fictional supplemental documents of the eval set", async () => {
-    const dataset = JSON.parse(
-      readFileSync(new URL("../../../evals/datasets/questions.json", import.meta.url), "utf8"),
-    ) as { documents: { sourceId: string; title: string; file: string }[] };
+  it(
+    "finds nothing in the fictional supplemental documents of the eval set",
+    { timeout: pdfTestTimeout },
+    async () => {
+      const dataset = JSON.parse(
+        readFileSync(new URL("../../../evals/datasets/questions.json", import.meta.url), "utf8"),
+      ) as { documents: { sourceId: string; title: string; file: string }[] };
 
-    for (const document of dataset.documents) {
-      const bytes = readFileSync(
-        new URL(`../../../evals/datasets/${document.file}`, import.meta.url),
-      );
-      const prepared = await prepareDocument({
-        slug: document.sourceId.replace(/^document:/, ""),
-        title: document.title,
-        fileName: document.file,
-        bytes,
-      });
+      for (const document of dataset.documents) {
+        const bytes = readFileSync(
+          new URL(`../../../evals/datasets/${document.file}`, import.meta.url),
+        );
+        const prepared = await prepareDocument({
+          slug: document.sourceId.replace(/^document:/, ""),
+          title: document.title,
+          fileName: document.file,
+          bytes,
+        });
 
-      expect(prepared.findings, document.sourceId).toEqual([]);
-      expect(prepared.sourceId).toBe(document.sourceId);
-      expect(prepared.sections[0]?.headingPath).toEqual([document.title]);
-    }
-  });
+        expect(prepared.findings, document.sourceId).toEqual([]);
+        expect(prepared.sourceId).toBe(document.sourceId);
+        expect(prepared.sections[0]?.headingPath).toEqual([document.title]);
+      }
+    },
+  );
 });
 
-describe("prepareDocument with a PDF", () => {
+describe("prepareDocument with a PDF", { timeout: pdfTestTimeout }, () => {
   const pdf = (bytes: Uint8Array, change: Partial<DocumentInput> = {}): DocumentInput =>
     input("", { fileName: "field-report.pdf", bytes, ...change });
 
