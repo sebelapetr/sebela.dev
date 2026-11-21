@@ -242,6 +242,16 @@ describe("release notes", () => {
     assert.doesNotMatch(notes, /#22/);
   });
 
+  it("leaves out the changelog commits of earlier releases", () => {
+    const notes = render([
+      commit("chore(release): changelog for v1.2.3 (#40)"),
+      commit("fix(api): a fix (#41)"),
+    ]);
+    assert.doesNotMatch(notes, /changelog for/);
+    assert.doesNotMatch(notes, /### Other changes/);
+    assert.match(notes, /a fix/);
+  });
+
   it("has no highlights without a phase merge", () => {
     assert.doesNotMatch(render([commit("fix: a (#1)")]), /Highlights/);
   });
@@ -328,6 +338,43 @@ describe("phase summary", () => {
     assert.equal(
       phaseSummary("## Highlights\n\n- a list first\n\nThe site goes live.\n"),
       "The site goes live.",
+    );
+  });
+
+  it("ends the section at a heading of any level, with or without a blank line before it", () => {
+    assert.equal(
+      phaseSummary("## Summary\n\nThe site goes live.\n### Issues\n\n- #1"),
+      "The site goes live.",
+    );
+    assert.equal(phaseSummary("## Summary\n### Notes\n\nNot the summary."), null);
+    assert.equal(phaseSummary("## Summary\n\n#### Notes\n\nNot the summary."), null);
+  });
+
+  it("never lets an HTML comment opener through, closed, unclosed or nested", () => {
+    for (const body of [
+      "## Summary\n\n<!-- draft: write this later\n\nThe phase adds search.",
+      "## Summary\n\n<!<!-- x -->-- hidden",
+      "## Summary\n\nSearch <!<!-- x -->-- arrives.",
+      "## Summary\n\n<!--\n\nhidden\n\n-->\n\nThe phase adds search.",
+    ]) {
+      const summary = phaseSummary(body);
+      assert.ok(
+        summary === null || !summary.includes("<!--"),
+        `${JSON.stringify(body)} gave ${summary}`,
+      );
+      assert.ok(summary === null || !summary.includes("<"), `no raw HTML: ${summary}`);
+    }
+    assert.equal(
+      phaseSummary("## Summary\n\n<!-- draft: write this later\n\nThe phase adds search."),
+      null,
+    );
+    assert.equal(
+      phaseSummary("## Summary\n\n<!--\n\nhidden\n\n-->\n\nThe phase adds search."),
+      "The phase adds search.",
+    );
+    assert.equal(
+      phaseSummary("## Summary\n\nSearch for a <b>term</b>."),
+      "Search for a &lt;b>term&lt;/b>.",
     );
   });
 
