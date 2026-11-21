@@ -17,7 +17,10 @@ export const sensitivityKinds = [
 ] as const;
 export type SensitivityKind = (typeof sensitivityKinds)[number];
 
-/** Where a sensitive value was found: its kind and its line in the cleaned text (title: 0). */
+/**
+ * Where a sensitive value was found: its kind and its line in the original file, counting LF, CRLF
+ * and CR line breaks (title: 0).
+ */
 export interface SensitivityFinding {
   readonly kind: SensitivityKind;
   readonly line: number;
@@ -193,7 +196,8 @@ export function prepareDocument(
   }
   checkTime();
 
-  const text = clean(decoded);
+  const cleaned = clean(decoded);
+  const text = cleaned.text;
   if (text.length > limits.maxExtractedChars) {
     reject(
       "extracted_too_large",
@@ -202,8 +206,10 @@ export function prepareDocument(
   }
   checkTime();
 
-  const findings = [...detect(title).map(({ kind }) => ({ kind, line: 0 })), ...detect(text)];
-  checkTime();
+  const findings = [
+    ...detect(title, () => 0, checkTime),
+    ...detect(text, originalLineOf(cleaned), checkTime),
+  ];
 
   const sections =
     type.extension === "md" ? markdownSections(text, title) : textSections(text, title);
@@ -287,20 +293,86 @@ function sniff(bytes: Uint8Array): void {
  * Unicode NFKC, no byte-order mark, zero-width characters or soft hyphens, LF line breaks, single
  * spaces, trimmed lines, words hyphenated across a line break joined and at most one blank line.
  */
-function clean(text: string): string {
-  return text
+interface CleanedLine {
+  text: string;
+  /** Where the line's pieces start, in order: its column and the original line it came from. */
+  readonly origins: [column: number, line: number][];
+}
+
+/** A cleaned line while it is built: the pieces that hyphen joins append to it. */
+interface DraftLine {
+  readonly pieces: string[];
+  length: number;
+  last: string;
+  readonly origins: [column: number, line: number][];
+}
+
+interface Cleaned {
+  readonly text: string;
+  readonly lines: readonly CleanedLine[];
+}
+
+/**
+ * NFKC, without a byte-order mark, zero-width characters and soft hyphens; LF line breaks, a form
+ * feed as a line break; runs of spaces, tabs and no-break spaces as one space; trimmed lines; a
+ * word hyphenated across a line break joined; at most one blank line in a row; no blank lines at
+ * the start or the end. Each cleaned line remembers the original lines it came from.
+ */
+function clean(raw: string): Cleaned {
+  const normalized = raw
     .replace(/^\uFEFF/u, "")
     .normalize("NFKC")
-    .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/gu, "")
-    .replace(/\r\n?/gu, "\n")
-    .replace(/\f/gu, "\n")
-    .replace(/[\t\u00A0 ]+/gu, " ")
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .replace(/(\p{L})-\n(\p{Ll})/gu, "$1$2")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
+    .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/gu, "");
+  const drafts: DraftLine[] = [];
+  normalized.split(/\r\n|\r|\n/u).forEach((fileLine, index) => {
+    for (const piece of fileLine.split("\f")) {
+      const text = piece.replace(/[\t\u00A0 ]+/gu, " ").trim();
+      const previous = drafts.at(-1);
+      if (previous !== undefined && /\p{L}-$/u.test(previous.last) && /^\p{Ll}/u.test(text)) {
+        // Drop the hyphen from the last piece, then append the text.
+        previous.pieces[previous.pieces.length - 1] = previous.last.slice(0, -1);
+        previous.length -= 1;
+        previous.origins.push([previous.length, index + 1]);
+        previous.pieces.push(text);
+        previous.length += text.length;
+        previous.last = text;
+      } else if (text !== "" || (previous !== undefined && previous.length > 0)) {
+        drafts.push({ pieces: [text], length: text.length, last: text, origins: [[0, index + 1]] });
+      }
+    }
+  });
+  while (drafts.at(-1)?.length === 0) drafts.pop();
+  const lines = drafts.map(({ pieces, origins }) => ({ text: pieces.join(""), origins }));
+  return { text: lines.map((line) => line.text).join("\n"), lines };
+}
+
+/** The line of the original file that a position of the cleaned text came from. */
+function originalLineOf(cleaned: Cleaned): (index: number) => number {
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of cleaned.lines) {
+    starts.push(offset);
+    offset += line.text.length + 1;
+  }
+  return (index) => {
+    let low = 0;
+    let high = starts.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if ((starts[middle] ?? 0) <= index) low = middle;
+      else high = middle - 1;
+    }
+    const column = index - (starts[low] ?? 0);
+    const origins = cleaned.lines[low]?.origins ?? [];
+    let first = 0;
+    let last = origins.length - 1;
+    while (first < last) {
+      const middle = (first + last + 1) >> 1;
+      if ((origins[middle]?.[0] ?? 0) <= column) first = middle;
+      else last = middle - 1;
+    }
+    return origins[first]?.[1] ?? 0;
+  };
 }
 
 interface DraftSection extends SourceSection {
@@ -392,17 +464,28 @@ function overlapping(text: string, max: number): string[] {
   const pieces: string[] = [];
   let index = 0;
   let current: string[] = [];
+  // The joined length of `current` and of the whitespace at its end, kept as tokens are added.
+  let joined = 0;
+  let trailing = 0;
+  const add = (token: string) => {
+    current.push(token);
+    joined += token.length;
+    const kept = token.trimEnd().length;
+    trailing = kept === 0 ? trailing + token.length : token.length - kept;
+  };
   while (index < tokens.length) {
-    let length = current.join("").trimEnd().length;
     let added = 0;
     while (index < tokens.length) {
       const token = tokens[index] ?? "";
       const next =
-        length === 0 ? token.trimEnd().length : current.join("").length + token.trimEnd().length;
+        joined - trailing === 0 ? token.trimEnd().length : joined + token.trimEnd().length;
       if (added > 0 && next > max) break;
-      if (added === 0 && next > max) current = [];
-      current.push(token);
-      length = current.join("").trimEnd().length;
+      if (added === 0 && next > max) {
+        current = [];
+        joined = 0;
+        trailing = 0;
+      }
+      add(token);
       added += 1;
       index += 1;
     }
@@ -415,7 +498,10 @@ function overlapping(text: string, max: number): string[] {
       tail.unshift(token);
       tailLength += token.length;
     }
-    current = tail;
+    current = [];
+    joined = 0;
+    trailing = 0;
+    for (const token of tail) add(token);
   }
   return pieces;
 }
@@ -425,6 +511,8 @@ interface Detector {
   readonly pattern: RegExp;
   /** Whether a match is a sensitive value; every match is when absent. */
   readonly accept?: (match: RegExpExecArray) => boolean;
+  /** How many leading characters of a match are context, not the value; none when absent. */
+  readonly context?: (match: RegExpExecArray) => number;
 }
 
 const credentialValue = (value: string) =>
@@ -444,10 +532,19 @@ const detectors: readonly Detector[] = [
     pattern:
       /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?|mssql|sqlserver|jdbc:[a-z]+):\/\/\S+/giu,
   },
-  { kind: "connection_string", pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:[^\s@/]+@\S+/giu },
+  // A scheme starts after a character that cannot be part of it, so a long dotted word is
+  // scanned once, not once per dot.
   {
     kind: "connection_string",
-    pattern: /\b(?:Server|Data Source|Host)=[^;\n]+;[^\n]*?\b(?:Password|Pwd)=[^;\n]+/giu,
+    pattern: /\b(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:[^\s@/]+@\S+/giu,
+  },
+  // From the line's first setting to its password: the lookahead and back reference keep the
+  // first setting (an atomic group), so each line is scanned once whatever its settings.
+  {
+    kind: "connection_string",
+    pattern:
+      /^(?=(([^\n]*?)\b(?:Server|Data Source|Host)=))\1[^;\n]+;[^\n]*?\b(?:Password|Pwd)=[^;\n]+/gimu,
+    context: (match) => match[2]?.length ?? 0,
   },
   { kind: "credential", pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/gu },
   { kind: "credential", pattern: /\bgh[pousr]_[A-Za-z0-9]{30,}/gu },
@@ -459,7 +556,7 @@ const detectors: readonly Detector[] = [
   { kind: "credential", pattern: /\bpa-[A-Za-z0-9_-]{30,}/gu },
   {
     kind: "credential",
-    pattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
+    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
   },
   { kind: "credential", pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/giu },
   {
@@ -470,7 +567,9 @@ const detectors: readonly Detector[] = [
   },
   {
     kind: "email",
-    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/gu,
+    // The local part starts after a character that cannot be part of it: scanned once per word.
+    pattern:
+      /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/gu,
   },
   {
     kind: "national_identifier",
@@ -498,32 +597,47 @@ const detectors: readonly Detector[] = [
 
 /**
  * Every sensitive value of a text as its kind and line, never the value. Each detector masks what
- * it found, so a value is reported once, under the most specific kind.
+ * it found, so a value is reported once, under the most specific kind. Linear in the text: every
+ * pattern scans a word or a line a bounded number of times, and the masking is one pass per
+ * detector. Checks the processing time after each detector.
  */
-function detect(text: string): SensitivityFinding[] {
+function detect(
+  text: string,
+  lineOf: (index: number) => number,
+  checkTime: () => void,
+): SensitivityFinding[] {
   let masked = text;
   const findings: SensitivityFinding[] = [];
   for (const detector of detectors) {
     const pattern = new RegExp(detector.pattern.source, detector.pattern.flags);
-    let next = masked;
+    const spans: [start: number, end: number][] = [];
     for (let match = pattern.exec(masked); match !== null; match = pattern.exec(masked)) {
       if (match[0] === "") {
         pattern.lastIndex += 1;
         continue;
       }
       if (detector.accept !== undefined && !detector.accept(match)) continue;
-      findings.push({ kind: detector.kind, line: lineOf(masked, match.index) });
-      next =
-        next.slice(0, match.index) +
-        match[0].replace(/[^\n]/gu, " ") +
-        next.slice(match.index + match[0].length);
+      const start = match.index + (detector.context?.(match) ?? 0);
+      findings.push({ kind: detector.kind, line: lineOf(start) });
+      spans.push([start, match.index + match[0].length]);
     }
-    masked = next;
+    if (spans.length > 0) masked = maskedSpans(masked, spans);
+    checkTime();
   }
   return findings;
 }
 
-const lineOf = (text: string, index: number) => text.slice(0, index).split("\n").length;
+/** The text with every character of the spans but line breaks replaced by a space. */
+function maskedSpans(text: string, spans: readonly (readonly [number, number])[]): string {
+  const parts: string[] = [];
+  let at = 0;
+  for (const [start, end] of spans) {
+    parts.push(text.slice(at, start), text.slice(start, end).replace(/[^\n]/gu, " "));
+    at = end;
+  }
+  parts.push(text.slice(at));
+  return parts.join("");
+}
 
 function sortedFindings(findings: readonly SensitivityFinding[]): SensitivityFinding[] {
   const unique = new Map<string, SensitivityFinding>();
