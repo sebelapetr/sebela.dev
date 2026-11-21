@@ -346,17 +346,18 @@ MCP Admin has deterministic integration tests against the real API and a Promptf
 
 ## Documentation
 
-| Read this                                                                                            | For                                                    |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [Overview PRD](.plan/00-overview/prd.md)                                                             | Product scope, audiences and phase boundaries          |
-| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md)                         | Data flow, trust boundary and engineering tradeoffs    |
-| [Repository structure](docs/repository-structure.md)                                                 | Target layout, allowed imports and worktree isolation  |
-| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md)                                   | Canonical terms, entity relationships and access rules |
-| [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements   |
-| [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations           |
-| [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries     |
-| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback             |
-| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                     |
+| Read this                                                                                            | For                                                      |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| [Overview PRD](.plan/00-overview/prd.md)                                                             | Product scope, audiences and phase boundaries            |
+| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md)                         | Data flow, trust boundary and engineering tradeoffs      |
+| [Repository structure](docs/repository-structure.md)                                                 | Target layout, allowed imports and worktree isolation    |
+| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md)                                   | Canonical terms, entity relationships and access rules   |
+| [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements     |
+| [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations             |
+| [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries       |
+| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback               |
+| [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)                                     | How to help, and how to report a vulnerability privately |
+| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                       |
 
 ## License
 

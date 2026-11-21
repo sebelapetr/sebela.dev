@@ -1,0 +1,57 @@
+name: Bug report
+description: Something on the website, in the API, an MCP server or the tooling does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. **Security vulnerabilities go to private reporting, not here** (see `SECURITY.md`).
+        Please do not paste API keys, tokens or personal data.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Website (sebela.dev)
+        - Public API
+        - Chat
+        - MCP server
+        - Release or deployment
+        - Repository, harness or local setup
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, with the URL, route, command or file involved.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened instead; link the document that describes it if you know one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and screen width, or OS, Node.js and pnpm versions and the commit for local setup.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Error output or screenshots, with secrets removed.
+      render: text
