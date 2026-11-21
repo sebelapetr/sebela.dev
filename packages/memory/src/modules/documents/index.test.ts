@@ -457,6 +457,18 @@ describe("prepareDocument with a PDF", () => {
     ]);
   });
 
+  it("leaves the caller's bytes intact, also a view into a larger buffer", async () => {
+    const pool = Buffer.alloc(report.length + 16);
+    pool.set(report, 8);
+    const view = pool.subarray(8, 8 + report.length);
+
+    const prepared = await prepareDocument(pdf(view));
+
+    expect(prepared.contentHash).toBe(contentHashOf(report));
+    expect(pool.byteLength).toBe(report.length + 16);
+    expect(contentHashOf(view)).toBe(contentHashOf(report));
+  });
+
   it("removes running headers and page numbers but keeps a single page's first line", async () => {
     const prepared = await prepareDocument(pdf(report));
     const single = await prepareDocument(pdf(fixturePdf(reportPages.slice(0, 1))));
