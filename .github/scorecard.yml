@@ -13,9 +13,9 @@ annotations:
       - code-review
     reasons:
       - reason: not-applicable # one maintainer; changes go through pull requests, CI and agent review
-  # Packaging: the project publishes packages. Every release pushes its images to GHCR
-  # (ghcr.io/sebelapetr/sebela-api, sebela-web, sebela-mcp-admin) with a signed build provenance
-  # and an SBOM attestation (docs/release-workflow.md, Images). Scorecard looks for a known
+  # Packaging: the project publishes packages. Every release pushes the images it built to GHCR
+  # (ghcr.io/sebelapetr/sebela-api, sebela-web, sebela-mcp-admin), each with a signed build
+  # provenance and an SBOM attestation (docs/release-workflow.md, Images). Scorecard looks for a known
   # publishing command or action in the workflow file itself, and the push is made by
   # scripts/release/images.mjs, which the release workflow runs; the tested release is not
   # restructured for the scanner.
