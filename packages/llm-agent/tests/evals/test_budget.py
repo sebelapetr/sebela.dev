@@ -378,7 +378,7 @@ def test_runs_recording_at_the_same_time_do_not_lose_each_other_s_entries(
         time.sleep(0.002)
         return data
 
-    monkeypatch.setattr(budget.json, "loads", slow_loads)
+    monkeypatch.setattr(json, "loads", slow_loads)
 
     def record(worker: int) -> None:
         for number in range(15):
@@ -391,7 +391,7 @@ def test_runs_recording_at_the_same_time_do_not_lose_each_other_s_entries(
         worker.start()
     for worker in workers:
         worker.join()
-    monkeypatch.setattr(budget.json, "loads", real_loads)
+    monkeypatch.setattr(json, "loads", real_loads)
     runs = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
     assert len(runs) == 60
     assert budget.ledger_spent(ledger, "07-ai-service") == pytest.approx(0.6)

@@ -23,9 +23,12 @@ its whole reservation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
-from collections.abc import Mapping
+import os
+import threading
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -332,9 +335,6 @@ def record_run(
         raise BudgetBlockedError(
             "a run without a named campaign and stage cannot be recorded in the ledger"
         )
-    data: dict[str, Any] = {"runs": []}
-    if ledger.exists():
-        data = json.loads(ledger.read_text(encoding="utf-8"))
     entry: dict[str, Any] = {
         "run": run_id,
         "at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -350,6 +350,33 @@ def record_run(
         entry["expected_usd"] = round(expected_usd, 6)
     if chunks is not None:
         entry["chunks"] = chunks
-    data["runs"] = [run for run in data["runs"] if run.get("run") != run_id] + [entry]
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    ledger.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    # Two runs in one checkout write the same ledger. Reading it, replacing this run's entry and
+    # writing it back happens under a lock and lands in one step, so neither loses the other's
+    # entry. (They can still both open their allowance from the same remainder: run paid evals
+    # one at a time per checkout.)
+    with _locked(ledger):
+        data: dict[str, Any] = {"runs": []}
+        if ledger.exists():
+            data = json.loads(ledger.read_text(encoding="utf-8"))
+        data["runs"] = [run for run in data["runs"] if run.get("run") != run_id] + [entry]
+        scratch = ledger.with_name(f"{ledger.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        scratch.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        os.replace(scratch, ledger)
+
+
+@contextlib.contextmanager
+def _locked(ledger: Path) -> Iterator[None]:
+    """Holds the ledger's lock file for one read-modify-write. Where the platform has no
+    advisory file locks the write goes unlocked, as before."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - not on the platforms the evals run on
+        yield
+        return
+    with ledger.with_name(f"{ledger.name}.lock").open("w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)

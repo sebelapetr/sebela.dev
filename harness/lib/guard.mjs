@@ -650,7 +650,8 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
 // once, so `gh pr create` for a `phase/*` head needs `--draft`. And gh takes flags between `gh`,
 // `pr` and the verb (`gh pr -R o/r ready 50`, `gh --repo o/r pr ready 50`): such a call names its
 // pull request in a way the guard does not follow, so it is unidentifiable and refused.
-const GH_CALL = new RegExp(`${AT_COMMAND}gh(?=\\s)`, "g");
+// gh where the shell runs a command: at the start, after ; & | ( a newline or a backtick.
+const GH_CALL = /(?:^|[;&|(\n`]\s*)(?:env\s+)?(?:\w+=\S*\s+)*gh(?=\s)/g;
 const PR_STATE_VERBS = new Set(["ready", "close", "reopen"]);
 const GH_FLAGS_WITH_VALUE = new Set(["-R", "--repo", "--hostname"]);
 // Options of `gh pr create` that take the next word as their value.
@@ -683,7 +684,7 @@ const PR_CREATE_OPTIONS_WITH_VALUE = new Set([
 ]);
 // Its short options without a value, which may be written together (`-df`).
 const PR_CREATE_SHORT_SWITCHES = /^-[dfwe]+$/;
-const GH_API = new RegExp(`${AT_COMMAND}gh\\s+api\\b([^;&|\\n]*)`, "g");
+const GH_API = /(?:^|[;&|(\n`]\s*)(?:env\s+)?(?:\w+=\S*\s+)*gh\s+api\b([^;&|\n]*)/g;
 const PR_STATE_OPTIONS_WITH_VALUE = new Set(["-c", "--comment"]);
 const PR_STATE_MUTATIONS =
   /\b(markPullRequestReadyForReview|convertPullRequestToDraft|closePullRequest|reopenPullRequest|mergePullRequest|enablePullRequestAutoMerge)\b/;
@@ -697,6 +698,30 @@ const PHASE_PR_UNKNOWN =
   "Could not confirm that this is not a phase pull request, so its state is not changed (docs/permissions.md). Name a pull request of this repository by its number, without --repo; to close an issue use `gh issue close <number>`.";
 
 const isPhaseBranch = (name) => /^(?:[^:/\s]+:)?phase\/\S+$/.test(name ?? "");
+
+// Whether the text at `index` is only quoted text and not a command: inside single quotes, or
+// inside double quotes that hold no command substitution so far. A pull request body or a commit
+// message that mentions `gh pr close` on a line of its own is such text; `"$(gh pr ready 50)"`
+// is not. (A heredoc is not quoting: pass a long body with --body-file.)
+function isQuotedText(command, index) {
+  let quote = null;
+  let substitution = false;
+  for (let i = 0; i < index; i += 1) {
+    const char = command[i];
+    if (quote === "'") {
+      if (char === "'") quote = null;
+    } else if (char === "\\") {
+      i += 1;
+    } else if (quote === '"') {
+      if (char === '"') quote = null;
+      else if (char === "`" || (char === "$" && command[i + 1] === "(")) substitution = true;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      substitution = false;
+    }
+  }
+  return quote === "'" || (quote === '"' && !substitution);
+}
 
 // The words of the simple command that continues at `start`: up to the next ; & | or newline
 // outside quotes, quotes removed, a backslash taking the next character literally (and joining a
@@ -745,6 +770,8 @@ function ghPrCall(words) {
   i += 1;
   skipFlags();
   let verb = words[i];
+  // A verb the shell fills in from a variable or a substitution cannot be read here.
+  if (/[$`]/.test(verb ?? "")) return { verb: null, args: words.slice(i + 1), flagged };
   // A flag whose value this reading did not expect must not hide the verb behind it.
   if (flagged && !PR_STATE_VERBS.has(verb) && verb !== "create") {
     verb = words.slice(i, i + 3).find((word) => PR_STATE_VERBS.has(word) || word === "create");
@@ -785,6 +812,7 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
 
   for (const match of fullCommand.matchAll(GH_CALL)) {
     const after = match.index + match[0].length;
+    if (isQuotedText(fullCommand, after - 2)) continue;
     const words = commandWordsFrom(fullCommand, after);
     if (words === null) {
       // An open quote: refuse when what can be read still looks like a pull request change.
@@ -797,6 +825,7 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
     const call = ghPrCall(words);
     if (!call) continue;
     const { verb, args, flagged } = call;
+    if (verb === null) return refuse(PHASE_PR_UNKNOWN);
     const otherRepository = elsewhere || args.some((word) => /^(--repo|-R)(=|$)/.test(word));
 
     if (verb === "create") {
@@ -829,7 +858,17 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
     if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
   }
 
-  for (const [, args] of fullCommand.matchAll(GH_API)) {
+  for (const apiCall of fullCommand.matchAll(GH_API)) {
+    if (isQuotedText(fullCommand, apiCall.index + apiCall[0].indexOf("gh"))) continue;
+    const args = apiCall[1];
+    // Merging through the REST endpoint: a phase pull request is merged by the owner only.
+    const merged = /(?:^|[\s/'"])pulls\/(\d+)\/merge(?=$|[\s'"?])/.exec(args)?.[1];
+    if (merged && /(?:^|\s)(?:-X|--method)[\s=]*['"]?PUT\b/i.test(args)) {
+      const head = elsewhere ? null : headOf(merged);
+      if (!head) return refuse(PHASE_PR_UNKNOWN);
+      if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
+      continue;
+    }
     if (/(^|[\s/'"])graphql(?=$|[\s'"])/.test(args)) {
       // A mutation names its pull request by a node ID, and a query read from a file cannot be
       // seen at all: neither can be matched to a pull request, so both count as a phase one.
