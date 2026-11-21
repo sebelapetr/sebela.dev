@@ -3,12 +3,21 @@
 # "Deployment"; infra/README.md, "Deployment"). Run only as the forced command of the `deploy`
 # user's SSH key, or by the owner on the server. The only input is one of:
 #
-#   deploy api=<commit> web=<commit> mcp-admin=<commit>   the verified tag set of the release job
-#   rollback                                              back to the previous verified release
+#   deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit>
+#             the release commit and the verified tag set of the release job
+#   rollback  back to the previous verified release
 #
 # As the forced command the input is SSH_ORIGINAL_COMMAND and arguments are ignored; otherwise it
-# is the arguments. Every service is named exactly once, with a full 40-character commit SHA. Any
-# other input is refused before anything runs, so the key can do nothing but deploy or roll back.
+# is the arguments. The release commit and every service are named exactly once, each with a full
+# 40-character commit SHA. Any other input is refused before anything runs, so the key can do
+# nothing but deploy or roll back.
+#
+# A deployment first brings this checkout to the release commit, so the script, the Compose files
+# and the backup script of the release are the ones that run: it fetches origin, refuses a commit
+# that is not on origin/master and a checkout with local modifications (nothing changed either
+# way), checks the commit out detached and runs the checked-out deploy.sh again, once, with
+# DEPLOY_RELEASE_CHECKED_OUT set to the commit; that run checks the checkout is at the commit and
+# goes on. A rollback leaves the checkout as it is.
 #
 # A deployment pulls the images, backs up first when the release adds a migration (DEPLOY_BACKUP,
 # which reads the same DEPLOY_ENV_FILE; without an executable backup script such a release is
@@ -34,7 +43,7 @@ SERVICES=(api web mcp-admin)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MIGRATIONS_DIR=/app/packages/db/migrations
-USAGE="usage: deploy api=<commit> web=<commit> mcp-admin=<commit> | rollback"
+USAGE="usage: deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> | rollback"
 
 say() { printf 'deploy: %s\n' "$*" >&2; }
 fail() {
@@ -86,10 +95,22 @@ describe_set() {
 }
 
 declare -A target=()
+release=""
 command="${words[0]}"
 case "$command" in
   deploy)
-    parse_set target "${words[@]:1}"
+    service_words=()
+    for word in "${words[@]:1}"; do
+      if [[ "$word" == release=* ]]; then
+        [[ -z "$release" ]] || fail "release commit named twice"
+        [[ "$word" =~ ^release=([0-9a-f]{40})$ ]] || fail "not a release commit SHA: $word"
+        release="${BASH_REMATCH[1]}"
+      else
+        service_words+=("$word")
+      fi
+    done
+    [[ -n "$release" ]] || fail "missing release commit: $USAGE"
+    parse_set target "${service_words[@]}"
     ;;
   rollback)
     ((${#words[@]} == 1)) || fail "$USAGE"
@@ -114,6 +135,37 @@ RELEASES="$DEPLOY_STATE_DIR/releases"
 
 exec 9>"$DEPLOY_STATE_DIR/lock"
 flock --nonblock 9 || fail "another deployment is running"
+
+# --- The checkout ------------------------------------------------------------------------------
+
+checkout_git() { git -C "$CHECKOUT" "$@"; }
+
+# Brings the checkout to the release commit and runs the release's deploy.sh in place of this one.
+# Only a commit on origin/master is checked out, so the input cannot choose code of its own. The
+# function is read whole before it runs, and exec replaces this process, so nothing of this file is
+# read after the checkout changed it. The re-executed script opens the lock again, which closes
+# this one's.
+checkout_release() {
+  if [[ -n "${DEPLOY_RELEASE_CHECKED_OUT:-}" ]]; then
+    [[ "$DEPLOY_RELEASE_CHECKED_OUT" == "$release" &&
+      "$(checkout_git rev-parse HEAD 2>/dev/null)" == "$release" ]] ||
+      fail "the checkout is not at the release commit $release; nothing changed"
+    return 0
+  fi
+  checkout_git fetch --quiet origin || fail "cannot fetch origin; nothing changed"
+  checkout_git merge-base --is-ancestor "$release" refs/remotes/origin/master 2>/dev/null ||
+    fail "the release commit $release is not on origin/master; nothing changed"
+  local changes
+  changes="$(checkout_git status --porcelain --untracked-files=no)" ||
+    fail "cannot read the state of the checkout; nothing changed"
+  [[ -z "$changes" ]] || fail "the checkout has local modifications; nothing changed"
+  checkout_git -c advice.detachedHead=false checkout --quiet --detach "$release" ||
+    fail "cannot check out the release commit $release; nothing changed"
+  say "the checkout is at the release commit $release"
+  DEPLOY_RELEASE_CHECKED_OUT="$release" exec bash "$CHECKOUT/infra/scripts/deploy.sh" "$@"
+}
+
+[[ "$command" != deploy ]] || checkout_release "$@"
 
 # --- Steps -------------------------------------------------------------------------------------
 

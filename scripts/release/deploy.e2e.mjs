@@ -1,7 +1,8 @@
 // Simulated deployment (docs/release-workflow.md, "Deployment"; docs/testing.md, CI): the real
-// infra/scripts/deploy.sh against a disposable Compose project of tiny busybox images
-// (fixtures/deploy-e2e/compose.yaml), with a project name of its own and nothing published on the
-// host. Each release is an image committed from busybox with a migration folder and a /healthy
+// infra/scripts/deploy.sh, run from a temporary checkout with a bare origin of its own
+// (fixtures/deploy-checkout.mjs) that the first deployment brings to the release commit, against a
+// disposable Compose project of tiny busybox images (fixtures/deploy-e2e/compose.yaml), with a
+// project name of its own and nothing published on the host. Each release is an image committed from busybox with a migration folder and a /healthy
 // script, so nothing is built. The run deploys a first and a second healthy release, then a
 // deliberately unhealthy one that must end with the second running again, refuses a release with
 // a new migration while there is no backup script, and rolls back to the first release. Needs
@@ -16,8 +17,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const ROOT = path.resolve(import.meta.dirname, "..", "..");
-const SCRIPT = path.join(ROOT, "infra", "scripts", "deploy.sh");
+import { GIT_ENV, createCheckout } from "./fixtures/deploy-checkout.mjs";
+
 const COMPOSE_FILE = path.join(import.meta.dirname, "fixtures", "deploy-e2e", "compose.yaml");
 const BASE_IMAGE = "busybox:1.37.0";
 // A registry name that never resolves: every image must already be local, nothing is pulled.
@@ -33,6 +34,7 @@ const RELEASES = {
   migrating: { tag: sha("4"), migrations: ["0001_first.sql", "0002_next.sql"], healthy: true },
 };
 const line = (tag) => SERVICES.map((service) => `${service}=${tag}`).join(" ");
+const deployInput = (tag) => `deploy release=${repo.commits.release} ${line(tag)}`;
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-deploy-e2e-"));
 const state = path.join(dir, "state");
@@ -40,6 +42,7 @@ const envFile = path.join(dir, "production.env");
 const backup = path.join(dir, "backup.sh");
 const backupLog = path.join(dir, "backups");
 const runs = path.join(dir, "runs");
+const repo = createCheckout(dir);
 fs.mkdirSync(state);
 fs.mkdirSync(runs);
 fs.writeFileSync(envFile, "# The fixture composition needs no settings.\n");
@@ -47,6 +50,7 @@ fs.writeFileSync(backup, `#!/bin/sh\necho backup >> "${backupLog}"\n`, { mode: 0
 
 const environment = {
   ...process.env,
+  ...GIT_ENV,
   COMPOSE_PROJECT_NAME: PROJECT,
   COMPOSE_FILE,
   DEPLOY_E2E_BASE_IMAGE: BASE_IMAGE,
@@ -71,7 +75,7 @@ function docker(args, { check = true } = {}) {
 }
 
 function deploy(input, env = {}) {
-  const result = spawnSync("bash", [SCRIPT, ...input.split(" ")], {
+  const result = spawnSync("bash", [repo.script, ...input.split(" ")], {
     env: { ...environment, ...env },
     encoding: "utf8",
     timeout: 300_000,
@@ -135,8 +139,9 @@ try {
 
   // The first release: no current release, so it backs up first, then runs healthy.
   commitRelease(RELEASES.first);
-  let result = deploy(`deploy ${line(RELEASES.first.tag)}`);
+  let result = deploy(deployInput(RELEASES.first.tag));
   assert.equal(result.status, 0, "the first release deploys");
+  assert.equal(repo.head(), repo.commits.release, "the checkout is at the release commit");
   assert.deepEqual(running(), all(RELEASES.first.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag)]);
   assert.equal(backups(), 1, "the first release was backed up");
@@ -144,7 +149,7 @@ try {
 
   // The second release has the same migrations: no backup.
   commitRelease(RELEASES.second);
-  result = deploy(`deploy ${line(RELEASES.second.tag)}`);
+  result = deploy(deployInput(RELEASES.second.tag));
   assert.equal(result.status, 0, "the second release deploys");
   assert.deepEqual(running(), all(RELEASES.second.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag), line(RELEASES.second.tag)]);
@@ -153,7 +158,7 @@ try {
 
   // A deliberately unhealthy release ends with the second release running again.
   commitRelease(RELEASES.unhealthy);
-  result = deploy(`deploy ${line(RELEASES.unhealthy.tag)}`);
+  result = deploy(deployInput(RELEASES.unhealthy.tag));
   assert.notEqual(result.status, 0, "the unhealthy release fails");
   assert.match(result.stderr, /previous release is running again/);
   assert.deepEqual(running(), all(RELEASES.second.tag));
@@ -162,7 +167,7 @@ try {
 
   // A new migration without a backup script is refused before anything changes.
   commitRelease(RELEASES.migrating);
-  result = deploy(`deploy ${line(RELEASES.migrating.tag)}`, {
+  result = deploy(deployInput(RELEASES.migrating.tag), {
     DEPLOY_BACKUP: path.join(dir, "no-backup.sh"),
   });
   assert.notEqual(result.status, 0, "a new migration without a backup is refused");

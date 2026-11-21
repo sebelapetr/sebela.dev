@@ -14,12 +14,27 @@ import { deployInput, nextVersion, releasedVersion, releaseNotes } from "./deplo
 const sha = (character) => character.repeat(40);
 
 describe("deploy input", () => {
-  it("names every service with its tag, in a fixed order", () => {
+  const release = sha("f");
+
+  it("names the release commit, then every service with its tag, in a fixed order", () => {
     assert.equal(
-      deployInput({ "mcp-admin": sha("c"), web: sha("b"), api: sha("a") }),
-      `deploy api=${sha("a")} web=${sha("b")} mcp-admin=${sha("c")}`,
+      deployInput({ "mcp-admin": sha("c"), web: sha("b"), api: sha("a") }, release),
+      `deploy release=${release} api=${sha("a")} web=${sha("b")} mcp-admin=${sha("c")}`,
     );
   });
+
+  const tags = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c") };
+  const invalidReleases = {
+    "a missing release commit": undefined,
+    "a short release commit": "abc1234",
+    "a branch name": "master",
+    "an injected release commit": `${release} api=${sha("d")}`,
+  };
+  for (const [name, value] of Object.entries(invalidReleases)) {
+    it(`refuses ${name}`, () => {
+      assert.throws(() => deployInput(tags, value));
+    });
+  }
 
   const invalid = {
     "a missing service": { api: sha("a"), web: sha("b") },
@@ -31,13 +46,13 @@ describe("deploy input", () => {
   };
   for (const [name, tags] of Object.entries(invalid)) {
     it(`refuses ${name}`, () => {
-      assert.throws(() => deployInput(tags));
+      assert.throws(() => deployInput(tags, release));
     });
   }
 
   it("refuses something that is not a tag set", () => {
-    assert.throws(() => deployInput(null));
-    assert.throws(() => deployInput([sha("a")]));
+    assert.throws(() => deployInput(null, release));
+    assert.throws(() => deployInput([sha("a")], release));
   });
 });
 

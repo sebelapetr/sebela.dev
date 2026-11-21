@@ -151,8 +151,9 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # The verified tag set reaches the server only as the input of the deploy user's forced command,
-  # infra/scripts/deploy.sh, which validates it again, backs up before a new migration, migrates,
+  # The release commit and the verified tag set reach the server only as the input of the deploy
+  # user's forced command, infra/scripts/deploy.sh, which validates them again, brings its checkout
+  # to the release commit (only a commit on master), backs up before a new migration, migrates,
   # recreates the services, waits for health and returns to the previous release on failure. The
   # GitHub Environment `production` is restricted to master and holds the only secrets: the deploy
   # key, the host and its known_hosts line. The smoke check then asks the public edge with a made-up
@@ -168,6 +169,7 @@ jobs:
     permissions:
       contents: read
     env:
+      SHA: ${{ github.sha }}
       TAGS: ${{ needs.images.outputs.tags }}
     steps:
       - uses: actions/checkout@v7
