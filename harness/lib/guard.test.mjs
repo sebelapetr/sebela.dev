@@ -908,3 +908,149 @@ test("reading a pull request through gh api and changing an issue pull request s
     assert.equal(bash(command, interactive), null, command);
   }
 });
+
+// --- the gaps of the first guards (issue #384) -------------------------------------
+
+const eachRestricted = [inLoop, asSubagent, { ...inLoop, isSubagent: true }];
+
+test("the loop and subagents never declare the phase-PR stage of a paid eval run", () => {
+  for (const command of [
+    "uv run --locked python -m evals.run --all --campaign 07-ai-service --stage phase-pr --allowance 3.9",
+    "node harness/with-secrets.mjs -- uv run --locked python -m evals.run --all --campaign 07-ai-service --stage phase-pr --allowance 3.9",
+    "pnpm --filter @sebela/llm-agent eval -- --all --stage=phase-pr --allowance 3.9",
+    "pnpm --silent eval --case S01-en --stage 'phase-pr' --allowance 1",
+    'cd packages/llm-agent && pnpm eval --stage "phase-pr" --all --allowance 2',
+    "pnpm eval --all --stage  phase-pr --allowance 2",
+  ]) {
+    for (const session of eachRestricted) {
+      const verdict = bash(command, session);
+      assert.match(verdict?.reason ?? "", /phase-pr/, command);
+      assert.notEqual(verdict.decision, "ask", command);
+    }
+    assert.equal(bash(command, interactive)?.decision, "ask", command);
+  }
+});
+
+test("the loop and subagents never set or clear the campaign the loop named", () => {
+  for (const command of [
+    "SEBELA_EVAL_CAMPAIGN=08-mcp-public pnpm eval --case S01-en --allowance 1",
+    "export SEBELA_EVAL_CAMPAIGN=08-mcp-public",
+    "env SEBELA_EVAL_CAMPAIGN=06-llm-agent pnpm eval --case S01-en --allowance 1",
+    "cd packages/llm-agent && SEBELA_EVAL_CAMPAIGN= pnpm eval --campaign 08-mcp-public --case S01-en --allowance 1",
+    "unset SEBELA_EVAL_CAMPAIGN; pnpm eval --campaign 08-mcp-public --case S01-en --allowance 1",
+    "env -u SEBELA_EVAL_CAMPAIGN pnpm eval --campaign 08-mcp-public --case S01-en --allowance 1",
+    "env --unset=SEBELA_EVAL_CAMPAIGN pnpm eval --campaign 08-mcp-public --case S01-en --allowance 1",
+    "SEBELA_EVAL_KEPT_RUNS= pnpm eval --case S01-en --allowance 1",
+    "unset SEBELA_EVAL_KEPT_RUNS",
+  ]) {
+    for (const session of eachRestricted) {
+      const verdict = bash(command, session);
+      assert.match(verdict?.reason ?? "", /SEBELA_EVAL/, command);
+      assert.notEqual(verdict.decision, "ask", command);
+    }
+    assert.equal(bash(command, interactive)?.decision, "ask", command);
+  }
+});
+
+test("an issue run, a free regrade and reading about the stage stay allowed", () => {
+  for (const command of [
+    "pnpm --silent eval --campaign 07-ai-service --stage issue --case S01-en --allowance 1",
+    "pnpm --silent eval --campaign 07-ai-service --case S01-en --allowance 1",
+    "uv run --locked python -m evals.run --regrade ../../.tmp/evals/llm-agent/run-1",
+    "grep -rn -e '--stage phase-pr' docs packages/llm-agent",
+    "grep -rn SEBELA_EVAL_CAMPAIGN= harness docs",
+    "cat docs/testing.md",
+    "uv run --locked pytest tests/evals -q",
+  ]) {
+    for (const session of [...eachRestricted, interactive]) {
+      assert.equal(bash(command, session), null, command);
+    }
+  }
+});
+
+test("a phase pull request is only ever created as a draft", () => {
+  const onPhase = { ...inLoop, currentBranch: "phase/07-ai-service" };
+  for (const [command, session] of [
+    ["gh pr create --base master --head phase/07-ai-service --title x --body y", inLoop],
+    ["gh pr create --base master --head=phase/07-ai-service --title x --body y", inLoop],
+    ["gh pr create -B master -H phase/07-ai-service -t x -b y", inLoop],
+    ["gh pr create --head sebelapetr:phase/07-ai-service --title x --body y", inLoop],
+    ["gh pr create --draft=false --head phase/07-ai-service --title x --body y", inLoop],
+    ["gh pr create --head phase/07-ai-service --title x --body y --draft=false", inLoop],
+    ["gh pr create --head phase/07-ai-service --title '--draft' --body '-d'", inLoop],
+    ["gh pr create --head phase/07-ai-service --title x --body 'a; b --draft'", inLoop],
+    ["gh pr create --base master --title x --body y", onPhase],
+    ["gh pr create --fill", onPhase],
+    ["git fetch && gh pr create --base master --head phase/07-ai-service --fill", inLoop],
+  ]) {
+    assert.match(bash(command, session)?.reason ?? "", /draft/, command);
+    assert.match(bash(command, { ...session, isSubagent: true })?.reason ?? "", /draft/, command);
+    const asked = bash(command, { ...session, unattended: false });
+    assert.equal(asked?.decision, "ask", command);
+  }
+});
+
+test("a pull request whose head cannot be told is not created without --draft", () => {
+  // No --head and no known branch, or the command moves elsewhere first.
+  assert.match(bash("gh pr create --base master --fill", inLoop).reason, /Could not confirm/);
+  assert.match(
+    bash("cd ../x && gh pr create --base master --fill", { ...inLoop, currentBranch: "feat/1-x" })
+      .reason,
+    /Could not confirm/,
+  );
+  assert.match(
+    bash('gh pr create --head phase/07-ai-service --body "never closed', inLoop).reason,
+    /Could not confirm/,
+  );
+  assert.equal(bash("gh pr create --draft --base master --fill", inLoop), null);
+});
+
+test("the loop's normal pull request steps still work", () => {
+  const onIssue = { ...inLoop, currentBranch: "feat/12-thing" };
+  for (const [command, session] of [
+    ["gh pr create --draft --base master --head phase/07-ai-service --title x --body y", inLoop],
+    ["gh pr create -d -B master -H phase/07-ai-service -t x -b y", inLoop],
+    ["gh pr create --base master --head phase/07-ai-service --title x --body y --draft", inLoop],
+    ["gh pr create --draft=true --head phase/07-ai-service --title x --body y", inLoop],
+    ["gh pr create --base phase/07-ai-service --head feat/12-thing --title x --body y", inLoop],
+    ["gh pr create --base phase/07-ai-service --title x --body-file .tmp/body.md", onIssue],
+    [
+      "gh pr create --base phase/07-ai-service --head feat/12-thing --title 'fix: a; b' --body \"Closes #12\n\n## What changed\nthings | more\"",
+      inLoop,
+    ],
+    ["gh pr ready 51", inLoop],
+    ["gh pr close 51 --delete-branch", inLoop],
+    ["gh pr edit 50 --body-file .tmp/body.md", inLoop],
+    ["gh pr view 50 --json state,isDraft", inLoop],
+    ["gh pr checks 51 --watch", inLoop],
+    ["gh pr list --base phase/07-ai-service --state open --json number", inLoop],
+  ]) {
+    assert.equal(bash(command, session), null, command);
+  }
+  assert.equal(
+    bash("gh pr merge 41 --squash --delete-branch", {
+      ...inLoop,
+      lookupPrBase: lookup({ 41: "phase/07-ai-service" }),
+    }),
+    null,
+  );
+});
+
+test("gh flags between gh, pr and the verb do not get a state change past the guard", () => {
+  for (const command of [
+    "gh pr -R sebelapetr/sebela.dev ready 50",
+    "gh --repo sebelapetr/sebela.dev pr ready 50",
+    "gh pr --repo=sebelapetr/sebela.dev close 50",
+    "gh -R sebelapetr/sebela.dev pr reopen 50",
+    "gh --repo=sebelapetr/sebela.dev pr -R sebelapetr/sebela.dev ready 51",
+    "gh pr -R sebelapetr/sebela.dev create --head phase/07-ai-service --title x --body y",
+    "gh --repo sebelapetr/sebela.dev pr create --base master --head phase/07-ai-service --fill",
+    "gh pr --help ready 50",
+  ]) {
+    for (const session of [inLoop, asSubagent]) {
+      const verdict = bash(command, session);
+      assert.match(verdict?.reason ?? "", /Could not confirm/, command);
+    }
+    assert.equal(bash(command, interactive)?.decision, "ask", command);
+  }
+});
