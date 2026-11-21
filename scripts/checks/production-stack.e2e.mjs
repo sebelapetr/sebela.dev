@@ -12,7 +12,7 @@
 //   website's installed dependencies with Chromium; screenshots in
 //   apps/web/test-results/complete-stack/).
 //
-// Needs Docker with Compose and `tar`; plain Node with no dependencies. It builds the API, website
+// Needs Docker with Compose, `tar` and `openssl`; plain Node with no dependencies. It builds the API, website
 // and MCP Admin images under the GHCR names the composition runs, with a tag of this run (or takes
 // the given ones, --images), and:
 //
@@ -25,6 +25,12 @@
 // - loads the demo seed and checks that Postgres, the API, the website and MCP Admin are healthy,
 //   that the migration finished, that only the website and MCP Admin publish a port, only on the loopback
 //   interface, and that pages show the seed with `noindex` and without the analytics script;
+// - runs the reference reverse-proxy configuration (infra/nginx/sebela.dev.conf) in a throwaway nginx
+//   container in front of the website, with a self-signed certificate, and checks its shared-cache
+//   rule: a page answered 200 gets the public rule; a client navigation (also Next's header-less 307
+//   to its `_rsc` URL), a 404, Ask, a POST, the closed internal route and the proxy's own 502 while
+//   the website is unreachable get `no-store`; the website's own header stays on the health route
+//   and robots.txt;
 // - with --browser, the hero's question to the mock Ask page in a browser (no model is called);
 // - checks that the website's /health reports the database failing when Postgres is stopped and the
 //   API failing when the API is stopped;
@@ -39,7 +45,7 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import net from "node:net";
-import { networkInterfaces } from "node:os";
+import os, { networkInterfaces } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
 
@@ -54,6 +60,12 @@ const PLAYWRIGHT_CLI = path.join(WEB_ROOT, "node_modules", "@playwright", "test"
 const REGISTRY = "ghcr.io/sebelapetr";
 const APPS = ["api", "web", "mcp-admin"];
 const HEALTHY_SERVICES = ["api", "mcp-admin", "postgres", "web"];
+const PROXY_FILE = path.join(CHECKOUT_ROOT, "infra", "nginx", "sebela.dev.conf");
+const PROXY_IMAGE =
+  "nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236";
+/** The shared-cache rule of public pages and documents (apps/web/AGENTS.md, Caching and invalidation). */
+const PUBLIC_RULE =
+  "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400";
 
 const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
 const seededPerson = JSON.parse(fs.readFileSync(path.join(DEMO_SEED, "person.json"), "utf8"));
@@ -186,6 +198,98 @@ async function health() {
   return { status: response.status, body: await response.json() };
 }
 
+/**
+ * Starts the reference reverse-proxy configuration in a throwaway nginx container that shares the
+ * website container's network, so the configuration's loopback upstream is the website. Only its
+ * placeholders change: the website's port inside its container, and a self-signed certificate and
+ * an empty edge-address include mounted at the paths the configuration names. Returns a function
+ * that requests a path through the proxy's TLS site and gives the status and headers.
+ */
+function startReverseProxy(folder, webContainer, webContainerPort, suffix = "reverse-proxy") {
+  const reference = fs.readFileSync(PROXY_FILE, "utf8");
+  const one = (pattern) => {
+    const match = pattern.exec(reference);
+    assert.ok(match, `the reverse-proxy configuration has ${String(pattern)}`);
+    return match[1];
+  };
+  const certificate = one(/^\s*ssl_certificate\s+(\S+);/mu);
+  const certificateKey = one(/^\s*ssl_certificate_key\s+(\S+);/mu);
+  const upstreamAddress = one(/^\s*server\s+(\S+):replace-with-the-web-port;/mu);
+  const siteName = [...reference.matchAll(/^\s*server_name\s+(\S+);/gmu)].at(-1)?.[1];
+  assert.ok(siteName, "the reverse-proxy configuration names its site");
+  const mounts = [
+    [path.join(folder, "site.conf"), "/etc/nginx/conf.d/default.conf"],
+    [path.join(folder, "certificate.pem"), certificate],
+    [path.join(folder, "certificate-key.pem"), certificateKey],
+    ...[...reference.matchAll(/^\s*include\s+(\S+);/gmu)].map((match, index) => [
+      path.join(folder, `include-${String(index)}.conf`),
+      match[1],
+    ]),
+  ];
+  fs.writeFileSync(
+    mounts[0][0],
+    reference.replaceAll("replace-with-the-web-port", webContainerPort),
+  );
+  for (const [file] of mounts.slice(3)) fs.writeFileSync(file, "");
+  run("openssl", [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "1",
+    "-subj",
+    `/CN=${siteName}`,
+    "-keyout",
+    mounts[2][0],
+    "-out",
+    mounts[1][0],
+  ]);
+  const name = `${env.COMPOSE_PROJECT_NAME}-${suffix}`;
+  run("docker", [
+    "run",
+    "--detach",
+    "--rm",
+    "--name",
+    name,
+    "--network",
+    `container:${webContainer}`,
+    ...mounts.flatMap(([source, target]) => ["--volume", `${source}:${target}:ro`]),
+    PROXY_IMAGE,
+  ]);
+  const request = (pathname, curlOptions = []) => {
+    const output = run("docker", [
+      "exec",
+      name,
+      "curl",
+      "--silent",
+      "--insecure",
+      "--output",
+      "/dev/null",
+      "--dump-header",
+      "-",
+      "--connect-to",
+      `${siteName}::${upstreamAddress}:`,
+      ...curlOptions,
+      `https://${siteName}${pathname}`,
+    ]);
+    const [statusLine = "", ...lines] = output.split(/\r?\n/u);
+    const headers = new Map();
+    for (const line of lines) {
+      const separator = line.indexOf(":");
+      if (separator > 0) {
+        const header = line.slice(0, separator).trim().toLowerCase();
+        const value = line.slice(separator + 1).trim();
+        headers.set(header, headers.has(header) ? `${headers.get(header)}, ${value}` : value);
+      }
+    }
+    return { status: Number(statusLine.split(" ")[1]), headers };
+  };
+  const stop = () => spawnSync("docker", ["rm", "--force", name], { stdio: "ignore" });
+  return { request, stop };
+}
+
 async function waitFor(check, message, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -279,6 +383,111 @@ try {
     assert.match(response.headers.get("x-robots-tag") ?? "", /noindex/, `${pathname} header`);
     assert.match(html, /<meta[^>]+name="robots"[^>]+noindex/, `${pathname} robots meta tag`);
     assert.ok(!html.includes("data-website-id"), `${pathname} loads no analytics script`);
+  }
+
+  step(
+    "the reference reverse proxy gives pages the shared-cache rule and everything else no-store",
+  );
+  const proxyFolder = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-reverse-proxy-"));
+  const proxies = [];
+  try {
+    const webContainer = containers().find((entry) => entry.Service === "web")?.ID;
+    assert.ok(webContainer, "the website container is listed");
+    const webContainerPort = String(
+      JSON.parse(compose(["config", "--format", "json"])).services.web.environment.WEB_PORT,
+    );
+    const proxy = startReverseProxy(proxyFolder, webContainer, webContainerPort);
+    proxies.push(proxy);
+    await waitFor(() => {
+      try {
+        return proxy.request("/health").status === 200;
+      } catch {
+        return false;
+      }
+    }, "the reverse proxy did not answer");
+    const expectSecurityHeaders = (what, answer) => {
+      assert.equal(
+        answer.headers.get("x-frame-options"),
+        "DENY",
+        `${what} keeps the security headers`,
+      );
+    };
+    const expectations = [
+      // [what, path, curl options, status (null: whatever the website answers), Cache-Control]
+      ["a page", "/", [], 200, PUBLIC_RULE],
+      ["another page, HEAD", "/experience", ["--head"], 200, PUBLIC_RULE],
+      // Next answers a navigation without a matching `_rsc` value with a 307 to its `_rsc` URL and
+      // no Cache-Control. Its cache key is the page's own, so the proxy must mark it no-store; the
+      // status is asserted so that a change in Next's behaviour is noticed.
+      ["a client navigation", "/experience", ["--header", "RSC: 1"], 307, "no-store"],
+      [
+        "a prefetch",
+        "/experience",
+        ["--header", "RSC: 1", "--header", "Next-Router-Prefetch: 1"],
+        null,
+        "no-store",
+      ],
+      ["a navigation payload by argument", "/experience?_rsc=smoke", [], null, "no-store"],
+      ["an empty navigation argument", "/experience?smoke=1&_rsc", [], null, "no-store"],
+      ["a missing page", "/no-such-page", [], 404, "no-store"],
+      ["Ask", "/ask", [], 200, "no-store"],
+      ["a POST", "/", ["--request", "POST"], null, "no-store"],
+      ["the closed internal route", "/internal/invalidation", [], 404, "no-store"],
+    ];
+    for (const [what, pathname, options, status, rule] of expectations) {
+      const answer = proxy.request(pathname, options);
+      const cacheControl = answer.headers.get("cache-control") ?? "";
+      if (status !== null) {
+        assert.equal(answer.status, status, `${what} (${pathname}) answers ${String(status)}`);
+      }
+      if (rule === PUBLIC_RULE) {
+        assert.equal(cacheControl, PUBLIC_RULE, `${what} gets the public rule`);
+      } else {
+        assert.match(
+          cacheControl,
+          /\bno-store\b/u,
+          `${what} (${pathname}, ${String(answer.status)}) is no-store, got "${cacheControl}"`,
+        );
+      }
+      expectSecurityHeaders(what, answer);
+    }
+    const health = proxy.request("/health");
+    assert.match(
+      health.headers.get("cache-control") ?? "",
+      /\bno-store\b/u,
+      "the health route keeps the website's no-store",
+    );
+    const robots = proxy.request("/robots.txt");
+    assert.equal(robots.headers.get("cache-control"), PUBLIC_RULE, "robots.txt keeps its own rule");
+    // A Set-Cookie answer is not checked here: no route of the website sets a cookie.
+
+    // The proxy's own 502: the same configuration with an upstream port nothing listens on.
+    proxy.stop();
+    const unreachable = startReverseProxy(
+      proxyFolder,
+      webContainer,
+      String(Number(webContainerPort) + 1),
+      "reverse-proxy-unreachable",
+    );
+    proxies.push(unreachable);
+    let badGateway = { status: 0, headers: new Map() };
+    await waitFor(() => {
+      try {
+        badGateway = unreachable.request("/");
+        return badGateway.status === 502;
+      } catch {
+        return false;
+      }
+    }, "the reverse proxy without its upstream did not answer 502");
+    assert.match(
+      badGateway.headers.get("cache-control") ?? "",
+      /\bno-store\b/u,
+      "the proxy's own 502 is no-store",
+    );
+    expectSecurityHeaders("the proxy's own 502", badGateway);
+  } finally {
+    for (const proxy of proxies) proxy.stop();
+    fs.rmSync(proxyFolder, { recursive: true, force: true });
   }
 
   if (BROWSER) {

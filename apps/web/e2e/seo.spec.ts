@@ -205,6 +205,32 @@ test.describe("metadata and indexing files on the configured origin", () => {
     }
   });
 
+  test("documents and previews may be kept briefly by the CDN, pages and Ask never by the website", async ({
+    request,
+  }) => {
+    const rule = "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400";
+    for (const path of ["/robots.txt", "/llms.txt", "/sitemap.xml", "/og/home"]) {
+      const response = await request.get(`${website.url}${path}`);
+      expect({ path, status: response.status() }).toEqual({ path, status: 200 });
+      expect({ path, value: response.headers()["cache-control"] }).toEqual({ path, value: rule });
+    }
+    // Pages get the public rule from the reverse proxy only (infra/nginx), which sees the upstream
+    // status and the navigation header; the website itself never marks a page public.
+    for (const path of ["/", "/experience", "/ai-roadmap", "/ask"]) {
+      const response = await request.get(`${website.url}${path}`);
+      expect({ path, value: response.headers()["cache-control"] }).toEqual({
+        path,
+        value: expect.stringMatching(/\bno-store\b/u),
+      });
+    }
+    // A client navigation's payload and the health check.
+    const payload = await request.get(`${website.url}/experience`, { headers: { RSC: "1" } });
+    expect(payload.headers()["cache-control"]).toMatch(/\bno-store\b/u);
+    expect((await request.get(`${website.url}/health`)).headers()["cache-control"]).toBe(
+      "no-store",
+    );
+  });
+
   test("robots.txt lets crawlers in and points at the sitemap", async ({ request }) => {
     const response = await request.get(`${website.url}/robots.txt`);
     expect(response.status()).toBe(200);
@@ -303,6 +329,8 @@ test.describe("metadata without a published profile", () => {
   test("the homepage is not found and not indexed", async ({ page }) => {
     const response = await page.goto(website.url);
     expect(response?.status()).toBe(404);
+    // Never kept by the CDN, so the profile shows as soon as it is published.
+    expect(response?.headers()["cache-control"]).toMatch(/\bno-store\b/u);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
   });
@@ -312,6 +340,7 @@ test.describe("metadata without a published profile", () => {
       const response = await request.get(`${website.url}${path}`);
       expect(response.status()).toBe(404);
       expect(response.headers()["x-robots-tag"]).toBe("noindex");
+      expect(response.headers()["cache-control"]).toBe("no-store");
     }
     expect((await request.get(`${website.url}/robots.txt`)).status()).toBe(200);
   });
