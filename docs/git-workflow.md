@@ -29,6 +29,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 - Phase 0 (planning, docs, agent configuration and the harness) has no issues. It is done directly on `phase/00-overview` and reaches `master` through the same kind of phase pull request, after the trial has passed.
 - The trial is the one phase whose base is not `master`: `phase/00-trial` is cut from `phase/00-overview`, and its phase pull request targets that branch and is closed without merging.
 - Other work without an issue uses `<type>/<short-slug>`, for example `docs/fix-testing-guide`, and targets `master` through a pull request the owner merges.
+- A number at the start of a slug means an issue number only on a branch cut from a phase branch. The worktree script continues an interrupted issue by that number ([repository structure](repository-structure.md#ports-and-worktree-isolation)); it never reads a phase branch, a branch cut from `master`, a name that starts with a phase folder (`docs/15-pages-prd`) or a zero-padded number that way.
 
 ### Why a phase branch
 
