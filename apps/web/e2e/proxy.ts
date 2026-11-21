@@ -3,12 +3,14 @@
 // recover once it answers again. It carries no port or host of its own (`stack.ts`).
 import { once } from "node:events";
 import { createServer, request, type ServerResponse } from "node:http";
+import { urlToHttpOptions } from "node:url";
 
 import { freePort, origin, required } from "./stack";
 
 /**
- * How the proxy answers: `up` forwards every request, `down` answers 503 to everything and `silent`
- * accepts every request and never answers, so the website's own timeout ends the read.
+ * How the proxy answers: `up` forwards every request on the target's origin, `down` answers 503
+ * to everything and `silent` accepts every request and never answers, so the website's own timeout
+ * ends the read.
  */
 export type ProxyMode = "up" | "down" | "silent";
 
@@ -18,11 +20,12 @@ export interface Proxy {
   close(): Promise<void>;
 }
 
-/** Starts a proxy to `target`, forwarding every request until the test changes its mode. */
+/** Starts a proxy to `target`, forwarding requests on its origin until the test changes its mode. */
 export async function startProxy(target: string): Promise<Proxy> {
   const host = required("WEB_HOST");
   const port = await freePort(host);
   const state: { mode: ProxyMode } = { mode: "up" };
+  const destination = new URL(target);
   const silent = new Set<ServerResponse>();
   const server = createServer((incoming, outgoing) => {
     if (state.mode === "down") {
@@ -34,9 +37,20 @@ export async function startProxy(target: string): Promise<Proxy> {
       outgoing.on("close", () => silent.delete(outgoing));
       return;
     }
+    // The request target comes from the client: one such as `//other-host/x` or an absolute URL
+    // resolves to another origin, which the proxy answers 502 without sending anything on.
+    const resolved = URL.parse(incoming.url ?? "/", destination);
+    if (resolved?.origin !== destination.origin) {
+      outgoing.writeHead(502).end();
+      return;
+    }
     const forwarded = request(
-      new URL(incoming.url ?? "/", target),
-      { method: incoming.method, headers: { ...incoming.headers, host: new URL(target).host } },
+      {
+        ...urlToHttpOptions(destination),
+        path: `${resolved.pathname}${resolved.search}`,
+        method: incoming.method,
+        headers: { ...incoming.headers, host: destination.host },
+      },
       (answer) => {
         outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
         answer.pipe(outgoing);
