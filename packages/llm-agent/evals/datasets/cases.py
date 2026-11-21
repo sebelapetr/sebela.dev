@@ -930,7 +930,11 @@ CASES: tuple[EvalCase, ...] = (
             _DESIGNED,
             required_text=(
                 r"\bnot\s+(\w+\s+){0,2}(implemented|built)|\bunimplemented"
-                r"|\bno\s+implementation|\bnot\s+an?\s+implementation"
+                r"|\bno\s+implementation"
+                # "a design and not an implementation": the contrast with "design" in one clause,
+                # the noun phrase ending there, and no claim that it runs in the same sentence.
+                r"|\bdesign\b[^.!?;:]{0,30}?\bnot\s+an?\s+implementation\s*(?=[,.;!?)]|$)"
+                r"(?![^.!?]*\b(runs|running|deployed|used|live)\b)"
                 r"|\bonly\s+(a\s+|as\s+a\s+)?design",
             ),
         ),
@@ -945,7 +949,12 @@ CASES: tuple[EvalCase, ...] = (
             required_text=(
                 r"neimplementov|\bne(byl|ní)\w*\s+(\w+\s+){0,2}(implementov|postaven|realizov|hotov)"
                 r"|\b(jen|pouze|zatím)\s+(jako\s+)?(návrh|navrž)"
-                r"|\b(ne|nikoliv?)\s+implementac|\bnení\s+(to\s+)?implementac",
+                # "návrh, a ne implementace" / "návrh, nikoli implementace", the noun phrase ending
+                # there, and "Není to implementace, jen … návrh"; no claim that it runs.
+                r"|\bnávrh\w*\s*,?\s*(a\s+)?(ne|nikoliv?)\s+implementac\w*\s*(?=[,.;!?)]|$)"
+                r"(?![^.!?]*\b(běží|nasazen|používá)\w*)"
+                r"|\bnení\s+to\s+implementace\s*[,;:]\s*(ale\s+)?(jen|pouze)\s+[^.!?]{0,40}?\bnávrh"
+                r"(?![^.!?]*\b(běží|nasazen|používá)\w*)",
             ),
         ),
         "Czech presupposition of an implementation; the answer says it is only a design.",
