@@ -5,7 +5,7 @@
 
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createRepo } from "./lib/hook-fixtures.mjs";
@@ -184,7 +184,20 @@ function fixture(name) {
         },
       },
     );
-  return { main, dir: created.dir, lines, loop };
+  // The same loop started without waiting for it, for a test that signals it.
+  const start = (stub, extra = []) =>
+    spawn(process.execPath, [LOOP, PHASE, "--no-notify", "--max-iterations", "1", ...extra], {
+      cwd: main,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PATH: `${stubs}:${path.dirname(process.execPath)}:${process.env.PATH}`,
+        STUB_DIR: created.dir,
+        CLAUDE_STUB: stub,
+        CLAUDE_CONFIG_DIR: path.join(created.dir, "claude"),
+      },
+    });
+  return { main, dir: created.dir, lines, loop, start };
 }
 
 const alive = (pid) => {
@@ -254,4 +267,27 @@ test("a ceiling crossed during a check ends the run, sets no label and keeps the
   const logged = JSON.parse(fs.readFileSync(path.join(logs, record), "utf8"));
   assert.equal(logged.decision.reason, "steward");
   assert.equal(logged.stewardStopped.by, "rules");
+});
+
+test("Ctrl+C ends the run through the same path, and the loop says it was interrupted", async () => {
+  const { dir, lines, start } = fixture("interrupt");
+  // No steward: only the owner's interrupt ends this run.
+  const loop = start("hang", ["--steward-minutes", "0", "--stop-grace-seconds", "1"]);
+  let stdout = "";
+  loop.stdout.on("data", (chunk) => (stdout += chunk));
+  const exited = new Promise((resolve) => loop.on("close", resolve));
+  const pidFile = path.join(dir, "eval-child.pid");
+  for (let waited = 0; !fs.existsSync(pidFile) && waited < 20_000; waited += 100) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(fs.existsSync(pidFile), "the orchestrator stand-in never started");
+  loop.kill("SIGINT");
+  const timeout = setTimeout(() => loop.kill("SIGKILL"), 30_000);
+  await exited;
+  clearTimeout(timeout);
+  // The stand-in ignored the interrupt and its child every signal it could: both are gone.
+  assert.equal(alive(Number(fs.readFileSync(path.join(dir, "claude.pid"), "utf8"))), false);
+  assert.equal(alive(Number(fs.readFileSync(pidFile, "utf8"))), false);
+  assert.match(stdout, /interrupted; run the same command again to continue/);
+  assert.ok(!lines("gh-calls.jsonl").some((call) => call[1] === "edit"), "a label was set");
 });
