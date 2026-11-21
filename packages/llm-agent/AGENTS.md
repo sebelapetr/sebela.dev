@@ -59,6 +59,8 @@ Run them from this folder, or through pnpm from the root (`pnpm --filter @sebela
 | Regenerate the content client                             | `pnpm generate:api-client` from the root, which also regenerates the TypeScript client. Only this package: `pnpm generate`                                                                          |
 | Ask one question locally (paid)                           | `LLM_AGENT_API_URL=<public API base URL> node ../../harness/with-secrets.mjs -- uv run --locked python -m llm_agent.runner "<question>"`                                                            |
 | Model evals (paid; see below)                             | `pnpm --silent eval --allowance <remaining USD> --case <id> [--case <id> ...]`                                                                                                                      |
+| Compare a Main-model candidate (paid; see below)          | `pnpm --silent eval --compare <haiku-high\|haiku-medium\|sonnet-medium> --allowance <remaining USD>`                                                                                                |
+| Compare stored comparison runs side by side (free)        | `uv run --locked python -m evals.run --compare-report ../../.tmp/evals/llm-agent/<run> [...]`                                                                                                       |
 | Regrade a stored run without new answers (free)           | `uv run --locked python -m evals.run --regrade ../../.tmp/evals/llm-agent/<run>`                                                                                                                    |
 | Start and read the fictional eval fixture (free)          | `uv run --locked python -m evals.run --check-fixture`                                                                                                                                               |
 
@@ -120,6 +122,7 @@ The evals live in `evals/`:
 - `graders/` holds the code graders (`code.py`), the Promptfoo assertion adapter (`assertion.py`) and the Sonnet rubric (`rubric.py`).
 - `gate.py` applies the gates.
 - `budget.py` keeps the campaign ledger.
+- `comparison.py` holds the Main-model comparison: its fixed subset with a rationale per case, the candidates, the pre-flight block and the side-by-side report.
 - `run.py`, `provider.py` and `promptfooconfig.yaml` hold the runner. Promptfoo drives the cases.
 
 Gates (`.plan/done/06-llm-agent/evals.md`):
@@ -128,11 +131,14 @@ Gates (`.plan/done/06-llm-agent/evals.md`):
 - Useful ordinary answers reach at least 90%, separately for EN and CS.
 - Supported citations reach at least 95%.
 - False blocking is at most 5% per language.
-- Every case runs 3 independent repeats.
+- Every case runs 3 independent repeats. A Main-model comparison repeats once and is never a gate (Policy).
 
 Policy:
 
 - **Which cases run.** An issue runs only the cases it affects: `--case` per ID, 3 repeats each.
+- **Main-model comparison (issue #183, owner-approved screening).** `--compare <candidate>` runs the fixed subset `comparison-v1` of `evals/comparison.py`: 20 implemented cases, 10 families in EN and CS (Q01, Q04, Q15, Q17, S01, S04, S05, S15, S18, S20), 1 repeat each. The direct attacks S08–S14 are left out, because the fixed Security stage stops them before Main. Only the Main stage changes; Security stays Haiku 5.5 `medium` and the judge stays the Sonnet 5.5 `medium` rubric. The candidates are `haiku-high` (the pinned baseline), `haiku-medium` and `sonnet-medium`; Sonnet uses the judge's pinned prices. The summary has mode `compare`, gate scope `comparison` and `pass: false` whatever the figures are; its `comparison` block records the candidate's model and effort, useful/citation/false-blocking/critical counts and rates per language, latency p50/p95 and cost. The reservation is USD 0.89 per candidate (20 subject runs at the execution allowance plus 8 judge calls), inside the per-run limit. The selected configuration then runs the whole catalogue with 3 repeats on the phase pull request; only that run can pass the gates.
+  - **Sonnet is blocked before anything starts.** One Main admission at the 8192-token output cap would reserve USD 0.0819 at Sonnet's output price, above the agent's USD 0.02 execution allowance (`ExecutionLimits`), so every case-run would end `limit_reached`. The runner refuses it with exit 2. Comparing Sonnet needs an owner decision on `max_cost_usd` or `main_output_tokens`.
+  - A comparison's stored answers carry the candidate's `main_model`/`main_effort`, so `--regrade` in the pinned configuration treats them as another agent version.
 - **Grader fixes.** A deterministic grader fix is checked with a free `--regrade`.
 - **Pooled slices (proposed method, pending owner confirmation in the #179 pull request).** When the affected cases would reserve more than the per-run limit, they run in slices. All slices must share one fingerprint: the same subject, dataset and rubric versions. Their `answers/*.json` are copied into one folder, and a free `--regrade <folder>` grades the pool. The gates apply to the pool, not to each slice, and a slice may fail its own gates. When a case is rerun, its new answers replace the old ones in the pool. Answers with another fingerprint are never pooled.
 - **Model judging.** A changed rubric is judged again with `--regrade <run> --judge --allowance <usd>`. That is paid and charged to the campaign.
@@ -292,6 +298,6 @@ Prompt changes (all shared, so every implemented case has a new fingerprint):
   - admission time, Retry-After, attempt/token/cost caps, a responsive event loop, cancellation during reads and telemetry failure (`test_execution_limits.py`);
   - that no unapproved draft is delivered.
 - `tests/integration/` calls the generated client and the agent against the real API, which serves the fictional fixture on a temporary database.
-- `tests/evals/` tests the eval code itself: the catalogue, the graders, the rubric, the gate, the budget and the runner. Paid calls are faked.
+- `tests/evals/` tests the eval code itself: the catalogue, the graders, the rubric, the gate, the budget, the runner and the Main-model comparison (`test_comparison.py`: subset size, languages and families, option errors, repeat count, scope `comparison`, the Sonnet block and the recorded versions). Paid calls are faked.
 
 Pitfall: a module-scoped async fixture needs `@pytest_asyncio.fixture(scope="module", loop_scope="module")`, and its tests need `@pytest.mark.asyncio(loop_scope="module")`. Otherwise the fixture's event loop is closed under the test.
