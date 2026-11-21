@@ -1454,7 +1454,7 @@ export interface components {
             cvPdfId?: string | null;
         };
         TechnologyCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /**
@@ -1486,7 +1486,7 @@ export interface components {
             position?: number;
         };
         TopicCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Ascending order in the list; ties are ordered by slug. */
@@ -1498,7 +1498,7 @@ export interface components {
             position?: number;
         };
         OrganizationCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /**
@@ -1527,7 +1527,7 @@ export interface components {
             logoId?: string | null;
         };
         ExperienceCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             title: string;
             /**
@@ -1588,7 +1588,7 @@ export interface components {
             technologies?: string[];
         };
         ProjectCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -1671,7 +1671,7 @@ export interface components {
             technologies?: string[];
         };
         TestimonialCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of the existing experience the testimonial belongs to. On an update it moves the testimonial to that experience. */
             experience: string;
@@ -1716,7 +1716,7 @@ export interface components {
             body?: string;
         };
         ExplorationCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -1780,7 +1780,7 @@ export interface components {
             topics?: string[];
         };
         ServiceCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -1843,7 +1843,7 @@ export interface components {
             evidence?: components["schemas"]["ServiceEvidenceInput"][];
         };
         EducationCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /**
              * @description `school` (a formal study programme), `course`, `certification` or `milestone` (any other learning achievement).
@@ -1893,7 +1893,7 @@ export interface components {
             position?: number;
         };
         CurrentFocusCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description What is being worked on or learned now. */
             title: string;
@@ -1977,7 +1977,7 @@ export interface components {
             position?: number;
         };
         RoadmapModuleCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of an existing area. */
             area: string;
@@ -2016,7 +2016,7 @@ export interface components {
             topics?: string[];
         };
         RoadmapResourceCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of an existing module. */
             module: string;
@@ -2126,7 +2126,7 @@ export interface components {
             endedAt?: string;
         };
         RoadmapBookCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             title: string;
             /**
@@ -2204,7 +2204,7 @@ export interface components {
             coverId?: string | null;
         };
         RoadmapEventCreate: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @enum {string} */
@@ -2425,7 +2425,7 @@ export interface components {
         Technology: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /**
@@ -2448,7 +2448,7 @@ export interface components {
         Topic: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Ascending order in the list; ties are ordered by slug. */
@@ -2463,7 +2463,7 @@ export interface components {
         Organization: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description The organization's own website. */
@@ -2482,7 +2482,7 @@ export interface components {
         Experience: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             title: string;
             /**
@@ -2518,7 +2518,7 @@ export interface components {
         Project: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of the experience the project belongs to; every project has exactly one. */
             experience: string;
@@ -2572,7 +2572,7 @@ export interface components {
         Testimonial: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of the experience the testimonial belongs to; every testimonial has exactly one. */
             experience: string;
@@ -2600,7 +2600,7 @@ export interface components {
         Exploration: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -2635,7 +2635,7 @@ export interface components {
         Service: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -2663,7 +2663,7 @@ export interface components {
             project: components["schemas"]["ServiceEvidenceProject"];
         };
         ServiceEvidenceProject: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -2680,7 +2680,7 @@ export interface components {
             exploration: components["schemas"]["ServiceEvidenceExploration"];
         };
         ServiceEvidenceExploration: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -2696,7 +2696,7 @@ export interface components {
         Education: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /**
              * @description `school` (a formal study programme), `course`, `certification` or `milestone` (any other learning achievement).
@@ -2724,7 +2724,7 @@ export interface components {
         CurrentFocus: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description What is being worked on or learned now. */
             title: string;
@@ -2744,7 +2744,7 @@ export interface components {
             updatedAt: string;
         };
         CurrentFocusProject: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description The slug of the experience it belongs to. */
@@ -2777,7 +2777,7 @@ export interface components {
         CvExploration: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown. */
@@ -2849,7 +2849,7 @@ export interface components {
         RoadmapTreeArea: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown; `null` when there is none. */
@@ -2885,7 +2885,7 @@ export interface components {
         RoadmapTreeModule: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown; `null` when there is none. */
@@ -2902,7 +2902,7 @@ export interface components {
         RoadmapTreeResource: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown; `null` when there is none. */
@@ -2942,7 +2942,7 @@ export interface components {
         RoadmapArea: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown; `null` when there is none. */
@@ -2963,7 +2963,7 @@ export interface components {
         RoadmapCurrentArea: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown; `null` when there is none. */
@@ -2998,7 +2998,7 @@ export interface components {
         RoadmapCurrentModule: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Markdown; `null` when there is none. */
@@ -3030,7 +3030,7 @@ export interface components {
         RoadmapModule: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of the area it belongs to. */
             area: string;
@@ -3047,7 +3047,7 @@ export interface components {
         RoadmapResource: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             /** @description The slug of the module it belongs to. */
             module: string;
@@ -3106,7 +3106,7 @@ export interface components {
             durationSeconds: number;
         };
         DiaryResource: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @enum {string} */
@@ -3119,7 +3119,7 @@ export interface components {
             area: string;
         };
         DiaryEvent: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @enum {string} */
@@ -3147,7 +3147,7 @@ export interface components {
         RoadmapBook: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             title: string;
             /** @description `null` when unknown. */
@@ -3187,7 +3187,7 @@ export interface components {
             updatedAt: string;
         };
         RoadmapBookResource: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description The slug of its module. */
@@ -3200,7 +3200,7 @@ export interface components {
         RoadmapEvent: {
             /** Format: uuid */
             id: string;
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @enum {string} */
@@ -3305,7 +3305,7 @@ export interface components {
             eventSeconds: number;
         };
         LearningTimeArea: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Study time: resource and book time together, never event attendance. */
@@ -3318,7 +3318,7 @@ export interface components {
             modules: components["schemas"]["LearningTimeModule"][];
         };
         LearningTimeModule: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @description Study time: resource and book time together, never event attendance. */
@@ -3329,7 +3329,7 @@ export interface components {
             bookSeconds: number;
         };
         LearningTimeResource: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @enum {string} */
@@ -3341,19 +3341,19 @@ export interface components {
             category: "resource" | "book";
             /** @description The module the resource is in now. */
             module: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
                 name: string;
             };
             /** @description The area of that module. */
             area: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
                 name: string;
             };
             /** @description The book the resource reads; `null` when it links none. */
             book: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
                 title: string;
             } | null;
@@ -3361,7 +3361,7 @@ export interface components {
             totalSeconds: number;
         };
         LearningTimeEvent: {
-            /** @description The stable, unique address of the record, for example `paldock`. */
+            /** @description The stable, unique address of the record, for example `northwind-freight`. */
             slug: string;
             name: string;
             /** @enum {string} */
@@ -4172,7 +4172,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -4236,7 +4236,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -4318,7 +4318,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -4557,7 +4557,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -4621,7 +4621,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -4703,7 +4703,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -4942,7 +4942,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5006,7 +5006,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5088,7 +5088,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5327,7 +5327,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5391,7 +5391,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5473,7 +5473,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5712,7 +5712,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5776,7 +5776,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -5858,7 +5858,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6097,7 +6097,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6161,7 +6161,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6234,7 +6234,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6328,7 +6328,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6392,7 +6392,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6500,7 +6500,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6573,7 +6573,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6812,7 +6812,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6876,7 +6876,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -6958,7 +6958,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7197,7 +7197,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7261,7 +7261,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7334,7 +7334,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7573,7 +7573,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7637,7 +7637,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7710,7 +7710,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -7949,7 +7949,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -8013,7 +8013,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -8086,7 +8086,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -8900,7 +8900,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -8964,7 +8964,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9046,7 +9046,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9236,7 +9236,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9300,7 +9300,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9382,7 +9382,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9572,7 +9572,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9636,7 +9636,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -9718,7 +9718,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -10689,7 +10689,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -10753,7 +10753,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -10835,7 +10835,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11074,7 +11074,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11138,7 +11138,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11220,7 +11220,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11517,7 +11517,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11581,7 +11581,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11654,7 +11654,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11893,7 +11893,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -11957,7 +11957,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -12030,7 +12030,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -12269,7 +12269,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -12333,7 +12333,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;
@@ -12406,7 +12406,7 @@ export interface operations {
                 "sebela-provenance"?: string;
             };
             path: {
-                /** @description The stable, unique address of the record, for example `paldock`. */
+                /** @description The stable, unique address of the record, for example `northwind-freight`. */
                 slug: string;
             };
             cookie?: never;

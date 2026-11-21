@@ -356,13 +356,13 @@ describe("E02: describe the project contract", () => {
           ...description.create.properties,
           slug: {
             type: "string",
-            description: "The stable, unique address of the record, for example `paldock`.",
+            description: "The stable, unique address of the record, for example `northwind`.",
           },
         },
       },
     };
     const answer =
-      "`name`, `summary`, `startedOn` and `slug` (for example `paldock`); a project belongs to an `experience`.";
+      "`name`, `summary`, `startedOn` and `slug` (for example `northwind`); a project belongs to an `experience`.";
     expect(gradeE02(answer, context(call("describe", { entity: "project" }, withExample)))).toEqual(
       expect.objectContaining({ pass: true }),
     );
