@@ -18,6 +18,12 @@ import {
   createIndexer,
   createRetriever,
   createVoyageEmbedder,
+  DocumentRejectedError,
+  contentHashOf,
+  defaultDocumentLimits,
+  documentSourceId,
+  prepareDocument,
+  sensitivityKinds,
   readRetrievalConfig,
   scheduleChanges,
   type Embedder,
@@ -28,6 +34,10 @@ import {
   type CandidateQuestion,
   type DocumentInput,
   type DocumentLimits,
+  type DocumentRejection,
+  type Indexer,
+  type PreparedDocument,
+  type SensitivityKind,
   type SensitivityFinding,
   type SourceChunk,
   type SourceSection,
@@ -37,7 +47,7 @@ import {
   type WorkCounts,
 } from "@sebela/memory";
 
-import { DomainError } from "../../errors.js";
+import { DomainError, type DomainErrorCode } from "../../errors.js";
 import type { ProfileService } from "../profile/index.js";
 import type { PrivateStorage } from "../storage/index.js";
 import type { RoadmapService } from "../roadmap/index.js";
@@ -184,12 +194,220 @@ export function createKnowledgeService(
     search: (request) => provider(() => ready().retriever.search(request)),
     candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
-    ingestDocument: () => Promise.reject(new Error("not implemented")),
-    listDocuments: () => Promise.reject(new Error("not implemented")),
-    showDocument: () => Promise.reject(new Error("not implemented")),
-    approveDocument: () => Promise.reject(new Error("not implemented")),
-    rejectDocument: () => Promise.reject(new Error("not implemented")),
+    ...createDocumentReview(sources.store, options, () => ready().indexer),
   };
+}
+
+type DocumentReview = Pick<
+  KnowledgeService,
+  "ingestDocument" | "listDocuments" | "showDocument" | "approveDocument" | "rejectDocument"
+>;
+
+/** The owner's review of supplemental documents: ingest, preview, approve and reject. */
+function createDocumentReview(
+  store: RetrievalPersistence,
+  options: KnowledgeServiceOptions,
+  indexer: () => Indexer,
+): DocumentReview {
+  const limits = options.documentLimits ?? defaultDocumentLimits;
+
+  const storage = (): PrivateStorage => {
+    if (options.privateStorage === undefined) {
+      throw new Error("Supplemental documents need private storage, which is not configured.");
+    }
+    return options.privateStorage;
+  };
+
+  const versionOf = async (contentHash: string): Promise<RetrievalDocumentVersion> => {
+    if (!contentHashPattern.test(contentHash)) {
+      throw new DomainError(
+        "validation_failed",
+        "A content hash is the 64 lower-case hexadecimal characters of the version's SHA-256.",
+      );
+    }
+    const version = await store.documentVersion(contentHash);
+    if (version === null) {
+      throw new DomainError("not_found", "No document version has this content hash.");
+    }
+    return version;
+  };
+
+  /** The stored original prepared again; `null` when it is gone or no longer has its hash. */
+  const reprepare = async (version: RetrievalDocumentVersion): Promise<PreparedDocument | null> => {
+    if (version.storageKey === null) return null;
+    const bytes = await storage().read(version.storageKey);
+    if (bytes === null || contentHashOf(bytes) !== version.contentHash) return null;
+    return prepare({
+      slug: version.sourceId.slice(documentPrefix.length),
+      title: version.title,
+      fileName: version.mediaType === "text/plain" ? "document.txt" : "document.md",
+      bytes,
+    });
+  };
+
+  const prepare = (input: DocumentInput): PreparedDocument => {
+    try {
+      return prepareDocument(input, { limits });
+    } catch (error) {
+      if (error instanceof DocumentRejectedError) {
+        throw new DomainError(rejectionCodes[error.reason], error.message);
+      }
+      throw error;
+    }
+  };
+
+  return {
+    async ingestDocument(input) {
+      const privateStorage = storage();
+      const contentHash = contentHashOf(input.bytes);
+      // An invalid slug is refused by the preparation with its own message, before any lookup.
+      if (documentSourceId(input.slug) === null) prepare(input);
+      const sourceId = documentSourceId(input.slug);
+      const existing = await store.documentVersion(contentHash);
+      if (existing !== null) {
+        if (existing.sourceId !== sourceId) {
+          throw new DomainError(
+            "conflict",
+            "These exact bytes were already ingested under another slug; ingest them under that slug.",
+          );
+        }
+        return { created: false, version: withoutKey(existing) };
+      }
+
+      const prepared = prepare(input);
+      const counts = {
+        sourceId: prepared.sourceId,
+        contentHash: prepared.contentHash,
+        title: prepared.title,
+        mediaType: prepared.mediaType,
+        byteSize: input.bytes.length,
+        sectionCount: prepared.sections.length,
+        chunkCount: prepared.chunks.length,
+      };
+      if (prepared.findings.length > 0) {
+        const added = await store.addDocumentVersion({
+          ...counts,
+          storageKey: null,
+          status: "blocked",
+          findings: prepared.findings,
+        });
+        return { created: added.created, version: withoutKey(added.version) };
+      }
+
+      const storageKey = await privateStorage.store({
+        bytes: input.bytes,
+        extension: prepared.extension,
+      });
+      let added;
+      try {
+        added = await store.addDocumentVersion({
+          ...counts,
+          storageKey,
+          status: "pending",
+          findings: [],
+        });
+      } catch (error) {
+        await privateStorage.delete(storageKey);
+        throw error;
+      }
+      // Another ingest of the same bytes won the race; its original is the one kept.
+      if (!added.created) await privateStorage.delete(storageKey);
+      return { created: added.created, version: withoutKey(added.version) };
+    },
+
+    listDocuments: async () => (await store.documentVersions()).map(withoutKey),
+
+    async showDocument(contentHash) {
+      const version = await versionOf(contentHash);
+      const prepared = await reprepare(version);
+      return {
+        version: withoutKey(version),
+        text: prepared?.text ?? null,
+        sections: prepared?.sections ?? [],
+        chunks: prepared?.chunks ?? [],
+        findings: version.findings.map((finding) => ({
+          kind: sensitivityKindOf(finding.kind),
+          line: finding.line,
+        })),
+      };
+    },
+
+    async approveDocument(contentHash) {
+      const version = await versionOf(contentHash);
+      if (version.status === "blocked") {
+        throw new DomainError(
+          "conflict",
+          "This version has sensitivity findings; ingest a sanitized revision and approve that.",
+        );
+      }
+      if (version.status !== "pending") {
+        throw new DomainError("conflict", `This version is ${version.status}, not pending.`);
+      }
+      const prepared = await reprepare(version);
+      if (prepared === null) {
+        throw new DomainError(
+          "conflict",
+          "The stored original no longer has this content hash; ingest the document again.",
+        );
+      }
+      const embedding = await provider(() => indexer().embedDocument(prepared));
+      if (!(await store.approveDocumentVersion(contentHash, embedding.version))) {
+        throw new DomainError("conflict", "This version was decided meanwhile.");
+      }
+      return { version: withoutKey(await versionOf(contentHash)), report: embedding.report };
+    },
+
+    async rejectDocument(contentHash) {
+      const version = await versionOf(contentHash);
+      if (version.status !== "pending" && version.status !== "blocked") {
+        throw new DomainError(
+          "conflict",
+          `This version is ${version.status}; only a pending or blocked one is rejected.`,
+        );
+      }
+      if (version.storageKey !== null) await storage().delete(version.storageKey);
+      if (!(await store.rejectDocumentVersion(contentHash))) {
+        throw new DomainError("conflict", "This version was decided meanwhile.");
+      }
+      return withoutKey(await versionOf(contentHash));
+    },
+  };
+}
+
+const contentHashPattern = /^[0-9a-f]{64}$/;
+const documentPrefix = "document:";
+
+const rejectionCodes: Readonly<Record<DocumentRejection, DomainErrorCode>> = {
+  invalid_slug: "validation_failed",
+  invalid_title: "validation_failed",
+  unsupported_type: "unsupported_media_type",
+  not_utf8: "unsupported_media_type",
+  empty: "validation_failed",
+  too_large: "payload_too_large",
+  extracted_too_large: "payload_too_large",
+  too_slow: "validation_failed",
+};
+
+function withoutKey(version: RetrievalDocumentVersion): DocumentVersion {
+  return {
+    sourceId: version.sourceId,
+    contentHash: version.contentHash,
+    title: version.title,
+    mediaType: version.mediaType,
+    byteSize: version.byteSize,
+    status: version.status,
+    findings: version.findings,
+    sectionCount: version.sectionCount,
+    chunkCount: version.chunkCount,
+    createdAt: version.createdAt,
+    decidedAt: version.decidedAt,
+  };
+}
+
+function sensitivityKindOf(value: string): SensitivityKind {
+  const kind = sensitivityKinds.find((known) => known === value);
+  if (kind === undefined) throw new Error(`Unknown sensitivity kind ${value}.`);
+  return kind;
 }
 
 /** The first instant of the calendar month (UTC) of `now`. */
