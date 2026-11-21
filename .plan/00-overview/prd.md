@@ -148,6 +148,7 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 | 11  | `11-knowledge-graph`   | Knowledge graph                 | Evidence-backed entities/relations and measured graph-assisted retrieval after launch                        |
 | 12  | `12-ontology`          | Ontology                        | Reviewed semantic definitions and a bounded Auto Ontology suitability experiment                             |
 | 13  | `13-mcp-apps`          | External MCP UI                 | Optional interactive views in verified clients, with structured/text fallback                                |
+| 15  | `15-pages`             | Pages                           | Generic content pages (privacy and the like) as content: API, Admin MCP entity, `/<slug>` route, footer link |
 
 ### Phase boundaries
 
@@ -186,6 +187,8 @@ Order of work: planning and the harness on `phase/00-overview` → the trial →
 **12 — Ontology.** Version/review concept meanings, relation constraints and mappings. Evaluate NVIDIA Auto Ontology on a bounded fictional export/snapshot before selecting an integration; its current relational-metadata focus is not assumed to solve unstructured-document ingest. No automatic approval of a full enterprise stack or Python database access.
 
 **13 — External MCP UI.** Separate post-launch MCP Apps compatibility/security work over existing reads. Website cards are already delivered in phase 7; public MCP retains structured/text fallback. This phase depends on 8 and 10, not on graph or ontology, and can be scheduled independently.
+
+**15 — Pages.** A small independent phase for the privacy page (#189): a generic content page (slug, title, Markdown body) with public reads and private writes in the API, the `page` entity in Admin MCP and a safe-Markdown `/<slug>` route with a footer link on the website. The demo seed holds a fictional privacy page; the owner enters the real text through Admin MCP. It depends only on phases 2, 3 and 5, does not depend on phases 7–14 and may run before them: intended after phase 6, beside phase 7. Both change the API contract, so whichever merges second merges `master` and regenerates the clients. No second language, editor, versioning or chat access.
 
 ## Implementation Decisions
 
