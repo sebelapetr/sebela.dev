@@ -34,6 +34,7 @@
     "@sebela/api-client": "workspace:*",
     "@sebela/config": "workspace:*",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "tsx": "4.23.15",
     "typescript": "catalog:",
