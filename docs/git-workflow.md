@@ -39,6 +39,9 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 
 - Every issue branch is worked on in its own worktree under `.worktrees/`, created and removed with the scripts described in `docs/repository-structure.md`.
 - App and package code is never edited in the main checkout. Planning files, docs and agent configuration may be.
+- The main checkout may be behind `origin/master`. Run `git fetch origin`, then analyse and branch from `origin/<base>`, not from the files of the local checkout.
+- The harness has 9 slots (`MAX_SLOTS`, `harness/lib/slots.mjs`), often all taken. A change that needs no database (documentation, CI, scripts) may use a plain worktree in an interactive session instead of a slot: `git worktree add .worktrees/<folder> -b <branch> origin/<base>`, never under `/tmp`. Name the folder as the harness would (`worktreeDirName`: slashes become `-`), or a later `worktree.mjs create` for that branch fails; plain worktrees do not show in `worktree.mjs list`. Run `pnpm install --frozen-lockfile` in it (the commit hook needs the tools) and never link `node_modules` from another checkout. Remove it with `git worktree remove` at the end of the session, and keep the branch. Anything that runs tests against a database uses a slot (`node harness/worktree.mjs create`); the phase loop always uses slots.
+- **Cleanup after a merge.** The squash merge of an issue pull request deletes its remote branch (`--delete-branch`); the orchestrator removes its own issue worktree, storage folder, database and local branch, and the docs-keeper's worktree, at their documented steps (`.claude/agents/orchestrator.md`, steps 10 and 11). Everything else (other worktrees, branches, databases, another session's plain worktree) is removed only on the owner's instruction.
 
 ## Commits
 
