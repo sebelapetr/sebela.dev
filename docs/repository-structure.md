@@ -68,6 +68,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
+├── .gitattributes           line endings, binary files and the generated API clients marked `linguist-generated` [0]
 ├── .dockerignore            allowlist of the image build context: manifests, apps, packages, `infra/pnpm`; of the seeds only the demo seed [2, 10]
 ├── .env.example             every setting with a comment and an example value; placeholders only [1]
 ├── .env.secrets.example     the owner's secrets for paid outside services, as placeholders; the real file stays in the main checkout [1]
