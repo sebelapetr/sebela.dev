@@ -23,8 +23,8 @@ def evidence(*refs: str) -> dict[str, Evidence]:
         ref: Evidence(
             ref=ref,
             tool="get_profile",
-            kind="person",
-            record_id=f"person-{ref}",
+            kind="profile",
+            record_id=f"profile-{ref}",
             title="Ilsa Marrow",
             href="/",
             data={},
@@ -60,7 +60,7 @@ def draft(text: str) -> Draft:
         # Many removal sites and many near-tokens.
         "src-98 " * 1100,
         "src-(" * 1600,
-        "s" + "​" * 8000 + "rc-99",
+        "s" + "\u200b" * 8000 + "rc-99",
     ],
 )
 def test_the_removal_is_linear_in_the_text(text: str) -> None:
@@ -89,7 +89,9 @@ def test_a_removal_never_reassembles_an_unknown_ref(written: str, shown: str) ->
 def test_a_ref_still_unknown_after_the_bounded_passes_replaces_the_draft() -> None:
     nested = "src-(" * 12 + "src-90" + ")9" * 12
     assert without_unknown_refs(nested, KNOWN) is None
-    verdict = review(draft(f"Ilsa wrote it {nested}."), evidence("src-1"), contact=None, prompt_texts=())
+    verdict = review(
+        draft(f"Ilsa wrote it {nested}."), evidence("src-1"), contact=None, prompt_texts=()
+    )
     assert verdict.action == "replace"
     assert verdict.finding == "unknown_ref"
 
@@ -146,10 +148,10 @@ def test_a_text_without_an_unknown_ref_is_returned_unchanged() -> None:
     ("written", "shown"),
     [
         ("Ilsa wrote it (SRC-1).", "Ilsa wrote it (src-1)."),
-        ("Ilsa wrote it (src–1).", "Ilsa wrote it (src-1)."),
-        ("Ilsa wrote it (src‑1, Src−2).", "Ilsa wrote it (src-1, src-2)."),
-        ("Ilsa wrote it (ｓｒｃ－１).", "Ilsa wrote it (src-1)."),
-        ("Ilsa wrote it (src-​1).", "Ilsa wrote it (src-1)."),
+        ("Ilsa wrote it (src\u20131).", "Ilsa wrote it (src-1)."),
+        ("Ilsa wrote it (src\u20111, Src\u22122).", "Ilsa wrote it (src-1, src-2)."),
+        ("Ilsa wrote it (\uff53\uff52\uff43\uff0d\uff11).", "Ilsa wrote it (src-1)."),
+        ("Ilsa wrote it (src-\u200b1).", "Ilsa wrote it (src-1)."),
     ],
 )
 def test_a_valid_ref_in_any_case_or_dash_is_kept_in_its_canonical_form(
@@ -163,12 +165,12 @@ def test_a_valid_ref_in_any_case_or_dash_is_kept_in_its_canonical_form(
     [
         "src-99",
         "SRC-99",
-        "src–99",
-        "src﹣99",
-        "src－99",
-        "ｓｒｃ-99",
-        "src​-99",
-        "s​rc-99",
+        "src\u201399",
+        "src\ufe6399",
+        "src\uff0d99",
+        "\uff53\uff52\uff43-99",
+        "src\u200b-99",
+        "s\u200brc-99",
         "src 99",
         "src_99",
         "src99",
