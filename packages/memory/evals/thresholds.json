@@ -1,16 +1,53 @@
 {
-  "description": "Gate of the memory evals. Not frozen yet: the vector baseline (#222) only measures; the thresholds are set from the measured variants and frozen when the deployed variant is chosen (#225). While `frozen` is false the runner reports metrics without a gate.",
-  "frozen": false,
+  "description": "Frozen gate of the memory evals (#225). It applies to a complete run of the deployed vector variant; later slices may only raise it (raise a minimum, lower a maximum), never loosen it.",
+  "frozen": true,
+  "variant": "vector",
   "minimum": {
-    "recallAtPool": null,
-    "ndcg": null,
-    "mrr": null,
-    "correctEmptyRate": null,
-    "provenanceAccuracy": null
+    "recallAtPool": 1,
+    "ndcg": 0.9,
+    "mrr": 0.93,
+    "correctEmptyRate": 0.2,
+    "provenanceAccuracy": 1
   },
   "maximum": {
-    "falseEmptyRate": null,
-    "latencyP95Ms": null,
-    "costPerQueryUsd": null
+    "falseEmptyRate": 0,
+    "latencyP95Ms": 500,
+    "costPerQueryUsd": 0.00001
+  },
+  "method": [
+    "Both baselines ran on 2026-11-21 over the complete question set (45 measured cases) with the fictional demo seed, the fictional dataset documents and the settings recorded in each summary: voyage-4, candidate pool 30, 6 final passages, relevance floor 0.3.",
+    "The quality minimums are the vector baseline's values rounded down to two decimals.",
+    "falseEmptyRate is frozen at the measured 0.",
+    "latencyP95Ms bounds retrieval after the query is embedded (the run embeds the questions in its candidates step, so every measured search comes from the query cache); the measured 74 ms gets headroom for a slower machine.",
+    "costPerQueryUsd bounds an uncached query embedding (about USD 0.0000006 in the 2026-11-20 run) with headroom; cached runs measure 0.",
+    "The full-text-only baseline stays below the vector variant on every quality metric except the correct-empty rate, which is the same 0.2 in both: the placeholder relevance floor is not calibrated yet."
+  ],
+  "baselines": {
+    "vector": {
+      "summary": "results/vector-complete.json",
+      "recallAtPool": 1,
+      "ndcg": 0.9065,
+      "mrr": 0.9375,
+      "hitRate": 0.975,
+      "precision": 0.4223,
+      "correctEmptyRate": 0.2,
+      "falseEmptyRate": 0,
+      "provenanceAccuracy": 1,
+      "latencyP95Ms": 74,
+      "costPerQueryUsd": 0
+    },
+    "fulltext": {
+      "summary": "results/fulltext-baseline.json",
+      "recallAtPool": 0.8375,
+      "ndcg": 0.6298,
+      "mrr": 0.6425,
+      "hitRate": 0.775,
+      "precision": 0.2031,
+      "correctEmptyRate": 0.2,
+      "falseEmptyRate": 0.025,
+      "provenanceAccuracy": 1,
+      "latencyP95Ms": 86,
+      "costPerQueryUsd": 0
+    }
   }
 }
