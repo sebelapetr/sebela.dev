@@ -19,6 +19,7 @@ import { TECHNOLOGY_LOGO_KEYS } from "../data/technology-logos";
 import { toTimelineEntries } from "../data/timeline";
 import { deepLinkIndex } from "../stores/deep-link";
 import { DisclosuresProvider } from "../stores/disclosures";
+import { ExperienceStructuredData } from "../../seo";
 
 /**
  * The experience page: the person's headline and length of career, the CV's actions (the PDF's
@@ -35,6 +36,7 @@ export function ExperienceTemplate({ content }: { readonly content: ExperienceCo
   const years = careerYears(content.careerStartedOn, new Date());
   return (
     <>
+      <ExperienceStructuredData content={content} />
       <SiteHeader name={content.name} />
       <main
         id={mainContentId}

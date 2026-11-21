@@ -2,8 +2,9 @@
 // area's and a module's page, the learning diary, a diary day, the learning statistics, the events,
 // the bookshelf, a book's page and the reading guide. Each has its title, description, canonical
 // address, Open Graph basics with a preview image at `/og<page path>`, breadcrumbs and the page's
-// own entity (the overview's areas and the diary's days as ItemLists; an area or module as a
-// schema.org Course, part of its area, with the API's estimate; a diary day as the person's
+// own entity (the overview's areas and the diary's days as ItemLists; an area or module as the
+// person's schema.org LearningResource (a plan the person learns from, not a course anyone
+// provides), part of its area, with the API's estimate; a diary day as the person's
 // BlogPosting; the events as an ItemList of Events; the bookshelf as an ItemList of its books; a
 // book as a Book; the reading guide as the person's Article), from the page's own read.
 import type { Metadata } from "next";
@@ -11,6 +12,7 @@ import type { Metadata } from "next";
 import { plainText } from "../../_shared";
 import { OPEN_GRAPH_IMAGE_SIZE, textCard, type OpenGraphCard } from "./open-graph-card";
 import { pageUrl } from "./page-metadata";
+import { pageTitle } from "./page-title";
 
 /** One step of the way from the roadmap's overview to the page: its name and site path. */
 export interface RoadmapPageCrumb {
@@ -29,7 +31,7 @@ interface RoadmapPageBase {
 }
 
 /** An area's or a module's page. */
-export interface RoadmapCoursePageFacts extends RoadmapPageBase {
+export interface RoadmapLearningPageFacts extends RoadmapPageBase {
   readonly kind: "area" | "module";
   /** The API's planned effort for the page's content in minutes; 0 when nothing is estimated. */
   readonly estimatedMinutes: number;
@@ -126,7 +128,7 @@ export interface RoadmapReadingGuidePageFacts extends RoadmapPageBase {
 /** What a roadmap page's metadata rests on, all of it from the page's own API read. */
 export type RoadmapPageFacts =
   | RoadmapOverviewPageFacts
-  | RoadmapCoursePageFacts
+  | RoadmapLearningPageFacts
   | RoadmapDiaryPageFacts
   | RoadmapDiaryDayPageFacts
   | RoadmapStatisticsPageFacts
@@ -156,7 +158,8 @@ const CARD_LABELS = {
 const ROADMAP_NAME = "AI Engineering Roadmap";
 
 /**
- * The page's metadata: its title (the breadcrumbs' names from the page up, then the person), its
+ * The page's metadata: its title (the page's name, its parent's while it fits, then the person,
+ * within `TITLE_MAX` characters with the person's name never shortened), its
  * description (the summary's first paragraph as plain text, or what the page is when there is none),
  * its canonical address on `origin`, the same as Open Graph basics with the person as the site, the
  * page's preview image on `origin` (its alt text is the title) and a large Twitter card. Open to
@@ -184,8 +187,9 @@ export function roadmapPageMetadata(origin: string, facts: RoadmapPageFacts): Me
 /**
  * The page's schema.org JSON-LD: the page as part of the website, its breadcrumbs from the overview
  * on `origin`, and the page's own entity: the overview's areas and the diary's days as ItemLists in
- * their order; an area or module as a Course the person provides, with the API's planned estimate
- * when there is one and, for a module, the area's Course it is part of; a diary day as the person's
+ * their order; an area or module as a LearningResource the person wrote to learn from (a learning
+ * plan, never a course on offer), with the API's planned estimate when there is one and, for a
+ * module, the area's LearningResource it is part of; a diary day as the person's
  * BlogPosting of its date; the events as an ItemList of Events with only the facts each has; the
  * bookshelf as an ItemList of its books in shelf order; a book as a Book with every fact it has and
  * none it lacks; the reading guide as the person's Article based on its source. The statistics have
@@ -336,7 +340,7 @@ function eventEntity(event: RoadmapEventFacts): object {
 
 function pageEntity(
   origin: string,
-  facts: RoadmapCoursePageFacts | RoadmapBookshelfPageFacts | RoadmapBookPageFacts,
+  facts: RoadmapLearningPageFacts | RoadmapBookshelfPageFacts | RoadmapBookPageFacts,
   { title, description, url }: PageText,
 ): object {
   const [page, parent] = facts.breadcrumbs.toReversed();
@@ -375,20 +379,21 @@ function pageEntity(
     };
   }
   return {
-    "@type": "Course",
-    "@id": `${url}#course`,
+    "@type": "LearningResource",
+    "@id": `${url}#learning`,
     url,
     name: page?.name ?? title,
     description,
     inLanguage: "en",
-    provider: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
+    learningResourceType: "Learning plan",
+    author: { "@type": "Person", "@id": `${origin}/#person`, name: facts.name },
     mainEntityOfPage: { "@id": `${url}#webpage` },
     ...(facts.estimatedMinutes > 0 ? { timeRequired: `PT${String(facts.estimatedMinutes)}M` } : {}),
     ...(facts.kind === "module" && parent !== undefined
       ? {
           isPartOf: {
-            "@type": "Course",
-            "@id": `${pageUrl(origin, parent.href)}#course`,
+            "@type": "LearningResource",
+            "@id": `${pageUrl(origin, parent.href)}#learning`,
             name: parent.name,
             url: pageUrl(origin, parent.href),
           },
@@ -399,13 +404,13 @@ function pageEntity(
 
 function describe(origin: string, facts: RoadmapPageFacts) {
   const names = facts.breadcrumbs.map((crumb) => crumb.name).reverse();
-  const title = [...names, facts.name].join(" — ");
+  const [page = ROADMAP_NAME, parent] = names;
+  const title = pageTitle(facts.name, page, ...(parent === undefined ? [] : [parent]));
   const description =
     facts.kind === "book"
       ? bookDescription(facts, names)
       : summaryText(facts.summary, DESCRIPTION_MAX) || fallbackDescription(facts.name, names);
-  const page = facts.breadcrumbs.at(-1);
-  const url = pageUrl(origin, page?.href ?? "/");
+  const url = pageUrl(origin, facts.breadcrumbs.at(-1)?.href ?? "/");
   return { title, description, url };
 }
 
