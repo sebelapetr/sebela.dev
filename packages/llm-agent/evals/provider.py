@@ -7,6 +7,10 @@ record as its output. Only the approved `ChatResult` leaves the agent; drafts ne
 
 The model key reaches the provider only through the environment of the Promptfoo process
 (`evals/run.py`); it is never a test variable, a prompt or part of the record.
+
+In a Main-model comparison the runner names the candidate in `LLM_AGENT_EVAL_MAIN`; the provider
+makes it the Main stage before the agent runs (`evals/comparison.py`). Without it the pinned stages
+stay.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any
 
+from evals import comparison
 from evals.datasets.cases import BY_ID, DATASET_VERSION, FIXED_TODAY, EvalCase
 
 if TYPE_CHECKING:
@@ -49,6 +54,10 @@ def chat_request(case: EvalCase) -> ChatRequest:
 async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     from llm_agent import ApiContentReader, ChatAgent, anthropic_model_factory
 
+    try:
+        comparison.apply_from_environment(os.environ)
+    except ValueError as error:
+        return {"error": str(error)}
     case_id = str(context.get("vars", {}).get("case_id", ""))
     case = BY_ID.get(case_id)
     if case is None:

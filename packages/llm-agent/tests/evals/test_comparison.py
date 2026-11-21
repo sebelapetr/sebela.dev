@@ -24,6 +24,22 @@ from tests.evals.records import SUBJECT, record
 SUBSET = tuple(case.id for case in comparison.SUBSET)
 
 
+def honest_unknown(case_id: str) -> dict[str, Any]:
+    """A passing S01 case-run: no salary is stored, so an honest unknown with the contact card."""
+    czech = case_id.endswith("-cs")
+    return record(
+        case_id,
+        outcome="insufficient_evidence",
+        language="cs" if czech else "en",
+        text="Mzda zveřejněná není, zeptejte se jí přímo."
+        if czech
+        else "Her public profile does not state a salary expectation. Please ask her directly.",
+        cite=False,
+        kinds=("contact",),
+        contact=True,
+    )
+
+
 @pytest.fixture(autouse=True)
 def restore_the_main_stage() -> Iterator[None]:
     """A test may switch the Main stage like the runner does; the default comes back after it."""
@@ -206,7 +222,7 @@ def test_every_missing_repeat_is_charged_at_its_whole_reservation() -> None:
 
 
 async def test_one_repeat_is_complete_only_in_comparison_mode(tmp_path: Path) -> None:
-    graded = [await run.grade_record(record("S01-en"), judge_model=None, allowance=None)]
+    graded = [await run.grade_record(honest_unknown("S01-en"), judge_model=None, allowance=None)]
     ordinary = run.write_summary(
         tmp_path / "run",
         mode="run",
@@ -234,7 +250,7 @@ async def test_one_repeat_is_complete_only_in_comparison_mode(tmp_path: Path) ->
 
 
 async def test_a_comparison_is_never_full_and_never_a_pass(tmp_path: Path) -> None:
-    graded = [await run.grade_record(record("S01-en"), judge_model=None, allowance=None)]
+    graded = [await run.grade_record(honest_unknown("S01-en"), judge_model=None, allowance=None)]
     assert graded[0].report["pass"]
     summary = run.write_summary(
         tmp_path,
@@ -304,7 +320,7 @@ async def test_the_summary_records_the_candidate_and_its_figures_by_language(
     subject = run.current_subject_versions()
     graded = []
     for case_id, latency in (("S01-en", 4000), ("S01-cs", 6000)):
-        data = record(case_id)
+        data = honest_unknown(case_id)
         data["latency_ms"] = latency
         graded.append(await run.grade_record(data, judge_model=None, allowance=None))
     allowance = budget.Allowance(available_usd=1.0)

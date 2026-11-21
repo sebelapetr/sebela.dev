@@ -104,8 +104,8 @@ def evaluate_gate(
             failures.append(f"{case_id}: not an implemented case")
             continue
         ran = {run.repeat for run in runs if run.case_id == case_id}
-        if len(ran) < REPEATS:
-            failures.append(f"{case_id}: {len(ran)} of {REPEATS} repeats ran")
+        if len(ran) < repeats:
+            failures.append(f"{case_id}: {len(ran)} of {repeats} repeats ran")
 
     counted = [run for run in runs if run.case_id in selected_ids and run.case_id in BY_ID]
     critical_runs = [run for run in counted if BY_ID[run.case_id].critical]
