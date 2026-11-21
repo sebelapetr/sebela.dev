@@ -704,12 +704,74 @@ async def grade_record(
     return Graded(run=run, report=report)
 
 
-def first_chunk(cases: Sequence[str], *, repeats: int) -> tuple[tuple[str, ...], ...]:
-    """`cases` as the early chunk (the cases of the first `anomaly.EARLY_CASE_RUNS` case-runs) and,
-    when any remain, the rest."""
-    size = max(1, math.ceil(anomaly.EARLY_CASE_RUNS / repeats))
-    early, rest = tuple(cases[:size]), tuple(cases[size:])
-    return (early, rest) if rest else (early,)
+#: The case-runs of one chunk after the early chunk. Each chunk is reserved just before it starts,
+#: so a run needs only one chunk's reservation free at a time (owner decision, issue #183).
+CHUNK_CASE_RUNS = 12
+
+
+def chunks(cases: Sequence[str], *, repeats: int) -> tuple[tuple[str, ...], ...]:
+    """`cases` as the early chunk (the cases of the first `anomaly.EARLY_CASE_RUNS` case-runs),
+    then bounded chunks of at most `CHUNK_CASE_RUNS` case-runs (at least one case each)."""
+    early = max(1, math.ceil(anomaly.EARLY_CASE_RUNS / repeats))
+    size = max(1, CHUNK_CASE_RUNS // repeats)
+    pieces = [tuple(cases[:early])]
+    pieces.extend(tuple(cases[start : start + size]) for start in range(early, len(cases), size))
+    return tuple(pieces)
+
+
+def allowance_stop(allowance: budget.Allowance, needed: float, chunk: Sequence[str]) -> str | None:
+    """Why the next chunk cannot start within `allowance`, or None when its reservation fits."""
+    if needed <= allowance.remaining_usd + 1e-9:
+        return None
+    return (
+        f"allowance: the next chunk ({len(chunk)} case(s)) needs up to {needed:.4f} USD;"
+        f" {max(allowance.remaining_usd, 0.0):.4f} USD remain"
+    )
+
+
+class _ChunkLog:
+    """The per-chunk charges of one paid run, written to the ledger after every chunk."""
+
+    def __init__(self, allowance: budget.Allowance, run_id: str) -> None:
+        self.allowance = allowance
+        self.run_id = run_id
+        self.entries: list[dict[str, Any]] = []
+        self._spent = allowance.spent_usd
+        self._uncertain = allowance.uncertain_usd
+
+    def add(self, chunk: Sequence[str], *, case_runs: int, reserved_usd: float) -> None:
+        spent, uncertain = self.allowance.spent_usd, self.allowance.uncertain_usd
+        self.entries.append(
+            {
+                "cases": list(chunk),
+                "case_runs": case_runs,
+                "reserved_usd": round(reserved_usd, 6),
+                "spent_usd": round(spent - self._spent, 6),
+                "uncertain_usd": round(uncertain - self._uncertain, 6),
+            }
+        )
+        self._spent, self._uncertain = spent, uncertain
+        self.write("running")
+
+    def write(self, scope: str) -> None:
+        budget.record_run(LEDGER, self.run_id, self.allowance, scope, chunks=self.entries)
+
+
+def judge_requests(
+    records: Sequence[Mapping[str, Any]], *, judge_mode: str
+) -> list[judging.JudgeRequest]:
+    """The judge requests `records` still need: every judged case-run without a compatible
+    stored judgement."""
+    requests: list[judging.JudgeRequest] = []
+    for record in records:
+        case = CASES[str(record["case_id"])]
+        if not case.expectation.judged:
+            continue
+        stored = record.get("judgement")
+        if isinstance(stored, dict) and rubric.compatible(stored, rubric.judge_input(case, record)):
+            continue
+        requests.append(judging.request(case, record, batch=judge_mode == "batch"))
+    return requests
 
 
 async def grade_records(
@@ -723,15 +785,7 @@ async def grade_records(
     how many judge requests failed; a failed request leaves its case-run ungraded with the visible
     reason. Raises `BudgetBlockedError` before anything is sent when the judgements do not fit."""
     batch = judge_mode == "batch"
-    requests: list[judging.JudgeRequest] = []
-    for record in records:
-        case = CASES[str(record["case_id"])]
-        if not case.expectation.judged:
-            continue
-        stored = record.get("judgement")
-        if isinstance(stored, dict) and rubric.compatible(stored, rubric.judge_input(case, record)):
-            continue
-        requests.append(judging.request(case, record, batch=batch))
+    requests = judge_requests(records, judge_mode=judge_mode)
     outcomes: dict[str, judging.JudgeOutcome] = {}
     if requests and batch:
         outcomes = await judging.judge_in_batch(requests, allowance)
@@ -976,16 +1030,22 @@ async def command_run(
     allowance = budget.open_allowance(declared_usd, LEDGER)
     repeats = repeats_for(candidate)
     execution_usd = execution_usd_for(candidate)
-    needed = reservation(
-        selected, repeats=repeats, execution_usd=execution_usd, judge_mode=judge_mode
-    )
-    allowance.require(needed, f"{len(selected)} case(s) x {repeats} repeat(s)")
+    pieces = chunks(selected, repeats=repeats)
+
+    def needed(chunk: Sequence[str]) -> float:
+        return reservation(
+            chunk, repeats=repeats, execution_usd=execution_usd, judge_mode=judge_mode
+        )
+
+    # Only the early chunk has to fit before anything starts; every later chunk is reserved
+    # just before it starts.
+    allowance.require(needed(pieces[0]), f"the early chunk ({len(pieces[0])} case(s)) x {repeats}")
     if candidate is not None:
         comparison.apply_main(candidate)
     folder = run_folder()
     secrets = secrets_of(os.environ)
     subject = current_subject_versions()
-    chunks = first_chunk(selected, repeats=repeats)
+    log = _ChunkLog(allowance, folder.name)
     extra: list[str] = []
     stored: list[dict[str, Any]] = []
     graded: list[Graded] = []
@@ -1003,7 +1063,15 @@ async def command_run(
             if differences:
                 raise _NotStartedError("; ".join(differences))
             started = True
-            for index, chunk in enumerate(chunks):
+            for index, chunk in enumerate(pieces):
+                rest = [case_id for later in pieces[index + 1 :] for case_id in later]
+                reserved = needed(chunk)
+                stopped = allowance_stop(allowance, reserved, chunk)
+                if stopped is not None:
+                    print(f"stopped: {stopped}", file=sys.stderr)
+                    extra.append(f"stopped before chunk {index + 1}: {stopped}")
+                    pending = [*chunk, *rest]
+                    break
                 records, failure, leaked = await _run_chunk(
                     folder, index, chunk, api.url, candidate, repeats=repeats, secrets=secrets
                 )
@@ -1040,7 +1108,8 @@ async def command_run(
                     else:
                         comparison.mark(candidate, records)
                 if blocked:
-                    pending = [case_id for later in chunks[index + 1 :] for case_id in later]
+                    log.add(chunk, case_runs=len(chunk) * repeats, reserved_usd=reserved)
+                    pending = rest
                     break
                 try:
                     chunk_graded, judge_failures = await grade_records(
@@ -1058,7 +1127,7 @@ async def command_run(
                     )
                 stored.extend(records)
                 graded.extend(chunk_graded)
-                rest = [case_id for later in chunks[index + 1 :] for case_id in later]
+                log.add(chunk, case_runs=len(chunk) * repeats, reserved_usd=reserved)
                 if blocked:
                     pending = rest
                     break
@@ -1104,9 +1173,7 @@ async def command_run(
         stopped=stopped,
         judge_mode=judge_mode,
     )
-    budget.record_run(
-        LEDGER, folder.name, allowance, summary["gate"]["scope"] if started else "not started"
-    )
+    log.write(summary["gate"]["scope"] if started else "not started")
     print_summary(summary, folder)
     if blocked or not started or stopped is not None:
         return BLOCKED
@@ -1179,6 +1246,8 @@ async def command_regrade(
             extra.append(f"{record.get('case_id')} repeat {record.get('repeat')}: {reason}")
     selected = list(dict.fromkeys(str(record["case_id"]) for record in usable))
     allowance: budget.Allowance | None = None
+    log: _ChunkLog | None = None
+    folder = run_folder()
     graded: list[Graded] = []
     pending: list[str] = []
     stopped: str | None = None
@@ -1192,11 +1261,22 @@ async def command_regrade(
             return BLOCKED
         assert declared_usd is not None
         allowance = budget.open_allowance(declared_usd, LEDGER)
-        chunks = first_chunk(selected, repeats=REPEATS)
-        for index, chunk in enumerate(chunks):
+        log = _ChunkLog(allowance, folder.name)
+        pieces = chunks(selected, repeats=REPEATS)
+        for index, chunk in enumerate(pieces):
             names = set(chunk)
             part = [record for record in usable if str(record["case_id"]) in names]
-            rest = [case_id for later in chunks[index + 1 :] for case_id in later]
+            rest = [case_id for later in pieces[index + 1 :] for case_id in later]
+            # Each chunk's judge requests are reserved just before they are sent.
+            reserved = sum(
+                item.reserved_usd for item in judge_requests(part, judge_mode=judge_mode)
+            )
+            stopped = allowance_stop(allowance, reserved, chunk)
+            if stopped is not None:
+                print(f"stopped: {stopped}", file=sys.stderr)
+                extra.append(f"stopped before chunk {index + 1}: {stopped}")
+                pending = [*chunk, *rest]
+                break
             try:
                 chunk_graded, judge_failures = await grade_records(
                     part, judge_mode=judge_mode, allowance=allowance
@@ -1209,6 +1289,7 @@ async def command_regrade(
                     graded.append(await grade_record(record, judge_model=None, allowance=None))
                 break
             graded.extend(chunk_graded)
+            log.add(chunk, case_runs=len(part), reserved_usd=reserved)
             if index == 0 and rest:
                 stopped = anomaly.early_stop(
                     [],
@@ -1221,7 +1302,6 @@ async def command_regrade(
                     extra.append(f"stopped after the early chunk: {stopped}")
                     pending = rest
                     break
-    folder = run_folder()
     store_answers(folder, usable)
     summary = write_summary(
         folder,
@@ -1235,8 +1315,8 @@ async def command_regrade(
         stopped=stopped,
         judge_mode=judge_mode if judge else None,
     )
-    if allowance is not None:
-        budget.record_run(LEDGER, folder.name, allowance, summary["gate"]["scope"])
+    if log is not None:
+        log.write(summary["gate"]["scope"])
     print_summary(summary, folder)
     if blocked or stopped is not None:
         return BLOCKED

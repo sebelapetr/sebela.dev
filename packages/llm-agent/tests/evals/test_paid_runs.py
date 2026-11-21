@@ -19,6 +19,8 @@ from typing import Any
 import pytest
 
 from evals import budget, judging, run
+from evals.catalogue import implemented
+from evals.datasets.cases import BY_ID as CASES
 from evals.graders import code, rubric
 from tests.evals.records import record
 
@@ -227,7 +229,7 @@ def test_after_the_early_chunk_a_run_continues_in_chunks_of_about_twelve_case_ru
 
 
 def unjudged(count: int) -> list[str]:
-    ids = [case.id for case in run.implemented() if not run.CASES[case.id].expectation.judged]
+    ids = [case.id for case in implemented() if not CASES[case.id].expectation.judged]
     assert len(ids) >= count
     return ids[:count]
 
@@ -244,7 +246,7 @@ def costing(usd: float) -> Callable[[str, int], dict[str, Any]]:
 async def test_a_full_run_starts_under_a_realistic_allowance_and_runs_chunk_by_chunk(
     paid: dict[str, Any],
 ) -> None:
-    selected = [case.id for case in run.implemented()]
+    selected = [case.id for case in implemented()]
     assert len(selected) == 80
     # The whole run would reserve about USD 9.18; each chunk is reserved just before it starts.
     assert run.reservation(selected) > 2.0
@@ -433,23 +435,25 @@ async def test_a_paid_regrade_reserves_each_chunk_and_stops_when_the_next_one_do
     from tests.evals.records import SUBJECT
 
     monkeypatch.setattr(run, "current_subject_versions", lambda: SUBJECT)
-    judged = [case.id for case in run.implemented() if run.CASES[case.id].expectation.judged][:6]
+    judged = [case.id for case in implemented() if CASES[case.id].expectation.judged][:6]
     stored = [record(case_id, repeat=repeat) for case_id in judged for repeat in (1, 2, 3)]
     source = tmp_path / "source"
     run.store_answers(source, stored)
     pieces = run.chunks(judged, repeats=3)
     assert [len(piece) for piece in pieces] == [2, 4]
     first = sum(
-        judging.request(run.CASES[str(item["case_id"])], item).reserved_usd
+        judging.request(CASES[str(item["case_id"])], item).reserved_usd
         for item in stored
-        if item["case_id"] in pieces[0]
+        if str(item["case_id"]) in pieces[0]
     )
     assert await run.command_regrade(source, judge=True, declared_usd=first + 0.05) == run.BLOCKED
     batches: AnsweringBatches = paid["batches"]
     assert [len(sent) for sent in batches.created] == [6]
     summary = summary_of()
     assert summary["stopped"].startswith("allowance")
-    assert summary["pending"] == list(pieces[1])
+    # The stored answers come back in file order, so compare the cases, not their order.
+    assert sorted(summary["pending"]) == sorted(pieces[1])
     assert summary["pass"] is False
     (entry,) = ledger()
     assert len(entry["chunks"]) == 1
+    assert sorted(entry["chunks"][0]["cases"]) == sorted(pieces[0])

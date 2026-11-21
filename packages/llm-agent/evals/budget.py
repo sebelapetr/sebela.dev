@@ -3,9 +3,10 @@
 A paid run states the campaign's remaining allowance it was given (`--allowance`, carried forward
 from the last issue/phase report or the workflow's declared remaining allowance). The run may use
 the smaller of that and what this checkout's local ledger leaves of the ceiling, so repeating runs
-in one worktree cannot re-grant spent money. Batches are reserved before they start: every
-subject execution at its full execution allowance, every judge call at its upper bound. A missing
-allowance, a ceiling overrun or an exhausted allowance is a visible block, never a pass.
+in one worktree cannot re-grant spent money. A run is reserved chunk by chunk, each bounded chunk
+just before it starts: every subject execution at its full execution allowance, every judge call
+at its upper bound. A missing allowance, a ceiling overrun or an exhausted allowance is a visible
+block, never a pass.
 
 Spend that cannot be measured (a crashed or cancelled execution, a missing usage report) consumes
 its whole reservation.
@@ -88,18 +89,29 @@ def open_allowance(declared_usd: float, ledger: Path) -> Allowance:
     return Allowance(available_usd=available)
 
 
-def record_run(ledger: Path, run_id: str, allowance: Allowance, scope: str) -> None:
+def record_run(
+    ledger: Path,
+    run_id: str,
+    allowance: Allowance,
+    scope: str,
+    *,
+    chunks: list[dict[str, Any]] | None = None,
+) -> None:
+    """Writes `run_id`'s entry: what `allowance` has spent so far and, when given, the charges of
+    every chunk. A run writes its entry after every chunk; a later write replaces the earlier one,
+    so the ledger counts each run once and keeps what a run spent before it was interrupted."""
     data: dict[str, Any] = {"runs": []}
     if ledger.exists():
         data = json.loads(ledger.read_text(encoding="utf-8"))
-    data["runs"].append(
-        {
-            "run": run_id,
-            "at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "scope": scope,
-            "spent_usd": round(allowance.spent_usd, 6),
-            "uncertain_usd": round(allowance.uncertain_usd, 6),
-        }
-    )
+    entry: dict[str, Any] = {
+        "run": run_id,
+        "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "scope": scope,
+        "spent_usd": round(allowance.spent_usd, 6),
+        "uncertain_usd": round(allowance.uncertain_usd, 6),
+    }
+    if chunks is not None:
+        entry["chunks"] = chunks
+    data["runs"] = [run for run in data["runs"] if run.get("run") != run_id] + [entry]
     ledger.parent.mkdir(parents=True, exist_ok=True)
     ledger.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
