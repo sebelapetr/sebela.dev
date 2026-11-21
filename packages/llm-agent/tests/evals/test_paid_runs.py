@@ -428,7 +428,9 @@ async def test_a_paid_regrade_stops_after_the_early_requests_when_a_judge_reques
         ],
     )
     paid["batches"].errored = ("Q01-en-r1",)
-    assert await run.command_regrade(source, judge=True, declared_usd=1.0, campaign=P6) == run.BLOCKED
+    assert (
+        await run.command_regrade(source, judge=True, declared_usd=1.0, campaign=P6) == run.BLOCKED
+    )
     batches: AnsweringBatches = paid["batches"]
     assert [len(sent) for sent in batches.created] == [6]
     summary = summary_of()
@@ -453,7 +455,10 @@ async def test_a_paid_regrade_reserves_each_chunk_and_stops_when_the_next_one_do
         for item in stored
         if str(item["case_id"]) in pieces[0]
     )
-    assert await run.command_regrade(source, judge=True, declared_usd=first + 0.05, campaign=P6) == run.BLOCKED
+    assert (
+        await run.command_regrade(source, judge=True, declared_usd=first + 0.05, campaign=P6)
+        == run.BLOCKED
+    )
     batches: AnsweringBatches = paid["batches"]
     assert [len(sent) for sent in batches.created] == [6]
     summary = summary_of()
@@ -581,7 +586,9 @@ async def test_a_paid_regrade_past_its_deadline_leaves_the_remaining_chunks_pend
     batches = SlowBatches()
     monkeypatch.setattr(judging, "anthropic_batches", lambda: batches)
     assert (
-        await run.command_regrade(source, judge=True, declared_usd=2.0, deadline_minutes=1.0, campaign=P6)
+        await run.command_regrade(
+            source, judge=True, declared_usd=2.0, deadline_minutes=1.0, campaign=P6
+        )
         == run.BLOCKED
     )
     assert [len(sent) for sent in batches.created] == [6]
@@ -606,13 +613,14 @@ async def test_an_issue_run_of_phase_7_stops_at_the_per_run_stop_with_the_rest_p
     # declared USD 4.00 is the whole campaign, but an issue run may spend USD 1.00.
     assert await run.command_run(selected, 4.0, campaign=P7) == run.BLOCKED
     ran = [tuple(call["cases"]) for call in paid["promptfoo"]]
-    assert ran == list(pieces[:5])  # 0.12 + 4 x 0.24 = 1.08 would pass the stop
+    # 0.12 + 3 x 0.24 = 0.84 is spent; the next chunk's 0.24 would pass the stop.
+    assert ran == list(pieces[:4])
     assert "stopped: allowance" in capsys.readouterr().err
     summary = summary_of()
     assert summary["pass"] is False
-    assert summary["pending"] == [case for piece in pieces[5:] for case in piece]
+    assert summary["pending"] == [case for piece in pieces[4:] for case in piece]
     (entry,) = ledger()
-    assert entry["spent_usd"] <= 1.0
+    assert entry["spent_usd"] == pytest.approx(0.84)
     assert (entry["campaign"], entry["stage"]) == ("07-ai-service", "issue")
 
 
@@ -644,7 +652,7 @@ async def test_the_spend_of_another_campaign_does_not_block_a_run(paid: dict[str
     earlier = budget.open_allowance(13.0, run.LEDGER, P6, "issue")
     earlier.charge(13.0, "the whole phase-6 campaign")
     budget.record_run(run.LEDGER, "phase-6", earlier, "full")
-    with pytest.raises(budget.BudgetBlockedError, match="06-llm-agent.*exhausted"):
+    with pytest.raises(budget.BudgetBlockedError, match=r"06-llm-agent.*exhausted"):
         await run.command_run(["S01-en"], 1.0, campaign=P6)
     assert await run.command_run(["S01-en"], 1.0, campaign=P7) in (0, 1)
 

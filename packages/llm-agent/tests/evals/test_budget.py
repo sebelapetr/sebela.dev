@@ -85,7 +85,9 @@ def test_one_campaign_cannot_spend_another_s_ceiling(tmp_path: Path) -> None:
 
 def test_ledger_entries_written_before_campaigns_belong_to_phase_6(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.json"
-    ledger.write_text(json.dumps({"runs": [{"run": "old", "spent_usd": 9.75, "uncertain_usd": 0.5}]}))
+    ledger.write_text(
+        json.dumps({"runs": [{"run": "old", "spent_usd": 9.75, "uncertain_usd": 0.5}]})
+    )
     assert budget.ledger_spent(ledger, "06-llm-agent") == pytest.approx(9.75)
     assert budget.ledger_spent(ledger, "07-ai-service") == 0.0
     assert budget.open_allowance(13.0, ledger, P6, "issue").available_usd == pytest.approx(3.25)
@@ -130,7 +132,7 @@ def test_an_exhausted_ceiling_blocks_and_names_the_campaign(tmp_path: Path) -> N
     spent.charge(4.0, "everything")
     budget.record_run(ledger, "run-1", spent, "full")
     for stage in budget.STAGES:
-        with pytest.raises(budget.BudgetBlockedError, match="07-ai-service.*exhausted"):
+        with pytest.raises(budget.BudgetBlockedError, match=r"07-ai-service.*exhausted"):
             budget.open_allowance(1.0, ledger, P7, stage)
 
 

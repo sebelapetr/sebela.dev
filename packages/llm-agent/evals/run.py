@@ -22,9 +22,15 @@
 An unknown option, an unknown, pending or repeated case, a regrade with case options, or an unknown
 candidate stops the runner before any setting is read, fixture started or model called.
 
-Budget (`evals/budget.py`): every paid command states the campaign's remaining allowance with
-`--allowance`; the run may spend at most that, capped by what this checkout's ledger leaves of the
-cumulative USD 10 ceiling. Before the subject runs, every case-run is reserved at the agent's own
+Budget (`evals/budget.py`): every paid command names its phase campaign (`--campaign <name>` or
+the environment variable `SEBELA_EVAL_CAMPAIGN`; a missing, unknown or contradictory name stops
+the runner) and states the campaign's remaining allowance with `--allowance`; the run may spend at
+most that, capped by what this checkout's ledger leaves of that campaign's own ceiling. A run is
+an issue run unless `--stage phase-pr` says it is the full run at the phase pull request: an issue
+run is also capped by the campaign's cumulative stop for issue runs and its per-run stop. Before
+and after a paid run the runner prints its spend line (`spend: expected ..., actual ...; ... of
+the <campaign> ceiling remain`), which goes into the issue comment and the report. Before the
+subject runs, every case-run is reserved at the agent's own
 execution allowance (in a comparison, the candidate's; `comparison.execution_limits`) and every
 judge call at its upper bound; a reservation over the allowance is a
 block (exit 2) before anything is paid. A missing model key is the same visible block, never a
@@ -134,10 +140,17 @@ class Plan:
     folders: tuple[Path, ...] = ()
     judge_mode: str = "batch"  # "batch" (Message Batches API) | "direct" (debugging)
     deadline_minutes: float = DEADLINE_MINUTES
+    #: The phase campaign a paid command spends from and its stage; None for a free command.
+    campaign: budget.Campaign | None = None
+    stage: str | None = None
 
 
-def plan(argv: Sequence[str]) -> Plan:
-    """Validates the command line completely before anything is read, started or paid."""
+def plan(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Plan:
+    """Validates the command line completely before anything is read, started or paid. `env`
+    (the process environment by default) may name the campaign of a paid command."""
+    environment = os.environ if env is None else env
+    campaign_option: str | None = None
+    stage: str | None = None
     cases: list[str] = []
     allowance: str | None = None
     regrade: str | None = None
@@ -180,6 +193,20 @@ def plan(argv: Sequence[str]) -> Plan:
                 if regrade is not None:
                     raise UsageError("--regrade given twice")
                 regrade = value
+        elif option == "--campaign":
+            if not args or args[0].startswith("--"):
+                raise UsageError("--campaign needs a value (a phase campaign)")
+            if campaign_option is not None:
+                raise UsageError("--campaign given twice")
+            campaign_option = args.pop(0)
+        elif option == "--stage":
+            if not args or args[0].startswith("--"):
+                raise UsageError("--stage needs a value (issue or phase-pr)")
+            if stage is not None:
+                raise UsageError("--stage given twice")
+            stage = args.pop(0)
+            if stage not in budget.STAGES:
+                raise UsageError(f"--stage is issue or phase-pr, not {stage}")
         elif option == "--judge-mode":
             if not args or args[0].startswith("--"):
                 raise UsageError("--judge-mode needs a value (batch or direct)")
@@ -211,7 +238,18 @@ def plan(argv: Sequence[str]) -> Plan:
         return Plan(mode="compare-report", folders=tuple(Path(folder) for folder in report))
 
     if check:
-        if cases or every or regrade or judge or allowance or compare or judge_mode or deadline:
+        if (
+            cases
+            or every
+            or regrade
+            or judge
+            or allowance
+            or compare
+            or judge_mode
+            or deadline
+            or campaign_option
+            or stage
+        ):
             raise UsageError("--check-fixture takes no other option")
         return Plan(mode="check-fixture")
 
@@ -237,6 +275,7 @@ def plan(argv: Sequence[str]) -> Plan:
             raise UsageError(
                 "a paid run needs --allowance <usd> (the campaign's remaining allowance)"
             )
+        paid_from = _campaign(campaign_option, environment)
         chosen = tuple(named) if named else subset
         mode = judge_mode or "batch"
         reserved = reservation(
@@ -254,13 +293,27 @@ def plan(argv: Sequence[str]) -> Plan:
         return Plan(
             mode="compare",
             cases=chosen,
-            allowance_usd=_allowance(allowance),
+            allowance_usd=_allowance(allowance, paid_from),
             candidate=compare,
             judge_mode=judge_mode or "batch",
             deadline_minutes=deadline or DEADLINE_MINUTES,
+            campaign=paid_from,
+            stage=stage or "issue",
         )
 
-    usd = _allowance(allowance) if allowance is not None else None
+    if regrade is not None and not judge:
+        # A free regrade spends nothing and belongs to no campaign.
+        if allowance is not None:
+            raise UsageError("--allowance applies only to a paid run or --judge")
+        if campaign_option is not None:
+            raise UsageError("--campaign applies only to a paid run or --judge")
+        if stage is not None:
+            raise UsageError("--stage applies only to a paid run or --judge")
+    paid_campaign: budget.Campaign | None = None
+    usd: float | None = None
+    if allowance is not None:
+        paid_campaign = _campaign(campaign_option, environment)
+        usd = _allowance(allowance, paid_campaign)
     if regrade is not None:
         if cases or every:
             raise UsageError("--regrade grades stored answers; it takes no --case or --all")
@@ -279,6 +332,8 @@ def plan(argv: Sequence[str]) -> Plan:
             allowance_usd=usd,
             judge_mode=judge_mode or "batch",
             deadline_minutes=deadline or DEADLINE_MINUTES,
+            campaign=paid_campaign if judge else None,
+            stage=(stage or "issue") if judge else None,
         )
 
     if judge:
@@ -307,6 +362,8 @@ def plan(argv: Sequence[str]) -> Plan:
         allowance_usd=usd,
         judge_mode=judge_mode or "batch",
         deadline_minutes=deadline or DEADLINE_MINUTES,
+        campaign=paid_campaign,
+        stage=stage or "issue",
     )
 
 
@@ -320,9 +377,16 @@ def _minutes(value: str) -> float:
     return minutes
 
 
-def _allowance(value: str) -> float:
+def _allowance(value: str, of: budget.Campaign) -> float:
     try:
-        return budget.parse_allowance(value)
+        return budget.parse_allowance(value, of)
+    except budget.BudgetBlockedError as error:
+        raise UsageError(str(error)) from error
+
+
+def _campaign(option: str | None, env: Mapping[str, str]) -> budget.Campaign:
+    try:
+        return budget.named_campaign(option, env)
     except budget.BudgetBlockedError as error:
         raise UsageError(str(error)) from error
 
@@ -372,6 +436,33 @@ def reservation(
     runs = len(cases) * repeats
     judged = sum(repeats for case_id in cases if CASES[case_id].expectation.judged)
     return runs * execution_usd + judged * judge_call_reservation_usd(judge_mode)
+
+
+#: The measured mean cost of one subject case-run with the pinned models (issue #181: 240
+#: case-runs for about USD 0.37) and of one direct judge call (issue #182); a batched judge call
+#: costs half. Only for the expected cost in the spend line; reservations use the upper bounds.
+EXPECTED_SUBJECT_RUN_USD = 0.00154
+EXPECTED_JUDGE_CALL_USD = comparison.OBSERVED_JUDGE_USD
+
+
+def expected_usd(
+    cases: Sequence[str],
+    *,
+    repeats: int = REPEATS,
+    candidate: str | None = None,
+    judge_mode: str = "batch",
+    subject: bool = True,
+) -> float:
+    """The honest estimate of what a paid run of `cases` costs, for its spend line; not its
+    reservation. `subject` is False for a paid regrade, which buys judgements only."""
+    if candidate is not None:
+        return comparison.expected_cost_usd(candidate, cases)
+    judge = EXPECTED_JUDGE_CALL_USD * (
+        1.0 if judge_mode == "direct" else rubric.JUDGE_BATCH_DISCOUNT
+    )
+    judged = sum(repeats for case_id in cases if CASES[case_id].expectation.judged)
+    runs = len(cases) * repeats if subject else 0
+    return runs * EXPECTED_SUBJECT_RUN_USD + judged * judge
 
 
 def suggested_slices(
@@ -783,9 +874,12 @@ class _ChunkLog:
     """The per-chunk charges of one paid run in the ledger: before every chunk its reservation as
     a provisional charge (`begin`), after it what it measured (`add`)."""
 
-    def __init__(self, allowance: budget.Allowance, run_id: str) -> None:
+    def __init__(
+        self, allowance: budget.Allowance, run_id: str, *, expected_usd: float | None = None
+    ) -> None:
         self.allowance = allowance
         self.run_id = run_id
+        self.expected_usd = expected_usd
         self.entries: list[dict[str, Any]] = []
         self._spent = allowance.spent_usd
         self._uncertain = allowance.uncertain_usd
@@ -808,6 +902,7 @@ class _ChunkLog:
             "running",
             chunks=[*self.entries, provisional],
             provisional_usd=reserved_usd,
+            expected_usd=self.expected_usd,
         )
 
     def add(self, chunk: Sequence[str], *, case_runs: int, reserved_usd: float) -> None:
@@ -825,7 +920,14 @@ class _ChunkLog:
         self.write("running")
 
     def write(self, scope: str) -> None:
-        budget.record_run(LEDGER, self.run_id, self.allowance, scope, chunks=self.entries)
+        budget.record_run(
+            LEDGER,
+            self.run_id,
+            self.allowance,
+            scope,
+            chunks=self.entries,
+            expected_usd=self.expected_usd,
+        )
 
 
 def judge_requests(
@@ -937,10 +1039,12 @@ def write_summary(
     pending: Sequence[str] = (),
     stopped: str | None = None,
     judge_mode: str | None = None,
+    expected_usd: float | None = None,
 ) -> dict[str, Any]:
     """Writes `summary.json`. `started` is False when the run stopped before Promptfoo started
     (nothing charged); `pending` names the cases an anomaly stop left unrun, `stopped` its reason;
-    `judge_mode` is how judgements were bought (None when none could be)."""
+    `judge_mode` is how judgements were bought (None when none could be); `expected_usd` is the
+    paid run's expected cost, for its spend line."""
     runs = [item.run for item in graded]
     gate = evaluate_gate(runs, selected, repeats=repeats_for(candidate))
     failures = [*gate.failures, *extra_failures]
@@ -979,14 +1083,7 @@ def write_summary(
             "rubric": rubric.RUBRIC_VERSION,
             "pricing": rubric.JUDGE_PRICING_VERSION,
         },
-        "cost": None
-        if allowance is None
-        else {
-            "available_usd": round(allowance.available_usd, 6),
-            "spent_usd": round(allowance.spent_usd, 6),
-            "uncertain_usd": round(allowance.uncertain_usd, 6),
-            "remaining_usd": round(allowance.remaining_usd, 6),
-        },
+        "cost": None if allowance is None else _cost_block(allowance, expected_usd),
         "latency_ms": latency,
         "case_runs": [item.report for item in graded],
     }
@@ -995,6 +1092,26 @@ def write_summary(
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
+
+
+def _cost_block(allowance: budget.Allowance, expected_usd: float | None) -> dict[str, Any]:
+    cost: dict[str, Any] = {
+        "available_usd": round(allowance.available_usd, 6),
+        "spent_usd": round(allowance.spent_usd, 6),
+        "uncertain_usd": round(allowance.uncertain_usd, 6),
+        "remaining_usd": round(allowance.remaining_usd, 6),
+    }
+    if allowance.campaign is not None:
+        cost["campaign"] = allowance.campaign.name
+        cost["stage"] = allowance.stage
+        cost["ceiling_usd"] = allowance.campaign.ceiling_usd
+        cost["campaign_remaining_usd"] = round(allowance.campaign_remaining_usd, 6)
+        if expected_usd is not None:
+            cost["expected_usd"] = round(expected_usd, 6)
+            cost["spend_line"] = budget.spend_line(
+                allowance, expected_usd=expected_usd, finished=True
+            )
+    return cost
 
 
 def store_answers(folder: Path, records: Sequence[Mapping[str, Any]]) -> None:
@@ -1052,6 +1169,8 @@ def print_summary(summary: Mapping[str, Any], folder: Path) -> None:
             f"  cost {cost['spent_usd']:.4f} USD (uncertain {cost['uncertain_usd']:.4f});"
             f" {cost['remaining_usd']:.4f} USD of this run's allowance remain"
         )
+        if cost.get("spend_line"):
+            print(f"  {cost['spend_line']}")
     for failure in gate["failures"]:
         print(f"  - {failure}")
     print(f"  report: {folder / 'summary.json'}")
@@ -1089,6 +1208,8 @@ async def command_run(
     selected: Sequence[str],
     declared_usd: float,
     *,
+    campaign: budget.Campaign,
+    stage: str = "issue",
     candidate: str | None = None,
     judge_mode: str = "batch",
     deadline_minutes: float = DEADLINE_MINUTES,
@@ -1100,7 +1221,7 @@ async def command_run(
             file=sys.stderr,
         )
         return BLOCKED
-    allowance = budget.open_allowance(declared_usd, LEDGER)
+    allowance = budget.open_allowance(declared_usd, LEDGER, campaign, stage)
     repeats = repeats_for(candidate)
     execution_usd = execution_usd_for(candidate)
     pieces = chunks(selected, repeats=repeats)
@@ -1118,7 +1239,9 @@ async def command_run(
     folder = run_folder()
     secrets = secrets_of(os.environ)
     subject = current_subject_versions()
-    log = _ChunkLog(allowance, folder.name)
+    expected = expected_usd(selected, repeats=repeats, candidate=candidate, judge_mode=judge_mode)
+    print(budget.spend_line(allowance, expected_usd=expected))
+    log = _ChunkLog(allowance, folder.name, expected_usd=expected)
     extra: list[str] = []
     stored: list[dict[str, Any]] = []
     graded: list[Graded] = []
@@ -1248,6 +1371,7 @@ async def command_run(
         pending=pending,
         stopped=stopped,
         judge_mode=judge_mode,
+        expected_usd=expected,
     )
     log.write(summary["gate"]["scope"] if started else "not started")
     print_summary(summary, folder)
@@ -1312,6 +1436,8 @@ async def command_regrade(
     *,
     judge: bool,
     declared_usd: float | None,
+    campaign: budget.Campaign | None = None,
+    stage: str = "issue",
     judge_mode: str = "batch",
     deadline_minutes: float = DEADLINE_MINUTES,
 ) -> int:
@@ -1329,6 +1455,7 @@ async def command_regrade(
     selected = list(dict.fromkeys(str(record["case_id"]) for record in usable))
     allowance: budget.Allowance | None = None
     log: _ChunkLog | None = None
+    expected: float | None = None
     folder = run_folder()
     graded: list[Graded] = []
     pending: list[str] = []
@@ -1342,8 +1469,13 @@ async def command_regrade(
             print("blocked: no model key for --judge", file=sys.stderr)
             return BLOCKED
         assert declared_usd is not None
-        allowance = budget.open_allowance(declared_usd, LEDGER)
-        log = _ChunkLog(allowance, folder.name)
+        # A paid regrade without a named campaign is a block, like every paid command.
+        allowance = budget.open_allowance(
+            declared_usd, LEDGER, campaign or budget.campaign(None), stage
+        )
+        expected = expected_usd(selected, judge_mode=judge_mode, subject=False)
+        print(budget.spend_line(allowance, expected_usd=expected))
+        log = _ChunkLog(allowance, folder.name, expected_usd=expected)
         pieces = chunks(selected, repeats=REPEATS)
         for index, chunk in enumerate(pieces):
             names = set(chunk)
@@ -1400,6 +1532,7 @@ async def command_regrade(
         pending=pending,
         stopped=stopped,
         judge_mode=judge_mode if judge else None,
+        expected_usd=expected,
     )
     if log is not None:
         log.write(summary["gate"]["scope"])
@@ -1444,6 +1577,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     chosen.regrade,
                     judge=chosen.judge,
                     declared_usd=chosen.allowance_usd,
+                    campaign=chosen.campaign,
+                    stage=chosen.stage or "issue",
                     judge_mode=chosen.judge_mode,
                     deadline_minutes=chosen.deadline_minutes,
                 )
@@ -1451,10 +1586,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if chosen.mode == "compare-report":
             return command_compare_report(chosen.folders)
         assert chosen.allowance_usd is not None
+        assert chosen.campaign is not None
         return asyncio.run(
             command_run(
                 chosen.cases,
                 chosen.allowance_usd,
+                campaign=chosen.campaign,
+                stage=chosen.stage or "issue",
                 candidate=chosen.candidate,
                 judge_mode=chosen.judge_mode,
                 deadline_minutes=chosen.deadline_minutes,
