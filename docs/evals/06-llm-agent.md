@@ -190,19 +190,19 @@ Not recorded on #183 or the linked issues: the total spend as one figure after t
 
 ## Graded answers and the judge
 
-**These are model grades, not human grades.** The owner delegated the scoring of the 12 answers to Claude (`claude-fable-5-2`, in the orchestrating session) instead of scoring them personally. The grader is a different model from the subject (`claude-haiku-5-5`) and the judge (`claude-sonnet-5-5`). It checked each claim against the eval fixture and the tool results stored with each answer. Phase 7 keeps its own human grading ([#216][i216]).
+**These are model grades, not human grades.** The owner delegated the scoring of the 12 answers to Claude (`claude-fable-5-2`, in the orchestrating session) instead of scoring them personally. The grader is a different model from the subject (`claude-haiku-5-5`) and the judge (`claude-sonnet-5-5`). It checked each claim against the eval fixture and the tool results stored with each answer. It graded under `criteria-v1`, two texts written before the grading and kept in [grading-criteria.md](grading-criteria.md#criteria-v1). Phase 7 keeps its own human grading ([#216][i216]).
 
-| Field            | Value                                                                                                                  |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Run              | `run-20261121T191400Z-2158998` (third full run)                                                                        |
-| Commit           | `09ee54d`                                                                                                              |
-| Runtime          | `f6f96186b735`                                                                                                         |
-| Expectations     | `expectations-711dd5c49d2c`                                                                                            |
-| Subject          | Security and Main `claude-haiku-5-5`, `medium`; Output Guard `output-guard-5+b761d86edfe7`; chat prompt `450396fe118b` |
-| Judge            | `claude-sonnet-5-5`, `medium`, `rubric-v5`                                                                             |
-| Graded by        | Claude (`claude-fable-5-2`), a model, on the owner's delegation; 2026-11-21                                            |
-| Scale            | 1–5 for grounding, relevance and language                                                                              |
-| Criteria version | none: the wording given to the grader is not recorded ([grading criteria](grading-criteria.md#phase-06-no-version))    |
+| Field            | Value                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Run              | `run-20261121T191400Z-2158998` (third full run)                                                                                                  |
+| Commit           | `09ee54d`                                                                                                                                        |
+| Runtime          | `f6f96186b735`                                                                                                                                   |
+| Expectations     | `expectations-711dd5c49d2c`                                                                                                                      |
+| Subject          | Security and Main `claude-haiku-5-5`, `medium`; Output Guard `output-guard-5+b761d86edfe7`; chat prompt `450396fe118b`                           |
+| Judge            | `claude-sonnet-5-5`, `medium`, `rubric-v5`                                                                                                       |
+| Graded by        | Claude (`claude-fable-5-2`), a model, on the owner's delegation; 2026-11-21                                                                      |
+| Scale            | 1–5 for grounding, relevance and language                                                                                                        |
+| Criteria version | [`criteria-v1`](grading-criteria.md#criteria-v1): the grading page's instruction and three definitions, and the guidance "Jak hodnotit odpovědi" |
 
 | #   | Case-run  | Kind                             | Grounding | Relevance | Language | Note                                                                                                                          |
 | --- | --------- | -------------------------------- | --------- | --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -221,7 +221,7 @@ Not recorded on #183 or the linked issues: the total spend as one figure after t
 
 Recorded means: grounding 4.58, relevance 4.83, language 4.50 (EN 4.50 / 4.83 / 4.50; CS 4.67 / 4.83 / 4.50).
 
-Source for both tables and the means: [graded answers][c-grades].
+Source for both tables and the means: [graded answers][c-grades]. The criteria version and its texts: [grader's comment on #309][c-criteria]. The `#` column is the answer's position on the grading page, which the guidance in `criteria-v1` refers to; the comment maps positions 3, 4, 5, 6, 9, 10, 11 and 12 to the case-runs shown in those rows.
 
 The one score below 4, grounding 3 for Q02-en r1 (one wrong date), was accepted for phase 6 as a rare, non-critical slip: a scan of all 240 answers of the run found 288 full dates in 114 answers, and this was the only one that matched no record of its turn (ten more are diary-window bounds, which are tool arguments). The follow-up is a deterministic date check ([#356][i356]).
 
@@ -249,7 +249,7 @@ Source: [graded answers][c-grades]; [third full run][c-run3] for the checks that
 
 What this suite and this record do not show:
 
-- **No human grades.** The 12 sampled answers were graded by a model, and the wording of the criteria it was given is not recorded. The judge was compared with those model grades on six answers only.
+- **No human grades.** The 12 sampled answers were graded by a model. Its criteria, [`criteria-v1`](grading-criteria.md#criteria-v1), were written for a human grader before the delegation; the grader says its check of claims was wider than the page's "cited records" and that the mapping to numbers was its own judgement at grading time ([grader's comment][c-criteria]). The judge was compared with those model grades on six answers only.
 - **A finite, fictional suite.** 80 cases over one fictional profile, 3 repeats each. No real visitor question was used. Passing it is a release gate, not proof of security or of quality on real traffic.
 - **Package only.** Phase 06 tests the library. HTTP, the website chat, conversation storage, spend admission, the public MCP server and retrieval are outside it ([#183][i183]).
 - **Dates are not checked.** Neither the judge nor a code check caught a wrong date ([#356][i356]).
@@ -295,6 +295,7 @@ What this suite and this record do not show:
 [c-run3]: https://github.com/sebelapetr/sebela.dev/issues/183#issuecomment-7068365370
 [c-grades]: https://github.com/sebelapetr/sebela.dev/issues/183#issuecomment-7068487666
 [c-final]: https://github.com/sebelapetr/sebela.dev/issues/183#issuecomment-7068927116
+[c-criteria]: https://github.com/sebelapetr/sebela.dev/issues/309#issuecomment-7071070914
 [c-178]: https://github.com/sebelapetr/sebela.dev/issues/178#issuecomment-7039327701
 [c-179]: https://github.com/sebelapetr/sebela.dev/issues/179#issuecomment-7044139438
 [c-180]: https://github.com/sebelapetr/sebela.dev/issues/180#issuecomment-7048820481
