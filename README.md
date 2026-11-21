@@ -10,6 +10,8 @@ The open-source engineering behind Petr Šebela's next professional website.
 [![Live: sebela.dev](https://img.shields.io/badge/live-sebela.dev-525252?style=flat-square)](https://sebela.dev)
 [![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
 [![Deploy](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/release.yml?branch=master&style=flat-square&label=deploy)](https://github.com/sebelapetr/sebela.dev/actions/workflows/release.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/sebelapetr/sebela.dev/badge)](https://scorecard.dev/viewer/?uri=github.com/sebelapetr/sebela.dev)
+[![Images: GHCR](https://img.shields.io/badge/images-GHCR-525252?style=flat-square)](https://github.com/sebelapetr/sebela.dev/packages)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-525252?style=flat-square)](LICENSE)
 
 [The idea](#the-idea) · [Architecture](#architecture) · [AI & MCP](#ai--mcp) · [Roadmap](#roadmap) · [Getting started](#working-on-the-project) · [Documentation](#documentation)

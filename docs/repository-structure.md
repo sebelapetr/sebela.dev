@@ -49,7 +49,8 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
 ├── .github/
-│   ├── workflows/           CI, the image release and the deployment [1, 10]
+│   ├── workflows/           CI, the image release and the deployment [1, 10], the OpenSSF Scorecard
+│   ├── CODEOWNERS           the owner as code owner of everything (review requested, not required)
 │   ├── dependabot.yml       monthly grouped updates of the pinned GitHub Actions
 │   ├── ISSUE_TEMPLATE/      issue forms (bug report, idea) and links to private security reporting and Discussions
 │   └── pull_request_template.md  sections of a pull request description, with the roles
