@@ -142,10 +142,10 @@ describe("paid model evals: the repository's workflow", () => {
     assert.notEqual(trigger, -1, "the changes job has no step with id `trigger`");
     assert.match(
       steps[trigger],
-      /^ {10}run: node scripts\/checks\/paid-evals-trigger\.mjs >> "\$GITHUB_OUTPUT"$/m,
+      /^ {8}run: node scripts\/checks\/paid-evals-trigger\.mjs >> "\$GITHUB_OUTPUT"$/m,
     );
-    assert.match(steps[trigger], /^ {12}EVENT: \$\{\{ github\.event_name \}\}$/m);
-    assert.match(steps[trigger], /^ {12}HEAD_REF: \$\{\{ github\.head_ref \}\}$/m);
+    assert.match(steps[trigger], /^ {10}EVENT: \$\{\{ github\.event_name \}\}$/m);
+    assert.match(steps[trigger], /^ {10}HEAD_REF: \$\{\{ github\.head_ref \}\}$/m);
     assert.doesNotMatch(steps[trigger], /^ {8}if:/m, "the trigger step must always run");
 
     const selecting = steps

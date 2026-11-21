@@ -63,7 +63,7 @@ The full list is in [AGENTS.md](AGENTS.md), which every agent, and every human c
 4. Run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`, or the narrower commands in [AGENTS.md](AGENTS.md#commands) for what you changed.
 5. Open a pull request into `master` with a Conventional Commits title. The [pull request template](.github/pull_request_template.md) lists what to include.
 
-CI runs the same checks on your pull request; the owner reviews and merges it. The paid model evals need the owner's key, so they do not run on pull requests from forks; the owner runs them where a change needs it.
+CI runs the same checks on your pull request; the owner reviews and merges it. The paid model evals start by themselves only on the owner's phase pull requests, so they do not run on your pull request; the owner runs them by hand where a change needs it.
 
 ## License
 
