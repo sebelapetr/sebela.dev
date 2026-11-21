@@ -1,5 +1,5 @@
-// Embedding providers behind the `Embedder` port: the Voyage AI adapter for deployment and paid
-// evals, and a deterministic fake for every other test. Nothing outside this module knows a
+// Providers behind the `Embedder` and `Reranker` ports: the Voyage AI adapters for deployment and
+// paid evals, and deterministic fakes for every other test. Nothing outside this module knows a
 // provider's wire format.
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -10,6 +10,7 @@ import {
   type Embedder,
   type Embedding,
   type EmbeddingInput,
+  type Reranker,
 } from "../ports/index.js";
 
 /** The fake embedder's model name; the store keeps its vectors apart from any real model's. */
@@ -59,6 +60,50 @@ export function createFakeEmbedder(
       }
       const tokens = texts.reduce((sum, text) => sum + words(text).length, 0);
       return Promise.resolve({ vectors: texts.map(vector), tokens });
+    },
+  };
+}
+
+/** The fake reranker's model name. */
+export const fakeRerankModel = "fake-word-overlap";
+
+export interface FakeRerankerOptions {
+  /** Fails every call with `ProviderUnavailableError`, as a provider outage would. */
+  readonly failing?: boolean;
+  /** The HTTP status a failing call reports. */
+  readonly failureStatus?: number;
+}
+
+/**
+ * A deterministic reranker for tests: a document's score is the share of the query's distinct
+ * (lower-cased, unaccented) words it contains, from 0 to 1. It bills one token per word of the
+ * query and of every document and counts its calls in `calls`.
+ */
+export function createFakeReranker(
+  options: FakeRerankerOptions = {},
+): Reranker & { readonly calls: number } {
+  let calls = 0;
+  return {
+    model: fakeRerankModel,
+    get calls() {
+      return calls;
+    },
+    rerank(query, documents) {
+      calls += 1;
+      if (options.failing === true) {
+        return Promise.reject(
+          new ProviderUnavailableError("The fake reranker is failing.", options.failureStatus),
+        );
+      }
+      const asked = [...new Set(words(query))];
+      const scores = documents.map((document) => {
+        const present = new Set(words(document));
+        return asked.length === 0
+          ? 0
+          : asked.filter((word) => present.has(word)).length / asked.length;
+      });
+      const tokens = words(query).length + documents.reduce((sum, d) => sum + words(d).length, 0);
+      return Promise.resolve({ scores, tokens });
     },
   };
 }
@@ -312,3 +357,25 @@ function parseVoyage(body: unknown): { vectors: Map<number, number[]>; tokens: n
   }
   return { vectors, tokens };
 }
+
+export interface VoyageRerankerOptions {
+  readonly apiKey: string;
+  readonly model: string;
+  readonly timeoutMs: number;
+  /** How many times a rate-limited (429) call is tried again; 0, the default, never retries. */
+  readonly retries?: number;
+  /** The longest wait before one retry; a longer `Retry-After` gives up at once. */
+  readonly maxRetryWaitMs?: number;
+  /** The fetch to call; tests pass a fake. */
+  readonly fetch?: typeof globalThis.fetch;
+  /** Waits between retries; tests pass one that only records. */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** The jitter source, from 0 to 1; tests pass a constant. */
+  readonly random?: () => number;
+}
+
+/** The Voyage AI reranking adapter. */
+export const createVoyageReranker: (options: VoyageRerankerOptions) => Reranker = () => ({
+  model: "",
+  rerank: () => Promise.reject(new Error("not implemented")),
+});

@@ -435,6 +435,15 @@ async function measure(dataset, plan, options, folder) {
  */
 
 /**
+ * What the run's searches cost, all searches together: the query embeddings and the reranking.
+ * Indexing and candidate runs are not part of answering a query.
+ * @param {Usage} usage
+ */
+export function queryCostOf(usage) {
+  return (usage.byOperation["search"] ?? { tokens: 0, costUsd: 0 }).costUsd;
+}
+
+/**
  * @param {import("./plan.js").Dataset} dataset
  * @param {{ run: import("./plan.js").Question[], pending: import("./plan.js").PendingCase[] }} plan
  * @param {ReturnType<typeof parseOptions>} options

@@ -96,5 +96,5 @@ export function samplePdf(): Buffer {
   );
 }
 
-export { createFakeEmbedder } from "@sebela/memory";
+export { createFakeEmbedder, createFakeReranker } from "@sebela/memory";
 export type { FakeEmbedderOptions } from "@sebela/memory";

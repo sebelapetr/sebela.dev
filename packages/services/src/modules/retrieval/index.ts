@@ -31,6 +31,7 @@ import {
   readRetrievalConfig,
   scheduleChanges,
   type Embedder,
+  type Reranker,
   type IndexReport,
   type PortfolioSnapshot,
   type ProcessOptions,
@@ -214,6 +215,8 @@ export interface KnowledgeServiceOptions {
   readonly config: RetrievalConfig | null;
   /** The embedding provider; without it every provider operation is unavailable. */
   readonly embedder?: Embedder;
+  /** The cross-encoder that ranks the final passages; without it search is unavailable. */
+  readonly reranker?: Reranker;
   /** Where originals of supplemental documents are kept; needed to ingest, show and approve. */
   readonly privateStorage?: PrivateStorage;
   /** Limits of a supplemental document; `defaultDocumentLimits` when absent. */

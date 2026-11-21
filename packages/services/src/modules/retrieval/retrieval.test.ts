@@ -14,6 +14,7 @@ import {
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
 import {
   createFakeEmbedder,
+  createFakeReranker,
   createQueryCachingEmbedder,
   type RetrievalConfig,
 } from "@sebela/memory";
@@ -29,6 +30,8 @@ const config: RetrievalConfig = {
   embeddingModel: "fake-hashed-words",
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 16,
+  rerankModel: "fake-word-overlap",
+  rerankPricePerMillionTokensUsd: 0.05,
   providerTimeoutMs: 1000,
   providerRetries: 0,
   providerMaxRetryWaitMs: 0,
@@ -62,7 +65,7 @@ describe("the knowledge service over the demo seed", () => {
         profile: createProfileService(persistence.profile),
         roadmap: createRoadmapService(persistence.roadmap),
       },
-      options,
+      { reranker: createFakeReranker(), ...options },
     );
 
   beforeAll(async () => {
@@ -165,11 +168,11 @@ describe("the knowledge service over the demo seed", () => {
       });
       const error = await refusal(failing.search({ query: "context window" }));
       expect(error.code).toBe("provider_unavailable");
-      expect(error.message).toBe(`The embedding provider is unavailable: it answered ${text}.`);
+      expect(error.message).toBe(`The retrieval provider is unavailable: it answered ${text}.`);
     }
     const silent = open({ config, embedder: createFakeEmbedder({ failing: true }) });
     expect((await refusal(silent.search({ query: "context window" }))).message).toBe(
-      "The embedding provider is unavailable.",
+      "The retrieval provider is unavailable.",
     );
   });
 
@@ -178,6 +181,36 @@ describe("the knowledge service over the demo seed", () => {
       "provider_unavailable",
     );
     expect((await refusal(open({ config }).reindexPortfolio())).code).toBe("provider_unavailable");
+  });
+
+  it("reports a failing or missing reranker as unavailable, never as no evidence", async () => {
+    const failing = open({
+      config,
+      embedder,
+      reranker: createFakeReranker({ failing: true, failureStatus: 503 }),
+    });
+    const error = await refusal(failing.search({ query: "context window" }));
+    expect(error.code).toBe("provider_unavailable");
+    expect(error.message).toBe(
+      "The retrieval provider is unavailable: it answered HTTP 503 (5xx, provider error).",
+    );
+    const missing = createKnowledgeService(
+      {
+        store: persistence.retrieval,
+        profile: createProfileService(persistence.profile),
+        roadmap: createRoadmapService(persistence.roadmap),
+      },
+      { config, embedder },
+    );
+    expect((await refusal(missing.search({ query: "context window" }))).code).toBe(
+      "provider_unavailable",
+    );
+  });
+
+  it("records the reranking of a search in the month's usage", async () => {
+    const before = (await knowledge.usage()).byOperation.rerank.tokens;
+    await knowledge.search({ query: "context window tokens" });
+    expect((await knowledge.usage()).byOperation.rerank.tokens).toBeGreaterThan(before);
   });
 
   it("refuses to search once the month's ceiling is reached", async () => {
@@ -200,7 +233,7 @@ describe("keeping the knowledge base current after content writes", () => {
         profile: createProfileService(persistence.profile),
         roadmap: createRoadmapService(persistence.roadmap),
       },
-      options,
+      { reranker: createFakeReranker(), ...options },
     );
   const term = "portfolio:glossary_term:context-window";
   const query = { query: "context window tokens a model reads in one request" };
@@ -294,6 +327,8 @@ describe("readRetrievalOptions", () => {
     RETRIEVAL_EMBEDDING_MODEL: "voyage-4",
     RETRIEVAL_EMBEDDING_PRICE_PER_MILLION_TOKENS_USD: "0.06",
     RETRIEVAL_EMBEDDING_BATCH_SIZE: "64",
+    RETRIEVAL_RERANK_MODEL: "rerank-3",
+    RETRIEVAL_RERANK_PRICE_PER_MILLION_TOKENS_USD: "0.05",
     RETRIEVAL_PROVIDER_TIMEOUT_MS: "10000",
     RETRIEVAL_PROVIDER_RETRIES: "2",
     RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: "2000",
@@ -322,15 +357,24 @@ describe("readRetrievalOptions", () => {
     expect(embedder?.dimension).toBe(1024);
   });
 
-  it("searches by vectors unless an eval run asks for the full-text baseline", () => {
+  it("ranks with the reranker unless an eval run asks for another variant", () => {
     const env = { ...settings, VOYAGE_API_KEY: fakeKey };
-    expect(readRetrievalOptions(env).searchVariant).toBe("vector");
-    expect(readRetrievalOptions({ ...env, RETRIEVAL_EVAL_VARIANT: "fulltext" }).searchVariant).toBe(
-      "fulltext",
-    );
-    expect(() => readRetrievalOptions({ ...env, RETRIEVAL_EVAL_VARIANT: "hybrid" })).toThrow(
+    expect(readRetrievalOptions(env).searchVariant).toBe("reranked");
+    for (const variant of ["vector", "fulltext", "hybrid", "reranked"] as const) {
+      expect(readRetrievalOptions({ ...env, RETRIEVAL_EVAL_VARIANT: variant }).searchVariant).toBe(
+        variant,
+      );
+    }
+    expect(() => readRetrievalOptions({ ...env, RETRIEVAL_EVAL_VARIANT: "bogus" })).toThrow(
       /RETRIEVAL_EVAL_VARIANT/,
     );
+  });
+
+  it("reranks with the configured Voyage model from the same key", () => {
+    expect(readRetrievalOptions({ ...settings, VOYAGE_API_KEY: fakeKey }).reranker?.model).toBe(
+      "rerank-3",
+    );
+    expect(readRetrievalOptions(settings).reranker).toBeUndefined();
   });
 
   it("names invalid settings, never the key", () => {

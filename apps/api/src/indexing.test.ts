@@ -24,6 +24,8 @@ const config: RetrievalConfig = {
   embeddingModel: "fake",
   embeddingPricePerMillionTokensUsd: 0.06,
   embeddingBatchSize: 32,
+  rerankModel: "fake-word-overlap",
+  rerankPricePerMillionTokensUsd: 0.05,
   providerTimeoutMs: 1000,
   providerRetries: 0,
   providerMaxRetryWaitMs: 0,

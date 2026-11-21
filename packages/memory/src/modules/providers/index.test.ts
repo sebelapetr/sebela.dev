@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ProviderUnavailableError } from "../ports/index.js";
 
-import { createFakeEmbedder, createQueryCachingEmbedder, createVoyageEmbedder } from "./index.js";
+import {
+  createFakeEmbedder,
+  createFakeReranker,
+  createQueryCachingEmbedder,
+  createVoyageEmbedder,
+  createVoyageReranker,
+} from "./index.js";
 
 const KEY = "test-voyage-key-not-real";
 
@@ -201,6 +207,155 @@ describe("the Voyage embedder", () => {
       20,
     );
     await expect(embedder.embed(["first"], "query")).rejects.toBeInstanceOf(
+      ProviderUnavailableError,
+    );
+  });
+});
+
+describe("the fake reranker", () => {
+  it("scores each document by the share of the query's words it holds, in order", async () => {
+    const reranker = createFakeReranker();
+    const { scores, tokens } = await reranker.rerank("Hybrid search reranker", [
+      "a reranker over HYBRID search",
+      "hybrid notes",
+      "tax deadlines",
+    ]);
+    expect(scores[0]).toBe(1);
+    expect(scores[1]).toBeCloseTo(1 / 3, 10);
+    expect(scores[2]).toBe(0);
+    expect(tokens).toBe(3 + 5 + 2 + 2);
+    expect(reranker.calls).toBe(1);
+  });
+
+  it("fails like an unavailable provider when asked to", async () => {
+    const failure = await createFakeReranker({ failing: true, failureStatus: 503 })
+      .rerank("x", ["y"])
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ProviderUnavailableError);
+    expect((failure as ProviderUnavailableError).status).toBe(503);
+  });
+});
+
+describe("the Voyage reranker", () => {
+  function reranker(
+    fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
+    retry: {
+      retries?: number;
+      maxRetryWaitMs?: number;
+      sleep?: (ms: number) => Promise<void>;
+    } = {},
+    timeoutMs = 1000,
+  ) {
+    return createVoyageReranker({
+      apiKey: KEY,
+      model: "rerank-3",
+      timeoutMs,
+      fetch,
+      random: () => 1,
+      ...retry,
+    });
+  }
+
+  it("sends the query and every document and returns the scores by document index", async () => {
+    const requests: { url: string; init: RequestInit | undefined }[] = [];
+    const voyageReranker = reranker((input, init) => {
+      requests.push({ url: input instanceof Request ? input.url : input.toString(), init });
+      return answer({
+        data: [
+          { index: 2, relevance_score: 0.9 },
+          { index: 0, relevance_score: 0.4 },
+          { index: 1, relevance_score: 0.1 },
+        ],
+        usage: { total_tokens: 42 },
+      });
+    });
+    expect(voyageReranker.model).toBe("rerank-3");
+    const result = await voyageReranker.rerank("which archive?", ["first", "second", "third"]);
+    expect(result).toEqual({ scores: [0.4, 0.1, 0.9], tokens: 42 });
+    const [request] = requests;
+    expect(request?.url).toBe("https://api.voyageai.com/v1/rerank");
+    expect(request?.init?.method).toBe("POST");
+    expect(new Headers(request?.init?.headers).get("authorization")).toBe(`Bearer ${KEY}`);
+    expect(JSON.parse(request?.init?.body as string)).toEqual({
+      query: "which archive?",
+      documents: ["first", "second", "third"],
+      model: "rerank-3",
+      truncation: true,
+    });
+  });
+
+  it("returns no scores for no documents without calling the provider", async () => {
+    let calls = 0;
+    const voyageReranker = reranker(() => {
+      calls += 1;
+      return answer({ data: [], usage: { total_tokens: 0 } });
+    });
+    await expect(voyageReranker.rerank("q", [])).resolves.toEqual({ scores: [], tokens: 0 });
+    expect(calls).toBe(0);
+  });
+
+  it.each([
+    ["an error status", () => answer({ detail: "unauthorized" }, 401)],
+    ["a network failure", () => Promise.reject(new TypeError("fetch failed"))],
+    ["a malformed body", () => answer({ data: "nope" })],
+    [
+      "a score that is not a number",
+      () => answer({ data: [{ index: 0, relevance_score: "high" }], usage: { total_tokens: 1 } }),
+    ],
+    ["a missing score", () => answer({ data: [], usage: { total_tokens: 1 } })],
+  ])("reports %s as an unavailable provider without the key", async (_label, fetch) => {
+    const failure = await reranker(fetch)
+      .rerank("q", ["first"])
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ProviderUnavailableError);
+    expect((failure as Error).message).not.toContain(KEY);
+  });
+
+  it("honours Retry-After on a rate-limited call and gives up after the allowed retries", async () => {
+    const waits: number[] = [];
+    const sleep = (ms: number) => {
+      waits.push(ms);
+      return Promise.resolve();
+    };
+    let calls = 0;
+    const limitedThenFine = reranker(
+      () => {
+        calls += 1;
+        return calls === 1
+          ? Promise.resolve(new Response("{}", { status: 429, headers: { "retry-after": "3" } }))
+          : answer({ data: [{ index: 0, relevance_score: 0.5 }], usage: { total_tokens: 2 } });
+      },
+      { retries: 2, maxRetryWaitMs: 5000, sleep },
+    );
+    await expect(limitedThenFine.rerank("q", ["first"])).resolves.toEqual({
+      scores: [0.5],
+      tokens: 2,
+    });
+    expect(waits).toEqual([3000]);
+
+    waits.length = 0;
+    const alwaysLimited = reranker(() => Promise.resolve(new Response("{}", { status: 429 })), {
+      retries: 2,
+      maxRetryWaitMs: 1500,
+      sleep,
+    });
+    const failure = await alwaysLimited.rerank("q", ["first"]).catch((error: unknown) => error);
+    expect((failure as ProviderUnavailableError).status).toBe(429);
+    expect(waits).toEqual([1000, 1500]);
+  });
+
+  it("gives up after the timeout", async () => {
+    const voyageReranker = reranker(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }),
+      {},
+      20,
+    );
+    await expect(voyageReranker.rerank("q", ["first"])).rejects.toBeInstanceOf(
       ProviderUnavailableError,
     );
   });

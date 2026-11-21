@@ -30,6 +30,7 @@ import {
   pendingSummary,
   providerEnvironment,
   queryCacheUse,
+  queryCostOf,
 } from "./run.js";
 
 const dataset = loadDataset();
@@ -162,20 +163,36 @@ describe("the runner's options", () => {
       RETRIEVAL_QUERY_CACHE_FILE: expect.stringMatching(
         /[/\\]\.tmp[/\\]evals[/\\]memory[/\\]query-cache\.json$/,
       ) as string,
-      RETRIEVAL_EVAL_VARIANT: "vector",
+      RETRIEVAL_EVAL_VARIANT: "reranked",
     });
   });
 
-  it("searches the vector variant by default and the full-text one when asked", () => {
-    expect(parseOptions([]).variant).toBe("vector");
-    expect(parseOptions(["--variant", "fulltext"]).variant).toBe("fulltext");
-    expect(() => parseOptions(["--variant", "hybrid"])).toThrow(/--variant/);
-    expect(providerEnvironment(parseOptions(["--variant", "fulltext"]))).toMatchObject({
-      RETRIEVAL_EVAL_VARIANT: "fulltext",
-    });
-    expect(providerEnvironment(parseOptions([]))).toMatchObject({
-      RETRIEVAL_EVAL_VARIANT: "vector",
-    });
+  it("searches the deployed reranked variant by default and any other variant when asked", () => {
+    expect(parseOptions([]).variant).toBe("reranked");
+    for (const variant of ["vector", "fulltext", "hybrid", "reranked"]) {
+      expect(parseOptions(["--variant", variant]).variant).toBe(variant);
+      expect(providerEnvironment(parseOptions(["--variant", variant]))).toMatchObject({
+        RETRIEVAL_EVAL_VARIANT: variant,
+      });
+    }
+    expect(() => parseOptions(["--variant", "bogus"])).toThrow(/--variant/);
+  });
+
+  it("costs a query's embedding and its reranking, not the indexing or candidate runs", () => {
+    const spend = (costUsd: number) => ({ tokens: 1, costUsd });
+    expect(
+      queryCostOf({
+        tokens: 4,
+        costUsd: 1.111,
+        byOperation: {
+          index: spend(1),
+          search: spend(0.01),
+          candidates: spend(0.1),
+          rerank: spend(0.001),
+        },
+      }),
+    ).toBeCloseTo(0.011, 10);
+    expect(queryCostOf({ tokens: 0, costUsd: 0, byOperation: {} })).toBe(0);
   });
 
   it("ingests every supplemental document under its slug and safe title", () => {

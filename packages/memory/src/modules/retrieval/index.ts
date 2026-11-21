@@ -14,6 +14,7 @@ import {
   ProviderUnavailableError,
   type Embedder,
   type NearestChunk,
+  type Reranker,
   type RetrievalConfig,
   type RetrievalStore,
   type UsageOperation,
@@ -25,11 +26,13 @@ import { createSpend } from "../spend/index.js";
  * embedded query, `fulltext` (the evals' baseline) by text search rank without calling the provider
  * and without the relevance floor, which is a cosine similarity.
  */
-export type SearchVariant = "vector" | "fulltext";
+export type SearchVariant = "vector" | "fulltext" | "hybrid" | "reranked";
 
 export interface RetrieverOptions {
   readonly store: RetrievalStore;
   readonly embedder: Embedder;
+  /** The cross-encoder of the `reranked` variant; without it that search is unavailable. */
+  readonly reranker?: Reranker;
   readonly config: RetrievalConfig;
   readonly now?: () => Date;
   /** `vector` when absent. */
