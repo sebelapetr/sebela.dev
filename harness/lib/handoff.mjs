@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { checkoutOf, missingTools, runTool } from "./workspace-tools.mjs";
+import { isDocumentation } from "./documentation.mjs";
 
 // Tools whose calls change files or run commands; reading a worktree does not make it the agent's.
 const ACTING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]);
@@ -76,13 +77,15 @@ export function worktreesNamedIn(transcriptText, mainRoot) {
 // What to check for the changed files (paths relative to the checkout): null when nothing changed,
 // { all: true } when the change base is unknown (null) or workspace-wide configuration changed,
 // otherwise { all: false, packages } with the names of the changed members, sorted. Root files
-// need no package; the root checks always run.
+// need no package and documentation (documentation.mjs) counts as no change; the root checks
+// always run.
 export function selectChecks(changedFiles, members) {
   if (changedFiles === null) return { all: true };
   if (!changedFiles.length) return null;
   const packages = new Set();
   for (const file of changedFiles) {
     if (WORKSPACE_FILES.has(file)) return { all: true };
+    if (isDocumentation(file)) continue;
     const member = members.find((candidate) => file.startsWith(`${candidate.dir}/`));
     if (member) packages.add(member.name);
   }

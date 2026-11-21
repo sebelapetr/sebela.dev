@@ -1,0 +1,14 @@
+{
+  "description": "Only the guides of the API and the seed changed: Turborepo on the change without its documentation selects nothing, so no image is built (unfiltered it selects @sebela/api, @sebela/db and @sebela/services)",
+  "changedFiles": ["apps/api/AGENTS.md", "packages/db/seed/README.md"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [],
+        "length": 0
+      }
+    }
+  },
+  "services": []
+}

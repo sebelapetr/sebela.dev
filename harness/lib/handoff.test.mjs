@@ -98,6 +98,22 @@ test("root files select only the root checks", () => {
   });
 });
 
+test("documentation of a package selects no package", () => {
+  assert.deepEqual(
+    selectChecks(["apps/web/AGENTS.md", "packages/alpha/README.md", "docs/testing.md"], MEMBERS),
+    { all: false, packages: [] },
+  );
+  assert.deepEqual(selectChecks(["apps/web/AGENTS.md", "packages/alpha/src/x.ts"], MEMBERS), {
+    all: false,
+    packages: ["@fixture/alpha"],
+  });
+  // Markdown that code reads is not documentation.
+  assert.deepEqual(selectChecks(["packages/alpha/evals/datasets/a.md"], MEMBERS), {
+    all: false,
+    packages: ["@fixture/alpha"],
+  });
+});
+
 test("workspace-wide configuration selects everything", () => {
   for (const file of [
     "package.json",

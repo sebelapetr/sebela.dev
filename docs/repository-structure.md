@@ -39,7 +39,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check, the pinned-actions check and whether a change runs the MCP Admin model evals — plain Node, no dependencies [1, 2, 10]
+│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check, the pinned-actions check and whether a change runs the MCP Admin model evals, the change without its documentation — plain Node, no dependencies [1, 2, 10]
 │   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version, release notes and changelog; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
@@ -157,7 +157,7 @@ A task with no package defining it, such as `build` before the first package wit
 - The root depends on `@sebela/config`, so a change to the shared configuration selects every package, its consumers included.
 - A base Turborepo cannot resolve in the checkout — a new branch, a rewritten history, a shallow clone — selects every package.
 
-Root files that belong to no package (the harness, the repository checks, docs) select no package; the root tasks cover them, and CI runs those on every change (`pnpm ci:root`). `pnpm exec turbo query affected --packages` lists the selection with the reason for each package.
+Root files that belong to no package (the harness, the repository checks, docs) select no package; the root tasks cover them, and CI runs those on every change (`pnpm ci:root`). Documentation never selects a package, not even inside the package's folder: CI and the release plan give Turborepo the change without its documentation (`scripts/checks/without-documentation.mjs`; [CI](testing.md#ci), "Documentation selects no work"). Run by hand, `turbo query affected` still counts it. `pnpm exec turbo query affected --packages` lists the selection with the reason for each package.
 
 ## Backend module layout
 
