@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   LEGACY_CAMPAIGN,
+  RUN_DEADLINE_MINUTES,
   ledgerRuns,
   mergeRuns,
   parseCampaigns,
@@ -277,4 +278,83 @@ test("unknown spend is reported as unknown", () => {
     spendLine(none, null),
     "spend: no eval campaign is defined for 11-knowledge-graph; the eval runner refuses a paid run",
   );
+});
+
+// --- the gaps of the first guards (issue #384) -------------------------------------
+
+const NOW = Date.parse("2026-11-21T12:00:00Z");
+
+test("three issue worktrees of USD 1.00 each add up past the issue stop", () => {
+  const runs = ["feat-1-x", "feat-2-y", "feat-3-z"].flatMap((source) =>
+    ledgerRuns(ledger(entry("r1", 1)), source),
+  );
+  const spend = summary(runs, { found: 3 });
+  assert.equal(spend.issueSpentUsd, 3);
+  assert.equal(spend.issueProjectedUsd, 3);
+  assert.equal(spend.issueStopUsd, 1.5);
+});
+
+test("an issue run under way projects its expected cost onto the issue spend", () => {
+  const runs = ledgerRuns(
+    ledger(
+      entry("r1", 1.2),
+      entry("r2", 0.1, { scope: "running", expected_usd: 0.5, at: "2026-11-21T11:50:00+00:00" }),
+      entry("r3", 0.2, {
+        stage: "phase-pr",
+        scope: "running",
+        expected_usd: 1,
+        at: "2026-11-21T11:50:00+00:00",
+      }),
+    ),
+    "main",
+  );
+  const spend = summary(runs, { now: NOW });
+  assert.equal(spend.issueSpentUsd, 1.3);
+  assert.equal(spend.issueProjectedUsd, 1.7);
+  assert.equal(spend.projectedUsd, 2.7);
+});
+
+test("a run left running by an interruption is not projected for ever", () => {
+  assert.equal(RUN_DEADLINE_MINUTES, 240);
+  const stale = entry("r1", 0.3, {
+    scope: "running",
+    expected_usd: 1.1,
+    at: "2026-11-21T07:59:00+00:00",
+  });
+  const live = entry("r2", 0.3, {
+    scope: "running",
+    expected_usd: 1.1,
+    at: "2026-11-21T08:01:00+00:00",
+  });
+  const undated = entry("r3", 0.3, { scope: "running", expected_usd: 1.1, at: undefined });
+  assert.equal(summary(ledgerRuns(ledger(stale), "main"), { now: NOW }).projectedUsd, 0.3);
+  assert.equal(summary(ledgerRuns(ledger(live), "main"), { now: NOW }).projectedUsd, 1.1);
+  assert.equal(summary(ledgerRuns(ledger(undated), "main"), { now: NOW }).projectedUsd, 0.3);
+  // Its spend still counts: the unfinished chunk stays at its whole reservation.
+  assert.equal(summary(ledgerRuns(ledger(stale), "main"), { now: NOW }).spentUsd, 0.3);
+});
+
+test("recent runs of another phase's campaign are listed, not dropped", () => {
+  const runs = ledgerRuns(
+    ledger(
+      entry("own", 0.2, { at: "2026-11-21T11:00:00+00:00", stage: "phase-pr" }),
+      entry("other", 0.4, { at: "2026-11-21T11:00:00+00:00", campaign: "08-mcp-public" }),
+      entry("old", 0.4, { at: "2026-11-21T08:00:00+00:00", campaign: "08-mcp-public" }),
+      { run: "legacy", at: "2026-11-21T11:00:00+00:00", spent_usd: 1 },
+    ),
+    "feat-301-chat",
+  );
+  const spend = summary(runs, { since: Date.parse("2026-11-21T10:00:00Z"), now: NOW });
+  assert.deepEqual(
+    spend.recent.map((run) => [run.run, run.stage]),
+    [["own", "phase-pr"]],
+  );
+  assert.deepEqual(
+    spend.foreign.map((run) => [run.run, run.source, run.campaign, run.spentUsd]),
+    [
+      ["legacy", "feat-301-chat", "06-llm-agent", 1],
+      ["other", "feat-301-chat", "08-mcp-public", 0.4],
+    ],
+  );
+  assert.equal(spend.spentUsd, 0.2);
 });

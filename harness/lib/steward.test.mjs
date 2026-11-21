@@ -332,7 +332,7 @@ test("what cannot be measured never stops the loop by itself and is never read a
   assert.deepEqual(codes(assess(unreadable)), ["spend-unknown"]);
 });
 
-test("spend near the ceiling and a reached issue stop are warnings", () => {
+test("spend near the ceiling is a warning", () => {
   const near = {
     ...efficient,
     spend: spend({ spentUsd: 3.3, remainingUsd: 0.7, projectedUsd: 3.3, issueSpentUsd: 1 }),
@@ -342,8 +342,9 @@ test("spend near the ceiling and a reached issue stop are warnings", () => {
     ...efficient,
     spend: spend({ spentUsd: 1.5, issueSpentUsd: 1.5, remainingUsd: 2.5, projectedUsd: 1.5 }),
   };
+  // The reached issue stop is a hard stop (issue #384), shown as a problem.
   assert.deepEqual(codes(assess(issueStop)), ["issue-stop"]);
-  assert.deepEqual(hardStops(issueStop), []);
+  assert.equal(assess(issueStop)[0].level, "problem");
 });
 
 test("a third review round, a loaded machine and several full suites are warnings", () => {
@@ -555,4 +556,121 @@ test("the model may stop the loop for inefficient work, with a reason", () => {
 test("the model's report may carry a stop and its reason", () => {
   assert.equal(STEWARD_REPORT_SCHEMA.properties.stop.type, "boolean");
   assert.equal(STEWARD_REPORT_SCHEMA.properties.stopReason.type, "string");
+});
+
+// --- the gaps of the first guards (issue #384) -------------------------------------
+
+test("issue runs at or past their cumulative stop stop the loop", () => {
+  // Three issue worktrees with USD 1.00 each: every one within its own ledger's stop.
+  const facts = {
+    ...efficient,
+    spend: spend({
+      spentUsd: 3,
+      issueSpentUsd: 3,
+      issueProjectedUsd: 3,
+      remainingUsd: 1,
+      projectedUsd: 3,
+    }),
+  };
+  const [stop] = hardStops(facts);
+  assert.equal(stop.code, "issue-stop");
+  assert.match(stop.reason, /1\.50 USD/);
+  assert.match(stop.reason, /3\.0000 USD/);
+  const at = {
+    ...efficient,
+    spend: spend({ spentUsd: 1.5, issueSpentUsd: 1.5, issueProjectedUsd: 1.5 }),
+  };
+  assert.deepEqual(codes(hardStops(at)), ["issue-stop"]);
+  const below = {
+    ...efficient,
+    spend: spend({ spentUsd: 1.4, issueSpentUsd: 1.4, issueProjectedUsd: 1.4 }),
+  };
+  assert.deepEqual(hardStops(below), []);
+  // Phase-PR spend is not issue work.
+  const reserve = {
+    ...efficient,
+    spend: spend({ spentUsd: 2.6, issueSpentUsd: 0.6, issueProjectedUsd: 0.6 }),
+  };
+  assert.deepEqual(hardStops(reserve), []);
+});
+
+test("an issue run under way that is expected to pass the issue stop stops the loop", () => {
+  const facts = {
+    ...efficient,
+    spend: spend({ spentUsd: 1.2, issueSpentUsd: 1.2, issueProjectedUsd: 1.7, projectedUsd: 1.7 }),
+  };
+  const [stop] = hardStops(facts);
+  assert.equal(stop.code, "issue-stop");
+  assert.match(stop.reason, /projected/);
+  assert.match(stop.reason, /1\.7000 USD/);
+});
+
+test("the steward never says the runner refuses what only the loop stops", () => {
+  const facts = {
+    ...efficient,
+    spend: spend({ spentUsd: 1.5, issueSpentUsd: 1.5, issueProjectedUsd: 1.5 }),
+  };
+  for (const item of [...assess(facts), ...hardStops(facts)]) {
+    assert.doesNotMatch(item.message ?? item.reason, /runner refuses/);
+  }
+});
+
+test("a local phase-PR run during the loop stops it", () => {
+  const run = {
+    run: "r7",
+    source: "feat-301-chat",
+    campaign: "07-ai-service",
+    stage: "phase-pr",
+    scope: "running",
+    spentUsd: 0.2,
+  };
+  const facts = { ...efficient, spend: spend({ recent: [run] }) };
+  const [stop] = hardStops(facts);
+  assert.equal(stop.code, "phase-pr-run");
+  assert.match(stop.reason, /r7/);
+  assert.match(stop.reason, /feat-301-chat/);
+  assert.match(stop.reason, /--stage phase-pr/);
+});
+
+test("a paid run of another phase's campaign in the loop's worktree stops it", () => {
+  const foreign = {
+    run: "r8",
+    source: "feat-301-chat",
+    campaign: "08-mcp-public",
+    stage: "issue",
+    scope: "partial",
+    spentUsd: 0.4,
+  };
+  const facts = { ...efficient, worktree: "feat-301-chat", spend: spend({ foreign: [foreign] }) };
+  const [stop] = hardStops(facts);
+  assert.equal(stop.code, "foreign-campaign");
+  assert.match(stop.reason, /08-mcp-public/);
+  assert.match(stop.reason, /r8/);
+  // Another loop's or the owner's run elsewhere is theirs: reported to the model, no stop.
+  const elsewhere = {
+    ...facts,
+    spend: spend({ foreign: [{ ...foreign, source: "feat-410-search" }] }),
+  };
+  assert.deepEqual(hardStops(elsewhere), []);
+  assert.equal(modelTriggers(elsewhere).length, 1);
+  assert.match(modelTriggers(elsewhere)[0], /08-mcp-public/);
+  const unknown = { ...facts, worktree: null };
+  assert.deepEqual(hardStops(unknown), []);
+});
+
+test("the disk stop needs two readings in a row during an iteration", () => {
+  const first = { ...efficient, machine: machine({ freeDiskGb: 1.4, freeDiskGbBefore: 6 }) };
+  assert.deepEqual(hardStops(first), []);
+  assert.deepEqual(codes(assess(first)), ["disk"]);
+  assert.equal(assess(first)[0].level, "warn");
+  const unknownBefore = {
+    ...efficient,
+    machine: machine({ freeDiskGb: 1.4, freeDiskGbBefore: null }),
+  };
+  assert.deepEqual(hardStops(unknownBefore), []);
+  const second = { ...efficient, machine: machine({ freeDiskGb: 1.6, freeDiskGbBefore: 1.4 }) };
+  assert.deepEqual(codes(hardStops(second)), ["disk"]);
+  // Between iterations one reading is enough: nothing is cut off.
+  const between = { ...efficient, machine: machine({ freeDiskGb: 1.4 }) };
+  assert.deepEqual(codes(hardStops(between)), ["disk"]);
 });
