@@ -605,55 +605,349 @@ function checkPush(fullCommand, { currentBranch }) {
   return destinations.some((name) => PROTECTED_BRANCHES.has(name)) ? masterRefused : null;
 }
 
-function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
-  const command = fullCommand.match(MERGE)?.[0];
-  if (!command) return null;
-  if (isSubagent) {
-    return deny("Only the orchestrator merges, and only into a phase branch.");
+// --- reading a command the way the shell does ---------------------------------------------
+//
+// The rules below decide on words, not on spellings. `shellCommands` splits a command line into
+// its simple commands — at ; & | ( ) and newlines outside quotes — and each into words with the
+// quotes removed. Text inside quotes stays one word, so a commit message or a pull request body
+// that mentions a command is not one. What the shell fills in at run time — a variable, a
+// command substitution — is marked in the word with DYNAMIC: such a word cannot be read here. A
+// substitution's own commands (`$(…)`, backticks, also inside double quotes) are read as
+// commands too; a heredoc's body is text, except the substitutions of an unquoted heredoc.
+// `open` says a quote or substitution never closed: what the shell would run is then unknown.
+const DYNAMIC = "\u0000";
+const isDynamic = (word) => typeof word === "string" && word.includes(DYNAMIC);
+
+function closingParen(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === "\\") i += 1;
+    else if (char === "'") {
+      const end = text.indexOf("'", i + 1);
+      if (end === -1) return -1;
+      i = end;
+    } else if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
   }
-  if (
-    /\s(--repo|-R)(\s|=)/.test(command) ||
-    /https?:\/\//.test(command) ||
-    /\bGH_(REPO|HOST)=/.test(fullCommand)
-  ) {
-    return deny("Merge pull requests of this repository only, by number.");
-  }
-  const number = command.match(/\bgh\s+pr\s+merge\s+(?:[^\s-]\S*\s+)*?(\d+)\b/)?.[1];
-  if (!number) {
-    return deny("Name the pull request number explicitly so its base branch can be checked.");
-  }
-  let base;
-  try {
-    base = lookupPrBase(Number(number));
-  } catch {
-    base = null;
-  }
-  if (!base) return deny(`Could not confirm the base branch of #${number}; not merging.`);
-  if (PROTECTED_BRANCHES.has(base)) {
-    return deny("Pull requests into master are merged by the owner only.");
-  }
-  if (!/--squash\b/.test(command)) {
-    return deny("Issue pull requests are merged into the phase branch with --squash.");
-  }
-  return null;
+  return -1;
 }
 
+function shellCommands(command) {
+  const commands = [];
+  let open = false;
+
+  const read = (text) => {
+    let words = [];
+    let word = null;
+    let heredocs = [];
+    const add = (piece) => {
+      word = (word ?? "") + piece;
+    };
+    const endWord = () => {
+      if (word !== null) words.push(word);
+      word = null;
+    };
+    const endCommand = () => {
+      endWord();
+      if (words.length) commands.push(words);
+      words = [];
+    };
+    // Reads the substitution that starts at `at` (a backtick or the parenthesis of `$(`),
+    // hands its commands to `read` and returns where it ends.
+    const substitution = (at) => {
+      const end = text[at] === "`" ? text.indexOf("`", at + 1) : closingParen(text, at);
+      if (end === -1) {
+        open = true;
+        read(text.slice(at + 1));
+        return text.length;
+      }
+      read(text.slice(at + 1, end));
+      return end + 1;
+    };
+
+    let i = 0;
+    while (i < text.length) {
+      const char = text[i];
+      if (char === "'") {
+        const end = text.indexOf("'", i + 1);
+        if (end === -1) {
+          open = true;
+          add(text.slice(i + 1));
+          break;
+        }
+        add(text.slice(i + 1, end));
+        i = end + 1;
+      } else if (char === '"') {
+        add("");
+        i += 1;
+        while (i < text.length && text[i] !== '"') {
+          if (text[i] === "\\" && i + 1 < text.length) {
+            add(text[i + 1]);
+            i += 2;
+          } else if (text[i] === "`" || (text[i] === "$" && text[i + 1] === "(")) {
+            add(DYNAMIC);
+            i = substitution(text[i] === "`" ? i : i + 1);
+          } else if (text[i] === "$") {
+            add(DYNAMIC);
+            i += 1;
+          } else {
+            add(text[i]);
+            i += 1;
+          }
+        }
+        if (i >= text.length) open = true;
+        i += 1;
+      } else if (char === "\\") {
+        if (text[i + 1] !== "\n" && text[i + 1] !== undefined) add(text[i + 1]);
+        i += 2;
+      } else if (char === "`" || (char === "$" && text[i + 1] === "(")) {
+        add(DYNAMIC);
+        i = substitution(char === "`" ? i : i + 1);
+      } else if (char === "$") {
+        add(DYNAMIC);
+        i += 1;
+      } else if (char === "<" && text[i + 1] === "<" && text[i + 2] !== "<") {
+        // A heredoc: its delimiter, quoted or not; the body starts after this line.
+        i += 2;
+        const strip = text[i] === "-";
+        if (strip) i += 1;
+        while (text[i] === " " || text[i] === "\t") i += 1;
+        let delimiter = "";
+        let quoted = false;
+        while (i < text.length && !/[\s;&|()<>]/.test(text[i])) {
+          if (text[i] === "'" || text[i] === '"') {
+            quoted = true;
+            const end = text.indexOf(text[i], i + 1);
+            if (end === -1) break;
+            delimiter += text.slice(i + 1, end);
+            i = end + 1;
+          } else {
+            if (text[i] === "\\") {
+              quoted = true;
+              i += 1;
+            }
+            delimiter += text[i] ?? "";
+            i += 1;
+          }
+        }
+        if (delimiter) heredocs.push({ delimiter, quoted, strip });
+      } else if (char === "\n") {
+        endCommand();
+        i += 1;
+        for (const { delimiter, quoted, strip } of heredocs) {
+          const body = [];
+          let closed = false;
+          while (i < text.length && !closed) {
+            const end = text.indexOf("\n", i);
+            const line = text.slice(i, end === -1 ? text.length : end);
+            i = end === -1 ? text.length : end + 1;
+            if ((strip ? line.replace(/^\t+/, "") : line) === delimiter) closed = true;
+            else body.push(line);
+          }
+          if (!quoted) {
+            // An unquoted heredoc still runs the substitutions in its body.
+            const inner = body.join("\n");
+            for (let at = 0; at < inner.length; at += 1) {
+              if (inner[at] === "\\") at += 1;
+              else if (inner[at] === "`" || (inner[at] === "$" && inner[at + 1] === "(")) {
+                const from = inner[at] === "`" ? at : at + 1;
+                const end =
+                  inner[from] === "`" ? inner.indexOf("`", from + 1) : closingParen(inner, from);
+                read(inner.slice(from + 1, end === -1 ? inner.length : end));
+                at = end === -1 ? inner.length : end;
+              }
+            }
+          }
+        }
+        heredocs = [];
+      } else if (char === "&" && (text[i - 1] === ">" || text[i + 1] === ">")) {
+        // 2>&1 and &> are redirections, not the end of a command.
+        add(char);
+        i += 1;
+      } else if (/[;&|()]/.test(char)) {
+        endCommand();
+        i += 1;
+      } else if (/\s/.test(char)) {
+        endWord();
+        i += 1;
+      } else {
+        add(char);
+        i += 1;
+      }
+    }
+    endCommand();
+  };
+
+  read(String(command));
+  return { commands, open };
+}
+
+const programOf = (word) => (isDynamic(word) ? word : path.basename(word ?? ""));
+const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+// Words that run the command that follows them, with their own options in between.
+const COMMAND_WRAPPERS = new Set([
+  "{",
+  "!",
+  "if",
+  "then",
+  "else",
+  "elif",
+  "do",
+  "while",
+  "until",
+  "time",
+  "command",
+  "builtin",
+  "exec",
+  "nohup",
+  "env",
+  "sudo",
+  "xargs",
+  "timeout",
+  "nice",
+  "ionice",
+  "stdbuf",
+  "setsid",
+]);
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+
+// Every simple command a command line runs, as words: those written out, and those handed to a
+// shell as text (`sh -c '…'`, `eval …`), each also behind wrappers such as `command`, `exec`,
+// `time`, `nohup`, `env` or `{`. Each is { words, from } where `from` is the index of the
+// program's own word, after assignments and wrappers.
+function invocations(command) {
+  const { commands, open } = shellCommands(command);
+  const found = [];
+  const queue = [...commands];
+  for (let guard = 0; queue.length > 0 && guard < 500; guard += 1) {
+    const words = queue.shift();
+    let from = 0;
+    while (from < words.length) {
+      const word = words[from];
+      if (ASSIGNMENT.test(word)) from += 1;
+      else if (COMMAND_WRAPPERS.has(programOf(word))) {
+        from += 1;
+        // The wrapper's own options, and a value such as timeout's duration.
+        while (from < words.length && (words[from].startsWith("-") || /^\d/.test(words[from]))) {
+          from += 1;
+        }
+      } else break;
+    }
+    const program = programOf(words[from]);
+    if (SHELLS.has(program)) {
+      const at = words.findIndex((word, index) => index > from && /^-[a-z]*c$/.test(word));
+      if (at !== -1 && words[at + 1] !== undefined) {
+        queue.push(...shellCommands(words[at + 1].replaceAll(DYNAMIC, "$")).commands);
+      }
+    } else if (program === "eval") {
+      const text = words
+        .slice(from + 1)
+        .join(" ")
+        .replaceAll(DYNAMIC, "$");
+      queue.push(...shellCommands(text).commands);
+    }
+    found.push({ words, from });
+  }
+  return { found, open };
+}
+
+// --- gh --------------------------------------------------------------------------------------
+//
 // The phase pull request stays a draft until the owner switches it: marking it ready starts the
 // paid model evals of the phase, once, on its final state (docs/git-workflow.md, Phase pull
-// request). No agent marks a pull request whose head is `phase/*` ready, closes or reopens it —
-// with `gh pr ready|close|reopen` or the same change through `gh api`. In the loop and in a
-// subagent the call is refused; in an interactive main session the owner is asked, so the change
-// happens only on the owner's own confirmation. A pull request that cannot be identified is
-// treated like a phase pull request.
+// request). No agent creates a pull request whose head is `phase/*` without `--draft`, marks one
+// ready, closes or reopens it — with `gh pr …` or the same change through `gh api` — and only the
+// orchestrator merges, only into a phase branch. In the loop and in a subagent such a call is
+// refused; in an interactive main session the owner is asked, so the change happens only on the
+// owner's own confirmation.
 //
-// Creating it counts too: a phase pull request opened without `--draft` starts the paid run at
-// once, so `gh pr create` for a `phase/*` head needs `--draft`. And gh takes flags between `gh`,
-// `pr` and the verb (`gh pr -R o/r ready 50`, `gh --repo o/r pr ready 50`): such a call names its
-// pull request in a way the guard does not follow, so it is unidentifiable and refused.
-// gh where the shell runs a command: at the start, after ; & | ( a newline or a backtick.
-const GH_CALL = /(?:^|[;&|(\n`]\s*)(?:env\s+)?(?:\w+=\S*\s+)*gh(?=\s)/g;
-const PR_STATE_VERBS = new Set(["ready", "close", "reopen"]);
+// gh is read in its parsed form: the command group and the verb are found by skipping flags.
+// A call that cannot be identified is treated like the guarded call it may be: a flag before the
+// group (`gh -R o/r workflow run …` — every rule below would otherwise read past it), a group or
+// verb the shell fills in or that gh does not have (an alias or an extension can be anything),
+// and a flag between `pr` and a guarded verb. `--help` and `--version` only print.
 const GH_FLAGS_WITH_VALUE = new Set(["-R", "--repo", "--hostname"]);
+const GH_PRINTS_ONLY = new Set(["--help", "-h", "--version"]);
+const GH_GROUPS = new Set([
+  "agent-task",
+  "alias",
+  "api",
+  "attestation",
+  "auth",
+  "browse",
+  "cache",
+  "co",
+  "codespace",
+  "completion",
+  "config",
+  "copilot",
+  "extension",
+  "gist",
+  "gpg-key",
+  "help",
+  "issue",
+  "label",
+  "org",
+  "pr",
+  "preview",
+  "project",
+  "release",
+  "repo",
+  "ruleset",
+  "run",
+  "search",
+  "secret",
+  "ssh-key",
+  "status",
+  "variable",
+  "version",
+  "workflow",
+]);
+// What the phase loop never needs (also UNATTENDED_FORBIDDEN above, on the command as written).
+const GH_LOOP_FORBIDDEN = new Set([
+  "api",
+  "repo",
+  "secret",
+  "auth",
+  "label",
+  "workflow",
+  "ruleset",
+  "variable",
+]);
+// Groups whose calls some rule here guards; an unidentifiable call may be one of them.
+const GH_GUARDED = new Set(["pr", "api", "workflow", "secret", "variable"]);
+// `gh alias` and `gh extension` make gh run what no rule can read.
+const GH_INDIRECT = new Set(["alias", "extension"]);
+const PR_VERBS = new Set([
+  "checkout",
+  "checks",
+  "close",
+  "comment",
+  "create",
+  "new",
+  "diff",
+  "edit",
+  "list",
+  "ls",
+  "lock",
+  "merge",
+  "ready",
+  "reopen",
+  "revert",
+  "review",
+  "status",
+  "unlock",
+  "update-branch",
+  "view",
+]);
+const PR_STATE_VERBS = new Set(["ready", "close", "reopen"]);
+const PR_CREATE_VERBS = new Set(["create", "new"]);
+const PR_GUARDED_VERBS = new Set([...PR_STATE_VERBS, ...PR_CREATE_VERBS, "merge"]);
+const PR_STATE_OPTIONS_WITH_VALUE = new Set(["-c", "--comment"]);
 // Options of `gh pr create` that take the next word as their value.
 const PR_CREATE_OPTIONS_WITH_VALUE = new Set([
   "-a",
@@ -684,8 +978,17 @@ const PR_CREATE_OPTIONS_WITH_VALUE = new Set([
 ]);
 // Its short options without a value, which may be written together (`-df`).
 const PR_CREATE_SHORT_SWITCHES = /^-[dfwe]+$/;
-const GH_API = /(?:^|[;&|(\n`]\s*)(?:env\s+)?(?:\w+=\S*\s+)*gh\s+api\b([^;&|\n]*)/g;
-const PR_STATE_OPTIONS_WITH_VALUE = new Set(["-c", "--comment"]);
+const PR_MERGE_OPTIONS_WITH_VALUE = new Set([
+  "-A",
+  "--author-email",
+  "-b",
+  "--body",
+  "-F",
+  "--body-file",
+  "--match-head-commit",
+  "-t",
+  "--subject",
+]);
 const PR_STATE_MUTATIONS =
   /\b(markPullRequestReadyForReview|convertPullRequestToDraft|closePullRequest|reopenPullRequest|mergePullRequest|enablePullRequestAutoMerge)\b/;
 const PHASE_PR_REASON =
@@ -693,90 +996,57 @@ const PHASE_PR_REASON =
 const PHASE_PR_DRAFT_REASON =
   "A phase pull request is only ever created as a draft: `gh pr create --draft --base <base> --head phase/<phase-folder> …` (docs/git-workflow.md, Phase pull request; docs/permissions.md). Without --draft it starts the phase's paid model evals at once. The owner marks it ready when the phase is complete.";
 const PR_CREATE_UNKNOWN =
-  "Could not confirm that this does not create a phase pull request without --draft, so it is not created (docs/permissions.md). Name the head with --head <branch>, keep gh's flags after `gh pr create`, without --repo, and pass a long body with --body-file <file>.";
+  "Could not confirm that this does not create a phase pull request without --draft, so it is not created (docs/permissions.md). Name the head in plain text with --head <branch> — not from a variable or a substitution, and not after a `cd`, `git switch` or `git checkout` in the same command — keep gh's flags after `gh pr create`, without --repo, and pass a long body with --body-file <file>. A draft (--draft) is always allowed.";
 const PHASE_PR_UNKNOWN =
-  "Could not confirm that this is not a phase pull request, so its state is not changed (docs/permissions.md). Name a pull request of this repository by its number, without --repo; to close an issue use `gh issue close <number>`.";
+  "Could not confirm that this is not a phase pull request, so its state is not changed (docs/permissions.md). Name a pull request of this repository by its number, in plain text, with gh's flags after the verb and without --repo; to close an issue use `gh issue close <number>`.";
+const GH_UNREADABLE_REASON =
+  "Could not confirm what this gh call does, so it is refused (docs/permissions.md): write the command group and the verb in plain text straight after `gh` — `gh pr view 12 --repo <owner>/<repo>`, not `gh -R <owner>/<repo> pr view 12` — and do not take them from a variable, a substitution, an alias or an extension.";
+const MERGE_UNKNOWN_REASON =
+  "Only the orchestrator merges, only a pull request of this repository named by its number in plain text, only into a phase branch and with --squash: `gh pr merge <number> --squash --delete-branch`, with no flag before `merge` (docs/git-workflow.md).";
 
 const isPhaseBranch = (name) => /^(?:[^:/\s]+:)?phase\/\S+$/.test(name ?? "");
 
-// Whether the text at `index` is only quoted text and not a command: inside single quotes, or
-// inside double quotes that hold no command substitution so far. A pull request body or a commit
-// message that mentions `gh pr close` on a line of its own is such text; `"$(gh pr ready 50)"`
-// is not. (A heredoc is not quoting: pass a long body with --body-file.)
-function isQuotedText(command, index) {
-  let quote = null;
-  let substitution = false;
-  for (let i = 0; i < index; i += 1) {
-    const char = command[i];
-    if (quote === "'") {
-      if (char === "'") quote = null;
-    } else if (char === "\\") {
-      i += 1;
-    } else if (quote === '"') {
-      if (char === '"') quote = null;
-      else if (char === "`" || (char === "$" && command[i + 1] === "(")) substitution = true;
-    } else if (char === "'" || char === '"') {
-      quote = char;
-      substitution = false;
-    }
-  }
-  return quote === "'" || (quote === '"' && !substitution);
+// A change of the checked-out branch earlier in the same command line: the branch the hook saw
+// is then not the branch a later command acts on.
+const BRANCH_CHANGING_GIT = new Set([
+  "switch",
+  "checkout",
+  "branch",
+  "rebase",
+  "bisect",
+  "worktree",
+]);
+function changesBranch(found) {
+  return found.some(({ words, from }) => {
+    const git = programOf(words[from]) === "git" ? gitInvocation(words.slice(from)) : null;
+    return git !== null && (isDynamic(git.sub) || BRANCH_CHANGING_GIT.has(git.sub));
+  });
 }
 
-// The words of the simple command that continues at `start`: up to the next ; & | or newline
-// outside quotes, quotes removed, a backslash taking the next character literally (and joining a
-// continued line). Null when a quote is left open: what the shell would run is then unknown.
-function commandWordsFrom(command, start) {
-  const words = [];
-  let word = null;
-  let quote = null;
-  for (let i = start; i < command.length; i += 1) {
-    const char = command[i];
-    if (quote) {
-      if (char === quote) quote = null;
-      else word += char;
-    } else if (char === "'" || char === '"') {
-      quote = char;
-      word ??= "";
-    } else if (char === "\\") {
-      i += 1;
-      if (command[i] !== "\n" && command[i] !== undefined) word = (word ?? "") + command[i];
-    } else if (/[;&|\n]/.test(char)) {
-      break;
-    } else if (/\s/.test(char)) {
-      if (word !== null) words.push(word);
-      word = null;
-    } else word = (word ?? "") + char;
-  }
-  if (quote) return null;
-  if (word !== null) words.push(word);
-  return words;
-}
-
-// What a gh invocation does to pull requests, from the words after `gh`: { verb, args, flagged }
-// for `gh pr <verb> …`, null for anything else. `flagged` when flags stand between `gh`, `pr`
-// and the verb.
-function ghPrCall(words) {
+// A gh call from the words after `gh`: { prints } for one that only prints help or a version,
+// else { group, verb, args, flaggedGroup, flaggedVerb } — `flaggedGroup` when a flag stands
+// before the command group, `flaggedVerb` when one stands between the group and its verb.
+function readGh(words) {
   let i = 0;
-  let flagged = false;
   const skipFlags = () => {
+    let flagged = false;
     while (i < words.length && words[i].startsWith("-")) {
+      if (GH_PRINTS_ONLY.has(words[i])) return null;
       flagged = true;
       i += GH_FLAGS_WITH_VALUE.has(words[i]) ? 2 : 1;
     }
+    return flagged;
   };
-  skipFlags();
-  if (words[i] !== "pr") return null;
+  const flaggedGroup = skipFlags();
+  if (flaggedGroup === null || i >= words.length) return { prints: true };
+  const group = words[i];
   i += 1;
-  skipFlags();
-  let verb = words[i];
-  // A verb the shell fills in from a variable or a substitution cannot be read here.
-  if (/[$`]/.test(verb ?? "")) return { verb: null, args: words.slice(i + 1), flagged };
-  // A flag whose value this reading did not expect must not hide the verb behind it.
-  if (flagged && !PR_STATE_VERBS.has(verb) && verb !== "create") {
-    verb = words.slice(i, i + 3).find((word) => PR_STATE_VERBS.has(word) || word === "create");
-  }
-  return verb ? { verb, args: words.slice(words.indexOf(verb, i) + 1), flagged } : null;
+  const rest = words.slice(i);
+  const flaggedVerb = skipFlags();
+  if (flaggedVerb === null) return { prints: true };
+  const args = words.slice(i + 1);
+  if (args.some((word) => GH_PRINTS_ONLY.has(word))) return { prints: true };
+  return { group, verb: words[i], args, rest, flaggedGroup, flaggedVerb };
 }
 
 // The head branch `gh pr create` was given and whether it asks for a draft:
@@ -797,8 +1067,9 @@ function prCreateOptions(args) {
   return { head, draft };
 }
 
-function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranch }) {
-  // Only the owner, asked in an interactive main session, can let such a change through.
+function checkGh(fullCommand, facts) {
+  const { restricted, unattended, isSubagent, lookupPrHead, lookupPrBase, currentBranch } = facts;
+  // Only the owner, asked in an interactive main session, can let a guarded call through.
   const refuse = (reason) => (restricted ? deny(reason) : { reason, decision: "ask" });
   const headOf = (selector) => {
     try {
@@ -807,38 +1078,68 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
       return null;
     }
   };
+  const { found, open } = invocations(fullCommand);
+  if (open && /\bgh\b/.test(fullCommand)) {
+    // An open quote or substitution: what gh would be given is unknown.
+    const guarded = /\b(pr|api|workflow|secret|variable)\b/.test(fullCommand);
+    if (restricted || guarded) return refuse(GH_UNREADABLE_REASON);
+  }
   const elsewhere = /\bGH_(REPO|HOST)=/.test(fullCommand);
-  const branchKnown = Boolean(currentBranch) && !MOVES.test(fullCommand);
+  const branchKnown = Boolean(currentBranch) && !MOVES.test(fullCommand) && !changesBranch(found);
 
-  for (const match of fullCommand.matchAll(GH_CALL)) {
-    const after = match.index + match[0].length;
-    if (isQuotedText(fullCommand, after - 2)) continue;
-    const words = commandWordsFrom(fullCommand, after);
-    if (words === null) {
-      // An open quote: refuse when what can be read still looks like a pull request change.
-      const rest = fullCommand.slice(after).split(/[;&|\n]/)[0];
-      if (/\bpr\b[\s\S]*\b(ready|close|reopen|create)\b/.test(rest)) {
-        return refuse(/\bcreate\b/.test(rest) ? PR_CREATE_UNKNOWN : PHASE_PR_UNKNOWN);
-      }
+  for (const { words, from } of found) {
+    if (programOf(words[from]) !== "gh") continue;
+    const call = readGh(words.slice(from + 1));
+    if (call.prints) continue;
+    const { group, verb, args, rest, flaggedGroup, flaggedVerb } = call;
+
+    const unreadable = isDynamic(group) || !GH_GROUPS.has(group);
+    if (flaggedGroup || unreadable || GH_INDIRECT.has(group)) {
+      if (restricted) return deny(GH_UNREADABLE_REASON);
+      // Interactively only what may be a guarded call is put to the owner.
+      if (unreadable || GH_GUARDED.has(group)) return refuse(GH_UNREADABLE_REASON);
       continue;
     }
-    const call = ghPrCall(words);
-    if (!call) continue;
-    const { verb, args, flagged } = call;
-    if (verb === null) return refuse(PHASE_PR_UNKNOWN);
+    if (unattended && GH_LOOP_FORBIDDEN.has(group)) return deny(SETTINGS_REASON);
+
+    if (group === "api") {
+      const verdict = checkGhApi(rest, { refuse, headOf, elsewhere });
+      if (verdict) return verdict;
+      continue;
+    }
+    if (group !== "pr") continue;
+    if (verb === undefined) continue;
+    if (isDynamic(verb) || !PR_VERBS.has(verb)) return refuse(PHASE_PR_UNKNOWN);
+    if (!PR_GUARDED_VERBS.has(verb)) continue;
     const otherRepository = elsewhere || args.some((word) => /^(--repo|-R)(=|$)/.test(word));
 
-    if (verb === "create") {
+    if (verb === "merge") {
+      const verdict = checkGhMerge(args, {
+        flaggedVerb,
+        otherRepository,
+        isSubagent,
+        lookupPrBase,
+      });
+      if (verdict) return verdict;
+      continue;
+    }
+    if (PR_CREATE_VERBS.has(verb)) {
       const { head, draft } = prCreateOptions(args);
-      if (draft === true && !flagged) continue;
-      if (flagged || otherRepository) return refuse(PR_CREATE_UNKNOWN);
-      // Without --head gh takes the checked-out branch.
-      if (head === null && !branchKnown) return refuse(PR_CREATE_UNKNOWN);
+      if (
+        draft === true &&
+        !flaggedVerb &&
+        !args.some((word) => isDynamic(word) && /^--draft/.test(word))
+      ) {
+        continue;
+      }
+      if (flaggedVerb || otherRepository) return refuse(PR_CREATE_UNKNOWN);
+      // A head from a variable or a substitution, or — without --head — a branch this command
+      // line may have changed, cannot be told from a phase branch.
+      if (head === null ? !branchKnown : isDynamic(head)) return refuse(PR_CREATE_UNKNOWN);
       if (isPhaseBranch(head ?? currentBranch)) return refuse(PHASE_PR_DRAFT_REASON);
       continue;
     }
-    if (!PR_STATE_VERBS.has(verb)) continue;
-    if (flagged || otherRepository) return refuse(PHASE_PR_UNKNOWN);
+    if (flaggedVerb || otherRepository) return refuse(PHASE_PR_UNKNOWN);
     let selector = null;
     for (let i = 0; i < args.length && selector === null; i += 1) {
       if (PR_STATE_OPTIONS_WITH_VALUE.has(args[i])) i += 1;
@@ -849,6 +1150,8 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
       // Without a selector gh acts on the pull request of the checked-out branch.
       if (!branchKnown) return refuse(PHASE_PR_UNKNOWN);
       head = currentBranch;
+    } else if (isDynamic(selector)) {
+      return refuse(PHASE_PR_UNKNOWN);
     } else if (isPhaseBranch(selector)) {
       head = selector;
     } else {
@@ -857,75 +1160,142 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
     }
     if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
   }
+  return null;
+}
 
-  for (const apiCall of fullCommand.matchAll(GH_API)) {
-    if (isQuotedText(fullCommand, apiCall.index + apiCall[0].indexOf("gh"))) continue;
-    const args = apiCall[1];
-    // Merging through the REST endpoint: a phase pull request is merged by the owner only.
-    const merged = /(?:^|[\s/'"])pulls\/(\d+)\/merge(?=$|[\s'"?])/.exec(args)?.[1];
-    if (merged && /(?:^|\s)(?:-X|--method)[\s=]*['"]?PUT\b/i.test(args)) {
-      const head = elsewhere ? null : headOf(merged);
-      if (!head) return refuse(PHASE_PR_UNKNOWN);
-      if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
-      continue;
-    }
-    if (/(^|[\s/'"])graphql(?=$|[\s'"])/.test(args)) {
-      // A mutation names its pull request by a node ID, and a query read from a file cannot be
-      // seen at all: neither can be matched to a pull request, so both count as a phase one.
-      if (PR_STATE_MUTATIONS.test(args) || /(=@|--input\b)/.test(args)) {
-        return refuse(PHASE_PR_REASON);
-      }
-      if (/\bupdatePullRequest\b/.test(args) && /\bstate\b/.test(args)) {
-        return refuse(PHASE_PR_REASON);
-      }
-      continue;
-    }
-    const number = /(?:^|[\s/'"])(?:pulls|issues)\/(\d+)(?=$|[\s'"?])/.exec(args)?.[1];
-    if (!number) continue;
-    const changesState =
-      /(?:^|\s)(?:-f|-F|--field|--raw-field)[\s=]*['"]?(?:state|draft)=/.test(args) ||
-      /(?:^|\s)--input\b/.test(args);
-    if (!changesState) continue;
-    if (elsewhere) return refuse(PHASE_PR_UNKNOWN);
-    const head = headOf(number);
-    if (!head) return refuse(PHASE_PR_UNKNOWN);
-    if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
+// `gh pr merge` in its parsed form: only the orchestrator, only this repository's pull request
+// by number, only into a phase branch, only with --squash.
+function checkGhMerge(args, { flaggedVerb, otherRepository, isSubagent, lookupPrBase }) {
+  if (isSubagent) return deny("Only the orchestrator merges, and only into a phase branch.");
+  if (flaggedVerb || otherRepository || args.some((word) => /^https?:\/\//.test(word))) {
+    return deny(MERGE_UNKNOWN_REASON);
+  }
+  let selector = null;
+  for (let i = 0; i < args.length && selector === null; i += 1) {
+    if (PR_MERGE_OPTIONS_WITH_VALUE.has(args[i])) i += 1;
+    else if (!args[i].startsWith("-")) selector = args[i];
+  }
+  if (selector === null || !/^\d+$/.test(selector)) return deny(MERGE_UNKNOWN_REASON);
+  let base;
+  try {
+    base = lookupPrBase(Number(selector));
+  } catch {
+    base = null;
+  }
+  if (!base) return deny(`Could not confirm the base branch of #${selector}; not merging.`);
+  if (PROTECTED_BRANCHES.has(base)) {
+    return deny("Pull requests into master are merged by the owner only.");
+  }
+  if (!args.some((word) => word === "--squash" || /^-[a-z]*s[a-z]*$/.test(word))) {
+    return deny("Issue pull requests are merged into the phase branch with --squash.");
   }
   return null;
 }
 
+// `gh api …` from its words: a state change of a pull request through REST or GraphQL.
+function checkGhApi(words, { refuse, headOf, elsewhere }) {
+  const has = (pattern) => words.some((word) => pattern.test(word));
+  const method = () => {
+    for (let i = 0; i < words.length; i += 1) {
+      const inline = /^(?:-X|--method)=?(.+)$/.exec(words[i])?.[1];
+      if (inline) return inline.toUpperCase();
+      if (words[i] === "-X" || words[i] === "--method") return (words[i + 1] ?? "").toUpperCase();
+    }
+    return null;
+  };
+  if (words.some(isDynamic) && has(/graphql|pulls|issues/)) {
+    // An endpoint, a field or a query the shell fills in cannot be read.
+    return refuse(PHASE_PR_UNKNOWN);
+  }
+  if (words.includes("graphql") || has(/(^|\/)graphql$/)) {
+    // A mutation names its pull request by a node ID, and a query read from a file cannot be
+    // seen at all: neither can be matched to a pull request, so both count as a phase one.
+    if (has(PR_STATE_MUTATIONS) || has(/=@/) || words.includes("--input")) {
+      return refuse(PHASE_PR_REASON);
+    }
+    if (has(/\bupdatePullRequest\b/) && has(/\bstate\b/)) return refuse(PHASE_PR_REASON);
+    return null;
+  }
+  // Merging through the REST endpoint: a phase pull request is merged by the owner only.
+  const merged = words
+    .map((word) => /(?:^|\/)pulls\/(\d+)\/merge(?:\?.*)?$/.exec(word)?.[1])
+    .find(Boolean);
+  if (merged && method() === "PUT") {
+    const head = elsewhere ? null : headOf(merged);
+    if (!head) return refuse(PHASE_PR_UNKNOWN);
+    return isPhaseBranch(head) ? refuse(PHASE_PR_REASON) : null;
+  }
+  const number = words
+    .map((word) => /(?:^|\/)(?:pulls|issues)\/(\d+)(?:\?.*)?$/.exec(word)?.[1])
+    .find(Boolean);
+  if (!number) return null;
+  const fields = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const inline = /^(?:-f|-F|--field|--raw-field)=?(.+)$/.exec(words[i])?.[1];
+    if (inline) fields.push(inline);
+    else if (/^(?:-f|-F|--field|--raw-field)$/.test(words[i])) fields.push(words[i + 1] ?? "");
+  }
+  const changesState =
+    fields.some((field) => /^(?:state|draft)=/.test(field)) || words.includes("--input");
+  if (!changesState) return null;
+  if (elsewhere) return refuse(PHASE_PR_UNKNOWN);
+  const head = headOf(number);
+  if (!head) return refuse(PHASE_PR_UNKNOWN);
+  return isPhaseBranch(head) ? refuse(PHASE_PR_REASON) : null;
+}
+
+// --- the stage and campaign of a paid eval run -------------------------------------------------
+//
 // A paid eval run in the loop spends from the loop's phase campaign at the stage `issue`
 // (packages/llm-agent/evals/budget.py). Declaring `--stage phase-pr` lifts both stops for issue
 // runs, and that run belongs to CI after the owner makes the phase pull request ready; setting
 // or clearing SEBELA_EVAL_CAMPAIGN renames the campaign the loop named, and
 // SEBELA_EVAL_KEPT_RUNS hides the spend of the other worktrees from the runner. The loop and
-// subagents do none of these; an interactive main session asks the owner. Commands that only
-// read (grep, cat, …) may mention them.
-const PHASE_PR_STAGE = /--stage(?:\s+|=)(['"]?)phase-pr\1(?=$|[\s;&|)])/;
-const EVAL_VARIABLES = "SEBELA_EVAL_(?:CAMPAIGN|KEPT_RUNS)";
-const EVAL_VARIABLE = new RegExp(`\\b${EVAL_VARIABLES}\\b`);
-const EVAL_VARIABLE_ASSIGNED = new RegExp(`\\b${EVAL_VARIABLES}\\s*=`);
-const EVAL_VARIABLE_DROPPED = new RegExp(`(?:^|\\s)(?:-u\\s*|--unset[=\\s])${EVAL_VARIABLES}\\b`);
-// Read one simple command at a time, with patterns that cannot backtrack over each other: an
-// assignment, env's -u/--unset, or `unset` and the variable in the same simple command.
-function changesEvalVariable(command) {
-  if (!EVAL_VARIABLE.test(command)) return false;
-  if (EVAL_VARIABLE_ASSIGNED.test(command) || EVAL_VARIABLE_DROPPED.test(command)) return true;
-  return command
-    .split(/[;&|(){}\n]/)
-    .some((simple) => EVAL_VARIABLE.test(simple) && simple.split(/\s/).includes("unset"));
-}
+// subagents do none of these; an interactive main session asks the owner. The rule reads the
+// words of each simple command, so quoted text that mentions the option or a variable — a commit
+// message, an issue comment, a search pattern — is not refused.
+const EVAL_VARIABLE = /^SEBELA_EVAL_(?:CAMPAIGN|KEPT_RUNS)$/;
+const EVAL_VARIABLE_ASSIGNED = /^SEBELA_EVAL_(?:CAMPAIGN|KEPT_RUNS)=/;
+// Programs whose arguments set or clear variables for what follows.
+const VARIABLE_PROGRAMS = new Set(["export", "declare", "typeset", "readonly", "local", "unset"]);
 const PHASE_PR_STAGE_REASON =
-  "A paid eval run with `--stage phase-pr` is the phase pull request's run: it belongs to CI, after the owner marks the phase pull request ready, and is never started by an agent (docs/testing.md, Running paid evals; docs/permissions.md). Run the issue's affected cases with `--stage issue`, within the stops for issue runs.";
+  "A paid eval run with `--stage phase-pr` is the phase pull request's run: it belongs to CI, after the owner marks the phase pull request ready, and is never started by an agent (docs/testing.md, Running paid evals; docs/permissions.md). Run the issue's affected cases with `--stage issue`, written in plain text, within the stops for issue runs.";
 const EVAL_VARIABLE_REASON =
   "SEBELA_EVAL_CAMPAIGN and SEBELA_EVAL_KEPT_RUNS are set by the phase loop and are not set, changed or cleared by an agent: they name the phase's eval campaign and the loop's record of what was spent (docs/testing.md, Running paid evals; docs/permissions.md). Name the phase's own campaign with `--campaign <phase-folder>`.";
 
-function checkEvalStage(command, { restricted }) {
-  const stage = PHASE_PR_STAGE.test(command);
-  if (!stage && !changesEvalVariable(command)) return null;
-  if (isReadOnlyCommand(command)) return null;
-  const reason = stage ? PHASE_PR_STAGE_REASON : EVAL_VARIABLE_REASON;
-  return restricted ? deny(reason) : { reason, decision: "ask" };
+function checkEvalStage(fullCommand, { restricted }) {
+  const refuse = (reason) => (restricted ? deny(reason) : { reason, decision: "ask" });
+  for (const { words, from } of invocations(fullCommand).found) {
+    for (let i = 0; i < words.length; i += 1) {
+      const word = words[i];
+      // The stage of a run, also one the shell fills in: `--stage "$STAGE"` cannot be read.
+      const stage =
+        word === "--stage" ? words[i + 1] : word.startsWith("--stage=") ? word.slice(8) : null;
+      if (stage !== null && i >= from && (stage === "phase-pr" || isDynamic(stage))) {
+        return refuse(PHASE_PR_STAGE_REASON);
+      }
+      // An assignment in front of the program, or among env's arguments.
+      if (EVAL_VARIABLE_ASSIGNED.test(word) && i < from) return refuse(EVAL_VARIABLE_REASON);
+    }
+    const program = programOf(words[from]);
+    const args = words.slice(from + 1);
+    if (VARIABLE_PROGRAMS.has(program)) {
+      if (args.some((word) => EVAL_VARIABLE.test(word) || EVAL_VARIABLE_ASSIGNED.test(word))) {
+        return refuse(EVAL_VARIABLE_REASON);
+      }
+    }
+    // env's own way of dropping a variable, wherever env stands among the wrappers.
+    const env = words.findIndex((word, index) => index <= from && programOf(word) === "env");
+    if (env !== -1) {
+      const dropped = words.slice(env + 1).some((word, index, list) => {
+        if (word.startsWith("--unset=")) return EVAL_VARIABLE.test(word.slice(8));
+        if (/^-u./.test(word)) return EVAL_VARIABLE.test(word.slice(2));
+        return (word === "-u" || word === "--unset") && EVAL_VARIABLE.test(list[index + 1] ?? "");
+      });
+      if (dropped) return refuse(EVAL_VARIABLE_REASON);
+    }
+  }
+  return null;
 }
 
 // Returns null when the call may proceed, { reason } when it must be refused, or
@@ -1003,9 +1373,15 @@ export function evaluateToolCall({
     }
     return (
       checkEvalStage(command, { restricted }) ??
-      checkPhasePrState(command, { restricted, lookupPrHead, currentBranch }) ??
-      checkPush(command, { currentBranch }) ??
-      checkMerge(command, { isSubagent, lookupPrBase })
+      checkGh(command, {
+        restricted,
+        unattended,
+        isSubagent,
+        lookupPrHead,
+        lookupPrBase,
+        currentBranch,
+      }) ??
+      checkPush(command, { currentBranch })
     );
   }
 
