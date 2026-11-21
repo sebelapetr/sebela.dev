@@ -1,6 +1,6 @@
 """What a caller passes in: the question, execution identifiers and the limits it grants.
 
-The defaults of `ExecutionLimits` are the owner-agreed initial limits (`.plan/06-llm-agent/prd.md`,
+The defaults of `ExecutionLimits` are the owner-agreed initial limits (`.plan/done/06-llm-agent/prd.md`,
 Initial execution limits). A caller may only tighten them; nothing the model writes changes them.
 """
 

@@ -19,7 +19,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Available on `master`.** The website serves the profile, CV and AI Engineering Roadmap from the content API. The owner can maintain that content through MCP Admin. Visitors can try prepared answers on the Ask page. The next phase adds the Python library for model-generated answers. [Phase 06 specification](.plan/06-llm-agent/prd.md)
+> **Available on `master`.** The website serves the profile, CV and AI Engineering Roadmap from the content API. The owner can maintain that content through MCP Admin. Visitors can try prepared answers on the Ask page. The next phase adds the Python library for model-generated answers. [Phase 06 specification](.plan/done/06-llm-agent/prd.md)
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -110,7 +110,7 @@ The browser reaches the assistant through the website and API. The API owns conv
 
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
-The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/06-llm-agent/prd.md)
+The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/done/06-llm-agent/prd.md)
 
 ### Two servers, two responsibilities
 
@@ -130,7 +130,7 @@ Portfolio API content and owner-approved extra documents are chunked, embedded a
 
 ## Roadmap
 
-Phases 00–05 have merged into `master`. Phase 06 has an approved specification and six published implementation issues. The first public release is scheduled for phase 10. [Phase 06 issues](.plan/06-llm-agent/issues.md)
+Phases 00–05 have merged into `master`. Phase 06 has an approved specification and six published implementation issues. The first public release is scheduled for phase 10. [Phase 06 issues](.plan/done/06-llm-agent/issues.md)
 
 | Phase                       | Deliverable                                                                       | Specification                                                                      |
 | --------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -141,7 +141,7 @@ Phases 00–05 have merged into `master`. Phase 06 has an approved specification
 | **03 · Website**            | Presentation pages, CV, design system and a chat UI backed by prepared answers    | [Website](.plan/03-web/prd.md)                                                     |
 | **04 · AI Roadmap**         | Learning domain, diary, books, events and roadmap pages                           | [AI Roadmap](.plan/04-ai-roadmap/prd.md)                                           |
 | **05 · Admin MCP**          | Secured content-management tools and content skills                               | [Admin MCP](.plan/05-mcp-admin/prd.md)                                             |
-| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                        | [LLM agent](.plan/06-llm-agent/prd.md)                                             |
+| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                        | [LLM agent](.plan/done/06-llm-agent/prd.md)                                        |
 | **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                        | [AI service](.plan/07-ai-service/prd.md)                                           |
 | **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                       | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
 | **09 · RAG**                | Approved-source ingest, private originals, embeddings and retrieval               | [RAG](.plan/09-rag/prd.md)                                                         |

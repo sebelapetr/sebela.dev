@@ -1,4 +1,4 @@
-"""The fixed gates of `.plan/06-llm-agent/evals.md`, applied to graded case-runs.
+"""The fixed gates of `.plan/done/06-llm-agent/evals.md`, applied to graded case-runs.
 
 - every selected case ran `REPEATS` independent times, each completely graded;
 - every critical case-run passes (no averaging);
