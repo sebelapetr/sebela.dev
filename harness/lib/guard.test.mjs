@@ -1112,3 +1112,24 @@ test("a state change inside a command substitution in quotes still counts", () =
     assert.match(bash(command, inLoop)?.reason ?? "", /phase pull request/, command);
   }
 });
+
+test("the eval and pull request rules read a hostile command quickly", () => {
+  const hostile = [
+    "unset ".repeat(20_000),
+    `unset ${"A ".repeat(50_000)}`,
+    " -u".repeat(40_000),
+    `--stage${" ".repeat(100_000)}x`,
+    `gh ${"-R o/r ".repeat(15_000)}x`,
+    `gh pr ${"-- -".repeat(25_000)}`,
+    `${"a=b ".repeat(25_000)}gh`,
+    `gh api ${"pulls/1 ".repeat(12_000)}-X`,
+    `gh pr create ${"'a' ".repeat(25_000)}`,
+  ];
+  for (const command of hostile) {
+    const started = performance.now();
+    for (const session of [inLoop, asSubagent, interactive]) bash(command, session);
+    const took = performance.now() - started;
+    assert.ok(took < 1_000, `${command.slice(0, 20)}… took ${Math.round(took)} ms`);
+  }
+  assert.ok(bash(`unset ${"A ".repeat(50_000)}SEBELA_EVAL_CAMPAIGN`, asSubagent));
+});
