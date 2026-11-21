@@ -22,7 +22,11 @@ final count at 8, by recomputing the metrics offline for floors 0.36 to 0.41 and
   precision.
 
 The deployed values are a floor of 0.38, which leaves margin on both sides, and a final count of
-5 from a pool of 30. Chunking is unchanged: recall at the pool is already 1. These values are
+5 from a pool of 30. The pool stays at 30: recall at the pool is already 1 at that size in
+every vector-based variant, so a larger pool cannot add an answering passage, and each extra
+candidate is one more document in every rerank call (about 1,100 rerank tokens per query at
+30). A smaller pool was not measured, to keep paid runs down. Chunking is unchanged for the same
+reason: recall at the pool is already 1. These values are
 calibrated on the same questions they are measured on, so the reranked metrics are in-sample.
 The floor of 0.3 in the earlier vector and full-text runs was a placeholder.
 
@@ -65,6 +69,15 @@ above plus earlier paid runs of the phase). The full-text baseline embeds only w
 The three runs of #226 add about USD 0.0060, so the cumulative phase 9 spend is about
 USD 0.0093 of USD 3. Their reranker calls (50,175 tokens per complete run) are most of it.
 
+`reranked-calibration.json` records 7,513 index tokens against 4,137 in the other complete runs,
+and its portfolio reindex reports 132 chunks embedded and none reused. Every run indexes a fresh
+temporary database. The eval's API server starts its indexing queue on the seeded content while
+the eval runs `knowledge reindex`. In the other runs the queue had stored most vectors by the
+time the reindex reached them, so the reindex reused them. In the calibration run the reindex
+started before that, so both embedded the whole corpus, about USD 0.0002 extra. This is the
+single-runner caveat of the indexing queue (`docs/architecture.md`), seen in the eval harness.
+It is not caused by the reranked search.
+
 ## Four variants side by side
 
 All four measure the complete question set (45 questions, 40 answerable) with the same index,
@@ -96,5 +109,11 @@ to two decimals (1, 0.9 and 0.2); every other metric is reported, not gated. The
 a complete run of the deployed variant the file names. #226 deploys the reranked pipeline and
 switches `variant` to `reranked` with the minimums unchanged, since its values are in-sample (see
 Relevance floor and final count). `reranked-complete.json` meets every minimum: recall at the
-pool 1, nDCG 0.94 and a correct-empty rate of 0.8. The file records all four baselines. A later
+pool 1, nDCG 0.94 and a correct-empty rate of 0.8. The file records all four baselines.
+
+The `gate` block inside `reranked-complete.json` says `applies: false`: the run was made while
+the file still named `vector`, so the gate did not apply to it then. The published JSON is left
+as the run wrote it. Recomputing the gate from that summary's metrics against the current
+`../thresholds.json` (`gateOf` in `../run.js`) gives `applies: true`, `passed: true` and no
+failures; the next complete reranked run records that itself. A later
 slice may only raise the minimums.

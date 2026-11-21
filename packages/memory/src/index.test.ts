@@ -819,6 +819,19 @@ describe("keeping the index current after content writes", () => {
     for (const passage of during.passages) {
       expect(memory.sources.get(passage.sourceId)?.modelVersion).toBe("2");
     }
+    // The deployed search keeps answering with contract passages, one per source, within the
+    // final count, and reaches the sources not yet re-embedded through their current text.
+    const deployed = await knowledgeBase({
+      memory,
+      embedder: countingEmbedder({ version: "2" }).embedder,
+    }).retriever.search({ query: "hybrid search reranker archive" });
+    expect(SearchResultSchema.parse(deployed)).toEqual(deployed);
+    expect(deployed.status).toBe("found");
+    const deployedIds = deployed.passages.map((passage) => passage.sourceId);
+    expect(new Set(deployedIds).size).toBe(deployedIds.length);
+    expect(deployedIds.length).toBeLessThanOrEqual(config.finalPassages);
+    expect(deployedIds).toContain("portfolio:project:reading-assistant");
+    expect(deployedIds.some((id) => memory.sources.get(id)?.modelVersion !== "2")).toBe(true);
 
     const resumed = countingEmbedder({ version: "2" });
     const after = knowledgeBase({ memory, embedder: resumed.embedder });
