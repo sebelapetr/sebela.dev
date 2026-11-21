@@ -10,6 +10,7 @@ class ErrorResponseErrorCode(StrEnum):
     PAYLOAD_TOO_LARGE = "payload_too_large"
     RATE_LIMITED = "rate_limited"
     UNAUTHORIZED = "unauthorized"
+    UNAVAILABLE = "unavailable"
     UNSUPPORTED_MEDIA_TYPE = "unsupported_media_type"
     VALIDATION_FAILED = "validation_failed"
 
