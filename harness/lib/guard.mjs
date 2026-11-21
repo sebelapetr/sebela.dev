@@ -645,30 +645,79 @@ function checkMerge(fullCommand, { isSubagent, lookupPrBase }) {
 // subagent the call is refused; in an interactive main session the owner is asked, so the change
 // happens only on the owner's own confirmation. A pull request that cannot be identified is
 // treated like a phase pull request.
-const PR_STATE = new RegExp(`${AT_COMMAND}gh\\s+pr\\s+(ready|close|reopen)\\b([^;&|\\n]*)`, "g");
+//
+// Creating it counts too: a phase pull request opened without `--draft` starts the paid run at
+// once, so `gh pr create` for a `phase/*` head needs `--draft`. And gh takes flags between `gh`,
+// `pr` and the verb (`gh pr -R o/r ready 50`, `gh --repo o/r pr ready 50`): such a call names its
+// pull request in a way the guard does not follow, so it is unidentifiable and refused.
+const GH_CALL = new RegExp(`${AT_COMMAND}gh(?=\\s)`, "g");
+const PR_STATE_VERBS = new Set(["ready", "close", "reopen"]);
+const GH_FLAGS_WITH_VALUE = new Set(["-R", "--repo", "--hostname"]);
+// Options of `gh pr create` that take the next word as their value.
+const PR_CREATE_OPTIONS_WITH_VALUE = new Set([
+  "-a",
+  "--assignee",
+  "-B",
+  "--base",
+  "-b",
+  "--body",
+  "-F",
+  "--body-file",
+  "-H",
+  "--head",
+  "-l",
+  "--label",
+  "-m",
+  "--milestone",
+  "-p",
+  "--project",
+  "-r",
+  "--reviewer",
+  "-R",
+  "--repo",
+  "-T",
+  "--template",
+  "-t",
+  "--title",
+  "--recover",
+]);
+// Its short options without a value, which may be written together (`-df`).
+const PR_CREATE_SHORT_SWITCHES = /^-[dfwe]+$/;
 const GH_API = new RegExp(`${AT_COMMAND}gh\\s+api\\b([^;&|\\n]*)`, "g");
 const PR_STATE_OPTIONS_WITH_VALUE = new Set(["-c", "--comment"]);
 const PR_STATE_MUTATIONS =
   /\b(markPullRequestReadyForReview|convertPullRequestToDraft|closePullRequest|reopenPullRequest|mergePullRequest|enablePullRequestAutoMerge)\b/;
 const PHASE_PR_REASON =
   "The phase pull request stays a draft until the owner switches it: no agent marks a phase pull request ready, closes or reopens it (docs/git-workflow.md, Phase pull request; docs/permissions.md). Marking it ready starts the phase's paid model evals. Leave it as it is, report what is done and let the owner change its state.";
+const PHASE_PR_DRAFT_REASON =
+  "A phase pull request is only ever created as a draft: `gh pr create --draft --base <base> --head phase/<phase-folder> …` (docs/git-workflow.md, Phase pull request; docs/permissions.md). Without --draft it starts the phase's paid model evals at once. The owner marks it ready when the phase is complete.";
+const PR_CREATE_UNKNOWN =
+  "Could not confirm that this does not create a phase pull request without --draft, so it is not created (docs/permissions.md). Name the head with --head <branch>, keep gh's flags after `gh pr create`, without --repo, and pass a long body with --body-file <file>.";
 const PHASE_PR_UNKNOWN =
   "Could not confirm that this is not a phase pull request, so its state is not changed (docs/permissions.md). Name a pull request of this repository by its number, without --repo; to close an issue use `gh issue close <number>`.";
 
 const isPhaseBranch = (name) => /^(?:[^:/\s]+:)?phase\/\S+$/.test(name ?? "");
 
-// The words of one command's arguments, quotes removed; null when a quote is left open.
-function argumentWords(text) {
+// The words of the simple command that continues at `start`: up to the next ; & | or newline
+// outside quotes, quotes removed, a backslash taking the next character literally (and joining a
+// continued line). Null when a quote is left open: what the shell would run is then unknown.
+function commandWordsFrom(command, start) {
   const words = [];
   let word = null;
   let quote = null;
-  for (const char of text) {
+  for (let i = start; i < command.length; i += 1) {
+    const char = command[i];
     if (quote) {
       if (char === quote) quote = null;
       else word += char;
     } else if (char === "'" || char === '"') {
       quote = char;
       word ??= "";
+    } else if (char === "\\") {
+      i += 1;
+      if (command[i] !== "\n" && command[i] !== undefined) word = (word ?? "") + command[i];
+    } else if (/[;&|\n]/.test(char)) {
+      break;
     } else if (/\s/.test(char)) {
       if (word !== null) words.push(word);
       word = null;
@@ -677,6 +726,48 @@ function argumentWords(text) {
   if (quote) return null;
   if (word !== null) words.push(word);
   return words;
+}
+
+// What a gh invocation does to pull requests, from the words after `gh`: { verb, args, flagged }
+// for `gh pr <verb> …`, null for anything else. `flagged` when flags stand between `gh`, `pr`
+// and the verb.
+function ghPrCall(words) {
+  let i = 0;
+  let flagged = false;
+  const skipFlags = () => {
+    while (i < words.length && words[i].startsWith("-")) {
+      flagged = true;
+      i += GH_FLAGS_WITH_VALUE.has(words[i]) ? 2 : 1;
+    }
+  };
+  skipFlags();
+  if (words[i] !== "pr") return null;
+  i += 1;
+  skipFlags();
+  let verb = words[i];
+  // A flag whose value this reading did not expect must not hide the verb behind it.
+  if (flagged && !PR_STATE_VERBS.has(verb) && verb !== "create") {
+    verb = words.slice(i, i + 3).find((word) => PR_STATE_VERBS.has(word) || word === "create");
+  }
+  return verb ? { verb, args: words.slice(words.indexOf(verb, i) + 1), flagged } : null;
+}
+
+// The head branch `gh pr create` was given and whether it asks for a draft:
+// { head (null when none is named), draft: true | false | null (not said) }.
+function prCreateOptions(args) {
+  let head = null;
+  let draft = null;
+  for (let i = 0; i < args.length; i += 1) {
+    const word = args[i];
+    const [option, inline] = word.split(/=(.*)/s);
+    if (option === "--head") head = inline ?? args[(i += 1)] ?? "";
+    else if (word === "-H") head = args[(i += 1)] ?? "";
+    else if (/^-H./.test(word)) head = word.slice(2).replace(/^=/, "");
+    else if (option === "--draft") draft = inline === undefined ? true : inline === "true";
+    else if (PR_CREATE_SHORT_SWITCHES.test(word)) draft = word.includes("d") ? true : draft;
+    else if (PR_CREATE_OPTIONS_WITH_VALUE.has(word)) i += 1;
+  }
+  return { head, draft };
 }
 
 function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranch }) {
@@ -690,21 +781,44 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
     }
   };
   const elsewhere = /\bGH_(REPO|HOST)=/.test(fullCommand);
+  const branchKnown = Boolean(currentBranch) && !MOVES.test(fullCommand);
 
-  for (const [, , args] of fullCommand.matchAll(PR_STATE)) {
-    const words = argumentWords(args);
-    if (words === null || elsewhere || words.some((word) => /^(--repo|-R)(=|$)/.test(word))) {
-      return refuse(PHASE_PR_UNKNOWN);
+  for (const match of fullCommand.matchAll(GH_CALL)) {
+    const after = match.index + match[0].length;
+    const words = commandWordsFrom(fullCommand, after);
+    if (words === null) {
+      // An open quote: refuse when what can be read still looks like a pull request change.
+      const rest = fullCommand.slice(after).split(/[;&|\n]/)[0];
+      if (/\bpr\b[\s\S]*\b(ready|close|reopen|create)\b/.test(rest)) {
+        return refuse(/\bcreate\b/.test(rest) ? PR_CREATE_UNKNOWN : PHASE_PR_UNKNOWN);
+      }
+      continue;
     }
+    const call = ghPrCall(words);
+    if (!call) continue;
+    const { verb, args, flagged } = call;
+    const otherRepository = elsewhere || args.some((word) => /^(--repo|-R)(=|$)/.test(word));
+
+    if (verb === "create") {
+      const { head, draft } = prCreateOptions(args);
+      if (draft === true && !flagged) continue;
+      if (flagged || otherRepository) return refuse(PR_CREATE_UNKNOWN);
+      // Without --head gh takes the checked-out branch.
+      if (head === null && !branchKnown) return refuse(PR_CREATE_UNKNOWN);
+      if (isPhaseBranch(head ?? currentBranch)) return refuse(PHASE_PR_DRAFT_REASON);
+      continue;
+    }
+    if (!PR_STATE_VERBS.has(verb)) continue;
+    if (flagged || otherRepository) return refuse(PHASE_PR_UNKNOWN);
     let selector = null;
-    for (let i = 0; i < words.length && selector === null; i += 1) {
-      if (PR_STATE_OPTIONS_WITH_VALUE.has(words[i])) i += 1;
-      else if (!words[i].startsWith("-")) selector = words[i];
+    for (let i = 0; i < args.length && selector === null; i += 1) {
+      if (PR_STATE_OPTIONS_WITH_VALUE.has(args[i])) i += 1;
+      else if (!args[i].startsWith("-")) selector = args[i];
     }
     let head;
     if (selector === null) {
       // Without a selector gh acts on the pull request of the checked-out branch.
-      if (!currentBranch || MOVES.test(fullCommand)) return refuse(PHASE_PR_UNKNOWN);
+      if (!branchKnown) return refuse(PHASE_PR_UNKNOWN);
       head = currentBranch;
     } else if (isPhaseBranch(selector)) {
       head = selector;
@@ -739,6 +853,31 @@ function checkPhasePrState(fullCommand, { restricted, lookupPrHead, currentBranc
     if (isPhaseBranch(head)) return refuse(PHASE_PR_REASON);
   }
   return null;
+}
+
+// A paid eval run in the loop spends from the loop's phase campaign at the stage `issue`
+// (packages/llm-agent/evals/budget.py). Declaring `--stage phase-pr` lifts both stops for issue
+// runs, and that run belongs to CI after the owner makes the phase pull request ready; setting
+// or clearing SEBELA_EVAL_CAMPAIGN renames the campaign the loop named, and
+// SEBELA_EVAL_KEPT_RUNS hides the spend of the other worktrees from the runner. The loop and
+// subagents do none of these; an interactive main session asks the owner. Commands that only
+// read (grep, cat, …) may mention them.
+const PHASE_PR_STAGE = /--stage(?:\s+|=)(['"]?)phase-pr\1(?=$|[\s;&|)])/;
+const EVAL_VARIABLES = "SEBELA_EVAL_(?:CAMPAIGN|KEPT_RUNS)";
+const EVAL_VARIABLE_CHANGED = new RegExp(
+  `\\b${EVAL_VARIABLES}\\s*=|\\bunset\\b[^;&|\\n]*\\b${EVAL_VARIABLES}\\b|(?:^|\\s)(?:-u\\s*|--unset[=\\s])${EVAL_VARIABLES}\\b`,
+);
+const PHASE_PR_STAGE_REASON =
+  "A paid eval run with `--stage phase-pr` is the phase pull request's run: it belongs to CI, after the owner marks the phase pull request ready, and is never started by an agent (docs/testing.md, Running paid evals; docs/permissions.md). Run the issue's affected cases with `--stage issue`, within the stops for issue runs.";
+const EVAL_VARIABLE_REASON =
+  "SEBELA_EVAL_CAMPAIGN and SEBELA_EVAL_KEPT_RUNS are set by the phase loop and are not set, changed or cleared by an agent: they name the phase's eval campaign and the loop's record of what was spent (docs/testing.md, Running paid evals; docs/permissions.md). Name the phase's own campaign with `--campaign <phase-folder>`.";
+
+function checkEvalStage(command, { restricted }) {
+  const stage = PHASE_PR_STAGE.test(command);
+  if (!stage && !EVAL_VARIABLE_CHANGED.test(command)) return null;
+  if (isReadOnlyCommand(command)) return null;
+  const reason = stage ? PHASE_PR_STAGE_REASON : EVAL_VARIABLE_REASON;
+  return restricted ? deny(reason) : { reason, decision: "ask" };
 }
 
 // Returns null when the call may proceed, { reason } when it must be refused, or
@@ -815,6 +954,7 @@ export function evaluateToolCall({
       );
     }
     return (
+      checkEvalStage(command, { restricted }) ??
       checkPhasePrState(command, { restricted, lookupPrHead, currentBranch }) ??
       checkPush(command, { currentBranch }) ??
       checkMerge(command, { isSubagent, lookupPrBase })
