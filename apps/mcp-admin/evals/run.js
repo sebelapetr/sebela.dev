@@ -51,7 +51,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { catalogue, gates } from "./catalogue.js";
+import { catalogue, gates, implementedCases } from "./catalogue.js";
 import { startClientAdapter } from "./client.js";
 import { fixtureFolder, startApi, startMcp } from "./fixture.js";
 import { evaluateGate } from "./gate.js";
@@ -632,6 +632,9 @@ async function regradeFolder(folder) {
     of: original.startedAt,
     scope: original.scope,
     model: MODEL,
+    // The graders of this regrade and of the original run (absent before grader versions).
+    graders: pinnedSettings().graders,
+    originalGraders: original?.pinned?.graders ?? null,
     gate,
     runs,
   };
@@ -641,6 +644,32 @@ async function regradeFolder(folder) {
     `${JSON.stringify({ scope: original.scope, gate, cost: 0, report }, null, 2)}\n`,
   );
   if (!gate.pass) process.exitCode = 1;
+}
+
+/**
+ * The settings a run is pinned to, the grader version of every implemented case included,
+ * recorded in its summary so results of different settings are never compared as one series.
+ */
+export function pinnedSettings() {
+  return {
+    promptfoo: PROMPTFOO,
+    provider: `anthropic:messages:${MODEL}`,
+    effort: "medium",
+    promptCaching: true,
+    maxTokens: 4096,
+    maxToolCalls: 6,
+    timeoutMs: 120000,
+    clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
+    dataset:
+      "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases), fixtures/s04 (S04 cases)",
+    repeats: gates.repeats,
+    caseRunConcurrency: CASE_RUN_CONCURRENCY,
+    noncriticalFloor: gates.noncriticalFloor,
+    // Each implemented case's grader version (`GRADER_VERSIONS` in graders.js).
+    graders: Object.fromEntries(
+      implementedCases().map((entry) => [entry.id, graders.GRADER_VERSIONS[entry.id] ?? 1]),
+    ),
+  };
 }
 
 async function main() {
@@ -698,21 +727,7 @@ async function main() {
   const summary = {
     startedAt,
     scope: plan.partial ? { partial: true, cases: plan.partial.cases } : { partial: false },
-    pinned: {
-      promptfoo: PROMPTFOO,
-      provider: `anthropic:messages:${MODEL}`,
-      effort: "medium",
-      promptCaching: true,
-      maxTokens: 4096,
-      maxToolCalls: 6,
-      timeoutMs: 120000,
-      clock: "2026-11-17T12:00:00+01:00 Europe/Prague (prompt only)",
-      dataset:
-        "fixtures/s01 (S01 cases), fixtures/s02 (S02 cases), fixtures/s03 (S03 cases), fixtures/s04 (S04 cases)",
-      repeats: gates.repeats,
-      caseRunConcurrency: CASE_RUN_CONCURRENCY,
-      noncriticalFloor: gates.noncriticalFloor,
-    },
+    pinned: pinnedSettings(),
     gate,
     usage: totals(runs),
     runs,

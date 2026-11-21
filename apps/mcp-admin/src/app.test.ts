@@ -58,6 +58,12 @@ async function expectUniformRefusal(response: Response) {
   }
 }
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("health and unauthenticated access (D06)", () => {
   it("answers a minimal health response without credentials", async () => {
     const { fetch, api } = open();
@@ -339,7 +345,9 @@ describe("an unavailable authentication check fails closed (D05)", () => {
         new Promise<Response>((_, reject) => {
           // Like fetch: a request whose signal already fired under load is rejected at once.
           if (request.signal.aborted) reject(request.signal.reason as Error);
+          hanging.add(request);
           request.signal.addEventListener("abort", () => {
+            hanging.delete(request);
             reject(request.signal.reason as Error);
           });
         }),
@@ -460,7 +468,9 @@ describe("limits (D08)", () => {
         new Promise<Response>((_, reject) => {
           // Like fetch: a request whose signal already fired under load is rejected at once.
           if (request.signal.aborted) reject(request.signal.reason as Error);
+          hanging.add(request);
           request.signal.addEventListener("abort", () => {
+            hanging.delete(request);
             reject(request.signal.reason as Error);
           });
         }),

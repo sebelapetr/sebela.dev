@@ -1,3 +1,4 @@
+import { coverage } from "@sebela/config/vitest";
 import { defineConfig } from "vitest/config";
 
 // Unit tests of the website's logic (environment, data mapping). They run in Node without a
@@ -5,5 +6,6 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    coverage: coverage(),
   },
 });
