@@ -16,7 +16,7 @@ The owner approved the following eight points on 2026-11-21. They extend the pha
 7. **A budget per phase campaign.** Phase 7: USD 4.00 (issue work stops at a cumulative USD 1.50; USD 2.00 is kept for the phase-PR full run and one affected rerun; USD 0.50 margin is released only by the owner). Phase 7.1: USD 2.00, its own campaign. Phase 8: USD 2.30 (USD 1.00 Haiku campaign plus USD 1.30 Sonnet confirmation). The per-run stop of USD 1.00 applies to issue runs, not to the full phase-PR run. The code currently hard-codes a USD 10 cumulative ceiling; a separate change makes the ceiling per campaign.
 8. **When the Python agent eval job runs.** On a pull request into `master` only when the agent package, its prompts or evals, or the API operations it calls change (a separate change implements the rule, like MCP Admin's `scripts/checks/mcp-admin-evals-affected.mjs`); otherwise the owner dispatches it by hand.
 
-Two working rules follow from them. During phase-7 issue runs, a rerun of affected phase-6 cases runs only the code-graded critical cases; judged ordinary cases wait for the phase-PR run, as in issue #182. The owner's 12 human-review answers are taken from the stored phase-PR run instead of a separate generation.
+Two working rules follow from them. During phase-7 issue runs, a rerun of affected phase-6 cases runs only the code-graded critical cases; judged ordinary cases wait for the phase-PR run, as in issue #182. The owner's 12 human-review answers are taken from the stored phase-PR run instead of a separate generation. The latency measurement is acceptance evidence and is paid from phase 7's USD 2.00 phase-PR reserve.
 
 ## Why
 
