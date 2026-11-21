@@ -8,6 +8,7 @@ import {
   gt,
   gte,
   inArray,
+  isNotNull,
   notInArray,
   sql,
 } from "drizzle-orm";
@@ -279,8 +280,8 @@ export interface RetrievalPersistence {
    * Approves the pending version with this content hash with its recorded conflicts and stores
    * `source` (its embedded version, which must be of the same source and carry the hash as its
    * version, without the conflicting chunks) in one transaction; the source's earlier approved
-   * version becomes superseded and forgets its storage key, so its chunks and original are no
-   * longer referenced. Returns `false` and stores nothing when no pending version has the hash.
+   * version becomes superseded and its chunks leave the index; it keeps its storage key until its
+   * original is deleted (`forgetDocumentOriginal`). Returns `false` and stores nothing when no pending version has the hash.
    */
   approveDocumentVersion(
     contentHash: string,
@@ -289,8 +290,8 @@ export interface RetrievalPersistence {
   ): Promise<boolean>;
   /**
    * Withdraws the approved version with this content hash: in one transaction it becomes
-   * `withdrawn`, forgets its storage key and its source leaves the index. Returns `false` when no
-   * approved version has the hash.
+   * `withdrawn` and its source leaves the index; it keeps its storage key until its original is
+   * deleted (`forgetDocumentOriginal`). Returns `false` when no approved version has the hash.
    */
   withdrawDocumentVersion(contentHash: string): Promise<boolean>;
   /**
@@ -508,7 +509,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         const decidedAt = new Date();
         await tx
           .update(documentVersions)
-          .set({ status: "superseded", storageKey: null, decidedAt })
+          .set({ status: "superseded", decidedAt })
           .where(
             and(
               eq(documentVersions.sourceId, row.sourceId),
@@ -542,7 +543,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       return db.transaction(async (tx) => {
         const [withdrawn] = await tx
           .update(documentVersions)
-          .set({ status: "withdrawn", storageKey: null, decidedAt: new Date() })
+          .set({ status: "withdrawn", decidedAt: new Date() })
           .where(
             and(
               eq(documentVersions.contentHash, contentHash),
@@ -573,9 +574,45 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       });
     },
 
-    forgetDocumentOriginal: () => Promise.reject(new Error("not implemented")),
+    async forgetDocumentOriginal(contentHash) {
+      const forgotten = await db
+        .update(documentVersions)
+        .set({ storageKey: null })
+        .where(
+          and(
+            eq(documentVersions.contentHash, contentHash),
+            inArray(documentVersions.status, ["superseded", "withdrawn"]),
+            isNotNull(documentVersions.storageKey),
+          ),
+        )
+        .returning({ id: documentVersions.id });
+      return forgotten.length > 0;
+    },
 
-    unpublishDocumentSources: () => Promise.reject(new Error("not implemented")),
+    async unpublishDocumentSources(unpublished) {
+      // Written by hand so the subquery's columns are qualified by their own table.
+      const excluded =
+        unpublished.length === 0
+          ? sql``
+          : sql`AND version.content_hash NOT IN (${sql.join(
+              unpublished.map((hash) => sql`${hash}`),
+              sql`, `,
+            )})`;
+      const removed = await db
+        .delete(sources)
+        .where(
+          and(
+            eq(sources.sourceKind, "supplemental"),
+            sql`NOT EXISTS (
+              SELECT 1 FROM ${documentVersions} AS version
+              WHERE version.source_id = ${sources}.source_id
+                AND version.status = 'approved' ${excluded}
+            )`,
+          ),
+        )
+        .returning({ id: sources.id });
+      return removed.length;
+    },
 
     async reindexApprovedDocument(contentHash, source, conflicts) {
       return db.transaction(async (tx) => {

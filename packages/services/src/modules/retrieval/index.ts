@@ -113,19 +113,25 @@ export interface KnowledgeService {
    * Approves the pending version with exactly this content hash: re-reads the original, verifies
    * its hash, embeds it and makes it searchable, superseding the source's earlier approved
    * version. A blocked, rejected or decided version is a `conflict`; an unknown hash `not_found`.
+   * The superseded original is deleted afterwards; one private storage could not delete is counted
+   * in `originalsLeft` and deleted by the next rebuild, and the approval stands.
    */
   approveDocument(contentHash: string): Promise<DocumentApproval>;
   /** Rejects a pending or blocked version and deletes its original; a decided one is a `conflict`. */
   rejectDocument(contentHash: string): Promise<DocumentVersion>;
   /**
    * Withdraws the approved version with this content hash: its source leaves search at once and
-   * its original is deleted. Needs no provider. A version that is not approved is a `conflict`;
-   * an unknown hash `not_found`.
+   * its original is deleted. Needs no provider. When private storage cannot delete the original
+   * the version stays withdrawn and out of search, keeps its storage key and the call is
+   * `provider_unavailable`; withdrawing again finishes it. Any other version that is not approved
+   * is a `conflict`; an unknown hash `not_found`.
    */
   withdrawDocument(contentHash: string): Promise<DocumentVersion>;
   /**
    * Deletes the supplemental document with this slug completely: every version, its chunks and
-   * every original. Needs no provider. A slug without versions is `not_found`.
+   * every original. Needs no provider. The originals are deleted first: when private storage
+   * cannot delete one the call is `provider_unavailable`, nothing is removed from the database and
+   * deleting again finishes it. A slug without versions is `not_found`.
    */
   deleteDocument(slug: string): Promise<DocumentDeletion>;
   /**
@@ -133,7 +139,11 @@ export interface KnowledgeService {
    * approved versions, keeping each version's approval; a pending, blocked, rejected, superseded
    * or withdrawn version is never published, and a supplemental source without an approved
    * version leaves the index. Conflicts are checked again against the current facts. An approved
-   * version whose original is gone or changed is counted `missing` and leaves search.
+   * version whose original is gone, changed or now has sensitivity findings is counted `missing`,
+   * named in `missingVersions` and leaves search, but stays `approved` until it is withdrawn or a
+   * revision is approved. A document another process approves while the rebuild runs stays
+   * published. Originals still held by superseded or withdrawn versions are deleted;
+   * `originalsLeft` counts those private storage could not delete.
    */
   rebuildIndex(): Promise<IndexRebuild>;
 }
@@ -149,9 +159,11 @@ export interface IndexRebuild {
   readonly documents: {
     /** Approved versions stored again. */
     readonly restored: number;
-    /** Approved versions whose original was gone or no longer had its hash. */
+    /** Approved versions whose original was gone, changed or now has sensitivity findings. */
     readonly missing: number;
+    /** Content hashes of the missing versions. */
     readonly missingVersions: readonly string[];
+    /** Superseded or withdrawn originals private storage could not delete. */
     readonly originalsLeft: number;
     /** Conflicting chunks left out of search. */
     readonly conflicts: number;
@@ -352,10 +364,31 @@ function createDocumentReview(
     return { conflicts, searchable, excluded: excluded.size };
   };
 
-  /** Deletes originals no version references any more; a failure leaves an unreferenced file. */
-  const deleteOriginals = async (keys: readonly (string | null)[]) => {
-    for (const key of keys) if (key !== null) await storage().delete(key);
+  /**
+   * Deletes the originals of superseded or withdrawn versions and only then forgets their keys, so
+   * an original private storage could not delete stays referenced and a later withdraw, delete or
+   * rebuild deletes it. Returns how many were left.
+   */
+  const discardOriginals = async (versions: readonly RetrievalDocumentVersion[]) => {
+    let left = 0;
+    for (const version of versions) {
+      if (version.storageKey === null) continue;
+      try {
+        await storage().delete(version.storageKey);
+      } catch {
+        left += 1;
+        continue;
+      }
+      await store.forgetDocumentOriginal(version.contentHash);
+    }
+    return left;
   };
+
+  const storageUnavailable = (what: string) =>
+    new DomainError(
+      "provider_unavailable",
+      `Private storage could not delete the original; ${what}`,
+    );
 
   const blockedMessage =
     "This version has sensitivity findings; ingest a sanitized revision and approve that.";
@@ -459,11 +492,12 @@ function createDocumentReview(
       if (!(await store.approveDocumentVersion(contentHash, embedding.version, conflicts))) {
         throw new DomainError("conflict", "This version was decided meanwhile.");
       }
-      // The superseded version's chunks left with the approval; its original is not referenced now.
-      await deleteOriginals(superseded.map((other) => other.storageKey));
+      // The superseded version's chunks left with the approval; its original goes now or at the next
+      // rebuild, and the approval stands either way.
+      const originalsLeft = await discardOriginals(superseded);
       return {
         version: withoutKey(await versionOf(contentHash)),
-        originalsLeft: 0,
+        originalsLeft,
         report: embedding.report,
       };
     },
@@ -485,17 +519,23 @@ function createDocumentReview(
 
     async withdrawDocument(contentHash) {
       const version = await versionOf(contentHash);
-      if (version.status !== "approved") {
+      const unfinished = version.status === "withdrawn" && version.storageKey !== null;
+      if (version.status !== "approved" && !unfinished) {
         throw new DomainError(
           "conflict",
           `This version is ${version.status}; only an approved one is withdrawn.`,
         );
       }
-      // Search loses the source in the transaction; the original goes only once nothing refers to it.
-      if (!(await store.withdrawDocumentVersion(contentHash))) {
+      // Search loses the source in the transaction, before private storage is asked for anything; a
+      // withdrawal whose original was left is finished by withdrawing again.
+      if (!unfinished && !(await store.withdrawDocumentVersion(contentHash))) {
         throw new DomainError("conflict", "This version was decided meanwhile.");
       }
-      await deleteOriginals([version.storageKey]);
+      if ((await discardOriginals([version])) > 0) {
+        throw storageUnavailable(
+          "the version is withdrawn and out of search; run withdraw again to delete its original.",
+        );
+      }
       return withoutKey(await versionOf(contentHash));
     },
 
@@ -511,8 +551,22 @@ function createDocumentReview(
         (version) => version.sourceId === sourceId,
       );
       if (versions.length === 0) throw new DomainError("not_found", "No document has this slug.");
-      await deleteOriginals(await store.deleteDocumentSource(sourceId));
-      return { sourceId, deletedVersions: versions.length };
+      // The originals go first, so a failure leaves every version listed and the delete repeatable;
+      // a file already gone counts as deleted.
+      const deleteAll = async (keys: readonly (string | null)[]) => {
+        try {
+          for (const key of keys) if (key !== null) await storage().delete(key);
+        } catch {
+          throw storageUnavailable("the document is still listed; run delete again.");
+        }
+      };
+      await deleteAll(versions.map((version) => version.storageKey));
+      const held = new Set(versions.map((version) => version.storageKey));
+      // A version ingested meanwhile is deleted with the others; its original goes too.
+      const deleted = await store.deleteDocumentSource(sourceId);
+      const ingestedMeanwhile = deleted.filter((key) => !held.has(key));
+      await deleteAll(ingestedMeanwhile);
+      return { sourceId, deletedVersions: versions.length + ingestedMeanwhile.length };
     },
 
     async rebuildIndex() {
@@ -528,14 +582,15 @@ function createDocumentReview(
         tokens: 0,
         costUsd: 0,
       };
-      const restored: string[] = [];
-      const approved = (await store.documentVersions()).filter(
-        (version) => version.status === "approved",
-      );
+      const recorded = await store.documentVersions();
+      const approved = recorded.filter((version) => version.status === "approved");
       for (const version of approved) {
         const prepared = await reprepare(version);
+        // An original that is gone, changed or now has sensitivity findings is never published; the
+        // version stays approved until the owner withdraws it or approves a sanitized revision.
         if (prepared === null || prepared.findings.length > 0) {
           documents.missing += 1;
+          documents.missingVersions.push(version.contentHash);
           continue;
         }
         const { conflicts, searchable, excluded } = await checked(prepared);
@@ -545,7 +600,6 @@ function createDocumentReview(
         ) {
           continue;
         }
-        restored.push(version.sourceId);
         documents.restored += 1;
         documents.conflicts += excluded;
         documents.embedded += embedding.report.embedded;
@@ -553,8 +607,14 @@ function createDocumentReview(
         documents.tokens += embedding.report.tokens;
         documents.costUsd += embedding.report.costUsd;
       }
-      // Only what was restored stays: a missing original or an undecided source is never published.
-      await store.removeSourcesExcept("supplemental", restored);
+      // Only approved, restorable documents stay; the database reads the approvals as it removes, so
+      // a document another process approves meanwhile stays published.
+      await store.unpublishDocumentSources(documents.missingVersions);
+      documents.originalsLeft = await discardOriginals(
+        recorded.filter(
+          (version) => version.status === "superseded" || version.status === "withdrawn",
+        ),
+      );
       return { portfolio, documents };
     },
   };
