@@ -111,8 +111,7 @@ class Clock:
 
 def requests(*pairs: tuple[str, int]) -> list[judging.JudgeRequest]:
     return [
-        judging.request(BY_ID[case_id], record(case_id, repeat=repeat))
-        for case_id, repeat in pairs
+        judging.request(BY_ID[case_id], record(case_id, repeat=repeat)) for case_id, repeat in pairs
     ]
 
 

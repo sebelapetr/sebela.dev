@@ -77,6 +77,8 @@ class AnsweringBatches:
 @pytest.fixture(autouse=True)
 def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(code, "prompt_fragments", lambda: ("A fixed system prompt line.",))
+    # The fake batches end at their first status check; do not wait between checks.
+    monkeypatch.setattr(judging, "POLL_SECONDS", 0.0)
 
 
 @pytest.fixture

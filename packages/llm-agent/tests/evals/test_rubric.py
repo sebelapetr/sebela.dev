@@ -180,7 +180,7 @@ async def test_a_one_hour_cache_write_reported_through_langchain_is_priced_at_2x
             "ephemeral_1h_input_tokens": 2000,
         },
     }
-    message = AIMessage(content=verdict().model_dump_json(), usage_metadata=usage)  # type: ignore[arg-type]
+    message = AIMessage(content=verdict().model_dump_json(), usage_metadata=usage)
     judgement = await rubric.judge(FakeJudge(message), CASE, record("Q01-en"), reserved_usd=1.0)
     expected = (1000 * 2.0 + 500 * 0.2 + 100 * 2.5 + 2000 * 4.0 + 200 * 10) / 1_000_000
     assert judgement.cost_usd == pytest.approx(expected)

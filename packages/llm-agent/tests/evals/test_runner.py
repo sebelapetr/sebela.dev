@@ -40,7 +40,16 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
         (["--case", "S01-en", "--allowance", "1", "--judge-mode", "cheap"], "batch or direct"),
         (["--case", "S01-en", "--allowance", "1", "--judge-mode"], "--judge-mode needs a value"),
         (
-            ["--case", "S01-en", "--allowance", "1", "--judge-mode", "batch", "--judge-mode", "direct"],
+            [
+                "--case",
+                "S01-en",
+                "--allowance",
+                "1",
+                "--judge-mode",
+                "batch",
+                "--judge-mode",
+                "direct",
+            ],
             "--judge-mode given twice",
         ),
         ([], "name the cases"),
@@ -82,9 +91,9 @@ def test_a_judge_call_is_reserved_with_a_one_hour_cache_write_and_the_full_outpu
         8_000 * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
         + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
     ) / 1_000_000
-    assert run.JUDGE_DIRECT_CALL_RESERVATION_USD == pytest.approx(direct)
+    assert pytest.approx(direct) == run.JUDGE_DIRECT_CALL_RESERVATION_USD
     # The default batch mode: the same upper bound at the batch discount.
-    assert run.JUDGE_CALL_RESERVATION_USD == pytest.approx(direct * rubric.JUDGE_BATCH_DISCOUNT)
+    assert pytest.approx(direct * rubric.JUDGE_BATCH_DISCOUNT) == run.JUDGE_CALL_RESERVATION_USD
     assert run.judge_call_reservation_usd("batch") == run.JUDGE_CALL_RESERVATION_USD
     assert run.judge_call_reservation_usd("direct") == run.JUDGE_DIRECT_CALL_RESERVATION_USD
 
