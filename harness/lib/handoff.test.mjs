@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GENERAL_AGENT_AREAS, selectChecks, turboArguments, worktreesNamedIn } from "./handoff.mjs";
+import {
+  GENERAL_AGENT_AREAS,
+  actedIn,
+  selectChecks,
+  turboArguments,
+  worktreesNamedIn,
+} from "./handoff.mjs";
 
 const MAIN = "/work/sebela";
 const MEMBERS = [
@@ -183,4 +189,31 @@ test("a general agent that changed none of those areas has nothing to check", ()
   assert.equal(selectChecks([], MEMBERS, { areas }), null);
   // Without a change base nothing says the areas are untouched: everything is checked.
   assert.deepEqual(selectChecks(null, MEMBERS, { areas }), { all: true });
+});
+
+// --- only edits and commits (issue #384, item 11) --------------------------------------
+
+test("with edits only, a worktree counts for an edit or a commit, not for a command", () => {
+  const text = transcript(
+    ["Bash", { command: `cd ${MAIN}/.worktrees/read-only && pnpm test` }],
+    ["Bash", { command: `git -C ${MAIN}/.worktrees/logged log -3` }],
+    ["Bash", { command: `echo "git commit" > ${MAIN}/.worktrees/echoed/x` }],
+    ["Write", { file_path: `${MAIN}/.worktrees/written/harness/x.mjs` }],
+    ["Bash", { command: `cd ${MAIN}/.worktrees/committed && git add -A && git commit -m x` }],
+    ["Bash", { command: `git -C ${MAIN}/.worktrees/committed-too commit -am x` }],
+  );
+  assert.deepEqual(worktreesNamedIn(text, MAIN, { editsOnly: true }), [
+    `${MAIN}/.worktrees/written`,
+    `${MAIN}/.worktrees/committed`,
+    `${MAIN}/.worktrees/committed-too`,
+  ]);
+  assert.equal(worktreesNamedIn(text, MAIN).length, 6);
+});
+
+test("whether an agent edited or committed anything at all", () => {
+  const only = (...uses) => actedIn(transcript(...uses));
+  assert.equal(only(["Bash", { command: "pnpm test" }], ["Read", { file_path: "x" }]), false);
+  assert.equal(only(["Edit", { file_path: "harness/x.mjs" }]), true);
+  assert.equal(only(["Bash", { command: "git add -A && git commit -m x" }]), true);
+  assert.equal(only(["Bash", { command: "git log --grep commit" }]), false);
 });
