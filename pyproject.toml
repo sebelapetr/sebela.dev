@@ -5,4 +5,4 @@ members = ["packages/llm-agent"]
 
 # The uv version, read by uv itself and by `astral-sh/setup-uv` in CI (`version-file`).
 [tool.uv]
-required-version = "==0.7.22"
+required-version = ">=0.7.22"
