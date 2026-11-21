@@ -571,16 +571,26 @@ describe("retrieval persistence", () => {
       expect((await retrieval.documentVersion(hash("v1")))?.conflicts).toEqual([conflict]);
     });
 
-    it("forgets the superseded version's original when a revision is approved", async () => {
+    it("keeps the superseded version's storage key until its original is forgotten", async () => {
       await retrieval.addDocumentVersion(pending("v1"));
       await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
       await retrieval.addDocumentVersion(pending("v2"));
       await retrieval.approveDocumentVersion(hash("v2"), documentSource("v2"));
       expect(await retrieval.documentVersion(hash("v1"))).toMatchObject({
         status: "superseded",
-        storageKey: null,
+        storageKey: pending("v1").storageKey,
       });
-      expect((await retrieval.documentVersion(hash("v2")))?.storageKey).not.toBeNull();
+
+      expect(await retrieval.forgetDocumentOriginal(hash("v1"))).toBe(true);
+      expect((await retrieval.documentVersion(hash("v1")))?.storageKey).toBeNull();
+      expect(await retrieval.forgetDocumentOriginal(hash("v1"))).toBe(false);
+      // An approved or pending version's original is still needed.
+      expect(await retrieval.forgetDocumentOriginal(hash("v2"))).toBe(false);
+      expect((await retrieval.documentVersion(hash("v2")))?.storageKey).toBe(
+        pending("v2").storageKey,
+      );
+      await retrieval.addDocumentVersion(pending("v3"));
+      expect(await retrieval.forgetDocumentOriginal(hash("v3"))).toBe(false);
     });
 
     it("withdraws an approved version and takes its source out of the index at once", async () => {
@@ -589,7 +599,11 @@ describe("retrieval persistence", () => {
       expect(await retrieval.withdrawDocumentVersion(hash("v1"))).toBe(true);
 
       const withdrawn = await retrieval.documentVersion(hash("v1"));
-      expect(withdrawn).toMatchObject({ status: "withdrawn", storageKey: null });
+      // The key stays until the original is deleted, so a failed deletion can be repeated.
+      expect(withdrawn).toMatchObject({
+        status: "withdrawn",
+        storageKey: pending("v1").storageKey,
+      });
       expect(withdrawn?.decidedAt).toBeInstanceOf(Date);
       expect(await retrieval.indexedSources()).toEqual([]);
       expect(
@@ -602,6 +616,48 @@ describe("retrieval persistence", () => {
       expect(await retrieval.withdrawDocumentVersion(hash("v1"))).toBe(false);
       expect(await retrieval.withdrawDocumentVersion(hash("none"))).toBe(false);
       expect((await retrieval.documentVersion(hash("v1")))?.status).toBe("pending");
+    });
+
+    it("unpublishes every document source without an approved version, read as it runs", async () => {
+      const NOTE = "document:harbour-note";
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      await retrieval.addDocumentVersion(
+        pending("note", { sourceId: NOTE, storageKey: "development/note.md" }),
+      );
+      await retrieval.approveDocumentVersion(
+        hash("note"),
+        source(NOTE, {
+          sourceKind: "supplemental",
+          contentKind: "document",
+          title: "Harbour note",
+          path: null,
+          version: hash("note"),
+          texts: [["note", vector(4)]],
+        }),
+      );
+      // An indexed document whose versions are gone, as after a lost database row.
+      await retrieval.replaceSource(
+        source("document:orphan", {
+          sourceKind: "supplemental",
+          contentKind: "document",
+          title: "Orphan",
+          path: null,
+          version: hash("orphan"),
+          texts: [["orphan", vector(5)]],
+        }),
+      );
+      await retrieval.replaceSource(source("portfolio:project:kept"));
+
+      // The note's approved original is missing, so it leaves search though it stays approved.
+      expect(await retrieval.unpublishDocumentSources([hash("note")])).toBe(2);
+
+      expect((await retrieval.indexedSources()).map((indexed) => indexed.sourceId).sort()).toEqual([
+        HANDBOOK,
+        "portfolio:project:kept",
+      ]);
+      expect((await retrieval.documentVersion(hash("note")))?.status).toBe("approved");
+      expect(await retrieval.unpublishDocumentSources([])).toBe(0);
     });
 
     it("deletes every version of a source with its chunks and returns the kept storage keys", async () => {

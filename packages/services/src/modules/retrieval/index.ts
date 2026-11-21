@@ -151,6 +151,8 @@ export interface IndexRebuild {
     readonly restored: number;
     /** Approved versions whose original was gone or no longer had its hash. */
     readonly missing: number;
+    readonly missingVersions: readonly string[];
+    readonly originalsLeft: number;
     /** Conflicting chunks left out of search. */
     readonly conflicts: number;
     readonly embedded: number;
@@ -179,6 +181,8 @@ export interface DocumentPreview {
 
 export interface DocumentApproval {
   readonly version: DocumentVersion;
+  /** Superseded originals private storage could not delete; the next rebuild deletes them. */
+  readonly originalsLeft: number;
   readonly report: {
     readonly embedded: number;
     readonly reused: number;
@@ -457,7 +461,11 @@ function createDocumentReview(
       }
       // The superseded version's chunks left with the approval; its original is not referenced now.
       await deleteOriginals(superseded.map((other) => other.storageKey));
-      return { version: withoutKey(await versionOf(contentHash)), report: embedding.report };
+      return {
+        version: withoutKey(await versionOf(contentHash)),
+        originalsLeft: 0,
+        report: embedding.report,
+      };
     },
 
     async rejectDocument(contentHash) {
@@ -512,6 +520,8 @@ function createDocumentReview(
       const documents = {
         restored: 0,
         missing: 0,
+        missingVersions: [] as string[],
+        originalsLeft: 0,
         conflicts: 0,
         embedded: 0,
         reused: 0,

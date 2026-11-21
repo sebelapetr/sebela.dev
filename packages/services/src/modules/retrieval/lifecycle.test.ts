@@ -9,6 +9,7 @@ import {
   demoSeedFolder,
   readDatabaseConfig,
   type Persistence,
+  type RetrievalPersistence,
 } from "@sebela/db";
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
 import { createFakeEmbedder, type Embedder, type RetrievalConfig } from "@sebela/memory";
@@ -114,15 +115,35 @@ describe("the lifecycle of supplemental sources", () => {
   let privateStorage: PrivateStorage;
   const embedder = createFakeEmbedder();
 
-  const open = (overrides: { embedder?: Embedder } = {}): KnowledgeService =>
+  const open = (
+    overrides: {
+      embedder?: Embedder;
+      privateStorage?: PrivateStorage;
+      store?: RetrievalPersistence;
+    } = {},
+  ): KnowledgeService =>
     createKnowledgeService(
       {
-        store: persistence.retrieval,
+        store: overrides.store ?? persistence.retrieval,
         profile: createProfileService(persistence.profile),
         roadmap: createRoadmapService(persistence.roadmap),
       },
-      { config, embedder: overrides.embedder ?? embedder, privateStorage },
+      {
+        config,
+        embedder: overrides.embedder ?? embedder,
+        privateStorage: overrides.privateStorage ?? privateStorage,
+      },
     );
+
+  /** The private storage with every deletion failing, as when it is unreachable. */
+  const undeletable = (): PrivateStorage => ({
+    store: (file) => privateStorage.store(file),
+    read: (key) => privateStorage.read(key),
+    delete: () => Promise.reject(new Error("The private storage is unavailable.")),
+  });
+
+  const keyOf = async (contentHash: string) =>
+    (await persistence.retrieval.documentVersion(contentHash))?.storageKey;
 
   /** Every indexed document chunk the store holds, as the search's candidates read them. */
   const documentChunks = async (query: string) => {
@@ -341,7 +362,13 @@ describe("the lifecycle of supplemental sources", () => {
 
     const rebuilt = await knowledge.rebuildIndex();
 
-    expect(rebuilt.documents).toMatchObject({ restored: 1, missing: 1, conflicts: 0 });
+    expect(rebuilt.documents).toMatchObject({
+      restored: 1,
+      missing: 1,
+      missingVersions: [gone.contentHash],
+      conflicts: 0,
+      originalsLeft: 0,
+    });
     expect(rebuilt.documents.embedded).toBe(0);
     expect(await documentSources()).toEqual(["document:approved-handbook"]);
     const chunks = await documentChunks("mooring permit refund berth");
@@ -350,6 +377,102 @@ describe("the lifecycle of supplemental sources", () => {
     expect(before[pending.contentHash]).toBe("pending");
     expect(before[rejected.contentHash]).toBe("rejected");
     expect(before[withdrawn.contentHash]).toBe("withdrawn");
+  });
+
+  it("keeps a withdrawn original referenced while private storage fails, so withdraw can finish it", async () => {
+    const first = await open().ingestDocument(handbook());
+    await open().approveDocument(first.version.contentHash);
+
+    const failed = await refusal(
+      open({ privateStorage: undeletable() }).withdrawDocument(first.version.contentHash),
+    );
+
+    expect(failed.code).toBe("provider_unavailable");
+    expect(failed.message).toContain("withdraw");
+    expect(await documentSources()).toEqual([]);
+    expect(await statuses(open())).toEqual({ [first.version.contentHash]: "withdrawn" });
+    expect(await filesBelow(privateRoot)).toHaveLength(1);
+    expect(await keyOf(first.version.contentHash)).not.toBeNull();
+
+    const finished = await open().withdrawDocument(first.version.contentHash);
+    expect(finished.status).toBe("withdrawn");
+    expect(await filesBelow(privateRoot)).toEqual([]);
+    expect(await keyOf(first.version.contentHash)).toBeNull();
+    expect((await refusal(open().withdrawDocument(first.version.contentHash))).code).toBe(
+      "conflict",
+    );
+  });
+
+  it("deletes nothing of a source while private storage fails, so the delete can be repeated", async () => {
+    const knowledge = open();
+    const first = await knowledge.ingestDocument(handbook());
+    await knowledge.approveDocument(first.version.contentHash);
+    await knowledge.ingestDocument(handbook(REVISED));
+
+    const failed = await refusal(
+      open({ privateStorage: undeletable() }).deleteDocument("harbour-handbook"),
+    );
+
+    expect(failed.code).toBe("provider_unavailable");
+    expect(failed.message).toContain("delete");
+    expect(await knowledge.listDocuments()).toHaveLength(2);
+    expect(await filesBelow(privateRoot)).toHaveLength(2);
+
+    expect(await knowledge.deleteDocument("harbour-handbook")).toEqual({
+      sourceId: "document:harbour-handbook",
+      deletedVersions: 2,
+    });
+    expect(await knowledge.listDocuments()).toEqual([]);
+    expect(await documentSources()).toEqual([]);
+    expect(await filesBelow(privateRoot)).toEqual([]);
+  });
+
+  it("approves a revision while private storage fails and deletes the superseded original at the next rebuild", async () => {
+    const first = await open().ingestDocument(handbook());
+    expect((await open().approveDocument(first.version.contentHash)).originalsLeft).toBe(0);
+    const revised = await open().ingestDocument(handbook(REVISED));
+
+    const approval = await open({ privateStorage: undeletable() }).approveDocument(
+      revised.version.contentHash,
+    );
+
+    expect(approval.version.status).toBe("approved");
+    expect(approval.originalsLeft).toBe(1);
+    expect(await filesBelow(privateRoot)).toHaveLength(2);
+    expect(await keyOf(first.version.contentHash)).not.toBeNull();
+
+    const rebuilt = await open().rebuildIndex();
+    expect(rebuilt.documents).toMatchObject({ restored: 1, originalsLeft: 0 });
+    expect(await filesBelow(privateRoot)).toHaveLength(1);
+    expect(await keyOf(first.version.contentHash)).toBeNull();
+    expect(await keyOf(revised.version.contentHash)).not.toBeNull();
+  });
+
+  it("keeps a document another process approves while a rebuild runs", async () => {
+    const knowledge = open();
+    const first = await knowledge.ingestDocument(handbook());
+    await knowledge.approveDocument(first.version.contentHash);
+    const late = await knowledge.ingestDocument({
+      ...handbook(`${HANDBOOK}\nA late note.\n`, "late-handbook"),
+      title: "Late handbook",
+    });
+    const retrieval = persistence.retrieval;
+    // The other process approves just before the rebuild unpublishes what has no approved version.
+    const racing: RetrievalPersistence = {
+      ...retrieval,
+      unpublishDocumentSources: async (unpublished) => {
+        await knowledge.approveDocument(late.version.contentHash);
+        return retrieval.unpublishDocumentSources(unpublished);
+      },
+    };
+
+    await open({ store: racing }).rebuildIndex();
+
+    expect(await documentSources()).toEqual([
+      "document:harbour-handbook",
+      "document:late-handbook",
+    ]);
+    expect((await statuses(knowledge))[late.version.contentHash]).toBe("approved");
   });
 
   it("records a conflict with the API facts, shows it and leaves its chunk out of search", async () => {

@@ -314,6 +314,17 @@ export interface RetrievalPersistence {
    * returns `false` when there is no such version.
    */
   rejectDocumentVersion(contentHash: string): Promise<boolean>;
+  /**
+   * Forgets the storage key of the superseded or withdrawn version with this content hash, once
+   * its original is deleted; returns `false` when no such version still holds a key.
+   */
+  forgetDocumentOriginal(contentHash: string): Promise<boolean>;
+  /**
+   * Removes from the index every supplemental source that has no approved version, or whose
+   * approved version is one of `unpublished` (its original is missing), in one statement that reads
+   * the versions as it runs; returns how many sources were removed.
+   */
+  unpublishDocumentSources(unpublished: readonly string[]): Promise<number>;
 }
 
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
@@ -561,6 +572,10 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
         return deleted.flatMap((row) => (row.storageKey === null ? [] : [row.storageKey]));
       });
     },
+
+    forgetDocumentOriginal: () => Promise.reject(new Error("not implemented")),
+
+    unpublishDocumentSources: () => Promise.reject(new Error("not implemented")),
 
     async reindexApprovedDocument(contentHash, source, conflicts) {
       return db.transaction(async (tx) => {
