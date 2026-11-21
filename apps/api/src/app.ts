@@ -395,6 +395,11 @@ const describingKnowledge: KnowledgeService = {
   search: documentationOnly,
   candidates: documentationOnly,
   usage: documentationOnly,
+  ingestDocument: documentationOnly,
+  listDocuments: documentationOnly,
+  showDocument: documentationOnly,
+  approveDocument: documentationOnly,
+  rejectDocument: documentationOnly,
 };
 
 /**

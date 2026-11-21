@@ -5,7 +5,15 @@ import { createLocalDriver, createLocalNamespaceStore } from "./drivers/local.js
 import { addressOf, prefixOf, segmentPattern, type StoredExtension } from "./keys.js";
 import { ownedNamespace } from "./namespace.js";
 
-export type { StoredExtension } from "./keys.js";
+export type { PrivateExtension, StoredExtension } from "./keys.js";
+export {
+  openPrivateStorage,
+  readPrivateStorageConfig,
+  type BunnyS3PrivateStorageConfig,
+  type LocalPrivateStorageConfig,
+  type PrivateStorage,
+  type PrivateStorageConfig,
+} from "./private.js";
 
 /** The key prefix and public base every driver shares. */
 interface StorageLayout {

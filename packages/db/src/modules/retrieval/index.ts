@@ -146,6 +146,46 @@ export interface RetrievalUsageTotals {
 }
 
 /**
+ * Where a supplemental document version stands: `pending` waits for the owner's decision,
+ * `blocked` has sensitivity findings and can never be approved, `approved` is the indexed version
+ * of its source until a revision supersedes it, and `rejected` was refused by the owner.
+ */
+export type RetrievalDocumentStatus =
+  "pending" | "blocked" | "approved" | "rejected" | "superseded";
+
+/** A sensitivity finding of a document version: its kind and line, never the detected value. */
+export interface RetrievalDocumentFinding {
+  readonly kind: string;
+  readonly line: number;
+}
+
+/** One ingested version of a supplemental document, identified by the hash of its bytes. */
+export interface RetrievalDocumentVersion {
+  /** `document:<slug>`. */
+  readonly sourceId: string;
+  /** SHA-256 of the original bytes, lower-case hex. */
+  readonly contentHash: string;
+  readonly title: string;
+  readonly mediaType: string;
+  readonly byteSize: number;
+  /** The private storage key of the original; `null` once it is gone or when it was never kept. */
+  readonly storageKey: string | null;
+  readonly status: RetrievalDocumentStatus;
+  readonly findings: readonly RetrievalDocumentFinding[];
+  readonly sectionCount: number;
+  readonly chunkCount: number;
+  readonly createdAt: Date;
+  /** When it was approved, rejected or superseded. */
+  readonly decidedAt: Date | null;
+}
+
+/** A version as ingestion records it: waiting for a decision, or blocked by findings. */
+export type NewRetrievalDocumentVersion = Omit<
+  RetrievalDocumentVersion,
+  "status" | "createdAt" | "decidedAt"
+> & { readonly status: "pending" | "blocked" };
+
+/**
  * The persistence of the knowledge index and of embedding spend in the private `retrieval` schema.
  * It implements the store port of `@sebela/memory` structurally.
  */
@@ -192,6 +232,29 @@ export interface RetrievalPersistence {
   /** Counts a failed attempt on each item and keeps the error; at `maxAttempts` it is failed. */
   failWork(ids: readonly string[], error: string, maxAttempts: number): Promise<void>;
   workCounts(): Promise<RetrievalWorkCounts>;
+  /**
+   * Records an ingested document version. A version with the same content hash is never recorded
+   * twice: the stored one is returned with `created: false`.
+   */
+  addDocumentVersion(
+    version: NewRetrievalDocumentVersion,
+  ): Promise<{ readonly created: boolean; readonly version: RetrievalDocumentVersion }>;
+  /** The version with this content hash, or `null`. */
+  documentVersion(contentHash: string): Promise<RetrievalDocumentVersion | null>;
+  /** Every recorded version, newest first. */
+  documentVersions(): Promise<RetrievalDocumentVersion[]>;
+  /**
+   * Approves the pending version with this content hash and stores `source` (its embedded
+   * version, which must be of the same source and carry the hash as its version) in one
+   * transaction; the source's earlier approved version becomes superseded. Returns `false` and
+   * stores nothing when no pending version has the hash.
+   */
+  approveDocumentVersion(contentHash: string, source: RetrievalSourceVersion): Promise<boolean>;
+  /**
+   * Rejects the pending or blocked version with this content hash and forgets its storage key;
+   * returns `false` when there is no such version.
+   */
+  rejectDocumentVersion(contentHash: string): Promise<boolean>;
 }
 
 export function createRetrievalPersistence(db: Database): RetrievalPersistence {
@@ -391,6 +454,12 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       const of = (status: string) => rows.find((row) => row.status === status)?.count ?? 0;
       return { pending: of("pending"), failed: of("failed") };
     },
+
+    addDocumentVersion: () => Promise.reject(new Error("not implemented")),
+    documentVersion: () => Promise.reject(new Error("not implemented")),
+    documentVersions: () => Promise.reject(new Error("not implemented")),
+    approveDocumentVersion: () => Promise.reject(new Error("not implemented")),
+    rejectDocumentVersion: () => Promise.reject(new Error("not implemented")),
 
     async removeSourcesExcept(sourceKind, sourceIds) {
       const removed = await db

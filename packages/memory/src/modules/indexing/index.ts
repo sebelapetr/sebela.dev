@@ -2,6 +2,7 @@
 // vector for the configured model, in bounded batches, checks the month's spend ceiling before
 // each batch, records the usage of every provider call and caches every returned vector at once.
 // Queued work from content writes is finished by a run over the whole portfolio.
+import type { PreparedDocument } from "../documents/index.js";
 import { portfolioSources, type PortfolioSource } from "../ingest/index.js";
 import {
   BudgetExhaustedError,
@@ -10,6 +11,7 @@ import {
   type PortfolioSnapshot,
   type RetrievalConfig,
   type RetrievalStore,
+  type SourceVersion,
   type UsageTotals,
   type WorkCounts,
 } from "../ports/index.js";
@@ -60,6 +62,19 @@ export const maxWorkAttempts = 5;
 /** Most queued items one run takes by default. */
 export const workBatchLimit = 500;
 
+/** What embedding one approved document produced: its version, ready to store, and the spend. */
+export interface DocumentEmbedding {
+  readonly version: SourceVersion;
+  readonly report: {
+    /** Chunks sent to the provider. */
+    readonly embedded: number;
+    /** Chunks whose cached vector was reused. */
+    readonly reused: number;
+    readonly tokens: number;
+    readonly costUsd: number;
+  };
+}
+
 export interface Indexer {
   /**
    * Indexes the portfolio. Throws `BudgetExhaustedError` before a batch the ceiling no longer
@@ -84,6 +99,12 @@ export interface Indexer {
     read: () => Promise<PortfolioSnapshot>,
     options?: ProcessOptions,
   ): Promise<QueueReport>;
+  /**
+   * Embeds the chunks of an approved supplemental document whose text hash has no cached vector,
+   * in batches, caching every returned vector at once, and returns the complete version for the
+   * caller to store with its approval. Stores no source. Fails like `reindexPortfolio`.
+   */
+  embedDocument(document: PreparedDocument): Promise<DocumentEmbedding>;
   /** Recorded provider usage this calendar month (UTC). */
   usage(): Promise<UsageTotals>;
 }
@@ -212,6 +233,7 @@ export function createIndexer(options: IndexerOptions): Indexer {
     reindexPortfolio: (snapshot) => reconcile(snapshot, false),
     rebuildPortfolio: (snapshot) => reconcile(snapshot, true),
     processPending,
+    embedDocument: () => Promise.reject(new Error("not implemented")),
     usage: () => spend.thisMonth(),
   };
 }

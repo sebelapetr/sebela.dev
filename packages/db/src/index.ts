@@ -11,7 +11,11 @@ export type {
   ApiKeyPersistence,
 } from "./modules/api-keys/index.js";
 export type {
+  NewRetrievalDocumentVersion,
   RetrievalChunkRecord,
+  RetrievalDocumentFinding,
+  RetrievalDocumentStatus,
+  RetrievalDocumentVersion,
   RetrievalIndexedSource,
   RetrievalNearestChunk,
   RetrievalNearestQuery,

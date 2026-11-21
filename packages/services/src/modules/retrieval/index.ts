@@ -7,7 +7,11 @@ import {
   type SearchRequest,
   type SearchResult,
 } from "@sebela/contracts";
-import { retrievalDimension, type RetrievalPersistence } from "@sebela/db";
+import {
+  retrievalDimension,
+  type RetrievalDocumentVersion,
+  type RetrievalPersistence,
+} from "@sebela/db";
 import {
   BudgetExhaustedError,
   ProviderUnavailableError,
@@ -22,6 +26,11 @@ import {
   type ProcessOptions,
   type QueueReport,
   type CandidateQuestion,
+  type DocumentInput,
+  type DocumentLimits,
+  type SensitivityFinding,
+  type SourceChunk,
+  type SourceSection,
   type RetrievalConfig,
   type RetrievalStore,
   type UsageTotals,
@@ -30,6 +39,7 @@ import {
 
 import { DomainError } from "../../errors.js";
 import type { ProfileService } from "../profile/index.js";
+import type { PrivateStorage } from "../storage/index.js";
 import type { RoadmapService } from "../roadmap/index.js";
 
 /**
@@ -66,6 +76,59 @@ export interface KnowledgeService {
   candidates(questions: readonly CandidateQuestion[]): Promise<string[][]>;
   /** The provider usage recorded this calendar month (UTC). */
   usage(): Promise<UsageTotals>;
+  /**
+   * Ingests a supplemental Markdown or plain-text document for the owner's review; never calls
+   * the provider. Bytes already ingested for the same slug change nothing (`created: false`); the
+   * same bytes under another slug are a `conflict`. A document with sensitivity findings is
+   * recorded `blocked`, with the kinds and lines of the findings only and without its original;
+   * otherwise the original is kept in private storage and the version is `pending`. An unsupported
+   * or non-UTF-8 file is `unsupported_media_type`, an oversized one `payload_too_large`, and an
+   * empty one, an invalid slug or title or an exceeded processing time `validation_failed`.
+   * Throws a plain error when no private storage is configured.
+   */
+  ingestDocument(input: DocumentInput): Promise<DocumentIngest>;
+  /** Every ingested document version, newest first. */
+  listDocuments(): Promise<DocumentVersion[]>;
+  /**
+   * The version with this content hash and its preview: the cleaned text, sections and chunks as
+   * they would be indexed (`null` and empty once the original is gone) and its findings.
+   */
+  showDocument(contentHash: string): Promise<DocumentPreview>;
+  /**
+   * Approves the pending version with exactly this content hash: re-reads the original, verifies
+   * its hash, embeds it and makes it searchable, superseding the source's earlier approved
+   * version. A blocked, rejected or decided version is a `conflict`; an unknown hash `not_found`.
+   */
+  approveDocument(contentHash: string): Promise<DocumentApproval>;
+  /** Rejects a pending or blocked version and deletes its original; a decided one is a `conflict`. */
+  rejectDocument(contentHash: string): Promise<DocumentVersion>;
+}
+
+/** An ingested document version as the owner reviews it; the storage key stays inside. */
+export type DocumentVersion = Omit<RetrievalDocumentVersion, "storageKey">;
+
+export interface DocumentIngest {
+  /** `false` when these bytes were ingested before; nothing changed then. */
+  readonly created: boolean;
+  readonly version: DocumentVersion;
+}
+
+export interface DocumentPreview {
+  readonly version: DocumentVersion;
+  readonly text: string | null;
+  readonly sections: readonly SourceSection[];
+  readonly chunks: readonly SourceChunk[];
+  readonly findings: readonly SensitivityFinding[];
+}
+
+export interface DocumentApproval {
+  readonly version: DocumentVersion;
+  readonly report: {
+    readonly embedded: number;
+    readonly reused: number;
+    readonly tokens: number;
+    readonly costUsd: number;
+  };
 }
 
 export interface KnowledgeSources {
@@ -79,6 +142,10 @@ export interface KnowledgeServiceOptions {
   readonly config: RetrievalConfig | null;
   /** The embedding provider; without it every provider operation is unavailable. */
   readonly embedder?: Embedder;
+  /** Where originals of supplemental documents are kept; needed to ingest, show and approve. */
+  readonly privateStorage?: PrivateStorage;
+  /** Limits of a supplemental document; `defaultDocumentLimits` when absent. */
+  readonly documentLimits?: DocumentLimits;
 }
 
 export function createKnowledgeService(
@@ -117,6 +184,11 @@ export function createKnowledgeService(
     search: (request) => provider(() => ready().retriever.search(request)),
     candidates: (questions) => provider(() => ready().retriever.candidates(questions)),
     usage: () => store.usageSince(monthStart(new Date())),
+    ingestDocument: () => Promise.reject(new Error("not implemented")),
+    listDocuments: () => Promise.reject(new Error("not implemented")),
+    showDocument: () => Promise.reject(new Error("not implemented")),
+    approveDocument: () => Promise.reject(new Error("not implemented")),
+    rejectDocument: () => Promise.reject(new Error("not implemented")),
   };
 }
 

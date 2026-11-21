@@ -6,11 +6,20 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createBunnyS3Driver, type S3Exchange, type S3Transport } from "./drivers/bunny-s3.js";
 import {
+  createBunnyS3Driver,
+  createBunnyS3PrivateDriver,
+  type S3Exchange,
+  type S3Transport,
+} from "./drivers/bunny-s3.js";
+import {
+  openPrivateStorage,
   openStorage,
+  readPrivateStorageConfig,
   readStorageConfig,
+  type BunnyS3PrivateStorageConfig,
   type BunnyS3StorageConfig,
+  type PrivateStorage,
   type LocalStorageConfig,
   type Storage,
 } from "./index.js";
@@ -209,6 +218,15 @@ function fakeS3(config: BunnyS3StorageConfig) {
     if (exchange.method === "DELETE") {
       if (!objects.delete(key)) return Promise.resolve(error(404, "NoSuchKey"));
       return Promise.resolve({ status: 204 });
+    }
+    if (exchange.method === "GET" && url.searchParams.get("list-type") === null) {
+      const object = objects.get(key);
+      if (object === undefined) return Promise.resolve(error(404, "NoSuchKey"));
+      return Promise.resolve({
+        status: 200,
+        headers: { "content-length": String(object.body.byteLength) },
+        body: object.body,
+      });
     }
     return Promise.resolve(error(501, "NotImplemented"));
   };
@@ -588,5 +606,323 @@ describe("bunny-s3 storage", () => {
     expect(opened.storage.publicAddress(`development/feature-a/${foreignName}`)).toBe(
       `https://media.example.test/files/development/feature-a/${foreignName}`,
     );
+  });
+});
+
+const privateEnvironment = {
+  PRIVATE_STORAGE_DRIVER: "local",
+  PRIVATE_STORAGE_LOCAL_ROOT: "/srv/fictional-private",
+  STORAGE_LOCAL_ROOT: "/srv/fictional-storage",
+  STORAGE_ENVIRONMENT: "development",
+  STORAGE_WORKTREE: "feature-a",
+};
+
+const privateBunnyEnvironment = {
+  PRIVATE_STORAGE_DRIVER: "bunny-s3",
+  PRIVATE_STORAGE_BUNNY_ENDPOINT: "https://de-s3.storage.example.test/",
+  PRIVATE_STORAGE_BUNNY_REGION: "de",
+  PRIVATE_STORAGE_BUNNY_ZONE: "fictional-private-zone",
+  PRIVATE_STORAGE_BUNNY_PASSWORD: "fictional-private-password",
+  STORAGE_BUNNY_ZONE: "fictional-dev-zone",
+  STORAGE_ENVIRONMENT: "development",
+  STORAGE_WORKTREE: "feature-a",
+};
+
+describe("readPrivateStorageConfig", () => {
+  it("reads the local driver with the shared prefix and no public address", () => {
+    expect(readPrivateStorageConfig(privateEnvironment)).toEqual({
+      driver: "local",
+      root: "/srv/fictional-private",
+      environment: "development",
+      worktree: "feature-a",
+    });
+  });
+
+  it("resolves a relative root against the working folder", () => {
+    const config = readPrivateStorageConfig(
+      { ...privateEnvironment, PRIVATE_STORAGE_LOCAL_ROOT: "../private" },
+      "/srv/app/api",
+    );
+
+    expect(config).toMatchObject({ root: "/srv/app/private" });
+  });
+
+  it("reads the bunny-s3 driver with its own zone and credentials", () => {
+    expect(readPrivateStorageConfig(privateBunnyEnvironment)).toEqual({
+      driver: "bunny-s3",
+      endpoint: "https://de-s3.storage.example.test",
+      region: "de",
+      zone: "fictional-private-zone",
+      password: "fictional-private-password",
+      environment: "development",
+      worktree: "feature-a",
+    });
+  });
+
+  it.each([
+    [{ PRIVATE_STORAGE_DRIVER: undefined }, "PRIVATE_STORAGE_DRIVER"],
+    [{ PRIVATE_STORAGE_DRIVER: "s3" }, "PRIVATE_STORAGE_DRIVER"],
+    [{ PRIVATE_STORAGE_LOCAL_ROOT: "" }, "PRIVATE_STORAGE_LOCAL_ROOT"],
+    [{ PRIVATE_STORAGE_LOCAL_ROOT: "/srv/fictional-storage" }, "PRIVATE_STORAGE_LOCAL_ROOT"],
+    [
+      { PRIVATE_STORAGE_LOCAL_ROOT: "/srv/fictional-storage/private" },
+      "PRIVATE_STORAGE_LOCAL_ROOT",
+    ],
+    [{ PRIVATE_STORAGE_LOCAL_ROOT: "/srv" }, "PRIVATE_STORAGE_LOCAL_ROOT"],
+    [{ STORAGE_ENVIRONMENT: "Bad" }, "STORAGE_ENVIRONMENT"],
+  ])("refuses the local settings %j, naming %s", (change, variable) => {
+    expect(() => readPrivateStorageConfig({ ...privateEnvironment, ...change })).toThrow(
+      new RegExp(`Invalid private storage configuration: set [A-Z_, ]*${variable}`),
+    );
+  });
+
+  it.each([
+    [{ PRIVATE_STORAGE_BUNNY_ENDPOINT: "http://de-s3.storage.example.test" }, "ENDPOINT"],
+    [{ PRIVATE_STORAGE_BUNNY_REGION: "" }, "REGION"],
+    [{ PRIVATE_STORAGE_BUNNY_ZONE: "" }, "ZONE"],
+    [{ PRIVATE_STORAGE_BUNNY_ZONE: "fictional-dev-zone" }, "ZONE"],
+    [{ PRIVATE_STORAGE_BUNNY_PASSWORD: "" }, "PASSWORD"],
+  ])("refuses the bunny-s3 settings %j, naming the %s", (change, variable) => {
+    expect(() => readPrivateStorageConfig({ ...privateBunnyEnvironment, ...change })).toThrow(
+      new RegExp(`PRIVATE_STORAGE_BUNNY_${variable}`),
+    );
+  });
+
+  it("requires the worktree folder for bunny-s3 in development", () => {
+    expect(() =>
+      readPrivateStorageConfig({ ...privateBunnyEnvironment, STORAGE_WORKTREE: "" }),
+    ).toThrow(/STORAGE_WORKTREE/);
+  });
+
+  it("never puts a value into the error and never falls back to local disk", () => {
+    const attempt = () =>
+      readPrivateStorageConfig({
+        ...privateBunnyEnvironment,
+        PRIVATE_STORAGE_BUNNY_ENDPOINT: "",
+        PRIVATE_STORAGE_LOCAL_ROOT: "/srv/fictional-private",
+      });
+
+    expect(attempt).toThrow(/PRIVATE_STORAGE_BUNNY_ENDPOINT/);
+    expect(attempt).not.toThrow(/fictional-private-password|fictional-private-zone/);
+  });
+});
+
+/** One private driver under test and a view of what it holds, outside its interface. */
+interface PrivateHarness {
+  open(layout?: Layout): PrivateStorage;
+  contents(key: string): Promise<Uint8Array | null>;
+  keys(): Promise<string[]>;
+  seed(key: string, bytes: Uint8Array): Promise<void>;
+  /** Makes every following write fail. */
+  breakWrites(): Promise<void>;
+  cleanup(): Promise<void>;
+}
+
+async function localPrivateHarness(): Promise<PrivateHarness> {
+  const base = await mkdtemp(join(tmpdir(), "sebela-private-"));
+  const root = join(base, "root");
+  return {
+    open: (layout = defaultLayout) => openPrivateStorage({ driver: "local", root, ...layout }),
+    async contents(key) {
+      const path = join(root, key);
+      return existsSync(path) ? new Uint8Array(await readFile(path)) : null;
+    },
+    keys: () => filesBelow(root),
+    async seed(key, bytes) {
+      await mkdir(dirname(join(root, key)), { recursive: true });
+      await writeFile(join(root, key), bytes);
+    },
+    async breakWrites() {
+      // A prefix folder that is a symbolic link is refused before anything is written.
+      await mkdir(join(root, "development"), { recursive: true });
+      await rm(join(root, "development", "feature-a"), { recursive: true, force: true });
+      await symlink(base, join(root, "development", "feature-a"));
+    },
+    cleanup: () => rm(base, { recursive: true, force: true }),
+  };
+}
+
+const privateBunnyConfig = (layout: Layout = defaultLayout): BunnyS3PrivateStorageConfig => ({
+  driver: "bunny-s3",
+  endpoint: "https://de-s3.storage.example.test",
+  region: "de",
+  zone: "fictional-private-zone",
+  password: "fictional-private-password",
+  ...layout,
+});
+
+function bunnyPrivateHarness(): Promise<PrivateHarness> {
+  const fake = fakeS3({ ...bunnyConfig(), zone: "fictional-private-zone" });
+  return Promise.resolve({
+    open: (layout) => createBunnyS3PrivateDriver(privateBunnyConfig(layout), fake.transport),
+    contents: (key) => Promise.resolve(fake.objects.get(key)?.body ?? null),
+    keys: () => Promise.resolve([...fake.objects.keys()].sort()),
+    seed(key, bytes) {
+      fake.objects.set(key, { body: bytes, headers: {} });
+      return Promise.resolve();
+    },
+    breakWrites() {
+      fake.state.failWith = 500;
+      fake.state.failCode = "InternalError";
+      return Promise.resolve();
+    },
+    cleanup: () => Promise.resolve(),
+  });
+}
+
+const privateName =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(md|txt)$/;
+const foreignPrivateName = "0b8f5c2e-1d4a-4f6b-9c3e-2a7d8e9f0a1b.md";
+
+describe.each([
+  ["local", localPrivateHarness],
+  ["bunny-s3", bunnyPrivateHarness],
+])("the %s private driver contract", (_name, create) => {
+  let harness: PrivateHarness;
+
+  beforeEach(async () => {
+    harness = await create();
+  });
+
+  afterEach(async () => {
+    await harness.cleanup();
+  });
+
+  it("stores, reads and deletes an original under the prefix with a generated name", async () => {
+    const storage = harness.open();
+
+    const key = await storage.store({ bytes: Buffer.from("# Notes"), extension: "md" });
+
+    const [environmentFolder, worktreeFolder, name] = key.split("/");
+    expect([environmentFolder, worktreeFolder]).toEqual(["development", "feature-a"]);
+    expect(name).toMatch(privateName);
+    expect(await harness.contents(key)).toEqual(new Uint8Array(Buffer.from("# Notes")));
+    expect(Buffer.from((await storage.read(key)) ?? [])).toEqual(Buffer.from("# Notes"));
+
+    await storage.delete(key);
+    await storage.delete(key);
+
+    expect(await storage.read(key)).toBeNull();
+    expect(await harness.keys()).toEqual([]);
+  });
+
+  it("never yields an address of any kind", async () => {
+    const storage = harness.open();
+    const key = await storage.store({ bytes: Buffer.from("plain"), extension: "txt" });
+
+    expect(Object.keys(storage).sort()).toEqual(["delete", "read", "store"]);
+    expect(key).not.toMatch(/^[a-z]+:|\/\//);
+  });
+
+  it("never reuses a key, even for the same content", async () => {
+    const storage = harness.open();
+    const bytes = Buffer.from("same");
+
+    const keys = await Promise.all([1, 2, 3].map(() => storage.store({ bytes, extension: "md" })));
+
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it.each([
+    "../outside/decoy.md",
+    "development/feature-a/../../../outside/decoy.md",
+    "/etc/hostname",
+    `development/other-worktree/${foreignPrivateName}`,
+    `production/feature-a/${foreignPrivateName}`,
+    `development/${foreignPrivateName}`,
+    `development/feature-a/nested/${foreignPrivateName}`,
+    `development/feature-a/${foreignName}`,
+    `development/feature-a/${foreignPrivateName}/`,
+    `development\\feature-a\\${foreignPrivateName}`,
+    `development/feature-a/${foreignPrivateName}\0.txt`,
+    "",
+  ])("neither reads nor deletes the key %j outside its prefix or layout", async (key) => {
+    const storage = harness.open();
+    const foreign = [
+      `development/other-worktree/${foreignPrivateName}`,
+      `production/feature-a/${foreignPrivateName}`,
+      `development/${foreignPrivateName}`,
+    ];
+    for (const other of foreign) await harness.seed(other, Buffer.from("other"));
+
+    await expect(storage.read(key)).resolves.toBeNull();
+    await expect(storage.delete(key)).rejects.toThrow(/key/i);
+
+    expect(await harness.keys()).toEqual([...foreign].sort());
+  });
+
+  it("refuses a public media extension", async () => {
+    const storage = harness.open();
+
+    await expect(
+      storage.store({ bytes: Buffer.from("x"), extension: "png" as "md" }),
+    ).rejects.toThrow(/extension/i);
+    expect(await harness.keys()).toEqual([]);
+  });
+
+  it("reports a failed write as a failure and leaves nothing behind", async () => {
+    const storage = harness.open();
+    await harness.breakWrites();
+
+    await expect(storage.store({ bytes: Buffer.from("x"), extension: "md" })).rejects.toThrow();
+
+    expect(await harness.keys()).toEqual([]);
+  });
+});
+
+describe("bunny-s3 private storage", () => {
+  let fake: ReturnType<typeof fakeS3>;
+  let storage: PrivateStorage;
+
+  beforeEach(() => {
+    fake = fakeS3({ ...bunnyConfig(), zone: "fictional-private-zone" });
+    storage = createBunnyS3PrivateDriver(privateBunnyConfig(), fake.transport);
+  });
+
+  it.each([
+    ["md", "text/markdown; charset=utf-8"],
+    ["txt", "text/plain; charset=utf-8"],
+  ] as const)(
+    "writes a %s original into the private zone as %s with a checksum",
+    async (extension, type) => {
+      const bytes = Buffer.from("fictional text");
+
+      const key = await storage.store({ bytes, extension });
+
+      const [exchange] = fake.exchanges;
+      expect(exchange?.url).toMatch(
+        new RegExp(`^https://de-s3\\.storage\\.example\\.test/fictional-private-zone/${key}`),
+      );
+      expect(exchange?.headers["authorization"]).toMatch(
+        /^AWS4-HMAC-SHA256 Credential=fictional-private-zone\/\d{8}\/de\/s3\/aws4_request,/,
+      );
+      const headers = fake.objects.get(key)?.headers ?? {};
+      expect(headers["content-type"]).toBe(type);
+      expect(headers["x-amz-checksum-sha256"]).toBe(
+        createHash("sha256").update(bytes).digest("base64"),
+      );
+    },
+  );
+
+  it("sends no request for a key outside its prefix", async () => {
+    await expect(storage.read(`development/other-worktree/${foreignPrivateName}`)).resolves.toBe(
+      null,
+    );
+
+    expect(fake.exchanges).toEqual([]);
+  });
+
+  it("turns a failed read into a storage error without the password", async () => {
+    const key = await storage.store({ bytes: Buffer.from("x"), extension: "md" });
+    fake.state.failWith = 403;
+
+    const error: unknown = await storage.read(key).then(
+      () => null,
+      (reason: unknown) => reason,
+    );
+
+    expect(Object.getPrototypeOf(error)).toBe(Error.prototype);
+    expect(String(error)).toMatch(/read.*403/i);
+    expect(String(error)).not.toMatch(/fictional-private-password/);
   });
 });

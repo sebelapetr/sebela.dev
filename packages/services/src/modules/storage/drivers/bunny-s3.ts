@@ -13,6 +13,7 @@ import {
 import type { HttpRequest } from "@smithy/types";
 
 import type { BunnyS3StorageConfig, Storage } from "../index.js";
+import type { BunnyS3PrivateStorageConfig, PrivateStorage } from "../private.js";
 import { addressOf, fileNameOf, newKey, prefixOf, type StoredExtension } from "../keys.js";
 import { markerName, type NamespaceStore } from "../namespace.js";
 
@@ -30,7 +31,7 @@ export interface S3Exchange {
 export interface S3Reply {
   readonly status: number;
   readonly headers?: Readonly<Record<string, string>>;
-  readonly body?: string;
+  readonly body?: string | Uint8Array;
 }
 
 /**
@@ -98,6 +99,18 @@ export function createBunnyS3Driver(
     publicAddress: (key) => addressOf(prefix, config.publicBaseUrl, key),
   };
 }
+
+/**
+ * A private Bunny Storage zone through the same S3-compatible API: store, read and delete, and no
+ * address of any kind. The zone has no CDN pull zone; keys are generated inside the prefix and a
+ * key outside it is refused (delete) or not found (read) without a request.
+ */
+export const createBunnyS3PrivateDriver: (
+  config: BunnyS3PrivateStorageConfig,
+  transport?: S3Transport,
+) => PrivateStorage = () => {
+  throw new Error("not implemented");
+};
 
 /**
  * The owner-guarded namespace `<environment>/<worktree>/` in the zone: the marker is one object,
@@ -227,7 +240,11 @@ function handlerFor(transport: S3Transport): NonNullable<S3ClientConfig["request
           statusCode: reply.status,
           headers: { ...reply.headers },
           // A stream, as from a real connection, so object bodies can be read as well.
-          body: Readable.from([Buffer.from(reply.body ?? "", "utf8")]),
+          body: Readable.from([
+            typeof reply.body === "string" || reply.body === undefined
+              ? Buffer.from(reply.body ?? "", "utf8")
+              : Buffer.from(reply.body),
+          ]),
         },
       };
     },
