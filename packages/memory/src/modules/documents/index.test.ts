@@ -53,6 +53,18 @@ async function rejection(run: () => Promise<unknown>): Promise<DocumentRejection
   }
 }
 
+/**
+ * The processor time a run takes, in milliseconds. Unlike wall-clock time it does not count the
+ * time other processes of a busy machine hold the processor. Each test file runs in its own
+ * process, so only this file's work is counted.
+ */
+async function processorMillisecondsOf(run: () => Promise<unknown>): Promise<number> {
+  const before = process.cpuUsage();
+  await run();
+  const used = process.cpuUsage(before);
+  return (used.user + used.system) / 1000;
+}
+
 // Every value below is fictional; tokens are assembled at run time so no scanner mistakes the
 // source for a leaked credential.
 const sensitive: readonly [SensitivityKind, string][] = [
@@ -352,15 +364,31 @@ describe("prepareDocument", () => {
     ["token-like words", "", "eyJ-", 48_000],
     ["connection settings", "", "Host=a;", 400_000],
     ["lines with telephone numbers", "", "Call 555-010-0199 now.\n", 400_000],
-  ])("prepares a long run of %s within the processing time", async (_name, prefix, unit, size) => {
-    const text = prefix + unit.repeat(Math.ceil(size / unit.length));
-    const started = performance.now();
+  ])(
+    "prepares a long run of %s in time linear in its length",
+    async (_name, prefix, unit, size) => {
+      const textOf = (length: number) => prefix + unit.repeat(Math.ceil(length / unit.length));
+      const prepare = (text: string) => prepareDocument(input(text, { fileName: "notes.txt" }));
+      const small = textOf(size / 4);
+      const large = textOf(size);
+      // The first run also warms the code up, so it is not timed.
+      expect(await rejection(() => prepare(large))).toBeNull();
 
-    expect(
-      await rejection(() => prepareDocument(input(text, { fileName: "notes.txt" }))),
-    ).toBeNull();
-    expect(performance.now() - started).toBeLessThan(1000);
-  });
+      // The shortest of interleaved runs, so a garbage collection in one run does not count.
+      const smallRuns: number[] = [];
+      const largeRuns: number[] = [];
+      for (let run = 0; run < 5; run += 1) {
+        smallRuns.push(await processorMillisecondsOf(() => prepare(small)));
+        largeRuns.push(await processorMillisecondsOf(() => prepare(large)));
+      }
+
+      // Four times the text takes about four times as long when the work is linear and sixteen
+      // times when it is quadratic; the ratio does not depend on how fast the machine is.
+      expect(Math.min(...largeRuns) / Math.min(...smallRuns)).toBeLessThan(8);
+    },
+    // Only so a quadratic variant fails on its ratio, not on the default time-out of 5 s.
+    60_000,
+  );
 
   it("finds a sensitive value in the display title as line 0", async () => {
     const prepared = await prepareDocument(
