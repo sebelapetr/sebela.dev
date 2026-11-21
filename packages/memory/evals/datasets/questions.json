@@ -1,5 +1,5 @@
 {
-  "description": "Fictional EN/CS retrieval questions over the demo seed and the fictional supplemental documents (.plan/09-rag/prd.md, Evals and measurement). Relevance: 2 = the source answers the question, 1 = related context, 0 (absent) = irrelevant. A question with no relevant source must return no evidence.",
+  "description": "Fictional EN/CS retrieval questions over the demo seed and the fictional supplemental documents (.plan/done/09-rag/prd.md, Evals and measurement). Relevance: 2 = the source answers the question, 1 = related context, 0 (absent) = irrelevant. A question with no relevant source must return no evidence.",
   "version": 1,
   "sources": {
     "document:harbor-retail-cv-2021": {
