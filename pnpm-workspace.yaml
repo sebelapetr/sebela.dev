@@ -16,6 +16,14 @@ allowBuilds:
 ignoredOptionalDependencies:
   - "@napi-rs/canvas"
 
+# drizzle-kit 0.31.11, the latest stable release, loads its configuration through
+# @esbuild-kit/esm-loader, whose @esbuild-kit/core-utils (last released 3.3.2) pins esbuild
+# ~0.18.20, affected by GHSA-67mh-4wv8-2f99 (fixed in 0.25.0). The override moves only that
+# dependency edge to the esbuild that drizzle-kit itself uses; it only uses esbuild's transform
+# API, which is unchanged. Remove it once drizzle-kit no longer depends on @esbuild-kit.
+overrides:
+  "@esbuild-kit/core-utils>esbuild": ^0.25.12
+
 # One version of each shared tool for the whole workspace. Packages refer to it with `catalog:`.
 catalog:
   "@eslint/js": 10.0.1
@@ -34,6 +42,6 @@ catalog:
   tailwindcss: 4.3.5
   turbo: 2.11.11
   typescript: 6.0.3
-  typescript-eslint: 8.72.2
+  typescript-eslint: 8.73.0
   vitest: 5.1.0
   zod: 4.6.7

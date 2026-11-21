@@ -51,13 +51,14 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── .github/
 │   ├── workflows/           CI, the image release and the deployment [1, 10], the OpenSSF Scorecard
 │   ├── CODEOWNERS           the owner as code owner of everything (review requested, not required)
-│   ├── dependabot.yml       monthly grouped updates of the pinned GitHub Actions
+│   ├── dependabot.yml       monthly updates of the pinned GitHub Actions and the images' pnpm
 │   ├── ISSUE_TEMPLATE/      issue forms (bug report, idea) and links to private security reporting and Discussions
 │   └── pull_request_template.md  sections of a pull request description, with the roles
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
 ├── infra/                   production definition, see infra/README.md [10]
 │   ├── production/          Compose production overrides and the production example settings
 │   ├── nginx/               reference configuration of the server's nginx site
+│   ├── pnpm/                pnpm for the container images: manifest and npm lockfile, installed with `npm ci` [10]
 │   └── scripts/             server scripts: deploy.sh, the deployment and rollback run as the deploy user's forced SSH command
 ├── turbo.json               task pipeline [1]
 ├── pnpm-workspace.yaml      workspace packages, tool version catalog [1]
@@ -67,7 +68,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 ├── eslint.config.js         lints root files: the harness, the repository checks and root configuration [1]
 ├── prettier.config.js       re-exports the shared Prettier configuration [1]
 ├── .prettierignore          generated files Prettier leaves alone [1]
-├── .dockerignore            allowlist of the image build context: manifests, apps, packages; of the seeds only the demo seed [2, 10]
+├── .dockerignore            allowlist of the image build context: manifests, apps, packages, `infra/pnpm`; of the seeds only the demo seed [2, 10]
 ├── .env.example             every setting with a comment and an example value; placeholders only [1]
 ├── .env.secrets.example     the owner's secrets for paid outside services, as placeholders; the real file stays in the main checkout [1]
 ├── AGENTS.md                rules for agents (each app and package also has its own)
@@ -104,10 +105,11 @@ Agents may read and edit `.env.local` only inside their assigned worktree, with 
 | Tool                                                       | Version                  | Declared in                                                                                                                                                    |
 | ---------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Node.js                                                    | 26, the current LTS line | `.nvmrc` (`26`) and `engines.node` in `package.json` (`>=26.0.0 <27.0.0`). `engineStrict` in `pnpm-workspace.yaml` makes installation fail on another version. |
-| pnpm                                                       | 12.21.0                  | `packageManager` in `package.json`. CI installs exactly this version.                                                                                          |
+| pnpm                                                       | 12.21.0                  | `packageManager` in `package.json`. CI and the container images (`infra/pnpm`) install exactly this version.                                                   |
 | Turborepo, ESLint, TypeScript, Prettier, typescript-eslint | Exact versions           | The `catalog` in `pnpm-workspace.yaml`; packages depend on them with `catalog:`.                                                                               |
 
 - **Prerequisites:** Git, Node.js 26 and pnpm 12.21.0. Install that pnpm version directly (for example `npm install --global pnpm@12.21.0`): pnpm 10 cannot switch itself to the native pnpm 12 executable, so an older global pnpm fails instead of switching.
+- **Upgrading pnpm** changes `packageManager` and `infra/pnpm` together: set the version in `infra/pnpm/package.json` and run `npm install --package-lock-only --ignore-scripts` in that folder (`infra/README.md`, pnpm in the images).
 - **Installation is locked:** `pnpm install --frozen-lockfile` installs exactly what `pnpm-lock.yaml` records. Change dependencies with `pnpm add` / `pnpm remove` and commit the updated lockfile in the same change.
 - **TypeScript stays on 6.0** while `typescript-eslint`, which needs the TypeScript compiler API, supports only `<6.1.0`. Move both together.
 - **Workspace members:** `apps/*` and `packages/*`. Every member is a `@sebela/*` package with its own `AGENTS.md`. A package defines only the tasks it can meaningfully run.
