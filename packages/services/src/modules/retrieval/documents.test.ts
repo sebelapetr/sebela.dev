@@ -243,6 +243,32 @@ describe("supplemental documents through the knowledge service", () => {
     expect(await persistence.retrieval.indexedSources()).toEqual([]);
   });
 
+  it("refuses to approve a pending version whose original now has findings", async () => {
+    // A version recorded clean before a sensitivity check caught its e-mail address.
+    const bytes = encode(LEAKY);
+    const storageKey = await privateStorage.store({ bytes, extension: "md" });
+    await persistence.retrieval.addDocumentVersion({
+      sourceId: "document:harbour-handbook",
+      contentHash: sha(bytes),
+      title: "Harbour support handbook",
+      mediaType: "text/markdown",
+      byteSize: bytes.length,
+      sectionCount: 4,
+      chunkCount: 4,
+      storageKey,
+      status: "pending",
+      findings: [],
+    });
+    const { knowledge, embedder } = open();
+
+    const error = await refusal(knowledge.approveDocument(sha(bytes)));
+    expect(error.code).toBe("conflict");
+    expect(error.message).toMatch(/sensitivity findings.*sanitized revision/);
+    expect(embedder.calls).toBe(0);
+    expect(await persistence.retrieval.indexedSources()).toEqual([]);
+    expect((await knowledge.showDocument(sha(bytes))).version.status).toBe("pending");
+  });
+
   it("needs a new approval for changed bytes and keeps the approved version until then", async () => {
     const { knowledge } = open();
     const first = await knowledge.ingestDocument(handbook());
