@@ -38,6 +38,9 @@
     "//#check:config": {
       "cache": false
     },
+    "//#check:format": {
+      "cache": false
+    },
     "//#test:harness": {},
     "//#test:checks": {},
     "test:e2e": {

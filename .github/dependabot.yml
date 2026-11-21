@@ -1,10 +1,25 @@
-# Dependabot keeps the GitHub Actions of .github/workflows/ current. Every action is pinned to a
-# full commit SHA with its version as a trailing comment (scripts/checks/pinned-actions.mjs);
-# Dependabot updates both. Once a month, all updates in one pull request whose commit header is
-# `ci: bump ...` (docs/testing.md, CI). The only npm directory covered is infra/pnpm, the hash-pinned
-# pnpm of the container images (infra/README.md, pnpm in the images): its monthly `chore(deps): bump ...`
-# pull request also has to move `packageManager` in package.json, which scripts/checks/image-pnpm.test.mjs
-# enforces. The workspace's npm and Python dependencies are not covered yet.
+# Dependabot keeps the dependencies current. Every pull request goes into master, where only the
+# owner merges it (docs/git-workflow.md, Dependency pull requests), and its commit header passes the
+# commit-message check: `ci: bump ...` for GitHub Actions, `chore(deps): bump ...` (or
+# `chore(deps-dev): bump ...` when only development dependencies move) for everything else.
+#
+# - github-actions: every action is pinned to a full commit SHA with its version as a trailing
+#   comment (scripts/checks/pinned-actions.mjs); Dependabot updates both. Once a month, all updates
+#   in one pull request.
+# - npm, /infra/pnpm: the hash-pinned pnpm of the container images (infra/README.md, pnpm in the
+#   images). Its monthly pull request also has to move `packageManager` in package.json, which
+#   scripts/checks/image-pnpm.test.mjs enforces, so the workspace entry below leaves pnpm alone.
+# - npm, /: the pnpm workspace (package.json of every member, the catalog and overrides of
+#   pnpm-workspace.yaml, pnpm-lock.yaml). Weekly: minor and patch updates in one pull request, each
+#   major update in its own.
+# - docker, /apps/*: the base image of every app's Dockerfile, pinned by tag and digest; an update
+#   moves both. Weekly: every update of all Dockerfiles in one pull request, a new digest of the
+#   same tag included (Node.js majors are ignored below).
+#
+# Node.js majors are not proposed: the Node.js version follows .nvmrc and `engines` in package.json
+# and moves by hand, with @types/node and the images. A cooldown of seven days lets a new release
+# settle before it is proposed (security updates ignore it). The uv workspace is not covered yet:
+# Dependabot's uv cannot run under its `required-version` pin (docs/git-workflow.md).
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -15,12 +30,55 @@ updates:
       github-actions:
         patterns:
           - "*"
+    open-pull-requests-limit: 2
     commit-message:
       prefix: ci
   - package-ecosystem: npm
     directory: /infra/pnpm
     schedule:
       interval: monthly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: pnpm
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+  - package-ecosystem: docker
+    directories:
+      - /apps/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
+    open-pull-requests-limit: 2
     commit-message:
       prefix: chore
       include: scope

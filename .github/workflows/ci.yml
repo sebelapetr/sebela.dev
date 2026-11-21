@@ -100,7 +100,7 @@ jobs:
           echo "TURBO_SCM_HEAD=$head" >> "$GITHUB_ENV"
       - name: Affected packages and why
         run: pnpm exec turbo query affected --packages
-      - name: Root checks (root lint, hard-coded configuration, harness and check tests)
+      - name: Root checks (root lint, hard-coded configuration, formatting, harness and check tests)
         run: pnpm ci:root
       - name: Affected package tasks (lint, typecheck, test, build)
         run: pnpm ci:affected
