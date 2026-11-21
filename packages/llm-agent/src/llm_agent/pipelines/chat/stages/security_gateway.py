@@ -1,8 +1,10 @@
 """Security Gateway: Haiku 5.5 at medium effort classifies the question; it never answers.
 
 A valid verdict is returned. A provider refusal is a `BLOCK`. Output that is not a valid verdict
-stops the execution as `classifier_invalid`, and a model failure after the retry allowance as
-`classifier_unavailable`: a failed classifier never allows a question through.
+is asked for once more within the execution's single retry allowance and deadline; a second
+invalid reply (or one when no retry is left) stops the execution as `classifier_invalid`, and a
+model failure after the retry allowance as `classifier_unavailable`: a failed or invalid
+classifier never allows a question through.
 
 The classifier sees the newest earlier exchanges as untrusted context for the current question,
 within the history caps and its own input cap; the current question is always sent complete.
@@ -52,6 +54,7 @@ async def classify(execution: Execution) -> Verdict:
             "security",
             messages,
             schema=VERDICT_SCHEMA,
+            valid=_readable,
             input_cap=limits.security_input_tokens,
             output_cap=limits.security_output_tokens,
             attempt_s=limits.security_attempt_s,
@@ -90,6 +93,17 @@ def _messages(execution: Execution) -> list[BaseMessage]:
     if not history:
         return bare
     return [SystemMessage(SECURITY_PROMPT), HumanMessage(f"{history_block(history)}\n{question}")]
+
+
+def _readable(reply: BaseMessage) -> bool:
+    """A provider refusal or a valid verdict; anything else earns the single retry."""
+    if stop_reason(reply) == "refusal":
+        return True
+    try:
+        _verdict(reply_text(reply))
+    except Unavailable:
+        return False
+    return True
 
 
 def _verdict(text: str) -> Verdict:

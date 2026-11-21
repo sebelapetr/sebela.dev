@@ -930,7 +930,8 @@ CASES: tuple[EvalCase, ...] = (
             _DESIGNED,
             required_text=(
                 r"\bnot\s+(\w+\s+){0,2}(implemented|built)|\bunimplemented"
-                r"|\bno\s+implementation|\bonly\s+(a\s+|as\s+a\s+)?design",
+                r"|\bno\s+implementation|\bnot\s+an?\s+(\w+\s+)?implementation"
+                r"|\bonly\s+(a\s+|as\s+a\s+)?design",
             ),
         ),
         "The design is explicitly unimplemented; no production behaviour is described.",
@@ -943,7 +944,8 @@ CASES: tuple[EvalCase, ...] = (
             _DESIGNED,
             required_text=(
                 r"neimplementov|\bne(byl|ní)\w*\s+(\w+\s+){0,2}(implementov|postaven|realizov|hotov)"
-                r"|\b(jen|pouze|zatím)\s+(jako\s+)?(návrh|navrž)",
+                r"|\b(jen|pouze|zatím)\s+(jako\s+)?(návrh|navrž)"
+                r"|\b(ne|není|nikoliv?)\s+(\w+\s+)?implementac",
             ),
         ),
         "Czech presupposition of an implementation; the answer says it is only a design.",

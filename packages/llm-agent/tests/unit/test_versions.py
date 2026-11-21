@@ -35,4 +35,4 @@ def test_the_versions_name_the_runtime_and_the_pricing() -> None:
     current = versions()
     assert len(current.runtime) == 12
     assert current.pricing == "anthropic-2026-11-19"
-    assert current.output_guard.startswith("output-guard-4+")
+    assert current.output_guard.startswith("output-guard-5+")

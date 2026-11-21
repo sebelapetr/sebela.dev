@@ -2,6 +2,9 @@
 
 Only transient failures are retried, within the execution's single retry allowance, deadline and
 cost allowance: rate limits, overload and server errors, connection failures and attempt timeouts.
+The one other retry is a reply the stage's validity check rejects (the Security Gateway's invalid
+verdict): it uses the same single allowance, deadline and admission, so an execution still has at
+most one retry and at most the capped model attempts.
 A provider's Retry-After is honoured, but only while it fits the remaining deadline: it can never
 extend or reset the common deadline.
 """
