@@ -91,10 +91,12 @@ def review(
 def without_unknown_refs(text: str, known: Container[str]) -> str | None:
     """The text with every source-ref token that is not a ref in `known` removed, or None.
 
-    A token is `src`, at most one separator (any dash, `_` or a space) and a number with any word
-    characters after it, standing on its own: it does not continue a word. Tokens are compared in
-    one normal form: Unicode compatibility forms (NFKC), case and dashes are folded and format
-    characters such as a zero-width space are ignored. A token that is in `known` is written in
+    A token is `src`, up to three separators (any dash, `_` or a space, or none) and a number with
+    any word characters after it, standing on its own: it does not continue a word, and a new
+    token right after the number ends it. Tokens are compared in one normal form: Unicode
+    compatibility forms (NFKC), case and dashes are folded, and invisible characters (format
+    characters, combining and enclosing marks, fillers) inside a token are ignored; outside a token
+    nothing is stripped. A token that is in `known` is written in
     that canonical form (`src-1`); any other is removed, and only its removal site is tidied: the
     whitespace before it, the separator joining it to a kept ref, or the brackets it leaves empty.
     The removal runs again while it leaves an unknown token (one can be built from the text around
@@ -114,12 +116,20 @@ def without_unknown_refs(text: str, known: Container[str]) -> str | None:
     return None
 
 
+#: Invisible characters outside the categories Cf, Mn and Me (Hangul fillers, braille blank).
+_INVISIBLE: Final = frozenset("\u115f\u1160\u3164\uffa0\u2800")
+#: The most separator characters between `src` and the number of a token.
+_MAX_SEPARATORS: Final = 3
+
+
 @dataclass(frozen=True)
 class _Token:
     start: int
     end: int
     written: str
     canonical: str
+    #: Another token starts right after this one ("src-1src-99").
+    adjoined: bool = False
 
 
 def _fold(char: str) -> str:
@@ -127,8 +137,9 @@ def _fold(char: str) -> str:
 
 
 def _ignored(char: str) -> bool:
-    """A format character (zero-width space, joiner, soft hyphen and the like)."""
-    return unicodedata.category(char) == "Cf"
+    """An invisible character: a format character (zero-width space, joiner, soft hyphen), a
+    combining or enclosing mark (variation selector, combining grapheme joiner) or a filler."""
+    return unicodedata.category(char) in {"Cf", "Mn", "Me"} or char in _INVISIBLE
 
 
 def _wordlike(folded: str) -> bool:
@@ -161,14 +172,15 @@ def _ref_tokens(text: str) -> list[_Token]:
             if token is not None:
                 tokens.append(token)
                 index = token.end
-                after_word = True
+                after_word = not token.adjoined
                 continue
         after_word = _wordlike(folded)
         index += 1
     return tokens
 
 
-def _token_at(text: str, start: int) -> _Token | None:
+def _number_start(text: str, start: int) -> int | None:
+    """Where the number of a token starting at `text[start]` begins, or None if none starts."""
     size = len(text)
     index = start
     for letter in "src":
@@ -177,12 +189,27 @@ def _token_at(text: str, start: int) -> _Token | None:
         if index >= size or _fold(text[index]) != letter:
             return None
         index += 1
-    while index < size and _ignored(text[index]):
-        index += 1
-    if index < size and _is_separator(text[index]):
-        index += 1
+    separators = 0
+    while index < size:
+        char = text[index]
+        if _ignored(char):
+            index += 1
+        elif separators < _MAX_SEPARATORS and _is_separator(char):
+            separators += 1
+            index += 1
+        else:
+            break
+    return index if index < size and _fold(text[index]).isdecimal() else None
+
+
+def _token_at(text: str, start: int) -> _Token | None:
+    index = _number_start(text, start)
+    if index is None:
+        return None
+    size = len(text)
     tail: list[str] = []
     end = index
+    adjoined = False
     while index < size:
         char = text[index]
         if _ignored(char):
@@ -191,12 +218,13 @@ def _token_at(text: str, start: int) -> _Token | None:
         folded = _fold(char)
         if not (folded.isdecimal() if not tail else _wordlike(folded)):
             break
+        if tail and folded == "s" and _number_start(text, index) is not None:
+            adjoined = True
+            break
         tail.append(folded)
         index += 1
         end = index
-    if not tail:
-        return None
-    return _Token(start, end, text[start:end], "src-" + "".join(tail))
+    return _Token(start, end, text[start:end], "src-" + "".join(tail), adjoined)
 
 
 _CLOSING: Final = {"(": ")", "[": "]"}

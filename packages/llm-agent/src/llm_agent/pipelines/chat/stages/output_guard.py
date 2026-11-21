@@ -2,10 +2,10 @@
 
 A stopped execution, a block and a declined request get fixed EN/CS responses. A draft is reviewed
 deterministically: it passes, is repaired by dropping sources that are not this turn's evidence
-(from its refs and as `src-<n>` tokens from its text), or is replaced as a whole by the fixed
-insufficient-evidence response. Whenever the visitor should ask
-directly, the contact card is built from a trusted `get_contact` read, never from model text; if
-that read fails the result is `unavailable`, so a draft is never shown without its required card.
+(from its refs and as source-ref tokens from its text, in any written form), or is replaced as a
+whole by the fixed insufficient-evidence response. Whenever the visitor should ask directly, the
+contact card is built from a trusted `get_contact` read, never from model text; if that read
+fails the result is `unavailable`, so a draft is never shown without its required card.
 The card is required for every honest unknown: an `insufficient_evidence` outcome, a replaced draft
 and a draft whose `unpublished` flag says the fact the visitor asked for is not published, even
 when the model chose `answered`; the card never depends on the outcome choice alone. It still
