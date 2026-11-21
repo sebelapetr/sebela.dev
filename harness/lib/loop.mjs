@@ -210,6 +210,34 @@ export function noteAfter(note, next) {
   return next === "wait" ? (note ?? null) : null;
 }
 
+// What the loop says when the steward stops it (harness/lib/steward.mjs, decideStop): by its
+// rules — a reached or projected eval ceiling, a run past the per-run stop, an unexpected paid CI
+// run, a nearly full disk — or by the steward model's judgement that the work is inefficient.
+//   stop    { by: "rules" | "model", reason }
+//   issue   the issue being worked on, or null
+//   spend   the spend line at the stop, or null
+// Returns { log, alert: [line], comment }: the comment goes on the issue, where the next run and
+// the owner find it.
+export function stewardStop({ stop, issue, spend }) {
+  const onIssue = issue ? ` on #${issue}` : "";
+  const who = stop.by === "model" ? "the steward model" : "the steward's rules";
+  return {
+    log: `stopping: ${who} stopped the loop${onIssue}: ${stop.reason}`,
+    alert: [`the steward stopped the loop${onIssue}`, stop.reason],
+    comment: [
+      `Loop note: ${who} stopped the phase loop: ${stop.reason}.`,
+      ...(spend ? [spend] : []),
+      "The worktree and branch are kept. Run the loop again when this is resolved.",
+    ].join("\n\n"),
+  };
+}
+
+// The issue comment after an iteration that paid for model evals: its spend line (expected
+// before, actual after, the remainder of the phase ceiling). Null when nothing was paid.
+export function spendComment({ line, paid, iteration }) {
+  return paid ? `Loop note: paid eval spend of iteration ${iteration}.\n\n${line}` : null;
+}
+
 // What the loop tells the owner after a phase_done report, from what GitHub shows then:
 //   pullRequest  the open pull request from the phase branch to the base ({ number }), null when
 //                there is none, undefined when gh could not check

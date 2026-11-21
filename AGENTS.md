@@ -98,7 +98,7 @@ Supported versions and what each command covers: `docs/repository-structure.md` 
 
 ## Hooks and handoff
 
-Your edits are formatted as you make them. Commits format and lint the staged files and check the message against Conventional Commits. A developer agent's handoff is refused while lint or typecheck of what it changed fail; fix the failures, do not bypass them (no `--no-verify`). Details: `docs/permissions.md` (Hooks) and `docs/git-workflow.md` (Local hooks).
+Your edits are formatted as you make them. Commits format and lint the staged files and check the message against Conventional Commits. A developer agent's handoff — and a general agent's, when it changed `.github/`, `scripts/`, `infra/` or `harness/` — is refused while lint or typecheck of what it changed fail; fix the failures, do not bypass them (no `--no-verify`). Details: `docs/permissions.md` (Hooks) and `docs/git-workflow.md` (Local hooks).
 
 ## Language
 

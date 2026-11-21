@@ -30,10 +30,24 @@ on:
         default: all
       allowance:
         description: >-
-          Python agent (llm-agent): the remaining USD allowance of its eval campaign
-          (.plan/done/06-llm-agent/evals.md). Required when that suite runs; the run spends at most this.
+          Python agent (llm-agent): the remaining USD allowance of the named eval campaign.
+          Required when that suite runs; the run spends at most this.
         type: string
         required: false
+      campaign:
+        description: >-
+          Python agent (llm-agent): the phase campaign the run spends from, named after its phase
+          folder (for example 07-ai-service; packages/llm-agent/evals/budget.py). Required when
+          that suite runs; there is no default campaign.
+        type: string
+        required: false
+      stage:
+        description: >-
+          Python agent (llm-agent): issue (bound by the campaign's stops for issue runs) or
+          phase-pr (the full run of a phase pull request and its affected rerun).
+        type: choice
+        options: [issue, phase-pr]
+        default: issue
 
 permissions:
   contents: read
@@ -49,6 +63,8 @@ jobs:
     outputs:
       mcp-admin: ${{ steps.affected.outputs.mcp-admin }}
       llm-agent: ${{ steps.affected.outputs.llm-agent }}
+      # The eval campaign of a phase pull request: its phase folder, validated by the trigger check.
+      campaign: ${{ steps.trigger.outputs.campaign }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -137,11 +153,17 @@ jobs:
           if-no-files-found: ignore
 
   # The Python chat agent (packages/llm-agent): every implemented case, 3 repeats each, with its
-  # gates. Cases still pending are listed in the report and never pass. The run spends at most the
-  # declared remaining campaign allowance: the manual run's `allowance` input, or the repository
-  # variable LLM_AGENT_EVAL_ALLOWANCE_USD on a pull request. A fresh CI runner has no ledger, so
-  # without a declared allowance the job is a visible block, never a fresh USD 10, and the job log
-  # names the new remainder the owner must store in the variable after the run.
+  # gates. Cases still pending are listed in the report and never pass. The run names its phase
+  # campaign, which has its own ceiling (packages/llm-agent/evals/budget.py; decision 0026): on a
+  # phase pull request the phase folder of its head branch phase/<phase-folder>, named by the
+  # trigger check of the `changes` job, at the stage `phase-pr`; on a manual run the `campaign`
+  # and `stage` inputs. A missing or unknown campaign is a visible block; no run falls back to
+  # another campaign's ceiling. The run spends at most the
+  # declared remaining allowance of that campaign: the manual run's `allowance` input, or the
+  # repository variable LLM_AGENT_EVAL_ALLOWANCE_USD on a pull request, which the owner sets to
+  # the campaign's remainder before marking the phase pull request ready. A fresh CI runner has no
+  # ledger, so without a declared allowance the job is a visible block, never a fresh ceiling, and
+  # the job log names the new remainder the owner must store in the variable after the run.
   # Wall time: the runner stops starting chunks after its 150-minute deadline; the chunk under way
   # still finishes (at most about 76 minutes: its subject runs plus a 60-minute batch wait and a
   # 10-minute cancel wait), so the eval step is bounded at 240 minutes and the job at 270, below
@@ -178,6 +200,10 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ALLOWANCE: ${{ inputs.allowance || vars.LLM_AGENT_EVAL_ALLOWANCE_USD }}
+          EVENT: ${{ github.event_name }}
+          PHASE_CAMPAIGN: ${{ needs.changes.outputs.campaign }}
+          CAMPAIGN_INPUT: ${{ inputs.campaign }}
+          STAGE_INPUT: ${{ inputs.stage }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "::error::The repository secret ANTHROPIC_API_KEY is not set."
@@ -187,7 +213,20 @@ jobs:
             echo "::error::No remaining campaign allowance is declared (input allowance or variable LLM_AGENT_EVAL_ALLOWANCE_USD)."
             exit 1
           fi
-          uv run --locked python -m evals.run --all --allowance "$ALLOWANCE"
+          # On a phase pull request the campaign is the phase folder the trigger check validated;
+          # the runner refuses a name that is not a known campaign.
+          if [ "$EVENT" = "pull_request" ]; then
+            CAMPAIGN="$PHASE_CAMPAIGN"
+            STAGE="phase-pr"
+          else
+            CAMPAIGN="$CAMPAIGN_INPUT"
+            STAGE="${STAGE_INPUT:-issue}"
+          fi
+          if [ -z "$CAMPAIGN" ]; then
+            echo "::error::No eval campaign is named (input campaign, or the phase folder of a phase pull request)."
+            exit 1
+          fi
+          uv run --locked python -m evals.run --all --campaign "$CAMPAIGN" --stage "$STAGE" --allowance "$ALLOWANCE"
       # The runner has no ledger before the run, so the declared allowance is the only record of
       # what remains. The owner sets LLM_AGENT_EVAL_ALLOWANCE_USD to this value after every run (or
       # passes it as the next dispatch input); otherwise the next run could spend the same allowance

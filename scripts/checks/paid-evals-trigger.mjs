@@ -2,8 +2,10 @@
 // docs/testing.md, CI). Plain Node, no dependencies.
 //
 // Usage: EVENT=<event name> HEAD_REF=<head branch> node scripts/checks/paid-evals-trigger.mjs
-// Prints `paid-evals=true` or `paid-evals=false` on stdout, for $GITHUB_OUTPUT; the reason goes to
-// stderr. Always exits 0: an unknown or missing event is a "no".
+// Prints `paid-evals=true` or `paid-evals=false` on stdout, for $GITHUB_OUTPUT, and for a phase
+// pull request a second line `campaign=<phase-folder>`: the eval campaign the Python agent's run
+// spends from (packages/llm-agent/evals/budget.py; docs/testing.md, Running paid evals). The
+// reason goes to stderr. Always exits 0: an unknown or missing event is a "no".
 //
 // Paid evals may start:
 // - on a phase pull request: a `pull_request` event whose head branch is `phase/<phase-folder>`
@@ -14,17 +16,25 @@
 // update, a contract example, a comment) used to run a whole suite, each run charged (#337). Which
 // suites a phase pull request then runs is decided per suite (mcp-admin-evals-affected.mjs).
 //
-// The head branch is text a contributor chooses. It is only compared here and never printed to
-// stdout, so it cannot add lines to the output file.
+// The head branch is text a contributor chooses. It reaches stdout only as the phase folder of a
+// branch that matched `phase/<phase-folder>` — letters, digits, dots, underscores and hyphens —
+// so it cannot add lines to the output file. The eval runner refuses a name that is not a known
+// campaign.
 
 import { pathToFileURL } from "node:url";
 
-const PHASE_BRANCH = /^phase\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PHASE_BRANCH = /^phase\/([A-Za-z0-9][A-Za-z0-9._-]*)$/;
 
 /** Whether `event` with the pull request's head branch `headRef` may start paid model evals. */
 export function startsPaidEvals({ event, headRef }) {
   if (event === "workflow_dispatch") return true;
   return event === "pull_request" && typeof headRef === "string" && PHASE_BRANCH.test(headRef);
+}
+
+/** The eval campaign of a phase pull request — its phase folder — or null for anything else. */
+export function phaseCampaign({ event, headRef }) {
+  if (event !== "pull_request" || typeof headRef !== "string") return null;
+  return PHASE_BRANCH.exec(headRef)?.[1] ?? null;
 }
 
 function main(env) {
@@ -46,6 +56,8 @@ function main(env) {
     );
   }
   process.stdout.write(`paid-evals=${String(starts)}\n`);
+  const campaign = phaseCampaign({ event, headRef });
+  if (campaign !== null) process.stdout.write(`campaign=${campaign}\n`);
   return 0;
 }
 

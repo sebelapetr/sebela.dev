@@ -1,20 +1,33 @@
 // The steward: every few minutes while the phase loop runs, it gathers what the run leaves behind —
 // the orchestrator's and its subagents' transcripts, the phase's pull requests, Postgres, the
-// worktree slots — and prints one line: ok, a warning or a problem. When something looks wrong, and
-// once an hour anyway, a small model (the `steward` agent) reads the facts and the latest
-// transcript and judges what a script cannot. It only reports. Rules: lib/steward.mjs; intent:
-// docs/agents.md, "The steward".
+// worktree slots, the eval ledgers, the paid CI runs, the machine's load and disk — and prints one
+// line: ok, a warning or a problem. When something looks wrong or was just paid for, and once an
+// hour anyway, a small model (the `steward` agent) reads the facts and the latest transcript and
+// judges what a script cannot. It returns whether the loop must stop: by a hard stop of the rules
+// (eval ceiling, per-run stop, unexpected paid CI run, disk) or by the model's judgement that the
+// work is inefficient. The loop acts on it (run-phase.mjs). Rules: lib/steward.mjs and
+// lib/spend.mjs; intent: docs/agents.md, "The steward".
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   STEWARD_REPORT_SCHEMA,
   assess,
+  decideStop,
   formatVerdict,
+  fullSuites,
+  hardStops,
+  modelTriggers,
   needsModel,
+  paidCiRuns,
+  parseProcesses,
   summarizeTranscript,
+  usageOf,
 } from "./lib/steward.mjs";
+import { countDispatches } from "./lib/phase-report.mjs";
 import { currentWork, describeWork, phaseProgress } from "./lib/progress.mjs";
+import { ledgerRuns, mergeRuns, parseCampaigns, summarizeSpend } from "./lib/spend.mjs";
 import { askAgent, quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { listWorktrees } from "./worktree.mjs";
 
@@ -135,6 +148,239 @@ function mergedWorktrees(mainRoot) {
     .map(({ name }) => name);
 }
 
+// --- spend ------------------------------------------------------------------------
+
+const CAMPAIGNS_FILE = ["packages", "llm-agent", "evals", "campaigns.json"];
+const LEDGER_FILE = [".tmp", "evals", "llm-agent", "ledger.json"];
+// The runs the loop has seen, kept beside its logs: a worktree's ledger goes with the worktree.
+const KEPT_RUNS = "eval-spend.json";
+
+// A file's text; undefined when it does not exist, null when it cannot be read.
+function textOf(file) {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch (error) {
+    return error.code === "ENOENT" ? undefined : null;
+  }
+}
+
+// The checkouts that may hold an eval ledger: the main one and every worktree folder.
+function checkouts(mainRoot) {
+  const found = [{ name: "the main checkout", root: mainRoot }];
+  try {
+    for (const entry of fs.readdirSync(path.join(mainRoot, ".worktrees"), {
+      withFileTypes: true,
+    })) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      if (entry.name === "logs" || entry.name === "locks") continue;
+      found.push({ name: entry.name, root: path.join(mainRoot, ".worktrees", entry.name) });
+    }
+  } catch {
+    // no worktrees yet
+  }
+  return found;
+}
+
+// What the phase's eval campaign has spent (lib/spend.mjs, summarizeSpend), from the ledgers of
+// every checkout and the runs kept from earlier checks in `logDir`. `since` (ms) lists the runs
+// written from then on. The kept runs are updated, so the spend of a removed worktree stays.
+export function phaseSpend({ mainRoot, phase, logDir, since = null }) {
+  const campaignsText = textOf(path.join(mainRoot, ...CAMPAIGNS_FILE));
+  const campaigns = campaignsText ? parseCampaigns(campaignsText) : null;
+  const seen = [];
+  const unreadable = [];
+  let found = 0;
+  for (const { name, root } of checkouts(mainRoot)) {
+    const text = textOf(path.join(root, ...LEDGER_FILE));
+    if (text === undefined) continue;
+    const runs = text === null ? null : ledgerRuns(text, name);
+    if (runs === null) unreadable.push(name);
+    else {
+      found += 1;
+      seen.push(...runs);
+    }
+  }
+  const keptFile = path.join(logDir, KEPT_RUNS);
+  const keptText = textOf(keptFile);
+  let kept = [];
+  if (keptText !== undefined) {
+    try {
+      kept = JSON.parse(keptText).runs;
+      if (!Array.isArray(kept)) throw new Error("no runs");
+      found += 1;
+    } catch {
+      kept = [];
+      unreadable.push("the loop's kept runs");
+    }
+  }
+  const runs = mergeRuns(kept, seen);
+  // An unreadable record is left as it is for the owner to look at, never overwritten.
+  if (runs.length > 0 && !unreadable.includes("the loop's kept runs")) {
+    const next = `${JSON.stringify({ runs }, null, 2)}\n`;
+    if (next !== keptText) {
+      try {
+        fs.mkdirSync(logDir, { recursive: true });
+        fs.writeFileSync(keptFile, next);
+      } catch {
+        // the next check tries again
+      }
+    }
+  }
+  return summarizeSpend({ phase, campaigns, runs, found, unreadable, since });
+}
+
+// --- paid CI runs -----------------------------------------------------------------
+
+const WORKFLOW = "model-evals.yml";
+
+function jsonOf(command, args) {
+  const out = quiet(command, args);
+  if (out === null) return null;
+  try {
+    return JSON.parse(out);
+  } catch {
+    return null;
+  }
+}
+
+// The paid model-eval runs of CI since `since` (lib/steward.mjs, paidCiRuns), each marked `new`
+// when no earlier check saw it; null when GitHub cannot be asked. `state` keeps what was seen.
+export function paidCi({ phase, since, state }) {
+  const runs = jsonOf("gh", [
+    "run",
+    "list",
+    "--workflow",
+    WORKFLOW,
+    "--limit",
+    "30",
+    "--json",
+    "databaseId,event,headBranch,createdAt,status",
+  ]);
+  if (!Array.isArray(runs)) return null;
+  const recent = runs.filter((run) => !(Date.parse(run.createdAt ?? "") < since));
+  state.ciJobs ??= new Map();
+  state.seenCi ??= new Set();
+  const jobs = new Map();
+  for (const run of recent) {
+    // The jobs of a finished run do not change any more.
+    let listed = state.ciJobs.get(run.databaseId);
+    if (!listed) {
+      listed = jsonOf("gh", ["run", "view", String(run.databaseId), "--json", "jobs"])?.jobs;
+      if (Array.isArray(listed) && run.status === "completed") {
+        state.ciJobs.set(run.databaseId, listed);
+      }
+    }
+    jobs.set(run.databaseId, Array.isArray(listed) ? listed : null);
+  }
+  // The phase branch and the branches of its issue pull requests.
+  const heads = jsonOf("gh", [
+    "pr",
+    "list",
+    "--base",
+    `phase/${phase}`,
+    "--state",
+    "all",
+    "--limit",
+    "200",
+    "--json",
+    "headRefName",
+  ]);
+  const branches = [`phase/${phase}`, ...(heads ?? []).map((pr) => pr.headRefName)];
+  const paid = paidCiRuns({ runs: recent, jobs, since, branches });
+  for (const run of paid.runs) {
+    run.new = !state.seenCi.has(run.id);
+    state.seenCi.add(run.id);
+  }
+  return paid;
+}
+
+// --- the machine ------------------------------------------------------------------
+
+const GB = 1024 ** 3;
+
+function freeGb(folder) {
+  try {
+    const stats = fs.statfsSync(folder);
+    return Math.round(((stats.bavail * stats.bsize) / GB) * 10) / 10;
+  } catch {
+    return null;
+  }
+}
+
+// The machine's 1- and 5-minute load, its cores and the free disk space (GB) of the tightest of
+// the checkout's and the system's file systems; null where it cannot be read.
+export function machineFacts(mainRoot) {
+  const free = [freeGb(mainRoot), freeGb(path.parse(mainRoot).root)].filter((gb) => gb !== null);
+  // Windows reports no load average.
+  const [load1, load5] = process.platform === "win32" ? [null, null] : os.loadavg();
+  const tenth = (value) => (value === null ? null : Math.round(value * 10) / 10);
+  return {
+    load1: tenth(load1),
+    load5: tenth(load5),
+    cores: os.availableParallelism(),
+    freeDiskGb: free.length ? Math.min(...free) : null,
+  };
+}
+
+// The full test suites running on the machine now, whoever started them; null when unknown.
+export function runningSuites() {
+  return fullSuites(parseProcesses(quiet("ps", ["-eo", "pid=,ppid=,etimes=,args="])));
+}
+
+// What the loop checks before it starts an iteration, without a model: the hard stops that are
+// already there — a reached ceiling, an unexpected paid CI run, a nearly full disk.
+export function stopsBeforeIteration({ mainRoot, phase, logDir, state }) {
+  const facts = {
+    spend: phaseSpend({ mainRoot, phase, logDir }),
+    paidCi: paidCi({ phase, since: state.loopStartedAt, state }),
+    machine: machineFacts(mainRoot),
+  };
+  return decideStop({ hard: hardStops(facts), report: null });
+}
+
+// --- usage ------------------------------------------------------------------------
+
+// What the agents of this iteration used (lib/steward.mjs, usageOf): the orchestrator and each
+// subagent it started, with the kind of agent where Claude Code recorded it. `unreadable` counts
+// the transcripts that gave nothing; null when not even the orchestrator's can be read.
+function usageFacts({ dir, sessionId, main }) {
+  const orchestrator = usageOf(main);
+  if (!orchestrator) return null;
+  const agents = [{ agent: "orchestrator", ...orchestrator }];
+  let unreadable = 0;
+  const subDir = path.join(dir, sessionId, "subagents");
+  let names = [];
+  try {
+    names = fs.readdirSync(subDir).filter((name) => name.endsWith(".jsonl"));
+  } catch {
+    // no subagents yet
+  }
+  for (const name of names.sort()) {
+    const usage = usageOf(readLines(path.join(subDir, name)));
+    let agent = "agent";
+    try {
+      const meta = JSON.parse(
+        fs.readFileSync(path.join(subDir, name.replace(/\.jsonl$/, ".meta.json")), "utf8"),
+      );
+      if (typeof meta.agentType === "string") agent = meta.agentType;
+    } catch {
+      // older Claude Code versions keep no metadata
+    }
+    if (usage) agents.push({ agent, ...usage });
+    else unreadable += 1;
+  }
+  const total = (field) => agents.reduce((sum, item) => sum + item[field], 0);
+  return {
+    agents,
+    unreadable,
+    turns: total("turns"),
+    inputTokens: total("inputTokens"),
+    outputTokens: total("outputTokens"),
+    cacheReadTokens: total("cacheReadTokens"),
+    minutes: orchestrator.minutes,
+  };
+}
+
 // A readable tail of a transcript for the model: what the agent did and what came back.
 function excerpt(lines) {
   const parts = [];
@@ -161,11 +407,12 @@ function excerpt(lines) {
   return parts.join("\n").slice(-EXCERPT_CHARS);
 }
 
-function askModel({ mainRoot, phase, facts, findings, transcript }) {
+function askModel({ mainRoot, phase, facts, findings, triggers, transcript }) {
   const prompt = [
-    `Phase: ${phase}. Judge whether this unattended run is healthy. Follow your agent definition.`,
-    `Facts gathered by the harness:\n${JSON.stringify(facts, null, 2)}`,
+    `Phase: ${phase}. Judge whether this unattended run is healthy and efficient. Follow your agent definition.`,
+    `Facts gathered by the harness (null or "unknown" means it could not be measured, never zero):\n${JSON.stringify(facts, null, 2)}`,
     `Findings of the harness's rules:\n${findings.map((f) => `- ${f.level}: ${f.message}`).join("\n") || "- none"}`,
+    `Paid for since the last check:\n${triggers.map((t) => `- ${t}`).join("\n") || "- nothing"}`,
     `Latest entries of the current agent's transcript:\n${transcript || "(none)"}`,
   ].join("\n\n");
   return askAgent({
@@ -179,7 +426,9 @@ function askModel({ mainRoot, phase, facts, findings, transcript }) {
 
 const SEVERITY = { ok: 0, warn: 1, problem: 2 };
 
-// One check. `state` carries what earlier checks saw: { lastModelAt, seenMerged }.
+// One check. `state` carries what earlier checks saw: { lastModelAt, lastModelCodes, lastCheckAt,
+// loopStartedAt, seenMerged, seenCi, ciJobs }. Returns the verdict; its `stop` is null or why the
+// loop must stop ({ by, code, reason }).
 export async function checkOnce({
   mainRoot,
   phase,
@@ -222,7 +471,20 @@ export async function checkOnce({
     newFailedIssues: failedIssues(phase).filter((n) => !failedAtStart.includes(n)),
     work: currentWork(main ?? []),
     progress: phaseProgressNow(phase),
+    // Spend and efficiency. The runs listed as recent are those written since the last check.
+    spend: phaseSpend({
+      mainRoot,
+      phase,
+      logDir,
+      since: state.lastCheckAt ?? iterationStartedAt,
+    }),
+    paidCi: paidCi({ phase, since: state.loopStartedAt ?? iterationStartedAt, state }),
+    usage: usageFacts({ dir, sessionId, main }),
+    reviewRounds: main ? (countDispatches(main).reviewer ?? 0) : null,
+    machine: machineFacts(mainRoot),
+    fullSuites: runningSuites(),
   };
+  state.lastCheckAt = now;
   const line = describeWork({
     work: facts.work,
     minutes: facts.iterationMinutes,
@@ -231,6 +493,8 @@ export async function checkOnce({
     progress: facts.progress,
   });
   const findings = assess(facts);
+  const hard = hardStops(facts);
+  const triggers = modelTriggers(facts);
   const rulesStatus = findings.reduce(
     (worst, f) => (SEVERITY[f.level] > SEVERITY[worst] ? f.level : worst),
     "ok",
@@ -245,13 +509,29 @@ export async function checkOnce({
   const minutesSinceModel = state.lastModelAt
     ? Math.round((now - state.lastModelAt) / 60_000)
     : null;
-  if (needsModel({ findings, minutesSinceModel })) {
+  const codes = findings
+    .map((f) => f.code)
+    .sort()
+    .join(",");
+  let report = null;
+  // A hard stop needs no judgement: the loop stops at once.
+  if (
+    hard.length === 0 &&
+    needsModel({
+      findings,
+      minutesSinceModel,
+      changed: codes !== state.lastModelCodes,
+      triggers,
+    })
+  ) {
     state.lastModelAt = now;
-    const report = await askModel({
+    state.lastModelCodes = codes;
+    report = await askModel({
       mainRoot,
       phase,
       facts,
       findings,
+      triggers,
       transcript: excerpt(sub ?? main ?? []),
     });
     if (report) {
@@ -265,6 +545,13 @@ export async function checkOnce({
       };
     } else {
       verdict.findings = [...verdict.findings, "the steward model gave no answer"];
+    }
+  }
+  verdict.stop = decideStop({ hard, report });
+  if (verdict.stop) {
+    verdict.status = "problem";
+    if (verdict.stop.by === "model") {
+      verdict.findings = [...verdict.findings, `stop: ${verdict.stop.reason}`];
     }
   }
 
