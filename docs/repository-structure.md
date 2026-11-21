@@ -50,6 +50,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   └── settings.json        hooks and permissions
 ├── .github/
 │   ├── workflows/           CI, the image release and the deployment [1, 10], the OpenSSF Scorecard, the coverage site on GitHub Pages
+│   ├── scorecard.yml        OpenSSF Scorecard maintainer annotations: why Code-Review and Packaging cannot be met or detected (not a workflow)
 │   ├── CODEOWNERS           the owner as code owner of everything (review requested, not required)
 │   ├── dependabot.yml       dependency updates: GitHub Actions and the images' pnpm monthly, the npm workspace and base images weekly
 │   ├── ISSUE_TEMPLATE/      issue forms (bug report, idea) and links to private security reporting and Discussions
