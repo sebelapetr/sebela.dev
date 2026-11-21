@@ -43,9 +43,15 @@ Paid runs count against the phase 9 ceiling of USD 3, with a stop at USD 1 per r
 | `hybrid-complete.json`      | 2026-11-21 |  4,571 |    0.00027 |
 | `reranked-calibration.json` | 2026-11-21 | 57,688 |    0.00296 |
 | `reranked-complete.json`    | 2026-11-21 | 54,312 |    0.00276 |
+| `pdf-supplemental.json`     | 2026-11-21 |  6,858 |    0.00039 |
 
 `supplemental-vector.json` measures only the six supplemental-document cases, after ingesting
 and approving their fictional documents; all six pass.
+
+`pdf-supplemental.json` measures only the two cases of the fictional text-layer PDF added in #227
+(`supplemental-pdf-chunk-size`, `supplemental-pdf-afternoon`) with the deployed reranked search.
+The PDF is ingested like the Markdown documents, approved without findings into 4 sections and
+4 chunks, and both cases pass with the PDF as the top source.
 
 ## Query cache
 
@@ -67,7 +73,9 @@ entries.
 Cumulative phase 9 spend after the two baselines of #225: about USD 0.0033 of USD 3 (the runs
 above plus earlier paid runs of the phase). The full-text baseline embeds only while indexing.
 The three runs of #226 add about USD 0.0060, so the cumulative phase 9 spend is about
-USD 0.0093 of USD 3. Their reranker calls (50,175 tokens per complete run) are most of it.
+USD 0.0093 of USD 3. Their reranker calls (50,175 tokens per complete run) are most of it. The
+PDF run of #227 adds about USD 0.0004, so the cumulative phase 9 spend is about USD 0.0097 of
+USD 3.
 
 `reranked-calibration.json` records 7,513 index tokens against 4,137 in the other complete runs,
 and its portfolio reindex reports 132 chunks embedded and none reused. Every run indexes a fresh
