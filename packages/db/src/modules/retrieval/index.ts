@@ -182,6 +182,8 @@ export interface RetrievalDocumentConflict {
 /** A sensitivity finding of a document version: its kind and line, never the detected value. */
 export interface RetrievalDocumentFinding {
   readonly kind: string;
+  /** The page of a PDF the line is on (from 1); absent for Markdown and plain text. */
+  readonly page?: number;
   readonly line: number;
 }
 
@@ -469,7 +471,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
           byteSize: version.byteSize,
           storageKey: version.storageKey,
           status: version.status,
-          findings: version.findings.map(({ kind, line }) => ({ kind, line })),
+          findings: version.findings.map(findingOf),
           sectionCount: version.sectionCount,
           chunkCount: version.chunkCount,
         })
@@ -920,11 +922,18 @@ function documentVersionOf(row: typeof documentVersions.$inferSelect): Retrieval
     byteSize: row.byteSize,
     storageKey: row.storageKey,
     status,
-    findings: row.findings.map(({ kind, line }) => ({ kind, line })),
+    findings: row.findings.map(findingOf),
     conflicts: conflictsOf(row.conflicts),
     sectionCount: row.sectionCount,
     chunkCount: row.chunkCount,
     createdAt: row.createdAt,
     decidedAt: row.decidedAt,
   };
+}
+
+/** A finding as stored and read: its kind, its page when it has one, and its line. */
+function findingOf(finding: RetrievalDocumentFinding): RetrievalDocumentFinding {
+  return finding.page === undefined
+    ? { kind: finding.kind, line: finding.line }
+    : { kind: finding.kind, page: finding.page, line: finding.line };
 }

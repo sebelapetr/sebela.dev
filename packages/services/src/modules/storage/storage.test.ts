@@ -815,7 +815,7 @@ describe.each([
     const key = await storage.store({ bytes, extension: "pdf" });
 
     expect(key.split("/").at(-1)).toMatch(/\.pdf$/);
-    expect(await storage.read(key)).toEqual(new Uint8Array(bytes));
+    expect(Buffer.from((await storage.read(key)) ?? [])).toEqual(bytes);
   });
 
   it("never yields an address of any kind", async () => {

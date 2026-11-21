@@ -6,7 +6,7 @@ export const storedExtensions = ["png", "jpg", "webp", "pdf"] as const;
 export type StoredExtension = (typeof storedExtensions)[number];
 
 /** The file extensions private storage accepts: the knowledge document originals. */
-export const privateExtensions = ["md", "txt"] as const;
+export const privateExtensions = ["md", "txt", "pdf"] as const;
 
 export type PrivateExtension = (typeof privateExtensions)[number];
 
