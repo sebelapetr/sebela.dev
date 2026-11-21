@@ -253,7 +253,7 @@ export function scrubPrivate(text, { mainRoot = null, home = null, host = null }
       );
     }
   }
-  if (host && host !== "localhost") {
+  if (host) {
     out = out.replace(new RegExp(`(?<![\\w.-])${escapeRegExp(host)}(?![\\w-])`, "g"), "<host>");
   }
   return out;

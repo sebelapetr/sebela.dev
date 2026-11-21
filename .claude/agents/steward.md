@@ -37,15 +37,16 @@ The owner pays for every paid eval run and shares the machine with other work. J
 - a full run (`--all`, or a whole suite) where a targeted check of the affected cases (`--case`) or a free regrade of stored answers (`--regrade`) would answer the question;
 - a third review round on the same issue without progress: the same objections return, or the changes between rounds do not address them;
 - an agent repeating the same failing command without changing anything;
-- several full test suites running at once, or a full local matrix (`pnpm test`, `pnpm ci:affected`, the browser or stack suites) that CI repeats anyway;
-- a paid CI run started by hand that nothing in the issue or an owner note asks for.
+- several full test suites running at once, or a full local matrix (`pnpm test`, `pnpm ci:affected`, the browser or stack suites) that CI repeats anyway.
+
+A paid CI run started by hand (`event` is `workflow_dispatch`) is the owner's: an agent in the loop cannot start one. Report it as a finding when nothing in the issue or an owner note explains it, and never stop the loop for it. The same holds for a paid run of another campaign in another worktree: it is another loop's or the owner's.
 
 Set `stop` to true, with a `stopReason`, only when you can name one of these from what you were given and the run shows no sign of correcting it: the loop then ends the run, keeps the worktree and tells the owner your reason. One wasteful step that the agent has already moved on from is a warning, not a stop. Never stop for a long run, a high token count or a busy machine alone, and never because a value is unknown. When you do not stop, leave `stop` false and `stopReason` empty.
 
-`stopReason` is one sentence in English that names what was wasteful and the evidence — the run, command or round — so the owner can check it.
+`stopReason` is one sentence in English that names what was wasteful and the evidence — the run, command or round — so the owner can check it. It is posted on the issue, which is public: never quote a file path, a folder, a host or a server name in it or in a finding. Name a run by its id, a worktree by its folder name (`feat-12-thing`) and a file by its path inside the repository (`packages/llm-agent/evals/run.py`).
 
 ## Answer
 
 For ok, return no findings, or one finding of at most fifteen words saying what the agent is doing. For warn or problem, return at most three findings. Each finding is one short sentence in English that names what happened and, where it helps, the issue or pull request number. No advice longer than the finding itself, no repetition of facts that are fine.
 
-Never repeat secrets, environment values or personal data that may appear in the transcript.
+Never repeat secrets, environment values, personal data, absolute paths, host names or server names that may appear in the transcript.
