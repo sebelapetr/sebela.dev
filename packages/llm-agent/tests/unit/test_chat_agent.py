@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from llm_agent import ChatAgent, ChatRequest, ChatResult, ExecutionLimits, versions
+from llm_agent.models.gateway import RETRY_BACKOFF_S
 from llm_agent.pipelines.chat.stages.main_agent import DRAFT_SCHEMA
 from llm_agent.prompts import CHAT_PROMPT, system_prompt_texts
 from tests.unit.fakes import (
@@ -398,6 +399,17 @@ async def test_an_invalid_classifier_reply_gets_no_retry_once_the_allowance_is_s
     assert result.reason == "classifier_invalid"
     assert result.usage.retries == 1
     assert len(models.stage_calls("security")) == 2
+    assert models.stage_calls("main") == []
+
+
+async def test_an_invalid_classifier_reply_is_final_when_the_backoff_does_not_fit() -> None:
+    """With at most the retry backoff left, the invalid reply is final and costs no retry."""
+    models = ScriptedModels(security=[verdict("MAYBE"), verdict()])
+    result = await run(models, limits=ExecutionLimits(deadline_s=RETRY_BACKOFF_S * 0.8))
+    assert result.outcome == "unavailable"
+    assert result.reason == "classifier_invalid"
+    assert result.usage.retries == 0
+    assert len(models.stage_calls("security")) == 1
     assert models.stage_calls("main") == []
 
 
