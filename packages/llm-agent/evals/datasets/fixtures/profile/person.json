@@ -1,0 +1,22 @@
+{
+  "name": "Ilsa Marrow",
+  "headline": "Fictional AI engineer for the LLM agent evals",
+  "shortBio": "Ilsa Marrow is a fictional engineer who builds evaluated, source-grounded assistants for small product teams.",
+  "longBio": "Ilsa Marrow does not exist; this record is the eval fixture of the reusable chat agent. In the fixture she has worked as a backend engineer since 2015 and now focuses on retrieval and evaluation for language-model features. She prefers small, measurable releases over large rewrites.",
+  "location": "Port Wren",
+  "email": "ilsa@marrow.example.test",
+  "links": [
+    { "label": "Website", "url": "https://marrow.example.test/" },
+    { "label": "Code", "url": "https://code.example.test/ilsa-marrow" }
+  ],
+  "availability": "Open to two days a week of consulting from March 2027.",
+  "careerStartedOn": "2015-09-01",
+  "servicesIntro": "Ilsa offers fictional reviews of chat assistants and their evaluation suites.",
+  "collaborationSteps": [
+    { "title": "Call", "description": "A short call about the product and its users." },
+    { "title": "Review", "description": "A written review of the assistant and its evals." }
+  ],
+  "servicesNote": "Fixture note: no prices are published.",
+  "photo": null,
+  "cvPdf": null
+}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   PassageSchema,
@@ -212,5 +213,30 @@ describe("search result", () => {
     ).toBe(false);
     const many = Array.from({ length: retrievalMaxPassages + 1 }, () => portfolio);
     expect(SearchResultSchema.safeParse({ status: "found", passages: many }).success).toBe(false);
+  });
+
+  it("describes the empty no-evidence list without a boolean subschema", () => {
+    // The generated Python content client (packages/llm-agent) reads the OpenAPI document with a
+    // generator that accepts only object schemas; an empty tuple would publish `items: false`.
+    const booleanSchemas: string[] = [];
+    const walk = (node: unknown, at: string): void => {
+      if (Array.isArray(node)) {
+        node.forEach((entry, index) => {
+          walk(entry, `${at}/${String(index)}`);
+        });
+      } else if (node !== null && typeof node === "object") {
+        for (const [key, value] of Object.entries(node)) {
+          if (
+            ["items", "additionalItems", "contains", "not"].includes(key) &&
+            typeof value === "boolean"
+          ) {
+            booleanSchemas.push(`${at}/${key}`);
+          }
+          walk(value, `${at}/${key}`);
+        }
+      }
+    };
+    walk(z.toJSONSchema(SearchResultSchema), "#");
+    expect(booleanSchemas).toEqual([]);
   });
 });

@@ -1,0 +1,26 @@
+[
+  {
+    "slug": "assistant-review",
+    "name": "Assistant review",
+    "summary": "A written review of a chat assistant: where it answers well, where it guesses and what to change first.",
+    "audience": "Teams with a chat assistant in front of customers.",
+    "deliverable": "A written review with prioritised recommendations.",
+    "position": 0,
+    "evidence": [
+      { "kind": "project", "project": "support-answer-engine" },
+      { "kind": "exploration", "exploration": "answer-grader" }
+    ]
+  },
+  {
+    "slug": "evaluation-setup",
+    "name": "Evaluation setup",
+    "summary": "An evaluation suite for an existing assistant, so prompt and model changes are measured.",
+    "audience": "Teams that already ship an AI feature.",
+    "deliverable": "An evaluation suite in the team's repository.",
+    "position": 1,
+    "evidence": [
+      { "kind": "project", "project": "evaluation-harness" },
+      { "kind": "exploration", "exploration": "reranking-trial" }
+    ]
+  }
+]
