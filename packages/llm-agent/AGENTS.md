@@ -81,6 +81,8 @@ Run them from this folder, or through pnpm from the root (`pnpm --filter @sebela
 | pytest                | 9.2.0   | this package's `pyproject.toml`, dev group                         |
 | openapi-python-client | 0.30.0  | this package's `pyproject.toml`, dev group                         |
 
+Install exactly that uv locally. uv refuses an older version but not a newer one (the bound admits Dependabot's uv, `docs/git-workflow.md`, Dependency pull requests), and CI runs the lower bound.
+
 The rest of the toolchain:
 
 - The runtime dependencies (`anthropic`, `attrs`, `httpx2`, `langchain-anthropic`, `langchain-core`, `langgraph`, `langsmith` and `pydantic`) are exact pins. `langsmith` is pinned directly because `ChatAgent` switches its tracing off for every run.

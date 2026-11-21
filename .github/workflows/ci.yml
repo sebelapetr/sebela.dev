@@ -93,9 +93,9 @@ jobs:
       # The Python members (packages/llm-agent): the repository's uv, which is the lower bound of
       # `required-version` in the root pyproject.toml (`lowest` installs exactly it; the bound
       # admits the newer uv of Dependabot, scripts/checks/uv-version.test.mjs), the Python minor of
-      # .python-version and exactly what uv.lock records. Their pnpm task
-      # wrappers run through Turborepo like every other package; the drift check below regenerates
-      # the Python content client too.
+      # .python-version and exactly what uv.lock records. Their pnpm task wrappers run through
+      # Turborepo like every other package; the drift check below regenerates the Python content
+      # client too.
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version-file: pyproject.toml

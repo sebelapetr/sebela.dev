@@ -20,7 +20,9 @@
 #   update in its own. Dependabot runs its own, newer uv, which `required-version` in the root
 #   pyproject.toml admits as a lower bound; CI checks the result with the repository's uv
 #   (scripts/checks/uv-version.test.mjs). The build backend uv_build follows that uv version and
-#   moves by hand with it, so it is ignored below.
+#   moves by hand with it, so it is ignored below. The client generator (openapi-python-client)
+#   and the formatter and linter (Ruff) are kept out of the group: a 0.x minor of either can
+#   change the generated client or the lint result, and would turn the whole group red.
 #
 # Node.js majors are not proposed: the Node.js version follows .nvmrc and `engines` in package.json
 # and moves by hand, with @types/node and the images. A cooldown of seven days lets a new release
@@ -97,6 +99,9 @@ updates:
       uv-minor-patch:
         patterns:
           - "*"
+        exclude-patterns:
+          - openapi-python-client
+          - ruff
         update-types:
           - minor
           - patch
