@@ -108,6 +108,8 @@ class Plan:
     allowance_usd: float | None = None
     regrade: Path | None = None
     judge: bool = False
+    candidate: str | None = None
+    folders: tuple[Path, ...] = ()
 
 
 def plan(argv: Sequence[str]) -> Plan:
@@ -199,7 +201,11 @@ JUDGE_CALL_RESERVATION_USD = (
 ) / 1_000_000
 
 
-def reservation(cases: Sequence[str]) -> float:
+def repeats_for(candidate: str | None) -> int:
+    raise NotImplementedError
+
+
+def reservation(cases: Sequence[str], *, repeats: int = REPEATS) -> float:
     """What a run of `cases` may cost at most: subject executions plus judge calls."""
     runs = len(cases) * REPEATS
     judged = sum(REPEATS for case_id in cases if CASES[case_id].expectation.judged)
@@ -325,6 +331,16 @@ def promptfoo_environment(
         "PROMPTFOO_DISABLE_SHARING": "1",
         "PROMPTFOO_DISABLE_UPDATE": "1",
     }
+
+
+def promptfoo_values(
+    api_url: str, selected: Sequence[str], candidate: str | None
+) -> dict[str, str]:
+    raise NotImplementedError
+
+
+def promptfoo_arguments(output: Path, *, repeats: int = REPEATS) -> list[str]:
+    raise NotImplementedError
 
 
 async def run_promptfoo(output: Path, env: Mapping[str, str]) -> None:
@@ -557,6 +573,16 @@ def latency_percentiles(latencies: Sequence[object]) -> dict[str, int | None]:
     return {"runs": len(measured), "p50": rank(0.50), "p95": rank(0.95)}
 
 
+def charge_subject(
+    allowance: budget.Allowance,
+    records: Sequence[Mapping[str, Any]],
+    selected: Sequence[str],
+    *,
+    repeats: int = REPEATS,
+) -> None:
+    raise NotImplementedError
+
+
 def write_summary(
     folder: Path,
     *,
@@ -566,6 +592,7 @@ def write_summary(
     extra_failures: Sequence[str],
     allowance: budget.Allowance | None,
     subject: Mapping[str, Any] | None,
+    candidate: str | None = None,
 ) -> dict[str, Any]:
     gate = evaluate_gate([item.run for item in graded], selected)
     failures = [*gate.failures, *extra_failures]
