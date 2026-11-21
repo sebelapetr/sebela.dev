@@ -13,14 +13,19 @@ import {
   KEY_A,
   KEY_B,
   rpc,
+  secretOf,
   send,
   testConfig,
   toolText,
+  UNDERSCORE_SECRET_KEY,
   UNKNOWN_KEY,
   type FakeApi,
 } from "./test-support/index.js";
 
 const opened: McpAdminApp[] = [];
+
+/** A key and its secret part, each of which must stay out of every answer and log line. */
+const keyAndSecret = (key: string) => [key, secretOf(key)];
 
 function open(
   options: { overrides?: Record<string, string>; api?: FakeApi; now?: () => number } = {},
@@ -676,6 +681,8 @@ describe("secrets stay out of answers and logs (D15)", () => {
     await client.close();
     await send(fetch, `/mcp?api_key=${KEY_B}`, rpc(initialize));
     await send(fetch, `/${KEY_B}`, { method: "GET", headers: bearer(KEY_B) });
+    await send(fetch, `/mcp?api_key=${UNDERSCORE_SECRET_KEY}`, rpc(initialize));
+    await send(fetch, "/mcp", rpc(initialize, bearer(UNDERSCORE_SECRET_KEY)));
 
     const text = toolText(result);
     expect(result.isError).toBe(true);
@@ -683,7 +690,10 @@ describe("secrets stay out of answers and logs (D15)", () => {
       expect(text).not.toContain(leak);
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
-      for (const leak of [sentinel, KEY_A, KEY_B, KEY_A.split("_")[2], KEY_B.split("_")[2]]) {
+      for (const leak of [
+        sentinel,
+        ...[KEY_A, KEY_B, UNDERSCORE_SECRET_KEY].flatMap(keyAndSecret),
+      ]) {
         expect(line).not.toContain(leak);
       }
     }
@@ -703,6 +713,6 @@ describe("secrets stay out of answers and logs (D15)", () => {
       error: { code: "internal", message: "Something went wrong." },
     });
     expect(lines).toContain("POST /mcp internal error: TypeError");
-    for (const line of lines) expect(line).not.toContain(KEY_A.split("_")[2]);
+    for (const line of lines) expect(line).not.toContain(secretOf(KEY_A));
   });
 });
