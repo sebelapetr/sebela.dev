@@ -52,6 +52,8 @@ Root instructions and the always-loaded Claude deep-module rule point to the can
 | steward            | Watches an unattended run and reports whether it is healthy; has no tools                                                       | Facts the loop gives it                                                         |
 | retrospective      | Suggests, from a finished phase's report and agent memory, what to promote into docs or fix; has no tools                       | Facts the loop gives it                                                         |
 
+No developer agent owns CI, release or infrastructure code: `.github/`, `scripts/release/`, `scripts/checks/`, `infra/` and `harness/`. A general agent (`general-purpose`) implements such an issue. The developer handoff hook (`harness/hooks/developer-handoff.mjs`, `SubagentStop`) covers only the three developer agents, and a general agent has no definition with a reading list (issue #371, item 5, extends the hook or adds a defined agent for that work; until then the brief carries the checks). The orchestrator's brief therefore tells it to read `AGENTS.md` and the relevant documents, to work test-first where `docs/testing.md` requires it, and to run lint, typecheck and the root checks (`pnpm ci:root`) itself before handing back. An independent `reviewer` is mandatory before the pull request is called ready, and verifies that those checks were run. Beyond its usual checks the reviewer verifies there that actions are pinned to commit SHAs, that no private term (hosting provider, server name, address or path) appears (`docs/permissions.md`, Private infrastructure details), that workflow permissions are least-privilege, that the change cannot start paid model evals unintentionally (`docs/testing.md`, CI), that script logic has test-first evidence, and that no check is weakened.
+
 Definitions live in `.claude/agents/`. A dedicated agent for a single app is added only if that part proves to need one.
 
 ### Model and effort
@@ -75,7 +77,7 @@ An interrupted run can leave an issue's branch and worktree behind. The orchestr
 
 For each issue of a phase:
 
-1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed. It reads the issue with its comments: an `Owner note` in a comment is as binding as the body, and the orchestrator passes every owner note, as written, to the developer and the reviewer.
+1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed. Before dispatching any agent it reads the whole issue, the `## Blocked by` and `## When` sections included, and every comment, and starts no issue whose blocker is still open (an issue blocked by an unmerged phase was once implemented early and its pull request started a paid eval run). It reads the issue with its comments: an `Owner note` in a comment is as binding as the body, and the orchestrator passes every owner note, as written, to the developer and the reviewer.
 2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role, ports and storage folder, is installed and migrated, and an empty profile is loaded with the demo seed.
 3. It dispatches the developer agent that matches the area of the issue.
 4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
@@ -83,7 +85,7 @@ For each issue of a phase:
 6. The reviewer approves or returns objections; objections go back to the developer.
 7. The orchestrator opens the issue pull request against the phase branch.
 8. When CI is green, the orchestrator squash-merges it into the phase branch. The issue closes.
-9. The orchestrator runs the docs-keeper on the merged change and removes the worktree.
+9. The orchestrator runs the docs-keeper on the merged change and removes the issue's worktree (`docs/git-workflow.md`, Worktrees).
 
 When no ready issue of the phase remains, the orchestrator archives the phase's plan (it moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, once, through a short-lived branch merged into the phase branch), opens the phase pull request to the phase's base branch — `master`, except for the trial — as a draft, and stops. HITL issues may still be open then. When the phase is complete, the owner marks the pull request ready for review, which runs the model evals of the affected suites once on the final state (`docs/testing.md`), and merges it when they pass.
 
