@@ -135,38 +135,53 @@ Facts this composition relies on:
 
 The CDN in front of the site keeps public answers briefly and never private or personalised ones. One public rule, `public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400`: browsers always revalidate, the CDN keeps an answer for a minute, serves it for another minute while it fetches a fresh one, and keeps serving it for a day while the server cannot be reached.
 
-| Answer                                                                                                                                      | `Cache-Control` at the CDN                                                                  | Set by                                                        | A content change shows within                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
-| A page: GET or HEAD, status 200, HTML, no cookie set, not a client navigation (`RSC`, `Next-Router-*` headers, `_rsc` argument), not `/ask` | the public rule                                                                             | nginx (`nginx/sebela.dev.conf`); the website sends `no-store` | about 2 minutes (about 3 if a notification is lost) |
-| `/robots.txt`, `/sitemap.xml`, `/llms.txt` with status 200                                                                                  | the public rule                                                                             | the website                                                   | about 2 minutes                                     |
-| The preview cards `/og/...` with status 200                                                                                                 | the public rule                                                                             | the website                                                   | about 2 minutes                                     |
-| `/media/<file>`, `/_next/image`                                                                                                             | `public, max-age=300`; the optimizer `public, max-age=<at least 300>, must-revalidate`      | the website                                                   | a new image is a new address                        |
-| `/_next/static/...`                                                                                                                         | `public, max-age=31536000, immutable`                                                       | the website                                                   | a new deployment's new file names                   |
-| `/ask`, navigation payloads, every 404 and 5xx, redirects, the fallback preview card, `/health`, `/cv/pdf`, `/internal/*`                   | `no-store` (the website's own header, passed through), or nothing on a redirect without one | the website                                                   | at once                                             |
-| An answer nginx makes itself (502 or 504 while the website is down, 429)                                                                    | `no-store`, so the CDN serves its stale copy instead                                        | nginx                                                         | at once                                             |
+| Answer                                                                                                                                           | `Cache-Control` at the CDN                                                             | Set by                                                        | A content change shows within                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| A page: GET or HEAD, status 200, HTML, no cookie set, not a client navigation (`RSC`, `Next-Router-*` headers, `_rsc` argument), not `/ask`      | the public rule                                                                        | nginx (`nginx/sebela.dev.conf`); the website sends `no-store` | about 2 minutes (about 3 if a notification is lost) |
+| `/robots.txt`, `/sitemap.xml`, `/llms.txt` with status 200                                                                                       | the public rule                                                                        | the website                                                   | about 2 minutes                                     |
+| The preview cards `/og/...` with status 200                                                                                                      | the public rule                                                                        | the website                                                   | about 2 minutes                                     |
+| `/media/<file>`, `/_next/image`                                                                                                                  | `public, max-age=300`; the optimizer `public, max-age=<at least 300>, must-revalidate` | the website                                                   | a new image is a new address                        |
+| `/_next/static/...`                                                                                                                              | `public, max-age=31536000, immutable`                                                  | the website                                                   | a new deployment's new file names                   |
+| `/ask`, every 404 and 5xx, redirects, the fallback preview card, `/health`, `/cv/pdf`                                                            | `no-store` (the website's own header, passed through)                                  | the website                                                   | at once                                             |
+| A client navigation (`RSC`, `Next-Router-*` headers or an `_rsc` argument), whatever its status, also Next's 307 to the `_rsc` address           | `no-store`                                                                             | nginx, over the website's value                               | at once                                             |
+| An answer nginx makes itself (`/internal/*` 404, 429, 502 or 504 while the website is down), and any answer without a `Cache-Control` of its own | `no-store`, so the CDN serves its stale copy instead                                   | nginx                                                         | at once                                             |
 
-Why nginx and not the website sets the page rule, and the details of each row: `apps/web/AGENTS.md`, Caching and invalidation. The production stack smoke check (`pnpm test:production-stack`) runs this nginx configuration in front of the built website and checks the page rows.
+Why nginx and not the website sets the page rule, and the details of each row: `apps/web/AGENTS.md`, Caching and invalidation. nginx fails closed: a navigation is `no-store` whatever its status, because Next answers one without a matching `_rsc` value with a 307 that has no `Cache-Control` under the page's own cache key, so the query string in the key is not enough; and any answer without a `Cache-Control` of its own is `no-store`. The production stack smoke check (`pnpm test:production-stack`) runs this nginx configuration in front of the built website and checks the page, navigation, 404, Ask, POST, internal-route and 502 rows.
 
-**How fast a change shows, and invalidation today.** A content write clears the website's in-process content cache through the API's signed notification within ten seconds, or after `WEB_CONTENT_REVALIDATE_SECONDS` (60 by default) if the notification is lost. The CDN's copy then expires within its minute and is replaced within at most one more: about 2 minutes, about 3 without a notification. There is no CDN purge and no Next revalidation; the CDN's copies simply expire.
+**Pages that render something per visitor.** nginx shares every 200 HTML page outside `/ask`, even when the website marks it `private`. A page that will render anything per visitor (a per-request CSP nonce, the homepage chat of phase 07) must be excluded in `nginx/sebela.dev.conf`, next to `/ask`, before it ships.
+
+**How fast a change shows, and invalidation today.** A content write clears the website's in-process content cache through the API's signed notification within ten seconds, or after `WEB_CONTENT_REVALIDATE_SECONDS` (60 by default) if the notification is lost. The CDN's copy then expires within its minute and is replaced within at most one more: about 2 minutes, about 3 without a notification. There is no CDN purge and no Next revalidation; the CDN's copies simply expire. **Urgent takedown:** with `stale-if-error=86400` the CDN may serve a removed page for up to a day while the server cannot be reached, and nothing purges it automatically; to remove content fast, change it through the API and then purge its address (or the whole site) at the CDN by hand.
 
 **robots.txt and llms.txt.** Before this rule the website sent them without `Cache-Control`, so the CDN kept them for its default of 30 days. The rule, and one purge of the two files at the CDN, must be live before indexing is switched on (`WEB_INDEXING`), or crawlers keep reading the robots.txt of the closed site.
 
-Owner checklist, once after the release that brings the rule:
+Owner checklist, once after the release that brings the rule. **The order matters:** the CDN settings come first and are verified before nginx changes. While the CDN ignores the query string, a client navigation (`/experience?_rsc=...`) falls onto the page's cache key, and once nginx marks pages public the CDN would serve that page's cached HTML to client navigations, which breaks them.
 
-1. **nginx.** Copy the http-context part (the two `map` blocks) and the server block's `add_header Cache-Control` and the location's `proxy_hide_header Cache-Control` of `nginx/sebela.dev.conf` into the live site, then `nginx -t` and reload nginx.
-2. **The CDN.** In the CDN settings of the site:
+1. **The CDN settings**, in the CDN settings of the site:
    - honour the origin's `Cache-Control` (no forced cache time that overrides it, no "cache everything"), so an answer without the public rule is not kept;
+   - pass the origin's `Cache-Control` to browsers unchanged (no browser cache time set at the CDN that replaces it);
    - serve stale content on an origin error or timeout (`stale-if-error`), and keep `stale-while-revalidate` if it is offered;
    - keep the query string in the cache key for every path: `/_next/image` needs `url`, `w` and `q`, and a navigation's `_rsc` argument must never fall onto the page's cached copy; do not strip or sort away the query;
-   - honour `Vary` for `Accept-Encoding`, or at least never serve a cached page for a request with an `RSC` header (Next also adds the `_rsc` argument, so the query string in the key is enough when `Vary` on other headers is ignored);
-   - do not cache cookies or answers with `Set-Cookie` (none of the cached answers sets one);
+   - honour `Vary` for `Accept-Encoding`;
+   - do not cache answers with `Set-Cookie` (none of the cached answers sets one);
    - purge `/robots.txt` and `/llms.txt` once.
-3. **Checks after the deployment.** Each command shows the row's `cache-control`; the CDN's own cache-status header shows a hit on the second request of a public row and never on a `no-store` one:
+2. **Verify the CDN settings** before going on. The query string must be in the key: two different unique values are each a miss, and a repeat of one is a hit (the CDN's own cache-status header shows hit or miss):
+
+   ```sh
+   probe=$(date +%s)
+   curl -sI "https://sebela.dev/llms.txt?probe=$probe-a" | grep -i cache  # a miss
+   curl -sI "https://sebela.dev/llms.txt?probe=$probe-b" | grep -i cache  # a miss
+   curl -sI "https://sebela.dev/llms.txt?probe=$probe-b" | grep -i cache  # a hit
+   ```
+
+   Browsers must see the origin's `Cache-Control`: `curl -sI https://sebela.dev/llms.txt` shows exactly the public rule above. Another value (such as a bare `public, max-age=...` with a different time, or one without `s-maxage`) is the CDN's rewritten value, and the browser-facing setting still overrides the origin.
+
+3. **nginx.** Check first that the live `location /` of the site, which the hosting panel manages outside this repository, has no `add_header` of its own: nginx drops every inherited server-level `add_header` in a location that has one, and with `proxy_hide_header Cache-Control` every proxied answer would then leave without `Cache-Control` and without the security headers. `nginx -T` prints the live configuration; read the site's `location /` block in it, and move any `add_header` there into the server block. Then copy the http-context part (the four `map` blocks) and the server block's `add_header Cache-Control` and the location's `proxy_hide_header Cache-Control` of `nginx/sebela.dev.conf` into the live site, run `nginx -t` and reload nginx.
+4. **Checks after the deployment.** Each command shows the row's `cache-control`; the CDN's own cache-status header shows a hit on the second request of a public row and never on a `no-store` one:
 
    ```sh
    curl -sI https://sebela.dev/ | grep -i cache-control                       # the public rule
    curl -sI https://sebela.dev/experience | grep -i cache-control             # the public rule
-   curl -sI -H 'RSC: 1' https://sebela.dev/experience | grep -i cache-control # no-store
+   curl -sI -H 'RSC: 1' https://sebela.dev/experience | grep -iE '^HTTP|cache-control' # 307, no-store
    curl -sI 'https://sebela.dev/experience?_rsc=check' | grep -i cache-control # no-store
    curl -sI https://sebela.dev/no-such-page | grep -i cache-control           # no-store (404)
    curl -sI https://sebela.dev/ask | grep -i cache-control                    # no-store
@@ -175,8 +190,8 @@ Owner checklist, once after the release that brings the rule:
    curl -sI https://sebela.dev/sitemap.xml | grep -i cache-control            # the public rule
    curl -sI https://sebela.dev/og/home | grep -i cache-control                # the public rule
    curl -sI https://sebela.dev/health | grep -i cache-control                 # no-store
-   curl -sI https://sebela.dev/cv/pdf | grep -i cache-control                 # no-store
-   curl -sI https://sebela.dev/internal/invalidation                          # 404
+   curl -sI https://sebela.dev/cv/pdf | grep -i cache-control                 # no-store (the file or a redirect)
+   curl -sI https://sebela.dev/internal/invalidation | grep -iE '^HTTP|cache-control' # 404, no-store
    ```
 
    For `/media/<file>` and `/_next/image`, take an image address from a page's source; both answer `public, max-age=...`.
