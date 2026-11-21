@@ -48,15 +48,14 @@ function stringsIn(value, found = []) {
   return found;
 }
 
-// Worktree folders `<mainRoot>/.worktrees/<name>` named in the tool calls a transcript records, in
-// order of first appearance. Only acting tools count; prompts, tool results and reads do not.
-export function worktreesNamedIn(transcriptText, mainRoot) {
-  // The path must start where a path can start, so `/x/<mainRoot>/...` does not count.
-  const pattern = new RegExp(
-    `(?<![\\w.~/-])${escapeRegExp(path.join(mainRoot, ".worktrees"))}/([^/\\s'"\`;&|()<>\\\\]+)`,
-    "g",
-  );
-  const found = [];
+// What changes files for certain: the edit tools, and a shell command that runs `git commit`.
+const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+const GIT_COMMIT = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit(?=\s|$)/;
+const editsOrCommits = (block) =>
+  EDIT_TOOLS.has(block.name) ||
+  (block.name === "Bash" && GIT_COMMIT.test(String(block.input?.command ?? "")));
+
+function* toolUses(transcriptText) {
   for (const line of String(transcriptText).split("\n")) {
     let entry;
     try {
@@ -66,12 +65,34 @@ export function worktreesNamedIn(transcriptText, mainRoot) {
     }
     if (entry?.type !== "assistant" || !Array.isArray(entry.message?.content)) continue;
     for (const block of entry.message.content) {
-      if (block?.type !== "tool_use" || !ACTING_TOOLS.has(block.name)) continue;
-      for (const text of stringsIn(block.input)) {
-        for (const [, name] of text.matchAll(pattern)) {
-          const root = path.join(mainRoot, ".worktrees", name);
-          if (!name.startsWith(".") && !found.includes(root)) found.push(root);
-        }
+      if (block?.type === "tool_use") yield block;
+    }
+  }
+}
+
+// Whether the transcript records an edit or a commit anywhere.
+export function actedIn(transcriptText) {
+  for (const block of toolUses(transcriptText)) if (editsOrCommits(block)) return true;
+  return false;
+}
+
+// Worktree folders `<mainRoot>/.worktrees/<name>` named in the tool calls a transcript records, in
+// order of first appearance. Only acting tools count; prompts, tool results and reads do not.
+// With `editsOnly`, only edits and commits count: a command that tests, lists or searches in a
+// worktree does not make it the agent's.
+export function worktreesNamedIn(transcriptText, mainRoot, { editsOnly = false } = {}) {
+  // The path must start where a path can start, so `/x/<mainRoot>/...` does not count.
+  const pattern = new RegExp(
+    `(?<![\\w.~/-])${escapeRegExp(path.join(mainRoot, ".worktrees"))}/([^/\\s'"\`;&|()<>\\\\]+)`,
+    "g",
+  );
+  const found = [];
+  for (const block of toolUses(transcriptText)) {
+    if (editsOnly ? !editsOrCommits(block) : !ACTING_TOOLS.has(block.name)) continue;
+    for (const text of stringsIn(block.input)) {
+      for (const [, name] of text.matchAll(pattern)) {
+        const root = path.join(mainRoot, ".worktrees", name);
+        if (!name.startsWith(".") && !found.includes(root)) found.push(root);
       }
     }
   }
@@ -191,11 +212,24 @@ const tail = (text) => text.split("\n").slice(-REPORT_LINES).join("\n");
 // Runs the handoff checks. `transcriptText` is the agent's transcript, `cwd` the directory its
 // session runs in. Returns { results } with one { worktree, command, ok, report } per worktree
 // that has changes; no results when the agent changed nothing. With `areas`, a worktree is checked
-// only when its changes touch one of those path prefixes (selectChecks). Throws when the
-// worktrees or their changes cannot be determined.
-export function checkHandoff({ mainRoot, cwd, transcriptText, env = process.env, areas = null }) {
+// only when its changes touch one of those path prefixes (selectChecks). With `editsOnly` (a
+// general agent, which also researches and reviews), a worktree is the agent's only when it
+// edited or committed there, and the session's folder only when it edited or committed at all.
+// Throws when the worktrees or their changes cannot be determined.
+export function checkHandoff({
+  mainRoot,
+  cwd,
+  transcriptText,
+  env = process.env,
+  areas = null,
+  editsOnly = false,
+}) {
   const roots = [];
-  for (const candidate of [cwd, ...worktreesNamedIn(transcriptText, mainRoot)]) {
+  const session = !editsOnly || actedIn(transcriptText) ? [cwd] : [];
+  for (const candidate of [
+    ...session,
+    ...worktreesNamedIn(transcriptText, mainRoot, { editsOnly }),
+  ]) {
     if (!candidate || !fs.existsSync(candidate)) continue;
     const root = checkoutOf(candidate, mainRoot);
     // The main checkout holds no developer work (docs/git-workflow.md); only worktrees are checked.
