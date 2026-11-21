@@ -96,10 +96,15 @@ def record_run(
     scope: str,
     *,
     chunks: list[dict[str, Any]] | None = None,
+    provisional_usd: float = 0.0,
 ) -> None:
     """Writes `run_id`'s entry: what `allowance` has spent so far and, when given, the charges of
-    every chunk. A run writes its entry after every chunk; a later write replaces the earlier one,
-    so the ledger counts each run once and keeps what a run spent before it was interrupted."""
+    every chunk. A later write replaces the earlier one, so the ledger counts each run once.
+
+    A run writes its entry before every chunk with that chunk's reservation as `provisional_usd`,
+    counted as spent and uncertain, and again after the chunk with what it measured instead. An
+    interrupted run therefore leaves an entry that counts its unfinished chunk at its whole
+    reservation: unmeasured spend consumes its reservation, also when the process is killed."""
     data: dict[str, Any] = {"runs": []}
     if ledger.exists():
         data = json.loads(ledger.read_text(encoding="utf-8"))
@@ -107,9 +112,11 @@ def record_run(
         "run": run_id,
         "at": datetime.now(UTC).isoformat(timespec="seconds"),
         "scope": scope,
-        "spent_usd": round(allowance.spent_usd, 6),
-        "uncertain_usd": round(allowance.uncertain_usd, 6),
+        "spent_usd": round(allowance.spent_usd + provisional_usd, 6),
+        "uncertain_usd": round(allowance.uncertain_usd + provisional_usd, 6),
     }
+    if provisional_usd > 0:
+        entry["provisional_usd"] = round(provisional_usd, 6)
     if chunks is not None:
         entry["chunks"] = chunks
     data["runs"] = [run for run in data["runs"] if run.get("run") != run_id] + [entry]

@@ -55,6 +55,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -108,6 +109,15 @@ API_ENV_FILES = ("../../.env.example", "../../.env", "../../.env.local")
 #: per case-run (debugging).
 JUDGE_MODES = ("batch", "direct")
 
+#: The overall wall-time deadline of a paid run or paid regrade, in minutes (`--deadline-minutes`).
+#: It is checked before every chunk after the early one: once it has passed, no further chunk
+#: starts, the remaining cases are pending and the summary and ledger are written. A chunk that
+#: has started finishes (its subject runs, then at most `judging.BATCH_MAX_WAIT_SECONDS` plus
+#: `judging.CANCEL_WAIT_SECONDS` for its batch), so a run ends at most one chunk after it.
+DEADLINE_MINUTES = 150.0
+#: The runner's monotonic clock (replaced in tests).
+clock = time.monotonic
+
 
 class UsageError(Exception):
     """The command line is invalid; nothing was started."""
@@ -123,6 +133,7 @@ class Plan:
     candidate: str | None = None
     folders: tuple[Path, ...] = ()
     judge_mode: str = "batch"  # "batch" (Message Batches API) | "direct" (debugging)
+    deadline_minutes: float = DEADLINE_MINUTES
 
 
 def plan(argv: Sequence[str]) -> Plan:
@@ -136,6 +147,7 @@ def plan(argv: Sequence[str]) -> Plan:
     compare: str | None = None
     report: list[str] | None = None
     judge_mode: str | None = None
+    deadline: float | None = None
     others = False
     args = list(argv)
     while args:
@@ -176,6 +188,12 @@ def plan(argv: Sequence[str]) -> Plan:
             judge_mode = args.pop(0)
             if judge_mode not in JUDGE_MODES:
                 raise UsageError(f"--judge-mode is batch or direct, not {judge_mode}")
+        elif option == "--deadline-minutes":
+            if not args or args[0].startswith("--"):
+                raise UsageError("--deadline-minutes needs a value (minutes)")
+            if deadline is not None:
+                raise UsageError("--deadline-minutes given twice")
+            deadline = _minutes(args.pop(0))
         elif option == "--all":
             every = True
         elif option == "--judge":
@@ -193,7 +211,7 @@ def plan(argv: Sequence[str]) -> Plan:
         return Plan(mode="compare-report", folders=tuple(Path(folder) for folder in report))
 
     if check:
-        if cases or every or regrade or judge or allowance or compare or judge_mode:
+        if cases or every or regrade or judge or allowance or compare or judge_mode or deadline:
             raise UsageError("--check-fixture takes no other option")
         return Plan(mode="check-fixture")
 
@@ -239,6 +257,7 @@ def plan(argv: Sequence[str]) -> Plan:
             allowance_usd=_allowance(allowance),
             candidate=compare,
             judge_mode=judge_mode or "batch",
+            deadline_minutes=deadline or DEADLINE_MINUTES,
         )
 
     usd = _allowance(allowance) if allowance is not None else None
@@ -251,12 +270,15 @@ def plan(argv: Sequence[str]) -> Plan:
             raise UsageError("--allowance applies only to a paid run or --judge")
         if not judge and judge_mode is not None:
             raise UsageError("--judge-mode applies only to a paid run or --judge")
+        if not judge and deadline is not None:
+            raise UsageError("--deadline-minutes applies only to a paid run or --judge")
         return Plan(
             mode="regrade",
             regrade=Path(regrade),
             judge=judge,
             allowance_usd=usd,
             judge_mode=judge_mode or "batch",
+            deadline_minutes=deadline or DEADLINE_MINUTES,
         )
 
     if judge:
@@ -279,7 +301,23 @@ def plan(argv: Sequence[str]) -> Plan:
         seen.add(case_id)
     if usd is None:
         raise UsageError("a paid run needs --allowance <usd> (the campaign's remaining allowance)")
-    return Plan(mode="run", cases=tuple(cases), allowance_usd=usd, judge_mode=judge_mode or "batch")
+    return Plan(
+        mode="run",
+        cases=tuple(cases),
+        allowance_usd=usd,
+        judge_mode=judge_mode or "batch",
+        deadline_minutes=deadline or DEADLINE_MINUTES,
+    )
+
+
+def _minutes(value: str) -> float:
+    try:
+        minutes = float(value)
+    except ValueError:
+        minutes = math.nan
+    if not math.isfinite(minutes) or minutes <= 0:
+        raise UsageError(f"--deadline-minutes is a positive number of minutes, not {value!r}")
+    return minutes
 
 
 def _allowance(value: str) -> float:
@@ -729,8 +767,21 @@ def allowance_stop(allowance: budget.Allowance, needed: float, chunk: Sequence[s
     )
 
 
+def deadline_stop(started_at: float, deadline_minutes: float, index: int) -> str | None:
+    """Why chunk `index` may not start any more, or None while the run is within its deadline.
+    The early chunk always starts."""
+    elapsed = clock() - started_at
+    if index == 0 or elapsed < deadline_minutes * 60:
+        return None
+    return (
+        f"deadline: {elapsed / 60:.1f} minutes have passed, the run's deadline is"
+        f" {deadline_minutes:g} minutes"
+    )
+
+
 class _ChunkLog:
-    """The per-chunk charges of one paid run, written to the ledger after every chunk."""
+    """The per-chunk charges of one paid run in the ledger: before every chunk its reservation as
+    a provisional charge (`begin`), after it what it measured (`add`)."""
 
     def __init__(self, allowance: budget.Allowance, run_id: str) -> None:
         self.allowance = allowance
@@ -738,6 +789,26 @@ class _ChunkLog:
         self.entries: list[dict[str, Any]] = []
         self._spent = allowance.spent_usd
         self._uncertain = allowance.uncertain_usd
+
+    def begin(self, chunk: Sequence[str], *, case_runs: int, reserved_usd: float) -> None:
+        """Counts `chunk` at its whole reservation (spent and uncertain) until `add` replaces it,
+        so an interrupted run never under-counts what its unfinished chunk may have paid."""
+        provisional = {
+            "cases": list(chunk),
+            "case_runs": case_runs,
+            "reserved_usd": round(reserved_usd, 6),
+            "spent_usd": round(reserved_usd, 6),
+            "uncertain_usd": round(reserved_usd, 6),
+            "provisional": True,
+        }
+        budget.record_run(
+            LEDGER,
+            self.run_id,
+            self.allowance,
+            "running",
+            chunks=[*self.entries, provisional],
+            provisional_usd=reserved_usd,
+        )
 
     def add(self, chunk: Sequence[str], *, case_runs: int, reserved_usd: float) -> None:
         spent, uncertain = self.allowance.spent_usd, self.allowance.uncertain_usd
@@ -1020,7 +1091,9 @@ async def command_run(
     *,
     candidate: str | None = None,
     judge_mode: str = "batch",
+    deadline_minutes: float = DEADLINE_MINUTES,
 ) -> int:
+    started_at = clock()
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print(
             "blocked: no model key; run through `pnpm --filter @sebela/llm-agent eval`",
@@ -1066,12 +1139,15 @@ async def command_run(
             for index, chunk in enumerate(pieces):
                 rest = [case_id for later in pieces[index + 1 :] for case_id in later]
                 reserved = needed(chunk)
-                stopped = allowance_stop(allowance, reserved, chunk)
+                stopped = deadline_stop(started_at, deadline_minutes, index) or allowance_stop(
+                    allowance, reserved, chunk
+                )
                 if stopped is not None:
                     print(f"stopped: {stopped}", file=sys.stderr)
                     extra.append(f"stopped before chunk {index + 1}: {stopped}")
                     pending = [*chunk, *rest]
                     break
+                log.begin(chunk, case_runs=len(chunk) * repeats, reserved_usd=reserved)
                 records, failure, leaked = await _run_chunk(
                     folder, index, chunk, api.url, candidate, repeats=repeats, secrets=secrets
                 )
@@ -1232,8 +1308,14 @@ def _outcomes(
 
 
 async def command_regrade(
-    source: Path, *, judge: bool, declared_usd: float | None, judge_mode: str = "batch"
+    source: Path,
+    *,
+    judge: bool,
+    declared_usd: float | None,
+    judge_mode: str = "batch",
+    deadline_minutes: float = DEADLINE_MINUTES,
 ) -> int:
+    started_at = clock()
     records = load_answers(source)
     subject = current_subject_versions()
     extra: list[str] = []
@@ -1271,12 +1353,15 @@ async def command_regrade(
             reserved = sum(
                 item.reserved_usd for item in judge_requests(part, judge_mode=judge_mode)
             )
-            stopped = allowance_stop(allowance, reserved, chunk)
+            stopped = deadline_stop(started_at, deadline_minutes, index) or allowance_stop(
+                allowance, reserved, chunk
+            )
             if stopped is not None:
                 print(f"stopped: {stopped}", file=sys.stderr)
                 extra.append(f"stopped before chunk {index + 1}: {stopped}")
                 pending = [*chunk, *rest]
                 break
+            log.begin(chunk, case_runs=len(part), reserved_usd=reserved)
             try:
                 chunk_graded, judge_failures = await grade_records(
                     part, judge_mode=judge_mode, allowance=allowance
@@ -1287,6 +1372,7 @@ async def command_regrade(
                 pending = rest
                 for record in part:
                     graded.append(await grade_record(record, judge_model=None, allowance=None))
+                log.add(chunk, case_runs=len(part), reserved_usd=reserved)
                 break
             graded.extend(chunk_graded)
             log.add(chunk, case_runs=len(part), reserved_usd=reserved)
@@ -1359,6 +1445,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     judge=chosen.judge,
                     declared_usd=chosen.allowance_usd,
                     judge_mode=chosen.judge_mode,
+                    deadline_minutes=chosen.deadline_minutes,
                 )
             )
         if chosen.mode == "compare-report":
@@ -1370,6 +1457,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 chosen.allowance_usd,
                 candidate=chosen.candidate,
                 judge_mode=chosen.judge_mode,
+                deadline_minutes=chosen.deadline_minutes,
             )
         )
     except (budget.BudgetBlockedError, UsageError) as error:

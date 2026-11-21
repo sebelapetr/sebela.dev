@@ -514,10 +514,19 @@ def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
 
     async def fake(
-        selected: Any, declared: float, *, candidate: str | None = None, judge_mode: str = ""
+        selected: Any,
+        declared: float,
+        *,
+        candidate: str | None = None,
+        judge_mode: str = "",
+        deadline_minutes: float = 0.0,
     ) -> int:
         seen.update(
-            selected=tuple(selected), declared=declared, candidate=candidate, judge_mode=judge_mode
+            selected=tuple(selected),
+            declared=declared,
+            candidate=candidate,
+            judge_mode=judge_mode,
+            deadline_minutes=deadline_minutes,
         )
         return 0
 
@@ -532,6 +541,7 @@ def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
         "declared": 1.0,
         "candidate": "sonnet-medium",
         "judge_mode": "batch",
+        "deadline_minutes": run.DEADLINE_MINUTES,
     }
     assert run.main(["--compare", "sonnet-medium", "--allowance", "6"]) == run.BLOCKED
 

@@ -14,7 +14,9 @@ hides the batch lifecycle (create, bounded polling, cancel on timeout, results m
   the request gets a visible failure, never a pass;
 - a batch that did not end within `BATCH_MAX_WAIT_SECONDS` is cancelled; once the cancel has
   ended it (at most `CANCEL_WAIT_SECONDS`), the results that succeeded before it are charged
-  their measured cost and kept, the rest are uncertain with a "did not end" failure.
+  their measured cost and kept, the rest are uncertain with a "did not end" failure;
+- when that cancel fails for good, the batch's status is checked once more: if it has ended,
+  its results are read and charged as above, otherwise every request is uncertain.
 
 Retries: the idempotent calls (retrieve, results, cancel) are retried on a transient error
 (HTTP 408, 409, 429 or 5xx, a lost connection or a timeout) after each of
@@ -145,7 +147,10 @@ async def judge_in_batch(
         while status != "ended":
             if reason is None and clock() - started >= max_wait_seconds:
                 reason = f"judge batch: {batch_id} did not end within {max_wait_seconds:.0f} s"
-                await _retry(lambda: client.cancel(batch_id), sleep)
+                try:
+                    await _retry(lambda: client.cancel(batch_id), sleep)
+                except Exception as error:
+                    raise _CancelFailedError(reason) from error
                 started = clock()
             elif reason is not None and clock() - started >= CANCEL_WAIT_SECONDS:
                 return _uncertain(requests, allowance, reason)
@@ -156,6 +161,12 @@ async def judge_in_batch(
                 )
             )
         results = await _retry(lambda: _read_results(client, batch_id), sleep)
+    except _CancelFailedError as failed:
+        # One last look: a batch that has ended anyway still has results that were paid for.
+        ended = await _results_if_ended(client, batch_id, sleep)
+        if ended is None:
+            return _uncertain(requests, allowance, str(failed))
+        results = ended
     except Exception as error:  # the batch state cannot be read: nothing is measured
         with contextlib.suppress(Exception):
             await _retry(lambda: client.cancel(batch_id), sleep)
@@ -170,6 +181,23 @@ async def judge_in_batch(
         )
         for item in requests
     }
+
+
+class _CancelFailedError(Exception):
+    """The cancel of a timed-out batch failed for good; its message is the timeout reason."""
+
+
+async def _results_if_ended(
+    client: MessageBatches, batch_id: str, sleep: Callable[[float], Awaitable[None]]
+) -> dict[str, dict[str, Any]] | None:
+    """The results of `batch_id` when one more status check finds it ended, otherwise None."""
+    try:
+        status = _as_dict(await client.retrieve(batch_id)).get("processing_status")
+        if status != "ended":
+            return None
+        return await _retry(lambda: _read_results(client, batch_id), sleep)
+    except Exception:
+        return None
 
 
 async def _read_results(client: MessageBatches, batch_id: str) -> dict[str, dict[str, Any]]:
