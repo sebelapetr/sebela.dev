@@ -31,6 +31,7 @@ describe("profileTextResponse", () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe(TEXT);
+    expect(response.headers.get("Cache-Control")).toMatch(/^public, /u);
     expect(await response.text()).toBe("# Robin Example\n");
   });
 
@@ -38,6 +39,8 @@ describe("profileTextResponse", () => {
     const response = profileTextResponse({ status: "missing" }, TEXT, () => "unused");
     expect(response.status).toBe(404);
     expect(response.headers.get("X-Robots-Tag")).toBe("noindex");
+    // Never kept by a shared cache, so a page published a moment later shows at once.
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.text()).not.toContain("unused");
   });
 
@@ -58,5 +61,12 @@ describe("textResponse", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe(TEXT);
     expect(await response.text()).toBe("User-agent: *\n");
+  });
+
+  it("lets the CDN keep the document briefly, so a content change or the indexing switch shows", () => {
+    const response = textResponse("User-agent: *\n", TEXT);
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400",
+    );
   });
 });

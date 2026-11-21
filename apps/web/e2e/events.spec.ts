@@ -133,7 +133,7 @@ test.describe("the roadmap's events", () => {
   }) => {
     const response = await page.goto(`${website.url}${eventsPage}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Events — AI Engineering Roadmap — ${name}`);
+    await expect(page).toHaveTitle(`Events · AI Engineering Roadmap · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Events");
     await expect(
@@ -222,9 +222,7 @@ test.describe("the roadmap's events", () => {
   test("a day covered only by an event shows the event without notes or time", async ({ page }) => {
     const response = await page.goto(`${website.url}${eventOnlyDay}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(
-      `Thursday, January 1, 2026 — Learning Diary — AI Engineering Roadmap — ${name}`,
-    );
+    await expect(page).toHaveTitle(`Thursday, January 1, 2026 · Learning Diary · ${name}`);
     await expect(page.getByRole("heading", { level: 2 })).toHaveText("Events");
     await expect(page.locator("main")).not.toContainText("What I worked on");
     await expect(page.locator("main")).not.toContainText("session");

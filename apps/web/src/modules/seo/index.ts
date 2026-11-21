@@ -1,5 +1,7 @@
 // The seo module: what search engines and language models read about the profile — each indexed
-// page's metadata and Open Graph preview image, the homepage's structured data, every AI Roadmap
+// page's metadata (titles within 60 characters) and Open Graph preview image, the structured data
+// of the homepage, the experience page, the services page and the CV, the llms.txt link in every
+// page's head, every AI Roadmap
 // page's metadata, breadcrumbs, structured data and preview image, the sitemap, robots.txt and
 // llms.txt with the roadmap's pages — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
@@ -9,6 +11,7 @@ import "server-only";
 
 import type { Metadata } from "next";
 
+import { NOT_STORED, PUBLIC_CACHE_CONTROL } from "./data/cache-control";
 import { getHomepage, getRoadmap, getRoadmapBookshelf, getRoadmapDiary } from "../profile";
 import { robotsTxt, sitemapXml } from "./data/indexing";
 import { openGraphImage } from "./components/open-graph-image";
@@ -27,6 +30,14 @@ import {
 } from "./data/roadmap-page";
 import { discoveryResult, roadmapPaths, type DiscoveryResult } from "./data/roadmap-discovery";
 import { siteOrigin } from "./data/site-origin";
+
+export { LlmsTxtLink } from "./components/llms-txt-link";
+
+export {
+  CvStructuredData,
+  ExperienceStructuredData,
+  ServicesStructuredData,
+} from "./components/page-structured-data";
 
 export { ProfileStructuredData } from "./components/profile-structured-data";
 
@@ -102,24 +113,24 @@ export async function llmsTxtResponse(): Promise<Response> {
 /**
  * An indexed page's Open Graph preview image, a 1200 × 630 PNG: the person's name and headline
  * from the profile, or the site's own card while the profile is missing or cannot be read, so a
- * shared link always has a preview. The profile's card is revalidated on every use (`no-cache`)
- * so an edited profile is never shown stale; the fallback is never stored.
+ * shared link always has a preview. The profile's card follows the public cache rule, so the CDN
+ * keeps it as briefly as the pages; the fallback is never stored.
  */
 export async function openGraphImageResponse(page: IndexedPage): Promise<Response> {
   const result = await getHomepage();
   const facts = result.status === "ready" ? result.profile : null;
   const card = openGraphCard(siteOrigin(), page, facts);
-  return openGraphImage(card, facts === null ? "no-store" : "no-cache");
+  return openGraphImage(card, facts === null ? NOT_STORED : PUBLIC_CACHE_CONTROL);
 }
 
 /**
  * An AI Roadmap page's Open Graph preview image, a 1200 × 630
  * PNG: the page's kind and name and whose roadmap it is on, or the site's own roadmap card while the
- * page cannot be read (`facts` is null), so a shared link always has a preview. The page's card is revalidated on every
- * use (`no-cache`); the fallback is never stored. A page that does not exist has no image: its
- * route answers 404 itself.
+ * page cannot be read (`facts` is null), so a shared link always has a preview. The page's card
+ * follows the public cache rule; the fallback is never stored. A page that does not exist has no
+ * image: its route answers 404 itself.
  */
 export function roadmapOpenGraphImageResponse(facts: RoadmapPageFacts | null): Response {
   const card = roadmapOpenGraphCard(siteOrigin(), facts);
-  return openGraphImage(card, facts === null ? "no-store" : "no-cache");
+  return openGraphImage(card, facts === null ? NOT_STORED : PUBLIC_CACHE_CONTROL);
 }

@@ -1,19 +1,28 @@
 // The HTTP answers of the profile's text documents (the sitemap and llms.txt): the document while
 // the profile can be read, 404 while it is not published and 503 while the API cannot be read — a
 // temporary failure never becomes a successful, empty document a crawler would keep.
+import { NOT_STORED, PUBLIC_CACHE_CONTROL } from "./cache-control";
+
 /** How long a crawler should wait before it asks again after a failed read, in seconds. */
 const RETRY_AFTER_SECONDS = 60;
 
-/** A successful text document. */
+/** A successful text document, which the CDN keeps briefly under the public cache rule. */
 export function textResponse(body: string, contentType: string): Response {
-  return new Response(body, { status: 200, headers: { "Content-Type": contentType } });
+  return new Response(body, {
+    status: 200,
+    headers: { "Content-Type": contentType, "Cache-Control": PUBLIC_CACHE_CONTROL },
+  });
 }
 
-/** A document or image that does not exist, kept out of search results. */
+/** A document or image that does not exist, kept out of search results and out of every cache. */
 export function notFoundResponse(): Response {
   return new Response("Not found.\n", {
     status: 404,
-    headers: { "Content-Type": "text/plain; charset=utf-8", "X-Robots-Tag": "noindex" },
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": NOT_STORED,
+      "X-Robots-Tag": "noindex",
+    },
   });
 }
 
@@ -37,7 +46,7 @@ export function profileTextResponse<Ready extends { readonly status: "ready" }>(
         status: 503,
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-store",
+          "Cache-Control": NOT_STORED,
           "Retry-After": String(RETRY_AFTER_SECONDS),
           "X-Robots-Tag": "noindex",
         },

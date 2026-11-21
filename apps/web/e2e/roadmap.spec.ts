@@ -171,7 +171,7 @@ test.describe("the roadmap overview", () => {
   }) => {
     const response = await page.goto(`${website.url}/ai-roadmap`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`AI Engineering Roadmap — ${name}`);
+    await expect(page).toHaveTitle(`AI Engineering Roadmap · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
     // 90 + 30 + 600 planned minutes are 12 hours; resources without an estimate add nothing.
@@ -359,7 +359,7 @@ test.describe("the roadmap overview", () => {
     await page.getByRole("link", { name: "Open the area page: Orbit foundations" }).click();
 
     await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations$/u);
-    await expect(page).toHaveTitle(`Orbit foundations — AI Engineering Roadmap — ${name}`);
+    await expect(page).toHaveTitle(`Orbit foundations · AI Engineering Roadmap · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orbit foundations");
     await expect(breadcrumbs(page).getByRole("link")).toHaveText(["AI Engineering Roadmap"]);
@@ -396,9 +396,7 @@ test.describe("the roadmap overview", () => {
 
     await page.getByRole("link", { name: "Open the module page: Signal basics" }).click();
     await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
-    await expect(page).toHaveTitle(
-      `Signal basics — Orbit foundations — AI Engineering Roadmap — ${name}`,
-    );
+    await expect(page).toHaveTitle(`Signal basics · Orbit foundations · ${name}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Signal basics");
     await expect(page.locator("main header")).toContainText("Module of Orbit foundations");
     await expect(page.locator("main header")).toContainText(/Updated [A-Z][a-z]+ \d{1,2}, \d{4}/u);
@@ -531,11 +529,12 @@ test.describe("the roadmap overview", () => {
       expect(description, path).not.toBe("");
       await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
         "content",
-        new RegExp(`^${names.at(-1) ?? ""} — `, "u"),
+        new RegExp(`^${names.at(-1) ?? ""} · `, "u"),
       );
 
-      // The page as a course by the person, part of its area for a module.
-      const course = graphs
+      // The page as a learning plan the person wrote, not a course on offer; part of its area for
+      // a module.
+      const learning = graphs
         .flatMap((graph) => (graph as { "@graph"?: unknown[] })["@graph"] ?? [])
         .find(
           (
@@ -543,17 +542,23 @@ test.describe("the roadmap overview", () => {
           ): node is {
             name: string;
             url: string;
-            provider: { name: string };
+            author: { name: string };
+            provider?: unknown;
             isPartOf?: { url: string };
-          } => (node as { "@type"?: string })["@type"] === "Course",
+          } => (node as { "@type"?: string })["@type"] === "LearningResource",
         );
-      expect(course?.name, path).toBe(names.at(-1));
-      expect(new URL(course?.url ?? "").pathname, path).toBe(path);
-      expect(course?.provider.name, path).toBe(name);
+      expect(learning?.name, path).toBe(names.at(-1));
+      expect(new URL(learning?.url ?? "").pathname, path).toBe(path);
+      expect(learning?.author.name, path).toBe(name);
+      expect(learning?.provider, path).toBeUndefined();
       expect(
-        course?.isPartOf === undefined ? null : new URL(course.isPartOf.url).pathname,
+        learning?.isPartOf === undefined ? null : new URL(learning.isPartOf.url).pathname,
         path,
       ).toBe(partOf);
+      expect(
+        graphs.flatMap((graph) => (graph as { "@graph"?: unknown[] })["@graph"] ?? []),
+        path,
+      ).not.toContainEqual(expect.objectContaining({ "@type": "Course" }));
 
       // A large preview card drawn at /og plus the page's address.
       await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
@@ -565,6 +570,10 @@ test.describe("the roadmap overview", () => {
       const preview = await request.get(`${website.url}/og${path}`);
       expect(preview.status(), path).toBe(200);
       expect(preview.headers()["content-type"], path).toBe("image/png");
+      // The CDN keeps a preview as briefly as the pages (infra/README.md, CDN caching).
+      expect(preview.headers()["cache-control"], path).toBe(
+        "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400",
+      );
     }
     for (const path of ["/og/ai-roadmap/no-such-area", "/og/ai-roadmap/orbit-foundations/nope"]) {
       expect((await request.get(`${website.url}${path}`)).status(), path).toBe(404);

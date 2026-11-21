@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "answer-grader",
+    "name": "Answer grader",
+    "summary": "A small grader that checks answers against the passages they cite.",
+    "status": "built",
+    "concepts": ["Grounded answers", "Citation checks"],
+    "startedOn": "2023-09-01",
+    "endedOn": "2023-12-15",
+    "position": 0,
+    "technologies": ["python"],
+    "topics": ["evaluation"]
+  },
+  {
+    "slug": "reranking-trial",
+    "name": "Reranking trial",
+    "summary": "A cross-encoder reranker compared with plain vector search on a fixed question set.",
+    "status": "tested",
+    "concepts": ["Reranking", "Retrieval recall"],
+    "startedOn": "2024-02-01",
+    "endedOn": "2024-04-30",
+    "position": 1,
+    "technologies": ["python", "pgvector"],
+    "topics": ["retrieval", "evaluation"]
+  },
+  {
+    "slug": "conversation-memory-design",
+    "name": "Conversation memory design",
+    "summary": "A memory model for multi-turn support conversations, written down as a design.",
+    "status": "designed",
+    "concepts": ["Short-term memory", "Forgetting rules"],
+    "startedOn": "2025-01-01",
+    "position": 2,
+    "technologies": ["langgraph"],
+    "topics": ["agents"]
+  }
+]

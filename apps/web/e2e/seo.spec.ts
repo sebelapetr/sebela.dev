@@ -74,10 +74,10 @@ test.describe("metadata and indexing files on the configured origin", () => {
   });
 
   for (const [path, title] of [
-    ["/", `${withExperience.name} — ${withExperience.headline}`],
-    ["/experience", `Experience — ${withExperience.name}`],
-    ["/services", `Services — ${withExperience.name}`],
-    ["/cv", `CV — ${withExperience.name}`],
+    ["/", `${withExperience.name} · Fictional engineer who builds calm software…`],
+    ["/experience", `Experience · ${withExperience.name}`],
+    ["/services", `Services · ${withExperience.name}`],
+    ["/cv", `CV · ${withExperience.name}`],
   ] as const) {
     test(`${path} has its title, description and canonical address`, async ({ page }) => {
       const response = await page.goto(`${website.url}${path}`);
@@ -96,6 +96,12 @@ test.describe("metadata and indexing files on the configured origin", () => {
       // Plain text: Markdown syntax from the profile never reaches the description.
       expect(description).not.toMatch(/[*_[\]]/);
       await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+      // Short enough for a search result to show whole, and the page points AI readers to llms.txt.
+      expect(Array.from(await page.title()).length).toBeLessThanOrEqual(60);
+      await expect(page.locator('link[rel="alternate"][type="text/plain"]')).toHaveAttribute(
+        "href",
+        "/llms.txt",
+      );
     });
   }
 
@@ -108,14 +114,70 @@ test.describe("metadata and indexing files on the configured origin", () => {
       name: withExperience.name,
       description: withExperience.headline,
       url: `${SITE}/`,
+      // The current main job and own business, never the ended roles or the side project.
+      jobTitle: ["Lead engineer", "Independent consultant"],
+      worksFor: [
+        {
+          "@type": "Organization",
+          name: "Fernway Logistics",
+          url: "https://fernway.example.test/",
+        },
+        { "@type": "Organization", name: "Morrow Studio" },
+      ],
+      knowsAbout: expect.arrayContaining(["TypeScript", "PostgreSQL"]),
+    });
+    expect(graph[2]).not.toHaveProperty("worksFor.1.url");
+  });
+
+  test("the experience page lists the roles and describes the person", async ({ page }) => {
+    await page.goto(`${website.url}/experience`);
+    const graph = await structuredData(page);
+    expect(graph.map((node) => node["@type"])).toEqual(["WebPage", "Person", "ItemList"]);
+    expect(graph[0]).toMatchObject({
+      "@id": `${SITE}/experience#webpage`,
+      about: { "@id": `${SITE}/#person` },
+      mainEntity: { "@id": `${SITE}/experience#experiences` },
+    });
+    expect(graph[1]).toMatchObject({
+      "@id": `${SITE}/#person`,
+      jobTitle: ["Lead engineer", "Independent consultant"],
+      knowsAbout: expect.arrayContaining(["TypeScript"]),
+    });
+    expect(graph[2]).toMatchObject({
+      itemListElement: expect.arrayContaining([
+        expect.objectContaining({
+          name: "Lead engineer at Fernway Logistics",
+          url: `${SITE}/experience#experience-fernway-lead-engineer`,
+        }),
+      ]),
     });
   });
 
-  test("the other pages carry no structured data of the person", async ({ page }) => {
-    for (const path of ["/experience", "/services", "/cv"]) {
-      await page.goto(`${website.url}${path}`);
-      await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+  test("the services page lists the services the person provides", async ({ page }) => {
+    await page.goto(`${website.url}/services`);
+    const graph = await structuredData(page);
+    expect(graph.map((node) => node["@type"])).toEqual(["WebPage", "Person", "ItemList"]);
+    const services = (graph[2] as { itemListElement: { item: Node }[] }).itemListElement.map(
+      (element) => element.item,
+    );
+    expect(services.length).toBeGreaterThan(0);
+    for (const service of services) {
+      expect(service).toMatchObject({ "@type": "Service", provider: { "@id": `${SITE}/#person` } });
     }
+  });
+
+  test("the CV page is a profile page of the person with the skills", async ({ page }) => {
+    await page.goto(`${website.url}/cv`);
+    const graph = await structuredData(page);
+    expect(graph.map((node) => node["@type"])).toEqual(["ProfilePage", "Person"]);
+    expect(graph[0]).toMatchObject({
+      "@id": `${SITE}/cv#webpage`,
+      mainEntity: { "@id": `${SITE}/#person` },
+    });
+    expect(graph[1]).toMatchObject({
+      jobTitle: ["Lead engineer", "Independent consultant"],
+      knowsAbout: expect.arrayContaining(["TypeScript"]),
+    });
   });
 
   test("the sitemap lists the real pages on the configured origin", async ({ request }) => {
@@ -141,6 +203,32 @@ test.describe("metadata and indexing files on the configured origin", () => {
       const path = (location ?? "").slice(SITE.length);
       expect((await request.get(`${website.url}${path}`)).status()).toBe(200);
     }
+  });
+
+  test("documents and previews may be kept briefly by the CDN, pages and Ask never by the website", async ({
+    request,
+  }) => {
+    const rule = "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400";
+    for (const path of ["/robots.txt", "/llms.txt", "/sitemap.xml", "/og/home"]) {
+      const response = await request.get(`${website.url}${path}`);
+      expect({ path, status: response.status() }).toEqual({ path, status: 200 });
+      expect({ path, value: response.headers()["cache-control"] }).toEqual({ path, value: rule });
+    }
+    // Pages get the public rule from the reverse proxy only (infra/nginx), which sees the upstream
+    // status and the navigation header; the website itself never marks a page public.
+    for (const path of ["/", "/experience", "/ai-roadmap", "/ask"]) {
+      const response = await request.get(`${website.url}${path}`);
+      expect({ path, value: response.headers()["cache-control"] }).toEqual({
+        path,
+        value: expect.stringMatching(/\bno-store\b/u),
+      });
+    }
+    // A client navigation's payload and the health check.
+    const payload = await request.get(`${website.url}/experience`, { headers: { RSC: "1" } });
+    expect(payload.headers()["cache-control"]).toMatch(/\bno-store\b/u);
+    expect((await request.get(`${website.url}/health`)).headers()["cache-control"]).toBe(
+      "no-store",
+    );
   });
 
   test("robots.txt lets crawlers in and points at the sitemap", async ({ request }) => {
@@ -199,7 +287,7 @@ test.describe("metadata of a profile with unsafe text", () => {
 
   test("keeps the text as text in the title and the structured data", async ({ page }) => {
     await page.goto(website.url);
-    await expect(page).toHaveTitle(`${withUnsafeText.name} — ${withUnsafeText.headline}`);
+    await expect(page).toHaveTitle(`${withUnsafeText.name} · Fictional engineer…`);
     expect(await page.evaluate(() => "__injected" in window)).toBe(false);
     await expect(page.locator("head script:not([src])", { hasText: "__injected" })).toHaveCount(0);
     const graph = await structuredData(page);
@@ -241,6 +329,8 @@ test.describe("metadata without a published profile", () => {
   test("the homepage is not found and not indexed", async ({ page }) => {
     const response = await page.goto(website.url);
     expect(response?.status()).toBe(404);
+    // Never kept by the CDN, so the profile shows as soon as it is published.
+    expect(response?.headers()["cache-control"]).toMatch(/\bno-store\b/u);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
   });
@@ -250,6 +340,7 @@ test.describe("metadata without a published profile", () => {
       const response = await request.get(`${website.url}${path}`);
       expect(response.status()).toBe(404);
       expect(response.headers()["x-robots-tag"]).toBe("noindex");
+      expect(response.headers()["cache-control"]).toBe("no-store");
     }
     expect((await request.get(`${website.url}/robots.txt`)).status()).toBe(200);
   });
