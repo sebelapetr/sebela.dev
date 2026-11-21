@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 
 import { plainText } from "../../_shared";
 import { OPEN_GRAPH_IMAGE_SIZE, openGraphImageUrl } from "./open-graph-card";
+import { homepageTitle, pageTitle } from "./page-title";
 import { PAGES, type IndexedPage } from "./pages";
 
 export type { IndexedPage } from "./pages";
@@ -26,18 +27,34 @@ export function pageUrl(origin: string, path: string): string {
   return `${origin}${path}`;
 }
 
+/** A page's title, description and canonical address, shared by its metadata and structured data. */
+export interface PageText {
+  readonly title: string;
+  readonly description: string;
+  readonly url: string;
+}
+
 /**
- * The page's metadata: its title (`<name> — <headline>` for the homepage, `<Page> — <name>`
- * otherwise), its description (the summary's first paragraph as plain text, or the headline), its
- * canonical address on `origin` and the same as Open Graph basics with the person as the site,
- * the page's preview image on `origin` (its alt text is the title) and a large Twitter card.
+ * The page's title (`<name> · <headline>` for the homepage, `<Page> · <name>` otherwise, within
+ * `TITLE_MAX` characters with the name never shortened), its description (the summary's first
+ * paragraph as plain text, or the headline) and its canonical address on `origin`.
  */
-export function pageMetadata(origin: string, page: IndexedPage, facts: PageFacts): Metadata {
+export function pageText(origin: string, page: IndexedPage, facts: PageFacts): PageText {
   const { path, label } = PAGES[page];
-  const title = label === null ? `${facts.name} — ${facts.headline}` : `${label} — ${facts.name}`;
+  const title =
+    label === null ? homepageTitle(facts.name, facts.headline) : pageTitle(facts.name, label);
   const summary = facts.summary == null ? "" : plainText(facts.summary, DESCRIPTION_MAX);
   const description = summary === "" ? facts.headline : summary;
-  const url = pageUrl(origin, path);
+  return { title, description, url: pageUrl(origin, path) };
+}
+
+/**
+ * The page's metadata: its title, description and canonical address (`pageText`), the same as Open
+ * Graph basics with the person as the site, the page's preview image on `origin` (its alt text is
+ * the title) and a large Twitter card.
+ */
+export function pageMetadata(origin: string, page: IndexedPage, facts: PageFacts): Metadata {
+  const { title, description, url } = pageText(origin, page, facts);
   const image = openGraphImageUrl(origin, page);
   return {
     title,

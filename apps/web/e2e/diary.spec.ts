@@ -133,7 +133,7 @@ test.describe("the learning diary", () => {
   }) => {
     const response = await page.goto(`${website.url}/ai-roadmap/diary`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`Learning Diary — AI Engineering Roadmap — ${name}`);
+    await expect(page).toHaveTitle(`Learning Diary · AI Engineering Roadmap · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Learning Diary");
     await expect(
@@ -165,9 +165,7 @@ test.describe("the learning diary", () => {
   }) => {
     const response = await page.goto(`${website.url}${busyDay}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(
-      `Monday, March 2, 2026 — Learning Diary — AI Engineering Roadmap — ${name}`,
-    );
+    await expect(page).toHaveTitle(`Monday, March 2, 2026 · Learning Diary · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Monday, March 2, 2026");
     await expect(page.locator("main")).toContainText("3h 5m · 4 sessions");

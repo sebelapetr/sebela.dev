@@ -8,6 +8,7 @@ import type { ServicesContent } from "../../profile";
 import { Collaboration } from "../components/collaboration";
 import { ServiceList } from "../components/service-list";
 import { toCollaborationSteps, toServiceRows } from "../data/services";
+import { ServicesStructuredData } from "../../seo";
 
 /**
  * The services page: the person's name and the services intro, the offers as numbered editorial
@@ -20,6 +21,7 @@ export function ServicesTemplate({ content }: { readonly content: ServicesConten
   const steps = toCollaborationSteps(content.collaborationSteps);
   return (
     <>
+      <ServicesStructuredData content={content} />
       <SiteHeader name={content.name} />
       <main
         id={mainContentId}

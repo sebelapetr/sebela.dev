@@ -1,0 +1,23 @@
+[
+  { "date": "2026-01-12", "notes": "Refreshed BM25 scoring and term saturation." },
+  {
+    "date": "2026-02-02",
+    "notes": "Started the search evaluation handbook: the chapter on relevance judgements."
+  },
+  { "date": "2026-02-03", "notes": "Watched the function calling tutorial end to end." },
+  { "date": "2026-03-02", "notes": "Started the ranking metrics notes: recall at k versus nDCG." },
+  {
+    "date": "2026-03-04",
+    "notes": "Read two more handbook chapters on pooling and judge agreement."
+  },
+  {
+    "date": "2026-03-05",
+    "notes": "Evening at the evaluation meetup, online; notes on judge calibration."
+  },
+  { "date": "2026-03-07", "notes": "Planned the agent guardrails module; no study session today." },
+  {
+    "date": "2026-03-09",
+    "notes": "Late session on the agent loop practice project: tool results are now validated before the next step."
+  },
+  { "date": "2026-03-11", "notes": "Short morning session on ranking metrics before work." }
+]

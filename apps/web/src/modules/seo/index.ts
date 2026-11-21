@@ -1,5 +1,7 @@
 // The seo module: what search engines and language models read about the profile — each indexed
-// page's metadata and Open Graph preview image, the homepage's structured data, every AI Roadmap
+// page's metadata (titles within 60 characters) and Open Graph preview image, the structured data
+// of the homepage, the experience page, the services page and the CV, the llms.txt link in every
+// page's head, every AI Roadmap
 // page's metadata, breadcrumbs, structured data and preview image, the sitemap, robots.txt and
 // llms.txt with the roadmap's pages — on the
 // canonical origin `WEB_SITE_ORIGIN`, from the public profile the API supplies. A profile that is
@@ -28,6 +30,14 @@ import {
 } from "./data/roadmap-page";
 import { discoveryResult, roadmapPaths, type DiscoveryResult } from "./data/roadmap-discovery";
 import { siteOrigin } from "./data/site-origin";
+
+export { LlmsTxtLink } from "./components/llms-txt-link";
+
+export {
+  CvStructuredData,
+  ExperienceStructuredData,
+  ServicesStructuredData,
+} from "./components/page-structured-data";
 
 export { ProfileStructuredData } from "./components/profile-structured-data";
 

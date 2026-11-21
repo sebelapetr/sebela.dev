@@ -1,0 +1,30 @@
+[
+  {
+    "slug": "hybrid-search",
+    "area": "retrieval-engineering",
+    "name": "Hybrid search",
+    "description": "Keyword and vector search together.",
+    "position": 0
+  },
+  {
+    "slug": "retrieval-evaluation",
+    "area": "retrieval-engineering",
+    "name": "Retrieval evaluation",
+    "description": "Ranking metrics and relevance judgements.",
+    "position": 1
+  },
+  {
+    "slug": "tool-use-basics",
+    "area": "agent-systems",
+    "name": "Tool use basics",
+    "description": "How a model asks for a tool and reads its result.",
+    "position": 0
+  },
+  {
+    "slug": "agent-guardrails",
+    "area": "agent-systems",
+    "name": "Agent guardrails",
+    "description": "Permissions, budgets and refusals for tool-using agents.",
+    "position": 1
+  }
+]

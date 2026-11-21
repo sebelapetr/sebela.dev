@@ -86,7 +86,7 @@ test.describe("services page read from the API", () => {
   }) => {
     const response = await page.goto(`${website.url}/services`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle("Services — Casey Morrow");
+    await expect(page).toHaveTitle("Services · Casey Morrow");
 
     const heading = page.getByRole("heading", { level: 1 });
     await expect(heading).toContainText("Casey Morrow");

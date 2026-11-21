@@ -249,9 +249,7 @@ test.describe("the learning statistics", () => {
   test("the areas and modules show study time only; events stand apart", async ({ page }) => {
     const response = await page.goto(`${website.url}${statistics}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(
-      `Learning Statistics — Learning Diary — AI Engineering Roadmap — ${name}`,
-    );
+    await expect(page).toHaveTitle(`Learning Statistics · Learning Diary · ${name}`);
     await expect(robots(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Learning Statistics");
     await expect(
