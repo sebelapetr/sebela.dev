@@ -228,7 +228,10 @@ jobs:
         env:
           NOTES_FILE: ${{ runner.temp }}/release-notes.md
         run: node scripts/release/deployment.mjs notes >> "$GITHUB_OUTPUT"
+      # A rerun of an already released commit (its deployment rerun, say) publishes nothing:
+      # `notes` prints release=false when a version tag already points at the commit.
       - name: Tag and publish the release
+        if: steps.notes.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.notes.outputs.version }}

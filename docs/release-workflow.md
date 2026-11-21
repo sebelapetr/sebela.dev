@@ -89,6 +89,7 @@ After a healthy deployment and smoke check the `release` job tags the commit wit
 - **Next version** from the Conventional Commits since the last version tag merged into the commit: a breaking change (`!` or a `BREAKING CHANGE` footer) raises the major, a `feat` the minor, anything else the patch. Counting starts at `v0.0.0`, so the first release is `v0.1.0` when it contains a feature.
 - **Release notes** list the commits since that tag, grouped as breaking changes, features, fixes and other changes, followed by the deployed image tags.
 - A failed deployment publishes no version; the next healthy one includes its commits.
+- A rerun of an already released commit (the deployment rerun after a rollback test, say) publishes no new version: when a version tag already points at the commit, the `release` job says so in its log and step summary and tags nothing.
 
 ## To be defined in phase 10
 
