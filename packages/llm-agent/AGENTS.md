@@ -79,12 +79,15 @@ Run them from this folder, or through pnpm from the root (`pnpm --filter @sebela
 | Ruff                  | 0.17.6  | this package's `pyproject.toml`, dev group      |
 | mypy                  | 2.4.1   | this package's `pyproject.toml`, dev group      |
 | pytest                | 9.2.0   | this package's `pyproject.toml`, dev group      |
+| pytest-cov            | 7.1.0   | this package's `pyproject.toml`, dev group      |
+| coverage              | 7.17.3  | this package's `pyproject.toml`, dev group      |
 | openapi-python-client | 0.30.0  | this package's `pyproject.toml`, dev group      |
 
 The rest of the toolchain:
 
 - The runtime dependencies (`anthropic`, `attrs`, `httpx2`, `langchain-anthropic`, `langchain-core`, `langgraph`, `langsmith` and `pydantic`) are exact pins. `langsmith` is pinned directly because `ChatAgent` switches its tracing off for every run.
 - `uv.lock` at the repository root records everything.
+- Test coverage (`docs/testing.md`, Coverage): `pytest-cov` measures `src/llm_agent/` without the generated client when `TEST_COVERAGE` is `true` and writes `coverage/lcov.info`. `coverage` is pinned directly, so the lockfile records a release that has passed the dependency cooldown (`docs/git-workflow.md`, Dependency pull requests) rather than the newest one `pytest-cov` admits. The settings in `pyproject.toml` and `package.json` are not package modules, so they do not move the `runtime` fingerprint.
 - The generated client is excluded from Ruff, and mypy ignores errors inside it. Its signatures still type the handwritten callers.
 
 ## Module map
