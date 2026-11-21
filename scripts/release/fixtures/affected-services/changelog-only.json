@@ -1,0 +1,22 @@
+{
+  "description": "A changelog pull request, which changes only CHANGELOG.md, builds nothing: no image contains it",
+  "changedFiles": ["CHANGELOG.md"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": []
+}

@@ -32,7 +32,13 @@ const fixtures = fs
 describe("affected services", () => {
   it("has the fixtures the issue names", () => {
     const names = fixtures.map(({ name }) => name);
-    for (const name of ["single-app", "shared-package", "docs-only", "workflow-only"]) {
+    for (const name of [
+      "single-app",
+      "shared-package",
+      "docs-only",
+      "workflow-only",
+      "changelog-only",
+    ]) {
       assert.ok(names.includes(`${name}.json`), `fixture ${name}`);
     }
   });
@@ -199,6 +205,30 @@ describe("release plan", () => {
         }),
       /commit/,
     );
+  });
+});
+
+// The changelog pull request the release job opens after publishing a version (docs/release-workflow.md,
+// "Changelog") changes only CHANGELOG.md. Merging it must release nothing, or every release would
+// open the next changelog pull request.
+describe("no release loop", () => {
+  const changelogOnly = fixtures.find(({ name }) => name === "changelog-only.json");
+
+  it("merging the changelog pull request builds no image, so no version and no changelog follow", () => {
+    const services = affectedServices({
+      packages: affectedPackages(changelogOnly.turbo),
+      changedFiles: changelogOnly.changedFiles,
+    });
+    // The release commit B carries the current images; C is the merged changelog commit.
+    const git = history({ ancestors: [A, B, C], changes: { [B]: services } });
+    const plan = releasePlan({
+      sha: C,
+      current: { api: B, web: B, "mcp-admin": B },
+      isAncestor: git.isAncestor,
+      affectedSince: git.affectedSince,
+    });
+    assert.deepEqual(plan.build, []);
+    assert.match(formatOutputs({ ...plan, release: plan.build.length > 0 }), /^release=false$/m);
   });
 });
 
