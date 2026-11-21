@@ -407,7 +407,7 @@ try {
         "a prefetch",
         "/experience",
         ["--header", "RSC: 1", "--header", "Next-Router-Prefetch: 1"],
-        200,
+        null,
         false,
       ],
       ["a navigation payload by argument", "/experience?_rsc=smoke", [], null, false],
