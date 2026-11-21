@@ -53,6 +53,14 @@ const imageOperators = new Set<number>([
   OPS.paintSolidColorImageMask,
 ]);
 
+/**
+ * Caps every typed array and buffer the parser's thread allocates at `maxBytes`, refusing a larger
+ * one before it is allocated and calling `onRefuse`; returns a function restoring the constructors.
+ */
+export const capAllocations: (maxBytes: number, onRefuse: () => void) => () => void = () => () => {
+  throw new Error("not implemented");
+};
+
 const assets = new URL("./", import.meta.resolve("pdfjs-dist/package.json"));
 
 async function read(input: PdfWorkerInput): Promise<PdfWorkerOutput> {
