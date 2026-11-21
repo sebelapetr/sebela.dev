@@ -10,6 +10,10 @@ engineStrict: true
 allowBuilds:
   esbuild: false
 
+# pdfjs-dist renders pages with this native canvas; the API only extracts text, so it is not installed.
+ignoredOptionalDependencies:
+  - "@napi-rs/canvas"
+
 # One version of each shared tool for the whole workspace. Packages refer to it with `catalog:`.
 catalog:
   "@eslint/js": 10.0.1

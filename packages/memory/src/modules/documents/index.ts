@@ -19,19 +19,27 @@ export type SensitivityKind = (typeof sensitivityKinds)[number];
 
 /**
  * Where a sensitive value was found: its kind and its line in the original file, counting LF, CRLF
- * and CR line breaks (title: 0).
+ * and CR line breaks (title: 0). In a PDF, its page (from 1) and its line of extracted text on that
+ * page (from 1); the title has no page.
  */
 export interface SensitivityFinding {
   readonly kind: SensitivityKind;
+  readonly page?: number;
   readonly line: number;
 }
 
-export type DocumentMediaType = "text/markdown" | "text/plain";
-export type DocumentExtension = "md" | "txt";
+export type DocumentMediaType = "text/markdown" | "text/plain" | "application/pdf";
+export type DocumentExtension = "md" | "txt" | "pdf";
 
 export interface DocumentLimits {
-  /** The most bytes of the original. */
+  /** The most bytes of a Markdown or plain-text original. */
   readonly maxBytes: number;
+  /** The most bytes of a PDF original. */
+  readonly maxPdfBytes: number;
+  /** The most pages of a PDF. */
+  readonly maxPages: number;
+  /** The most megabytes of heap the PDF parser may use. */
+  readonly maxParserMemoryMb: number;
   /** The most characters of the cleaned text. */
   readonly maxExtractedChars: number;
   /** The most milliseconds the preparation may take. */
@@ -40,6 +48,9 @@ export interface DocumentLimits {
 
 export const defaultDocumentLimits: DocumentLimits = {
   maxBytes: 1_048_576,
+  maxPdfBytes: 10_485_760,
+  maxPages: 100,
+  maxParserMemoryMb: 256,
   maxExtractedChars: 500_000,
   maxProcessingMs: 10_000,
 };
@@ -53,7 +64,13 @@ export type DocumentRejection =
   | "empty"
   | "too_large"
   | "extracted_too_large"
-  | "too_slow";
+  | "too_slow"
+  | "malformed"
+  | "encrypted"
+  | "no_text_layer"
+  | "incomplete_extraction"
+  | "too_many_pages"
+  | "parser_limit";
 
 export class DocumentRejectedError extends Error {
   constructor(
@@ -145,7 +162,15 @@ const pdfMessage =
 export function prepareDocument(
   input: DocumentInput,
   options: PrepareOptions = {},
-): PreparedDocument {
+): Promise<PreparedDocument> {
+  try {
+    return Promise.resolve(prepareText(input, options));
+  } catch (error) {
+    return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+function prepareText(input: DocumentInput, options: PrepareOptions): PreparedDocument {
   const limits = options.limits ?? defaultDocumentLimits;
   const clock = options.clock ?? (() => performance.now());
   const started = clock();
