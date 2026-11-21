@@ -174,7 +174,7 @@ export const providerUsage = retrievalSchema.table(
   (table) => [
     check(
       "provider_usage_operation_known",
-      sql`${table.operation} IN ('index', 'search', 'candidates')`,
+      sql`${table.operation} IN ('index', 'search', 'candidates', 'rerank')`,
     ),
     check("provider_usage_not_negative", sql`${table.tokens} >= 0 AND ${table.costUsd} >= 0`),
     index("provider_usage_occurred_at").on(table.occurredAt),

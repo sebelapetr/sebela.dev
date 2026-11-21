@@ -1,7 +1,9 @@
-// Search over the index: embeds the query (within the spend ceiling), takes the nearest chunks of
-// the configured model by cosine distance, keeps the best chunk of each source at or above the
-// relevance floor and projects them as contract passages. The evals' full-text variant takes the
-// candidate pool by text search rank instead, without the provider and without the floor.
+// Search over the index in two stages. The first stage embeds the query (within the spend ceiling),
+// takes the nearest chunks of the configured model by cosine distance and the best chunks by text
+// search rank, keeps the best chunk of each source in each list and fuses the two lists by
+// reciprocal rank into the candidate pool. The second stage scores the pool with the cross-encoder
+// reranker, keeps the passages at or above the relevance floor (a reranker score), at most the
+// final count, and projects them as contract passages. The evals' other variants stop earlier.
 import {
   SearchResultSchema,
   type Passage,
@@ -22,9 +24,10 @@ import {
 import { createSpend } from "../spend/index.js";
 
 /**
- * How the candidate pool is found: `vector` (the deployed search) by cosine distance of the
- * embedded query, `fulltext` (the evals' baseline) by text search rank without calling the provider
- * and without the relevance floor, which is a cosine similarity.
+ * How passages are ranked. `reranked` (the deployed search): the hybrid pool scored by the
+ * reranker, the floor applied to its score. The evals' baselines: `hybrid`, the fused pool in its
+ * order without the reranker and without a floor; `vector`, by cosine similarity with the floor
+ * applied to it; `fulltext`, by text search rank without calling the provider and without a floor.
  */
 export type SearchVariant = "vector" | "fulltext" | "hybrid" | "reranked";
 
@@ -35,7 +38,7 @@ export interface RetrieverOptions {
   readonly reranker?: Reranker;
   readonly config: RetrievalConfig;
   readonly now?: () => Date;
-  /** `vector` when absent. */
+  /** `reranked` when absent. */
   readonly variant?: SearchVariant;
 }
 
@@ -54,6 +57,9 @@ export interface Retriever {
   candidates(questions: readonly CandidateQuestion[]): Promise<string[][]>;
 }
 
+/** The rank constant of reciprocal rank fusion: a source at rank r of a list scores 1/(k + r). */
+const FUSION_RANK_CONSTANT = 60;
+
 /** One question of a candidate run. */
 export interface CandidateQuestion {
   readonly query: string;
@@ -62,8 +68,15 @@ export interface CandidateQuestion {
 
 export function createRetriever(options: RetrieverOptions): Retriever {
   const { store, embedder, config } = options;
-  const variant = options.variant ?? "vector";
-  const spend = createSpend({ store, embedder, config, now: options.now });
+  const variant = options.variant ?? "reranked";
+  const spend = createSpend({
+    store,
+    embedder,
+    reranker: options.reranker,
+    config,
+    now: options.now,
+  });
+  const usesVectors = variant !== "fulltext";
 
   /** The candidate pool of a query's vector, best chunk of each source first. */
   async function pool(
@@ -121,19 +134,40 @@ export function createRetriever(options: RetrieverOptions): Retriever {
     return vectors;
   }
 
+  /** The first-stage pool of a query, best first, from its vector when the variant uses one. */
+  async function firstStage(
+    query: string,
+    vector: readonly number[] | undefined,
+    kinds?: readonly RetrievalContentKind[],
+  ): Promise<NearestChunk[]> {
+    if (variant === "fulltext") return textPool(query, kinds);
+    if (vector === undefined) throw new ProviderUnavailableError("A vector was missing.");
+    if (variant === "vector") return pool(vector, kinds);
+    const [byVector, byText] = await Promise.all([pool(vector, kinds), textPool(query, kinds)]);
+    return fuse([byVector, byText], config.candidatePool);
+  }
+
+  /** The pool scored by the reranker, best first; ties keep the pool's order. */
+  async function rerank(query: string, found: readonly NearestChunk[]): Promise<NearestChunk[]> {
+    if (found.length === 0) return [];
+    const { scores } = await spend.rerank(
+      query,
+      found.map((chunk) => chunk.text),
+    );
+    return found
+      .map((chunk, index) => ({ ...chunk, similarity: scores[index] ?? 0 }))
+      .sort((a, b) => b.similarity - a.similarity);
+  }
+
   return {
     async search(request) {
       const limit = Math.min(request.limit ?? config.finalPassages, config.finalPassages);
-      let found: NearestChunk[];
-      if (variant === "fulltext") {
-        found = await textPool(request.query, request.kinds);
-      } else {
-        const [vector] = await embedQueries("search", [request.query]);
-        found = vector === undefined ? [] : await pool(vector, request.kinds);
-      }
-      const floor = variant === "fulltext" ? 0 : config.relevanceFloor;
-      const passages = found
-        .filter((chunk) => chunk.similarity >= floor)
+      const [vector] = usesVectors ? await embedQueries("search", [request.query]) : [];
+      const found = await firstStage(request.query, vector, request.kinds);
+      const ranked = variant === "reranked" ? await rerank(request.query, found) : found;
+      const floor = variant === "reranked" || variant === "vector" ? config.relevanceFloor : null;
+      const passages = ranked
+        .filter((chunk) => floor === null || chunk.similarity >= floor)
         .map(toPassage)
         .filter((passage) => passage !== null)
         .slice(0, limit);
@@ -146,26 +180,54 @@ export function createRetriever(options: RetrieverOptions): Retriever {
       );
     },
     async candidates(questions) {
-      if (variant === "fulltext") {
-        const pools: string[][] = [];
-        for (const { query, kinds } of questions) {
-          pools.push((await textPool(query, kinds)).map((chunk) => chunk.sourceId));
-        }
-        return pools;
-      }
-      const vectors = await embedQueries(
-        "candidates",
-        questions.map((question) => question.query),
-      );
+      const vectors = usesVectors
+        ? await embedQueries(
+            "candidates",
+            questions.map((question) => question.query),
+          )
+        : [];
       const pools: string[][] = [];
-      for (const [index, { kinds }] of questions.entries()) {
-        const vector = vectors[index];
-        if (vector === undefined) throw new ProviderUnavailableError("A vector was missing.");
-        pools.push((await pool(vector, kinds)).map((chunk) => chunk.sourceId));
+      for (const [index, { query, kinds }] of questions.entries()) {
+        const found = await firstStage(query, vectors[index], kinds);
+        pools.push(found.map((chunk) => chunk.sourceId));
       }
       return pools;
     },
   };
+}
+
+/**
+ * Reciprocal rank fusion of lists that rank each source at most once, best first: a source scores
+ * the sum of 1/(k + rank) over the lists that hold it (ranks from 1), ties go to the smaller source
+ * ID, and the first `size` are kept. A source is represented by its chunk of the list it ranked
+ * best in (the first such list on a tie), its similarity replaced by the fused score.
+ */
+function fuse(lists: readonly (readonly NearestChunk[])[], size: number): NearestChunk[] {
+  const fused = new Map<string, { chunk: NearestChunk; rank: number; score: number }>();
+  for (const list of lists) {
+    for (const [index, chunk] of list.entries()) {
+      const rank = index + 1;
+      const score = 1 / (FUSION_RANK_CONSTANT + rank);
+      const seen = fused.get(chunk.sourceId);
+      if (seen === undefined) {
+        fused.set(chunk.sourceId, { chunk, rank, score });
+      } else {
+        fused.set(chunk.sourceId, {
+          chunk: rank < seen.rank ? chunk : seen.chunk,
+          rank: Math.min(rank, seen.rank),
+          score: seen.score + score,
+        });
+      }
+    }
+  }
+  return [...fused.values()]
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (a.chunk.sourceId < b.chunk.sourceId ? -1 : a.chunk.sourceId > b.chunk.sourceId ? 1 : 0),
+    )
+    .slice(0, size)
+    .map(({ chunk, score }) => ({ ...chunk, similarity: score }));
 }
 
 const clamp = (value: number) => Math.max(-1, Math.min(1, value));

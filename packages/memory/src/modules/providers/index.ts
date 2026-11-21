@@ -246,31 +246,79 @@ export interface VoyageEmbedderOptions {
  * attempt; a caller's abort ends the waiting too.
  */
 export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
-  const { apiKey, model, dimension, timeoutMs } = options;
+  const { model, dimension } = options;
+  const post = voyagePoster(VOYAGE_EMBEDDINGS, "embedding", options);
+
+  async function embed(
+    texts: readonly string[],
+    input: EmbeddingInput,
+    signal?: AbortSignal,
+  ): Promise<Embedding> {
+    const body = await post(
+      { input: texts, model, input_type: input, output_dimension: dimension },
+      signal,
+    );
+    const parsed = parseVoyage(body);
+    if (parsed === null) throw post.unavailable("its answer was malformed");
+    const vectors: number[][] = [];
+    for (let index = 0; index < texts.length; index += 1) {
+      const vector = parsed.vectors.get(index);
+      if (vector?.length !== dimension)
+        throw post.unavailable("a vector was missing or of another size");
+      vectors.push(vector);
+    }
+    return { vectors, tokens: parsed.tokens };
+  }
+
+  return { model, version: VOYAGE_VERSION, dimension, embed };
+}
+
+/** What both Voyage adapters share: the key, the per-attempt timeout and the 429 retries. */
+interface VoyageCallOptions {
+  readonly apiKey: string;
+  readonly timeoutMs: number;
+  readonly retries?: number;
+  readonly maxRetryWaitMs?: number;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly sleep?: (ms: number) => Promise<void>;
+  readonly random?: () => number;
+}
+
+interface VoyagePoster {
+  /** Posts the body and returns the parsed JSON answer (`null` when it is not JSON). */
+  (body: unknown, signal?: AbortSignal): Promise<unknown>;
+  /** The error of this provider for a reason, never naming the key. */
+  unavailable(reason: string, status?: number): ProviderUnavailableError;
+}
+
+/**
+ * Posts JSON to a Voyage endpoint: each attempt within the timeout, a rate-limited (429) answer
+ * tried again up to `retries` times after the `Retry-After` it asked for or else an exponential
+ * backoff with jitter, each wait capped at `maxRetryWaitMs` (a longer `Retry-After` gives up at
+ * once). Every failure is a `ProviderUnavailableError` naming the provider's role, with the HTTP
+ * status when it answered one.
+ */
+function voyagePoster(
+  url: string,
+  role: "embedding" | "reranking",
+  options: VoyageCallOptions,
+): VoyagePoster {
+  const { apiKey, timeoutMs } = options;
   const retries = options.retries ?? 0;
   const maxRetryWaitMs = options.maxRetryWaitMs ?? 0;
   const send = options.fetch ?? globalThis.fetch;
   const sleep = options.sleep ?? wait;
   const random = options.random ?? Math.random;
   const unavailable = (reason: string, status?: number) =>
-    new ProviderUnavailableError(`The embedding provider is unavailable: ${reason}.`, status);
+    new ProviderUnavailableError(`The ${role} provider is unavailable: ${reason}.`, status);
 
-  async function call(
-    texts: readonly string[],
-    input: EmbeddingInput,
-    signal?: AbortSignal,
-  ): Promise<Response> {
+  async function call(body: string, signal?: AbortSignal): Promise<Response> {
     const timeout = AbortSignal.timeout(timeoutMs);
     try {
-      return await send(VOYAGE_EMBEDDINGS, {
+      return await send(url, {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          input: texts,
-          model,
-          input_type: input,
-          output_dimension: dimension,
-        }),
+        body,
         signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
       });
     } catch (error) {
@@ -279,12 +327,9 @@ export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
     }
   }
 
-  async function embed(
-    texts: readonly string[],
-    input: EmbeddingInput,
-    signal?: AbortSignal,
-  ): Promise<Embedding> {
-    let response = await call(texts, input, signal);
+  const post = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
+    const body = JSON.stringify(payload);
+    let response = await call(body, signal);
     for (let attempt = 0; response.status === RATE_LIMITED && attempt < retries; attempt += 1) {
       const asked = retryAfterMs(response.headers.get("retry-after"));
       if (asked !== null && asked > maxRetryWaitMs) break;
@@ -292,25 +337,14 @@ export function createVoyageEmbedder(options: VoyageEmbedderOptions): Embedder {
       await response.body?.cancel();
       await sleep(asked ?? Math.min(maxRetryWaitMs, Math.round(backoff)));
       if (signal?.aborted === true) throw unavailable("the call was cancelled");
-      response = await call(texts, input, signal);
+      response = await call(body, signal);
     }
     if (!response.ok) {
       throw unavailable(`it answered ${String(response.status)}`, response.status);
     }
-    const body: unknown = await response.json().catch(() => null);
-    const parsed = parseVoyage(body);
-    if (parsed === null) throw unavailable("its answer was malformed");
-    const vectors: number[][] = [];
-    for (let index = 0; index < texts.length; index += 1) {
-      const vector = parsed.vectors.get(index);
-      if (vector?.length !== dimension)
-        throw unavailable("a vector was missing or of another size");
-      vectors.push(vector);
-    }
-    return { vectors, tokens: parsed.tokens };
-  }
-
-  return { model, version: VOYAGE_VERSION, dimension, embed };
+    return response.json().catch(() => null);
+  };
+  return Object.assign(post, { unavailable });
 }
 
 const RATE_LIMITED = 429;
@@ -374,8 +408,52 @@ export interface VoyageRerankerOptions {
   readonly random?: () => number;
 }
 
-/** The Voyage AI reranking adapter. */
-export const createVoyageReranker: (options: VoyageRerankerOptions) => Reranker = () => ({
-  model: "",
-  rerank: () => Promise.reject(new Error("not implemented")),
-});
+/**
+ * The Voyage AI reranking adapter: one call scores every document against the query, without
+ * truncating the list (no `top_k`), and returns the scores in the documents' order. Failures,
+ * retries and the timeout behave as in `createVoyageEmbedder`; a score missing or not a number is
+ * a malformed answer. No documents need no call.
+ */
+export function createVoyageReranker(options: VoyageRerankerOptions): Reranker {
+  const { model } = options;
+  const post = voyagePoster(VOYAGE_RERANK, "reranking", options);
+  return {
+    model,
+    async rerank(query, documents, signal) {
+      if (documents.length === 0) return { scores: [], tokens: 0 };
+      const body = await post({ query, documents, model, truncation: true }, signal);
+      const parsed = parseVoyageRerank(body);
+      if (parsed === null) throw post.unavailable("its answer was malformed");
+      const scores: number[] = [];
+      for (let index = 0; index < documents.length; index += 1) {
+        const score = parsed.scores.get(index);
+        if (score === undefined) throw post.unavailable("a score was missing");
+        scores.push(score);
+      }
+      return { scores, tokens: parsed.tokens };
+    },
+  };
+}
+
+const VOYAGE_RERANK = "https://api.voyageai.com/v1/rerank";
+
+/** The relevance scores by document index and the billed tokens of a Voyage answer, or `null`. */
+function parseVoyageRerank(body: unknown): { scores: Map<number, number>; tokens: number } | null {
+  if (!isRecord(body)) return null;
+  const data = body["data"];
+  const usage = body["usage"];
+  if (!Array.isArray(data) || !isRecord(usage)) return null;
+  const tokens = usage["total_tokens"];
+  if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return null;
+  const scores = new Map<number, number>();
+  for (const item of data as unknown[]) {
+    if (!isRecord(item)) return null;
+    const index = item["index"];
+    const score = item["relevance_score"];
+    if (typeof index !== "number" || typeof score !== "number" || !Number.isFinite(score)) {
+      return null;
+    }
+    scores.set(index, score);
+  }
+  return { scores, tokens };
+}

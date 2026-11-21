@@ -867,7 +867,12 @@ function workOperationOf(value: string): RetrievalWorkOperation {
   throw new Error(`Unknown work operation ${value}.`);
 }
 
-const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", "candidates"];
+const usageOperations: readonly RetrievalUsageOperation[] = [
+  "index",
+  "search",
+  "candidates",
+  "rerank",
+];
 
 function sourceKindOf(value: string): RetrievalSourceKind {
   if (value === "portfolio" || value === "supplemental") return value;

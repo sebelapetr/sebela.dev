@@ -3464,7 +3464,7 @@ export interface components {
             /** @description SHA-256 of the indexed source text; changes when the source changes. */
             version: string;
             text: string;
-            /** @description Cosine similarity to the query. */
+            /** @description Relevance to the query, higher is better: the reranker's score in the deployed search. */
             score: number;
             /**
              * Format: starts_with
@@ -3493,7 +3493,7 @@ export interface components {
             /** @description SHA-256 of the indexed source text; changes when the source changes. */
             version: string;
             text: string;
-            /** @description Cosine similarity to the query. */
+            /** @description Relevance to the query, higher is better: the reranker's score in the deployed search. */
             score: number;
             provenance: {
                 /** @constant */

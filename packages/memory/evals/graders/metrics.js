@@ -10,6 +10,7 @@
  * @typedef {object} ObservedPassage
  * @property {string} sourceId
  * @property {string} [path] The canonical site path of a portfolio passage.
+ * @property {number} [score] The passage's relevance score (the reranker's in the deployed search).
  *
  * @typedef {object} Observation What one search returned.
  * @property {"found" | "no_evidence" | "error"} status

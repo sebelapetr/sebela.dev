@@ -1,0 +1,1642 @@
+{
+  "status": "measured",
+  "scope": "complete",
+  "variant": "hybrid",
+  "runAt": "2026-11-21T04:18:07.172Z",
+  "settings": {
+    "RETRIEVAL_EMBEDDING_MODEL": "voyage-4",
+    "RETRIEVAL_RERANK_MODEL": "rerank-3",
+    "RETRIEVAL_CANDIDATE_POOL": "30",
+    "RETRIEVAL_FINAL_PASSAGES": "6",
+    "RETRIEVAL_RELEVANCE_FLOOR": "0.3",
+    "RETRIEVAL_EMBEDDING_BATCH_SIZE": "128"
+  },
+  "pacing": {
+    "minIntervalMs": 0,
+    "providerRetries": 6,
+    "maxRetryWaitMs": 60000
+  },
+  "measured": 45,
+  "passed": 38,
+  "metrics": {
+    "questions": 45,
+    "recallAtPool": 1,
+    "ndcg": 0.8034158090757761,
+    "precision": 0.237037037037037,
+    "mrr": 0.7958333333333334,
+    "hitRate": 0.95,
+    "correctEmptyRate": 0,
+    "falseEmptyRate": 0,
+    "provenanceAccuracy": 1,
+    "latencyMs": {
+      "p50": 33,
+      "p95": 43
+    },
+    "costPerQueryUsd": 0
+  },
+  "gate": {
+    "frozen": true,
+    "applies": false,
+    "reason": "The gate applies only to a complete run of the vector variant."
+  },
+  "spend": {
+    "ceilingUsd": 1,
+    "indexing": {
+      "portfolio": {
+        "sources": 90,
+        "updated": 77,
+        "removed": 0,
+        "embedded": 4,
+        "reused": 84,
+        "tokens": 105,
+        "costUsd": 0.0000063,
+        "completed": 0,
+        "remaining": {
+          "pending": 0,
+          "failed": 0
+        }
+      },
+      "approvals": [
+        {
+          "version": {
+            "sourceId": "document:northgate-evaluation-talk",
+            "contentHash": "c64f2bafedd3cb79eea2bca44640aec4ba09d3656235433a3b7a0b52720c20d1",
+            "title": "Notes from a talk at the Northgate Engineering meetup",
+            "mediaType": "text/markdown",
+            "byteSize": 532,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T04:17:42.132Z",
+            "decidedAt": "2026-11-21T04:17:44.072Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 131,
+            "costUsd": 0.000007860000000000001
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:harbor-retail-cv-2021",
+            "contentHash": "72e3f46bfe41d37f24e033825ff4777caa791a88417e7434677f6dd572dfb3ff",
+            "title": "Alex Novara — CV (2021 edition)",
+            "mediaType": "text/markdown",
+            "byteSize": 422,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [
+              {
+                "kind": "date",
+                "chunkOrdinal": 1,
+                "sourceId": "portfolio:experience:harbor-retail-senior-developer",
+                "claim": "2023",
+                "fact": "2019-02-01 to 2022-03-31"
+              }
+            ],
+            "sectionCount": 4,
+            "chunkCount": 4,
+            "createdAt": "2026-11-21T04:17:45.683Z",
+            "decidedAt": "2026-11-21T04:17:48.268Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 101,
+            "costUsd": 0.00000606
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:support-handbook-excerpt",
+            "contentHash": "1dfd18eae21142d4ed12a3553c576e36fc4250afb4c4142a66a0aaec5e2c2c75",
+            "title": "Support handbook excerpt",
+            "mediaType": "text/markdown",
+            "byteSize": 483,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T04:17:49.925Z",
+            "decidedAt": "2026-11-21T04:17:53.188Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 97,
+            "costUsd": 0.00000582
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:reading-assistant-retrospective",
+            "contentHash": "1cbbcc93c38945044676df49007e34a75b198ab743e6b2d10d74e141d97ecf1e",
+            "title": "Retrospektiva asistenta pro čtenáře",
+            "mediaType": "text/markdown",
+            "byteSize": 537,
+            "status": "approved",
+            "findings": [],
+            "conflicts": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T04:17:54.854Z",
+            "decidedAt": "2026-11-21T04:17:57.567Z"
+          },
+          "originalsLeft": 0,
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 222,
+            "costUsd": 0.00001332
+          }
+        }
+      ]
+    },
+    "usage": {
+      "tokens": 4571,
+      "costUsd": 0.00027426,
+      "byOperation": {
+        "index": {
+          "tokens": 4137,
+          "costUsd": 0.00024822
+        },
+        "search": {
+          "tokens": 0,
+          "costUsd": 0
+        },
+        "candidates": {
+          "tokens": 434,
+          "costUsd": 0.00002604
+        },
+        "rerank": {
+          "tokens": 0,
+          "costUsd": 0
+        }
+      }
+    },
+    "queryCache": {
+      "entriesAtStart": 0,
+      "candidates": {
+        "queries": 45,
+        "fromCache": 0,
+        "embedded": 45
+      },
+      "search": {
+        "queries": 45,
+        "fromCache": 45,
+        "embedded": 0
+      },
+      "note": "Cached query embeddings cost nothing and take no provider time, so the latency and cost per query leave out the embedding call for every search served from the cache."
+    }
+  },
+  "cases": [
+    {
+      "id": "portfolio-lumen-role",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:reading-assistant-retrospective",
+        "document:northgate-evaluation-talk",
+        "portfolio:case_study:reading-assistant"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.03149801587301587, 0.031009615384615385,
+        0.03036576949620428, 0.029437229437229435
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7262287617954056,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 122
+      }
+    },
+    {
+      "id": "portfolio-career-start",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:support-handbook-excerpt",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:northwind-freight-developer"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.031009615384615385, 0.031009615384615385,
+        0.030798389007344232, 0.015873015873015872
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7544558788831857,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 38
+      }
+    },
+    {
+      "id": "portfolio-archive-questions",
+      "language": "en",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:project:reading-assistant",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:project:document-assistant-prototype",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:project:editorial-workbench"
+      ],
+      "scores": [
+        0.03278688524590164, 0.0315136476426799, 0.031009615384615385, 0.030798389007344232,
+        0.030776515151515152, 0.029236022193768675
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.8642203869628404,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 38
+      }
+    },
+    {
+      "id": "portfolio-chunking-comparison",
+      "language": "en",
+      "category": "cross-record",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:exploration:chunking-benchmark",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:roadmap_resource:chunking-experiments",
+        "portfolio:roadmap_module:chunking-strategies",
+        "portfolio:roadmap_area:retrieval-systems",
+        "portfolio:roadmap_resource:chunking-reading-list"
+      ],
+      "scores": [
+        0.03278688524590164, 0.0315136476426799, 0.0315136476426799, 0.03125, 0.031024531024531024,
+        0.031024531024531024
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.6666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 32
+      }
+    },
+    {
+      "id": "portfolio-review-duration",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:project:architecture-review-kit",
+        "portfolio:service:architecture-review",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:experience:quill-studio-consulting",
+        "portfolio:project:editorial-workbench",
+        "portfolio:profile:person"
+      ],
+      "scores": [
+        0.01639344262295082, 0.016129032258064516, 0.015873015873015872, 0.015625,
+        0.015384615384615385, 0.015151515151515152
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 33
+      }
+    },
+    {
+      "id": "portfolio-handbook-service",
+      "language": "en",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:project:document-assistant-prototype",
+        "portfolio:profile:person",
+        "portfolio:service:ai-assistant-prototype",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:quill-studio-consulting",
+        "document:northgate-evaluation-talk"
+      ],
+      "scores": [
+        0.032266458495966696, 0.03225806451612903, 0.032018442622950824, 0.030309988518943745,
+        0.030158730158730156, 0.029910714285714284
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.9061827879747687,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 43
+      }
+    },
+    {
+      "id": "portfolio-permission-model",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:exploration:tool-permission-model",
+        "portfolio:roadmap_resource:tool-schema-tutorial",
+        "portfolio:roadmap_module:tool-calling",
+        "portfolio:case_study:editorial-workbench",
+        "portfolio:event:year-end-agents-workshop",
+        "portfolio:roadmap_resource:function-router-build"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.03149801587301587, 0.03055037313432836,
+        0.028850145288501453, 0.028693528693528692
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 41
+      }
+    },
+    {
+      "id": "portfolio-summit-takeaways",
+      "language": "en",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:northgate-evaluation-talk",
+        "portfolio:event:retrieval-summit",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt"
+      ],
+      "scores": [
+        0.032266458495966696, 0.03200204813108039, 0.031544957774465976, 0.030776515151515152,
+        0.030117753623188408, 0.029418126757516764
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.5,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 0.3333333333333333,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 44
+      }
+    },
+    {
+      "id": "portfolio-attention-notes",
+      "language": "cs",
+      "category": "diary",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:diary_day:2025-02-10",
+        "document:northgate-evaluation-talk",
+        "document:reading-assistant-retrospective",
+        "portfolio:roadmap_module:llm-basics",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:profile:person"
+      ],
+      "scores": [
+        0.031544957774465976, 0.02964254577157803, 0.029206349206349208, 0.029116045245077504,
+        0.02877846790890269, 0.02788769549651404
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7262287617954056,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 42
+      }
+    },
+    {
+      "id": "portfolio-grounding",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:glossary_term:grounding",
+        "document:northgate-evaluation-talk",
+        "portfolio:roadmap_module:llm-basics",
+        "portfolio:profile:person",
+        "portfolio:roadmap_resource:red-team-exercise",
+        "portfolio:glossary_term:embedding"
+      ],
+      "scores": [
+        0.03278688524590164, 0.030090497737556562, 0.028381642512077296, 0.016129032258064516,
+        0.016129032258064516, 0.015873015873015872
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.8262346571285599,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 31
+      }
+    },
+    {
+      "id": "portfolio-embedding-term",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:glossary_term:grounding",
+        "portfolio:roadmap_area:foundations",
+        "portfolio:glossary_term:embedding",
+        "portfolio:roadmap_module:embeddings",
+        "portfolio:roadmap_resource:embedding-geometry-talk",
+        "portfolio:project:document-assistant-prototype"
+      ],
+      "scores": [
+        0.031054405392392875, 0.030776515151515152, 0.03028233151183971, 0.028629032258064516,
+        0.028068137824235385, 0.025278219395866455
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.531730627995306,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.3333333333333333,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 29
+      }
+    },
+    {
+      "id": "portfolio-vector-book",
+      "language": "en",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:book:fictional-vector-search-handbook",
+        "portfolio:roadmap_resource:vector-search-handbook-reading",
+        "portfolio:roadmap_module:embeddings",
+        "portfolio:profile:person",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031754032258064516, 0.03149801587301587, 0.03128054740957967,
+        0.03057889822595705, 0.02946912242686891
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 29
+      }
+    },
+    {
+      "id": "portfolio-degrees",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "portfolio:education:harbour-university-bachelor",
+        "portfolio:education:harbour-university-informatics",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:lumen-press-staff-engineer"
+      ],
+      "scores": [
+        0.032018442622950824, 0.03200204813108039, 0.03177805800756621, 0.03128054740957967,
+        0.030798389007344232, 0.030309988518943745
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.5706417189553201,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.3333333333333333,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 36
+      }
+    },
+    {
+      "id": "portfolio-certification",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": false,
+      "reason": "no answering source among the final passages",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:northwind-freight-developer"
+      ],
+      "scores": [
+        0.03252247488101534, 0.03200204813108039, 0.03177805800756621, 0.030776515151515152,
+        0.030158730158730156, 0.015625
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0,
+        "precision": 0,
+        "reciprocalRank": 0,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 33
+      }
+    },
+    {
+      "id": "portfolio-checkout-outages",
+      "language": "en",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:experience:harbor-retail-senior-developer",
+        "portfolio:project:store-replatforming",
+        "document:harbor-retail-cv-2021",
+        "portfolio:profile:person",
+        "portfolio:service:architecture-review",
+        "portfolio:case_study:editorial-workbench"
+      ],
+      "scores": [
+        0.03252247488101534, 0.03252247488101534, 0.03036576949620428, 0.03036576949620428,
+        0.029437229437229435, 0.028205128205128206
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7967075809905066,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.5,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 35
+      }
+    },
+    {
+      "id": "portfolio-picking-walks",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:project:warehouse-picking",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:harbor-retail-senior-developer",
+        "portfolio:service:ai-assistant-prototype",
+        "portfolio:roadmap_area:foundations",
+        "portfolio:project:architecture-review-kit"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03200204813108039, 0.030090497737556562, 0.02651914295749912,
+        0.016129032258064516, 0.015873015873015872
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 36
+      }
+    },
+    {
+      "id": "portfolio-editor-testimonial",
+      "language": "en",
+      "category": "cross-record",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:northgate-evaluation-talk",
+        "portfolio:case_study:reading-assistant",
+        "document:support-handbook-excerpt"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.030798389007344232, 0.030798389007344232,
+        0.029857397504456328, 0.028577260665441927
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 35
+      }
+    },
+    {
+      "id": "portfolio-who-is-alex",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt",
+        "portfolio:experience:quill-studio-consulting"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.031746031746031744, 0.031009615384615385,
+        0.029910714285714284, 0.015384615384615385
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 30
+      }
+    },
+    {
+      "id": "portfolio-collaboration-steps",
+      "language": "en",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:service:ai-assistant-prototype",
+        "portfolio:case_study:reading-assistant",
+        "document:harbor-retail-cv-2021",
+        "portfolio:case_study:editorial-workbench"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031754032258064516, 0.03128054740957967, 0.03057889822595705,
+        0.03036576949620428, 0.030330882352941176
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 31
+      }
+    },
+    {
+      "id": "portfolio-availability",
+      "language": "en",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:quill-studio-consulting",
+        "portfolio:service:ai-assistant-prototype",
+        "document:support-handbook-excerpt"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031746031746031744, 0.03128054740957967, 0.031054405392392875,
+        0.03055037313432836, 0.02967032967032967
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.944847956559586,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 38
+      }
+    },
+    {
+      "id": "portfolio-hybrid-playlist",
+      "language": "cs",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:roadmap_resource:hybrid-search-playlist",
+        "portfolio:roadmap_module:search-fundamentals",
+        "document:reading-assistant-retrospective",
+        "portfolio:event:retrieval-summit",
+        "portfolio:experience:open-shelf-maintainer",
+        "portfolio:book:fictional-vector-search-handbook"
+      ],
+      "scores": [
+        0.03252247488101534, 0.031754032258064516, 0.02844163539403516, 0.015873015873015872,
+        0.015873015873015872, 0.015625
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.9832184408687481,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    },
+    {
+      "id": "portfolio-retrieval-area",
+      "language": "en",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:roadmap_module:search-fundamentals",
+        "portfolio:roadmap_area:retrieval-systems",
+        "portfolio:roadmap_module:rag-evaluation",
+        "portfolio:roadmap_module:reranking",
+        "portfolio:roadmap_module:chunking-strategies",
+        "portfolio:project:reading-assistant"
+      ],
+      "scores": [
+        0.031754032258064516, 0.03128054740957967, 0.03125763125763126, 0.030679156908665108,
+        0.03036576949620428, 0.029857397504456328
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7967075809905066,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.5,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 35
+      }
+    },
+    {
+      "id": "portfolio-agent-loops",
+      "language": "en",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:roadmap_module:agent-loops",
+        "portfolio:roadmap_resource:state-machine-agent",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:roadmap_area:agents-in-production",
+        "portfolio:event:year-end-agents-workshop",
+        "portfolio:book:fictional-agent-ergonomics"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031054405392392875, 0.030017921146953404, 0.029206349206349208,
+        0.02900988017658188, 0.028790389395194696
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.944847956559586,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 30
+      }
+    },
+    {
+      "id": "portfolio-new-year-workshop",
+      "language": "cs",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:northgate-evaluation-talk",
+        "document:support-handbook-excerpt",
+        "portfolio:event:year-end-agents-workshop"
+      ],
+      "scores": [
+        0.03252247488101534, 0.030834914611005692, 0.030536130536130537, 0.030158730158730156,
+        0.027432808155699723, 0.01639344262295082
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.3562071871080222,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 0.16666666666666666,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 35
+      }
+    },
+    {
+      "id": "portfolio-bpe-by-hand",
+      "language": "en",
+      "category": "diary",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:diary_day:2025-02-18",
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:reading-assistant-retrospective",
+        "document:northgate-evaluation-talk"
+      ],
+      "scores": [
+        0.03278688524590164, 0.0315136476426799, 0.030330882352941176, 0.030330882352941176,
+        0.03007688828584351, 0.029273504273504274
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.8262346571285599,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 42
+      }
+    },
+    {
+      "id": "portfolio-score-tracking",
+      "language": "en",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:exploration:eval-dashboard",
+        "portfolio:service:evaluation-setup",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:glossary_term:eval",
+        "document:northgate-evaluation-talk",
+        "portfolio:book:fictional-evaluation-field-guide"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.029910714285714284, 0.027417840375586856,
+        0.026785714285714288, 0.026709401709401708
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 33
+      }
+    },
+    {
+      "id": "portfolio-evaluation-service",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:reading-assistant-retrospective",
+        "portfolio:service:evaluation-setup",
+        "portfolio:experience:open-shelf-maintainer",
+        "portfolio:glossary_term:eval",
+        "portfolio:book:fictional-evaluation-field-guide",
+        "portfolio:roadmap_module:rag-evaluation"
+      ],
+      "scores": [
+        0.03177805800756621, 0.01639344262295082, 0.016129032258064516, 0.016129032258064516,
+        0.015873015873015872, 0.015625
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.6309297535714574,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 0.5,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 34
+      }
+    },
+    {
+      "id": "portfolio-workbench-outcome",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:project:editorial-workbench",
+        "portfolio:case_study:editorial-workbench",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:project:store-replatforming",
+        "portfolio:profile:person"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.03125763125763126, 0.029910714285714284,
+        0.029857397504456328, 0.029386529386529386
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 29
+      }
+    },
+    {
+      "id": "portfolio-citation-checker",
+      "language": "en",
+      "category": "exact-name",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:exploration:citation-checker",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:book:fictional-vector-search-handbook",
+        "portfolio:glossary_term:grounding",
+        "portfolio:case_study:reading-assistant",
+        "document:support-handbook-excerpt"
+      ],
+      "scores": [
+        0.03131881575727918, 0.029437229437229435, 0.028958333333333336, 0.028404512489927477,
+        0.027313266443701224, 0.02694394213381555
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.944847956559586,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 34
+      }
+    },
+    {
+      "id": "portfolio-community-catalogue",
+      "language": "en",
+      "category": "cross-record",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:experience:open-shelf-maintainer",
+        "portfolio:project:community-catalogue",
+        "document:harbor-retail-cv-2021",
+        "document:support-handbook-excerpt",
+        "portfolio:book:fictional-vector-search-handbook",
+        "portfolio:project:editorial-workbench"
+      ],
+      "scores": [
+        0.03252247488101534, 0.03252247488101534, 0.030536130536130537, 0.029418126757516764,
+        0.028309409888357256, 0.027777777777777776
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 35
+      }
+    },
+    {
+      "id": "portfolio-studies",
+      "language": "cs",
+      "category": "paraphrase",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt",
+        "portfolio:education:harbour-university-informatics"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031754032258064516, 0.031024531024531024, 0.03076923076923077,
+        0.030330882352941176, 0.016129032258064516
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.21840743681816419,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 0.16666666666666666,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    },
+    {
+      "id": "portfolio-pgvector-work",
+      "language": "en",
+      "category": "cross-record",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "portfolio:exploration:chunking-benchmark",
+        "portfolio:project:reading-assistant",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:event:retrieval-summit"
+      ],
+      "scores": [
+        0.031099324975891997, 0.030834914611005692, 0.03047794966520434, 0.03021353930031804,
+        0.03007688828584351, 0.02967032967032967
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.700869602949816,
+        "precision": 0.5,
+        "reciprocalRank": 0.5,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 33
+      }
+    },
+    {
+      "id": "portfolio-red-team",
+      "language": "en",
+      "category": "roadmap",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "portfolio:roadmap_resource:red-team-exercise",
+        "portfolio:profile:person",
+        "portfolio:service:architecture-review",
+        "portfolio:project:store-replatforming",
+        "document:northgate-evaluation-talk",
+        "portfolio:roadmap_module:agent-loops"
+      ],
+      "scores": [
+        0.03278688524590164, 0.0304147465437788, 0.030090497737556562, 0.02946912242686891,
+        0.028665028665028666, 0.027745885954841176
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.8262346571285599,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 31
+      }
+    },
+    {
+      "id": "portfolio-eval-term",
+      "language": "en",
+      "category": "exact-name",
+      "pass": false,
+      "reason": "no answering source among the final passages",
+      "errored": false,
+      "returned": [
+        "document:northgate-evaluation-talk",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:glossary_term:grounding",
+        "portfolio:glossary_term:context-window",
+        "portfolio:roadmap_resource:red-team-exercise",
+        "portfolio:diary_day:2025-02-10"
+      ],
+      "scores": [
+        0.028949545078577336, 0.028438886647841874, 0.02804284323271665, 0.02658450704225352,
+        0.026387470207694927, 0.025893752088205813
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0,
+        "precision": 0,
+        "reciprocalRank": 0,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 37
+      }
+    },
+    {
+      "id": "no-answer-football",
+      "language": "en",
+      "category": "no-answer",
+      "pass": false,
+      "reason": "returned passages for a question without an answer",
+      "errored": false,
+      "returned": [
+        "document:harbor-retail-cv-2021",
+        "portfolio:profile:person",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:northgate-evaluation-talk",
+        "document:support-handbook-excerpt",
+        "portfolio:project:booking-portal"
+      ],
+      "scores": [
+        0.03252247488101534, 0.032266458495966696, 0.031754032258064516, 0.03149801587301587,
+        0.030303030303030304, 0.028381642512077296
+      ],
+      "metrics": {
+        "answerable": false,
+        "recallAtPool": null,
+        "ndcg": null,
+        "precision": 0,
+        "reciprocalRank": null,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    },
+    {
+      "id": "no-answer-hourly-rate",
+      "language": "cs",
+      "category": "no-answer",
+      "pass": false,
+      "reason": "returned passages for a question without an answer",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "document:support-handbook-excerpt",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:northgate-evaluation-talk",
+        "portfolio:experience:quill-studio-consulting"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.03149801587301587, 0.031009615384615385,
+        0.029957522915269395, 0.015384615384615385
+      ],
+      "metrics": {
+        "answerable": false,
+        "recallAtPool": null,
+        "ndcg": null,
+        "precision": 0,
+        "reciprocalRank": null,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 29
+      }
+    },
+    {
+      "id": "no-answer-rust-operators",
+      "language": "en",
+      "category": "no-answer",
+      "pass": false,
+      "reason": "returned passages for a question without an answer",
+      "errored": false,
+      "returned": [
+        "portfolio:profile:person",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:harbor-retail-cv-2021",
+        "document:northgate-evaluation-talk",
+        "portfolio:roadmap_module:agent-observability",
+        "portfolio:project:community-catalogue"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031746031746031744, 0.03128054740957967, 0.030017921146953404,
+        0.02854251012145749, 0.028381642512077296
+      ],
+      "metrics": {
+        "answerable": false,
+        "recallAtPool": null,
+        "ndcg": null,
+        "precision": 0,
+        "reciprocalRank": null,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 30
+      }
+    },
+    {
+      "id": "no-answer-recipe",
+      "language": "cs",
+      "category": "no-answer",
+      "pass": false,
+      "reason": "returned passages for a question without an answer",
+      "errored": false,
+      "returned": [
+        "portfolio:book:fictional-vector-search-handbook",
+        "document:northgate-evaluation-talk",
+        "portfolio:project:editorial-workbench",
+        "document:reading-assistant-retrospective",
+        "portfolio:event:retrieval-summit",
+        "portfolio:roadmap_resource:hybrid-search-playlist"
+      ],
+      "scores": [
+        0.01639344262295082, 0.016129032258064516, 0.015873015873015872, 0.015625,
+        0.015384615384615385, 0.015151515151515152
+      ],
+      "metrics": {
+        "answerable": false,
+        "recallAtPool": null,
+        "ndcg": null,
+        "precision": 0,
+        "reciprocalRank": null,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    },
+    {
+      "id": "no-answer-mobile-games",
+      "language": "en",
+      "category": "no-answer",
+      "pass": false,
+      "reason": "returned passages for a question without an answer",
+      "errored": false,
+      "returned": [
+        "document:harbor-retail-cv-2021",
+        "portfolio:profile:person",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt",
+        "document:northgate-evaluation-talk",
+        "portfolio:project:warehouse-picking"
+      ],
+      "scores": [
+        0.03252247488101534, 0.03252247488101534, 0.03076923076923077, 0.029910714285714284,
+        0.028373015873015873, 0.015873015873015872
+      ],
+      "metrics": {
+        "answerable": false,
+        "recallAtPool": null,
+        "ndcg": null,
+        "precision": 0,
+        "reciprocalRank": null,
+        "hit": false,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 31
+      }
+    },
+    {
+      "id": "supplemental-golden-sets",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:northgate-evaluation-talk",
+        "portfolio:profile:person",
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:roadmap_module:rag-evaluation",
+        "portfolio:book:fictional-evaluation-field-guide"
+      ],
+      "scores": [
+        0.03252247488101534, 0.03177805800756621, 0.03057889822595705, 0.030117753623188408,
+        0.03007688828584351, 0.029206349206349208
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    },
+    {
+      "id": "supplemental-harbor-end",
+      "language": "en",
+      "category": "conflict",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:harbor-retail-senior-developer",
+        "portfolio:profile:person",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:northgate-evaluation-talk",
+        "document:support-handbook-excerpt"
+      ],
+      "scores": [
+        0.03278688524590164, 0.03225806451612903, 0.031746031746031744, 0.03055037313432836,
+        0.029709507042253523, 0.02967032967032967
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7967075809905066,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.5,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 29
+      }
+    },
+    {
+      "id": "supplemental-loyalty",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:harbor-retail-cv-2021",
+        "portfolio:profile:person",
+        "portfolio:experience:harbor-retail-senior-developer",
+        "document:northgate-evaluation-talk",
+        "portfolio:project:store-replatforming",
+        "portfolio:case_study:reading-assistant"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031754032258064516, 0.031009615384615385, 0.030798389007344232,
+        0.027346637102734665, 0.027242401779095628
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 31
+      }
+    },
+    {
+      "id": "supplemental-refunds",
+      "language": "en",
+      "category": "injection",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:support-handbook-excerpt",
+        "portfolio:experience:quill-studio-consulting",
+        "portfolio:book:fictional-vector-search-handbook",
+        "portfolio:project:document-assistant-prototype",
+        "portfolio:glossary_term:grounding",
+        "portfolio:roadmap_resource:vector-search-handbook-reading"
+      ],
+      "scores": [
+        0.03278688524590164, 0.030834914611005692, 0.03057889822595705, 0.02967032967032967,
+        0.028985507246376812, 0.026875901875901876
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 31
+      }
+    },
+    {
+      "id": "supplemental-launch-delay",
+      "language": "cs",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:reading-assistant-retrospective",
+        "portfolio:education:first-agent-in-production",
+        "portfolio:case_study:reading-assistant",
+        "document:northgate-evaluation-talk",
+        "portfolio:project:reading-assistant",
+        "portfolio:project:document-assistant-prototype"
+      ],
+      "scores": [
+        0.03278688524590164, 0.016129032258064516, 0.015873015873015872, 0.015625,
+        0.015384615384615385, 0.015151515151515152
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.9639404333166532,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    },
+    {
+      "id": "supplemental-czech-golden-set",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:northgate-evaluation-talk",
+        "portfolio:case_study:reading-assistant",
+        "portfolio:education:first-agent-in-production",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "portfolio:project:document-assistant-prototype",
+        "portfolio:service:ai-assistant-prototype"
+      ],
+      "scores": [
+        0.03278688524590164, 0.031054405392392875, 0.031024531024531024, 0.031009615384615385,
+        0.030090497737556562, 0.02900988017658188
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.16666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 28
+      }
+    }
+  ],
+  "pending": []
+}

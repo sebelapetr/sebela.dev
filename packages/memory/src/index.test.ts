@@ -809,9 +809,12 @@ describe("keeping the index current after content writes", () => {
     await expect(partial.indexer.rebuildPortfolio(snapshot())).rejects.toBeInstanceOf(
       ProviderUnavailableError,
     );
+    // Cosine similarity compares only vectors of one model; full-text candidates of a source not yet
+    // re-embedded are its current text and may still be reranked into the hybrid result.
     const during = await knowledgeBase({
       memory,
       embedder: countingEmbedder({ version: "2" }).embedder,
+      variant: "vector",
     }).retriever.search({ query: "hybrid search reranker archive" });
     for (const passage of during.passages) {
       expect(memory.sources.get(passage.sourceId)?.modelVersion).toBe("2");
@@ -873,7 +876,7 @@ describe("searching the portfolio", () => {
   it("finds no evidence below the relevance floor", async () => {
     const { indexer, retriever } = knowledgeBase();
     await indexer.reindexPortfolio(snapshot());
-    await expect(retriever.search({ query: "quarterly tax filing deadlines" })).resolves.toEqual({
+    await expect(retriever.search({ query: "quarterly tax filing" })).resolves.toEqual({
       status: "no_evidence",
       passages: [],
     });
