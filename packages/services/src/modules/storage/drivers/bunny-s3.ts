@@ -14,7 +14,15 @@ import type { HttpRequest } from "@smithy/types";
 
 import type { BunnyS3StorageConfig, Storage } from "../index.js";
 import type { BunnyS3PrivateStorageConfig, PrivateStorage } from "../private.js";
-import { addressOf, fileNameOf, newKey, prefixOf, type StoredExtension } from "../keys.js";
+import {
+  addressOf,
+  fileNameOf,
+  newKey,
+  prefixOf,
+  privateExtensions,
+  type PrivateExtension,
+  type StoredExtension,
+} from "../keys.js";
 import { markerName, type NamespaceStore } from "../namespace.js";
 
 /** One signed HTTP request the S3 client would send to the storage endpoint. */
@@ -45,6 +53,11 @@ const contentTypes: Readonly<Record<StoredExtension, string>> = {
   jpg: "image/jpeg",
   webp: "image/webp",
   pdf: "application/pdf",
+};
+
+const privateContentTypes: Readonly<Record<PrivateExtension, string>> = {
+  md: "text/markdown; charset=utf-8",
+  txt: "text/plain; charset=utf-8",
 };
 
 /**
@@ -105,12 +118,55 @@ export function createBunnyS3Driver(
  * address of any kind. The zone has no CDN pull zone; keys are generated inside the prefix and a
  * key outside it is refused (delete) or not found (read) without a request.
  */
-export const createBunnyS3PrivateDriver: (
+export function createBunnyS3PrivateDriver(
   config: BunnyS3PrivateStorageConfig,
   transport?: S3Transport,
-) => PrivateStorage = () => {
-  throw new Error("not implemented");
-};
+): PrivateStorage {
+  const prefix = prefixOf(config);
+  const client = clientFor(config, transport);
+  const isKey = (key: string) => fileNameOf(prefix, key, privateExtensions) !== null;
+
+  return {
+    async store(file) {
+      const key = newKey(prefix, file.extension, privateExtensions);
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: config.zone,
+            Key: key,
+            Body: file.bytes,
+            ContentType: privateContentTypes[file.extension],
+            ChecksumSHA256: createHash("sha256").update(file.bytes).digest("base64"),
+          }),
+        );
+      } catch (error) {
+        throw storageError("store the file", error);
+      }
+      return key;
+    },
+
+    async read(key) {
+      if (!isKey(key)) return null;
+      try {
+        const reply = await client.send(new GetObjectCommand({ Bucket: config.zone, Key: key }));
+        return (await reply.Body?.transformToByteArray()) ?? new Uint8Array();
+      } catch (error) {
+        if (error instanceof S3ServiceException && error.name === "NoSuchKey") return null;
+        throw storageError("read the file", error);
+      }
+    },
+
+    async delete(key) {
+      if (!isKey(key)) throw new Error("The key is not a key of this storage.");
+      try {
+        await client.send(new DeleteObjectCommand({ Bucket: config.zone, Key: key }));
+      } catch (error) {
+        if (error instanceof S3ServiceException && error.name === "NoSuchKey") return;
+        throw storageError("delete the file", error);
+      }
+    },
+  };
+}
 
 /**
  * The owner-guarded namespace `<environment>/<worktree>/` in the zone: the marker is one object,
@@ -200,7 +256,10 @@ export function createBunnyS3NamespaceStore(
 }
 
 /** One S3 client for the zone, path-style and signed with the zone name and password. */
-function clientFor(config: BunnyS3StorageConfig, transport?: S3Transport): S3Client {
+function clientFor(
+  config: Pick<BunnyS3StorageConfig, "endpoint" | "region" | "zone" | "password">,
+  transport?: S3Transport,
+): S3Client {
   return new S3Client({
     endpoint: config.endpoint,
     region: config.region,

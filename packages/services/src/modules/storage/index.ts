@@ -4,6 +4,7 @@ import { createBunnyS3Driver, createBunnyS3NamespaceStore } from "./drivers/bunn
 import { createLocalDriver, createLocalNamespaceStore } from "./drivers/local.js";
 import { addressOf, prefixOf, segmentPattern, type StoredExtension } from "./keys.js";
 import { ownedNamespace } from "./namespace.js";
+import { httpsOrigin, passwordPattern, regionPattern } from "./settings.js";
 
 export type { PrivateExtension, StoredExtension } from "./keys.js";
 export {
@@ -79,11 +80,6 @@ export interface OpenedStorage {
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-/** A Bunny S3 region code, such as `de` or `syd`. */
-const regionPattern = /^[a-z][a-z0-9-]{0,31}$/;
-/** A zone password: printable, without whitespace. */
-const passwordPattern = /^[\x21-\x7e]{1,256}$/;
-
 /**
  * Reads the storage settings from an environment such as `process.env`. Throws an error naming
  * every missing or invalid variable, never their values; there are no fallbacks, so a cloud
@@ -148,15 +144,6 @@ function publicBase(value: string | undefined, protocols: readonly string[]): st
   if (!protocols.includes(url.protocol) || url.username || url.password) return null;
   if (url.search || url.hash) return null;
   return url.href.replace(/\/+$/, "");
-}
-
-/** The origin of an https address that is nothing but an origin, or `null`. */
-function httpsOrigin(value: string | undefined): string | null {
-  if (value === undefined || !URL.canParse(value)) return null;
-  const url = new URL(value);
-  if (url.protocol !== "https:" || url.username || url.password) return null;
-  if (url.pathname !== "/" || url.search || url.hash || value.includes("?")) return null;
-  return url.origin;
 }
 
 /** Whether the address is on the host of the origin or on one of its subdomains (a bucket host). */

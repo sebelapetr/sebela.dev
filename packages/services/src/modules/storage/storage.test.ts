@@ -51,7 +51,7 @@ async function filesBelow(folder: string): Promise<string[]> {
   if (!existsSync(folder)) return [];
   const entries = await readdir(folder, { recursive: true, withFileTypes: true });
   return entries
-    .filter((entry) => !entry.isDirectory())
+    .filter((entry) => entry.isFile())
     .map((entry) => join(entry.parentPath, entry.name).slice(folder.length + 1))
     .sort();
 }
@@ -734,9 +734,11 @@ async function localPrivateHarness(): Promise<PrivateHarness> {
     },
     async breakWrites() {
       // A prefix folder that is a symbolic link is refused before anything is written.
+      const elsewhere = join(base, "elsewhere");
+      await mkdir(elsewhere, { recursive: true });
       await mkdir(join(root, "development"), { recursive: true });
       await rm(join(root, "development", "feature-a"), { recursive: true, force: true });
-      await symlink(base, join(root, "development", "feature-a"));
+      await symlink(elsewhere, join(root, "development", "feature-a"));
     },
     cleanup: () => rm(base, { recursive: true, force: true }),
   };
