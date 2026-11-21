@@ -1,0 +1,313 @@
+{
+  "status": "measured",
+  "scope": "partial",
+  "variant": "vector",
+  "runAt": "2026-11-21T00:55:46.782Z",
+  "settings": {
+    "RETRIEVAL_EMBEDDING_MODEL": "voyage-4",
+    "RETRIEVAL_CANDIDATE_POOL": "30",
+    "RETRIEVAL_FINAL_PASSAGES": "6",
+    "RETRIEVAL_RELEVANCE_FLOOR": "0.3",
+    "RETRIEVAL_EMBEDDING_BATCH_SIZE": "128"
+  },
+  "pacing": {
+    "minIntervalMs": 21000,
+    "providerRetries": 6,
+    "maxRetryWaitMs": 60000
+  },
+  "measured": 6,
+  "passed": 6,
+  "metrics": {
+    "questions": 6,
+    "recallAtPool": 1,
+    "ndcg": 0.9601080023845266,
+    "precision": 0.5277777777777778,
+    "mrr": 0.9166666666666666,
+    "hitRate": 1,
+    "correctEmptyRate": null,
+    "falseEmptyRate": 0,
+    "provenanceAccuracy": 1,
+    "latencyMs": {
+      "p50": 48,
+      "p95": 110
+    },
+    "costPerQueryUsd": 0
+  },
+  "gate": {
+    "frozen": false
+  },
+  "spend": {
+    "ceilingUsd": 1,
+    "indexing": {
+      "portfolio": {
+        "sources": 90,
+        "updated": 90,
+        "removed": 0,
+        "embedded": 132,
+        "reused": 0,
+        "tokens": 3481,
+        "costUsd": 0.00020885999999999998,
+        "completed": 0,
+        "remaining": {
+          "pending": 0,
+          "failed": 0
+        }
+      },
+      "approvals": [
+        {
+          "version": {
+            "sourceId": "document:northgate-evaluation-talk",
+            "contentHash": "c64f2bafedd3cb79eea2bca44640aec4ba09d3656235433a3b7a0b52720c20d1",
+            "title": "Notes from a talk at the Northgate Engineering meetup",
+            "mediaType": "text/markdown",
+            "byteSize": 532,
+            "status": "approved",
+            "findings": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T00:51:36.085Z",
+            "decidedAt": "2026-11-21T00:51:38.486Z"
+          },
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 131,
+            "costUsd": 0.000007860000000000001
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:harbor-retail-cv-2021",
+            "contentHash": "d0a09cb9d9da5551c4a831e972707a71af792b5ba8e2a872dd425a38e54ef541",
+            "title": "Alex Novara — CV (2021 edition)",
+            "mediaType": "text/markdown",
+            "byteSize": 407,
+            "status": "approved",
+            "findings": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T00:52:01.120Z",
+            "decidedAt": "2026-11-21T00:52:03.122Z"
+          },
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 120,
+            "costUsd": 0.0000072
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:support-handbook-excerpt",
+            "contentHash": "1dfd18eae21142d4ed12a3553c576e36fc4250afb4c4142a66a0aaec5e2c2c75",
+            "title": "Support handbook excerpt",
+            "mediaType": "text/markdown",
+            "byteSize": 483,
+            "status": "approved",
+            "findings": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T00:52:25.724Z",
+            "decidedAt": "2026-11-21T00:52:27.635Z"
+          },
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 97,
+            "costUsd": 0.00000582
+          }
+        },
+        {
+          "version": {
+            "sourceId": "document:reading-assistant-retrospective",
+            "contentHash": "1cbbcc93c38945044676df49007e34a75b198ab743e6b2d10d74e141d97ecf1e",
+            "title": "Retrospektiva asistenta pro čtenáře",
+            "mediaType": "text/markdown",
+            "byteSize": 537,
+            "status": "approved",
+            "findings": [],
+            "sectionCount": 3,
+            "chunkCount": 3,
+            "createdAt": "2026-11-21T00:52:50.231Z",
+            "decidedAt": "2026-11-21T00:52:52.114Z"
+          },
+          "report": {
+            "embedded": 3,
+            "reused": 0,
+            "tokens": 222,
+            "costUsd": 0.00001332
+          }
+        }
+      ]
+    },
+    "usage": {
+      "tokens": 7595,
+      "costUsd": 0.0004557,
+      "byOperation": {
+        "index": {
+          "tokens": 7532,
+          "costUsd": 0.00045192
+        },
+        "search": {
+          "tokens": 0,
+          "costUsd": 0
+        },
+        "candidates": {
+          "tokens": 63,
+          "costUsd": 0.00000378
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "supplemental-golden-sets",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:northgate-evaluation-talk",
+        "portfolio:roadmap_resource:golden-set-workshop",
+        "portfolio:book:fictional-evaluation-field-guide"
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 110
+      }
+    },
+    {
+      "id": "supplemental-harbor-end",
+      "language": "en",
+      "category": "conflict",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:harbor-retail-senior-developer",
+        "portfolio:profile:person"
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.7967075809905066,
+        "precision": 0.6666666666666666,
+        "reciprocalRank": 0.5,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 45
+      }
+    },
+    {
+      "id": "supplemental-loyalty",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:harbor-retail-cv-2021",
+        "portfolio:experience:lumen-press-staff-engineer",
+        "document:support-handbook-excerpt",
+        "portfolio:profile:person"
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.25,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 44
+      }
+    },
+    {
+      "id": "supplemental-refunds",
+      "language": "en",
+      "category": "injection",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": ["document:support-handbook-excerpt"],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 1,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 48
+      }
+    },
+    {
+      "id": "supplemental-launch-delay",
+      "language": "cs",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:reading-assistant-retrospective",
+        "portfolio:education:first-agent-in-production",
+        "portfolio:case_study:reading-assistant"
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 0.9639404333166532,
+        "precision": 0.6666666666666666,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 50
+      }
+    },
+    {
+      "id": "supplemental-czech-golden-set",
+      "language": "en",
+      "category": "supplemental",
+      "pass": true,
+      "reason": "an answering source was returned",
+      "errored": false,
+      "returned": [
+        "document:northgate-evaluation-talk",
+        "portfolio:book:fictional-evaluation-field-guide",
+        "document:reading-assistant-retrospective",
+        "portfolio:roadmap_resource:golden-set-workshop"
+      ],
+      "metrics": {
+        "answerable": true,
+        "recallAtPool": 1,
+        "ndcg": 1,
+        "precision": 0.25,
+        "reciprocalRank": 1,
+        "hit": true,
+        "correctEmpty": false,
+        "falseEmpty": false,
+        "provenance": 1,
+        "latencyMs": 57
+      }
+    }
+  ],
+  "pending": []
+}

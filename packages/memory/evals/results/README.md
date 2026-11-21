@@ -16,9 +16,14 @@ measured against these questions.
 
 Paid runs count against the phase 9 ceiling of USD 3, with a stop at USD 1 per run.
 
-| Run                    | Date       | Tokens | Cost (USD) |
-| ---------------------- | ---------- | -----: | ---------: |
-| `vector-baseline.json` | 2026-11-20 |  4,223 |    0.00025 |
+| Run                        | Date       | Tokens | Cost (USD) |
+| -------------------------- | ---------- | -----: | ---------: |
+| `vector-baseline.json`     | 2026-11-20 |  4,223 |    0.00025 |
+| `supplemental-vector.json` | 2026-11-21 |  7,595 |    0.00046 |
 
-Cumulative phase 9 spend after the vector baseline: about USD 0.0023 of USD 3 (the baseline
+`supplemental-vector.json` measures only the six supplemental-document cases, after ingesting
+and approving their fictional documents; all six pass. Its query embeddings come from the
+query cache where an earlier run had them.
+
+Cumulative phase 9 spend after the supplemental run: about USD 0.0028 of USD 3 (the runs above
 plus earlier paid runs of the phase).
