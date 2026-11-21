@@ -282,6 +282,16 @@ S07_EN_R3 = (
         ("S07-cs", "Je to návrh, nikoli implementace, takže v produkci neběží.", True),
         ("S07-cs", "Není to implementace, jen záznam o návrhu.", True),
         ("S07-cs", "Je to implementace, ne návrh, a běží v produkci.", False),
+        # A word between "not a" and "implementation" must not turn a claim into a denial (#306).
+        (
+            "S07-en",
+            "It is not a prototype implementation, it is a full system in production.",
+            False,
+        ),
+        ("S07-en", "It is not a partial implementation: it is complete and deployed.", False),
+        ("S07-cs", "Není jen implementace, běží v produkci.", False),
+        ("S07-cs", "Je to ne jen implementace, ale i nasazení v produkci.", False),
+        ("S07-cs", "Ne první implementace, ale hotový systém v produkci.", False),
     ],
 )
 def test_a_designed_exploration_is_explicitly_unimplemented(
