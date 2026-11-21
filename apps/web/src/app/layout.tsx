@@ -7,6 +7,7 @@ import "@sebela/ui/globals.css";
 import { themeScript } from "../modules/_shared";
 import { Analytics } from "../modules/analytics";
 import { indexingPageMetadata } from "../modules/indexing";
+import { LlmsTxtLink } from "../modules/seo";
 
 // Page titles and descriptions come from the API on each page; this is only the fallback. While
 // `WEB_INDEXING` is not on, every page also asks not to be indexed (read per request).
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <LlmsTxtLink />
       </head>
       <body className="flex min-h-dvh flex-col">
         {children}

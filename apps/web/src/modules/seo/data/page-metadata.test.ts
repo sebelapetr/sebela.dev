@@ -8,14 +8,25 @@ const FACTS = { name: "Robin Example", headline: "Fictional engineer for tests" 
 describe("pageMetadata", () => {
   it("titles the homepage with the name and headline", () => {
     expect(pageMetadata(ORIGIN, "home", FACTS).title).toBe(
-      "Robin Example — Fictional engineer for tests",
+      "Robin Example · Fictional engineer for tests",
     );
   });
 
+  it("keeps every title within 60 characters, shortening the headline and never the name", () => {
+    const headline = "Fictional engineer who builds calm software for logistics and health care";
+    const home = pageMetadata(ORIGIN, "home", { ...FACTS, headline });
+    expect(home.title).toBe("Robin Example · Fictional engineer who builds calm software…");
+    for (const page of ["home", "experience", "services", "cv"] as const) {
+      const title = pageMetadata(ORIGIN, page, { ...FACTS, headline }).title as string;
+      expect(Array.from(title).length).toBeLessThanOrEqual(60);
+      expect(title).toContain("Robin Example");
+    }
+  });
+
   it.each([
-    ["experience", "Experience — Robin Example"],
-    ["services", "Services — Robin Example"],
-    ["cv", "CV — Robin Example"],
+    ["experience", "Experience · Robin Example"],
+    ["services", "Services · Robin Example"],
+    ["cv", "CV · Robin Example"],
   ] as const)("titles the %s page with its name and the person's", (page, title) => {
     expect(pageMetadata(ORIGIN, page, FACTS).title).toBe(title);
   });
@@ -64,7 +75,7 @@ describe("pageMetadata", () => {
     expect(pageMetadata(ORIGIN, "experience", FACTS).openGraph).toEqual({
       type: "website",
       url: "https://site.example.test/experience",
-      title: "Experience — Robin Example",
+      title: "Experience · Robin Example",
       description: FACTS.headline,
       siteName: "Robin Example",
       images: [
@@ -73,7 +84,7 @@ describe("pageMetadata", () => {
           width: 1200,
           height: 630,
           type: "image/png",
-          alt: "Experience — Robin Example",
+          alt: "Experience · Robin Example",
         },
       ],
     });
@@ -92,7 +103,7 @@ describe("pageMetadata", () => {
   it("offers the preview image as a large card to every reader of Twitter cards", () => {
     expect(pageMetadata(ORIGIN, "cv", FACTS).twitter).toEqual({
       card: "summary_large_image",
-      title: "CV — Robin Example",
+      title: "CV · Robin Example",
       description: FACTS.headline,
       images: ["https://site.example.test/og/cv"],
     });
@@ -103,6 +114,6 @@ describe("pageMetadata", () => {
       name: "</title><script>alert(1)</script>",
       headline: "A & B",
     });
-    expect(metadata.title).toBe("</title><script>alert(1)</script> — A & B");
+    expect(metadata.title).toBe("</title><script>alert(1)</script> · A & B");
   });
 });

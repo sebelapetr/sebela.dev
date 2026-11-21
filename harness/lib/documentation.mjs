@@ -11,11 +11,18 @@
 const READ_BY_CODE = /(^|\/)(src|evals|fixtures)\/|^\.claude\/skills\//;
 
 /**
+ * Markdown a package's build reads, so it is not documentation: the guide that
+ * packages/llm-agent/pyproject.toml names as the readme of the built package. A test finds every
+ * such readme in the repository (scripts/checks/without-documentation.test.mjs).
+ */
+const READ_BY_BUILD = new Set(["packages/llm-agent/AGENTS.md"]);
+
+/**
  * Whether a changed file (a path relative to the repository root) is documentation: Markdown
  * anywhere, the app and package README.md and AGENTS.md included, and everything in docs/ and
- * .plan/, except Markdown in a folder code reads.
+ * .plan/, except Markdown in a folder code reads and Markdown a package's build reads.
  */
 export function isDocumentation(file) {
-  if (READ_BY_CODE.test(file)) return false;
+  if (READ_BY_CODE.test(file) || READ_BY_BUILD.has(file)) return false;
   return /^(docs|\.plan)\//.test(file) || /\.md$/i.test(file);
 }

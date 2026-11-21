@@ -180,7 +180,7 @@ test.describe("experience page read from the API", () => {
   }) => {
     const response = await page.goto(`${website.url}/experience`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle("Experience — Casey Morrow");
+    await expect(page).toHaveTitle("Experience · Casey Morrow");
 
     const heading = page.getByRole("heading", { level: 1 });
     await expect(heading).toContainText("Casey Morrow");

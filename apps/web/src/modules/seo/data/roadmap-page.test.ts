@@ -34,13 +34,24 @@ const MODULE: RoadmapPageFacts = {
 };
 
 describe("roadmapPageMetadata", () => {
-  it("titles a page by the way to it, from the page up to the person", () => {
+  it("titles a page by its name and its parent's, then the person", () => {
     expect(roadmapPageMetadata(ORIGIN, AREA).title).toBe(
-      "Signal area — AI Engineering Roadmap — Robin Example",
+      "Signal area · AI Engineering Roadmap · Robin Example",
     );
     expect(roadmapPageMetadata(ORIGIN, MODULE).title).toBe(
-      "Signal basics — Signal area — AI Engineering Roadmap — Robin Example",
+      "Signal basics · Signal area · Robin Example",
     );
+  });
+
+  it("keeps a long page's title within 60 characters, shortening the page and never the person", () => {
+    const long = "A fictional module whose name goes on and on far past any limit a title has";
+    const facts: RoadmapPageFacts = {
+      ...MODULE,
+      breadcrumbs: [...AREA.breadcrumbs, { name: long, href: "/ai-roadmap/signal-area/long" }],
+    };
+    const title = roadmapPageMetadata(ORIGIN, facts).title as string;
+    expect(title).toBe("A fictional module whose name goes on and… · Robin Example");
+    expect(Array.from(title).length).toBeLessThanOrEqual(60);
   });
 
   it("describes a page with its summary's first paragraph as plain text", () => {
@@ -62,7 +73,7 @@ describe("roadmapPageMetadata", () => {
     const metadata = roadmapPageMetadata(ORIGIN, MODULE);
     const url = "https://site.example.test/ai-roadmap/signal-area/signal-basics";
     const image = "https://site.example.test/og/ai-roadmap/signal-area/signal-basics";
-    const title = "Signal basics — Signal area — AI Engineering Roadmap — Robin Example";
+    const title = "Signal basics · Signal area · Robin Example";
     const description =
       "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.";
     expect(metadata.alternates?.canonical).toBe(url);
@@ -150,16 +161,19 @@ describe("roadmapOpenGraphCard", () => {
 });
 
 describe("roadmapStructuredData", () => {
-  it("describes an area as a course with the person as its provider and no estimate when none", () => {
+  it("describes an area as the person's learning resource, not a course, and no estimate when none", () => {
     const graph = (roadmapStructuredData(ORIGIN, AREA) as { "@graph": object[] })["@graph"];
+    expect(graph).not.toContainEqual(expect.objectContaining({ "@type": "Course" }));
+    expect(graph.some((node) => "provider" in node)).toBe(false);
     expect(graph).toContainEqual({
-      "@type": "Course",
-      "@id": "https://site.example.test/ai-roadmap/signal-area#course",
+      "@type": "LearningResource",
+      "@id": "https://site.example.test/ai-roadmap/signal-area#learning",
       url: "https://site.example.test/ai-roadmap/signal-area",
       name: "Signal area",
       description: "Learns fictional signals from notes.",
       inLanguage: "en",
-      provider: {
+      learningResourceType: "Learning plan",
+      author: {
         "@type": "Person",
         "@id": "https://site.example.test/#person",
         name: "Robin Example",
@@ -176,7 +190,7 @@ describe("roadmapStructuredData", () => {
           "@type": "WebPage",
           "@id": "https://site.example.test/ai-roadmap/signal-area/signal-basics#webpage",
           url: "https://site.example.test/ai-roadmap/signal-area/signal-basics",
-          name: "Signal basics — Signal area — AI Engineering Roadmap — Robin Example",
+          name: "Signal basics · Signal area · Robin Example",
           description:
             "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.",
           inLanguage: "en",
@@ -210,14 +224,15 @@ describe("roadmapStructuredData", () => {
           ],
         },
         {
-          "@type": "Course",
-          "@id": "https://site.example.test/ai-roadmap/signal-area/signal-basics#course",
+          "@type": "LearningResource",
+          "@id": "https://site.example.test/ai-roadmap/signal-area/signal-basics#learning",
           url: "https://site.example.test/ai-roadmap/signal-area/signal-basics",
           name: "Signal basics",
           description:
             "Signal basics, part of Signal area on Robin Example's AI Engineering Roadmap.",
           inLanguage: "en",
-          provider: {
+          learningResourceType: "Learning plan",
+          author: {
             "@type": "Person",
             "@id": "https://site.example.test/#person",
             name: "Robin Example",
@@ -227,8 +242,8 @@ describe("roadmapStructuredData", () => {
           },
           timeRequired: "PT90M",
           isPartOf: {
-            "@type": "Course",
-            "@id": "https://site.example.test/ai-roadmap/signal-area#course",
+            "@type": "LearningResource",
+            "@id": "https://site.example.test/ai-roadmap/signal-area#learning",
             name: "Signal area",
             url: "https://site.example.test/ai-roadmap/signal-area",
           },
@@ -250,7 +265,7 @@ describe("roadmapStructuredData", () => {
     expect(json).not.toContain("</script>");
     expect(JSON.parse(json)).toMatchObject({
       "@graph": [
-        { name: "</script><script>alert(1)</script> — AI Engineering Roadmap — Robin Example" },
+        { name: "</script><script>alert(1)</script> · Robin Example" },
         { itemListElement: [{}, { name: "</script><script>alert(1)</script>" }] },
         { name: "</script><script>alert(1)</script>" },
       ],
@@ -317,12 +332,12 @@ const SPARSE_BOOK: BookFacts = {
 };
 
 describe("the bookshelf's and a book's metadata", () => {
-  it("titles the bookshelf and a book by the way to them", () => {
+  it("titles the bookshelf and a book by their names and their parents'", () => {
     expect(roadmapPageMetadata(ORIGIN, BOOKSHELF).title).toBe(
-      "Bookshelf — AI Engineering Roadmap — Robin Example",
+      "Bookshelf · AI Engineering Roadmap · Robin Example",
     );
     expect(roadmapPageMetadata(ORIGIN, BOOK).title).toBe(
-      "The Quiet Orbit — Bookshelf — AI Engineering Roadmap — Robin Example",
+      "The Quiet Orbit · Bookshelf · Robin Example",
     );
   });
 
@@ -559,18 +574,18 @@ function graphOf(facts: RoadmapPageFacts): object[] {
 }
 
 describe("the overview's, diary's, events', statistics' and reading guide's metadata", () => {
-  it("titles each page by the way to it, from the page up to the person", () => {
+  it("titles each page by its name and its parent's, then the person", () => {
     expect(
       [OVERVIEW, DIARY, DIARY_DAY, STATISTICS, EVENTS, READING_GUIDE].map(
         (facts) => roadmapPageMetadata(ORIGIN, facts).title,
       ),
     ).toEqual([
-      "AI Engineering Roadmap — Robin Example",
-      "Learning Diary — AI Engineering Roadmap — Robin Example",
-      "Monday, March 2, 2026 — Learning Diary — AI Engineering Roadmap — Robin Example",
-      "Learning Statistics — Learning Diary — AI Engineering Roadmap — Robin Example",
-      "Events — AI Engineering Roadmap — Robin Example",
-      "How to Read Effectively — Bookshelf — AI Engineering Roadmap — Robin Example",
+      "AI Engineering Roadmap · Robin Example",
+      "Learning Diary · AI Engineering Roadmap · Robin Example",
+      "Monday, March 2, 2026 · Learning Diary · Robin Example",
+      "Learning Statistics · Learning Diary · Robin Example",
+      "Events · AI Engineering Roadmap · Robin Example",
+      "How to Read Effectively · Bookshelf · Robin Example",
     ]);
   });
 

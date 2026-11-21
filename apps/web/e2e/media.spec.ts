@@ -418,7 +418,9 @@ test.describe("Open Graph previews", () => {
       const response = await request.get(`${website.url}/og/${page}`);
       expect(response.status()).toBe(200);
       expect(response.headers()["content-type"]).toBe("image/png");
-      expect(response.headers()["cache-control"]).toBe("no-cache");
+      expect(response.headers()["cache-control"]).toBe(
+        "public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400",
+      );
       const body = await response.body();
       expect(pngSize(body)).toEqual({ width: 1200, height: 630 });
       await writeFile(test.info().outputPath(`og-${page}.png`), body);

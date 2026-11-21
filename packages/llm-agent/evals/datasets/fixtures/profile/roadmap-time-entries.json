@@ -1,0 +1,57 @@
+[
+  {
+    "resource": "bm25-refresher",
+    "startedAt": "2026-01-12T19:00:00+01:00",
+    "endedAt": "2026-01-12T20:00:00+01:00"
+  },
+  {
+    "resource": "vector-index-course",
+    "startedAt": "2026-01-20T18:30:00+01:00",
+    "endedAt": "2026-01-20T20:30:00+01:00"
+  },
+  {
+    "resource": "search-evaluation-handbook",
+    "startedAt": "2026-02-02T20:00:00+01:00",
+    "endedAt": "2026-02-02T21:00:00+01:00"
+  },
+  {
+    "resource": "function-calling-tutorial",
+    "startedAt": "2026-02-03T19:00:00+01:00",
+    "endedAt": "2026-02-03T20:30:00+01:00"
+  },
+  {
+    "event": "port-wren-agents-conference",
+    "startedAt": "2026-02-18T09:00:00+01:00",
+    "endedAt": "2026-02-18T12:30:00+01:00"
+  },
+  {
+    "event": "port-wren-agents-conference",
+    "startedAt": "2026-02-19T10:00:00+01:00",
+    "endedAt": "2026-02-19T12:00:00+01:00"
+  },
+  {
+    "resource": "ranking-metrics-notes",
+    "startedAt": "2026-03-02T18:00:00+01:00",
+    "endedAt": "2026-03-02T19:15:00+01:00"
+  },
+  {
+    "resource": "search-evaluation-handbook",
+    "startedAt": "2026-03-04T21:00:00+01:00",
+    "endedAt": "2026-03-04T22:30:00+01:00"
+  },
+  {
+    "event": "evaluation-meetup-march",
+    "startedAt": "2026-03-05T18:00:00+01:00",
+    "endedAt": "2026-03-05T20:00:00+01:00"
+  },
+  {
+    "resource": "agent-loop-project",
+    "startedAt": "2026-03-09T23:30:00+01:00",
+    "endedAt": "2026-03-10T00:45:00+01:00"
+  },
+  {
+    "resource": "ranking-metrics-notes",
+    "startedAt": "2026-03-11T07:00:00+01:00",
+    "endedAt": "2026-03-11T07:40:00+01:00"
+  }
+]

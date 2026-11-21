@@ -1,0 +1,15 @@
+{
+  "name": "@sebela/llm-agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The reusable portfolio chat agent (Python): pnpm and Turborepo task wrappers; Python metadata lives in pyproject.toml.",
+  "license": "MIT",
+  "scripts": {
+    "build": "uv build --quiet --out-dir dist",
+    "eval": "node ../../harness/with-secrets.mjs -- uv run --locked python -m evals.run",
+    "generate": "uv run --locked openapi-python-client generate --path ../api-client/src/generated/openapi.json --meta none --config content-api-client.yaml --output-path src/llm_agent/generated/content_api --overwrite",
+    "lint": "uv run --locked ruff format --check && uv run --locked ruff check",
+    "test": "uv run --locked pytest",
+    "typecheck": "uv run --locked mypy"
+  }
+}

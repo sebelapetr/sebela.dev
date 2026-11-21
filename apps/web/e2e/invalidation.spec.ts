@@ -90,7 +90,9 @@ test.describe("cached content after signed invalidations", () => {
     const homepage = await text(website.url, "/");
     expect(homepage).not.toContain(before);
     // The title and the description of the homepage name the headline.
-    expect(homepage).toContain(`<title>Casey Morrow — ${after}</title>`);
+    expect(homepage).toContain(
+      "<title>Casey Morrow · Fictional engineer who now builds quiet…</title>",
+    );
     expect(await text(website.url, "/llms.txt")).toContain(after);
     expect(await bytes(website.url, "/og/home")).not.toBe(preview);
 

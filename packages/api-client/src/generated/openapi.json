@@ -20785,10 +20785,11 @@
                 "const": "no_evidence"
               },
               "passages": {
+                "maxItems": 0,
                 "type": "array",
-                "prefixItems": [],
-                "items": false,
-                "maxItems": 0
+                "items": {
+                  "$ref": "#/components/schemas/Passage"
+                }
               }
             },
             "required": [
