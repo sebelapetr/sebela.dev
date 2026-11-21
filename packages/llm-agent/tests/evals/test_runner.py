@@ -35,6 +35,14 @@ def fixed_prompt_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
         (["--regrade", "x", "--allowance", "1"], "--allowance applies only"),
         (["--judge", "--case", "S01-en", "--allowance", "1"], "--judge applies only to --regrade"),
         (["--check-fixture", "--case", "S01-en"], "--check-fixture takes no other option"),
+        (["--check-fixture", "--judge-mode", "direct"], "--check-fixture takes no other option"),
+        (["--regrade", "x", "--judge-mode", "direct"], "--judge-mode applies only"),
+        (["--case", "S01-en", "--allowance", "1", "--judge-mode", "cheap"], "batch or direct"),
+        (["--case", "S01-en", "--allowance", "1", "--judge-mode"], "--judge-mode needs a value"),
+        (
+            ["--case", "S01-en", "--allowance", "1", "--judge-mode", "batch", "--judge-mode", "direct"],
+            "--judge-mode given twice",
+        ),
         ([], "name the cases"),
     ],
 )
@@ -57,6 +65,26 @@ def test_a_valid_paid_run_and_a_free_regrade() -> None:
     assert run.plan(["--all", "--allowance", "1"]).cases[0] == "Q01-en"
     assert run.plan(["--regrade", "folder"]).judge is False
     assert run.plan(["--check-fixture"]).mode == "check-fixture"
+
+
+def test_the_judge_runs_as_a_batch_unless_direct_mode_is_asked_for() -> None:
+    assert run.plan(["--case", "Q01-en", "--allowance", "1"]).judge_mode == "batch"
+    direct = ["--case", "Q01-en", "--allowance", "1", "--judge-mode", "direct"]
+    assert run.plan(direct).judge_mode == "direct"
+    regrade = ["--regrade", "x", "--judge", "--allowance", "1", "--judge-mode", "direct"]
+    assert run.plan(regrade).judge_mode == "direct"
+    compare = ["--compare", "haiku-medium", "--allowance", "1", "--judge-mode", "direct"]
+    assert run.plan(compare).judge_mode == "direct"
+
+
+def test_a_judge_call_is_reserved_with_a_one_hour_cache_write_and_the_full_output() -> None:
+    assert run.JUDGE_CALL_RESERVATION_USD == pytest.approx(
+        (
+            8_000 * rubric.JUDGE_PRICE_INPUT * rubric.JUDGE_CACHE_WRITE_1H
+            + rubric.JUDGE_MAX_TOKENS * rubric.JUDGE_PRICE_OUTPUT
+        )
+        / 1_000_000
+    )
 
 
 def test_the_reservation_covers_every_subject_execution_and_judge_call() -> None:

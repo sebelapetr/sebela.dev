@@ -513,8 +513,12 @@ def test_a_haiku_subset_needs_no_slices() -> None:
 def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
 
-    async def fake(selected: Any, declared: float, *, candidate: str | None = None) -> int:
-        seen.update(selected=tuple(selected), declared=declared, candidate=candidate)
+    async def fake(
+        selected: Any, declared: float, *, candidate: str | None = None, judge_mode: str = ""
+    ) -> int:
+        seen.update(
+            selected=tuple(selected), declared=declared, candidate=candidate, judge_mode=judge_mode
+        )
         return 0
 
     monkeypatch.setattr(run, "command_run", fake)
@@ -523,7 +527,12 @@ def test_a_sonnet_slice_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     for case_id in piece:
         args += ["--case", case_id]
     assert run.main(args) == 0
-    assert seen == {"selected": piece, "declared": 1.0, "candidate": "sonnet-medium"}
+    assert seen == {
+        "selected": piece,
+        "declared": 1.0,
+        "candidate": "sonnet-medium",
+        "judge_mode": "batch",
+    }
     assert run.main(["--compare", "sonnet-medium", "--allowance", "6"]) == run.BLOCKED
 
 
@@ -730,9 +739,11 @@ def fake_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
 
     async def promptfoo(output: Path, env: Mapping[str, str], *, repeats: int = 3) -> None:
         seen["promptfoo"].append({"env": dict(env), "repeats": repeats})
+        cases = env["LLM_AGENT_EVAL_CASES"].split(",")
         results = [
             {"vars": {"case_id": item["case_id"]}, "response": {"output": json.dumps(item)}}
             for item in seen["records"]
+            if item["case_id"] in cases
         ]
         text = json.dumps({"results": {"results": results}})
         await asyncio.to_thread(output.write_text, text, encoding="utf-8")
