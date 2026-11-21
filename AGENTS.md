@@ -25,6 +25,7 @@ The personal professional website of Petr Šebela (sebela.dev): one site for cli
 | Agent roles and orchestration                  | `docs/agents.md`               |
 | What agents may and may not do                 | `docs/permissions.md`          |
 | Visual language                                | `docs/design.md`               |
+| Chatbot and public MCP threats and defences    | `docs/threat-model.md`         |
 | Releases                                       | `docs/release-workflow.md`     |
 | Why things are the way they are                | `docs/decisions/`              |
 

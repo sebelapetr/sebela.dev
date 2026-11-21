@@ -106,7 +106,7 @@ The visual direction is editorial and monochrome: strong typography, generous wh
 
 ### Planned visitor assistant
 
-The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers.
+The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers. The [threat model](docs/threat-model.md) lists what a visitor may try, which layer stops it and what remains a residual risk.
 
 1. **Check access and cost.** The API verifies conversation ownership, applies rate limits and bot checks, and checks the available budget before a model call.
 2. **Guard the input.** A small model checks for off-topic requests, manipulation and abuse.
@@ -351,18 +351,19 @@ MCP Admin has deterministic integration tests against the real API and a Promptf
 
 ## Documentation
 
-| Read this                                                                                            | For                                                      |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [Overview PRD](.plan/00-overview/prd.md)                                                             | Product scope, audiences and phase boundaries            |
-| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md)                         | Data flow, trust boundary and engineering tradeoffs      |
-| [Repository structure](docs/repository-structure.md)                                                 | Target layout, allowed imports and worktree isolation    |
-| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md)                                   | Canonical terms, entity relationships and access rules   |
-| [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements     |
-| [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations             |
-| [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries       |
-| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback               |
-| [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)                                     | How to help, and how to report a vulnerability privately |
-| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                       |
+| Read this                                                                                            | For                                                                          |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Overview PRD](.plan/00-overview/prd.md)                                                             | Product scope, audiences and phase boundaries                                |
+| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md)                         | Data flow, trust boundary and engineering tradeoffs                          |
+| [Threat model](docs/threat-model.md)                                                                 | What a visitor may try against the chatbot and public MCP, and what stops it |
+| [Repository structure](docs/repository-structure.md)                                                 | Target layout, allowed imports and worktree isolation                        |
+| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md)                                   | Canonical terms, entity relationships and access rules                       |
+| [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements                         |
+| [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations                                 |
+| [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries                           |
+| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback                                   |
+| [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)                                     | How to help, and how to report a vulnerability privately                     |
+| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                                           |
 
 ## License
 
