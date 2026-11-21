@@ -27,7 +27,9 @@ is what an answer that uses its tools needs. A candidate whose worst case fits t
 (`ExecutionLimits().max_cost_usd`, USD 0.02) runs with the default limits unchanged; otherwise its
 cost allowance is that worst case and every other limit stays the default. Retries are not added:
 a retry after an attempt of unknown usage may still stop as `limit_reached`, as it does under the
-defaults, and the summary counts those runs. These limits are internal to the evals
+defaults, and the summary counts those runs. Input is priced at the plain input rate: the agent
+requests no prompt caching (it sends no `cache_control`), so a cache-write premium would need a
+new derivation. These limits are internal to the evals
 (`ComparisonLimits`): the public request schema still refuses more than USD 0.02, and production
 and every ordinary run keep the defaults. A comparison whose reservation exceeds the owner's
 per-run limit (`PER_RUN_LIMIT_USD`) is refused with the slices that fit
