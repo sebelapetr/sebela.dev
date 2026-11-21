@@ -5,6 +5,9 @@ deterministically: it passes, is repaired by dropping sources that are not this 
 is replaced as a whole by the fixed insufficient-evidence response. Whenever the visitor should ask
 directly, the contact card is built from a trusted `get_contact` read, never from model text; if
 that read fails the result is `unavailable`, so a draft is never shown without its required card.
+The card is required for every honest unknown: an `insufficient_evidence` outcome, a replaced draft
+and a draft whose `unpublished` flag says its text states that an asked fact is not published, even
+when the model chose `answered`; the card never depends on the outcome choice alone.
 An answered draft carries the typed blocks of the experiences, services and explorations it cites,
 built from their evidence records; no other result carries blocks.
 """
@@ -27,6 +30,7 @@ async def finalize(execution: Execution, state: ChatState) -> ChatResult:
     verdict = state.get("verdict")
     draft = state.get("draft")
     action = "fixed"
+    unpublished: bool | None = None
     if stopped is not None:
         result = stopped_result(execution, stopped)
     elif verdict is not None and verdict.verdict == "BLOCK":
@@ -38,7 +42,15 @@ async def finalize(execution: Execution, state: ChatState) -> ChatResult:
         result = _fixed(execution, "refused", "declined", "out_of_scope")
     else:
         result, action = await _reviewed(execution, draft)
-    tracer.finish("stage.output", "ok", started, action=action, outcome=result.outcome)
+        unpublished = draft.unpublished
+    tracer.finish(
+        "stage.output",
+        "ok",
+        started,
+        action=action,
+        outcome=result.outcome,
+        unpublished=unpublished,
+    )
     return with_trace(execution, result)
 
 
@@ -67,7 +79,10 @@ async def _reviewed(execution: Execution, draft: Draft) -> tuple[ChatResult, str
         language = draft.language
         body = draft.text
         refs = verdict.refs
-        needs_contact = outcome == "insufficient_evidence" or draft.show_contact
+        # An honest unknown carries the card whichever outcome the model chose for it.
+        needs_contact = (
+            outcome == "insufficient_evidence" or draft.show_contact or draft.unpublished
+        )
     contact: ContactCard | None = None
     if needs_contact:
         contact = tools.contact_card()

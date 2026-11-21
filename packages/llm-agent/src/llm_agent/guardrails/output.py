@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_agent.schemas import ContactCard, Evidence, Language
 
-GUARD_VERSION: Final = "output-guard-3"
+GUARD_VERSION: Final = "output-guard-4"
 MAX_TEXT_CHARS: Final = 4000
 LEAK_MIN_LENGTH: Final = 40
 
@@ -41,6 +41,9 @@ class Draft(BaseModel):
     text: str = Field(max_length=MAX_TEXT_CHARS * 2)
     source_refs: list[str] = Field(max_length=16)
     show_contact: bool
+    #: The text says that something the visitor asked about is not in the published records.
+    #: Whatever the outcome, such a draft is shown with the trusted contact card.
+    unpublished: bool
 
 
 @dataclass(frozen=True)
