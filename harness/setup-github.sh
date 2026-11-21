@@ -30,3 +30,9 @@ gh api --method PUT "repos/$repo/branches/master/protection" --input - >/dev/nul
 }
 JSON
 echo "master protected: pull request with green CI required for everyone (admins too), no force-push, no deletion"
+
+# The release workflow opens the changelog pull request with its GITHUB_TOKEN
+# (docs/release-workflow.md, Changelog). Workflow tokens stay read-only unless a job asks for more.
+gh api --method PUT "repos/$repo/actions/permissions/workflow" \
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true >/dev/null
+echo "GitHub Actions may open pull requests (the changelog pull request); workflow tokens read-only by default"

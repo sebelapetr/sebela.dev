@@ -1,17 +1,30 @@
-// Release decisions around a deployment (docs/release-workflow.md, "Deployment" and "Versions"):
-// the input of the server's forced command, built from the verified tag set of the `images` job,
-// and the version and changelog of the GitHub release made after a healthy deployment. Plain Node
-// without dependencies; tested in deployment.test.mjs. The release workflow runs it as
+// Release decisions around a deployment (docs/release-workflow.md, "Deployment", "Versions" and
+// "Changelog"): the input of the server's forced command, built from the verified tag set of the
+// `images` job, the version and notes of the GitHub release made after a healthy deployment, and
+// CHANGELOG.md, whose sections are those notes. Plain Node without dependencies; tested in
+// deployment.test.mjs. The release workflow runs it as
 //
 //   SHA=<commit> TAGS='{"api":"<commit>",...}' node scripts/release/deployment.mjs input
 //   SHA=<commit> TAGS='{...}' NOTES_FILE=<path> node scripts/release/deployment.mjs notes
+//   VERSION=<tag> NOTES_FILE=<path> node scripts/release/deployment.mjs changelog-entry
+//
+// and the owner rebuilds the whole changelog from the version tags with
+//
+//   [RELEASES_FILE=<json>] node scripts/release/deployment.mjs changelog
+//
+// Every command reads GITHUB_REPOSITORY (owner/name, set by GitHub Actions) for its links.
 //
 // `input` prints the forced-command input, which names SHA as the release commit the server's
-// checkout is brought to. `notes` writes the release notes of the commits since
-// the last version tag merged into SHA to NOTES_FILE and prints `release=true` and
-// `version=<tag>` for $GITHUB_OUTPUT. When SHA already carries a version tag (a rerun of a
-// released commit), it writes no notes, prints `release=false` and `version=<that tag>` and says
-// so in the log and, when GITHUB_STEP_SUMMARY is set, in the step summary.
+// checkout is brought to. `notes` writes the release notes of the commits since the last version
+// tag merged into SHA to NOTES_FILE and prints `release=true` and `version=<tag>` for
+// $GITHUB_OUTPUT; the summary of a phase pull request among them is read with `gh` and left out
+// when GitHub cannot give it. When SHA already carries a version tag (a rerun of a released
+// commit), it writes no notes, prints `release=false` and `version=<that tag>` and says so in the
+// log and, when GITHUB_STEP_SUMMARY is set, in the step summary. `changelog-entry` adds the notes
+// in NOTES_FILE as the section of VERSION, dated today in UTC (or DATE), to CHANGELOG_FILE
+// (CHANGELOG.md by default). `changelog` writes CHANGELOG_FILE again from every version tag and
+// its commits; RELEASES_FILE may give, per version, what git does not know: `date`, the deployed
+// `tags` and a `note`.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -108,28 +121,186 @@ const GROUPS = [
   ["other", "Other changes"],
 ];
 
+/** Groups whose entries are listed by scope; the others list their entries in history order. */
+const BY_SCOPE = new Set(["feature", "fix"]);
+
+/** A phase pull request's merge header in Conventional form: `Phase 09: RAG knowledge base (#280)`. */
+const PHASE = /^Phase \d.*\(#(?<number>\d+)\)\s*$/;
+
+/** GitHub's default merge header of a phase pull request, whose head is a `phase/` branch. */
+const PHASE_MERGE = /^Merge pull request #(?<number>\d+) from [^/\s]+\/(?<branch>phase\/\S+)/;
+
 /**
- * The Markdown notes of a GitHub release: `commits` ({ sha, subject, body }) grouped into breaking
- * changes, features, fixes and other changes (empty groups left out, merge commits skipped), then
- * the deployed image of every service from `tags`.
+ * The phase pull request a commit merges, { number, title }, or null: a `Phase NN: Title (#N)`
+ * header, or GitHub's default merge header from a `phase/` branch, titled by the first line of its
+ * message body (the pull request's title) or else by its branch.
  */
-export function releaseNotes({ commits, tags }) {
-  const entries = commits
+function phaseMerge({ subject, body }) {
+  const named = PHASE.exec(subject);
+  if (named?.groups) {
+    return {
+      number: Number(named.groups.number),
+      title: subject.replace(/\s*\(#\d+\)\s*$/, ""),
+    };
+  }
+  const merged = PHASE_MERGE.exec(subject);
+  if (merged?.groups) {
+    const title = (body ?? "").split("\n")[0]?.trim();
+    return { number: Number(merged.groups.number), title: title || merged.groups.branch };
+  }
+  return null;
+}
+
+/** The numbers of the phase pull requests among `commits`, in history order. */
+export function phasePullRequests(commits) {
+  return commits
+    .map(phaseMerge)
+    .filter(Boolean)
+    .map(({ number }) => number);
+}
+
+const GENERATED = /Generated with \[Claude Code\]|claude\.ai\/code\/session_/;
+
+/**
+ * The summary of a phase pull request from its `body`: the first paragraph of prose in its
+ * `## Summary` (or `## Highlights`) section, on one line, skipping lists, tables, quotes and the
+ * generated-by line. Null without such a section or paragraph: the rest of a phase pull request's
+ * description (its issues, what remains for the owner) is no summary of what the phase brings.
+ */
+export function phaseSummary(body) {
+  if (typeof body !== "string") return null;
+  const text = body.replace(/<!--[\s\S]*?-->/g, "").replace(/\r\n/g, "\n");
+  const section = /^##\s+(?:summary|highlights)\s*$/im.exec(text);
+  if (!section) return null;
+  const rest = text.slice(section.index + section[0].length);
+  const end = rest.search(/^#{1,2}\s/m);
+  const found = (end === -1 ? rest : rest.slice(0, end))
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .find(
+      (paragraph) =>
+        paragraph !== "" &&
+        !/^(#|[-*+] |\d+\. |\||>|```)/.test(paragraph) &&
+        !GENERATED.test(paragraph),
+    );
+  return found ? found.replace(/\s+/g, " ") : null;
+}
+
+/**
+ * The Markdown notes of release `version` (its GitHub release body and its CHANGELOG.md section):
+ * a `note` when one is given; Highlights naming each phase pull request among `commits` ({ sha,
+ * subject, body }) with the summary of its body in `phases` (pull request number to body; the
+ * phase alone when it has none); the commits as breaking changes, features and fixes (both by
+ * scope) and other changes, empty groups left out and merge commits skipped; pull request numbers
+ * and commits without one linked in `repository` (`owner/name`); the comparison with `previous`
+ * (or the history of a first release); then the deployed image of every service from `tags`, left
+ * out when `tags` is null. A release without new commits says so in one line instead.
+ */
+export function releaseNotes({ commits, tags, version, previous, repository, phases = {}, note }) {
+  const github = `https://github.com/${repository}`;
+  const pull = (text) =>
+    text.replace(/\(#(\d+)\)/g, (_, number) => `([#${number}](${github}/pull/${number}))`);
+  const entry = ({ sha, description }) =>
+    /\(#\d+\)/.test(description)
+      ? pull(description)
+      : `${description} ([${sha.slice(0, 7)}](${github}/commit/${sha}))`;
+  const changes = commits
     .filter((commit) => !isMerge(commit))
+    .filter((commit) => !phaseMerge(commit))
     .map((c) => ({ ...c, ...classify(c) }));
   const sections = [];
-  for (const [kind, heading] of GROUPS) {
-    const lines = entries
-      .filter((entry) => entry.kind === kind)
-      .map(({ sha, scope, description }) => {
-        const prefix = scope ? `**${scope}:** ` : "";
-        return `- ${prefix}${description} (${sha.slice(0, 7)})`;
-      });
-    if (lines.length > 0) sections.push(`## ${heading}\n\n${lines.join("\n")}`);
+  if (note) sections.push(note.trim());
+  const highlights = commits
+    .map(phaseMerge)
+    .filter(Boolean)
+    .map(({ number, title }) => {
+      const summary = phaseSummary(phases[number]);
+      const name = `**${title}** ([#${number}](${github}/pull/${number}))`;
+      return summary ? `${name}: ${summary}` : `${name}.`;
+    });
+  if (highlights.length > 0) sections.push(`### Highlights\n\n${highlights.join("\n\n")}`);
+  if (changes.length === 0 && highlights.length === 0) {
+    sections.push(
+      previous
+        ? `No changes since ${previous}; re-release of the same commit.`
+        : "No changes in this release.",
+    );
+  } else {
+    for (const [kind, heading] of GROUPS) {
+      const group = changes.filter((change) => change.kind === kind);
+      if (group.length === 0) continue;
+      const lines = [];
+      if (BY_SCOPE.has(kind)) {
+        const scopes = [...new Set(group.map(({ scope }) => scope).filter(Boolean))].sort();
+        for (const scope of scopes) {
+          lines.push(`- **${scope}**`);
+          for (const change of group.filter((c) => c.scope === scope)) {
+            lines.push(`  - ${entry(change)}`);
+          }
+        }
+        for (const change of group.filter((c) => !c.scope)) lines.push(`- ${entry(change)}`);
+      } else {
+        for (const change of group) {
+          const prefix = change.scope ? `**${change.scope}:** ` : "";
+          lines.push(`- ${prefix}${entry(change)}`);
+        }
+      }
+      sections.push(`### ${heading}\n\n${lines.join("\n")}`);
+    }
+    sections.push(
+      previous
+        ? `**Full Changelog**: [${previous}...${version}](${github}/compare/${previous}...${version})`
+        : `**Full Changelog**: [${version}](${github}/commits/${version})`,
+    );
   }
-  const images = SERVICES.map((service) => `- \`${imageName(service)}:${tags[service]}\``);
-  sections.push(`## Images\n\n${images.join("\n")}`);
+  if (tags) {
+    const images = SERVICES.map((service) => `- \`${imageName(service)}:${tags[service]}\``);
+    sections.push(`### Images\n\n${images.join("\n")}`);
+  }
   return `${sections.join("\n\n")}\n`;
+}
+
+const CHANGELOG_HEADER = `# Changelog
+
+All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). Each section is the notes of its GitHub release, written by the release workflow after a healthy deployment; there is no Unreleased section, because every merge into master is deployed.
+`;
+
+const releaseLink = (version, repository) =>
+  `[${version}]: https://github.com/${repository}/releases/tag/${version}`;
+
+/**
+ * `changelog` (the text of CHANGELOG.md, or "" for a new one) with the section of release
+ * `version` from `date` (YYYY-MM-DD) added as the newest: the heading `## [version] - date`
+ * followed by exactly its release `notes`, and the heading's link to the GitHub release added as
+ * the first of the links at the end. Throws when the changelog already has the version.
+ */
+export function addToChangelog(changelog, { version, date, notes, repository }) {
+  if (!VERSION.test(version ?? "")) throw new Error(`Not a vX.Y.Z version: ${String(version)}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) throw new Error(`Not a date: ${String(date)}`);
+  const text = changelog.trim() === "" ? CHANGELOG_HEADER : changelog;
+  if (text.includes(`\n## [${version}] `)) {
+    throw new Error(`The changelog already has ${version}.`);
+  }
+  const section = `## [${version}] - ${date}\n\n${notes.endsWith("\n") ? notes : `${notes}\n`}`;
+  const link = releaseLink(version, repository);
+  const lines = text.split("\n");
+  const firstSection = lines.findIndex((line) => line.startsWith("## ["));
+  const firstLink = lines.findIndex((line) => /^\[v\d+\.\d+\.\d+\]: /.test(line));
+  if (firstSection === -1) {
+    return `${text.trimEnd()}\n\n${section}\n${link}\n`;
+  }
+  const head = lines.slice(0, firstSection).join("\n").trimEnd();
+  const body = lines.slice(firstSection, firstLink === -1 ? undefined : firstLink).join("\n");
+  const links = firstLink === -1 ? [] : lines.slice(firstLink).filter(Boolean);
+  return `${head}\n\n${section}\n${body.trimEnd()}\n\n${[link, ...links].join("\n")}\n`;
+}
+
+/** CHANGELOG.md for `releases` ({ version, date, notes }, oldest first): each added in turn. */
+export function changelogDocument({ releases, repository }) {
+  return releases.reduce(
+    (changelog, release) => addToChangelog(changelog, { ...release, repository }),
+    "",
+  );
 }
 
 // --- Command line ------------------------------------------------------------------------------
@@ -146,11 +317,55 @@ function inputCommand() {
   process.stdout.write(`${deployInput(tagsFromEnvironment(), process.env.SHA)}\n`);
 }
 
+/** The commits of `range` (`<from>..<to>` or one commit and its history), newest first. */
+function commitsOf(range) {
+  return git(["log", "--format=%H%x1f%s%x1f%b%x1e", range])
+    .split("\x1e")
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map((record) => {
+      const [hash, subject, body] = record.split("\x1f");
+      return { sha: hash ?? "", subject: subject ?? "", body: body ?? "" };
+    });
+}
+
+/** The repository the links point to: GITHUB_REPOSITORY, which GitHub Actions sets. */
+function repositoryFromEnvironment() {
+  const repository = process.env.GITHUB_REPOSITORY ?? "";
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) {
+    throw new Error("Set GITHUB_REPOSITORY to the repository (owner/name).");
+  }
+  return repository;
+}
+
+/**
+ * The bodies of the phase pull requests among `commits`, read with `gh`. A body GitHub cannot
+ * give (no `gh`, no token, no network) is left out, so its phase is named without a summary.
+ */
+function phaseBodies(commits, repository) {
+  const bodies = {};
+  for (const number of phasePullRequests(commits)) {
+    try {
+      bodies[number] = execFileSync(
+        "gh",
+        ["pr", "view", String(number), "--repo", repository, "--json", "body", "--jq", ".body"],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      );
+    } catch {
+      process.stderr.write(
+        `The body of pull request #${number} is unavailable; its phase is named without a summary.\n`,
+      );
+    }
+  }
+  return bodies;
+}
+
 function notesCommand() {
   const sha = process.env.SHA ?? "";
   const notesFile = process.env.NOTES_FILE ?? "";
   if (!COMMIT.test(sha)) throw new Error("Set SHA to the release commit.");
   if (!notesFile) throw new Error("Set NOTES_FILE to where the notes go.");
+  const repository = repositoryFromEnvironment();
   const tags = tagsFromEnvironment();
   deployInput(tags, sha);
   const released = releasedVersion(git(["tag", "--list", "v*", "--points-at", sha]).split("\n"));
@@ -166,25 +381,82 @@ function notesCommand() {
     git(["tag", "--list", "v*", "--merged", sha, "--sort=-v:refname"])
       .split("\n")
       .find((tag) => VERSION.test(tag)) ?? null;
-  const range = previous ? `${previous}..${sha}` : sha;
-  const commits = git(["log", "--format=%H%x1f%s%x1f%b%x1e", range])
-    .split("\x1e")
-    .map((record) => record.trim())
-    .filter(Boolean)
-    .map((record) => {
-      const [hash, subject, body] = record.split("\x1f");
-      return { sha: hash ?? "", subject: subject ?? "", body: body ?? "" };
-    });
-  fs.writeFileSync(notesFile, releaseNotes({ commits, tags }));
-  process.stdout.write(`release=true\nversion=${nextVersion(previous, commits)}\n`);
+  const commits = commitsOf(previous ? `${previous}..${sha}` : sha);
+  const version = nextVersion(previous, commits);
+  const phases = phaseBodies(commits, repository);
+  fs.writeFileSync(
+    notesFile,
+    releaseNotes({ commits, tags, version, previous, repository, phases }),
+  );
+  process.stdout.write(`release=true\nversion=${version}\n`);
 }
 
-const COMMANDS = { input: inputCommand, notes: notesCommand };
+const today = () => process.env.DATE || new Date().toISOString().slice(0, 10);
+
+function changelogEntryCommand() {
+  const version = process.env.VERSION ?? "";
+  const notesFile = process.env.NOTES_FILE ?? "";
+  const changelogFile = process.env.CHANGELOG_FILE || "CHANGELOG.md";
+  if (!notesFile) throw new Error("Set NOTES_FILE to the release notes.");
+  const repository = repositoryFromEnvironment();
+  const changelog = fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : "";
+  const notes = fs.readFileSync(notesFile, "utf8");
+  fs.writeFileSync(
+    changelogFile,
+    addToChangelog(changelog, { version, date: today(), notes, repository }),
+  );
+}
+
+/** The version tags of the repository, oldest first. */
+function versionTags() {
+  return git(["tag", "--list", "v*", "--sort=v:refname"])
+    .split("\n")
+    .filter((tag) => VERSION.test(tag));
+}
+
+function changelogCommand() {
+  const repository = repositoryFromEnvironment();
+  const changelogFile = process.env.CHANGELOG_FILE || "CHANGELOG.md";
+  const releasesFile = process.env.RELEASES_FILE ?? "";
+  const known = releasesFile ? JSON.parse(fs.readFileSync(releasesFile, "utf8")) : {};
+  const releases = [];
+  let previous = null;
+  for (const version of versionTags()) {
+    const { date, tags = null, note } = known[version] ?? {};
+    const commits = commitsOf(previous ? `${previous}..${version}` : version);
+    releases.push({
+      version,
+      date:
+        date ??
+        new Date(git(["log", "-1", "--format=%cI", version]).trim()).toISOString().slice(0, 10),
+      notes: releaseNotes({
+        commits,
+        tags,
+        version,
+        previous,
+        repository,
+        phases: phaseBodies(commits, repository),
+        note,
+      }),
+    });
+    previous = version;
+  }
+  fs.writeFileSync(changelogFile, changelogDocument({ releases, repository }));
+}
+
+const COMMANDS = {
+  input: inputCommand,
+  notes: notesCommand,
+  "changelog-entry": changelogEntryCommand,
+  changelog: changelogCommand,
+};
 
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   const command = COMMANDS[process.argv[2] ?? ""];
   if (!command) {
-    process.stderr.write("usage: node scripts/release/deployment.mjs input|notes\n");
+    process.stderr.write(
+      `usage: node scripts/release/deployment.mjs ${Object.keys(COMMANDS).join("|")}\n`,
+    );
     process.exitCode = 2;
   } else {
     try {
