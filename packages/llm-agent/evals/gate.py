@@ -14,6 +14,7 @@ needs the owner.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -173,3 +174,15 @@ def evaluate_gate(
         selected=selected_ids,
         pending=pending_ids,
     )
+
+
+def latency_percentiles(latencies: Sequence[object]) -> dict[str, int | None]:
+    """Nearest-rank p50 and p95 of the case-runs that measured a latency, in milliseconds."""
+    measured = sorted(value for value in latencies if isinstance(value, int))
+    if not measured:
+        return {"runs": 0, "p50": None, "p95": None}
+
+    def rank(quantile: float) -> int:
+        return measured[max(math.ceil(quantile * len(measured)) - 1, 0)]
+
+    return {"runs": len(measured), "p50": rank(0.50), "p95": rank(0.95)}

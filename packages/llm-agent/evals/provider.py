@@ -9,8 +9,8 @@ The model key reaches the provider only through the environment of the Promptfoo
 (`evals/run.py`); it is never a test variable, a prompt or part of the record.
 
 In a Main-model comparison the runner names the candidate in `LLM_AGENT_EVAL_MAIN`; the provider
-makes it the Main stage before the agent runs (`evals/comparison.py`). Without it the pinned stages
-stay.
+makes it the Main stage before the agent runs and passes the candidate's comparison-only execution
+limits (`evals/comparison.py`). Without it the pinned stages and the agent's default limits stay.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]
     from llm_agent import ApiContentReader, ChatAgent, anthropic_model_factory
 
     try:
-        comparison.apply_from_environment(os.environ)
+        limits = comparison.apply_from_environment(os.environ)
     except ValueError as error:
         return {"error": str(error)}
     case_id = str(context.get("vars", {}).get("case_id", ""))
@@ -65,7 +65,7 @@ async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]
     started = time.monotonic()
     async with ApiContentReader(os.environ["LLM_AGENT_API_URL"]) as content:
         agent = ChatAgent(content=content, models=anthropic_model_factory())
-        result = await agent.run(chat_request(case))
+        result = await agent.run(chat_request(case), limits=limits)
     record = {
         "record_schema": RECORD_SCHEMA,
         "case_id": case.id,

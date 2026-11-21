@@ -5,6 +5,7 @@ Fakes only: no model, no key, no API. The paid comparison itself is run by the o
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -147,7 +148,16 @@ def test_compare_runs_exactly_the_subset_with_the_named_candidate() -> None:
             "Q02-en is not in the comparison subset",
         ),
         (
-            ["--compare", "haiku-medium", "--case", "S01-en", "--case", "S01-en", "--allowance", "1"],
+            [
+                "--compare",
+                "haiku-medium",
+                "--case",
+                "S01-en",
+                "--case",
+                "S01-en",
+                "--allowance",
+                "1",
+            ],
             "S01-en named twice",
         ),
         (["--compare", "haiku-medium", "--all", "--allowance", "1"], "--compare runs the fixed"),
@@ -348,8 +358,6 @@ def test_the_report_option_reads_comparison_folders_for_free() -> None:
         run.plan(["--compare-report"])
     with pytest.raises(run.UsageError, match="--compare-report takes no other option"):
         run.plan(["--compare-report", "a", "--allowance", "1"])
-
-
 
 
 def test_compare_may_run_a_slice_of_the_subset_named_with_case() -> None:
@@ -635,7 +643,8 @@ def fake_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
             {"vars": {"case_id": item["case_id"]}, "response": {"output": json.dumps(item)}}
             for item in seen["records"]
         ]
-        output.write_text(json.dumps({"results": {"results": results}}), encoding="utf-8")
+        text = json.dumps({"results": {"results": results}})
+        await asyncio.to_thread(output.write_text, text, encoding="utf-8")
 
     monkeypatch.setattr(run, "start_api", api)
     monkeypatch.setattr(run, "read_person", person)
