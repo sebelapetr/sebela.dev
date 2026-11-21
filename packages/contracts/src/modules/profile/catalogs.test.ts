@@ -27,13 +27,13 @@ const core = {
 };
 
 describe("SlugParamsSchema", () => {
-  it.each(["paldock", "next-js", "a1", "rag"])("accepts the slug %s", (slug) => {
+  it.each(["northwind-freight", "next-js", "a1", "rag"])("accepts the slug %s", (slug) => {
     expect(SlugParamsSchema.parse({ slug })).toEqual({ slug });
   });
 
   it.each([
     ["an empty slug", ""],
-    ["upper case", "Paldock"],
+    ["upper case", "Northwind-Freight"],
     ["a space", "next js"],
     ["a leading hyphen", "-rag"],
     ["a trailing hyphen", "rag-"],

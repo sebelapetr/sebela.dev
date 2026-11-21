@@ -17,7 +17,7 @@ T = TypeVar("T", bound="RoadmapResourceCreate")
 class RoadmapResourceCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         module (str): The slug of an existing module.
         name (str):
         type_ (RoadmapResourceCreateType):

@@ -14,7 +14,7 @@ T = TypeVar("T", bound="RoadmapModuleCreate")
 class RoadmapModuleCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         area (str): The slug of an existing area.
         name (str):
         position (int): Ascending order among its siblings; ties are ordered by slug.

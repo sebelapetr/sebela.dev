@@ -16,7 +16,7 @@ T = TypeVar("T", bound="LearningTimeArea")
 class LearningTimeArea:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         total_seconds (int): Study time: resource and book time together, never event attendance.
         resource_seconds (int): Time logged on resources whose type is not `book`.

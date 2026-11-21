@@ -23,7 +23,7 @@ class CvExploration:
 
         Attributes:
             id (UUID):
-            slug (str): The stable, unique address of the record, for example `paldock`.
+            slug (str): The stable, unique address of the record, for example `northwind-freight`.
             name (str):
             summary (str): Markdown.
             status (CvExplorationStatus): How far the exploration got: `built` (it exists and runs), `tested` (it was tried

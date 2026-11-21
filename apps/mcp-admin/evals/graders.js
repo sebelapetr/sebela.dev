@@ -1205,7 +1205,7 @@ function describedNames(description) {
     }
     const values = [...(Array.isArray(node["enum"]) ? node["enum"] : []), node["const"]];
     for (const value of values) if (typeof value === "string") names.add(value);
-    // An example the contract quotes itself, such as "for example `paldock`", is not a guess.
+    // An example the contract quotes itself, such as "for example `northwind`", is not a guess.
     const text = node["description"];
     if (typeof text === "string") {
       for (const match of text.matchAll(QUOTED_IDENTIFIER)) if (match[1]) names.add(match[1]);

@@ -17,7 +17,9 @@ export const key = (description: string) =>
   });
 
 /** The stable, unique address of a record; set when it is created and never changed. */
-export const SlugSchema = key("The stable, unique address of the record, for example `paldock`.");
+export const SlugSchema = key(
+  "The stable, unique address of the record, for example `northwind-freight`.",
+);
 
 /**
  * A reference to uploaded media by its identifier; `null` means none is attached. The media must

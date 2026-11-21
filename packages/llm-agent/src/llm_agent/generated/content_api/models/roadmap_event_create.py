@@ -16,7 +16,7 @@ T = TypeVar("T", bound="RoadmapEventCreate")
 class RoadmapEventCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         kind (RoadmapEventCreateKind):
         starts_on (datetime.date): The first day of the event, `YYYY-MM-DD` in Europe/Prague, inclusive.

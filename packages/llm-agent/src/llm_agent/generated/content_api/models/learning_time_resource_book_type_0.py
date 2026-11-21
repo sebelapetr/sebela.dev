@@ -12,7 +12,7 @@ T = TypeVar("T", bound="LearningTimeResourceBookType0")
 class LearningTimeResourceBookType0:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         title (str):
     """
 

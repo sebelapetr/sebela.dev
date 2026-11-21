@@ -22,7 +22,7 @@ class RoadmapTreeResource:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         description (None | str): Markdown; `null` when there is none.
         type_ (RoadmapTreeResourceType):

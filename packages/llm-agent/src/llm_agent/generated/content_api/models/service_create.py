@@ -22,7 +22,7 @@ T = TypeVar("T", bound="ServiceCreate")
 class ServiceCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         summary (str): Markdown.
         audience (str): Who the service is for. Markdown.
