@@ -25,6 +25,12 @@ function clientAnswering(answer: (request: Request) => Response | Promise<Respon
   return { client, requests };
 }
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("checkHealth", () => {
   it("reports the API and the database healthy when the API is ready", async () => {
     const { client, requests } = clientAnswering(() => json({ status: "ready" }));
@@ -78,7 +84,9 @@ describe("checkHealth", () => {
     const { client } = clientAnswering(
       (request) =>
         new Promise<Response>((_resolve, reject) => {
+          hanging.add(request);
           request.signal.addEventListener("abort", () => {
+            hanging.delete(request);
             reject(request.signal.reason as Error);
           });
         }),

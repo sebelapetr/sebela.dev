@@ -323,9 +323,7 @@ test.describe("the assembled AI Roadmap", () => {
   }) => {
     const response = await page.goto(`${website.url}${guide}`);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(
-      `How to Read Effectively — Bookshelf — AI Engineering Roadmap — ${name}`,
-    );
+    await expect(page).toHaveTitle(`How to Read Effectively · Bookshelf · ${name}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("How to Read Effectively");
     await expect(subNavigation(page).locator('[aria-current="page"]')).toHaveText("Bookshelf");
     await expect(
@@ -451,7 +449,8 @@ test.describe("the assembled AI Roadmap", () => {
   }) => {
     for (const { path, names } of pages) {
       await page.goto(`${website.url}${path}`);
-      const title = [...names].reverse().join(" — ") + ` — ${name}`;
+      // The page, its nearest parent and the person, as the short title pattern names them.
+      const title = [...[...names].reverse().slice(0, 2), name].join(" · ");
       await expect(page, path).toHaveTitle(title);
       const canonical = `${SITE}${path}`;
       await expect(page.locator('link[rel="canonical"]'), path).toHaveAttribute("href", canonical);

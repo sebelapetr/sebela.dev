@@ -19,3 +19,5 @@ coverage/
 !.claude/agent-memory-local/README.md
 playwright-report/
 test-results/
+.venv/
+__pycache__/

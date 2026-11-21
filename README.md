@@ -9,6 +9,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 [![Latest release](https://img.shields.io/github/v/release/sebelapetr/sebela.dev?style=flat-square&label=release)](https://github.com/sebelapetr/sebela.dev/releases)
 [![Live: sebela.dev](https://img.shields.io/badge/live-sebela.dev-525252?style=flat-square)](https://sebela.dev)
 [![CI](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/sebelapetr/sebela.dev/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsebelapetr.github.io%2Fsebela.dev%2Fcoverage.json&style=flat-square)](docs/testing.md#coverage)
 [![Deploy](https://img.shields.io/github/actions/workflow/status/sebelapetr/sebela.dev/release.yml?branch=master&style=flat-square&label=deploy)](https://github.com/sebelapetr/sebela.dev/actions/workflows/release.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/sebelapetr/sebela.dev/badge)](https://scorecard.dev/viewer/?uri=github.com/sebelapetr/sebela.dev)
 [![Images: GHCR](https://img.shields.io/badge/images-GHCR-525252?style=flat-square)](https://github.com/sebelapetr/sebela.dev/packages)
@@ -23,7 +24,7 @@ The open-source engineering behind Petr Šebela's next professional website.
 </div>
 
 > [!NOTE]
-> **Live at [sebela.dev](https://sebela.dev) with the fictional demo content.** A merge into `master` that changes a service deploys automatically, and each healthy deployment is published as a GitHub release; the site stays `noindex` until the launch with real content. The website serves the profile, CV and AI Engineering Roadmap from the content API, and the owner maintains that content through MCP Admin. A private knowledge base indexes portfolio content and approved documents behind an authenticated search route. Visitors can try prepared answers on the Ask page. The Python library for model-generated answers (phase 06) is in acceptance. [Phase 06 specification](.plan/06-llm-agent/prd.md)
+> **Live at [sebela.dev](https://sebela.dev) with the fictional demo content.** A merge into `master` that changes a service deploys automatically, and each healthy deployment is published as a GitHub release; the site stays `noindex` until the launch with real content. The website serves the profile, CV and AI Engineering Roadmap from the content API, and the owner maintains that content through MCP Admin. A private knowledge base indexes portfolio content and approved documents behind an authenticated search route. Visitors can try prepared answers on the Ask page. The Python library for model-generated answers (phase 06) is in acceptance. [Phase 06 specification](.plan/done/06-llm-agent/prd.md)
 
 <details>
 <summary><strong>For the owner: replace the preview image</strong></summary>
@@ -114,7 +115,7 @@ The browser reaches the assistant through the website and API. The API owns conv
 
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
-The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/06-llm-agent/prd.md)
+The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/done/06-llm-agent/prd.md)
 
 ### Two servers, two responsibilities
 
@@ -134,7 +135,7 @@ Portfolio API content and owner-approved extra documents are chunked, embedded a
 
 ## Roadmap
 
-Phases 00–05, 09 and 10 have merged into `master`, and the site is deployed at [sebela.dev](https://sebela.dev) with the fictional demo content. Phase 06 is implemented and in acceptance. Phases 07, 08, 09.1 and 09.2 are next; the public launch with real content is the last step of phase 09.1. [Phase 06 issues](.plan/06-llm-agent/issues.md)
+Phases 00–05, 09 and 10 have merged into `master`, and the site is deployed at [sebela.dev](https://sebela.dev) with the fictional demo content. Phase 06 is implemented and in acceptance. Phases 07, 08, 09.1 and 09.2 are next; the public launch with real content is the last step of phase 09.1. [Phase 06 issues](.plan/done/06-llm-agent/issues.md)
 
 | Phase                       | Deliverable                                                                        | Specification                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -145,7 +146,7 @@ Phases 00–05, 09 and 10 have merged into `master`, and the site is deployed at
 | **03 · Website**            | Presentation pages, CV, design system and a chat UI backed by prepared answers     | [Website](.plan/done/03-web/prd.md)                                                |
 | **04 · AI Roadmap**         | Learning domain, diary, books, events and roadmap pages                            | [AI Roadmap](.plan/done/04-ai-roadmap/prd.md)                                      |
 | **05 · Admin MCP**          | Secured content-management tools and content skills                                | [Admin MCP](.plan/done/05-mcp-admin/prd.md)                                        |
-| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                         | [LLM agent](.plan/06-llm-agent/prd.md)                                             |
+| **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                         | [LLM agent](.plan/done/06-llm-agent/prd.md)                                        |
 | **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                         | [AI service](.plan/07-ai-service/prd.md)                                           |
 | **07.1 · Jev gateway**      | A measured Jev classifier for the Security Gateway behind a switchable adapter     | [Jev gateway](.plan/07.1-jev-gateway/prd.md)                                       |
 | **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                        | [Public MCP](.plan/08-mcp-public/prd.md)                                           |

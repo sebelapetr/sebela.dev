@@ -193,6 +193,12 @@ function routes(overrides: Record<string, Route> = {}): Record<string, Route> {
   };
 }
 
+/**
+ * Requests the API never answers, held here: otherwise nothing but their own abort listeners
+ * reaches them, and garbage collection may drop them before their deadline aborts them.
+ */
+const hanging = new Set<Request>();
+
 describe("loadAsk", () => {
   it("returns the name and the public records the chat's answers rest on, in the API's order", async () => {
     const { client } = clientWith(routes());
@@ -289,7 +295,9 @@ describe("loadAsk", () => {
   it("gives up on an API that does not answer in time", async () => {
     const hang: Route = (request) =>
       new Promise<Response>((_resolve, reject) => {
+        hanging.add(request);
         request.signal.addEventListener("abort", () => {
+          hanging.delete(request);
           reject(request.signal.reason as Error);
         });
       });

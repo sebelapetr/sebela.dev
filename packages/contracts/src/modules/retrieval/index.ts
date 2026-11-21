@@ -166,7 +166,9 @@ export const SearchResultSchema = z
       status: z.literal("found"),
       passages: z.array(PassageSchema).min(1).max(retrievalMaxPassages),
     }),
-    z.strictObject({ status: z.literal("no_evidence"), passages: z.tuple([]) }),
+    // An empty list as an array of no passages, not an empty tuple: the tuple would publish
+    // `items: false`, which the generated Python content client cannot read.
+    z.strictObject({ status: z.literal("no_evidence"), passages: z.array(PassageSchema).max(0) }),
   ])
   .meta({
     id: "SearchResult",

@@ -3471,8 +3471,7 @@ export interface components {
         } | {
             /** @constant */
             status: "no_evidence";
-            passages: [
-            ];
+            passages: components["schemas"]["Passage"][];
         };
         Passage: components["schemas"]["PortfolioPassage"] | components["schemas"]["SupplementalPassage"];
         /** @description A passage of a public portfolio record. */

@@ -29,6 +29,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 - Phase 0 (planning, docs, agent configuration and the harness) has no issues. It is done directly on `phase/00-overview` and reaches `master` through the same kind of phase pull request, after the trial has passed.
 - The trial is the one phase whose base is not `master`: `phase/00-trial` is cut from `phase/00-overview`, and its phase pull request targets that branch and is closed without merging.
 - Other work without an issue uses `<type>/<short-slug>`, for example `docs/fix-testing-guide`, and targets `master` through a pull request the owner merges.
+- A number at the start of a slug means an issue number only on a branch cut from a phase branch. The worktree script continues an interrupted issue by that number ([repository structure](repository-structure.md#ports-and-worktree-isolation)); it never reads a phase branch, a branch cut from `master`, a name that starts with a phase folder (`docs/15-pages-prd`) or a zero-padded number that way.
 
 ### Why a phase branch
 
@@ -38,6 +39,9 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 
 - Every issue branch is worked on in its own worktree under `.worktrees/`, created and removed with the scripts described in `docs/repository-structure.md`.
 - App and package code is never edited in the main checkout. Planning files, docs and agent configuration may be.
+- The main checkout may be behind `origin/master`. Run `git fetch origin`, then analyse and branch from `origin/<base>`, not from the files of the local checkout.
+- The harness has 9 slots (`MAX_SLOTS`, `harness/lib/slots.mjs`), often all taken. A change that needs no database (documentation, CI, scripts) may use a plain worktree in an interactive session instead of a slot: `git worktree add .worktrees/<folder> -b <branch> origin/<base>`, never under `/tmp`. Name the folder as the harness would (`worktreeDirName`: slashes become `-`), or a later `worktree.mjs create` for that branch fails; plain worktrees do not show in `worktree.mjs list`. Run `pnpm install --frozen-lockfile` in it (the commit hook needs the tools) and never link `node_modules` from another checkout. Remove it with `git worktree remove` at the end of the session, and keep the branch. Anything that runs tests against a database uses a slot (`node harness/worktree.mjs create`); the phase loop always uses slots.
+- **Cleanup after a merge.** The squash merge of an issue pull request deletes its remote branch (`--delete-branch`); the orchestrator removes its own issue worktree, storage folder, database and local branch, and the docs-keeper's worktree, at their documented steps (`.claude/agents/orchestrator.md`, steps 10 and 11). Everything else (other worktrees, branches, databases, another session's plain worktree) is removed only on the owner's instruction.
 
 ## Commits
 
@@ -58,6 +62,7 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 - **What is checked is what is committed.** A file whose working copy equals its staged content is formatted in place and staged again. A partially staged file is formatted from its staged content directly into the index; its working copy, with the unstaged edits, stays exactly as it was. Lint reads the staged content too. Other unstaged and untracked files are never touched.
 - **Paths are data.** File names go to Git separated by NUL bytes and to the tools after `--` or as an option value, never through a shell or as a pattern, so spaces, brackets, a leading dash or non-ASCII characters are safe.
 - **Fast by design.** The hooks do not run the typecheck or the tests; the [handoff checks](permissions.md#handoff-checks) and CI do. Without installed tools in the checkout the commit stops and names `pnpm install --frozen-lockfile`.
+- **CI checks the formatting too.** A commit made without the hooks, or a file changed in the GitHub web editor, can skip `pre-commit`, so `pnpm check:format` (`scripts/checks/formatting.mjs`, part of `pnpm lint` and `pnpm ci:root`) runs Prettier in check mode over the same files: the working copy of every tracked regular file, with the checkout's configuration, `.prettierignore` (the lockfile, the generated migrations and API client, archived plans under `.plan/done/` and `CHANGELOG.md`) and `.gitignore`, skipping file types Prettier does not support. It changes nothing; a file it names is formatted with `pnpm exec prettier --write -- <file>` and committed.
 - **No takeover.** If `core.hooksPath` already points elsewhere, the installer keeps it and says so. The one exception is the harness's own former path, `scripts/harness/git-hooks` (before [decision 0013](decisions/0013-harness-at-the-top-level.md)), which it moves to the current one. The phase loop does not change repository settings, so under `SEBELA_UNATTENDED=1` the installer only reports; the owner's one `pnpm install` in the main checkout enables the hooks for every worktree.
 - A failing hook is fixed, not bypassed: do not commit with `--no-verify`.
 
@@ -111,7 +116,7 @@ Orchestrated by: <agent>
 ## Phase pull request
 
 - Opened by the orchestrator from the phase branch to `master` **as a draft** when no ready issue of the phase remains; HITL issues may still be open.
-- When the phase is complete, the owner marks it **ready for review**. That runs the model evals of the affected suites once on the final state (`docs/testing.md`, Evals-driven development); a draft runs none.
+- When the phase is complete, the owner marks it **ready for review**. That runs the model evals of the affected suites once on the final state (`docs/testing.md`, Evals-driven development); a draft runs none. Only a phase pull request starts paid evals by itself: any other pull request into `master` starts none, and a change that really needs a suite gets a manual, charged run of the `Model evals` workflow (`docs/testing.md`, CI).
 - It also moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, so merging the phase into `master` archives its PRD and issue overview. The orchestrator does this once, on a short-lived branch merged into the phase branch, when it first opens the pull request; a phase already in `.plan/done/` is left there.
 - The description starts with a `## Summary` section whose first paragraph says in plain words what the phase brings to the site; the release that deploys the phase quotes it as its highlight (`docs/release-workflow.md`, Versions). It then lists the issues of the phase with their pull requests, and anything skipped or failed.
 - The owner reviews the phase as a whole and is the only one who merges it. It is merged with a **merge commit**, so `master` keeps one commit per issue plus one commit marking the phase.
@@ -120,6 +125,24 @@ Orchestrated by: <agent>
 ## Changelog pull request
 
 After every deployment that publishes a new version, the release workflow opens `chore(release): changelog for vX.Y.Z` from `changelog/vX.Y.Z` into `master`: it adds that version's release notes to `CHANGELOG.md` and nothing else (`docs/release-workflow.md`, Changelog). It is part of the normal flow after each release: the owner merges it with a squash merge once its checks are green, oldest version first when several are open. Merging it releases nothing. Nobody else edits `CHANGELOG.md` by hand.
+
+## Dependency pull requests
+
+Dependabot (`.github/dependabot.yml`) opens pull requests into `master` that update dependencies and nothing else. Their commit header, which is also the title and so the squash commit, passes the commit-message check.
+
+| Entry                | What it updates                                                                                                     | When    | Pull requests (open at most)                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `github-actions`     | The pinned actions of `.github/workflows/`: the commit SHA and its version comment                                  | Monthly | One with every update, `ci: bump …` (2)                                                                          |
+| `npm`, `/infra/pnpm` | The hash-pinned pnpm of the container images (`infra/README.md`, pnpm in the images)                                | Monthly | `chore(deps): bump pnpm …`; it must also move `packageManager` in `package.json` before its checks pass (1)      |
+| `npm`, `/`           | The pnpm workspace: every member's `package.json`, the catalog and overrides of `pnpm-workspace.yaml`, the lockfile | Weekly  | One for all minor and patch updates, one for each major update, `chore(deps): …` or `chore(deps-dev): …` (5)     |
+| `docker`, `/apps/*`  | The base image of every app's Dockerfile, pinned by tag and digest; an update moves both                            | Weekly  | One for every base-image update of every Dockerfile, a new digest of the same tag included, `chore(deps): …` (2) |
+
+- **Expected volume:** one or two pull requests a week (the npm group, now and then the Docker group or an npm major), plus the two monthly ones. The first runs bring the major updates that are already waiting, up to the limit.
+- **Cooldown.** A new npm or Docker release is proposed once it is seven days old, so a broken or malicious release has time to be pulled first; the other entries keep Dependabot's default of three days. Security updates ignore the cooldown.
+- **Not proposed.** Node.js majors (the `node` base image and `@types/node`): the Node.js version follows `.nvmrc` and `engines` in `package.json` and moves by hand, together with the images. The workspace entry leaves pnpm to the `/infra/pnpm` entry.
+- **Not covered yet.** The uv workspace of the Python members: Dependabot runs its own uv, and the exact `required-version` pin in the root `pyproject.toml` refuses any other uv version, so an entry would fail on every run. It is added once that workspace is on `master` and the pin admits Dependabot's uv (#328). Images in the Compose files (the Postgres image of `compose.yaml`) are not covered either; they would need the separate `docker-compose` entry.
+- **CI.** A dependency pull request runs CI like any other: the commit-message check, the root checks and the affected package tasks. A change of `pnpm-lock.yaml` selects the packages whose external dependencies changed, a change of `pnpm-workspace.yaml` (a catalog or override version) every package, and a Dockerfile its app ([Affected packages](repository-structure.md#affected-packages)). It gets no repository Actions secrets: the private-terms check reports that it was skipped, and it starts no paid eval suite, like every pull request that is not a phase pull request (`docs/testing.md`, CI): `Affected eval suites` ends green and the suites' jobs are skipped, also for an update of MCP Admin's or the API client's locked dependencies. The owner decides whether such an update needs a manual, charged run of the `Model evals` workflow before merging.
+- **Who merges.** The owner reviews and merges every dependency pull request, with a squash merge once its checks are green. Agents do not merge them. When an update needs more than Dependabot changed (the pnpm pull request, a major update with breaking changes), the follow-up commit goes onto the same branch, or the pull request is closed and the work is done in an issue; `@dependabot ignore` comments stop a version or dependency from being proposed again.
 
 ## Rules that never bend
 

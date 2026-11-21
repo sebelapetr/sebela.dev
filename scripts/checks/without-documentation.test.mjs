@@ -176,8 +176,24 @@ describe("this repository", () => {
     for (const file of read) assert.equal(isDocumentation(file), false, file);
   });
 
-  it("treats the app and package guides as documentation", () => {
-    const guides = tracked.filter((file) => /^(apps|packages)\/[^/]+\/AGENTS\.md$/.test(file));
+  // The Markdown a Python member's pyproject.toml names as the readme of the built package.
+  const readmes = tracked
+    .filter((file) => /(^|\/)pyproject\.toml$/.test(file))
+    .flatMap((file) => {
+      const text = fs.readFileSync(path.join(REPOSITORY, file), "utf8");
+      const name = /^readme\s*=\s*"([^"]+\.md)"\s*$/im.exec(text)?.[1];
+      return name ? [path.posix.join(path.posix.dirname(file), name)] : [];
+    });
+
+  it("counts the Markdown a package build reads as its readme", () => {
+    assert.ok(readmes.includes("packages/llm-agent/AGENTS.md"));
+    for (const file of readmes) assert.equal(isDocumentation(file), false, file);
+  });
+
+  it("treats the other app and package guides as documentation", () => {
+    const guides = tracked.filter(
+      (file) => /^(apps|packages)\/[^/]+\/AGENTS\.md$/.test(file) && !readmes.includes(file),
+    );
     assert.ok(guides.length > 0);
     for (const file of guides) assert.equal(isDocumentation(file), true, file);
   });

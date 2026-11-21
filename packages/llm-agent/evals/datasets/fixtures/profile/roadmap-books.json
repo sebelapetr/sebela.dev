@@ -1,0 +1,29 @@
+[
+  {
+    "slug": "fictional-search-evaluation-handbook",
+    "title": "A Fictional Handbook of Search Evaluation",
+    "author": "Mara Placeholder",
+    "description": "A fictional handbook on relevance judgements and ranking metrics.",
+    "pages": 312,
+    "year": 2025,
+    "priority": 0,
+    "startedOn": "2026-02-02"
+  },
+  {
+    "slug": "fictional-ranking-primer",
+    "title": "A Fictional Ranking Primer",
+    "author": "Jon Example",
+    "pages": 140,
+    "year": 2024,
+    "priority": 1,
+    "startedOn": "2025-11-03",
+    "endedOn": "2025-12-01",
+    "summary": "Short chapters on BM25, learning to rank and why a baseline comes first."
+  },
+  {
+    "slug": "fictional-agent-design-notes",
+    "title": "Fictional Notes on Agent Design",
+    "author": "Theo Example",
+    "priority": 2
+  }
+]

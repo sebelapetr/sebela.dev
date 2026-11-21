@@ -1,0 +1,31 @@
+[
+  {
+    "slug": "brindle-labs-ai-engineer",
+    "title": "AI engineer",
+    "kind": "main_job",
+    "organization": "brindle-labs",
+    "startedOn": "2021-03-01",
+    "summary": "Builds retrieval and evaluation for the support assistant of the fictional Brindle Labs.",
+    "responsibilities": [
+      "Design retrieval over the support knowledge base",
+      "Own the evaluation suite that guards every prompt and model change"
+    ],
+    "inCv": true,
+    "technologies": ["python", "langgraph", "pgvector", "postgresql"]
+  },
+  {
+    "slug": "port-wren-transit-backend-engineer",
+    "title": "Backend engineer",
+    "kind": "main_job",
+    "organization": "port-wren-transit",
+    "startedOn": "2015-09-01",
+    "endedOn": "2021-02-28",
+    "summary": "Built the timetable and ticketing back end of the fictional Port Wren Transit Authority.",
+    "responsibilities": [
+      "Maintain the ticketing API used by the ticket machines",
+      "Publish timetable changes to the departure boards"
+    ],
+    "inCv": true,
+    "technologies": ["typescript", "postgresql", "kafka"]
+  }
+]

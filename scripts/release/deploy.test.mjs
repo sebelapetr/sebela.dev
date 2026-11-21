@@ -50,6 +50,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // A test may have taken the write permission of the state folder away.
+  fs.chmodSync(state, 0o700);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -356,6 +358,122 @@ describe("a deployment", () => {
     scenario({ migrations: MIGRATIONS });
     assert.equal(deploy(deployInput(A)).status, 0);
     assert.deepEqual(releases(), [line(A)]);
+  });
+});
+
+// The record of verified releases is what a rollback and the fallback of a failed deployment read.
+// A state folder the script cannot keep it in is found before anything changes, never after the
+// running services were replaced. (Permission checks do not bind root, so these tests need an
+// ordinary user, as CI and the server's deploy user are.)
+describe("the state folder", () => {
+  const recordFile = () => path.join(state, "releases");
+
+  /** Refused before anything ran: no Docker call, the checkout and the record as they were. */
+  function assertNothingChanged(result, message, recorded) {
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, message);
+    assert.match(result.stderr, /nothing changed/);
+    assert.equal(result.stderr.includes(dir), false, "the message names no path");
+    assert.deepEqual(result.calls, [], "docker never ran");
+    assert.equal(repo.head(), repo.commits.old, "the checkout did not move");
+    assert.deepEqual(starts(), ["old"], "the script did not re-execute");
+    assert.deepEqual(releases(), recorded);
+  }
+
+  for (const [name, input] of [
+    ["a deployment", () => deployInput(B)],
+    ["a rollback", () => "rollback"],
+  ]) {
+    it(`refuses ${name} when the record is not writable, with nothing changed`, () => {
+      record(line(A), line(C));
+      fs.chmodSync(recordFile(), 0o444);
+      scenario({ migrations: MIGRATIONS });
+      const result = deploy(input(), { ssh: true });
+      assertNothingChanged(result, /record of verified releases is not writable/, [
+        line(A),
+        line(C),
+      ]);
+    });
+
+    it(`refuses ${name} when the state folder is not writable, with nothing changed`, () => {
+      record(line(A), line(C));
+      fs.writeFileSync(path.join(state, "lock"), "");
+      fs.chmodSync(state, 0o555);
+      scenario({ migrations: MIGRATIONS });
+      const result = deploy(input(), { ssh: true });
+      assertNothingChanged(result, /state folder is not writable/, [line(A), line(C)]);
+    });
+
+    it(`refuses ${name} when the lock cannot be opened, with nothing changed`, () => {
+      record(line(A), line(C));
+      fs.writeFileSync(path.join(state, "lock"), "", { mode: 0o444 });
+      scenario({ migrations: MIGRATIONS });
+      const result = deploy(input(), { ssh: true });
+      assertNothingChanged(result, /lock .* cannot be opened/, [line(A), line(C)]);
+    });
+  }
+
+  it("refuses a record that is not a file, with nothing changed", () => {
+    fs.mkdirSync(recordFile());
+    scenario({ migrations: MIGRATIONS });
+    const result = deploy(deployInput(B), { ssh: true });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /record of verified releases is not a file; nothing changed/);
+    assert.deepEqual(result.calls, []);
+    assert.equal(repo.head(), repo.commits.old);
+  });
+
+  it("names the user that needs the access", () => {
+    record(line(A));
+    fs.chmodSync(recordFile(), 0o444);
+    const result = deploy(deployInput(B));
+    assert.ok(result.stderr.includes(os.userInfo().username), result.stderr);
+  });
+
+  it("says that a healthy release is running but not recorded, and does not roll it back", () => {
+    record(line(A));
+    const image = `${REGISTRY}/sebela-api:${D}`;
+    scenario({ migrations: MIGRATIONS, chmodOnUp: { [recordFile()]: "444" }, images: [image] });
+    const result = deploy(deployInput(B));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /is running but is NOT recorded/);
+    assert.ok(result.stderr.includes(`\ndeploy:   ${line(B)}\n`), "the exact line to append");
+    assert.equal(result.stderr.includes(dir), false, "the message names no path");
+    assert.deepEqual(
+      ups(result.calls).map(({ tags }) => tags),
+      [{ api: B, web: B, "mcp-admin": B }],
+      "the healthy release keeps running: the previous one is not started",
+    );
+    assert.equal(steps(result.calls).includes("image-rm"), false, "no image is removed");
+    assert.deepEqual(releases(), [line(A)]);
+  });
+
+  it("records the release when the deployment is run again after the record was repaired", () => {
+    record(line(A));
+    scenario({ migrations: MIGRATIONS, chmodOnUp: { [recordFile()]: "444" } });
+    assert.notEqual(deploy(deployInput(B)).status, 0);
+    fs.chmodSync(recordFile(), 0o644);
+    scenario({ migrations: MIGRATIONS });
+    const result = deploy(deployInput(B));
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(releases(), [line(A), line(B)]);
+  });
+
+  it("says that a rollback is running but the record still names the newer release", () => {
+    record(line(A), line(B));
+    scenario({ migrations: MIGRATIONS, chmodOnUp: { [state]: "555" } });
+    const result = deploy("rollback");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /is running, but the record still names/);
+    assert.ok(result.stderr.includes(`\ndeploy:   ${line(B)}\n`), "the exact line to remove");
+    assert.equal(result.stderr.includes(dir), false, "the message names no path");
+    assert.deepEqual(
+      ups(result.calls).map(({ tags }) => tags),
+      [{ api: A, web: A, "mcp-admin": A }],
+      "the previous release keeps running",
+    );
+    assert.equal(steps(result.calls).includes("image-rm"), false, "no image is removed");
+    assert.deepEqual(releases(), [line(A), line(B)]);
   });
 });
 

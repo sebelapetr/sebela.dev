@@ -37,7 +37,7 @@ test.describe("homepage read from the API", () => {
   }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(`${withPhoto.name} — ${withPhoto.headline}`);
+    await expect(page).toHaveTitle("Jordan Vale · Fictional engineer of small, dependable web…");
 
     const heading = page.getByRole("heading", { level: 1 });
     await expect(heading).toContainText(withPhoto.name);

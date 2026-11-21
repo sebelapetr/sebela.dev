@@ -1,0 +1,25 @@
+[
+  {
+    "slug": "port-wren-agents-conference",
+    "name": "Fictional Port Wren Agents Conference",
+    "kind": "conference",
+    "organizer": "The fictional Port Wren AI Circle",
+    "startsOn": "2026-02-18",
+    "endsOn": "2026-02-20",
+    "place": "Port Wren Congress Hall",
+    "online": false,
+    "takeaways": "Talks by other engineers on tool loops and agent permissions; notes on budgets per tool call.",
+    "topics": ["agents"]
+  },
+  {
+    "slug": "evaluation-meetup-march",
+    "name": "Fictional Evaluation Meetup",
+    "kind": "meetup",
+    "organizer": "A fictional evaluation study group",
+    "startsOn": "2026-03-05",
+    "endsOn": "2026-03-05",
+    "online": true,
+    "takeaways": "Listened to two talks on judge calibration and golden sets.",
+    "topics": ["evaluation"]
+  }
+]

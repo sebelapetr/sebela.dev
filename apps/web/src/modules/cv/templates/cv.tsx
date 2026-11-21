@@ -10,6 +10,7 @@ import {
   CvSummary,
 } from "../components/cv-sections";
 import { toCvDocument } from "../data/cv-document";
+import { CvStructuredData } from "../../seo";
 
 /**
  * The CV page: one column, top to bottom — the header with the contacts, the PDF's download and
@@ -21,6 +22,7 @@ export function CvTemplate({ content }: { readonly content: CvContent }) {
   const cv = toCvDocument(content);
   return (
     <>
+      <CvStructuredData content={content} />
       <SiteHeader name={cv.header.name} />
       <main
         id={mainContentId}

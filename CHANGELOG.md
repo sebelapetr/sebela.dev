@@ -2,6 +2,110 @@
 
 All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). From v0.3.0 on, each section is byte for byte the notes of its GitHub release, added by the release workflow after a healthy deployment; the sections of v0.1.0 to v0.2.1 were rendered again in this format from the same commits, so they differ from the older notes of their releases. There is no Unreleased section, because every merge into master is deployed.
 
+## [v0.4.0] - 2026-11-21
+
+### Features
+
+- phase 06 — LLM agent ([#274](https://github.com/sebelapetr/sebela.dev/pull/274))
+
+### Other changes
+
+- record the agent dispatch, worktree and paid-eval working rules ([#370](https://github.com/sebelapetr/sebela.dev/pull/370))
+- describe both jobs of the coverage site workflow ([#362](https://github.com/sebelapetr/sebela.dev/pull/362))
+
+**Full Changelog**: [v0.3.2...v0.4.0](https://github.com/sebelapetr/sebela.dev/compare/v0.3.2...v0.4.0)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
+- `ghcr.io/sebelapetr/sebela-web:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
+- `ghcr.io/sebelapetr/sebela-mcp-admin:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
+
+## [v0.3.2] - 2026-11-21
+
+### Fixes
+
+- **mcp-admin**
+  - make the E02 guessed-field check see snake_case and kebab-case names ([#342](https://github.com/sebelapetr/sebela.dev/pull/342))
+
+### Other changes
+
+- measure test coverage and publish it as a README badge ([#341](https://github.com/sebelapetr/sebela.dev/pull/341))
+
+**Full Changelog**: [v0.3.1...v0.3.2](https://github.com/sebelapetr/sebela.dev/compare/v0.3.1...v0.3.2)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:f8dd6db64212a15feb4c1daa601ca01a5f0023fe`
+- `ghcr.io/sebelapetr/sebela-web:f8dd6db64212a15feb4c1daa601ca01a5f0023fe`
+- `ghcr.io/sebelapetr/sebela-mcp-admin:f8dd6db64212a15feb4c1daa601ca01a5f0023fe`
+
+## [v0.3.1] - 2026-11-21
+
+### Fixes
+
+- **infra**
+  - check the deployment state before changing anything ([#353](https://github.com/sebelapetr/sebela.dev/pull/353))
+- **web**
+  - forward the browser tests' proxy only on its target origin ([#347](https://github.com/sebelapetr/sebela.dev/pull/347))
+
+**Full Changelog**: [v0.3.0...v0.3.1](https://github.com/sebelapetr/sebela.dev/compare/v0.3.0...v0.3.1)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:417b4d8c4de65eb8562a4d285431317e440ad5d4`
+- `ghcr.io/sebelapetr/sebela-web:3dcd47a2cc978d4a483c850a1495bfce5e8e439b`
+- `ghcr.io/sebelapetr/sebela-mcp-admin:417b4d8c4de65eb8562a4d285431317e440ad5d4`
+
+## [v0.3.0] - 2026-11-21
+
+### Features
+
+- **ci**
+  - attest build provenance and SBOMs of the release images ([#296](https://github.com/sebelapetr/sebela.dev/pull/296))
+  - keep a changelog generated from each release ([#291](https://github.com/sebelapetr/sebela.dev/pull/291))
+
+### Fixes
+
+- **ci**
+  - start paid model evals only on a phase pull request or by hand ([#338](https://github.com/sebelapetr/sebela.dev/pull/338))
+  - publish no new version when the release commit is already tagged ([18cf8d3](https://github.com/sebelapetr/sebela.dev/commit/18cf8d3369d0d7b73825fd33b1d93f9dab9b96ce))
+- **deps**
+  - clear two vulnerable dev dependencies and pin pnpm in the images by hash ([#307](https://github.com/sebelapetr/sebela.dev/pull/307))
+- **harness**
+  - continue another branch only for an issue of a phase ([#327](https://github.com/sebelapetr/sebela.dev/pull/327))
+- **infra**
+  - deploy with the repository files of the release ([f7157f0](https://github.com/sebelapetr/sebela.dev/commit/f7157f045f6c1bf53faf7d90b4b89701ec30c7b8))
+
+### Other changes
+
+- **deps:** bump the docker group across 3 directories with 1 update ([#336](https://github.com/sebelapetr/sebela.dev/pull/336))
+- **plan:** record the published phase 15 issues ([#324](https://github.com/sebelapetr/sebela.dev/pull/324))
+- correct the eval trigger, formatting check and Prettier ignore descriptions ([#339](https://github.com/sebelapetr/sebela.dev/pull/339))
+- extend dependabot to the npm workspace and the base images ([#326](https://github.com/sebelapetr/sebela.dev/pull/326))
+- mark the generated API clients as generated for GitHub ([#313](https://github.com/sebelapetr/sebela.dev/pull/313))
+- check formatting in CI, not only in the commit hook ([#325](https://github.com/sebelapetr/sebela.dev/pull/325))
+- **plan:** apply the owner's decisions to the phase 15 pages PRD ([#318](https://github.com/sebelapetr/sebela.dev/pull/318))
+- **plan:** add phase 15 for content pages and the privacy page ([#312](https://github.com/sebelapetr/sebela.dev/pull/312))
+- count no documentation as a change of an app or package ([#304](https://github.com/sebelapetr/sebela.dev/pull/304))
+- add OpenSSF Scorecard, CODEOWNERS and README badges ([#301](https://github.com/sebelapetr/sebela.dev/pull/301))
+- **plan:** apply the owner's eval cost controls to phases 7 and 8 ([#297](https://github.com/sebelapetr/sebela.dev/pull/297))
+- add security policy, contributing guide and issue and pull request templates ([#294](https://github.com/sebelapetr/sebela.dev/pull/294))
+- pin third-party actions to commit SHAs and add dependabot ([#295](https://github.com/sebelapetr/sebela.dev/pull/295))
+- refresh the README status for the live site ([#292](https://github.com/sebelapetr/sebela.dev/pull/292))
+- ignore MCP Admin's documentation and count its eval skills ([97f4898](https://github.com/sebelapetr/sebela.dev/commit/97f48984fc691aabea5d1dcffe2b07d6bad569b3))
+- count only the mcp-admin job of the model evals workflow ([959c590](https://github.com/sebelapetr/sebela.dev/commit/959c5900333c1d1f847115d09b1c43c3cee32e6e))
+- run the MCP Admin model evals only for changes that can affect it ([05fc265](https://github.com/sebelapetr/sebela.dev/commit/05fc26518cb86887fb03170bcdb8e7e2aa02682c))
+- **decisions:** renumber the checkout decision to 0025 ([c5522bd](https://github.com/sebelapetr/sebela.dev/commit/c5522bdd0333584ce32aa2357ab114fa78a93d55))
+
+**Full Changelog**: [v0.2.1...v0.3.0](https://github.com/sebelapetr/sebela.dev/compare/v0.2.1...v0.3.0)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:417b4d8c4de65eb8562a4d285431317e440ad5d4`
+- `ghcr.io/sebelapetr/sebela-web:417b4d8c4de65eb8562a4d285431317e440ad5d4`
+- `ghcr.io/sebelapetr/sebela-mcp-admin:417b4d8c4de65eb8562a4d285431317e440ad5d4`
+
 ## [v0.2.1] - 2026-11-21
 
 Re-release of v0.2.0 (same commit, same images): created when the deploy job was rerun after the rollback test of #237.
@@ -190,6 +294,10 @@ No changes since v0.2.0; re-release of the same commit.
 - `ghcr.io/sebelapetr/sebela-web:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 
+[v0.4.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.4.0
+[v0.3.2]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.3.2
+[v0.3.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.3.1
+[v0.3.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.3.0
 [v0.2.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.2.0
 [v0.1.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.1.0
