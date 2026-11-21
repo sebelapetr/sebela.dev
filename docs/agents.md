@@ -75,7 +75,7 @@ An interrupted run can leave an issue's branch and worktree behind. The orchestr
 
 For each issue of a phase:
 
-1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed.
+1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed. It reads the issue with its comments: an `Owner note` in a comment is as binding as the body, and the orchestrator passes every owner note, as written, to the developer and the reviewer.
 2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role, ports and storage folder, is installed and migrated, and an empty profile is loaded with the demo seed.
 3. It dispatches the developer agent that matches the area of the issue.
 4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
@@ -85,7 +85,7 @@ For each issue of a phase:
 8. When CI is green, the orchestrator squash-merges it into the phase branch. The issue closes.
 9. The orchestrator runs the docs-keeper on the merged change and removes the worktree.
 
-When no ready issue of the phase remains, the orchestrator opens the phase pull request to the phase's base branch — `master`, except for the trial — as a draft, and stops. HITL issues may still be open then. When the phase is complete, the owner marks the pull request ready for review, which runs the model evals of the affected suites once on the final state (`docs/testing.md`), and merges it when they pass.
+When no ready issue of the phase remains, the orchestrator archives the phase's plan (it moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, once, through a short-lived branch merged into the phase branch), opens the phase pull request to the phase's base branch — `master`, except for the trial — as a draft, and stops. HITL issues may still be open then. When the phase is complete, the owner marks the pull request ready for review, which runs the model evals of the affected suites once on the final state (`docs/testing.md`), and merges it when they pass.
 
 ## The phase loop
 
@@ -98,18 +98,24 @@ harness/run-phase.sh <phase-folder>
 - **One iteration, one issue.** The script starts Claude Code non-interactively with the orchestrator agent and the instruction to take the next ready issue of the phase through to a merged issue pull request. Every iteration starts with a clean context.
 - **State lives in GitHub**, not in the script: issue labels, open and merged pull requests, the phase branch. The script can be stopped and started again at any time and continues where it left off.
 - **Usage limit.** When a run ends because the usage limit is reached, the script waits ten minutes and tries again, until the limit lifts. A wait counts neither as a failure nor as an iteration, and Ctrl+C ends it at once.
-- **End.** The loop ends when no ready issue of the phase remains; the phase pull request is then open as a draft and the loop writes [the phase report](#the-phase-report).
+- **End.** The loop ends when the orchestrator reports that no ready issue of the phase remains. The loop then asks GitHub for the open pull request from `phase/<phase>` to the base and for the phase's open issues, and says which it is (`phaseEnd` in `harness/lib/loop.mjs`): **phase done** when the draft pull request is open and only HITL issues are left (named, to be done before the owner marks it ready), or **phase stopped: no workable issue left** when issues labelled `agent-failed`, blocked or unready issues remain or no phase pull request exists, listing them and the pull request or "no phase pull request". The notification says the same. Either way it writes [the phase report](#the-phase-report).
 - **Before each iteration** (`harness/preflight.mjs`, rules in `harness/lib/preflight.mjs`) the loop checks the machine. Docker not running, Postgres not healthy or `gh` not signed in stop the loop with what to do, because every agent would otherwise fail or try to work around it. A main checkout that is not on the base branch, is behind `origin/<base>` or has uncommitted changes is only a warning, printed before the first iteration: the owner may mean it.
 - **Progress.** An iteration's first line says how many of the phase's issues are closed (`(3/21 issues closed)`). Every half minute the loop reads the orchestrator's transcript and prints a line when it picks an issue or hands it to another agent (`#24 feat/24-generated-api-client → reviewer`), also when it sends objections back to the developer or fixes back to the reviewer it already started; the phase report counts those as further rounds; rules in `harness/lib/progress.mjs`.
 - **Cost.** Each iteration's log line ends with what the run cost and how long it took, from the orchestrator's result (`merged #22 ($4.07, 24 min): …`); subagents are included.
-- **Notifications.** On Windows (WSL) the loop shows a notification, which stays until dismissed, when the steward reports a new problem, when it cannot start an iteration, when it waits for the usage limit for the first time in a row and when it ends — phase done, too many failures or the iteration limit. Not on Ctrl+C: the owner is there. `harness/lib/notify.mjs` uses the toast API that ships with Windows through `powershell.exe`; elsewhere it does nothing. `--no-notify` turns them off.
+- **Notifications.** On Windows (WSL) the loop shows a notification, which stays until dismissed, when the steward reports a new problem, when it cannot start an iteration, when it waits for the usage limit for the first time in a row and when it ends — phase done, phase stopped with nothing workable, too many failures, a repeated safeguard stop, an environment stop or the iteration limit. Not on Ctrl+C: the owner is there. `harness/lib/notify.mjs` uses the toast API that ships with Windows through `powershell.exe`; elsewhere it does nothing. `--no-notify` turns them off.
 - **Guards against spinning:**
   - an issue that fails once gets the label `agent-retry`; a second failure gets `agent-failed` (and loses `agent-retry`), and it is skipped from then on;
   - HITL issues are always skipped;
   - after several consecutive failed runs the script stops;
   - every run writes a log outside git.
 - **Sequential.** One issue at a time. Parallel runs are a later improvement.
-- **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed, interrupted or phase done). Interrupted means the usage limit stopped the work on an issue: the loop waits as for any limit and continues the same issue, without a label or a failure counted. The loop reads it — or recognises a usage limit — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
+- **How a run ends:** the orchestrator finishes every unattended run with a structured report (merged, failed, interrupted or phase done). Interrupted means something outside the issue stopped the work on it; the worktree and branch are kept and the report names the cause:
+  - `usage_limit`: the loop waits as for any limit and continues the same issue;
+  - `safeguard` (a model safeguard refused or stopped an agent): the loop retries once at once; a second safeguard stop in a row on the same issue stops the loop with a notification. The loop also recognises a safeguard that ends the `claude -p` run itself (stop reason `refusal`, safety stops counted, or usage-policy wording such as "Usage Policy", "AUP" or "content filtering policy" in the error) and treats it the same way. It remembers the last safeguard only while it runs;
+  - `environment` (low disk, a missing tool or credential, a guard refusal that cannot be worked around without breaking a rule): the loop stops at once and the notification names the cause.
+
+  None of them labels the issue or counts as a failure. The loop reads the report — or recognises a usage limit or a safeguard — and decides what follows. It labels failed issues itself; the orchestrator does not change labels.
+
 - **Options:** `--base <branch>` (default `master`; the trial uses `phase/00-overview`), `--wait-minutes`, `--max-failures`, `--max-iterations`, `--steward-minutes` (default 15, 0 turns the steward off), `--no-notify`, `--note "<text>"` (below). Logs are in `.worktrees/logs/<phase>/`.
 - **A note from the owner.** `harness/run-phase.sh <phase-folder> --note "<text>"` hands the orchestrator a note written when the loop is started, for example why the last run was stopped and what an unfinished issue still needs. It adds to the orchestrator's instructions and never replaces a rule or the guard. The loop keeps no state, so the orchestrator first records a note about an issue on that issue as a comment starting with `Owner note:`, where later runs find it. The note stays while the loop only waits for the usage limit and ends with the first run that finished, merged or failed, so it is not repeated to the issues that follow (`ownerNoteSection` and `noteAfter` in `harness/lib/loop.mjs`). A comment on the issue does the same without the option; the option saves the owner that step.
 - **Unattended permissions:** the loop runs in auto mode with prompts refused. Calls on the allow list run; any other call is judged by the auto-mode classifier and refused if it is held back. The deny list and the guard hook apply on top.
@@ -140,13 +146,14 @@ The reviewer agent is the only check between issues inside a phase, so a mistake
 
 ## What the reviewer checks
 
-- Every acceptance criterion of the issue, with the website's whole browser suite run once per review (developers run only the specs they touch; [Browser tests by role](testing.md#browser-tests-by-role))
+- Every acceptance criterion of the issue, with the browser specs the change affects run once per review and none when it cannot change the website; the whole suite runs only in CI before the merge ([Browser tests by role](testing.md#browser-tests-by-role))
 - Package boundaries and the trust boundary
 - Access: every write is a private, authenticated route; the API key never reaches client-side code
 - Where test-first is mandatory: the test came before the implementation
 - UI: screenshots at three widths and both themes
 - MCP and AI: evals exist and meet their threshold
 - Documentation updated when behaviour or structure changed
+- On every migration pull request: the migration follows the compatibility rule, so the previous release still runs on the new schema ([Release workflow](release-workflow.md#migration-compatibility-rule))
 - No weakened checks, no hard-coded environment values, no real personal data
 
 ## Documentation upkeep

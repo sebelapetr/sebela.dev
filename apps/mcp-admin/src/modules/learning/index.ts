@@ -326,10 +326,11 @@ export function createLearningTasks(content: CallerContent): LearningTasks {
         const book = BookSchema.safeParse(read.value);
         if (!book.success) return fail(UNREADABLE);
         if (!book.data.resource) {
+          const slug = session.book;
           return fieldError(
-            "The book has no linked resource to log its reading on; nothing was sent.",
+            `The book \`${slug}\` has no roadmap resource of type \`book\` linked to it, so there is nowhere to log its reading; nothing was sent.`,
             ["book"],
-            "Link the book to a resource of type `book` first, or ask the owner.",
+            `A book's reading time is logged on the roadmap resource whose \`book\` field names it. Ask the owner which existing resource of type \`book\` reads it, or in which module to create one (\`add_resource\` with type \`book\`); then link it with save { entity: "roadmap-resource", action: "update", id: <resource slug>, fields: { book: "${slug}" } } and log the session again.`,
           );
         }
         resource = book.data.resource.slug;

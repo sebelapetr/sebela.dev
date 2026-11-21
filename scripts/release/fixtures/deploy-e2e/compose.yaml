@@ -1,0 +1,59 @@
+# The production composition in miniature for deploy.e2e.mjs: the same services, dependencies and
+# image tag variables as compose.yaml with infra/production/compose.yaml, run from tiny busybox
+# images that the test commits per release. Each image holds a migration folder like the API image
+# and a /healthy script the health checks run, so a release can be made deliberately unhealthy.
+# The test sets COMPOSE_PROJECT_NAME to a name of its own; nothing is published on the host.
+
+name: sebela-deploy-e2e
+
+x-release: &release
+  command: ["sleep", "3600"]
+  stop_grace_period: 1s
+  healthcheck:
+    test: ["CMD", "/healthy"]
+    interval: 1s
+    timeout: 2s
+    retries: 2
+    start_period: 0s
+
+services:
+  postgres:
+    image: ${DEPLOY_E2E_BASE_IMAGE:?set DEPLOY_E2E_BASE_IMAGE}
+    command: ["sleep", "3600"]
+    stop_grace_period: 1s
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 1s
+      retries: 2
+
+  migrate:
+    image: ${DEPLOY_REGISTRY:?set DEPLOY_REGISTRY}/sebela-api:${API_IMAGE_TAG:?set API_IMAGE_TAG}
+    # Lists the migrations and counts its own runs in the test's folder, so the test can check
+    # that a deployment migrates exactly once and a rollback never does.
+    command: ["sh", "-c", "ls /app/packages/db/migrations && echo run >> /runs/migrations"]
+    volumes:
+      - ${DEPLOY_E2E_RUNS_DIR:?set DEPLOY_E2E_RUNS_DIR}:/runs
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *release
+    image: ${DEPLOY_REGISTRY:?set DEPLOY_REGISTRY}/sebela-api:${API_IMAGE_TAG:?set API_IMAGE_TAG}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    <<: *release
+    image: ${DEPLOY_REGISTRY:?set DEPLOY_REGISTRY}/sebela-web:${WEB_IMAGE_TAG:?set WEB_IMAGE_TAG}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  mcp-admin:
+    <<: *release
+    image: ${DEPLOY_REGISTRY:?set DEPLOY_REGISTRY}/sebela-mcp-admin:${MCP_ADMIN_IMAGE_TAG:?set MCP_ADMIN_IMAGE_TAG}
+    depends_on:
+      api:
+        condition: service_healthy

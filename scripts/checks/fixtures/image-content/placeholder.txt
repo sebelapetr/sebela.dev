@@ -1,0 +1,1 @@
+A fictional placeholder for the image-content check's fixture image. It holds no value.

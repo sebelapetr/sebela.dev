@@ -305,8 +305,10 @@ describe("the hero's hand-off", () => {
     const id = present(handOffQuestion(storage, "  Q from the hero?  ", () => crypto.randomUUID()));
     const { store, sent } = setup(storage);
 
-    store.open(id);
-    store.open(id);
+    // It says it sent the question, so the page can bring the question into view as it would for
+    // one asked on the page; opening it again only shows it.
+    expect(store.open(id)).toBe("sent");
+    expect(store.open(id)).toBe("shown");
 
     expect(sent).toHaveLength(1);
     expect(sent[0]?.submission).toMatchObject({ conversationId: id, question: "Q from the hero?" });
@@ -322,7 +324,7 @@ describe("the hero's hand-off", () => {
     await answer(at(first.sent, 0), "Kept.");
 
     const second = setup(storage);
-    second.store.open(id);
+    expect(second.store.open(id)).toBe("shown");
 
     expect(second.sent).toHaveLength(0);
     expect(second.store.getSnapshot()).toMatchObject({
@@ -344,7 +346,7 @@ describe("the hero's hand-off", () => {
     await flush();
 
     const second = setup(storage);
-    second.store.open(id);
+    expect(second.store.open(id)).toBe("shown");
 
     expect(second.sent).toHaveLength(0);
     expect(second.store.getSnapshot()).toMatchObject({

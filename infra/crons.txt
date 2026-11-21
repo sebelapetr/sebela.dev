@@ -1,0 +1,9 @@
+# Scheduled jobs of the production server (infra/README.md, "Backups"), in crontab form. They are
+# entered once in the hosting panel's cron jobs for the `deploy` user, with the server's paths in place of the
+# placeholders; the server's clock runs in UTC.
+#
+# minute hour day-of-month month day-of-week  command
+
+# The nightly encrypted backup of the production database. Its Better Stack heartbeat alerts when
+# no successful backup has arrived for a day; the output goes to the system log.
+30 2 * * * BACKUP_ENV_FILE=<production environment file> <checkout>/infra/scripts/backup.sh 2>&1 | logger --tag sebela-backup

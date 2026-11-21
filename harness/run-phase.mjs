@@ -21,13 +21,14 @@ import {
   decideNext,
   noteAfter,
   ownerNoteSection,
+  phaseEnd,
 } from "./lib/loop.mjs";
 import { newProblem, notify } from "./lib/notify.mjs";
 import { currentWork, workChange } from "./lib/progress.mjs";
 import { formatCost, iterationStats } from "./lib/phase-report.mjs";
 import { writePhaseReport } from "./phase-report.mjs";
 import { checkReadiness } from "./preflight.mjs";
-import { readLines, transcriptDir } from "./run-tools.mjs";
+import { quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { checkOnce, failedIssues, phaseProgressNow } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
@@ -80,13 +81,17 @@ Base branch: ${base}
 Handle exactly ONE issue, following your agent definition, docs/agents.md and docs/git-workflow.md:
 
 1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
-2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. An issue labelled \`agent-retry\` failed once before: read its comments first. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
+2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. Always read the issue with its comments (\`gh issue view <n> --comments\`): an \`Owner note\` there is binding, and you pass every owner note to the developer and the reviewer as written. An issue labelled \`agent-retry\` failed once before: its comments say why. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
 3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
-4. If no such issue is left, open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. Never mark it ready for review: the owner does that when the phase is complete, HITL issues included, which starts its model evals.
+4. If no such issue is left, archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. If GitHub refuses the pull request (for example because the phase branch has no commits beyond ${base}), still report phase_done and say why in the summary. Never mark it ready for review: the owner does that when the phase is complete, HITL issues included, which starts its model evals.
+5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
+6. If the work on the issue stops for a reason outside the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted with its cause:
+   - usage_limit: the usage limit was reached. The loop waits and continues the same issue.
+   - safeguard: a model safeguard refused or stopped an agent (a usage-policy or AUP refusal, an invalid_request flagged by the API). The loop retries once at once and stops if it happens again.
+   - environment: the machine cannot run the work, such as low disk, a missing tool or credential, or a guard refusal you cannot work around without breaking a rule. The loop stops and tells the owner.
+   For every other outcome the cause is null.
 
 Write the report summary in English; it goes to the loop's log.
-5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
-6. If the usage limit stops the work on the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted. The loop waits and continues the same issue.
 
 Nobody can answer questions in this run. Never wait for input; when something needs the owner, record it on the issue.
 Finish with the structured report.${ownerNoteSection(note)}`;
@@ -158,6 +163,69 @@ function issueLabels(issue) {
     },
   );
   return out.split("\n").filter(Boolean);
+}
+
+// The open pull request from the phase branch to the base: { number }, null when there is none,
+// undefined when gh fails.
+function phasePullRequest(phase, base) {
+  const out = quiet("gh", [
+    "pr",
+    "list",
+    "--head",
+    `phase/${phase}`,
+    "--base",
+    base,
+    "--state",
+    "open",
+    "--json",
+    "number",
+  ]);
+  if (out === null) return undefined;
+  const [pr] = JSON.parse(out);
+  return pr ? { number: pr.number } : null;
+}
+
+// The phase's open issues with their label names, or null when gh fails.
+function openPhaseIssues(phase) {
+  const out = quiet("gh", [
+    "issue",
+    "list",
+    "--label",
+    `phase:${phase}`,
+    "--state",
+    "open",
+    "--limit",
+    "200",
+    "--json",
+    "number,labels",
+  ]);
+  if (out === null) return null;
+  return JSON.parse(out).map((issue) => ({
+    number: issue.number,
+    labels: issue.labels.map((label) => label.name),
+  }));
+}
+
+// Why the loop stops, for the log and the notification.
+function stopMessage(decision, run, consecutiveFailures) {
+  const issue = decision.lastSafeguard?.issue ?? run.issue;
+  const onIssue = issue ? ` on #${issue}` : "";
+  if (decision.reason === "safeguard_repeated") {
+    return {
+      log: `stopping: a model safeguard stopped the work${onIssue} twice in a row; the worktree and branch are kept.`,
+      alert: [`a model safeguard stopped the work${onIssue} twice`, "the loop stopped"],
+    };
+  }
+  if (decision.reason === "environment") {
+    return {
+      log: `stopping: the environment cannot run the work${onIssue}: ${run.summary}`,
+      alert: [`environment problem${onIssue}`, run.summary],
+    };
+  }
+  return {
+    log: `stopping after ${consecutiveFailures} failed runs in a row.`,
+    alert: ["the loop stopped", `${consecutiveFailures} failed runs in a row`],
+  };
 }
 
 function addLabel(issue, label) {
@@ -247,6 +315,8 @@ async function main() {
   // The steward compares with what had already failed when the loop started.
   const stewardState = { failedAtStart: failedIssues(options.phase) };
   let consecutiveFailures = 0;
+  // The safeguard stop of the run before, if any; a second one on the same issue stops the loop.
+  let lastSafeguard = null;
   let waiting = false;
   // The owner's note goes to the orchestrator until the first run that finished.
   let note = options.note;
@@ -294,10 +364,12 @@ async function main() {
     const decision = decideNext({
       run,
       consecutiveFailures,
+      lastSafeguard,
       issueLabels: labels,
       maxConsecutiveFailures: options.maxFailures,
     });
     consecutiveFailures = decision.consecutiveFailures;
+    lastSafeguard = decision.lastSafeguard;
     note = noteAfter(note, decision.next);
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -310,7 +382,7 @@ async function main() {
     const spent = cost ? ` (${cost})` : "";
     const what =
       run.kind === "report"
-        ? `${run.outcome}${run.issue ? ` #${run.issue}` : ""}${spent}: ${run.summary}`
+        ? `${run.outcome}${run.cause ? ` (${run.cause})` : ""}${run.issue ? ` #${run.issue}` : ""}${spent}: ${run.summary}`
         : `${run.kind}${spent}`;
     log(`iteration ${iteration}: ${what} -> ${decision.next}`);
     if (run.kind === "crash") log(`  ${run.detail}`);
@@ -321,21 +393,28 @@ async function main() {
     }
 
     if (decision.next === "done") {
-      log(
-        "phase done: the phase pull request is open as a draft; mark it ready for review when the phase is complete.",
-      );
+      // The report says the phase is done; GitHub says whether a pull request exists and what is left.
+      const end = phaseEnd({
+        pullRequest: phasePullRequest(options.phase, options.base),
+        openIssues: openPhaseIssues(options.phase),
+      });
+      for (const line of end.log) log(line);
       const report = await writePhaseReport({ mainRoot, phase: options.phase }).catch((error) =>
         log(`the phase report failed: ${error.message}`),
       );
       if (report) log(`phase report: ${report}`);
-      alert(options, ["phase done", "the phase pull request is open as a draft"]);
+      alert(options, end.alert);
       return;
     }
     if (decision.next === "stop") {
-      log(`stopping after ${consecutiveFailures} failed runs in a row. See ${logDir}.`);
-      alert(options, ["the loop stopped", `${consecutiveFailures} failed runs in a row`]);
+      const message = stopMessage(decision, run, consecutiveFailures);
+      log(`${message.log} See ${logDir}.`);
+      alert(options, message.alert);
       process.exitCode = 1;
       return;
+    }
+    if (decision.reason === "safeguard") {
+      log("a model safeguard stopped the run; retrying once at once.");
     }
     if (decision.next === "wait") {
       log(`usage limit reached; waiting ${options.waitMinutes} minutes.`);

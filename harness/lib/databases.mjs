@@ -22,6 +22,7 @@ const TIMEOUT_MS = 20_000;
 const DATABASE_IDENTIFIER = /^wt_[a-z0-9_]{1,60}$/;
 const OWNER_NAME = /^[A-Za-z0-9._-]+$/;
 const ROLE_ATTRIBUTES = "LOGIN CREATEDB NOSUPERUSER NOCREATEROLE";
+const CREATE_VECTOR = "CREATE EXTENSION IF NOT EXISTS vector;";
 // The holder of a database whose owner makes its comment untrustworthy; never a worktree name.
 const FOREIGN = Symbol("foreign owner");
 
@@ -136,6 +137,10 @@ export function composeDatabases({ root, env }) {
         psql(
           `ALTER DATABASE "${name}" OWNER TO "${name}"; REVOKE CONNECT ON DATABASE "${name}" FROM PUBLIC;`,
         );
+        // pgvector is not a trusted extension, so a worktree role cannot create it. The superuser
+        // creates it in the worktree's database and in template1, which the temporary databases
+        // of its tests are copied from; migrations then only need `CREATE EXTENSION IF NOT EXISTS`.
+        psql(`\\connect template1\n${CREATE_VECTOR}\n\\connect "${name}"\n${CREATE_VECTOR}\n`);
       } catch (error) {
         // A database or role without its owner could never be reused or dropped by the scripts.
         for (const statement of undo) {

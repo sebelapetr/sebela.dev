@@ -359,6 +359,10 @@ test.describe("the learning statistics", () => {
     await page.goto(`${website.url}${diary}`);
     const toStatistics = page.getByRole("link", { name: "View statistics" });
     await expect(toStatistics).toHaveAttribute("href", statistics);
+    // A chart icon before the text and an arrow after it, both hidden from assistive technology.
+    await expect(toStatistics).toHaveAccessibleName("View statistics");
+    await expect(toStatistics.locator("svg")).toHaveCount(2);
+    await expect(toStatistics.locator("svg:not([aria-hidden='true'])")).toHaveCount(0);
     const day = page.getByRole("link", { name: "Monday, March 2, 2026" });
     for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press("Tab");

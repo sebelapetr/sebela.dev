@@ -166,7 +166,7 @@ const projectOfCaseStudy: RecordId = {
 const media = (field: string, what: string): Relationship => ({
   field,
   target: "media",
-  rule: `The UUID of existing media to use as ${what}, or null to remove it. A new file is uploaded first with the \`upload\` tool; use only the media ID a successful upload returned.`,
+  rule: `The UUID of existing media to use as ${what}, or null to remove it. A new photo, logo or PDF is stored first by the owner with the API's command \`pnpm --silent --filter @sebela/api media upload <file>\`, which prints its media ID; use only a media ID the owner returned or a successful upload gave.`,
 });
 const slugsOf = (field: string, target: Entity): Relationship => ({
   field,
@@ -219,8 +219,9 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     relationships: [media("photoId", "the profile photo"), media("cvPdfId", "the CV PDF")],
     notes: [
       "The CV is a manually prepared PDF the owner supplies; it is never generated. A new CV PDF " +
-        "is uploaded with the `upload` tool and attached as `cvPdfId`; a failed upload leaves the " +
-        "current CV attached.",
+        "or photo is stored by the owner with `pnpm --silent --filter @sebela/api media upload <file>`, which prints " +
+        "its media ID, and attached as `cvPdfId` or `photoId`; a failed upload leaves the current " +
+        "file attached.",
     ],
   },
   collection(
@@ -519,8 +520,9 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     delete: "/v1/media/{id}",
     relationships: [],
     notes: [
-      "A file is added only with the `upload` tool, from the bytes the caller passes; this entity " +
-        "changes the metadata of existing media.",
+      "A file is added by the owner with `pnpm --silent --filter @sebela/api media upload <file>` or, when small, " +
+        "with the `upload` tool from the bytes the caller passes; this entity changes the metadata " +
+        "of existing media.",
     ],
   },
 ];
