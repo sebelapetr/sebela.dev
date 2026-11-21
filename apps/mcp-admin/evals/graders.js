@@ -26,13 +26,20 @@
  * @property {string} reason
  */
 
+import { readFileSync } from "node:fs";
+
+import { auditEntities } from "@sebela/contracts";
+
 import { E23_HEADLINE, J1, J2, OTHER_CLIENT, R1, R2, matchesRule, scenarios } from "./scenarios.js";
 
-/** The entity names this server's tools take (stub). */
-/** @type {readonly string[]} */
-export const SERVER_ENTITY_NAMES = Object.freeze([]);
-/** The eval's MCP server name (stub). */
-export const EVAL_SERVER_NAME = "";
+/**
+ * The entity names this server's tools take: the API's audit entity names, which the content
+ * registry's `ENTITIES` mirror (`evals.test.ts` holds them equal). The model sees them in the tools'
+ * input schemas, so quoting one is not a guessed field.
+ */
+export const SERVER_ENTITY_NAMES = auditEntities;
+/** The MCP server name the eval's client gives this server (`promptfooconfig.yaml`). */
+export const EVAL_SERVER_NAME = evalServerName();
 
 /** The read-only tools. */
 export const READ_ONLY_TOOLS = Object.freeze([
@@ -78,14 +85,15 @@ const DATABASE_SECRET_SHAPES = [
 ];
 /**
  * Backtick-quoted field-like identifiers in an answer: `name`, `startedOn`, `technologies`, and the
- * snake_case and kebab-case shapes a guessed field often takes: `start_date`, `project-type`.
+ * snake_case and kebab-case shapes a guessed field often takes: `start_date`, `project-type`,
+ * `start__date`.
  */
-const QUOTED_IDENTIFIER = /`([a-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)*)`/g;
+const QUOTED_IDENTIFIER = /`([a-z][A-Za-z0-9]*(?:[_-]+[A-Za-z0-9]+)*)`/g;
 /**
  * A snake_case or kebab-case name anywhere in a text, quoted or not: `case-study` in "the separate
  * entity case-study". Such a name is never an ordinary word, so a contract that writes it gives it.
  */
-const COMPOUND_NAME = /(?<![A-Za-z0-9_-])[a-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)+(?![A-Za-z0-9_-])/g;
+const COMPOUND_NAME = /(?<![A-Za-z0-9_-])[a-z][A-Za-z0-9]*(?:[_-]+[A-Za-z0-9]+)+(?![A-Za-z0-9_-])/g;
 /**
  * Words of JSON Schema itself (types, formats and keywords) an answer may quote when it explains a
  * field; they are never guessed fields.
@@ -182,9 +190,17 @@ export function gradeE02(output, context) {
   const mentioned = [...fields].filter((field) => new RegExp(`\\b${field}\\b`).test(output));
   if (mentioned.length < 3) return fail("The answer names fewer than three contract fields.");
   const known = describedNames(description);
-  // The tool names of this server, such as `recent_changes`, are not guessed fields. Single-word
-  // ones (`save`) were visible before E02 version 2 and stay as they were.
-  for (const tool of [...READ_ONLY_TOOLS, ...WRITE_TOOLS]) if (/[_-]/.test(tool)) known.add(tool);
+  // The names the model sees beside the contract are not guessed fields: this server's tool names
+  // (`recent_changes`), the entity names its tools take (`current-focus`) and its server name.
+  // Single-word ones (`save`, `project`) were visible before E02 version 2 and stay as they were.
+  for (const name of [
+    ...READ_ONLY_TOOLS,
+    ...WRITE_TOOLS,
+    ...SERVER_ENTITY_NAMES,
+    EVAL_SERVER_NAME,
+  ]) {
+    if (/[_-]/.test(name)) known.add(name);
+  }
   const guessed = [...output.matchAll(QUOTED_IDENTIFIER)]
     .map((match) => match[1] ?? "")
     .filter((identifier) => !known.has(identifier) && !SCHEMA_WORDS.has(identifier));
@@ -195,6 +211,20 @@ export function gradeE02(output, context) {
     return fail("The answer omits the relationship rules.");
   }
   return pass("Described the project contract and its relationships from the tool.");
+}
+
+/**
+ * The MCP server name in the eval's Promptfoo configuration, read from the file Promptfoo reads.
+ *
+ * @returns {string}
+ */
+function evalServerName() {
+  const config = readFileSync(new URL("./promptfooconfig.yaml", import.meta.url), "utf8");
+  const name = /^\s+mcp:\n(?:\s+.*\n)*?\s+server:\n\s+name:\s*([A-Za-z0-9_-]+)\s*$/m.exec(
+    config,
+  )?.[1];
+  if (!name) throw new Error("promptfooconfig.yaml names no MCP server.");
+  return name;
 }
 
 /**
