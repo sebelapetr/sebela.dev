@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-off GitHub set-up for the harness: labels and protection of master.
+# One-off GitHub set-up for the harness: labels, protection of master and GitHub Actions opening
+# pull requests (the release workflow's changelog pull request).
 # Outward-facing: run it only with the owner's approval. Safe to run again.
 #   harness/setup-github.sh
 set -euo pipefail
@@ -33,6 +34,8 @@ echo "master protected: pull request with green CI required for everyone (admins
 
 # The release workflow opens the changelog pull request with its GITHUB_TOKEN
 # (docs/release-workflow.md, Changelog). Workflow tokens stay read-only unless a job asks for more.
+# The same setting also lets workflows approve pull requests; harmless here, since master requires
+# no approving review.
 gh api --method PUT "repos/$repo/actions/permissions/workflow" \
   -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true >/dev/null
 echo "GitHub Actions may open pull requests (the changelog pull request); workflow tokens read-only by default"

@@ -208,9 +208,8 @@ jobs:
   # After a healthy deployment: the next version from the Conventional Commits since the last
   # version tag, tagged on the release commit, and a GitHub release whose notes give the phase
   # highlights, group those commits and list the deployed images. Then the same notes become the
-  # newest section of CHANGELOG.md through a pull request into master, which only the owner merges
-  # (or auto-merge when the repository variable CHANGELOG_AUTO_MERGE is `true`); it changes no image,
-  # so merging it releases nothing (docs/release-workflow.md, "Changelog").
+  # newest section of CHANGELOG.md through a pull request into master, which the owner merges; it
+  # changes no image, so merging it releases nothing (docs/release-workflow.md, "Changelog").
   release:
     name: Version and GitHub release
     needs: [images, deploy]
@@ -261,7 +260,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.notes.outputs.version }}
-          AUTO_MERGE: ${{ vars.CHANGELOG_AUTO_MERGE }}
         run: |
           branch="changelog/$VERSION"
           git fetch --quiet origin master
@@ -277,8 +275,3 @@ jobs:
             --title "chore(release): changelog for $VERSION" \
             --body "The section of $VERSION in CHANGELOG.md: the notes of its GitHub release, $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$VERSION. It changes no image, so merging it releases nothing (docs/release-workflow.md, Changelog)."
           gh workflow run ci.yml --ref "$branch" --field base="$base"
-          if [ "$AUTO_MERGE" = "true" ]; then
-            gh pr merge "$branch" --auto --squash
-          else
-            echo "The changelog pull request waits for the owner (CHANGELOG_AUTO_MERGE is not true)."
-          fi

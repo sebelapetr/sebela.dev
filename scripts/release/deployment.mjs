@@ -83,6 +83,10 @@ export function releasedVersion(tags) {
 
 const isMerge = ({ subject }) => subject.startsWith("Merge ");
 
+/** The commit of a changelog pull request, which only repeats an earlier release's notes. */
+const isChangelog = ({ subject }) =>
+  /^chore\(release\): changelog for v\d+\.\d+\.\d+\b/.test(subject);
+
 /** The kind of a commit for the version and the changelog. */
 function classify({ subject, body }) {
   const match = CONVENTIONAL.exec(subject);
@@ -162,28 +166,56 @@ export function phasePullRequests(commits) {
 const GENERATED = /Generated with \[Claude Code\]|claude\.ai\/code\/session_/;
 
 /**
+ * `text` without HTML comments, as GitHub hides them: each `<!--` up to its `-->`, and everything
+ * after an opener that is never closed. Repeated until nothing changes, so removing one comment
+ * cannot form another (`<!<!-- x -->--`).
+ */
+function withoutComments(text) {
+  let current = text;
+  for (;;) {
+    let result = "";
+    let index = 0;
+    for (;;) {
+      const start = current.indexOf("<!--", index);
+      if (start === -1) {
+        result += current.slice(index);
+        break;
+      }
+      result += current.slice(index, start);
+      const end = current.indexOf("-->", start + 4);
+      if (end === -1) break;
+      index = end + 3;
+    }
+    if (result === current) return result;
+    current = result;
+  }
+}
+
+/**
  * The summary of a phase pull request from its `body`: the first paragraph of prose in its
- * `## Summary` (or `## Highlights`) section, on one line, skipping lists, tables, quotes and the
- * generated-by line. Null without such a section or paragraph: the rest of a phase pull request's
- * description (its issues, what remains for the owner) is no summary of what the phase brings.
+ * `## Summary` (or `## Highlights`) section, which ends at the next heading of any level, on one
+ * line, skipping lists, tables, quotes, raw HTML and the generated-by line. HTML comments are
+ * removed first and any `<` left is escaped, so a summary can never open a comment or a tag that
+ * would hide the rest of the notes. Null without such a section or paragraph: the rest of a phase
+ * pull request's description (its issues, what remains for the owner) is no summary.
  */
 export function phaseSummary(body) {
   if (typeof body !== "string") return null;
-  const text = body.replace(/<!--[\s\S]*?-->/g, "").replace(/\r\n/g, "\n");
+  const text = withoutComments(body.replace(/\r\n/g, "\n"));
   const section = /^##\s+(?:summary|highlights)\s*$/im.exec(text);
   if (!section) return null;
   const rest = text.slice(section.index + section[0].length);
-  const end = rest.search(/^#{1,2}\s/m);
+  const end = rest.search(/^#{1,6}\s/m);
   const found = (end === -1 ? rest : rest.slice(0, end))
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
     .find(
       (paragraph) =>
         paragraph !== "" &&
-        !/^(#|[-*+] |\d+\. |\||>|```)/.test(paragraph) &&
+        !/^(#|[-*+] |\d+\. |\||>|```|<)/.test(paragraph) &&
         !GENERATED.test(paragraph),
     );
-  return found ? found.replace(/\s+/g, " ") : null;
+  return found ? found.replace(/\s+/g, " ").replaceAll("<", "&lt;") : null;
 }
 
 /**
@@ -205,7 +237,7 @@ export function releaseNotes({ commits, tags, version, previous, repository, pha
       ? pull(description)
       : `${description} ([${sha.slice(0, 7)}](${github}/commit/${sha}))`;
   const changes = commits
-    .filter((commit) => !isMerge(commit))
+    .filter((commit) => !isMerge(commit) && !isChangelog(commit))
     .filter((commit) => !phaseMerge(commit))
     .map((c) => ({ ...c, ...classify(c) }));
   const sections = [];
@@ -262,7 +294,7 @@ export function releaseNotes({ commits, tags, version, previous, repository, pha
 
 const CHANGELOG_HEADER = `# Changelog
 
-All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). Each section is the notes of its GitHub release, written by the release workflow after a healthy deployment; there is no Unreleased section, because every merge into master is deployed.
+All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). From v0.3.0 on, each section is byte for byte the notes of its GitHub release, added by the release workflow after a healthy deployment; the sections of v0.1.0 to v0.2.1 were rendered again in this format from the same commits, so they differ from the older notes of their releases. There is no Unreleased section, because every merge into master is deployed.
 `;
 
 const releaseLink = (version, repository) =>

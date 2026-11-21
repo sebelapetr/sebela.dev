@@ -10,7 +10,7 @@ issue → branch → worktree → implementation → checks → review → issue
                                   ...all issues of the phase...
 phase branch → phase pull request → owner approval → merge into master
                                   → deployment and version (docs/release-workflow.md)
-                                  → changelog pull request → owner merges (or auto-merge)
+                                  → changelog pull request → owner merges
 ```
 
 One issue, one branch, one worktree, one pull request. One phase, one integration branch, one pull request to `master`.
@@ -113,11 +113,11 @@ Orchestrated by: <agent>
 
 ## Changelog pull request
 
-After every deployment that publishes a new version, the release workflow opens `chore(release): changelog for vX.Y.Z` from `changelog/vX.Y.Z` into `master`: it adds that version's release notes to `CHANGELOG.md` and nothing else (`docs/release-workflow.md`, Changelog). It is part of the normal flow after each release: the owner merges it with a squash merge once its checks are green, oldest version first when several are open. When the owner has set the repository variable `CHANGELOG_AUTO_MERGE` to `true`, it merges itself instead. Merging it releases nothing. Nobody else edits `CHANGELOG.md` by hand.
+After every deployment that publishes a new version, the release workflow opens `chore(release): changelog for vX.Y.Z` from `changelog/vX.Y.Z` into `master`: it adds that version's release notes to `CHANGELOG.md` and nothing else (`docs/release-workflow.md`, Changelog). It is part of the normal flow after each release: the owner merges it with a squash merge once its checks are green, oldest version first when several are open. Merging it releases nothing. Nobody else edits `CHANGELOG.md` by hand.
 
 ## Rules that never bend
 
-- Nobody but the owner merges into `master`. Nobody pushes to `master` directly. The one automated merge is the changelog pull request's auto-merge, and only when the owner has turned it on (`CHANGELOG_AUTO_MERGE`).
+- Nobody but the owner merges into `master`. Nobody pushes to `master` directly.
 - Nobody force-pushes a shared branch (`master`, a phase branch).
 - A failing check is fixed, not bypassed.
 
