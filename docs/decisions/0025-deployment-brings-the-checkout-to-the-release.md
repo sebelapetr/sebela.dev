@@ -1,4 +1,4 @@
-# 0024 — A deployment brings the server's checkout to the release commit
+# 0025 — A deployment brings the server's checkout to the release commit
 
 Status: accepted
 Date: 2026-11-21
