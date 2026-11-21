@@ -160,6 +160,9 @@
     },
     "portfolio:service:evaluation-setup": {
       "path": "/services#service-evaluation-setup"
+    },
+    "document:riverbend-workshop-handout": {
+      "path": null
     }
   },
   "documents": [
@@ -182,6 +185,11 @@
       "sourceId": "document:reading-assistant-retrospective",
       "title": "Retrospektiva asistenta pro čtenáře",
       "file": "documents/reading-assistant-retrospective.md"
+    },
+    {
+      "sourceId": "document:riverbend-workshop-handout",
+      "title": "Retrieval Evaluation Workshop",
+      "file": "documents/riverbend-workshop-handout.pdf"
     }
   ],
   "questions": [
@@ -663,6 +671,28 @@
       "relevance": {
         "document:northgate-evaluation-talk": 2
       }
+    },
+    {
+      "id": "supplemental-pdf-chunk-size",
+      "language": "en",
+      "category": "supplemental",
+      "query": "What chunk size did Alex recommend in the Riverbend workshop?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:riverbend-workshop-handout": 2
+      },
+      "note": "Answered only by the fictional PDF handout (#227): its text layer, without the running header and page numbers."
+    },
+    {
+      "id": "supplemental-pdf-afternoon",
+      "language": "en",
+      "category": "supplemental",
+      "query": "What did the workshop participants do after lunch?",
+      "requires": "supplemental",
+      "relevance": {
+        "document:riverbend-workshop-handout": 2
+      },
+      "note": "Answered by the second page of the fictional PDF handout (#227)."
     }
   ]
 }

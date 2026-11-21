@@ -94,13 +94,16 @@ export interface KnowledgeService {
   /** The provider usage recorded this calendar month (UTC). */
   usage(): Promise<UsageTotals>;
   /**
-   * Ingests a supplemental Markdown or plain-text document for the owner's review; never calls
-   * the provider. Bytes already ingested for the same slug change nothing (`created: false`); the
-   * same bytes under another slug are a `conflict`. A document with sensitivity findings is
-   * recorded `blocked`, with the kinds and lines of the findings only and without its original;
-   * otherwise the original is kept in private storage and the version is `pending`. An unsupported
-   * or non-UTF-8 file is `unsupported_media_type`, an oversized one `payload_too_large`, and an
-   * empty one, an invalid slug or title or an exceeded processing time `validation_failed`.
+   * Ingests a supplemental Markdown, plain-text or text-layer PDF document for the owner's review;
+   * never calls the provider. Bytes already ingested for the same slug change nothing
+   * (`created: false`); the same bytes under another slug are a `conflict`. A document with
+   * sensitivity findings is recorded `blocked`, with the kinds and lines (and, for a PDF, pages) of
+   * the findings only and without its original; otherwise the original is kept in private storage
+   * and the version is `pending`. An unsupported or non-UTF-8 file, or a damaged,
+   * password-protected, scanned, image-only or incompletely extracted PDF, is
+   * `unsupported_media_type`; too many bytes, pages, extracted characters or parser memory are
+   * `payload_too_large`; an empty document, an invalid slug or title or an exceeded processing
+   * time are `validation_failed`.
    * Throws a plain error when no private storage is configured.
    */
   ingestDocument(input: DocumentInput): Promise<DocumentIngest>;
@@ -339,14 +342,14 @@ function createDocumentReview(
     return prepare({
       slug: version.sourceId.slice(documentPrefix.length),
       title: version.title,
-      fileName: version.mediaType === "text/plain" ? "document.txt" : "document.md",
+      fileName: fileNames[version.mediaType] ?? "document.md",
       bytes,
     });
   };
 
-  const prepare = (input: DocumentInput): PreparedDocument => {
+  const prepare = async (input: DocumentInput): Promise<PreparedDocument> => {
     try {
-      return prepareDocument(input, { limits });
+      return await prepareDocument(input, { limits });
     } catch (error) {
       if (error instanceof DocumentRejectedError) {
         throw new DomainError(rejectionCodes[error.reason], error.message);
@@ -403,7 +406,7 @@ function createDocumentReview(
       const privateStorage = storage();
       const contentHash = contentHashOf(input.bytes);
       // An invalid slug is refused by the preparation with its own message, before any lookup.
-      if (documentSourceId(input.slug) === null) prepare(input);
+      if (documentSourceId(input.slug) === null) await prepare(input);
       const sourceId = documentSourceId(input.slug);
       const existing = await store.documentVersion(contentHash);
       if (existing !== null) {
@@ -416,7 +419,7 @@ function createDocumentReview(
         return { created: false, version: withoutKey(existing) };
       }
 
-      const prepared = prepare(input);
+      const prepared = await prepare(input);
       const counts = {
         sourceId: prepared.sourceId,
         contentHash: prepared.contentHash,
@@ -469,6 +472,7 @@ function createDocumentReview(
         chunks: prepared?.chunks ?? [],
         findings: version.findings.map((finding) => ({
           kind: sensitivityKindOf(finding.kind),
+          ...(finding.page === undefined ? {} : { page: finding.page }),
           line: finding.line,
         })),
       };
@@ -637,6 +641,19 @@ const rejectionCodes: Readonly<Record<DocumentRejection, DomainErrorCode>> = {
   too_large: "payload_too_large",
   extracted_too_large: "payload_too_large",
   too_slow: "validation_failed",
+  malformed: "unsupported_media_type",
+  encrypted: "unsupported_media_type",
+  no_text_layer: "unsupported_media_type",
+  incomplete_extraction: "unsupported_media_type",
+  too_many_pages: "payload_too_large",
+  parser_limit: "payload_too_large",
+};
+
+/** The file name a stored original is prepared under again, by its recorded media type. */
+const fileNames: Readonly<Record<string, string>> = {
+  "text/markdown": "document.md",
+  "text/plain": "document.txt",
+  "application/pdf": "document.pdf",
 };
 
 function withoutKey(version: RetrievalDocumentVersion): DocumentVersion {

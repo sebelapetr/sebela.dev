@@ -1,9 +1,12 @@
-// Turns the bytes of a supplemental Markdown or plain-text document into an indexable source:
-// checked for type and limits, decoded as UTF-8, cleaned, checked locally for sensitive values and
-// split by headings into sections and bounded, overlapping chunks. Nothing here calls a provider.
+// Turns the bytes of a supplemental Markdown, plain-text or text-layer PDF document into an
+// indexable source: checked for type and limits, decoded as UTF-8 or read from the PDF's text layer
+// in a bounded parser (pages and headings kept, running headers and footers dropped), cleaned,
+// checked locally for sensitive values and split by headings into sections and bounded,
+// overlapping chunks. Nothing here calls a provider.
 import { createHash } from "node:crypto";
 
 import { chunkMaxLength, type SourceChunk, type SourceSection } from "../ingest/index.js";
+import { readPdf, type PdfFailure } from "./pdf.js";
 
 /** The kinds of sensitive value a local check finds. A finding never carries the value. */
 export const sensitivityKinds = [
@@ -19,19 +22,27 @@ export type SensitivityKind = (typeof sensitivityKinds)[number];
 
 /**
  * Where a sensitive value was found: its kind and its line in the original file, counting LF, CRLF
- * and CR line breaks (title: 0).
+ * and CR line breaks (title: 0). In a PDF, its page (from 1) and its line of extracted text on that
+ * page (from 1); the title has no page.
  */
 export interface SensitivityFinding {
   readonly kind: SensitivityKind;
+  readonly page?: number;
   readonly line: number;
 }
 
-export type DocumentMediaType = "text/markdown" | "text/plain";
-export type DocumentExtension = "md" | "txt";
+export type DocumentMediaType = "text/markdown" | "text/plain" | "application/pdf";
+export type DocumentExtension = "md" | "txt" | "pdf";
 
 export interface DocumentLimits {
-  /** The most bytes of the original. */
+  /** The most bytes of a Markdown or plain-text original. */
   readonly maxBytes: number;
+  /** The most bytes of a PDF original. */
+  readonly maxPdfBytes: number;
+  /** The most pages of a PDF. */
+  readonly maxPages: number;
+  /** The most mebibytes of heap and decoded buffers the PDF parser may use together. */
+  readonly maxParserMemoryMb: number;
   /** The most characters of the cleaned text. */
   readonly maxExtractedChars: number;
   /** The most milliseconds the preparation may take. */
@@ -40,6 +51,9 @@ export interface DocumentLimits {
 
 export const defaultDocumentLimits: DocumentLimits = {
   maxBytes: 1_048_576,
+  maxPdfBytes: 10_485_760,
+  maxPages: 100,
+  maxParserMemoryMb: 256,
   maxExtractedChars: 500_000,
   maxProcessingMs: 10_000,
 };
@@ -53,7 +67,13 @@ export type DocumentRejection =
   | "empty"
   | "too_large"
   | "extracted_too_large"
-  | "too_slow";
+  | "too_slow"
+  | "malformed"
+  | "encrypted"
+  | "no_text_layer"
+  | "incomplete_extraction"
+  | "too_many_pages"
+  | "parser_limit";
 
 export class DocumentRejectedError extends Error {
   constructor(
@@ -115,6 +135,7 @@ const types: Readonly<
   md: { extension: "md", mediaType: "text/markdown" },
   markdown: { extension: "md", mediaType: "text/markdown" },
   txt: { extension: "txt", mediaType: "text/plain" },
+  pdf: { extension: "pdf", mediaType: "application/pdf" },
 };
 
 /** The extension and media type a file name stands for, or `null` when it is not supported. */
@@ -134,18 +155,16 @@ export function contentHashOf(bytes: Uint8Array): string {
 
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
-const pdfMessage =
-  "PDF documents are not supported yet; convert the document to Markdown or plain text and ingest that.";
-
 /**
- * Prepares a document. Throws `DocumentRejectedError` for an invalid slug or title, an unsupported
- * type, bytes that are not UTF-8 text, an empty text and every exceeded limit. Sensitive values do
- * not throw: they are returned as findings, without the values.
+ * Prepares a document. Rejects with `DocumentRejectedError` for an invalid slug or title, an
+ * unsupported type, bytes that are not UTF-8 text, a PDF that is damaged, password-protected,
+ * scanned or not completely extractable, an empty text and every exceeded limit. Sensitive values
+ * do not reject: they are returned as findings, without the values.
  */
-export function prepareDocument(
+export async function prepareDocument(
   input: DocumentInput,
   options: PrepareOptions = {},
-): PreparedDocument {
+): Promise<PreparedDocument> {
   const limits = options.limits ?? defaultDocumentLimits;
   const clock = options.clock ?? (() => performance.now());
   const started = clock();
@@ -166,37 +185,63 @@ export function prepareDocument(
     );
   }
   const title = checkedTitle(input.title);
-  if (input.bytes.length > limits.maxBytes) {
+  const type = documentTypeOf(input.fileName);
+  const isPdf = type?.extension === "pdf";
+  const maxBytes = isPdf ? limits.maxPdfBytes : limits.maxBytes;
+  if (input.bytes.length > maxBytes) {
     reject(
       "too_large",
-      `The file is larger than ${String(limits.maxBytes)} bytes; split it into smaller documents.`,
+      `The file is larger than ${String(maxBytes)} bytes; split it into smaller documents.`,
     );
   }
-  const type = documentTypeOf(input.fileName);
   if (type === null) {
-    if (/\.pdf$/iu.test(input.fileName)) reject("unsupported_type", pdfMessage);
     reject(
       "unsupported_type",
-      "Only Markdown (.md, .markdown) and plain-text (.txt) documents are supported; convert the document first.",
+      "Only Markdown (.md, .markdown), plain-text (.txt) and PDF (.pdf) documents are supported; convert the document first.",
     );
   }
-  sniff(input.bytes);
 
-  let decoded: string;
-  try {
-    decoded = new TextDecoder("utf-8", { fatal: true }).decode(input.bytes);
-  } catch {
-    reject("not_utf8", "The file is not valid UTF-8 text; save it as UTF-8 and ingest it again.");
-  }
-  if (hasBinaryControl(decoded)) {
-    reject(
-      "unsupported_type",
-      "The file holds binary data, not text; only Markdown and plain-text documents are supported.",
-    );
+  let cleaned: Cleaned;
+  let lineOf: (index: number) => Location;
+  if (isPdf) {
+    if (!startsWith(input.bytes, pdfSignature)) {
+      reject(
+        "unsupported_type",
+        "The file is named .pdf but is not a PDF; ingest the original PDF or rename the file to its real type.",
+      );
+    }
+    const reading = await readPdf(input.bytes, {
+      maxPages: limits.maxPages,
+      // The raw text holds the running headers and spacing the cleaned text drops.
+      maxChars: limits.maxExtractedChars * 2,
+      maxParserMemoryMb: limits.maxParserMemoryMb,
+      timeoutMs: limits.maxProcessingMs - (clock() - started),
+    });
+    if (!reading.ok) pdfRejection(reading.failure, limits);
+    cleaned = clean(reading.markdown.text);
+    const markdownLine = originalLineOf(cleaned);
+    const origins = reading.markdown.origins;
+    lineOf = (index) => origins[markdownLine(index) - 1] ?? { line: 0 };
+  } else {
+    sniff(input.bytes);
+    let decoded: string;
+    try {
+      decoded = new TextDecoder("utf-8", { fatal: true }).decode(input.bytes);
+    } catch {
+      reject("not_utf8", "The file is not valid UTF-8 text; save it as UTF-8 and ingest it again.");
+    }
+    if (hasBinaryControl(decoded)) {
+      reject(
+        "unsupported_type",
+        "The file holds binary data, not text; only Markdown, plain-text and PDF documents are supported.",
+      );
+    }
+    cleaned = clean(decoded);
+    const originalLine = originalLineOf(cleaned);
+    lineOf = (index) => ({ line: originalLine(index) });
   }
   checkTime();
 
-  const cleaned = clean(decoded);
   const text = cleaned.text;
   if (text.length > limits.maxExtractedChars) {
     reject(
@@ -207,12 +252,12 @@ export function prepareDocument(
   checkTime();
 
   const findings = [
-    ...detect(title, () => 0, checkTime),
-    ...detect(text, originalLineOf(cleaned), checkTime),
+    ...detect(title, () => ({ line: 0 }), checkTime),
+    ...detect(text, lineOf, checkTime),
   ];
 
   const sections =
-    type.extension === "md" ? markdownSections(text, title) : textSections(text, title);
+    type.extension === "txt" ? textSections(text, title) : markdownSections(text, title);
   if (sections.length === 0) {
     reject(
       "empty",
@@ -238,6 +283,68 @@ export function prepareDocument(
     chunks,
     findings: sortedFindings(findings),
   };
+}
+
+/** Where a position of the cleaned text came from: a line and, in a PDF, its page. */
+interface Location {
+  readonly page?: number;
+  readonly line: number;
+}
+
+const pdfSignature = [0x25, 0x50, 0x44, 0x46, 0x2d];
+
+/** Rejects a PDF whose text cannot be used, saying what the owner can do about it. */
+function pdfRejection(failure: PdfFailure, limits: DocumentLimits): never {
+  switch (failure.reason) {
+    case "malformed":
+      return reject(
+        "malformed",
+        "The file is not a readable PDF (its structure is damaged); export it again from its source application and ingest the new file.",
+      );
+    case "encrypted":
+      return reject(
+        "encrypted",
+        "The PDF is password-protected; remove the password (save an unprotected copy) and ingest that copy.",
+      );
+    case "no_text_layer":
+      return reject(
+        "no_text_layer",
+        "The PDF is scanned: its pages are images without a text layer. Run text recognition (OCR) on it first, or convert it to Markdown or plain text.",
+      );
+    case "empty":
+      return reject("empty", "The PDF holds no text; add the text and ingest it again.");
+    case "incomplete_extraction": {
+      const why = {
+        unreadable: "its content could not be read",
+        images: "it is a scanned image without a text layer",
+        undecodable: "its fonts do not map their characters to text",
+      }[failure.cause];
+      return reject(
+        "incomplete_extraction",
+        `The text of page ${String(failure.page)} could not be extracted completely (${why}); run text recognition (OCR) on the PDF, or convert it to Markdown or plain text.`,
+      );
+    }
+    case "too_many_pages":
+      return reject(
+        "too_many_pages",
+        `The PDF has ${String(failure.pages)} pages, more than ${String(limits.maxPages)}; split it into smaller documents.`,
+      );
+    case "extracted_too_large":
+      return reject(
+        "extracted_too_large",
+        `The text of the PDF is longer than ${String(limits.maxExtractedChars)} characters; split it into smaller documents.`,
+      );
+    case "parser_limit":
+      return reject(
+        "parser_limit",
+        `Reading the PDF needed more than ${String(limits.maxParserMemoryMb)} MiB of memory; split it into smaller documents or convert it to Markdown or plain text.`,
+      );
+    case "too_slow":
+      return reject(
+        "too_slow",
+        `Reading the PDF took longer than ${String(limits.maxProcessingMs)} ms; split it into smaller documents.`,
+      );
+  }
 }
 
 /** C0 controls other than tab, line feed, form feed and carriage return; DEL and C1 controls. */
@@ -275,7 +382,12 @@ const startsWith = (bytes: Uint8Array, magic: readonly number[]) =>
 
 /** Refuses files whose first bytes name a binary format, whatever their file name says. */
 function sniff(bytes: Uint8Array): void {
-  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46])) reject("unsupported_type", pdfMessage);
+  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46])) {
+    reject(
+      "unsupported_type",
+      "The file is a PDF, not text; name it with the .pdf extension and ingest it again.",
+    );
+  }
   const binary = [
     [0x89, 0x50, 0x4e, 0x47],
     [0xc2, 0x89, 0x50, 0x4e, 0x47],
@@ -284,7 +396,7 @@ function sniff(bytes: Uint8Array): void {
   if (binary.some((magic) => startsWith(bytes, magic))) {
     reject(
       "unsupported_type",
-      "The file is an image or an archive, not text; only Markdown and plain-text documents are supported.",
+      "The file is an image or an archive, not text; only Markdown, plain-text and PDF documents are supported.",
     );
   }
 }
@@ -603,7 +715,7 @@ const detectors: readonly Detector[] = [
  */
 function detect(
   text: string,
-  lineOf: (index: number) => number,
+  lineOf: (index: number) => Location,
   checkTime: () => void,
 ): SensitivityFinding[] {
   let masked = text;
@@ -618,7 +730,7 @@ function detect(
       }
       if (detector.accept !== undefined && !detector.accept(match)) continue;
       const start = match.index + (detector.context?.(match) ?? 0);
-      findings.push({ kind: detector.kind, line: lineOf(start) });
+      findings.push({ kind: detector.kind, ...lineOf(start) });
       spans.push([start, match.index + match[0].length]);
     }
     if (spans.length > 0) masked = maskedSpans(masked, spans);
@@ -641,9 +753,12 @@ function maskedSpans(text: string, spans: readonly (readonly [number, number])[]
 
 function sortedFindings(findings: readonly SensitivityFinding[]): SensitivityFinding[] {
   const unique = new Map<string, SensitivityFinding>();
-  for (const finding of findings) unique.set(`${finding.kind}:${String(finding.line)}`, finding);
+  for (const finding of findings) {
+    unique.set(`${finding.kind}:${String(finding.page ?? 0)}:${String(finding.line)}`, finding);
+  }
   return [...unique.values()].sort(
     (left, right) =>
+      (left.page ?? 0) - (right.page ?? 0) ||
       left.line - right.line ||
       sensitivityKinds.indexOf(left.kind) - sensitivityKinds.indexOf(right.kind),
   );

@@ -12,7 +12,7 @@ import {
   type PrivateStorage,
   type RetrievalConfig,
 } from "@sebela/services";
-import { createFakeEmbedder, createFakeReranker } from "@sebela/services/testing";
+import { createFakeEmbedder, createFakeReranker, fixturePdf } from "@sebela/services/testing";
 
 import { openTestBackend, type TestBackend } from "../test-support.js";
 import { runKnowledgeCommand } from "./knowledge.js";
@@ -200,6 +200,18 @@ describe("the knowledge command's supplemental documents", () => {
     await writeFile(join(folder, "handbook-FINAL.md"), handbook);
     await writeFile(join(folder, "leaky.md"), leaky);
     await writeFile(join(folder, "other.txt"), "Another fictional note about parking.\n");
+    await writeFile(
+      join(folder, "Field report.pdf"),
+      fixturePdf([
+        {
+          lines: [
+            { text: "Lakeside Studio Notes", size: 18 },
+            { text: "The kiln room opens on Tuesdays and the glaze shelf is restocked monthly." },
+          ],
+        },
+        { lines: [{ text: `Ask ${["kiln", "studio.example"].join("@")} for a key.` }] },
+      ]),
+    );
   });
 
   afterAll(async () => {
@@ -347,6 +359,50 @@ describe("the knowledge command's supplemental documents", () => {
       expect(refused.err()).not.toContain(folder);
     } finally {
       await rm(huge);
+    }
+  });
+
+  it("ingests a PDF and prints its findings with their pages", async () => {
+    const blocked = await run([
+      "ingest",
+      "Field report.pdf",
+      "--slug",
+      "field-report",
+      "--title",
+      "Field report",
+    ]);
+    expect(blocked.code).toBe(1);
+    const { version } = blocked.json() as {
+      version: Version & { mediaType: string; findings: unknown[] };
+    };
+    expect(version).toMatchObject({ status: "blocked", mediaType: "application/pdf" });
+    expect(version.findings).toEqual([{ kind: "email", page: 2, line: 1 }]);
+    expect(blocked.err()).toMatch(/kinds, pages and lines above/);
+    expect(JSON.stringify(blocked.json())).not.toContain("kiln@");
+  });
+
+  it("holds a PDF to the PDF byte limit before reading it", async () => {
+    // Sparse files: one over the Markdown limit but within the PDF limit is read (and is no PDF),
+    // one over the PDF limit is refused before it is read.
+    const within = join(folder, "within.pdf");
+    const over = join(folder, "over.pdf");
+    await writeFile(within, "");
+    await truncate(within, 2 * 1024 ** 2);
+    await writeFile(over, "");
+    await truncate(over, 3 * 1024 ** 3);
+    try {
+      const read = await run(["ingest", "within.pdf", "--slug", "within", "--title", "Within"]);
+      expect(read.code).toBe(1);
+      expect(read.err()).not.toMatch(/larger than/);
+      expect(read.err()).toMatch(/PDF/);
+
+      const refused = await run(["ingest", "over.pdf", "--slug", "over", "--title", "Over"]);
+      expect(refused.code).toBe(1);
+      expect(refused.err()).toMatch(/larger than 10485760 bytes/);
+      expect(refused.err()).not.toContain(folder);
+    } finally {
+      await rm(within);
+      await rm(over);
     }
   });
 

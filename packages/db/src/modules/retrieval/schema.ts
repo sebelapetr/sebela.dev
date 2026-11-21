@@ -183,8 +183,8 @@ export const providerUsage = retrievalSchema.table(
 
 /**
  * Every ingested version of a supplemental document, identified by the SHA-256 of its original
- * bytes: its display title, type, size, private storage key, the owner's decision and the kinds and
- * lines of its sensitivity findings, never the detected values, and the conflicts its approved chunks
+ * bytes: its display title, type, size, private storage key, the owner's decision and the kinds,
+ * pages (of a PDF) and lines of its sensitivity findings, never the detected values, and the conflicts its approved chunks
  * have with the structured portfolio facts. Private operational state; the
  * original stays in private storage and only an approved version's passages are indexed.
  */
@@ -200,7 +200,7 @@ export const documentVersions = retrievalSchema.table(
     byteSize: integer("byte_size").notNull(),
     storageKey: text("storage_key"),
     status: text("status").notNull(),
-    findings: jsonb("findings").$type<{ kind: string; line: number }[]>().notNull(),
+    findings: jsonb("findings").$type<{ kind: string; page?: number; line: number }[]>().notNull(),
     /** Chunks that contradict the structured portfolio facts; left out of search. */
     conflicts: jsonb("conflicts")
       .$type<

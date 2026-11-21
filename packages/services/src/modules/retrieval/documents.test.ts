@@ -10,9 +10,11 @@ import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/test
 import {
   createFakeEmbedder,
   createFakeReranker,
+  defaultDocumentLimits,
   type Embedder,
   type RetrievalConfig,
 } from "@sebela/memory";
+import { fixturePdf, malformedPdf, type FixturePdfPage } from "@sebela/memory/testing";
 
 import { DomainError } from "../../errors.js";
 import { createProfileService } from "../profile/index.js";
@@ -345,7 +347,7 @@ describe("supplemental documents through the knowledge service", () => {
 
   it.each([
     ["an unsupported type", { fileName: "handbook.html" }, "unsupported_media_type"],
-    ["a PDF", { fileName: "handbook.pdf" }, "unsupported_media_type"],
+    ["Markdown bytes named .pdf", { fileName: "handbook.pdf" }, "unsupported_media_type"],
     [
       "bytes that are not UTF-8",
       { bytes: new Uint8Array([0x23, 0x20, 0xff, 0xfe]) },
@@ -364,9 +366,119 @@ describe("supplemental documents through the knowledge service", () => {
     expect(embedder.calls).toBe(0);
   });
 
+  // A fictional two-page PDF report with a running header and page-number footers.
+  const reportPages = (
+    contact = "Ask the harbour office for the tide tables.",
+  ): FixturePdfPage[] => [
+    {
+      lines: [
+        { text: "Fictional Harbour Report" },
+        { text: "Harbour tides", size: 20 },
+        { text: "The spring tides lift the moored boats by two metres." },
+        { text: "Page 1 of 2" },
+      ],
+    },
+    {
+      lines: [
+        { text: "Fictional Harbour Report" },
+        { text: "Contact", size: 15 },
+        { text: contact },
+        { text: "Page 2 of 2" },
+      ],
+    },
+  ];
+  const report = (bytes = fixturePdf(reportPages())) => ({
+    slug: "harbour-report",
+    title: "Harbour tide report",
+    fileName: "tide report.pdf",
+    bytes,
+  });
+
+  it("ingests a PDF as a pending version, embeds it only on approval and restores it on rebuild", async () => {
+    const { knowledge, embedder } = open();
+    const bytes = fixturePdf(reportPages());
+
+    const { version } = await knowledge.ingestDocument(report(bytes));
+
+    expect(version).toMatchObject({
+      sourceId: "document:harbour-report",
+      contentHash: sha(bytes),
+      mediaType: "application/pdf",
+      byteSize: bytes.length,
+      status: "pending",
+      findings: [],
+      sectionCount: 2,
+    });
+    const preview = await knowledge.showDocument(version.contentHash);
+    expect(preview.sections.map((section) => section.headingPath)).toEqual([
+      ["Harbour tide report", "Harbour tides"],
+      ["Harbour tide report", "Harbour tides", "Contact"],
+    ]);
+    expect(preview.text).not.toContain("Fictional Harbour Report");
+    expect(embedder.calls).toBe(0);
+    expect(await filesBelow(privateRoot)).toEqual([expect.stringMatching(/\.pdf$/) as string]);
+
+    const approved = await knowledge.approveDocument(version.contentHash);
+    expect(approved.report.embedded).toBe(version.chunkCount);
+    const [passage] = await supplementalPassages(knowledge, "spring tides moored boats");
+    expect(passage).toMatchObject({ sourceId: "document:harbour-report", version: sha(bytes) });
+
+    await persistence.retrieval.removeSourcesExcept("supplemental", []);
+    const rebuilt = await knowledge.rebuildIndex();
+    expect(rebuilt.documents).toMatchObject({ restored: 1, missing: 0 });
+    expect(await supplementalPassages(knowledge, "spring tides moored boats")).toHaveLength(1);
+  });
+
+  it("blocks a PDF with findings at their page and line", async () => {
+    const { knowledge, embedder } = open();
+    const contact = `Write to ${["tide.desk", "example.test"].join("@")} for the tables.`;
+
+    const { version } = await knowledge.ingestDocument(report(fixturePdf(reportPages(contact))));
+
+    expect(version.status).toBe("blocked");
+    expect(version.findings).toEqual([{ kind: "email", page: 2, line: 3 }]);
+    expect((await knowledge.listDocuments())[0]?.findings).toEqual(version.findings);
+    expect(await filesBelow(privateRoot)).toEqual([]);
+    expect(embedder.calls).toBe(0);
+  });
+
+  it.each([
+    ["a malformed PDF", malformedPdf(), "unsupported_media_type"],
+    [
+      "a password-protected PDF",
+      fixturePdf(reportPages(), { encrypted: true }),
+      "unsupported_media_type",
+    ],
+    ["a scanned PDF", fixturePdf([{ image: true }]), "unsupported_media_type"],
+    [
+      "a PDF with a scanned page",
+      fixturePdf([...reportPages(), { image: true }]),
+      "unsupported_media_type",
+    ],
+    ["an empty PDF", fixturePdf([{}]), "validation_failed"],
+  ])("refuses %s with an actionable message and stores nothing", async (_name, bytes, code) => {
+    const { knowledge, embedder } = open();
+    const error = await refusal(knowledge.ingestDocument(report(bytes)));
+    expect(error.code).toBe(code);
+    expect(error.message.length).toBeGreaterThan(20);
+    expect(await knowledge.listDocuments()).toEqual([]);
+    expect(await filesBelow(privateRoot)).toEqual([]);
+    expect(embedder.calls).toBe(0);
+  });
+
+  it.each([
+    ["more pages than the limit", { maxPages: 1 }],
+    ["more parser memory than the limit", { maxParserMemoryMb: 4 }],
+    ["more bytes than the PDF limit", { maxPdfBytes: 64 }],
+  ])("refuses a PDF that needs %s as too large", async (_name, change) => {
+    const { knowledge } = open({ documentLimits: { ...defaultDocumentLimits, ...change } });
+    expect((await refusal(knowledge.ingestDocument(report()))).code).toBe("payload_too_large");
+    expect(await filesBelow(privateRoot)).toEqual([]);
+  });
+
   it("refuses a file over the size limit as too large", async () => {
     const { knowledge } = open({
-      documentLimits: { maxBytes: 64, maxExtractedChars: 1000, maxProcessingMs: 10_000 },
+      documentLimits: { ...defaultDocumentLimits, maxBytes: 64, maxExtractedChars: 1000 },
     });
     expect((await refusal(knowledge.ingestDocument(handbook()))).code).toBe("payload_too_large");
     expect(await filesBelow(privateRoot)).toEqual([]);

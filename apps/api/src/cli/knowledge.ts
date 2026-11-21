@@ -15,6 +15,7 @@ import { SearchRequestSchema } from "@sebela/contracts";
 import {
   DomainError,
   defaultDocumentLimits,
+  documentTypeOf,
   openPrivateStorage,
   openServices,
   readDatabaseConfig,
@@ -44,7 +45,7 @@ const USAGE = `Usage: knowledge <command>
                           of [{ id, query, kinds? }], resolved against the starting directory.
   usage                   Prints the provider usage recorded this calendar month (UTC).
 
-  Supplemental documents (Markdown or plain text, kept in private storage):
+  Supplemental documents (Markdown, plain text or PDF with a text layer, kept in private storage):
   ingest <file> --slug <slug> --title <title>
                           Ingests the file for review without calling the provider; prints
                           { created, version }. Exits 1 when the version is blocked by findings.
@@ -142,7 +143,10 @@ export async function runKnowledgeCommand(
     if (ingest !== null) {
       const path = resolve(cwd, ingest.file);
       // The size is checked before the file is read, so a huge file is never loaded.
-      const { maxBytes } = defaultDocumentLimits;
+      const maxBytes =
+        documentTypeOf(ingest.file)?.extension === "pdf"
+          ? defaultDocumentLimits.maxPdfBytes
+          : defaultDocumentLimits.maxBytes;
       if ((await stat(path)).size > maxBytes) {
         throw new DomainError(
           "payload_too_large",
@@ -159,7 +163,7 @@ export async function runKnowledgeCommand(
       print(ingested);
       if (ingested.version.status === "blocked") {
         output.err(
-          "The document has sensitivity findings (kinds and lines above); remove them and ingest a sanitized revision.\n",
+          "The document has sensitivity findings (kinds, pages and lines above); remove them and ingest a sanitized revision.\n",
         );
         return 1;
       }

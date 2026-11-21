@@ -58,6 +58,7 @@ const contentTypes: Readonly<Record<StoredExtension, string>> = {
 const privateContentTypes: Readonly<Record<PrivateExtension, string>> = {
   md: "text/markdown; charset=utf-8",
   txt: "text/plain; charset=utf-8",
+  pdf: "application/pdf",
 };
 
 /**

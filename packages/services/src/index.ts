@@ -75,7 +75,7 @@ export type {
   UsageTotals,
   WorkCounts,
 } from "@sebela/memory";
-export { defaultDocumentLimits } from "@sebela/memory";
+export { defaultDocumentLimits, documentTypeOf } from "@sebela/memory";
 export type { DocumentLimits, SensitivityFinding } from "@sebela/memory";
 export type {
   DocumentApproval,
