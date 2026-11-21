@@ -106,7 +106,7 @@ The visual direction is editorial and monochrome: strong typography, generous wh
 
 ### Planned visitor assistant
 
-The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers.
+The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers. The [threat model](docs/threat-model.md) lists what a visitor may try, which layer stops it and what remains a residual risk.
 
 1. **Check access and cost.** The API verifies conversation ownership, applies rate limits and bot checks, and checks the available budget before a model call.
 2. **Guard the input.** A small model checks for off-topic requests, manipulation and abuse.
