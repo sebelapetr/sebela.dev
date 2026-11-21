@@ -1,14 +1,19 @@
-# Paid model evals: only the suites a change affects, and not on every push (docs/testing.md,
-# Evals-driven development). The phase loop opens a phase pull request as a draft, which runs no
-# evals; the owner marks it ready for review when the phase is complete, HITL work included, and
-# that runs them once on the final state. Each suite has its own job and its own paths: its folder and what can
-# change its behaviour. A suite runs in full on a pull request into the main branch when it is
-# opened, reopened or marked ready for review and the pull request changes one of its paths, and
-# by hand (workflow_dispatch, one suite or all). New commits on the pull request start no charged
-# run; start one by hand when a fix needs it. Issue pull requests into phase branches never run
-# paid evals; developers run the affected cases locally, where the eval command reads the key from
-# the main checkout's .env.secrets. The key comes from the repository secret ANTHROPIC_API_KEY and
-# is given only to the step that runs the evals.
+# Paid model evals: only on a phase pull request or by hand, only the suites a change affects, and
+# not on every push (docs/testing.md, Evals-driven development). They start by themselves only on a
+# phase pull request, head branch phase/<phase-folder> into the main branch, when it is opened,
+# reopened or marked ready for review and is not a draft; the suites it affects then run in full.
+# The phase loop opens a phase pull request as a draft, which runs no evals; the owner marks it
+# ready for review when the phase is complete, HITL work included, and that runs them once on the
+# final state. New commits on the pull request start no charged run. Every other pull request
+# (a fix, a dependency update, documentation) starts none, whatever it changes: the job
+# `Affected eval suites` ends green without selecting a suite (scripts/checks/paid-evals-trigger.mjs).
+# When such a change, or a fix on a phase pull request, needs a suite, start it by hand
+# (workflow_dispatch, one suite or all: Actions, Model evals, Run workflow, or
+# `gh workflow run model-evals.yml --ref <branch> -f suite=<suite>`); every run is charged. Each
+# suite has its own job and its own paths: its folder and what can change its behaviour. Issue pull
+# requests into phase branches never run paid evals; developers run the affected cases locally,
+# where the eval command reads the key from the main checkout's .env.secrets. The key comes from
+# the repository secret ANTHROPIC_API_KEY and is given only to the step that runs the evals.
 name: Model evals
 
 on:
@@ -28,7 +33,8 @@ permissions:
   contents: read
 
 jobs:
-  # Which suites the pull request affects. A manual run selects them by its input instead.
+  # Which suites the pull request affects: none unless it is a phase pull request. A manual run
+  # selects them by its input instead.
   changes:
     name: Affected eval suites
     # A draft pull request runs no evals: the phase is not complete yet.
@@ -43,7 +49,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+      # Only a phase pull request (head branch phase/<phase-folder>) or a manual run may start paid
+      # evals. On any other pull request the next step is skipped, so no suite is selected and
+      # every suite's job is skipped. The head branch is passed as an environment variable, never
+      # written into a shell line.
+      - id: trigger
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/checks/paid-evals-trigger.mjs >> "$GITHUB_OUTPUT"
       - id: affected
+        if: steps.trigger.outputs.paid-evals == 'true'
         env:
           EVENT: ${{ github.event_name }}
           SUITE: ${{ inputs.suite }}
