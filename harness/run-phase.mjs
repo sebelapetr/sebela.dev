@@ -20,6 +20,7 @@ import {
   RUN_REPORT_SCHEMA,
   classifyRun,
   decideNext,
+  descendantsOf,
   noteAfter,
   ownerNoteSection,
   phaseEnd,
@@ -116,25 +117,56 @@ Nobody can answer questions in this run. Never wait for input; when something ne
 Finish with the structured report.${ownerNoteSection(note)}`;
 }
 
-// Sends a signal to the orchestrator's whole process group: the orchestrator, its subagents'
-// commands and whatever those started, a paid eval command included. Returns whether anything
-// was there to take it.
-function signalRun(child, signal) {
-  try {
-    process.kill(-child.pid, signal);
-    return true;
-  } catch {
+// Everything a run has started and how to signal it. Claude Code's Bash tool starts each command
+// in a session and process group of its own, so a signal to the orchestrator's process group
+// misses an agent's command — a paid eval among them — and once the orchestrator is gone its
+// children no longer hang below it. The run is therefore followed through the parents of the
+// process list: every process found below the orchestrator is remembered, with its process
+// group, and looked for again at every signal.
+function runProcesses(child) {
+  const known = new Map([[child.pid, child.pid]]);
+  let ownGroup = null;
+  const refresh = () => {
+    const out = quiet("ps", ["-eo", "pid=,ppid=,pgid="]);
+    if (out === null) return;
+    const processes = out
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/).map(Number))
+      .filter((row) => row.length === 3 && row.every(Number.isInteger))
+      .map(([pid, ppid, pgid]) => ({ pid, ppid, pgid }));
+    ownGroup = processes.find((row) => row.pid === process.pid)?.pgid ?? ownGroup;
+    for (const pid of [...known.keys()]) {
+      for (const found of descendantsOf(processes, pid)) known.set(found.pid, found.pgid);
+    }
+  };
+  const send = (target, signal) => {
     try {
-      return child.kill(signal);
+      process.kill(target, signal);
+      return true;
     } catch {
       return false;
     }
-  }
+  };
+  return {
+    // Signals every process of the run and every process group it has, never the loop's own.
+    signal(signal) {
+      refresh();
+      const groups = new Set([...known.values()].filter((pgid) => pgid !== ownGroup));
+      for (const pgid of groups) send(-pgid, signal);
+      // A process still in the loop's own group is signalled by itself.
+      for (const [pid, pgid] of known) if (pgid === ownGroup) send(pid, signal);
+    },
+    // Whether anything of the run is still there.
+    alive() {
+      return [...known.keys()].some((pid) => send(pid, 0));
+    },
+  };
 }
 
 // `control.stop` is set to a function that ends the run (the steward's stop): an interrupt, then
-// a terminate after `graceMs` and a kill after as long again, each to the run's whole process
-// group, until nothing of it is left. One interrupt alone can be ignored or lost, and a command
+// a terminate after `graceMs` and a kill after as long again, each to every process the run has
+// started (runProcesses), until none of them is left. Ctrl+C in the loop's terminal takes the
+// same path, and a second Ctrl+C kills at once. One interrupt alone can be ignored or lost, and a command
 // the orchestrator started must not go on spending after the loop has stopped.
 function runOrchestrator({
   mainRoot,
@@ -195,7 +227,7 @@ function runOrchestrator({
         ENABLE_CLAUDEAI_MCP_SERVERS: "false",
       },
       stdio: ["ignore", "pipe", "pipe"],
-      // Its own process group, so a stop reaches everything the run started. Ctrl+C in the
+      // Its own process group, so signals meant for the run never hit the loop. Ctrl+C in the
       // loop's terminal no longer reaches it by itself; the loop passes it on below.
       detached: true,
     });
@@ -203,35 +235,43 @@ function runOrchestrator({
     let stderr = "";
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr += chunk));
-    const interrupt = () => signalRun(child, "SIGINT");
+    const run = runProcesses(child);
     const timers = [];
     let ending = null;
-    // Resolves when nothing of the run's process group is left.
+    // Resolves when nothing the run started is left.
     const end = () => {
       ending ??= new Promise((done) => {
-        signalRun(child, "SIGINT");
+        run.signal("SIGINT");
         const finish = () => {
           for (const timer of timers) clearTimeout(timer);
           clearInterval(watch);
           done();
         };
-        timers.push(setTimeout(() => signalRun(child, "SIGTERM"), graceMs));
-        timers.push(setTimeout(() => signalRun(child, "SIGKILL"), 2 * graceMs));
+        timers.push(setTimeout(() => run.signal("SIGTERM"), graceMs));
+        timers.push(setTimeout(() => run.signal("SIGKILL"), 2 * graceMs));
         // A last look after the kill, so the loop never waits for ever.
         timers.push(setTimeout(finish, 2 * graceMs + 2_000));
         const watch = setInterval(() => {
-          if (!signalRun(child, 0)) finish();
+          if (!run.alive()) finish();
         }, 200);
       });
       return ending;
     };
     control.stop = end;
+    // The run has its own process group, so Ctrl+C reaches it only through the loop: the first
+    // one ends it as a stop does, a further one kills what is left at once.
+    let interrupts = 0;
+    const interrupt = () => {
+      interrupts += 1;
+      if (interrupts === 1) end();
+      else run.signal("SIGKILL");
+    };
     // The loop being ended from outside ends the run with it.
     const leave = () => {
-      signalRun(child, "SIGTERM");
+      run.signal("SIGTERM");
       process.exit(143);
     };
-    process.once("SIGINT", interrupt);
+    process.on("SIGINT", interrupt);
     process.once("SIGTERM", leave);
     process.once("SIGHUP", leave);
     child.on("close", async (exitCode) => {

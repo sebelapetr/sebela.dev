@@ -259,6 +259,29 @@ export function scrubPrivate(text, { mainRoot = null, home = null, host = null }
   return out;
 }
 
+// Every process a run has started, from a process list ([{ pid, ppid, pgid }]): the children of
+// `root`, their children and so on, in the order found. Claude Code starts each command of its
+// Bash tool in a session and process group of its own, so the orchestrator's process group does
+// not hold them; their parents do.
+export function descendantsOf(processes, root) {
+  const children = new Map();
+  for (const process of processes) {
+    children.set(process.ppid, [...(children.get(process.ppid) ?? []), process]);
+  }
+  const found = [];
+  const seen = new Set([root]);
+  const queue = [root];
+  while (queue.length > 0) {
+    for (const process of children.get(queue.shift()) ?? []) {
+      if (seen.has(process.pid)) continue;
+      seen.add(process.pid);
+      found.push(process);
+      queue.push(process.pid);
+    }
+  }
+  return found;
+}
+
 // What the loop says when the steward stops it (harness/lib/steward.mjs, decideStop): by its
 // rules — a reached or projected eval ceiling, a run past the per-run stop, an unexpected paid CI
 // run, a nearly full disk — or by the steward model's judgement that the work is inefficient.
