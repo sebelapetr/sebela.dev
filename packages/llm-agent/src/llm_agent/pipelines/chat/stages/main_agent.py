@@ -39,8 +39,9 @@ DRAFT_SCHEMA: Final[dict[str, Any]] = {
         "text": {"type": "string"},
         "source_refs": {"type": "array", "items": {"type": "string"}},
         "show_contact": {"type": "boolean"},
+        "unpublished": {"type": "boolean"},
     },
-    "required": ["outcome", "language", "text", "source_refs", "show_contact"],
+    "required": ["outcome", "language", "text", "source_refs", "show_contact", "unpublished"],
     "additionalProperties": False,
 }
 

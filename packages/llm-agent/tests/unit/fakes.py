@@ -635,6 +635,7 @@ def draft(
     language: str = "en",
     refs: Sequence[str] = ("src-1",),
     show_contact: bool = False,
+    unpublished: bool = False,
 ) -> AIMessage:
     return message(
         {
@@ -643,6 +644,7 @@ def draft(
             "text": text,
             "source_refs": list(refs),
             "show_contact": show_contact,
+            "unpublished": unpublished,
         }
     )
 
