@@ -202,7 +202,7 @@ describe("the runner's options", () => {
       const args = ingests[index] ?? [];
       expect(args).toEqual([
         "ingest",
-        expect.stringMatching(/datasets[/\\]documents[/\\][a-z0-9-]+\.md$/) as string,
+        expect.stringMatching(/datasets[/\\]documents[/\\][a-z0-9-]+\.(md|pdf)$/) as string,
         "--slug",
         document.sourceId.replace(/^document:/, ""),
         "--title",
