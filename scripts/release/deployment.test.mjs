@@ -3,9 +3,13 @@
 // next version from Conventional Commits, and the changelog of the GitHub release.
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 
-import { deployInput, nextVersion, releaseNotes } from "./deployment.mjs";
+import { deployInput, nextVersion, releasedVersion, releaseNotes } from "./deployment.mjs";
 
 const sha = (character) => character.repeat(40);
 
@@ -76,6 +80,22 @@ describe("next version", () => {
   });
 });
 
+describe("released version", () => {
+  it("is null when no version tag points at the commit", () => {
+    assert.equal(releasedVersion([]), null);
+    assert.equal(releasedVersion(["latest", "v1.2", "1.2.3", "v1.2.3-rc.1"]), null);
+  });
+
+  it("is the version tag that already points at the commit, so nothing is released again", () => {
+    assert.equal(releasedVersion(["v0.2.0"]), "v0.2.0");
+    assert.equal(releasedVersion(["latest", "v0.2.0"]), "v0.2.0");
+  });
+
+  it("is the highest version when several point at the commit", () => {
+    assert.equal(releasedVersion(["v0.9.0", "v0.10.0", "v0.2.1"]), "v0.10.0");
+  });
+});
+
 describe("release notes", () => {
   const tags = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c") };
 
@@ -123,5 +143,71 @@ describe("release notes", () => {
     const notes = releaseNotes({ commits: [commit("fix: a")], tags });
     assert.doesNotMatch(notes, /## Features/);
     assert.match(notes, /## Fixes/);
+  });
+});
+
+describe("notes command", () => {
+  const script = path.join(import.meta.dirname, "deployment.mjs");
+  const tags = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c") };
+
+  function repository() {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "release-notes-"));
+    const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
+    git("init", "--quiet");
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "Test");
+    git("config", "commit.gpgsign", "false");
+    git("config", "tag.gpgsign", "false");
+    const commitAs = (subject) => {
+      git("commit", "--quiet", "--allow-empty", "--message", subject);
+      return git("rev-parse", "HEAD");
+    };
+    return { directory, git, commitAs };
+  }
+
+  function notes(directory, commitSha) {
+    const notesFile = path.join(directory, "notes.md");
+    const summary = path.join(directory, "summary.md");
+    const stdout = execFileSync(process.execPath, [script, "notes"], {
+      cwd: directory,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SHA: commitSha,
+        TAGS: JSON.stringify(tags),
+        NOTES_FILE: notesFile,
+        GITHUB_STEP_SUMMARY: summary,
+      },
+    });
+    const outputs = Object.fromEntries(
+      stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.split("=")),
+    );
+    const read = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "");
+    return { outputs, notes: read(notesFile), summary: read(summary) };
+  }
+
+  it("releases the next version of a commit without a version tag", () => {
+    const { directory, git, commitAs } = repository();
+    commitAs("feat(web): a page");
+    git("tag", "v0.2.0");
+    const head = commitAs("fix(api): a fix");
+    const result = notes(directory, head);
+    assert.deepEqual(result.outputs, { release: "true", version: "v0.2.1" });
+    assert.match(result.notes, /a fix/);
+  });
+
+  it("releases nothing again when the commit already carries a version tag", () => {
+    const { directory, git, commitAs } = repository();
+    commitAs("feat(web): a page");
+    const head = commitAs("fix(api): a fix");
+    git("tag", "v0.2.0");
+    const result = notes(directory, head);
+    assert.deepEqual(result.outputs, { release: "false", version: "v0.2.0" });
+    assert.equal(result.notes, "");
+    assert.match(result.summary, /v0\.2\.0/);
+    assert.match(result.summary, /already/);
   });
 });

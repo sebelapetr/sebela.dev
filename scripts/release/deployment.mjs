@@ -7,7 +7,10 @@
 //   SHA=<commit> TAGS='{...}' NOTES_FILE=<path> node scripts/release/deployment.mjs notes
 //
 // `input` prints the forced-command input. `notes` writes the release notes of the commits since
-// the last version tag merged into SHA to NOTES_FILE and prints `version=<tag>` for $GITHUB_OUTPUT.
+// the last version tag merged into SHA to NOTES_FILE and prints `release=true` and
+// `version=<tag>` for $GITHUB_OUTPUT. When SHA already carries a version tag (a rerun of a
+// released commit), it writes no notes, prints `release=false` and `version=<that tag>` and says
+// so in the log and, when GITHUB_STEP_SUMMARY is set, in the step summary.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -38,6 +41,26 @@ export function deployInput(tags) {
     return `${service}=${tag}`;
   });
   return ["deploy", ...words].join(" ");
+}
+
+/**
+ * The version a commit was already released as, from `tags`, the tags that point at it: the
+ * highest `vX.Y.Z` among them, or null when none is a version tag. A commit with a version is not
+ * released again, so a rerun of the deployment of a released commit publishes nothing.
+ */
+export function releasedVersion(tags) {
+  const versions = tags
+    .map((tag) => ({ tag, match: VERSION.exec(tag) }))
+    .filter(({ match }) => match)
+    .map(({ tag, match }) => ({ tag, parts: match.slice(1).map(Number) }));
+  versions.sort((a, b) => {
+    for (let index = 0; index < 3; index += 1) {
+      const difference = b.parts[index] - a.parts[index];
+      if (difference !== 0) return difference;
+    }
+    return 0;
+  });
+  return versions[0]?.tag ?? null;
 }
 
 const isMerge = ({ subject }) => subject.startsWith("Merge ");
@@ -125,6 +148,15 @@ function notesCommand() {
   if (!notesFile) throw new Error("Set NOTES_FILE to where the notes go.");
   const tags = tagsFromEnvironment();
   deployInput(tags);
+  const released = releasedVersion(git(["tag", "--list", "v*", "--points-at", sha]).split("\n"));
+  if (released) {
+    const message = `The commit ${sha} is already released as ${released}; no new version is published.`;
+    process.stderr.write(`${message}\n`);
+    const summary = process.env.GITHUB_STEP_SUMMARY;
+    if (summary) fs.appendFileSync(summary, `${message}\n`);
+    process.stdout.write(`release=false\nversion=${released}\n`);
+    return;
+  }
   const previous =
     git(["tag", "--list", "v*", "--merged", sha, "--sort=-v:refname"])
       .split("\n")
@@ -139,7 +171,7 @@ function notesCommand() {
       return { sha: hash ?? "", subject: subject ?? "", body: body ?? "" };
     });
   fs.writeFileSync(notesFile, releaseNotes({ commits, tags }));
-  process.stdout.write(`version=${nextVersion(previous, commits)}\n`);
+  process.stdout.write(`release=true\nversion=${nextVersion(previous, commits)}\n`);
 }
 
 const COMMANDS = { input: inputCommand, notes: notesCommand };
