@@ -5,8 +5,13 @@
 //
 // Usage, from the repository root:
 //   node scripts/checks/coverage-summary.mjs [--root <dir>] [--json <file>]
+//                                            [--site <dir> --docs-url <url>]
 //     Prints the summary as Markdown and appends it to the file GITHUB_STEP_SUMMARY names, the
-//     GitHub Actions job summary. With --json, also writes the figures to <file>.
+//     GitHub Actions job summary. With --json, also writes the figures to <file>. With --site,
+//     writes the public coverage site that CI publishes to GitHub Pages from master: `coverage.json`
+//     (the README badge's shields.io endpoint), `coverage-summary.json` (the figures) and
+//     `index.html` (the table, linking to <url>, the documentation of what is measured). It holds
+//     only figures and package names.
 //
 // A member is measured when it declares a coverage provider: `@vitest/coverage-v8` in its
 // package.json, or `pytest-cov` in the pyproject.toml of a Python member. A measured member without
@@ -18,7 +23,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const USAGE = "Usage: coverage-summary [--root <dir>] [--json <file>]\n";
+const USAGE =
+  "Usage: coverage-summary [--root <dir>] [--json <file>] [--site <dir> --docs-url <url>]\n";
 
 // The member folders of pnpm-workspace.yaml (`apps/*`, `packages/*`).
 const MEMBER_FOLDERS = ["apps", "packages"];
@@ -180,13 +186,108 @@ export function toMarkdown(members) {
   ].join("\n");
 }
 
+// The README's neutral badge colour. One colour for every value: there is no threshold, so no
+// figure is shown as good or bad.
+const BADGE_COLOUR = "525252";
+
+/** The README badge as a shields.io endpoint (https://shields.io/badges/endpoint-badge). */
+export function shieldsEndpoint({ lines }) {
+  const { percent } = lines.overall;
+  return {
+    schemaVersion: 1,
+    label: "coverage",
+    message: percent === null ? "not measured" : `${percent.toFixed(1)}%`,
+    color: BADGE_COLOUR,
+  };
+}
+
+function escapeHtml(text) {
+  return String(text).replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character],
+  );
+}
+
+function pageRow(cells) {
+  return `<tr>${cells.map((value) => `<td>${value}</td>`).join("")}</tr>`;
+}
+
+/** The site's page: the figures as a table, without scripts, styles or other resources. */
+function toHtml(members, docsUrl) {
+  const { lines } = figures(members);
+  const rows = members
+    .filter((member) => member.status === "measured")
+    .map(({ name, language, lines: { found, hit } }) =>
+      pageRow([
+        `<code>${escapeHtml(name)}</code>`,
+        language,
+        String(hit),
+        String(found),
+        cell(percent(hit, found)),
+      ]),
+    );
+  const totals = [
+    ["TypeScript", lines.typescript],
+    ["Python", lines.python],
+    ["Overall", lines.overall],
+  ].map(([label, figure]) =>
+    pageRow([
+      `<strong>${label}</strong>`,
+      "",
+      String(figure.covered),
+      String(figure.total),
+      `<strong>${cell(figure.percent)}</strong>`,
+    ]),
+  );
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    "<title>Test coverage</title>",
+    "</head>",
+    "<body>",
+    "<h1>Test coverage</h1>",
+    `<p>${escapeHtml(cell(lines.overall.percent))} of the lines of handwritten source that the unit ` +
+      "and integration tests run, measured on the latest master. Generated code is excluded, and " +
+      `there is no threshold. <a href="${escapeHtml(docsUrl)}">What is measured</a>.</p>`,
+    "<table>",
+    "<thead><tr><th>Package</th><th>Language</th><th>Covered</th><th>Lines</th><th>Coverage</th></tr></thead>",
+    "<tbody>",
+    ...rows,
+    ...totals,
+    "</tbody>",
+    "</table>",
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
+
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeSite(directory, members, docsUrl) {
+  const summary = figures(members);
+  writeJson(path.join(directory, "coverage.json"), shieldsEndpoint(summary));
+  writeJson(path.join(directory, "coverage-summary.json"), summary);
+  fs.writeFileSync(path.join(directory, "index.html"), toHtml(members, docsUrl));
+}
+
+const OPTIONS = { "--root": "root", "--json": "json", "--site": "site", "--docs-url": "docsUrl" };
+
 function parseArguments(args) {
-  const options = { root: process.cwd(), json: undefined };
+  const options = { root: process.cwd() };
   for (let index = 0; index < args.length; index += 2) {
     const [name, value] = [args[index], args[index + 1]];
-    if (value === undefined || !["--root", "--json"].includes(name)) return undefined;
-    options[name.slice(2)] = value;
+    if (value === undefined || !(name in OPTIONS)) return undefined;
+    options[OPTIONS[name]] = value;
   }
+  if (options.site !== undefined && options.docsUrl === undefined) return undefined;
   return options;
 }
 
@@ -200,10 +301,8 @@ function main(args) {
   const markdown = toMarkdown(members);
   process.stdout.write(markdown);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
-  if (options.json) {
-    fs.mkdirSync(path.dirname(path.resolve(options.json)), { recursive: true });
-    fs.writeFileSync(options.json, `${JSON.stringify(figures(members), null, 2)}\n`);
-  }
+  if (options.json) writeJson(options.json, figures(members));
+  if (options.site) writeSite(options.site, members, options.docsUrl);
   return 0;
 }
 

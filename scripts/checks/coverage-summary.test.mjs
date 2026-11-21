@@ -9,6 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { shieldsEndpoint } from "./coverage-summary.mjs";
+
 const SCRIPT = path.join(import.meta.dirname, "coverage-summary.mjs");
 
 function write(root, file, text) {
@@ -174,9 +176,68 @@ describe("coverage summary", () => {
     assert.equal(row(stdout, "`@fixture/api`"), "| `@fixture/api` | TypeScript | 0 | 0 | — |");
   });
 
+  it("writes the published site: the badge's endpoint, the figures and a page", (t) => {
+    const root = workspace(t);
+    const site = path.join(root, "site");
+    const docs = "https://example.test/docs/testing.md#coverage";
+    assert.equal(run(root, ["--site", site, "--docs-url", docs]).status, 0);
+    assert.deepEqual(fs.readdirSync(site).sort(), [
+      "coverage-summary.json",
+      "coverage.json",
+      "index.html",
+    ]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(site, "coverage.json"), "utf8")), {
+      schemaVersion: 1,
+      label: "coverage",
+      message: "53.3%",
+      color: "525252",
+    });
+    const figures = JSON.parse(fs.readFileSync(path.join(site, "coverage-summary.json"), "utf8"));
+    assert.equal(figures.lines.overall.percent, 53.3);
+    const page = fs.readFileSync(path.join(site, "index.html"), "utf8");
+    assert.match(page, /<title>Test coverage<\/title>/);
+    assert.match(page, /53\.3%/);
+    assert.match(page, /<td><code>@fixture\/api<\/code><\/td>/);
+    assert.ok(page.includes(`<a href="${docs}">`));
+    assert.doesNotMatch(page, /<script|<link|<img|https?:\/\/(?!example\.test\/docs)/);
+  });
+
+  it("refuses a site without the address of the documentation it links to", (t) => {
+    const root = workspace(t);
+    const { status, stderr } = run(root, ["--site", path.join(root, "site")]);
+    assert.equal(status, 2);
+    assert.match(stderr, /--docs-url/);
+  });
+
   it("refuses unknown arguments", (t) => {
     const { status, stderr } = run(workspace(t), ["--threshold", "80"]);
     assert.equal(status, 2);
     assert.match(stderr, /Usage/);
+  });
+});
+
+describe("shields endpoint", () => {
+  const figure = (percent) => ({ lines: { overall: { covered: 1, total: 2, percent } } });
+
+  it("states the overall line coverage with one decimal in the README's neutral colour", () => {
+    assert.deepEqual(shieldsEndpoint(figure(83.8)), {
+      schemaVersion: 1,
+      label: "coverage",
+      message: "83.8%",
+      color: "525252",
+    });
+    assert.equal(shieldsEndpoint(figure(100)).message, "100.0%");
+    assert.equal(shieldsEndpoint(figure(0)).message, "0.0%");
+  });
+
+  it("keeps the colour whatever the figure: there is no threshold", () => {
+    const colours = new Set(
+      [0, 12.5, 50, 99.9].map((value) => shieldsEndpoint(figure(value)).color),
+    );
+    assert.deepEqual([...colours], ["525252"]);
+  });
+
+  it("says so when nothing was measured", () => {
+    assert.equal(shieldsEndpoint(figure(null)).message, "not measured");
   });
 });
