@@ -93,7 +93,7 @@ async def test_the_stages_use_the_configured_models_and_only_the_read_tools() ->
     await run(models)
     security, main = models.calls[0][0], models.calls[1][0]
     assert (security.model, security.effort, security.tools) == ("claude-haiku-5-5", "medium", ())
-    assert (main.model, main.effort) == ("claude-haiku-5-5", "high")
+    assert (main.model, main.effort) == ("claude-haiku-5-5", "medium")
     assert sorted(tool["name"] for tool in main.tools) == [
         "get_contact",
         "get_learning_diary",
@@ -501,7 +501,7 @@ async def test_every_model_attempt_is_a_span_with_its_model_effort_and_tokens() 
     assert (ok["model"], ok["effort"], ok["attempt"]) == ("claude-haiku-5-5", "medium", 2)
     assert (ok["input_tokens"], ok["output_tokens"]) == (1000, 200)
     assert attempts[0].attributes["input_tokens"] is None
-    assert attempts[2].attributes["effort"] == "high"
+    assert attempts[2].attributes["effort"] == "medium"
 
 
 async def test_the_retry_allowance_is_one_for_the_whole_execution() -> None:

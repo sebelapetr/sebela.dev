@@ -103,11 +103,12 @@ def test_the_subset_is_versioned() -> None:
 
 
 def test_the_baseline_is_the_pinned_main_stage_and_security_is_not_a_candidate() -> None:
-    assert comparison.BASELINE == "haiku-high"
-    assert comparison.CANDIDATES["haiku-high"] == config.STAGES["main"]
-    assert comparison.CANDIDATES["haiku-medium"].model == config.HAIKU
-    assert comparison.CANDIDATES["haiku-medium"].effort == "medium"
-    assert comparison.CANDIDATES["haiku-medium"].prices == config.HAIKU_PRICES
+    # Owner decision on #183 (2026-11-21): the Main default is Haiku 5.5 at medium effort.
+    assert comparison.BASELINE == "haiku-medium"
+    assert comparison.CANDIDATES["haiku-medium"] == config.STAGES["main"]
+    assert comparison.CANDIDATES["haiku-high"].model == config.HAIKU
+    assert comparison.CANDIDATES["haiku-high"].effort == "high"
+    assert comparison.CANDIDATES["haiku-high"].prices == config.HAIKU_PRICES
     assert set(comparison.CANDIDATES) == {"haiku-high", "haiku-medium", "sonnet-medium"}
 
 
@@ -276,10 +277,10 @@ def test_the_gate_of_the_whole_subset_is_not_full() -> None:
 
 def test_switching_the_main_stage_changes_the_recorded_subject_versions() -> None:
     before = run.current_subject_versions()
-    assert (before["main_model"], before["main_effort"]) == (config.HAIKU, "high")
-    comparison.apply_main("haiku-medium")
+    assert (before["main_model"], before["main_effort"]) == (config.HAIKU, "medium")
+    comparison.apply_main("haiku-high")
     after = run.current_subject_versions()
-    assert (after["main_model"], after["main_effort"]) == (config.HAIKU, "medium")
+    assert (after["main_model"], after["main_effort"]) == (config.HAIKU, "high")
     assert after["security_model"] == before["security_model"]
     assert after["security_effort"] == "medium"
     assert config.STAGES["main"].prices == config.HAIKU_PRICES
@@ -288,17 +289,17 @@ def test_switching_the_main_stage_changes_the_recorded_subject_versions() -> Non
 def test_an_unknown_candidate_is_never_applied() -> None:
     with pytest.raises(ValueError, match="unknown candidate"):
         comparison.apply_main("gpt-high")
-    assert config.STAGES["main"] == comparison.CANDIDATES["haiku-high"]
+    assert config.STAGES["main"] == comparison.CANDIDATES["haiku-medium"]
 
 
 def test_the_provider_applies_the_candidate_named_in_its_environment() -> None:
-    comparison.apply_from_environment({comparison.ENVIRONMENT: "haiku-medium"})
-    assert versions().main_effort == "medium"
+    comparison.apply_from_environment({comparison.ENVIRONMENT: "haiku-high"})
+    assert versions().main_effort == "high"
 
 
 def test_without_a_named_candidate_the_provider_keeps_the_pinned_stage() -> None:
     comparison.apply_from_environment({})
-    assert versions().main_effort == "high"
+    assert versions().main_effort == "medium"
 
 
 def test_promptfoo_receives_the_candidate_only_in_comparison_mode() -> None:
@@ -312,7 +313,7 @@ def test_promptfoo_receives_the_candidate_only_in_comparison_mode() -> None:
 async def test_the_summary_records_the_candidate_and_its_figures_by_language(
     tmp_path: Path,
 ) -> None:
-    comparison.apply_main("haiku-medium")
+    comparison.apply_main("haiku-high")
     subject = run.current_subject_versions()
     graded = []
     for case_id, latency in (("S01-en", 4000), ("S01-cs", 6000)):
@@ -329,14 +330,14 @@ async def test_the_summary_records_the_candidate_and_its_figures_by_language(
         extra_failures=[],
         allowance=allowance,
         subject=subject,
-        candidate="haiku-medium",
+        candidate="haiku-high",
     )
-    assert summary["subject"]["main_effort"] == "medium"
+    assert summary["subject"]["main_effort"] == "high"
     result = summary["comparison"]
     assert result["version"] == comparison.COMPARISON_VERSION
-    assert result["candidate"] == "haiku-medium"
-    assert result["baseline"] == "haiku-high"
-    assert result["main"] == {"model": config.HAIKU, "effort": "medium"}
+    assert result["candidate"] == "haiku-high"
+    assert result["baseline"] == "haiku-medium"
+    assert result["main"] == {"model": config.HAIKU, "effort": "high"}
     assert result["security"] == {"model": config.HAIKU, "effort": "medium"}
     assert result["judge"] == {"model": rubric.JUDGE_MODEL, "effort": rubric.JUDGE_EFFORT}
     assert result["repeats"] == 1

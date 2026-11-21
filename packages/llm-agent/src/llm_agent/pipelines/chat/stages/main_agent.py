@@ -1,4 +1,4 @@
-"""Main Agent: Haiku 5.5 at high effort answers with the read tools and returns a structured draft.
+"""Main Agent: Haiku 5.5 at medium effort answers with the read tools and returns a draft.
 
 The draft is held back for the Output Guard. The loop is bounded by the decision and tool caps
 (restricted after an `UNCERTAIN` verdict): a decision that still asks for tools when no further
