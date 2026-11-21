@@ -7,6 +7,7 @@ import {
   customType,
   index,
   integer,
+  jsonb,
   numeric,
   pgSchema,
   text,
@@ -177,5 +178,48 @@ export const providerUsage = retrievalSchema.table(
     ),
     check("provider_usage_not_negative", sql`${table.tokens} >= 0 AND ${table.costUsd} >= 0`),
     index("provider_usage_occurred_at").on(table.occurredAt),
+  ],
+);
+
+/**
+ * Every ingested version of a supplemental document, identified by the SHA-256 of its original
+ * bytes: its display title, type, size, private storage key, the owner's decision and the kinds and
+ * lines of its sensitivity findings, never the detected values. Private operational state; the
+ * original stays in private storage and only an approved version's passages are indexed.
+ */
+export const documentVersions = retrievalSchema.table(
+  "document_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
+    sourceId: text("source_id").notNull(),
+    contentHash: text("content_hash").notNull().unique(),
+    title: text("title").notNull(),
+    mediaType: text("media_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    storageKey: text("storage_key"),
+    status: text("status").notNull(),
+    findings: jsonb("findings").$type<{ kind: string; line: number }[]>().notNull(),
+    sectionCount: integer("section_count").notNull(),
+    chunkCount: integer("chunk_count").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (table) => [
+    check("document_versions_hash_hex", sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "document_versions_source_bounded",
+      sql`char_length(${table.sourceId}) BETWEEN 1 AND 200`,
+    ),
+    check("document_versions_title_bounded", sql`char_length(${table.title}) BETWEEN 1 AND 300`),
+    check(
+      "document_versions_status_known",
+      sql`${table.status} IN ('pending', 'blocked', 'approved', 'rejected', 'superseded')`,
+    ),
+    check(
+      "document_versions_counts_not_negative",
+      sql`${table.byteSize} >= 0 AND ${table.sectionCount} >= 0 AND ${table.chunkCount} >= 0`,
+    ),
+    index("document_versions_source").on(table.sourceId, table.status),
   ],
 );

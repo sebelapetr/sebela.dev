@@ -162,6 +162,13 @@
       "when": 1795216078291,
       "tag": "0022_retrieval_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795220562407,
+      "tag": "0023_retrieval_document_versions",
+      "breakpoints": true
     }
   ]
 }

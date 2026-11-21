@@ -3,6 +3,7 @@ import {
   asc,
   cosineDistance,
   count,
+  desc,
   eq,
   gt,
   gte,
@@ -14,6 +15,7 @@ import {
 import type { Database } from "../../database.js";
 import {
   chunks,
+  documentVersions,
   embeddings,
   providerUsage,
   sections,
@@ -307,75 +309,7 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
             .limit(1);
           if (newer !== undefined) return false;
         }
-        const [stored] = await tx
-          .insert(sources)
-          .values({
-            sourceId: source.sourceId,
-            sourceKind: source.sourceKind,
-            contentKind: source.contentKind,
-          })
-          .onConflictDoUpdate({
-            target: sources.sourceId,
-            set: { sourceKind: source.sourceKind, contentKind: source.contentKind, stale: false },
-          })
-          .returning({ id: sources.id });
-        if (stored === undefined) throw new Error("The source was not stored.");
-        await tx.delete(versions).where(eq(versions.sourceId, stored.id));
-        const [version] = await tx
-          .insert(versions)
-          .values({
-            sourceId: stored.id,
-            version: source.version,
-            title: source.title,
-            path: source.path,
-            model: source.model,
-            modelVersion: source.modelVersion,
-            dimension: source.dimension,
-            indexedAt: source.indexedAt,
-          })
-          .returning({ id: versions.id });
-        if (version === undefined) throw new Error("The version was not stored.");
-        await cacheVectors(
-          tx,
-          new Map(source.chunks.map((chunk) => [chunk.textHash, chunk.vector])),
-          source.model,
-          source.modelVersion,
-        );
-        if (source.sections.length === 0) return true;
-        const storedSections = await tx
-          .insert(sections)
-          .values(
-            source.sections.map((section) => ({
-              versionId: version.id,
-              ordinal: section.ordinal,
-              headingPath: [...section.headingPath],
-              start: section.start,
-              end: section.end,
-            })),
-          )
-          .returning({ id: sections.id, ordinal: sections.ordinal });
-        const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
-        if (source.chunks.length === 0) return true;
-        await tx.insert(chunks).values(
-          source.chunks.map((chunk) => {
-            const sectionId = sectionIds.get(chunk.sectionOrdinal);
-            if (sectionId === undefined) {
-              throw new Error(`Chunk ${String(chunk.ordinal)} names an unknown section.`);
-            }
-            return {
-              versionId: version.id,
-              sectionId,
-              ordinal: chunk.ordinal,
-              text: chunk.text,
-              textHash: chunk.textHash,
-              search: sql`to_tsvector('simple', unaccent(${chunk.text}))`,
-              embedding: [...chunk.vector],
-              model: source.model,
-              modelVersion: source.modelVersion,
-              dimension: source.dimension,
-            };
-          }),
-        );
+        await storeVersion(tx, source);
         return true;
       });
     },
@@ -455,11 +389,92 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
       return { pending: of("pending"), failed: of("failed") };
     },
 
-    addDocumentVersion: () => Promise.reject(new Error("not implemented")),
-    documentVersion: () => Promise.reject(new Error("not implemented")),
-    documentVersions: () => Promise.reject(new Error("not implemented")),
-    approveDocumentVersion: () => Promise.reject(new Error("not implemented")),
-    rejectDocumentVersion: () => Promise.reject(new Error("not implemented")),
+    async addDocumentVersion(version) {
+      const [added] = await db
+        .insert(documentVersions)
+        .values({
+          sourceId: version.sourceId,
+          contentHash: version.contentHash,
+          title: version.title,
+          mediaType: version.mediaType,
+          byteSize: version.byteSize,
+          storageKey: version.storageKey,
+          status: version.status,
+          findings: version.findings.map(({ kind, line }) => ({ kind, line })),
+          sectionCount: version.sectionCount,
+          chunkCount: version.chunkCount,
+        })
+        .onConflictDoNothing({ target: documentVersions.contentHash })
+        .returning();
+      if (added !== undefined) return { created: true, version: documentVersionOf(added) };
+      const [stored] = await db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.contentHash, version.contentHash));
+      if (stored === undefined) throw new Error("The document version was not stored.");
+      return { created: false, version: documentVersionOf(stored) };
+    },
+
+    async documentVersion(contentHash) {
+      const [row] = await db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.contentHash, contentHash));
+      return row === undefined ? null : documentVersionOf(row);
+    },
+
+    async documentVersions() {
+      const rows = await db.select().from(documentVersions).orderBy(desc(documentVersions.seq));
+      return rows.map(documentVersionOf);
+    },
+
+    async approveDocumentVersion(contentHash, source) {
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(documentVersions)
+          .where(eq(documentVersions.contentHash, contentHash))
+          .for("update");
+        if (row?.status !== "pending") return false;
+        if (
+          source.sourceId !== row.sourceId ||
+          source.version !== row.contentHash ||
+          source.sourceKind !== "supplemental"
+        ) {
+          throw new Error("The indexed version is not the version being approved.");
+        }
+        const decidedAt = new Date();
+        await tx
+          .update(documentVersions)
+          .set({ status: "superseded", decidedAt })
+          .where(
+            and(
+              eq(documentVersions.sourceId, row.sourceId),
+              eq(documentVersions.status, "approved"),
+            ),
+          );
+        await tx
+          .update(documentVersions)
+          .set({ status: "approved", decidedAt })
+          .where(eq(documentVersions.id, row.id));
+        await storeVersion(tx, source);
+        return true;
+      });
+    },
+
+    async rejectDocumentVersion(contentHash) {
+      const rejected = await db
+        .update(documentVersions)
+        .set({ status: "rejected", storageKey: null, decidedAt: new Date() })
+        .where(
+          and(
+            eq(documentVersions.contentHash, contentHash),
+            inArray(documentVersions.status, ["pending", "blocked"]),
+          ),
+        )
+        .returning({ id: documentVersions.id });
+      return rejected.length > 0;
+    },
 
     async removeSourcesExcept(sourceKind, sourceIds) {
       const removed = await db
@@ -550,6 +565,81 @@ export function createRetrievalPersistence(db: Database): RetrievalPersistence {
 
 type Executor = Pick<Database, "insert">;
 
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Stores a source version, its sections and chunks inside the caller's transaction. */
+async function storeVersion(tx: Transaction, source: RetrievalSourceVersion): Promise<void> {
+  const [stored] = await tx
+    .insert(sources)
+    .values({
+      sourceId: source.sourceId,
+      sourceKind: source.sourceKind,
+      contentKind: source.contentKind,
+    })
+    .onConflictDoUpdate({
+      target: sources.sourceId,
+      set: { sourceKind: source.sourceKind, contentKind: source.contentKind, stale: false },
+    })
+    .returning({ id: sources.id });
+  if (stored === undefined) throw new Error("The source was not stored.");
+  await tx.delete(versions).where(eq(versions.sourceId, stored.id));
+  const [version] = await tx
+    .insert(versions)
+    .values({
+      sourceId: stored.id,
+      version: source.version,
+      title: source.title,
+      path: source.path,
+      model: source.model,
+      modelVersion: source.modelVersion,
+      dimension: source.dimension,
+      indexedAt: source.indexedAt,
+    })
+    .returning({ id: versions.id });
+  if (version === undefined) throw new Error("The version was not stored.");
+  await cacheVectors(
+    tx,
+    new Map(source.chunks.map((chunk) => [chunk.textHash, chunk.vector])),
+    source.model,
+    source.modelVersion,
+  );
+  if (source.sections.length === 0) return;
+  const storedSections = await tx
+    .insert(sections)
+    .values(
+      source.sections.map((section) => ({
+        versionId: version.id,
+        ordinal: section.ordinal,
+        headingPath: [...section.headingPath],
+        start: section.start,
+        end: section.end,
+      })),
+    )
+    .returning({ id: sections.id, ordinal: sections.ordinal });
+  const sectionIds = new Map(storedSections.map((section) => [section.ordinal, section.id]));
+  if (source.chunks.length === 0) return;
+  await tx.insert(chunks).values(
+    source.chunks.map((chunk) => {
+      const sectionId = sectionIds.get(chunk.sectionOrdinal);
+      if (sectionId === undefined) {
+        throw new Error(`Chunk ${String(chunk.ordinal)} names an unknown section.`);
+      }
+      return {
+        versionId: version.id,
+        sectionId,
+        ordinal: chunk.ordinal,
+        text: chunk.text,
+        textHash: chunk.textHash,
+        search: sql`to_tsvector('simple', unaccent(${chunk.text}))`,
+        embedding: [...chunk.vector],
+        model: source.model,
+        modelVersion: source.modelVersion,
+        dimension: source.dimension,
+      };
+    }),
+  );
+}
+
 /**
  * Serialises queueing work, reading the watermark and a conditional replace until the end of the
  * caller's transaction. A work item's `seq` is drawn before its transaction commits, so without the
@@ -590,4 +680,31 @@ const usageOperations: readonly RetrievalUsageOperation[] = ["index", "search", 
 function sourceKindOf(value: string): RetrievalSourceKind {
   if (value === "portfolio" || value === "supplemental") return value;
   throw new Error(`Unknown source kind ${value}.`);
+}
+
+const documentStatuses: readonly RetrievalDocumentStatus[] = [
+  "pending",
+  "blocked",
+  "approved",
+  "rejected",
+  "superseded",
+];
+
+function documentVersionOf(row: typeof documentVersions.$inferSelect): RetrievalDocumentVersion {
+  const status = documentStatuses.find((known) => known === row.status);
+  if (status === undefined) throw new Error(`Unknown document status ${row.status}.`);
+  return {
+    sourceId: row.sourceId,
+    contentHash: row.contentHash,
+    title: row.title,
+    mediaType: row.mediaType,
+    byteSize: row.byteSize,
+    storageKey: row.storageKey,
+    status,
+    findings: row.findings.map(({ kind, line }) => ({ kind, line })),
+    sectionCount: row.sectionCount,
+    chunkCount: row.chunkCount,
+    createdAt: row.createdAt,
+    decidedAt: row.decidedAt,
+  };
 }
