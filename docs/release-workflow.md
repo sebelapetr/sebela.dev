@@ -48,7 +48,7 @@ Built, verified and published by `.github/workflows/release.yml` on every push t
     --jq '.[].verificationResult.statement.predicate'
   ```
 
-  The same works for `sebela-web` and `sebela-mcp-admin`, and for the `current` tag. Adding `--signer-workflow sebelapetr/sebela.dev/.github/workflows/release.yml` also checks that the release workflow, not another workflow of the repository, built it.
+  The same works for `sebela-web` and `sebela-mcp-admin`, and for the `current` tag. Adding `--signer-workflow sebelapetr/sebela.dev/.github/workflows/release.yml` also checks that the release workflow, not another workflow of the repository, built it. The GitHub release of the version attaches the same SBOM and attestation bundles as files (Release files).
 
 - **One release at a time.** GitHub lets the running release finish and cancels a release still waiting when a newer push queues. Nothing is lost by that: the newer release builds everything that changed since the current images.
 - **`current` moves on publishing**, before the images are deployed. A failed deployment therefore leaves `current` on images that are not running; the next release still builds everything that changed since them, and the server runs whatever its record of verified releases names (Deployment).
@@ -106,10 +106,42 @@ After a healthy deployment and smoke check the `release` job tags the commit wit
   - **Breaking changes**, **Features**, **Fixes** and **Other changes**, empty groups left out and merge commits skipped. Features and fixes are grouped by their scope (`web`, `api`, `retrieval`, `infra`, `ci`…, in alphabetical order, unscoped entries last); the phase merge itself is listed only in the highlights.
   - Pull request numbers as links to the pull request (`GITHUB_REPOSITORY`); a commit without one is linked by its short SHA.
   - **Full Changelog**: the comparison `vPrevious...vNew` on GitHub, or the history up to the first version.
-  - **Images**: the deployed image tag of every service, last.
+  - **Images**: the deployed image tag of every service, last. Each says whether it was built for this release, naming its attached files, or reused unchanged, with no files attached (Release files), followed by a link to how they are verified. The `notes` command learns the built services from `BUILT`, the images job's output `built`; without it, as for the releases made before release files existed, the list names the tags alone.
   - A release without new commits says only `No changes since vX; re-release of the same commit.` before its images, instead of empty sections.
 - A failed deployment publishes no version; the next healthy one includes its commits.
 - A rerun of an already released commit (the deployment rerun after a rollback test, say) publishes no new version: when a version tag already points at the commit, the `release` job says so in its log and step summary and tags nothing.
+
+## Release files
+
+Every GitHub release attaches, for each image its run built and pushed, the files that let anyone verify it without going to the registry. They are what that run attested; no new signing key and no secret is involved: the signatures are made with the images job's OIDC token, like the attestations stored in GHCR (Images). The decisions are `scripts/release/release-files.mjs`, tested on fictional SBOMs and bundles (`scripts/release/release-files.test.mjs`, `docs/testing.md`, CI).
+
+- **`sebela-<service>-vX.Y.Z.spdx.json`**: the SPDX SBOM of the image, as `anchore/sbom-action` generated it from the pushed image and `actions/attest` signed it.
+- **`sebela-<service>-vX.Y.Z.intoto.jsonl`**: the Sigstore bundles of the image's two attestations, one per line: the SLSA build provenance first, then the SBOM attestation. Each holds a DSSE-signed in-toto statement about the pushed digest. The `.intoto.jsonl` ending is the provenance file OpenSSF Scorecard's `Signed-Releases` check gives full credit for (`docs/testing.md`, Scorecard).
+- **Reused images get no files.** A release builds only the services that changed (Images); an unchanged image is the same image, with the same digest and the same attestations, that an earlier run built. Its files are not attached again, because this release did not make them: the release notes say for each image whether it was built for the release, with its file names, or reused unchanged, and a reused image's attestations stay beside it in GHCR, where the commands under Images verify it. Its files are on the GitHub release of the run that built it when that run's deployment succeeded and published a version; a run whose deployment failed publishes no release (Versions). Releases made before release files existed have none and are left as they are.
+- **How they get there.** After the attestations, the images job copies each pushed image's SBOM and bundles (the attestation actions' `bundle-path`) into the workflow artifact `release-files`; it checks only that they exist, which the attestation steps already guarantee. The upload of the artifact is a new step before the deployment: when it fails, the images job fails after publishing, as a failed attestation step does, and nothing is deployed. Every other check of the files runs after the deployment. After a healthy deployment, the release job downloads the artifact and `release-files.mjs prepare` checks that it holds exactly the files of the built images, that each bundle attests exactly the pushed digest of its image with the expected predicate type and that the SBOM is the one its attestation signed, and names them for the version. `gh release create` uploads them: with files, it creates the release as a draft, uploads and only then publishes the release and its tag, and removes the draft when an upload fails. Finally `release-files.mjs check` compares the published release's files with the expected names. Any failure fails the `release` job visibly, before the changelog pull request; a failure before publishing leaves no tag and no release, so a rerun of the job publishes the version with its files. The job's permissions do not change: `contents: write` covers the files, and an artifact of the same run needs no permission.
+- **Verifying a downloaded file.** With the GitHub CLI, for the image tag the release notes list (Images), in the folder with the downloaded files:
+
+  ```sh
+  # The provenance: signed by this repository's release workflow for exactly this image.
+  gh attestation verify oci://ghcr.io/sebelapetr/sebela-api:<sha> \
+    --bundle sebela-api-vX.Y.Z.intoto.jsonl --repo sebelapetr/sebela.dev \
+    --signer-workflow sebelapetr/sebela.dev/.github/workflows/release.yml
+  # The SBOM: verify its attestation from the same file and compare the signed SBOM with the download.
+  gh attestation verify oci://ghcr.io/sebelapetr/sebela-api:<sha> \
+    --bundle sebela-api-vX.Y.Z.intoto.jsonl --repo sebelapetr/sebela.dev \
+    --signer-workflow sebelapetr/sebela.dev/.github/workflows/release.yml \
+    --predicate-type https://spdx.dev/Document/v2.3 --format json \
+    --jq '.[0].verificationResult.statement.predicate' > signed-sbom.json
+  node -e '
+    const fs = require("node:fs");
+    const { isDeepStrictEqual } = require("node:util");
+    const [signed, downloaded] = process.argv.slice(1).map((file) => JSON.parse(fs.readFileSync(file, "utf8")));
+    if (!signed?.spdxVersion || !isDeepStrictEqual(signed, downloaded)) throw new Error("Not the signed SBOM.");
+    console.log("The SBOM is the signed one.");
+  ' signed-sbom.json sebela-api-vX.Y.Z.spdx.json
+  ```
+
+  The image reference only gives the digest the bundles must attest (the packages are public); the signatures are checked against the bundles in the file. The comparison needs only Node.js and fails closed: an empty or unparsable `signed-sbom.json`, as left by a failed verification, is an error, not a match. The same works for `sebela-web` and `sebela-mcp-admin`.
 
 ## Changelog
 
@@ -121,7 +153,7 @@ After a healthy deployment and smoke check the `release` job tags the commit wit
 - **What the owner or orchestrator does.** The `pull_request` `CI` run waits in `action_required`. Someone with write access approves that run (Actions tab, or `gh api -X POST repos/<owner>/<repo>/actions/runs/<id>/approve`); when it is green the owner merges. `Commit messages` and `Model evals` need no approval, and approving `Model evals` costs nothing because the trigger answers no for a head that is not a phase branch. Inside the unattended phase loop `gh api` is refused by the guard, so the waiting run is approved in an interactive session or in the Actions tab. This manual approval is a known rough edge of the workflow.
 - **No loop.** The merged commit changes only `CHANGELOG.md`, which no image contains, so its release plan builds nothing and no version, release or changelog pull request follows (`scripts/release/images.test.mjs`, "no release loop", on real Turborepo output for that change).
 - **Permissions.** The `release` job alone has `contents: write` (tag, release, branch), `pull-requests: write` (the pull request) and `actions: write` (starting CI on it); the only credential is still `GITHUB_TOKEN`. The repository must let GitHub Actions create pull requests (`harness/setup-github.sh`, which keeps the default workflow token read-only); without it the step fails after the release was published, with the branch already pushed.
-- **Recovery.** A changelog pull request that could not be opened, or two that conflict because the earlier one was not merged first, are replaced by rebuilding the file from the version tags: `GITHUB_REPOSITORY=<owner>/<name> RELEASES_FILE=<json> node scripts/release/deployment.mjs changelog`, where the optional JSON gives per version what git does not know (`date`, the deployed `tags`, a `note`; the backfill of v0.1.0–v0.2.1 took them from their GitHub releases). The same tags, data and phase pull request descriptions write the same file; `changelog` reads those descriptions live with `gh`, so a phase description edited later renders its highlight differently in a rebuild than in the release. Existing GitHub releases are never edited.
+- **Recovery.** A changelog pull request that could not be opened, or two that conflict because the earlier one was not merged first, are replaced by rebuilding the file from the version tags: `GITHUB_REPOSITORY=<owner>/<name> RELEASES_FILE=<json> node scripts/release/deployment.mjs changelog`, where the optional JSON gives per version what git does not know (`date`, the deployed `tags`, the `built` services whose release files were attached, a `note`; the backfill of v0.1.0–v0.2.1 took them from their GitHub releases). The same tags, data and phase pull request descriptions write the same file; `changelog` reads those descriptions live with `gh`, so a phase description edited later renders its highlight differently in a rebuild than in the release. Existing GitHub releases are never edited.
 
 ## To be defined in phase 10
 
