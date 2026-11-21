@@ -10,6 +10,8 @@
 //   unhealthy   tags whose services never become healthy (`compose up --wait` fails)
 //   failMigrate API tags whose one-off migration fails
 //   images      local image references, as `docker image ls` lists them
+//   chmodOnUp   path -> octal mode, applied when `compose up` succeeds: a state folder or record
+//               that stops being writable after the script checked it
 //
 // Any other call fails, so the script under test cannot do anything the tests do not expect.
 
@@ -49,6 +51,9 @@ if (args[0] === "compose") {
   if (command === "up") {
     const sick = Object.values(tags).filter((tag) => (scenario.unhealthy ?? []).includes(tag));
     if (sick.length > 0) fail(`a container is unhealthy (${sick.join(", ")})`);
+    for (const [file, mode] of Object.entries(scenario.chmodOnUp ?? {})) {
+      fs.chmodSync(file, Number.parseInt(mode, 8));
+    }
     process.exit(0);
   }
   fail(`unexpected compose call: ${args.join(" ")}`);
