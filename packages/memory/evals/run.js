@@ -57,6 +57,8 @@ const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const apiFolder = join(repositoryRoot, "apps", "api");
 const seedFolder = join(repositoryRoot, "packages", "db", "seed", "demo");
 const reportRoot = join(repositoryRoot, ".tmp", "evals", "memory");
+/** Query embeddings by model, version and text, reused by every later run of this checkout. */
+const queryCacheFile = join(reportRoot, "query-cache.json");
 
 /** Retrieval settings recorded with each run, so results name the configuration they measured. */
 const RECORDED_SETTINGS = [
@@ -122,27 +124,36 @@ export function providerEnvironment(options) {
     RETRIEVAL_MONTHLY_CEILING_USD: String(options.ceilingUsd),
     RETRIEVAL_PROVIDER_RETRIES: RUN_PROVIDER_RETRIES,
     RETRIEVAL_PROVIDER_MAX_RETRY_WAIT_MS: RUN_PROVIDER_MAX_RETRY_WAIT_MS,
+    RETRIEVAL_QUERY_CACHE_FILE: queryCacheFile,
   };
 }
 
 /**
- * Not implemented yet.
+ * The knowledge command's arguments that ingest each fictional supplemental document of the
+ * dataset under its slug and its safe display title (never the file name).
  *
  * @param {import("./plan.js").Dataset} dataset
  * @returns {string[][]}
  */
 export function documentIngests(dataset) {
-  return dataset.documents.length < 0 ? [] : [];
+  return dataset.documents.map(({ sourceId, title, file }) => [
+    "ingest",
+    join(evalsFolder, "datasets", file),
+    "--slug",
+    sourceId.replace(/^document:/, ""),
+    "--title",
+    title,
+  ]);
 }
 
 /**
- * Not implemented yet.
+ * The private storage of a run: a local root inside its scratch folder, removed with it.
  *
  * @param {string} scratch
  * @returns {Record<string, string>}
  */
 export function privateStorageEnvironment(scratch) {
-  return scratch === "" ? {} : {};
+  return { PRIVATE_STORAGE_DRIVER: "local", PRIVATE_STORAGE_LOCAL_ROOT: join(scratch, "private") };
 }
 
 /**
@@ -221,10 +232,26 @@ async function measure(dataset, plan, options, folder) {
     const knowledge = (/** @type {string[]} */ ...args) =>
       runJson(process.execPath, ["--import", "tsx", "src/cli/knowledge.ts", ...args], {
         cwd: apiFolder,
-        env: { ...process.env, ...budget, DATABASE_NAME: api.database },
+        env: {
+          ...process.env,
+          ...budget,
+          ...privateStorageEnvironment(scratch),
+          DATABASE_NAME: api.database,
+        },
       });
     const indexing = await knowledge("reindex");
     await pause();
+    // Each supplemental document is ingested (no provider call) and approved by its exact hash,
+    // which embeds it; a blocked document stops the run, as the knowledge command exits 1.
+    /** @type {unknown[]} */
+    const approvals = [];
+    for (const args of documentIngests(dataset)) {
+      const { version } = /** @type {{ version: { contentHash: string } }} */ (
+        await knowledge(...args)
+      );
+      approvals.push(await knowledge("approve", version.contentHash));
+      await pause();
+    }
     const questionsFile = join(scratch, "questions.json");
     await writeFile(
       questionsFile,
@@ -269,7 +296,7 @@ async function measure(dataset, plan, options, folder) {
       throw new Error("Promptfoo's output contained a credential; it was deleted.");
     }
     const usage = /** @type {Usage} */ (await knowledge("usage"));
-    return summarize(dataset, plan, options, report, indexing, usage);
+    return summarize(dataset, plan, options, report, { portfolio: indexing, approvals }, usage);
   } finally {
     await api.stop();
     await rm(scratch, { recursive: true, force: true });
@@ -286,7 +313,8 @@ async function measure(dataset, plan, options, folder) {
  * @param {{ run: import("./plan.js").Question[], pending: import("./plan.js").PendingCase[] }} plan
  * @param {ReturnType<typeof parseOptions>} options
  * @param {any} report Promptfoo's JSON output.
- * @param {unknown} indexing The reindex report.
+ * @param {{ portfolio: unknown, approvals: unknown[] }} indexing The reindex report and the
+ *   supplemental documents' approvals.
  * @param {Usage} usage The temporary database's recorded provider usage.
  */
 function summarize(dataset, plan, options, report, indexing, usage) {

@@ -1,8 +1,8 @@
 // @ts-check
 
 // The question set and which of its cases the system can answer yet. A case whose capability is
-// not searchable is reported pending — never passed — until the slice that adds it (supplemental
-// documents arrive with ingest and approval, .plan/09-rag/prd.md).
+// not searchable is reported pending — never passed — until the slice that adds it
+// (.plan/09-rag/prd.md).
 import { readFileSync } from "node:fs";
 
 /**
@@ -29,12 +29,12 @@ import { readFileSync } from "node:fs";
  */
 
 /**
- * What the search route can answer today: the indexed public portfolio. Supplemental documents are
- * not ingested yet, so their cases stay pending and the runner never reports a pass for them.
+ * What the search route can answer today: the indexed public portfolio and the supplemental
+ * documents the runner ingests and approves.
  *
  * @type {ReadonlySet<Capability>}
  */
-export const SEARCHABLE = new Set(/** @type {Capability[]} */ (["portfolio"]));
+export const SEARCHABLE = new Set(/** @type {Capability[]} */ (["portfolio", "supplemental"]));
 
 /** @returns {Dataset} */
 export function loadDataset() {

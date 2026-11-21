@@ -1,5 +1,7 @@
 // The knowledge base of the backend: composes `@sebela/memory` with the retrieval persistence, the
 // public portfolio reads and the configured embedding provider.
+import { isAbsolute } from "node:path";
+
 import {
   retrievalContentKinds,
   type ContentChange,
@@ -16,6 +18,7 @@ import {
   BudgetExhaustedError,
   ProviderUnavailableError,
   createIndexer,
+  createQueryCachingEmbedder,
   createRetriever,
   createVoyageEmbedder,
   DocumentRejectedError,
@@ -532,8 +535,9 @@ async function snapshot({ profile, roadmap }: KnowledgeSources): Promise<Portfol
 
 /**
  * The retrieval options of a process from its environment: the `RETRIEVAL_*` settings (none set
- * switches retrieval off) and the Voyage embedder when `VOYAGE_API_KEY` is set. Throws an error
- * naming every invalid setting, never a value.
+ * switches retrieval off) and the Voyage embedder when `VOYAGE_API_KEY` is set. An absolute
+ * `RETRIEVAL_QUERY_CACHE_FILE` keeps query embeddings in that file and reuses them, for paid eval
+ * runs only. Throws an error naming every invalid setting, never a value.
  */
 export function readRetrievalOptions(
   env: Readonly<Record<string, string | undefined>>,
@@ -541,15 +545,20 @@ export function readRetrievalOptions(
   const config = readRetrievalConfig(env);
   const apiKey = env["VOYAGE_API_KEY"]?.trim() ?? "";
   if (config === null || apiKey === "") return { config };
+  const cacheFile = env["RETRIEVAL_QUERY_CACHE_FILE"]?.trim() ?? "";
+  if (cacheFile !== "" && !isAbsolute(cacheFile)) {
+    throw new Error("RETRIEVAL_QUERY_CACHE_FILE must be an absolute path.");
+  }
+  const voyage = createVoyageEmbedder({
+    apiKey,
+    model: config.embeddingModel,
+    dimension: retrievalDimension,
+    timeoutMs: config.providerTimeoutMs,
+    retries: config.providerRetries,
+    maxRetryWaitMs: config.providerMaxRetryWaitMs,
+  });
   return {
     config,
-    embedder: createVoyageEmbedder({
-      apiKey,
-      model: config.embeddingModel,
-      dimension: retrievalDimension,
-      timeoutMs: config.providerTimeoutMs,
-      retries: config.providerRetries,
-      maxRetryWaitMs: config.providerMaxRetryWaitMs,
-    }),
+    embedder: cacheFile === "" ? voyage : createQueryCachingEmbedder(voyage, cacheFile),
   };
 }

@@ -1,6 +1,10 @@
 // Embedding providers behind the `Embedder` port: the Voyage AI adapter for deployment and paid
 // evals, and a deterministic fake for every other test. Nothing outside this module knows a
 // provider's wire format.
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
 import {
   ProviderUnavailableError,
   type Embedder,
@@ -59,10 +63,95 @@ export function createFakeEmbedder(
   };
 }
 
-/** Not implemented yet. */
-export const createQueryCachingEmbedder: (embedder: Embedder, file: string) => Embedder = (
-  embedder,
-) => embedder;
+/**
+ * Wraps an embedder so query embeddings are kept in a JSON file and reused, by model, version,
+ * dimension and text, across instances and processes: for paid eval runs on a low-limit key, which
+ * ask the same questions run after run. Only the misses of a call go to the provider, in one call,
+ * and only their tokens are billed. Document embeddings always pass through (the store keeps those).
+ * The file holds hashes of the keys and the vectors, never a query's text; it is written whole
+ * through a renamed temporary file, so a reader never sees half of it. A failure of the provider
+ * passes through and caches nothing.
+ */
+export function createQueryCachingEmbedder(embedder: Embedder, file: string): Embedder {
+  const keyOf = (text: string) =>
+    createHash("sha256")
+      .update(JSON.stringify([embedder.model, embedder.version, embedder.dimension, text]))
+      .digest("hex");
+
+  return {
+    model: embedder.model,
+    version: embedder.version,
+    dimension: embedder.dimension,
+    async embed(texts, input, signal) {
+      if (input !== "query") return embedder.embed(texts, input, signal);
+      const entries = await readCache(file);
+      const keys = texts.map(keyOf);
+      const missing = [...new Set(texts.filter((_, index) => !entries.has(keys[index] ?? "")))];
+      let tokens = 0;
+      if (missing.length > 0) {
+        const fresh = await embedder.embed(missing, input, signal);
+        tokens = fresh.tokens;
+        for (const [index, text] of missing.entries()) {
+          const vector = fresh.vectors[index];
+          if (vector === undefined) {
+            throw new ProviderUnavailableError("The embedding provider returned too few vectors.");
+          }
+          entries.set(keyOf(text), vector);
+        }
+        await writeCache(file, entries);
+      }
+      return {
+        vectors: keys.map((key) => {
+          const vector = entries.get(key);
+          if (vector === undefined) throw new Error("A cached query embedding is missing.");
+          return vector;
+        }),
+        tokens,
+      };
+    },
+  };
+}
+
+const cacheFormat = 1;
+
+async function readCache(file: string): Promise<Map<string, readonly number[]>> {
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return new Map();
+    throw error;
+  }
+  const parsed: unknown = JSON.parse(text);
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("format" in parsed) ||
+    parsed.format !== cacheFormat ||
+    !("entries" in parsed) ||
+    typeof parsed.entries !== "object" ||
+    parsed.entries === null
+  ) {
+    throw new Error("The query embedding cache is not in the expected format; delete it.");
+  }
+  const entries = new Map<string, readonly number[]>();
+  for (const [key, vector] of Object.entries(parsed.entries)) {
+    if (Array.isArray(vector) && vector.every((value) => typeof value === "number")) {
+      entries.set(key, vector);
+    }
+  }
+  return entries;
+}
+
+async function writeCache(file: string, entries: ReadonlyMap<string, readonly number[]>) {
+  await mkdir(dirname(file), { recursive: true });
+  const temporary = `${file}.${String(process.pid)}.${randomUUID()}.tmp`;
+  await writeFile(
+    temporary,
+    JSON.stringify({ format: cacheFormat, entries: Object.fromEntries(entries) }),
+  );
+  await rename(temporary, file);
+}
 
 /** Lower-cased words without diacritics. */
 function words(text: string): string[] {
