@@ -94,13 +94,16 @@ export interface KnowledgeService {
   /** The provider usage recorded this calendar month (UTC). */
   usage(): Promise<UsageTotals>;
   /**
-   * Ingests a supplemental Markdown or plain-text document for the owner's review; never calls
-   * the provider. Bytes already ingested for the same slug change nothing (`created: false`); the
-   * same bytes under another slug are a `conflict`. A document with sensitivity findings is
-   * recorded `blocked`, with the kinds and lines of the findings only and without its original;
-   * otherwise the original is kept in private storage and the version is `pending`. An unsupported
-   * or non-UTF-8 file is `unsupported_media_type`, an oversized one `payload_too_large`, and an
-   * empty one, an invalid slug or title or an exceeded processing time `validation_failed`.
+   * Ingests a supplemental Markdown, plain-text or text-layer PDF document for the owner's review;
+   * never calls the provider. Bytes already ingested for the same slug change nothing
+   * (`created: false`); the same bytes under another slug are a `conflict`. A document with
+   * sensitivity findings is recorded `blocked`, with the kinds and lines (and, for a PDF, pages) of
+   * the findings only and without its original; otherwise the original is kept in private storage
+   * and the version is `pending`. An unsupported or non-UTF-8 file, or a damaged,
+   * password-protected, scanned, image-only or incompletely extracted PDF, is
+   * `unsupported_media_type`; too many bytes, pages, extracted characters or parser memory are
+   * `payload_too_large`; an empty document, an invalid slug or title or an exceeded processing
+   * time are `validation_failed`.
    * Throws a plain error when no private storage is configured.
    */
   ingestDocument(input: DocumentInput): Promise<DocumentIngest>;

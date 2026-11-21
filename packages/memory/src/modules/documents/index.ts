@@ -41,7 +41,7 @@ export interface DocumentLimits {
   readonly maxPdfBytes: number;
   /** The most pages of a PDF. */
   readonly maxPages: number;
-  /** The most megabytes of heap the PDF parser may use. */
+  /** The most mebibytes of heap and decoded buffers the PDF parser may use together. */
   readonly maxParserMemoryMb: number;
   /** The most characters of the cleaned text. */
   readonly maxExtractedChars: number;

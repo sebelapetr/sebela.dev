@@ -80,6 +80,9 @@ export async function readPdf(bytes: Uint8Array, limits: PdfReadLimits): Promise
   }
 }
 
+/** How often the parser's memory is sampled, in milliseconds. */
+const memorySampleMs = 10;
+
 /** Runs the parser's worker within the memory and time limits. */
 function parse(
   bytes: Uint8Array,
@@ -116,6 +119,7 @@ function parse(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearInterval(sampler);
       finish();
       void worker.terminate();
     };
@@ -127,6 +131,28 @@ function parse(
       },
       Math.max(0, limits.timeoutMs),
     );
+    // The heap limit does not hold buffers outside the JavaScript heap, such as a decoded stream,
+    // so the worker's memory is sampled and the worker stopped once heap and buffers exceed it.
+    const maxBytes = limits.maxParserMemoryMb * 1_048_576;
+    let sampling = false;
+    const sampler = setInterval(() => {
+      if (sampling || settled) return;
+      sampling = true;
+      worker
+        .getHeapStatistics()
+        .then((statistics) => {
+          sampling = false;
+          if (statistics.used_heap_size + statistics.external_memory > maxBytes) {
+            settle(() => {
+              resolve({ reason: "parser_limit" });
+            });
+          }
+        })
+        .catch(() => {
+          // The worker has stopped; its exit or error event settles the reading.
+          sampling = false;
+        });
+    }, memorySampleMs);
     worker.once("message", (message: PdfWorkerOutput) => {
       settle(() => {
         resolve(message);

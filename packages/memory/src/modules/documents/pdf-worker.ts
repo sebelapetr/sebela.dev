@@ -70,6 +70,8 @@ async function read(input: PdfWorkerInput): Promise<PdfWorkerOutput> {
     disableAutoFetch: true,
     isOffscreenCanvasSupported: false,
     isImageDecoderSupported: false,
+    // Text is all the reading needs: an image beyond a small size is not decoded at all.
+    maxImageSize: 1_048_576,
     stopAtErrors: true,
     verbosity: 0,
   });

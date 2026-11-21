@@ -10,7 +10,9 @@ engineStrict: true
 allowBuilds:
   esbuild: false
 
-# pdfjs-dist renders pages with this native canvas; the API only extracts text, so it is not installed.
+# pdfjs-dist renders pages with this optional native canvas; the API only extracts text, so it is
+# not installed. The exclusion is workspace-wide: it also drops the optional canvas of the older
+# pdfjs-dist under promptfoo's pdf-parse (dev only), which keeps its own direct canvas dependency.
 ignoredOptionalDependencies:
   - "@napi-rs/canvas"
 
