@@ -9,7 +9,8 @@
 //     SBOM_ATTESTATION_API=<file> ... node scripts/release/release-files.mjs collect
 //   VERSION=<tag> BUILT='["api"]' DIGESTS='{...}' FILES_DIR=<dir> OUT_DIR=<dir> \
 //     node scripts/release/release-files.mjs prepare
-//   <asset names, one per line> | VERSION=<tag> BUILT='["api"]' node scripts/release/release-files.mjs check
+//   <asset names, one per line> | VERSION=<tag> BUILT='["api"]' \
+//     node scripts/release/release-files.mjs check
 //
 // - collect (images job, after the attestations): copies, for each pushed image (DIGESTS, the
 //   `publish` output), its SBOM and its two bundles to FILES_DIR as `<service>.spdx.json`,

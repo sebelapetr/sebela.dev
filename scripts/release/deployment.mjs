@@ -5,7 +5,8 @@
 // deployment.test.mjs. The release workflow runs it as
 //
 //   SHA=<commit> TAGS='{"api":"<commit>",...}' node scripts/release/deployment.mjs input
-//   SHA=<commit> TAGS='{...}' BUILT='["api"]' NOTES_FILE=<path> node scripts/release/deployment.mjs notes
+//   SHA=<commit> TAGS='{...}' BUILT='["api"]' NOTES_FILE=<path> \
+//     node scripts/release/deployment.mjs notes
 //   VERSION=<tag> NOTES_FILE=<path> node scripts/release/deployment.mjs changelog-entry
 //
 // and the owner rebuilds the whole changelog from the version tags with
@@ -19,13 +20,13 @@
 // tag merged into SHA to NOTES_FILE and prints `release=true` and `version=<tag>` for
 // $GITHUB_OUTPUT; the summary of a phase pull request among them is read with `gh` and left out
 // when GitHub cannot give it. BUILT, the services whose images the run built, makes the notes name
-// the release files attached for them and say that the reused images have none. When SHA already carries a version tag (a rerun of a released
-// commit), it writes no notes, prints `release=false` and `version=<that tag>` and says so in the
-// log and, when GITHUB_STEP_SUMMARY is set, in the step summary. `changelog-entry` adds the notes
-// in NOTES_FILE as the section of VERSION, dated today in UTC (or DATE), to CHANGELOG_FILE
-// (CHANGELOG.md by default). `changelog` writes CHANGELOG_FILE again from every version tag and
-// its commits; RELEASES_FILE may give, per version, what git does not know: `date`, the deployed
-// `tags`, the `built` services and a `note`.
+// the release files attached for them and say that the reused images have none. When SHA already
+// carries a version tag (a rerun of a released commit), it writes no notes, prints
+// `release=false` and `version=<that tag>` and says so in the log and, when GITHUB_STEP_SUMMARY is
+// set, in the step summary. `changelog-entry` adds the notes in NOTES_FILE as the section of
+// VERSION, dated today in UTC (or DATE), to CHANGELOG_FILE (CHANGELOG.md by default). `changelog`
+// writes CHANGELOG_FILE again from every version tag and its commits; RELEASES_FILE may give, per
+// version, what git does not know: `date`, the deployed `tags`, the `built` services and a `note`.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
