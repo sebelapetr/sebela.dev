@@ -13,7 +13,8 @@
 #   pnpm-workspace.yaml, pnpm-lock.yaml). Weekly: minor and patch updates in one pull request, each
 #   major update in its own.
 # - docker, /apps/*: the base image of every app's Dockerfile, pinned by tag and digest; an update
-#   moves both. Weekly: minor and patch updates of all Dockerfiles in one pull request.
+#   moves both. Weekly: every update of all Dockerfiles in one pull request, a new digest of the
+#   same tag included (Node.js majors are ignored below).
 #
 # Node.js majors are not proposed: the Node.js version follows .nvmrc and `engines` in package.json
 # and moves by hand, with @types/node and the images. A cooldown of seven days lets a new release
@@ -70,12 +71,9 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      docker-minor-patch:
+      docker:
         patterns:
           - "*"
-        update-types:
-          - minor
-          - patch
     ignore:
       - dependency-name: node
         update-types:
