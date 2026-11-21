@@ -41,6 +41,12 @@ describe("capAllocations", () => {
     expect(refusals.count).toBe(0);
   });
 
+  it("hides the native decompression, whose output buffers no constructor sees", () => {
+    capped(1024);
+
+    expect("DecompressionStream" in globalThis).toBe(false);
+  });
+
   it("restores the original constructors when released", () => {
     const original = Uint8Array;
     capped(16);
@@ -48,6 +54,7 @@ describe("capAllocations", () => {
     release = undefined;
 
     expect(Uint8Array).toBe(original);
+    expect(typeof DecompressionStream).toBe("function");
     expect(new Uint8Array(32).length).toBe(32);
   });
 });

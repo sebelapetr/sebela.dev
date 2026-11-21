@@ -16,6 +16,8 @@ export interface PdfWorkerInput {
   readonly bytes: Uint8Array;
   readonly maxPages: number;
   readonly maxChars: number;
+  /** The most bytes one typed array or buffer may take. */
+  readonly maxAllocationBytes: number;
 }
 
 /** A piece of text in reading order: its string, whether a line ends after it, its baseline and size. */
@@ -40,7 +42,8 @@ export type PdfWorkerOutput =
   | { readonly kind: "malformed" }
   | { readonly kind: "encrypted" }
   | { readonly kind: "too_many_pages"; readonly pages: number }
-  | { readonly kind: "extracted_too_large" };
+  | { readonly kind: "extracted_too_large" }
+  | { readonly kind: "parser_limit" };
 
 const imageOperators = new Set<number>([
   OPS.paintImageXObject,
@@ -53,13 +56,98 @@ const imageOperators = new Set<number>([
   OPS.paintSolidColorImageMask,
 ]);
 
+/** The constructors that allocate memory outside the JavaScript heap. */
+const typedArrays = [
+  Int8Array,
+  Uint8Array,
+  Uint8ClampedArray,
+  Int16Array,
+  Uint16Array,
+  Int32Array,
+  Uint32Array,
+  Float32Array,
+  Float64Array,
+  BigInt64Array,
+  BigUint64Array,
+] as const;
+
+/** The elements a typed array's constructor allocates for its first argument; none for a view. */
+function elementsOf(argument: unknown): number {
+  if (typeof argument === "number") return argument;
+  if (argument instanceof ArrayBuffer || argument instanceof SharedArrayBuffer) return 0;
+  if (typeof argument === "object" && argument !== null && "length" in argument) {
+    const length = Number(argument.length);
+    return Number.isFinite(length) ? length : 0;
+  }
+  return 0;
+}
+
+/** The bytes an `ArrayBuffer` asks for, including the most a resizable one may grow to. */
+function bufferBytesOf(args: readonly unknown[]): number {
+  const [length, options] = args;
+  const maxByteLength =
+    typeof options === "object" && options !== null && "maxByteLength" in options
+      ? Number(options.maxByteLength)
+      : 0;
+  return Math.max(typeof length === "number" ? length : 0, maxByteLength);
+}
+
 /**
  * Caps every typed array and buffer the parser's thread allocates at `maxBytes`, refusing a larger
  * one before it is allocated and calling `onRefuse`; returns a function restoring the constructors.
+ *
+ * The parser decodes a stream into one buffer that it doubles as it grows, so a single allocation
+ * could hold a whole decompressed stream: the heap limit does not count it and a sample of the
+ * thread's memory could come after it. The parser looks these constructors up as globals, so
+ * wrapping them here bounds every such buffer. It would otherwise inflate a stream natively with
+ * `DecompressionStream`, collecting the whole output in buffers no constructor sees, so that is
+ * hidden too: the parser then decodes the stream itself, within the cap.
  */
-export const capAllocations: (maxBytes: number, onRefuse: () => void) => () => void = () => () => {
-  throw new Error("not implemented");
-};
+export function capAllocations(maxBytes: number, onRefuse: () => void): () => void {
+  const scope = globalThis as unknown as Record<string, unknown>;
+  const refuse = (bytes: number): never => {
+    onRefuse();
+    throw new RangeError(
+      `The PDF parser may not allocate ${String(bytes)} bytes at once; its limit is ${String(maxBytes)}.`,
+    );
+  };
+  const restore: (() => void)[] = [];
+  const wrap = (
+    name: string,
+    constructor: new (...args: never[]) => object,
+    bytesOf: (args: readonly unknown[]) => number,
+  ) => {
+    const capped: new (...args: never[]) => object = new Proxy(constructor, {
+      construct(target, args: unknown[], newTarget: new (...args: never[]) => object): object {
+        const bytes = bytesOf(args);
+        if (bytes > maxBytes) refuse(bytes);
+        return Reflect.construct(target, args, newTarget === capped ? target : newTarget) as object;
+      },
+    });
+    scope[name] = capped;
+    restore.push(() => {
+      scope[name] = constructor;
+    });
+  };
+  for (const constructor of typedArrays) {
+    wrap(
+      constructor.name,
+      constructor,
+      (args) => elementsOf(args[0]) * constructor.BYTES_PER_ELEMENT,
+    );
+  }
+  wrap("ArrayBuffer", ArrayBuffer, bufferBytesOf);
+  const decompression = Object.getOwnPropertyDescriptor(globalThis, "DecompressionStream");
+  if (decompression !== undefined) {
+    Reflect.deleteProperty(globalThis, "DecompressionStream");
+    restore.push(() => {
+      Object.defineProperty(globalThis, "DecompressionStream", decompression);
+    });
+  }
+  return () => {
+    for (const undo of restore) undo();
+  };
+}
 
 const assets = new URL("./", import.meta.resolve("pdfjs-dist/package.json"));
 
@@ -140,4 +228,16 @@ async function read(input: PdfWorkerInput): Promise<PdfWorkerOutput> {
   }
 }
 
-parentPort?.postMessage(await read(workerData as PdfWorkerInput));
+if (parentPort !== null) {
+  const port = parentPort;
+  const input = workerData as PdfWorkerInput;
+  const state = { refused: false };
+  // The first refusal is the answer: the parent stops the thread on its first message.
+  capAllocations(input.maxAllocationBytes, () => {
+    if (state.refused) return;
+    state.refused = true;
+    port.postMessage({ kind: "parser_limit" } satisfies PdfWorkerOutput);
+  });
+  const output = await read(input);
+  if (!state.refused) port.postMessage(output);
+}

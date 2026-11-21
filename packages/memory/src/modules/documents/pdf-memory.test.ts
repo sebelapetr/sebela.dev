@@ -29,7 +29,7 @@ const reasonOf = async (input: DocumentInput) => {
 };
 
 describe("the PDF parser's memory", () => {
-  it("refuses a stream that decodes to a gigabyte before its buffer nears the limit", async () => {
+  it("refuses a stream that decodes to a gigabyte before its buffers reach the limit", async () => {
     const body = { text: "Fictional body text for the parser's memory bound." };
     // The worker's own start and the parser's code, measured on a harmless PDF first.
     expect(await reasonOf(pdf(fixturePdf([{ lines: [body] }])))).toBeNull();
@@ -39,7 +39,8 @@ describe("the PDF parser's memory", () => {
     expect(bomb.length).toBeLessThan(defaultDocumentLimits.maxPdfBytes);
     expect(await reasonOf(pdf(bomb))).toBe("parser_limit");
 
-    // No buffer may exceed a quarter of the limit, so the growing stream stops well within it.
+    // No buffer may exceed an eighth of the limit: the growing stream, its copy while it doubles
+    // and the parser's heap stay within half of it.
     const limit = defaultDocumentLimits.maxParserMemoryMb * mebibyte;
     expect(peakBytes() - before).toBeLessThan(limit / 2);
   }, 60_000);

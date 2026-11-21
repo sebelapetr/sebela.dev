@@ -67,6 +67,7 @@ export async function readPdf(bytes: Uint8Array, limits: PdfReadLimits): Promise
     case "malformed":
     case "encrypted":
     case "extracted_too_large":
+    case "parser_limit":
       return { ok: false, failure: { reason: output.kind } };
     case "too_many_pages":
       return { ok: false, failure: { reason: "too_many_pages", pages: output.pages } };
@@ -95,6 +96,9 @@ function parse(
     bytes: copy,
     maxPages: limits.maxPages,
     maxChars: limits.maxChars,
+    // An eighth of the memory limit: the buffer the parser doubles, its copy while it grows (three
+    // eighths together) and the parser's heap stay within half of the limit.
+    maxAllocationBytes: Math.floor((limits.maxParserMemoryMb * 1_048_576) / 8),
   };
   return new Promise((resolve, reject) => {
     const worker = new Worker(workerUrl, {
