@@ -180,7 +180,18 @@ export function pendingSummary(options, pending) {
  *
  * @type {(file: string) => Promise<number>}
  */
-export const cacheEntryCount = () => Promise.reject(new Error("not implemented"));
+export async function cacheEntryCount(file) {
+  /** @type {string} */
+  let text;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return 0;
+    throw error;
+  }
+  const parsed = /** @type {{ entries?: Record<string, unknown> }} */ (JSON.parse(text));
+  return Object.keys(parsed.entries ?? {}).length;
+}
 
 /**
  * @typedef {{ queries: number, fromCache: number, embedded: number }} StepCacheUse
@@ -192,9 +203,16 @@ export const cacheEntryCount = () => Promise.reject(new Error("not implemented")
  *
  * @type {(queries: number, counts: { start: number, afterCandidates: number, end: number }) => QueryCacheUse}
  */
-export const queryCacheUse = () => {
-  throw new Error("not implemented");
-};
+export function queryCacheUse(queries, counts) {
+  /** @type {(added: number) => StepCacheUse} */
+  const step = (added) => ({ queries, fromCache: queries - added, embedded: added });
+  return {
+    entriesAtStart: counts.start,
+    candidates: step(counts.afterCandidates - counts.start),
+    search: step(counts.end - counts.afterCandidates),
+    note: "Cached query embeddings cost nothing and take no provider time, so the latency and cost per query leave out the embedding call for every search served from the cache.",
+  };
+}
 
 async function main() {
   const options = parseOptions(process.argv.slice(2));
@@ -285,10 +303,12 @@ async function measure(dataset, plan, options, folder) {
       ),
     );
     const poolsFile = join(scratch, "pools.json");
+    const cacheAtStart = await cacheEntryCount(queryCacheFile);
     const candidates = /** @type {{ pools: Record<string, string[]> }} */ (
       await knowledge("candidates", questionsFile)
     );
     await writeFile(poolsFile, JSON.stringify(candidates.pools));
+    const cacheAfterCandidates = await cacheEntryCount(queryCacheFile);
     await pause();
 
     const raw = join(scratch, "promptfoo.json");
@@ -321,7 +341,20 @@ async function measure(dataset, plan, options, folder) {
       throw new Error("Promptfoo's output contained a credential; it was deleted.");
     }
     const usage = /** @type {Usage} */ (await knowledge("usage"));
-    return summarize(dataset, plan, options, report, { portfolio: indexing, approvals }, usage);
+    const queryCache = queryCacheUse(new Set(plan.run.map((question) => question.query)).size, {
+      start: cacheAtStart,
+      afterCandidates: cacheAfterCandidates,
+      end: await cacheEntryCount(queryCacheFile),
+    });
+    return summarize(
+      dataset,
+      plan,
+      options,
+      report,
+      { portfolio: indexing, approvals },
+      usage,
+      queryCache,
+    );
   } finally {
     await api.stop();
     await rm(scratch, { recursive: true, force: true });
@@ -341,8 +374,9 @@ async function measure(dataset, plan, options, folder) {
  * @param {{ portfolio: unknown, approvals: unknown[] }} indexing The reindex report and the
  *   supplemental documents' approvals.
  * @param {Usage} usage The temporary database's recorded provider usage.
+ * @param {QueryCacheUse} queryCache Which steps' query embeddings came from the cache.
  */
-function summarize(dataset, plan, options, report, indexing, usage) {
+function summarize(dataset, plan, options, report, indexing, usage, queryCache) {
   /** @type {any[]} */
   const results = report?.results?.results ?? [];
   const cases = plan.run.map((question) => {
@@ -391,7 +425,7 @@ function summarize(dataset, plan, options, report, indexing, usage) {
       { queryCostUsd: search.costUsd },
     ),
     gate: { frozen: false },
-    spend: { ceilingUsd: options.ceilingUsd, indexing, usage },
+    spend: { ceilingUsd: options.ceilingUsd, indexing, usage, queryCache },
     cases,
     pending: plan.pending,
   };

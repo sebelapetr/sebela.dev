@@ -72,7 +72,7 @@
             "embedded": 3,
             "reused": 0,
             "tokens": 131,
-            "costUsd": 0.000007860000000000001
+            "costUsd": 7.860000000000001e-6
           }
         },
         {
@@ -93,7 +93,7 @@
             "embedded": 3,
             "reused": 0,
             "tokens": 120,
-            "costUsd": 0.0000072
+            "costUsd": 7.2e-6
           }
         },
         {
@@ -114,7 +114,7 @@
             "embedded": 3,
             "reused": 0,
             "tokens": 97,
-            "costUsd": 0.00000582
+            "costUsd": 5.82e-6
           }
         },
         {
@@ -135,7 +135,7 @@
             "embedded": 3,
             "reused": 0,
             "tokens": 222,
-            "costUsd": 0.00001332
+            "costUsd": 1.332e-5
           }
         }
       ]
@@ -154,9 +154,23 @@
         },
         "candidates": {
           "tokens": 63,
-          "costUsd": 0.00000378
+          "costUsd": 3.78e-6
         }
       }
+    },
+    "queryCache": {
+      "entriesAtStart": 0,
+      "candidates": {
+        "queries": 6,
+        "fromCache": 0,
+        "embedded": 6
+      },
+      "search": {
+        "queries": 6,
+        "fromCache": 6,
+        "embedded": 0
+      },
+      "note": "Cached query embeddings cost nothing and take no provider time, so the latency and cost per query leave out the embedding call for every search served from the cache."
     }
   },
   "cases": [
