@@ -33,7 +33,11 @@ See docs/testing.md.
 
 ## Roles
 
-<!-- Required (docs/git-workflow.md). Issue pull requests from the phase loop also name `Orchestrated by:`. -->
+<!--
+Required for every pull request (docs/git-workflow.md, Issue pull requests).
+Approved by: the reviewer agent for an issue pull request, the owner for a pull request into master.
+Issue pull requests the orchestrator opens from the phase loop add a fourth line: `Orchestrated by: <agent>`.
+-->
 
 Implemented by:
 Reviewed by:
