@@ -98,3 +98,6 @@ export function samplePdf(): Buffer {
 
 export { createFakeEmbedder, createFakeReranker } from "@sebela/memory";
 export type { FakeEmbedderOptions } from "@sebela/memory";
+/** Fictional text-layer PDFs built in memory, for the API's document ingest tests. */
+export { fixturePdf } from "@sebela/memory/testing";
+export type { FixturePdfPage } from "@sebela/memory/testing";
