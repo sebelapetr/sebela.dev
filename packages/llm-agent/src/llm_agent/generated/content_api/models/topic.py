@@ -15,7 +15,7 @@ class Topic:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         position (int): Ascending order in the list; ties are ordered by slug.
         created_at (datetime.datetime):

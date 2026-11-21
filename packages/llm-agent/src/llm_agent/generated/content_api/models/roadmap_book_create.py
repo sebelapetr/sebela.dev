@@ -16,7 +16,7 @@ T = TypeVar("T", bound="RoadmapBookCreate")
 class RoadmapBookCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         title (str):
         author (None | str | Unset): `null` when unknown.
         description (None | str | Unset): A short Markdown introduction; `null` when there is none.

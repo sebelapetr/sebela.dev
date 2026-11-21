@@ -21,7 +21,7 @@ class Project:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         experience (str): The slug of the experience the project belongs to; every project has exactly one.
         name (str):
         summary (str): Markdown.

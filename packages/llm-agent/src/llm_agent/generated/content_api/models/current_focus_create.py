@@ -14,7 +14,7 @@ T = TypeVar("T", bound="CurrentFocusCreate")
 class CurrentFocusCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         title (str): What is being worked on or learned now.
         description (str): Markdown.
         position (int): Ascending order in the list; ties are ordered by slug.

@@ -16,7 +16,7 @@ T = TypeVar("T", bound="TechnologyCreate")
 class TechnologyCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         tier (TechnologyCreateTier): `primary` technologies are shown prominently, `secondary` ones as plain text.
         position (int): Ascending order in the list; ties are ordered by slug.

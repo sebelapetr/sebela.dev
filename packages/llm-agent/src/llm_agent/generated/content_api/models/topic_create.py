@@ -12,7 +12,7 @@ T = TypeVar("T", bound="TopicCreate")
 class TopicCreate:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         position (int): Ascending order in the list; ties are ordered by slug.
     """

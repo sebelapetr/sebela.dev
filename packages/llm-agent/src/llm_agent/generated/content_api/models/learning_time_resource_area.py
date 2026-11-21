@@ -13,7 +13,7 @@ class LearningTimeResourceArea:
     """The area of that module.
 
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
     """
 

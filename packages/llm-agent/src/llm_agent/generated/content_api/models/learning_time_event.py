@@ -15,7 +15,7 @@ T = TypeVar("T", bound="LearningTimeEvent")
 class LearningTimeEvent:
     """
     Attributes:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         kind (LearningTimeEventKind):
         starts_on (datetime.date):

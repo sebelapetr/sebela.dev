@@ -20,7 +20,7 @@ class RoadmapTreeArea:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         description (None | str): Markdown; `null` when there is none.
         weight (int): The recommended share of learning effort, 1 to 100. It is not progress and not logged time.

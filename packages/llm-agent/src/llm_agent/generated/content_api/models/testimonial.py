@@ -15,7 +15,7 @@ class Testimonial:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         experience (str): The slug of the experience the testimonial belongs to; every testimonial has exactly one.
         quote (str): What the author said, plain text without quotation marks.
         author_name (str): The name of the client or colleague who said it.

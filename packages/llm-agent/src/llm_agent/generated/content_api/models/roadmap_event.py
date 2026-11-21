@@ -21,7 +21,7 @@ class RoadmapEvent:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         kind (RoadmapEventKind):
         organizer (None | str): Who organised it; `null` when unknown.

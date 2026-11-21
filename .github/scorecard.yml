@@ -1,0 +1,25 @@
+# OpenSSF Scorecard maintainer annotations (github.com/ossf/scorecard, config/README.md): the
+# reason beside a check's result that Scorecard cannot know. Scorecard reads this file from the
+# repository; it is not the workflow, which is .github/workflows/scorecard.yml. An annotation adds
+# context only: it changes no score (docs/testing.md, CI, Scorecard). Checks that can still be
+# improved are not annotated.
+annotations:
+  # Code-Review: a single-maintainer project. There is no second person to approve a change, and
+  # Scorecard does not count a review by a bot or an AI agent; its documentation calls requiring
+  # reviews infeasible for a project with one active participant. Every change still reaches
+  # master through a pull request with CI and an agent review before the owner merges it
+  # (docs/git-workflow.md).
+  - checks:
+      - code-review
+    reasons:
+      - reason: not-applicable # one maintainer; changes go through pull requests, CI and agent review
+  # Packaging: the project publishes packages. Every release pushes the images it built to GHCR
+  # (ghcr.io/sebelapetr/sebela-api, sebela-web, sebela-mcp-admin), each with a signed build
+  # provenance and an SBOM attestation (docs/release-workflow.md, Images). Scorecard looks for a known
+  # publishing command or action in the workflow file itself, and the push is made by
+  # scripts/release/images.mjs, which the release workflow runs; the tested release is not
+  # restructured for the scanner.
+  - checks:
+      - packaging
+    reasons:
+      - reason: not-detected # .github/workflows/release.yml publishes through scripts/release/images.mjs

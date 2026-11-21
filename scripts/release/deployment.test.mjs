@@ -309,6 +309,45 @@ describe("release notes", () => {
   it("can leave out the images when they are not known", () => {
     assert.doesNotMatch(render(commits, { tags: null }), /### Images/);
   });
+
+  it("names the attached files of each image the release built and says the reused ones are attested where they were built", () => {
+    const notes = render(commits, { built: ["api", "mcp-admin"] });
+    const imagesSection = notes.slice(notes.indexOf("### Images"));
+    assert.ok(
+      imagesSection.includes(
+        `- \`ghcr.io/sebelapetr/sebela-api:${images.api}\`, built for this release: \`sebela-api-v1.3.0.spdx.json\` and \`sebela-api-v1.3.0.intoto.jsonl\` are attached.\n`,
+      ),
+      imagesSection,
+    );
+    assert.ok(
+      imagesSection.includes(
+        `- \`ghcr.io/sebelapetr/sebela-mcp-admin:${images["mcp-admin"]}\`, built for this release: \`sebela-mcp-admin-v1.3.0.spdx.json\` and \`sebela-mcp-admin-v1.3.0.intoto.jsonl\` are attached.\n`,
+      ),
+      imagesSection,
+    );
+    assert.ok(
+      imagesSection.includes(
+        `- \`ghcr.io/sebelapetr/sebela-web:${images.web}\`, reused unchanged: no files are attached for it; its SBOM and provenance attestations were made by the release run that built it and are stored beside it in GHCR.\n`,
+      ),
+      imagesSection,
+    );
+    assert.match(
+      imagesSection,
+      new RegExp(
+        `How to verify the files and the images: \\[docs/release-workflow\\.md\\]\\(${GITHUB}/blob/master/docs/release-workflow\\.md#release-files\\)\\.\n$`,
+      ),
+    );
+  });
+
+  it("keeps the plain list of images when it is not known which were built", () => {
+    const notes = render(commits);
+    assert.ok(notes.endsWith(`- \`ghcr.io/sebelapetr/sebela-mcp-admin:${images["mcp-admin"]}\`\n`));
+    assert.doesNotMatch(notes, /attached|reused/);
+  });
+
+  it("refuses a built list that names an unknown service", () => {
+    assert.throws(() => render(commits, { built: ["api", "worker"] }), /unknown service/i);
+  });
 });
 
 describe("phase merges", () => {
@@ -536,7 +575,7 @@ describe("release commands", () => {
 
   const read = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "");
 
-  function notes(directory, commitSha, gh = fakeGh(directory)) {
+  function notes(directory, commitSha, gh = fakeGh(directory), extra = {}) {
     const notesFile = path.join(directory, "notes.md");
     const summary = path.join(directory, "summary.md");
     const outputs = run(directory, "notes", {
@@ -545,6 +584,7 @@ describe("release commands", () => {
       TAGS: JSON.stringify(images),
       NOTES_FILE: notesFile,
       GITHUB_STEP_SUMMARY: summary,
+      ...extra,
     });
     return { outputs, notes: read(notesFile), summary: read(summary) };
   }
@@ -586,6 +626,16 @@ describe("release commands", () => {
         /### Highlights\n\n\*\*Phase 02: API and database\*\* \(\[#4\]\([^)]+\)\): The content API\.\n/,
       );
       assert.deepEqual(gh.calls(), [`pr view 4 --repo ${REPOSITORY} --json body --jq .body`]);
+    });
+
+    it("names the files attached for the images built, from BUILT", () => {
+      const { directory, git, commitAs } = repository();
+      commitAs("feat(web): a page");
+      git("tag", "v0.2.0");
+      const head = commitAs("fix(api): a fix (#7)");
+      const result = notes(directory, head, fakeGh(directory), { BUILT: '["api"]' });
+      assert.match(result.notes, /built for this release: `sebela-api-v0\.2\.1\.spdx\.json`/);
+      assert.match(result.notes, /sebela-web:b{40}`, reused unchanged/);
     });
 
     it("still publishes the notes when GitHub cannot say what the phase brought", () => {
@@ -695,6 +745,19 @@ describe("release commands", () => {
       assert.doesNotMatch(section("v0.2.0"), /a page/);
       assert.match(section("v0.1.0"), /a page/);
       assert.match(section("v0.1.0"), new RegExp(`${GITHUB}/commits/v0\\.1\\.0`));
+    });
+
+    it("renders the attached files of a version whose built images the releases file gives", () => {
+      const { directory, releasesFile } = released();
+      const known = JSON.parse(fs.readFileSync(releasesFile, "utf8"));
+      known["v0.2.1"].built = ["web"];
+      fs.writeFileSync(releasesFile, JSON.stringify(known));
+      const changelog = rebuild(directory, releasesFile);
+      assert.match(
+        changelog,
+        /`sebela-web-v0\.2\.1\.spdx\.json` and `sebela-web-v0\.2\.1\.intoto\.jsonl`/,
+      );
+      assert.doesNotMatch(changelog, /sebela-web-v0\.2\.0/);
     });
 
     it("writes the same file every time", () => {

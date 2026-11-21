@@ -1,3 +1,5 @@
+import { readdir, readFile } from "node:fs/promises";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -7,6 +9,7 @@ import {
   auditProvenanceHeader,
   auditProvenanceMaxLength,
 } from "@sebela/contracts";
+import { demoSeedFolder } from "@sebela/services";
 
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
@@ -870,6 +873,49 @@ describe("the OpenAPI document and the reference", () => {
     expect(
       Object.keys(document.components.schemas["AuditChange"]?.properties ?? {}).sort(),
     ).toEqual(Object.keys(AuditChangeSchema.shape).sort());
+  });
+
+  it("quotes only slugs of the fictional demo seed as slug examples", async () => {
+    const seedSlugs = new Set<string>();
+    const collectSlugs = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        for (const item of node) collectSlugs(item);
+        return;
+      }
+      if (typeof node !== "object" || node === null) return;
+      for (const [name, value] of Object.entries(node)) {
+        if (name === "slug" && typeof value === "string") seedSlugs.add(value);
+        collectSlugs(value);
+      }
+    };
+    for (const file of await readdir(demoSeedFolder)) {
+      if (file.endsWith(".json")) {
+        collectSlugs(JSON.parse(await readFile(new URL(file, demoSeedFolder), "utf8")) as unknown);
+      }
+    }
+
+    const examples = new Set<string>();
+    const collectExamples = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        for (const item of node) collectExamples(item);
+        return;
+      }
+      if (typeof node !== "object" || node === null) return;
+      const description = (node as { description?: unknown }).description;
+      if (
+        typeof description === "string" &&
+        description.startsWith("The stable, unique address of the record")
+      ) {
+        for (const match of description.matchAll(/`([^`]+)`/g)) {
+          if (match[1] !== undefined) examples.add(match[1]);
+        }
+      }
+      for (const value of Object.values(node)) collectExamples(value);
+    };
+    collectExamples(document);
+
+    expect(examples.size).toBeGreaterThan(0);
+    for (const example of examples) expect(seedSlugs).toContain(example);
   });
 
   it("documents the health route", () => {

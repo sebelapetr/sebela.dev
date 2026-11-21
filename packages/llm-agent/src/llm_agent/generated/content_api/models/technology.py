@@ -18,7 +18,7 @@ class Technology:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         name (str):
         tier (TechnologyTier): `primary` technologies are shown prominently, `secondary` ones as plain text.
         group (None | TechnologyGroupType0): The group of a primary technology: `core` (with logos) or

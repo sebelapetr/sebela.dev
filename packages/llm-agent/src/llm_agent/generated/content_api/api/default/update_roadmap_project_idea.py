@@ -111,7 +111,7 @@ def sync_detailed(
     (`validation_failed` on `topics`).
 
     Args:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         sebela_provenance (str | Unset): A short label of the tool or client making the write,
             such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never
             proof of who acted or that a human approved. A label outside the pattern is refused with
@@ -153,7 +153,7 @@ def sync(
     (`validation_failed` on `topics`).
 
     Args:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         sebela_provenance (str | Unset): A short label of the tool or client making the write,
             such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never
             proof of who acted or that a human approved. A label outside the pattern is refused with
@@ -190,7 +190,7 @@ async def asyncio_detailed(
     (`validation_failed` on `topics`).
 
     Args:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         sebela_provenance (str | Unset): A short label of the tool or client making the write,
             such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never
             proof of who acted or that a human approved. A label outside the pattern is refused with
@@ -230,7 +230,7 @@ async def asyncio(
     (`validation_failed` on `topics`).
 
     Args:
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         sebela_provenance (str | Unset): A short label of the tool or client making the write,
             such as `mcp-admin/update_content`, stored with its audit. Stated by the caller: never
             proof of who acted or that a human approved. A label outside the pattern is refused with

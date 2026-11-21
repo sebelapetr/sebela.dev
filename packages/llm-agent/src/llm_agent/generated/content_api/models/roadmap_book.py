@@ -22,7 +22,7 @@ class RoadmapBook:
     """
     Attributes:
         id (UUID):
-        slug (str): The stable, unique address of the record, for example `paldock`.
+        slug (str): The stable, unique address of the record, for example `northwind-freight`.
         title (str):
         author (None | str): `null` when unknown.
         description (None | str): A short Markdown introduction; `null` when there is none.

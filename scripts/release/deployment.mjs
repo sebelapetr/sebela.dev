@@ -5,7 +5,8 @@
 // deployment.test.mjs. The release workflow runs it as
 //
 //   SHA=<commit> TAGS='{"api":"<commit>",...}' node scripts/release/deployment.mjs input
-//   SHA=<commit> TAGS='{...}' NOTES_FILE=<path> node scripts/release/deployment.mjs notes
+//   SHA=<commit> TAGS='{...}' BUILT='["api"]' NOTES_FILE=<path> \
+//     node scripts/release/deployment.mjs notes
 //   VERSION=<tag> NOTES_FILE=<path> node scripts/release/deployment.mjs changelog-entry
 //
 // and the owner rebuilds the whole changelog from the version tags with
@@ -18,19 +19,21 @@
 // checkout is brought to. `notes` writes the release notes of the commits since the last version
 // tag merged into SHA to NOTES_FILE and prints `release=true` and `version=<tag>` for
 // $GITHUB_OUTPUT; the summary of a phase pull request among them is read with `gh` and left out
-// when GitHub cannot give it. When SHA already carries a version tag (a rerun of a released
-// commit), it writes no notes, prints `release=false` and `version=<that tag>` and says so in the
-// log and, when GITHUB_STEP_SUMMARY is set, in the step summary. `changelog-entry` adds the notes
-// in NOTES_FILE as the section of VERSION, dated today in UTC (or DATE), to CHANGELOG_FILE
-// (CHANGELOG.md by default). `changelog` writes CHANGELOG_FILE again from every version tag and
-// its commits; RELEASES_FILE may give, per version, what git does not know: `date`, the deployed
-// `tags` and a `note`.
+// when GitHub cannot give it. BUILT, the services whose images the run built, makes the notes name
+// the release files attached for them and say that the reused images have none. When SHA already
+// carries a version tag (a rerun of a released commit), it writes no notes, prints
+// `release=false` and `version=<that tag>` and says so in the log and, when GITHUB_STEP_SUMMARY is
+// set, in the step summary. `changelog-entry` adds the notes in NOTES_FILE as the section of
+// VERSION, dated today in UTC (or DATE), to CHANGELOG_FILE (CHANGELOG.md by default). `changelog`
+// writes CHANGELOG_FILE again from every version tag and its commits; RELEASES_FILE may give, per
+// version, what git does not know: `date`, the deployed `tags`, the `built` services and a `note`.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import { SERVICES, imageName } from "./images.mjs";
+import { releaseFileNames } from "./release-files.mjs";
 
 const COMMIT = /^[0-9a-f]{40}$/;
 const VERSION = /^v(\d+)\.(\d+)\.(\d+)$/;
@@ -226,9 +229,25 @@ export function phaseSummary(body) {
  * scope) and other changes, empty groups left out and merge commits skipped; pull request numbers
  * and commits without one linked in `repository` (`owner/name`); the comparison with `previous`
  * (or the history of a first release); then the deployed image of every service from `tags`, left
- * out when `tags` is null. A release without new commits says so in one line instead.
+ * out when `tags` is null. When `built` lists the services whose images the release's run built,
+ * each image also says whether its release files are attached (built) or not (reused), and a link
+ * says how to verify them. A release without new commits says so in one line instead.
  */
-export function releaseNotes({ commits, tags, version, previous, repository, phases = {}, note }) {
+export function releaseNotes({
+  commits,
+  tags,
+  version,
+  previous,
+  repository,
+  phases = {},
+  note,
+  built = null,
+}) {
+  if (built !== null) {
+    if (!Array.isArray(built)) throw new Error("The built images are not a list of services.");
+    const unknown = built.filter((service) => !SERVICES.includes(service));
+    if (unknown.length > 0) throw new Error(`An unknown service: ${unknown.join(", ")}`);
+  }
   const github = `https://github.com/${repository}`;
   const pull = (text) =>
     text.replace(/\(#(\d+)\)/g, (_, number) => `([#${number}](${github}/pull/${number}))`);
@@ -286,8 +305,19 @@ export function releaseNotes({ commits, tags, version, previous, repository, pha
     );
   }
   if (tags) {
-    const images = SERVICES.map((service) => `- \`${imageName(service)}:${tags[service]}\``);
-    sections.push(`### Images\n\n${images.join("\n")}`);
+    const images = SERVICES.map((service) => {
+      const image = `- \`${imageName(service)}:${tags[service]}\``;
+      if (!built) return image;
+      if (!built.includes(service)) {
+        return `${image}, reused unchanged: no files are attached for it; its SBOM and provenance attestations were made by the release run that built it and are stored beside it in GHCR.`;
+      }
+      const files = releaseFileNames(service, version);
+      return `${image}, built for this release: \`${files.sbom}\` and \`${files.attestations}\` are attached.`;
+    });
+    const verify = built
+      ? `\n\nHow to verify the files and the images: [docs/release-workflow.md](${github}/blob/master/docs/release-workflow.md#release-files).`
+      : "";
+    sections.push(`### Images\n\n${images.join("\n")}${verify}`);
   }
   return `${sections.join("\n\n")}\n`;
 }
@@ -400,6 +430,7 @@ function notesCommand() {
   const repository = repositoryFromEnvironment();
   const tags = tagsFromEnvironment();
   deployInput(tags, sha);
+  const built = process.env.BUILT ? JSON.parse(process.env.BUILT) : null;
   const released = releasedVersion(git(["tag", "--list", "v*", "--points-at", sha]).split("\n"));
   if (released) {
     const message = `The commit ${sha} is already released as ${released}; no new version is published.`;
@@ -418,7 +449,7 @@ function notesCommand() {
   const phases = phaseBodies(commits, repository);
   fs.writeFileSync(
     notesFile,
-    releaseNotes({ commits, tags, version, previous, repository, phases }),
+    releaseNotes({ commits, tags, version, previous, repository, phases, built }),
   );
   process.stdout.write(`release=true\nversion=${version}\n`);
 }
@@ -454,7 +485,7 @@ function changelogCommand() {
   const releases = [];
   let previous = null;
   for (const version of versionTags()) {
-    const { date, tags = null, note } = known[version] ?? {};
+    const { date, tags = null, note, built = null } = known[version] ?? {};
     const commits = commitsOf(previous ? `${previous}..${version}` : version);
     releases.push({
       version,
@@ -469,6 +500,7 @@ function changelogCommand() {
         repository,
         phases: phaseBodies(commits, repository),
         note,
+        built,
       }),
     });
     previous = version;
