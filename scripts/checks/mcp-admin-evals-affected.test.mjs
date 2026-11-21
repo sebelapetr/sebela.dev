@@ -128,6 +128,27 @@ packages:
     resolution: {integrity: sha512-fixture}
 `;
 
+const WORKFLOW = `name: Model evals
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  # Which suites the pull request affects.
+  changes:
+    runs-on: ubuntu-latest
+    steps:
+      - run: node scripts/checks/mcp-admin-evals-affected.mjs "$BASE" HEAD
+
+  mcp-admin:
+    name: MCP Admin model evals
+    needs: changes
+    steps:
+      - run: node evals/run.js
+`;
+
 const CLIENT = `import createClient from "openapi-fetch";
 
 export type Person = Schemas["Person"];
@@ -151,7 +172,7 @@ function baseFiles() {
     "apps/mcp-admin/src/app.test.ts": 'fetch("/v1/chat/conversations");\n',
     "apps/mcp-admin/src/test-support/fake-api.ts": 'route("/v1/chat/conversations");\n',
     "apps/api/src/routes.ts": "export {};\n",
-    ".github/workflows/model-evals.yml": "name: Model evals\n",
+    ".github/workflows/model-evals.yml": WORKFLOW,
   };
 }
 
@@ -357,9 +378,54 @@ describe("MCP Admin model evals: affected or not", () => {
     });
   }
 
-  it("is affected by a change to the model evals workflow", (t) => {
-    const result = affected(t, { ".github/workflows/model-evals.yml": "name: Changed\n" });
+  it("is affected by a change to the mcp-admin job of the model evals workflow", (t) => {
+    const result = affected(t, {
+      ".github/workflows/model-evals.yml": WORKFLOW.replace(
+        "      - run: node evals/run.js\n",
+        "      - run: node evals/run.js --case E01\n",
+      ),
+    });
     assert.equal(result.affected, true, result.output);
+    assert.match(result.output, /mcp-admin job/);
+  });
+
+  it("is affected when the mcp-admin job is removed from the workflow", (t) => {
+    const result = affected(t, {
+      ".github/workflows/model-evals.yml": WORKFLOW.slice(0, WORKFLOW.indexOf("  mcp-admin:")),
+    });
+    assert.equal(result.affected, true, result.output);
+  });
+
+  it("is not affected by the mcp-admin job moving within the workflow", (t) => {
+    const [head, job] = WORKFLOW.split("\n  mcp-admin:\n");
+    const moved = head.replace("jobs:\n", `jobs:\n  mcp-admin:\n${job}\n`);
+    const result = affected(t, { ".github/workflows/model-evals.yml": moved });
+    assert.equal(result.affected, false, result.output);
+  });
+
+  it("is not affected by an edit of the changes job or the rest of the workflow", (t) => {
+    const result = affected(t, {
+      ".github/workflows/model-evals.yml": WORKFLOW.replace(
+        "  changes:\n    runs-on: ubuntu-latest\n",
+        "  changes:\n    runs-on: ubuntu-latest\n    outputs:\n      llm-agent: x\n",
+      ).replace("      - master\n", "      - master\n    types: [opened]\n"),
+    });
+    assert.equal(result.affected, false, result.output);
+  });
+
+  it("is not affected by another job added to the workflow", (t) => {
+    const result = affected(t, {
+      ".github/workflows/model-evals.yml": `${WORKFLOW}\n  llm-agent:\n    name: Python agent model evals\n    needs: changes\n    steps:\n      - run: uv run python -m evals.run\n`,
+    });
+    assert.equal(result.affected, false, result.output);
+  });
+
+  it("is not affected by a change to this decision itself", (t) => {
+    const result = affected(t, {
+      "scripts/checks/mcp-admin-evals-affected.mjs": "// changed\n",
+      "scripts/checks/mcp-admin-evals-affected.test.mjs": "// changed\n",
+    });
+    assert.equal(result.affected, false, result.output);
   });
 
   it("is affected by a changed dependency of MCP Admin or of its API client in the lockfile", (t) => {

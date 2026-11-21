@@ -8,7 +8,9 @@
 //
 // MCP Admin reaches the API only through the generated client, so it is affected by:
 // - any change under apps/mcp-admin/ (code, tool descriptions, prompts, evals, fixtures,
-//   package.json) and by the model evals workflow itself;
+//   package.json), and by a change, removal or addition of the `mcp-admin` job in the model evals
+//   workflow (its other jobs, the `changes` job and this script decide which suites run, not how
+//   MCP Admin behaves, so they do not count);
 // - a change of a documented route MCP Admin calls in the committed OpenAPI document
 //   (packages/api-client/src/generated/openapi.json): any method, parameter, security, request or
 //   response of it, with every schema it refers to resolved, a removed route included. The called
@@ -34,13 +36,11 @@ const OPENAPI = "packages/api-client/src/generated/openapi.json";
 const CLIENT = "packages/api-client/src/index.ts";
 const LOCKFILE = "pnpm-lock.yaml";
 const SOURCE_FOLDERS = ["apps/mcp-admin/src", "apps/mcp-admin/evals"];
+const WORKFLOW = ".github/workflows/model-evals.yml";
+const WORKFLOW_JOB = "mcp-admin";
 const LOCK_IMPORTERS = ["apps/mcp-admin", "packages/api-client"];
 const PATH_RULES = [
   { test: (file) => file.startsWith("apps/mcp-admin/"), why: "MCP Admin changed" },
-  {
-    test: (file) => file === ".github/workflows/model-evals.yml",
-    why: "the model evals workflow changed",
-  },
   {
     test: (file) => file === "packages/api-client/package.json",
     why: "the API client's package changed",
@@ -196,6 +196,33 @@ function importerEntry(lockfile, importer) {
   return lines.slice(start, end).join("\n").trimEnd();
 }
 
+/**
+ * The text of one job of a GitHub Actions workflow: from its key under the top-level `jobs:` to
+ * the next job's key, without trailing blank or comment lines (a comment there introduces the
+ * next job). Empty when the workflow or the job does not exist. Plain text, so no YAML parser is
+ * needed; the workflows of this repository indent jobs by two spaces.
+ */
+export function workflowJob(workflow, job) {
+  const lines = (workflow ?? "").split("\n");
+  let index = lines.findIndex((line) => /^jobs:\s*(?:#.*)?$/.test(line));
+  if (index === -1) return "";
+  const key = new RegExp(`^  ${job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*(?:#.*)?$`);
+  for (index += 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\S/.test(line) && !line.startsWith("#")) return "";
+    if (key.test(line)) break;
+  }
+  if (index >= lines.length) return "";
+  const block = [lines[index]];
+  for (index += 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^ {0,2}[^\s#]/.test(line)) break;
+    block.push(line);
+  }
+  while (block.length > 1 && /^\s*(?:#.*)?$/.test(block.at(-1))) block.pop();
+  return block.join("\n");
+}
+
 /** The client's source without its one-line type declarations, which change no behaviour. */
 function clientRuntime(text) {
   return (text ?? "")
@@ -214,6 +241,14 @@ export function decide(base, head = "HEAD") {
   for (const file of files) {
     const rule = PATH_RULES.find(({ test }) => test(file));
     if (rule) reasons.push(`${rule.why}: ${file}`);
+  }
+  if (files.includes(WORKFLOW)) {
+    const before = workflowJob(show(mergeBase, WORKFLOW), WORKFLOW_JOB);
+    const after = workflowJob(show(head, WORKFLOW), WORKFLOW_JOB);
+    if (before !== after) {
+      const what = !after ? "was removed" : !before ? "was added" : "changed";
+      reasons.push(`the ${WORKFLOW_JOB} job of ${WORKFLOW} ${what}`);
+    }
   }
   if (files.includes(LOCKFILE)) {
     const before = show(mergeBase, LOCKFILE);

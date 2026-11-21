@@ -59,7 +59,7 @@ jobs:
               echo "$name=false"
             fi
           }
-          # MCP Admin: its app, this workflow, and the routes it calls in the API contract, the API
+          # MCP Admin: its app, its job below, and the routes it calls in the API contract, the API
           # client and their locked dependencies, decided by scripts/checks/mcp-admin-evals-affected.mjs
           # (docs/testing.md, CI). A route added for another consumer does not run it.
           if [ "$EVENT" = "workflow_dispatch" ]; then
