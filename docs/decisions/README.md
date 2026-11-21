@@ -42,3 +42,4 @@ Date: YYYY-MM-DD
 | 0021 | [The API audits every content write in the write's own transaction](0021-api-owned-atomic-content-audit.md)                  |
 | 0022 | [RAG is split into a private knowledge base and a later integration phase](0022-rag-split-knowledge-base-and-integration.md) |
 | 0023 | [Incremental delivery on merge, behind the server's nginx, at sebela.dev](0023-incremental-delivery-on-merge.md)             |
+| 0024 | [The Main Agent runs Claude Haiku 5.5 at medium effort](0024-main-agent-haiku-medium.md)                                     |

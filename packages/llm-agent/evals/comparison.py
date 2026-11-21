@@ -101,11 +101,12 @@ SONNET_PRICES: Final = Prices(
     cache_write=rubric.JUDGE_PRICE_INPUT * 1.25,
 )
 
-#: The pinned Main stage, before any candidate replaces it.
-BASELINE: Final[str] = "haiku-high"
+#: The pinned Main stage, before any candidate replaces it: Haiku 5.5 at medium effort since the
+#: owner's selection on #183 (2026-11-21); `haiku-high` was the baseline of the comparison run.
+BASELINE: Final[str] = "haiku-medium"
 CANDIDATES: Final[dict[str, StageModel]] = {
     BASELINE: STAGES["main"],
-    "haiku-medium": StageModel(model=HAIKU, effort="medium", prices=HAIKU_PRICES),
+    "haiku-high": StageModel(model=HAIKU, effort="high", prices=HAIKU_PRICES),
     "sonnet-medium": StageModel(model=rubric.JUDGE_MODEL, effort="medium", prices=SONNET_PRICES),
 }
 

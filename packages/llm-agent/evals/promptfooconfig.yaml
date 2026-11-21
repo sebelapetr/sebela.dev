@@ -4,7 +4,7 @@
 # starts the fictional test API, selects the cases, sets the allowlisted environment and applies
 # the gates. Pinned settings: Promptfoo 0.126.0 (through `pnpm dlx`), the provider below, which
 # runs the public package operation with the agent's own pinned models (Security Gateway Claude
-# Haiku 5.5 at medium effort, Main Agent Claude Haiku 5.5 at high effort, Output Guard without a
+# Haiku 5.5 at medium effort, Main Agent Claude Haiku 5.5 at medium effort, Output Guard without a
 # model) and its own limits (60 s, 0.02 USD per execution). No sampling parameter is set; three
 # independent repeats carry the variance.
 description: LLM agent S01 guarded bilingual profile answer
