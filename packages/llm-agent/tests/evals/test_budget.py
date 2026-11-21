@@ -1,36 +1,202 @@
-"""The cumulative campaign allowance: declared remainder, local ledger cap and reservations."""
+"""The campaign allowance: a ceiling per phase campaign, the declared remainder, the ledger cap,
+the stops of issue runs and reservations."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from evals import budget
 
+P6 = budget.campaign("06-llm-agent")
+P7 = budget.campaign("07-ai-service")
 
-@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "ten", "10.01"])
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "ten", "13.01"])
 def test_an_invalid_or_over_ceiling_allowance_is_refused(value: str) -> None:
     with pytest.raises(budget.BudgetBlockedError):
-        budget.parse_allowance(value)
+        budget.parse_allowance(value, P6)
+
+
+# --- A ceiling per phase campaign (decision 0026, point 7; issue #371) ------------------------
+
+
+def test_every_phase_campaign_has_the_ceiling_and_stops_the_owner_approved() -> None:
+    assert {name: entry.ceiling_usd for name, entry in budget.CAMPAIGNS.items()} == {
+        "06-llm-agent": 13.0,
+        "07-ai-service": 4.0,
+        "07.1-jev-gateway": 2.0,
+        "08-mcp-public": 2.3,
+    }
+    assert (P7.issue_stop_usd, P7.run_stop_usd) == (1.5, 1.0)
+    assert budget.campaign("07.1-jev-gateway").run_stop_usd == 1.0
+    assert budget.campaign("08-mcp-public").run_stop_usd == 1.0
+    # The finished phase-6 campaign keeps the rules it ran under.
+    assert (P6.issue_stop_usd, P6.run_stop_usd) == (None, None)
+
+
+@pytest.mark.parametrize("name", [None, "", "07", "phase-7", "07-AI-SERVICE", "09-rag"])
+def test_an_unknown_or_missing_campaign_is_a_block_never_a_default(name: str | None) -> None:
+    with pytest.raises(budget.BudgetBlockedError, match="campaign"):
+        budget.campaign(name)
+
+
+def test_a_run_names_its_campaign_by_option_or_environment_and_they_may_not_differ() -> None:
+    env = {budget.CAMPAIGN_ENVIRONMENT: "07-ai-service"}
+    assert budget.named_campaign(None, env) == P7
+    assert budget.named_campaign("07-ai-service", {}) == P7
+    assert budget.named_campaign("07-ai-service", env) == P7
+    with pytest.raises(budget.BudgetBlockedError, match="differs"):
+        budget.named_campaign("06-llm-agent", env)
+    with pytest.raises(budget.BudgetBlockedError, match="names no campaign"):
+        budget.named_campaign(None, {})
+    with pytest.raises(budget.BudgetBlockedError, match="names no campaign"):
+        budget.named_campaign(None, {budget.CAMPAIGN_ENVIRONMENT: " "})
+
+
+def test_an_allowance_above_the_campaign_s_own_ceiling_is_refused() -> None:
+    assert budget.parse_allowance("4", P7) == 4.0
+    with pytest.raises(budget.BudgetBlockedError, match=r"4\.00 USD ceiling of the 07-ai-service"):
+        budget.parse_allowance("4.01", P7)
+    # What phase 6 could declare is no longer grantable to a later phase.
+    with pytest.raises(budget.BudgetBlockedError):
+        budget.parse_allowance("10", P7)
+
+
+def test_one_campaign_cannot_spend_another_s_ceiling(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    earlier = budget.open_allowance(13.0, ledger, P6, "phase-pr")
+    earlier.charge(12.0, "the phase-6 campaign")
+    budget.record_run(ledger, "p6", earlier, "full")
+    fresh = budget.open_allowance(4.0, ledger, P7, "phase-pr")
+    assert fresh.available_usd == pytest.approx(4.0)
+    fresh.charge(3.9, "the phase-7 phase-PR run")
+    budget.record_run(ledger, "p7", fresh, "full")
+    assert budget.ledger_spent(ledger, "06-llm-agent") == pytest.approx(12.0)
+    assert budget.ledger_spent(ledger, "07-ai-service") == pytest.approx(3.9)
+    assert budget.open_allowance(13.0, ledger, P6, "phase-pr").available_usd == pytest.approx(1.0)
+    assert budget.open_allowance(4.0, ledger, P7, "phase-pr").available_usd == pytest.approx(0.1)
+    assert budget.open_allowance(
+        2.0, ledger, budget.campaign("07.1-jev-gateway"), "phase-pr"
+    ).available_usd == pytest.approx(2.0)
+
+
+def test_ledger_entries_written_before_campaigns_belong_to_phase_6(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    ledger.write_text(json.dumps({"runs": [{"run": "old", "spent_usd": 9.75, "uncertain_usd": 0.5}]}))
+    assert budget.ledger_spent(ledger, "06-llm-agent") == pytest.approx(9.75)
+    assert budget.ledger_spent(ledger, "07-ai-service") == 0.0
+    assert budget.open_allowance(13.0, ledger, P6, "issue").available_usd == pytest.approx(3.25)
+    assert budget.open_allowance(4.0, ledger, P7, "phase-pr").available_usd == pytest.approx(4.0)
+
+
+def test_an_issue_run_stops_at_the_per_run_stop(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    assert budget.open_allowance(4.0, ledger, P7, "issue").available_usd == pytest.approx(1.0)
+    # The full phase-PR run is not bound by it.
+    assert budget.open_allowance(4.0, ledger, P7, "phase-pr").available_usd == pytest.approx(4.0)
+    # A smaller declared allowance still wins.
+    assert budget.open_allowance(0.4, ledger, P7, "issue").available_usd == pytest.approx(0.4)
+
+
+def test_issue_runs_stop_at_their_cumulative_stop_and_leave_the_phase_pr_reserve(
+    tmp_path: Path,
+) -> None:
+    ledger = tmp_path / "ledger.json"
+    for number, usd in enumerate((0.9, 0.4)):
+        run = budget.open_allowance(4.0, ledger, P7, "issue")
+        run.charge(usd, "issue work")
+        budget.record_run(ledger, f"issue-{number}", run, "partial")
+    third = budget.open_allowance(4.0, ledger, P7, "issue")
+    assert third.available_usd == pytest.approx(0.2)
+    third.charge(0.2, "the rest of the issue work")
+    budget.record_run(ledger, "issue-2", third, "partial")
+    with pytest.raises(budget.BudgetBlockedError, match=r"issue runs.*1\.50 USD"):
+        budget.open_allowance(4.0, ledger, P7, "issue")
+    # The phase-PR run still has the rest of the ceiling; its spend does not count as issue work.
+    reserve = budget.open_allowance(4.0, ledger, P7, "phase-pr")
+    assert reserve.available_usd == pytest.approx(2.5)
+    reserve.charge(2.0, "the phase-PR run")
+    budget.record_run(ledger, "phase-pr", reserve, "full")
+    assert budget.ledger_spent(ledger, "07-ai-service", stage="issue") == pytest.approx(1.5)
+    assert budget.open_allowance(4.0, ledger, P7, "phase-pr").available_usd == pytest.approx(0.5)
+
+
+def test_an_exhausted_ceiling_blocks_and_names_the_campaign(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    spent = budget.open_allowance(4.0, ledger, P7, "phase-pr")
+    spent.charge(4.0, "everything")
+    budget.record_run(ledger, "run-1", spent, "full")
+    for stage in budget.STAGES:
+        with pytest.raises(budget.BudgetBlockedError, match="07-ai-service.*exhausted"):
+            budget.open_allowance(1.0, ledger, P7, stage)
+
+
+@pytest.mark.parametrize("stage", ["", "pr", "full", "Issue", None])
+def test_an_unknown_stage_is_refused(tmp_path: Path, stage: str | None) -> None:
+    with pytest.raises(budget.BudgetBlockedError, match="stage"):
+        budget.open_allowance(1.0, tmp_path / "ledger.json", P7, stage)  # type: ignore[arg-type]
+
+
+def test_a_ledger_entry_names_its_campaign_stage_and_expected_cost(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    allowance = budget.open_allowance(1.0, ledger, P7, "issue")
+    allowance.charge(0.25, "work")
+    budget.record_run(ledger, "run-1", allowance, "partial", expected_usd=0.2)
+    (entry,) = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
+    assert (entry["campaign"], entry["stage"]) == ("07-ai-service", "issue")
+    assert entry["expected_usd"] == pytest.approx(0.2)
+
+
+def test_an_allowance_without_a_campaign_cannot_be_recorded(tmp_path: Path) -> None:
+    loose = budget.Allowance(available_usd=1.0)
+    with pytest.raises(budget.BudgetBlockedError, match="campaign"):
+        budget.record_run(tmp_path / "ledger.json", "run-1", loose, "partial")
+
+
+def test_the_remainder_of_the_campaign_ceiling_follows_the_run(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    first = budget.open_allowance(4.0, ledger, P7, "issue")
+    first.charge(0.5, "work")
+    budget.record_run(ledger, "run-1", first, "partial")
+    second = budget.open_allowance(4.0, ledger, P7, "issue")
+    assert second.campaign_remaining_usd == pytest.approx(3.5)
+    second.charge(0.25, "more work")
+    assert second.campaign_remaining_usd == pytest.approx(3.25)
+
+
+def test_the_spend_line_states_expected_actual_and_the_remainder(tmp_path: Path) -> None:
+    allowance = budget.open_allowance(4.0, tmp_path / "ledger.json", P7, "issue")
+    assert budget.spend_line(allowance, expected_usd=0.3) == (
+        "spend: expected 0.3000 USD before the run;"
+        " 4.0000 USD of the 07-ai-service ceiling (4.00 USD) remain"
+    )
+    allowance.charge(0.2, "measured")
+    allowance.charge(0.02, "crashed", uncertain=True)
+    assert budget.spend_line(allowance, expected_usd=0.3, finished=True) == (
+        "spend: expected 0.3000 USD, actual 0.2200 USD (uncertain 0.0200);"
+        " 3.7800 USD of the 07-ai-service ceiling (4.00 USD) remain"
+    )
 
 
 def test_the_ledger_caps_what_a_declared_allowance_grants(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.json"
-    first = budget.open_allowance(10.0, ledger)
-    first.charge(9.5, "earlier run")
+    first = budget.open_allowance(13.0, ledger, P6, "issue")
+    first.charge(12.5, "earlier run")
     budget.record_run(ledger, "run-1", first, "partial")
-    second = budget.open_allowance(10.0, ledger)
+    second = budget.open_allowance(13.0, ledger, P6, "issue")
     assert second.available_usd == pytest.approx(0.5)
 
 
 def test_an_exhausted_campaign_blocks(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.json"
-    spent = budget.open_allowance(10.0, ledger)
-    spent.charge(10.0, "everything")
+    spent = budget.open_allowance(13.0, ledger, P6, "issue")
+    spent.charge(13.0, "everything")
     budget.record_run(ledger, "run-1", spent, "partial")
     with pytest.raises(budget.BudgetBlockedError):
-        budget.open_allowance(5.0, ledger)
+        budget.open_allowance(5.0, ledger, P6, "issue")
 
 
 def test_a_reservation_over_the_remainder_blocks_and_uncertain_spend_is_tracked() -> None:
@@ -45,18 +211,16 @@ def test_a_reservation_over_the_remainder_blocks_and_uncertain_spend_is_tracked(
 
 def test_a_run_rewrites_its_own_ledger_entry_with_every_chunk(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.json"
-    allowance = budget.open_allowance(5.0, ledger)
+    allowance = budget.open_allowance(5.0, ledger, P6, "issue")
     allowance.charge(0.3, "chunk 1")
     chunks = [{"cases": ["a"], "reserved_usd": 0.5, "spent_usd": 0.3, "uncertain_usd": 0.0}]
     budget.record_run(ledger, "run-1", allowance, "running", chunks=chunks)
     allowance.charge(0.2, "chunk 2")
     chunks.append({"cases": ["b"], "reserved_usd": 0.5, "spent_usd": 0.2, "uncertain_usd": 0.0})
     budget.record_run(ledger, "run-1", allowance, "full", chunks=chunks)
-    assert budget.ledger_spent(ledger) == pytest.approx(0.5)
-    again = budget.open_allowance(5.0, ledger)
+    assert budget.ledger_spent(ledger, "06-llm-agent") == pytest.approx(0.5)
+    again = budget.open_allowance(5.0, ledger, P6, "issue")
     assert again.available_usd == pytest.approx(5.0)
-    import json
-
     (entry,) = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
     assert entry["scope"] == "full"
     assert [chunk["cases"] for chunk in entry["chunks"]] == [["a"], ["b"]]
@@ -65,17 +229,15 @@ def test_a_run_rewrites_its_own_ledger_entry_with_every_chunk(tmp_path: Path) ->
 def test_a_provisional_charge_counts_as_spent_and_uncertain_until_it_is_replaced(
     tmp_path: Path,
 ) -> None:
-    import json
-
     ledger = tmp_path / "ledger.json"
-    allowance = budget.open_allowance(5.0, ledger)
+    allowance = budget.open_allowance(5.0, ledger, P6, "issue")
     allowance.charge(0.3, "chunk 1")
     budget.record_run(ledger, "run-1", allowance, "running", provisional_usd=0.5)
     (entry,) = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
     assert entry["provisional_usd"] == pytest.approx(0.5)
     assert entry["spent_usd"] == pytest.approx(0.8)
     assert entry["uncertain_usd"] == pytest.approx(0.5)
-    assert budget.ledger_spent(ledger) == pytest.approx(0.8)
+    assert budget.ledger_spent(ledger, "06-llm-agent") == pytest.approx(0.8)
     allowance.charge(0.2, "chunk 2")
     budget.record_run(ledger, "run-1", allowance, "running")
     (entry,) = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
