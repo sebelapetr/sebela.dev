@@ -2,19 +2,19 @@
 
 The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/done/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
 
-| Path                              | What it is                                                                                                             |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `production/compose.yaml`         | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                            |
-| `production/.env.example`         | Every production setting, as a documented placeholder; the real file lives only on the server                          |
-| `nginx/sebela.dev.conf`           | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website |
-| `scripts/deploy.sh`               | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                        |
-| `scripts/backup.sh`               | The encrypted backup of the production database to the `sebela-backups` zone, with retention                           |
-| `scripts/restore.sh`              | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                         |
-| `scripts/clear-demo.sh`           | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                  |
-| `scripts/bunny-edge-addresses.sh` | Writes the Bunny CDN edge addresses nginx trusts for the visitor's address, then tests and reloads nginx (root, daily) |
-| `scripts/backup-common.sh`        | The settings and storage helpers the three scripts above share (sourced, never run)                                    |
-| `crons.txt`                       | The server's scheduled jobs, entered once in the hosting panel: the nightly backup                                     |
-| `pnpm/`                           | pnpm for the API, website and MCP Admin images: a manifest and npm lockfile installed with `npm ci` (below)            |
+| Path                              | What it is                                                                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `production/compose.yaml`         | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                                                                    |
+| `production/.env.example`         | Every production setting, as a documented placeholder; the real file lives only on the server                                                                  |
+| `nginx/sebela.dev.conf`           | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website, with the page cache rule (CDN caching) |
+| `scripts/deploy.sh`               | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                                                                |
+| `scripts/backup.sh`               | The encrypted backup of the production database to the `sebela-backups` zone, with retention                                                                   |
+| `scripts/restore.sh`              | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                                                                 |
+| `scripts/clear-demo.sh`           | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                                                          |
+| `scripts/bunny-edge-addresses.sh` | Writes the Bunny CDN edge addresses nginx trusts for the visitor's address, then tests and reloads nginx (root, daily)                                         |
+| `scripts/backup-common.sh`        | The settings and storage helpers the three scripts above share (sourced, never run)                                                                            |
+| `crons.txt`                       | The server's scheduled jobs, entered once in the hosting panel: the nightly backup                                                                             |
+| `pnpm/`                           | pnpm for the API, website and MCP Admin images: a manifest and npm lockfile installed with `npm ci` (below)                                                    |
 
 ## The production stack
 
@@ -130,6 +130,56 @@ Facts this composition relies on:
 - **nginx.** The hosting panel's site for `sebela.dev` with its Let's Encrypt certificate takes `nginx/sebela.dev.conf`, with the website's `WEB_PORT` and the certificate paths in place of its placeholders, and includes the CDN edge address file of `scripts/bunny-edge-addresses.sh` (Open points).
 - **GHCR packages.** The release workflow creates `sebela-api`, `sebela-web` and `sebela-mcp-admin` on its first publish, linked to the repository by their source label. Once, the owner sets each package's visibility to public in its package settings, so the server pulls without a registry login.
 - **Analytics.** On the Umami Cloud account, the website is created for `sebela.dev`; its tracker script address (`https://cloud.umami.is/script.js`) goes into `WEB_ANALYTICS_SCRIPT_URL` and its website ID into `WEB_ANALYTICS_WEBSITE_ID`, both public values. They stay empty until the owner turns analytics on.
+
+## CDN caching
+
+The CDN in front of the site keeps public answers briefly and never private or personalised ones. One public rule, `public, max-age=0, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400`: browsers always revalidate, the CDN keeps an answer for a minute, serves it for another minute while it fetches a fresh one, and keeps serving it for a day while the server cannot be reached.
+
+| Answer                                                                                                                                      | `Cache-Control` at the CDN                                                                  | Set by                                                        | A content change shows within                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| A page: GET or HEAD, status 200, HTML, no cookie set, not a client navigation (`RSC`, `Next-Router-*` headers, `_rsc` argument), not `/ask` | the public rule                                                                             | nginx (`nginx/sebela.dev.conf`); the website sends `no-store` | about 2 minutes (about 3 if a notification is lost) |
+| `/robots.txt`, `/sitemap.xml`, `/llms.txt` with status 200                                                                                  | the public rule                                                                             | the website                                                   | about 2 minutes                                     |
+| The preview cards `/og/...` with status 200                                                                                                 | the public rule                                                                             | the website                                                   | about 2 minutes                                     |
+| `/media/<file>`, `/_next/image`                                                                                                             | `public, max-age=300`; the optimizer `public, max-age=<at least 300>, must-revalidate`      | the website                                                   | a new image is a new address                        |
+| `/_next/static/...`                                                                                                                         | `public, max-age=31536000, immutable`                                                       | the website                                                   | a new deployment's new file names                   |
+| `/ask`, navigation payloads, every 404 and 5xx, redirects, the fallback preview card, `/health`, `/cv/pdf`, `/internal/*`                   | `no-store` (the website's own header, passed through), or nothing on a redirect without one | the website                                                   | at once                                             |
+| An answer nginx makes itself (502 or 504 while the website is down, 429)                                                                    | `no-store`, so the CDN serves its stale copy instead                                        | nginx                                                         | at once                                             |
+
+Why nginx and not the website sets the page rule, and the details of each row: `apps/web/AGENTS.md`, Caching and invalidation. The production stack smoke check (`pnpm test:production-stack`) runs this nginx configuration in front of the built website and checks the page rows.
+
+**How fast a change shows, and invalidation today.** A content write clears the website's in-process content cache through the API's signed notification within ten seconds, or after `WEB_CONTENT_REVALIDATE_SECONDS` (60 by default) if the notification is lost. The CDN's copy then expires within its minute and is replaced within at most one more: about 2 minutes, about 3 without a notification. There is no CDN purge and no Next revalidation; the CDN's copies simply expire.
+
+**robots.txt and llms.txt.** Before this rule the website sent them without `Cache-Control`, so the CDN kept them for its default of 30 days. The rule, and one purge of the two files at the CDN, must be live before indexing is switched on (`WEB_INDEXING`), or crawlers keep reading the robots.txt of the closed site.
+
+Owner checklist, once after the release that brings the rule:
+
+1. **nginx.** Copy the http-context part (the two `map` blocks) and the server block's `add_header Cache-Control` and the location's `proxy_hide_header Cache-Control` of `nginx/sebela.dev.conf` into the live site, then `nginx -t` and reload nginx.
+2. **The CDN.** On the pull zone of the site:
+   - honour the origin's `Cache-Control` (no forced cache time that overrides it, no "cache everything"), so an answer without the public rule is not kept;
+   - serve stale content on an origin error or timeout (`stale-if-error`), and keep `stale-while-revalidate` if it is offered;
+   - keep the query string in the cache key for every path: `/_next/image` needs `url`, `w` and `q`, and a navigation's `_rsc` argument must never fall onto the page's cached copy; do not strip or sort away the query;
+   - honour `Vary` for `Accept-Encoding`, or at least never serve a cached page for a request with an `RSC` header (Next also adds the `_rsc` argument, so the query string in the key is enough when `Vary` on other headers is ignored);
+   - do not cache cookies or answers with `Set-Cookie` (none of the cached answers sets one);
+   - purge `/robots.txt` and `/llms.txt` once.
+3. **Checks after the deployment.** Each command shows the row's `cache-control`; the CDN's own cache-status header shows a hit on the second request of a public row and never on a `no-store` one:
+
+   ```sh
+   curl -sI https://sebela.dev/ | grep -i cache-control                       # the public rule
+   curl -sI https://sebela.dev/experience | grep -i cache-control             # the public rule
+   curl -sI -H 'RSC: 1' https://sebela.dev/experience | grep -i cache-control # no-store
+   curl -sI 'https://sebela.dev/experience?_rsc=check' | grep -i cache-control # no-store
+   curl -sI https://sebela.dev/no-such-page | grep -i cache-control           # no-store (404)
+   curl -sI https://sebela.dev/ask | grep -i cache-control                    # no-store
+   curl -sI https://sebela.dev/robots.txt | grep -i cache-control             # the public rule
+   curl -sI https://sebela.dev/llms.txt | grep -i cache-control               # the public rule
+   curl -sI https://sebela.dev/sitemap.xml | grep -i cache-control            # the public rule
+   curl -sI https://sebela.dev/og/home | grep -i cache-control                # the public rule
+   curl -sI https://sebela.dev/health | grep -i cache-control                 # no-store
+   curl -sI https://sebela.dev/cv/pdf | grep -i cache-control                 # no-store
+   curl -sI https://sebela.dev/internal/invalidation                          # 404
+   ```
+
+   For `/media/<file>` and `/_next/image`, take an image address from a page's source; both answer `public, max-age=...`.
 
 ## Open points for the server preparation
 
