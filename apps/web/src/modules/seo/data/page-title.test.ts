@@ -61,12 +61,12 @@ describe("pageTitle", () => {
   });
 
   it("never splits a flag, whose two code points read as one character", () => {
-    const page = shortenedPage(pageTitle(NAME, "🇨🇿".repeat(40)));
+    const page = shortenedPage(pageTitle(NAME, "🇨🇿".repeat(60)));
     expect(graphemes(page).every((character) => character === "🇨🇿")).toBe(true);
   });
 
   it("never splits a joined emoji sequence", () => {
-    const page = shortenedPage(pageTitle(NAME, "👩‍💻".repeat(40)));
+    const page = shortenedPage(pageTitle(NAME, "👩‍💻".repeat(60)));
     expect(graphemes(page).every((character) => character === "👩‍💻")).toBe(true);
   });
 
