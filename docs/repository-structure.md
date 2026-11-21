@@ -39,7 +39,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── lib/                 the pure rules behind them, with their tests
 │   └── setup-github.sh      labels and branch protection, run once by the owner
 ├── scripts/
-│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check and whether a change runs the MCP Admin model evals — plain Node, no dependencies [1, 2, 10]
+│   ├── checks/              repository checks: the hard-coded configuration check, the CI commit-message check, the API, website and production stack smoke checks, the production composition policy, the image-content check, the pinned-actions check and whether a change runs the MCP Admin model evals — plain Node, no dependencies [1, 2, 10]
 │   └── release/             the release decisions: affected services, images to build and reuse; the deployment input, version and release notes; the production smoke check and the simulated deployment, with fixtures [10]
 ├── docs/                    architecture, design, workflow, decisions [1, grows]
 ├── .plan/                   PRDs and issue overviews, one folder per phase; merged phases in .plan/done/
@@ -49,6 +49,7 @@ Where things live in this monorepo and why. This is the target layout; the numbe
 │   ├── agents/              orchestrator, backend-, frontend- and ai-developer, reviewer, docs-keeper, steward, retrospective
 │   └── settings.json        hooks and permissions
 ├── .github/workflows/       CI, the image release and the deployment [1, 10]
+├── .github/dependabot.yml   monthly grouped updates of the pinned GitHub Actions
 ├── compose.yaml             base stack: postgres [1]; profile `api`: migrate, api [2]; profile `web`: web [3]; later mcp
 ├── infra/                   production definition, see infra/README.md [10]
 │   ├── production/          Compose production overrides and the production example settings
