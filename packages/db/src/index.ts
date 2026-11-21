@@ -13,9 +13,11 @@ export type {
 export type {
   NewRetrievalDocumentVersion,
   RetrievalChunkRecord,
+  RetrievalDocumentConflict,
   RetrievalDocumentFinding,
   RetrievalDocumentStatus,
   RetrievalDocumentVersion,
+  RetrievalFullTextQuery,
   RetrievalIndexedSource,
   RetrievalNearestChunk,
   RetrievalNearestQuery,

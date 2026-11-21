@@ -157,6 +157,13 @@ export interface NearestQuery {
   readonly limit: number;
 }
 
+/** A full-text query over the current versions: any of the query's words, best rank first. */
+export interface FullTextQuery {
+  readonly query: string;
+  readonly kinds?: readonly RetrievalContentKind[];
+  readonly limit: number;
+}
+
 /** A chunk found by a nearest-neighbour query, with its source and its cosine similarity. */
 export interface NearestChunk {
   readonly sourceId: string;
@@ -168,7 +175,7 @@ export interface NearestChunk {
   readonly text: string;
   readonly headingPath: readonly string[];
   readonly indexedAt: Date;
-  /** 1 minus the cosine distance. */
+  /** 1 minus the cosine distance; for a full-text match, its text search rank. */
   readonly similarity: number;
 }
 
@@ -203,6 +210,12 @@ export interface RetrievalStore {
   usageSince(since: Date): Promise<UsageTotals>;
   /** Nearest chunks of current, non-stale versions embedded with the query's model. */
   nearest(query: NearestQuery): Promise<NearestChunk[]>;
+  /**
+   * Chunks of current, non-stale versions matching any word of the query (unaccented, without
+   * stemming), best text search rank first, the rank reported as the similarity. The evals'
+   * full-text baseline; it calls no provider.
+   */
+  fullText(query: FullTextQuery): Promise<NearestChunk[]>;
   /** Removes and marks the sources and queues the items, all in one transaction. */
   scheduleWork(work: ScheduledWork): Promise<void>;
   /**
@@ -247,6 +260,9 @@ export interface PortfolioExperience {
   readonly title: string;
   readonly summary: string;
   readonly responsibilities: readonly string[];
+  /** ISO dates; `endedOn` is `null` while the role continues. */
+  readonly startedOn: string;
+  readonly endedOn: string | null;
   readonly organization: Named;
   readonly technologies: readonly Named[];
 }

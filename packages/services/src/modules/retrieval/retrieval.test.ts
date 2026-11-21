@@ -322,6 +322,17 @@ describe("readRetrievalOptions", () => {
     expect(embedder?.dimension).toBe(1024);
   });
 
+  it("searches by vectors unless an eval run asks for the full-text baseline", () => {
+    const env = { ...settings, VOYAGE_API_KEY: fakeKey };
+    expect(readRetrievalOptions(env).searchVariant).toBe("vector");
+    expect(readRetrievalOptions({ ...env, RETRIEVAL_EVAL_VARIANT: "fulltext" }).searchVariant).toBe(
+      "fulltext",
+    );
+    expect(() => readRetrievalOptions({ ...env, RETRIEVAL_EVAL_VARIANT: "hybrid" })).toThrow(
+      /RETRIEVAL_EVAL_VARIANT/,
+    );
+  });
+
   it("names invalid settings, never the key", () => {
     expect(() =>
       readRetrievalOptions({ ...settings, RETRIEVAL_FINAL_PASSAGES: "0", VOYAGE_API_KEY: fakeKey }),

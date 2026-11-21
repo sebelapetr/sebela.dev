@@ -12,6 +12,7 @@ import {
   scheduleChanges,
   createRetriever,
   type Embedder,
+  type FullTextQuery,
   type IndexedSource,
   type NearestChunk,
   type NearestQuery,
@@ -64,6 +65,8 @@ function snapshot(): PortfolioSnapshot {
         title: "Staff engineer",
         summary: "Leads the editorial platform team at a fictional publisher.",
         responsibilities: ["Owns the article pipeline", "Mentors two engineers"],
+        startedOn: "2022-04-01",
+        endedOn: null,
         organization: { name: "Lumen Press" },
         technologies: [{ name: "TypeScript" }, { name: "Postgres" }],
       },
@@ -261,6 +264,35 @@ function memoryStore() {
             headingPath: section?.headingPath ?? [],
             indexedAt: source.indexedAt,
             similarity: cosine(query.vector, chunk.vector),
+          });
+        }
+      }
+      found.sort((a, b) => b.similarity - a.similarity);
+      return Promise.resolve(found.slice(0, query.limit));
+    },
+    // The share of the query's words in the chunk stands in for the text search rank.
+    fullText: (query: FullTextQuery) => {
+      const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      const asked = new Set(words(query.query));
+      const found: NearestChunk[] = [];
+      for (const source of sources.values()) {
+        if (stale.has(source.sourceId)) continue;
+        if (query.kinds !== undefined && !query.kinds.includes(source.contentKind)) continue;
+        for (const chunk of source.chunks) {
+          const present = new Set(words(chunk.text).filter((word) => asked.has(word)));
+          if (present.size === 0) continue;
+          const section = source.sections.find((each) => each.ordinal === chunk.sectionOrdinal);
+          found.push({
+            sourceId: source.sourceId,
+            sourceKind: source.sourceKind,
+            contentKind: source.contentKind,
+            title: source.title,
+            path: source.path,
+            version: source.version,
+            text: chunk.text,
+            headingPath: section?.headingPath ?? [],
+            indexedAt: source.indexedAt,
+            similarity: present.size / asked.size / 10,
           });
         }
       }
@@ -898,6 +930,46 @@ describe("searching the portfolio", () => {
     ]);
     expect(pool.length).toBeGreaterThan(0);
     expect(pool.every((sourceId) => sourceId.startsWith("portfolio:glossary_term:"))).toBe(true);
+  });
+});
+
+describe("the full-text search variant", () => {
+  const fullText = (memory: ReturnType<typeof memoryStore>, embedder: Embedder) =>
+    createRetriever({ store: memory.store, embedder, config, now: () => NOW, variant: "fulltext" });
+
+  it("finds passages by text search rank without the provider or the relevance floor", async () => {
+    const { indexer, ...memory } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    const retriever = fullText(memory, createFakeEmbedder({ failing: true }));
+
+    const result = await retriever.search({ query: "hybrid search reranker archive" });
+    expect(SearchResultSchema.parse(result)).toEqual(result);
+    expect(result.status).toBe("found");
+    expect(result.passages[0]?.sourceId).toBe("portfolio:project:reading-assistant");
+    // The stand-in rank stays far below the cosine floor; full text applies none.
+    expect(result.passages[0]?.score).toBeLessThan(config.relevanceFloor);
+    expect(memory.usage.filter((record) => record.operation !== "index")).toEqual([]);
+
+    await expect(retriever.search({ query: "quarterly tax filing" })).resolves.toEqual({
+      status: "no_evidence",
+      passages: [],
+    });
+  });
+
+  it("lists full-text candidate pools by source and kind without the provider", async () => {
+    const { indexer, ...memory } = knowledgeBase();
+    await indexer.reindexPortfolio(snapshot());
+    const retriever = fullText(memory, createFakeEmbedder({ failing: true }));
+    const [pool = [], glossary = []] = await retriever.candidates([
+      { query: "hybrid search reranker archive" },
+      { query: "hybrid search answering sources", kinds: ["glossary_term"] },
+    ]);
+    expect(pool[0]).toBe("portfolio:project:reading-assistant");
+    expect(new Set(pool).size).toBe(pool.length);
+    expect(glossary.length).toBeGreaterThan(0);
+    expect(glossary.every((sourceId) => sourceId.startsWith("portfolio:glossary_term:"))).toBe(
+      true,
+    );
   });
 });
 

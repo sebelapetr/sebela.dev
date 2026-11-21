@@ -9,6 +9,7 @@ export type {
   Embedder,
   Embedding,
   EmbeddingInput,
+  FullTextQuery,
   IndexedSource,
   NearestChunk,
   NearestQuery,
@@ -46,7 +47,14 @@ export type {
   QueueReport,
 } from "./modules/indexing/index.js";
 export { createRetriever } from "./modules/retrieval/index.js";
-export type { CandidateQuestion, Retriever, RetrieverOptions } from "./modules/retrieval/index.js";
+export type {
+  CandidateQuestion,
+  Retriever,
+  RetrieverOptions,
+  SearchVariant,
+} from "./modules/retrieval/index.js";
+export { findConflicts } from "./modules/conflicts/index.js";
+export type { DocumentConflict, DocumentConflictKind } from "./modules/conflicts/index.js";
 export {
   DocumentRejectedError,
   contentHashOf,

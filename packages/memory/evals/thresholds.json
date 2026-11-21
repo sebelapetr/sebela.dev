@@ -1,16 +1,45 @@
 {
-  "description": "Gate of the memory evals. Not frozen yet: the vector baseline (#222) only measures; the thresholds are set from the measured variants and frozen when the deployed variant is chosen (#225). While `frozen` is false the runner reports metrics without a gate.",
-  "frozen": false,
+  "description": "Frozen gate of the memory evals (#225). It gates only what the phase PRD gates (recall@pool, nDCG and the correct-empty rate) and applies only to a complete run of the variant named in `variant`, which is the deployed retrieval pipeline. A slice that deploys another pipeline (the hybrid or reranked variant of #226) switches `variant` to it in the same change. Later slices may only raise the minimums, never loosen them; every other metric is reported, not gated.",
+  "frozen": true,
+  "variant": "vector",
   "minimum": {
-    "recallAtPool": null,
-    "ndcg": null,
-    "mrr": null,
-    "correctEmptyRate": null,
-    "provenanceAccuracy": null
+    "recallAtPool": 1,
+    "ndcg": 0.9,
+    "correctEmptyRate": 0.2
   },
-  "maximum": {
-    "falseEmptyRate": null,
-    "latencyP95Ms": null,
-    "costPerQueryUsd": null
+  "method": [
+    "Both baselines ran on 2026-11-21 over the complete question set (45 measured cases) with the fictional demo seed, the fictional dataset documents and the settings recorded in each summary: voyage-4, candidate pool 30, 6 final passages, relevance floor 0.3.",
+    "The minimums are the vector baseline's values rounded down to two decimals: recall@pool 1, nDCG 0.9, correct-empty rate 0.2.",
+    "MRR, hit rate, precision, the false-empty rate, provenance accuracy, latency and cost per query are reported in every summary but not gated: the PRD gates only recall@pool, nDCG and correct-empty, and the cached vector runs measure latency and cost a paid reranker cannot match.",
+    "The gate applies to the deployed variant only; a run of another variant reports the gate as not applying. Switching `variant` to a newly deployed pipeline keeps these minimums, so the new pipeline must meet them.",
+    "The full-text-only baseline stays below the vector variant on every quality metric except the correct-empty rate, which is the same 0.2 in both: the placeholder relevance floor is not calibrated yet."
+  ],
+  "baselines": {
+    "vector": {
+      "summary": "results/vector-complete.json",
+      "recallAtPool": 1,
+      "ndcg": 0.9065,
+      "mrr": 0.9375,
+      "hitRate": 0.975,
+      "precision": 0.4223,
+      "correctEmptyRate": 0.2,
+      "falseEmptyRate": 0,
+      "provenanceAccuracy": 1,
+      "latencyP95Ms": 74,
+      "costPerQueryUsd": 0
+    },
+    "fulltext": {
+      "summary": "results/fulltext-baseline.json",
+      "recallAtPool": 0.8375,
+      "ndcg": 0.6298,
+      "mrr": 0.6425,
+      "hitRate": 0.775,
+      "precision": 0.2031,
+      "correctEmptyRate": 0.2,
+      "falseEmptyRate": 0.025,
+      "provenanceAccuracy": 1,
+      "latencyP95Ms": 86,
+      "costPerQueryUsd": 0
+    }
   }
 }

@@ -20,6 +20,8 @@ Paid runs count against the phase 9 ceiling of USD 3, with a stop at USD 1 per r
 | -------------------------- | ---------- | -----: | ---------: |
 | `vector-baseline.json`     | 2026-11-20 |  4,223 |    0.00025 |
 | `supplemental-vector.json` | 2026-11-21 |  7,595 |    0.00046 |
+| `fulltext-baseline.json`   | 2026-11-21 |  4,137 |    0.00025 |
+| `vector-complete.json`     | 2026-11-21 |  4,571 |    0.00027 |
 
 `supplemental-vector.json` measures only the six supplemental-document cases, after ingesting
 and approving their fictional documents; all six pass.
@@ -41,5 +43,21 @@ its p95 latency is 110 ms and its cost per query is 0, against 3,388 ms in the u
 afterwards from the run's recorded usage and the cache file, which held exactly those six
 entries.
 
-Cumulative phase 9 spend after the supplemental run: about USD 0.0028 of USD 3 (the runs above
-plus earlier paid runs of the phase).
+Cumulative phase 9 spend after the two baselines of #225: about USD 0.0033 of USD 3 (the runs
+above plus earlier paid runs of the phase). The full-text baseline embeds only while indexing.
+
+## Baselines and the frozen gate
+
+`fulltext-baseline.json` (`--variant fulltext`) and `vector-complete.json` (`--variant vector`)
+measure the complete question set, including the supplemental documents and the seeded conflict,
+with the same settings. `vector-baseline.json` is the earlier vector run over the first 39
+questions, kept for comparison. The vector variant is the deployed one: nDCG 0.91 against 0.63,
+recall at the pool 1 against 0.84, and no false empty against 0.025.
+
+`../thresholds.json` freezes the gate from `vector-complete.json`: it gates only what the phase PRD
+gates, recall at the pool, nDCG and the correct-empty rate, at its values rounded down to two
+decimals; every other metric is reported, not gated (the file states the method and both
+baselines). The gate applies to a complete run of the deployed variant the file names, now
+`vector`; a slice that deploys another pipeline (the hybrid or reranked variant) switches
+`variant` to it in the same change, and the new pipeline must meet the same minimums. A later
+slice may only raise them.

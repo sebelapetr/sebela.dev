@@ -1,6 +1,7 @@
 // Search over the index: embeds the query (within the spend ceiling), takes the nearest chunks of
 // the configured model by cosine distance, keeps the best chunk of each source at or above the
-// relevance floor and projects them as contract passages.
+// relevance floor and projects them as contract passages. The evals' full-text variant takes the
+// candidate pool by text search rank instead, without the provider and without the floor.
 import {
   SearchResultSchema,
   type Passage,
@@ -19,11 +20,20 @@ import {
 } from "../ports/index.js";
 import { createSpend } from "../spend/index.js";
 
+/**
+ * How the candidate pool is found: `vector` (the deployed search) by cosine distance of the
+ * embedded query, `fulltext` (the evals' baseline) by text search rank without calling the provider
+ * and without the relevance floor, which is a cosine similarity.
+ */
+export type SearchVariant = "vector" | "fulltext";
+
 export interface RetrieverOptions {
   readonly store: RetrievalStore;
   readonly embedder: Embedder;
   readonly config: RetrievalConfig;
   readonly now?: () => Date;
+  /** `vector` when absent. */
+  readonly variant?: SearchVariant;
 }
 
 export interface Retriever {
@@ -49,6 +59,7 @@ export interface CandidateQuestion {
 
 export function createRetriever(options: RetrieverOptions): Retriever {
   const { store, embedder, config } = options;
+  const variant = options.variant ?? "vector";
   const spend = createSpend({ store, embedder, config, now: options.now });
 
   /** The candidate pool of a query's vector, best chunk of each source first. */
@@ -56,13 +67,32 @@ export function createRetriever(options: RetrieverOptions): Retriever {
     vector: readonly number[],
     kinds?: readonly RetrievalContentKind[],
   ): Promise<NearestChunk[]> {
-    const nearest = await store.nearest({
-      vector,
-      model: embedder.model,
-      modelVersion: embedder.version,
-      ...(kinds === undefined ? {} : { kinds }),
-      limit: config.candidatePool,
-    });
+    return bestPerSource(
+      await store.nearest({
+        vector,
+        model: embedder.model,
+        modelVersion: embedder.version,
+        ...(kinds === undefined ? {} : { kinds }),
+        limit: config.candidatePool,
+      }),
+    );
+  }
+
+  /** The candidate pool of a query's words by text search rank, best chunk of each source first. */
+  async function textPool(
+    query: string,
+    kinds?: readonly RetrievalContentKind[],
+  ): Promise<NearestChunk[]> {
+    return bestPerSource(
+      await store.fullText({
+        query,
+        ...(kinds === undefined ? {} : { kinds }),
+        limit: config.candidatePool,
+      }),
+    );
+  }
+
+  function bestPerSource(nearest: readonly NearestChunk[]): NearestChunk[] {
     const best = new Map<string, NearestChunk>();
     for (const chunk of [...nearest].sort((a, b) => b.similarity - a.similarity)) {
       if (!best.has(chunk.sourceId)) best.set(chunk.sourceId, chunk);
@@ -91,10 +121,16 @@ export function createRetriever(options: RetrieverOptions): Retriever {
   return {
     async search(request) {
       const limit = Math.min(request.limit ?? config.finalPassages, config.finalPassages);
-      const [vector] = await embedQueries("search", [request.query]);
-      const found = vector === undefined ? [] : await pool(vector, request.kinds);
+      let found: NearestChunk[];
+      if (variant === "fulltext") {
+        found = await textPool(request.query, request.kinds);
+      } else {
+        const [vector] = await embedQueries("search", [request.query]);
+        found = vector === undefined ? [] : await pool(vector, request.kinds);
+      }
+      const floor = variant === "fulltext" ? 0 : config.relevanceFloor;
       const passages = found
-        .filter((chunk) => chunk.similarity >= config.relevanceFloor)
+        .filter((chunk) => chunk.similarity >= floor)
         .map(toPassage)
         .filter((passage) => passage !== null)
         .slice(0, limit);
@@ -107,6 +143,13 @@ export function createRetriever(options: RetrieverOptions): Retriever {
       );
     },
     async candidates(questions) {
+      if (variant === "fulltext") {
+        const pools: string[][] = [];
+        for (const { query, kinds } of questions) {
+          pools.push((await textPool(query, kinds)).map((chunk) => chunk.sourceId));
+        }
+        return pools;
+      }
       const vectors = await embedQueries(
         "candidates",
         questions.map((question) => question.query),

@@ -24,6 +24,7 @@ import {
   RUN_CEILING_USD,
   cacheEntryCount,
   documentIngests,
+  gateOf,
   parseOptions,
   privateStorageEnvironment,
   pendingSummary,
@@ -161,6 +162,19 @@ describe("the runner's options", () => {
       RETRIEVAL_QUERY_CACHE_FILE: expect.stringMatching(
         /[/\\]\.tmp[/\\]evals[/\\]memory[/\\]query-cache\.json$/,
       ) as string,
+      RETRIEVAL_EVAL_VARIANT: "vector",
+    });
+  });
+
+  it("searches the vector variant by default and the full-text one when asked", () => {
+    expect(parseOptions([]).variant).toBe("vector");
+    expect(parseOptions(["--variant", "fulltext"]).variant).toBe("fulltext");
+    expect(() => parseOptions(["--variant", "hybrid"])).toThrow(/--variant/);
+    expect(providerEnvironment(parseOptions(["--variant", "fulltext"]))).toMatchObject({
+      RETRIEVAL_EVAL_VARIANT: "fulltext",
+    });
+    expect(providerEnvironment(parseOptions([]))).toMatchObject({
+      RETRIEVAL_EVAL_VARIANT: "vector",
     });
   });
 
@@ -226,6 +240,63 @@ describe("the runner's options", () => {
     expect(summary.status).toBe("pending");
     expect(summary.measured).toBe(0);
     expect(summary).not.toHaveProperty("passed");
+  });
+});
+
+describe("the gate", () => {
+  const thresholds = {
+    frozen: true,
+    variant: "vector",
+    minimum: { recallAtPool: 0.8, ndcg: 0.6, mrr: null, correctEmptyRate: 0.5 },
+    maximum: { falseEmptyRate: null, latencyP95Ms: 2000, costPerQueryUsd: null },
+  };
+  const metrics = {
+    recallAtPool: 0.9,
+    ndcg: 0.6,
+    mrr: 0.1,
+    correctEmptyRate: 0.75,
+    falseEmptyRate: 0.4,
+    latencyMs: { p50: 100, p95: 1500 },
+    costPerQueryUsd: 0.01,
+  };
+  const complete = { variant: "vector", scope: "complete" };
+
+  it("reports no gate while the thresholds are not frozen", () => {
+    expect(gateOf({ ...thresholds, frozen: false }, metrics, complete)).toEqual({ frozen: false });
+  });
+
+  it("passes a complete run of the frozen variant that meets every set threshold", () => {
+    expect(gateOf(thresholds, metrics, complete)).toEqual({
+      frozen: true,
+      applies: true,
+      passed: true,
+      failures: [],
+    });
+  });
+
+  it("fails a metric below its minimum, above its maximum or not measured", () => {
+    const gate = gateOf(
+      thresholds,
+      { ...metrics, ndcg: 0.59, correctEmptyRate: null, latencyMs: { p50: 1, p95: 2001 } },
+      complete,
+    );
+    expect(gate.passed).toBe(false);
+    expect(gate.failures).toEqual([
+      { metric: "ndcg", value: 0.59, minimum: 0.6 },
+      { metric: "correctEmptyRate", value: null, minimum: 0.5 },
+      { metric: "latencyP95Ms", value: 2001, maximum: 2000 },
+    ]);
+  });
+
+  it("does not apply to a partial run or another variant", () => {
+    for (const run of [
+      { variant: "vector", scope: "partial" },
+      { variant: "fulltext", scope: "complete" },
+    ]) {
+      const gate = gateOf(thresholds, { ...metrics, ndcg: 0 }, run);
+      expect(gate).toMatchObject({ frozen: true, applies: false });
+      expect(gate).not.toHaveProperty("passed");
+    }
   });
 });
 

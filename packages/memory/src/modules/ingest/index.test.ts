@@ -29,6 +29,8 @@ const portfolio: PortfolioSnapshot = {
       title: "Staff engineer",
       summary: "Leads the editorial platform team.",
       responsibilities: ["Owns the article pipeline"],
+      startedOn: "2022-04-01",
+      endedOn: null,
       organization: { name: "Lumen Press" },
       technologies: [{ name: "TypeScript" }],
     },

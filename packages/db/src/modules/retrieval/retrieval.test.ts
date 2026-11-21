@@ -555,5 +555,194 @@ describe("retrieval persistence", () => {
       expect(await retrieval.rejectDocumentVersion(hash("v1"))).toBe(false);
       expect((await retrieval.documentVersion(hash("v1")))?.status).toBe("approved");
     });
+
+    const conflict = {
+      kind: "date",
+      chunkOrdinal: 1,
+      sourceId: "experience:harbor-retail",
+      claim: "2023",
+      fact: "2019–2022",
+    };
+
+    it("records the conflicts of an approved version", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      expect((await retrieval.documentVersion(hash("v1")))?.conflicts).toEqual([]);
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"), [conflict]);
+      expect((await retrieval.documentVersion(hash("v1")))?.conflicts).toEqual([conflict]);
+    });
+
+    it("keeps the superseded version's storage key until its original is forgotten", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      await retrieval.addDocumentVersion(pending("v2"));
+      await retrieval.approveDocumentVersion(hash("v2"), documentSource("v2"));
+      expect(await retrieval.documentVersion(hash("v1"))).toMatchObject({
+        status: "superseded",
+        storageKey: pending("v1").storageKey,
+      });
+
+      expect(await retrieval.forgetDocumentOriginal(hash("v1"))).toBe(true);
+      expect((await retrieval.documentVersion(hash("v1")))?.storageKey).toBeNull();
+      expect(await retrieval.forgetDocumentOriginal(hash("v1"))).toBe(false);
+      // An approved or pending version's original is still needed.
+      expect(await retrieval.forgetDocumentOriginal(hash("v2"))).toBe(false);
+      expect((await retrieval.documentVersion(hash("v2")))?.storageKey).toBe(
+        pending("v2").storageKey,
+      );
+      await retrieval.addDocumentVersion(pending("v3"));
+      expect(await retrieval.forgetDocumentOriginal(hash("v3"))).toBe(false);
+    });
+
+    it("withdraws an approved version and takes its source out of the index at once", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      expect(await retrieval.withdrawDocumentVersion(hash("v1"))).toBe(true);
+
+      const withdrawn = await retrieval.documentVersion(hash("v1"));
+      // The key stays until the original is deleted, so a failed deletion can be repeated.
+      expect(withdrawn).toMatchObject({
+        status: "withdrawn",
+        storageKey: pending("v1").storageKey,
+      });
+      expect(withdrawn?.decidedAt).toBeInstanceOf(Date);
+      expect(await retrieval.indexedSources()).toEqual([]);
+      expect(
+        await retrieval.nearest({ vector: vector(3), model: MODEL, modelVersion: "1", limit: 5 }),
+      ).toEqual([]);
+    });
+
+    it("withdraws only an approved version", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      expect(await retrieval.withdrawDocumentVersion(hash("v1"))).toBe(false);
+      expect(await retrieval.withdrawDocumentVersion(hash("none"))).toBe(false);
+      expect((await retrieval.documentVersion(hash("v1")))?.status).toBe("pending");
+    });
+
+    it("unpublishes every document source without an approved version, read as it runs", async () => {
+      const NOTE = "document:harbour-note";
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      await retrieval.addDocumentVersion(
+        pending("note", { sourceId: NOTE, storageKey: "development/note.md" }),
+      );
+      await retrieval.approveDocumentVersion(
+        hash("note"),
+        source(NOTE, {
+          sourceKind: "supplemental",
+          contentKind: "document",
+          title: "Harbour note",
+          path: null,
+          version: hash("note"),
+          texts: [["note", vector(4)]],
+        }),
+      );
+      // An indexed document whose versions are gone, as after a lost database row.
+      await retrieval.replaceSource(
+        source("document:orphan", {
+          sourceKind: "supplemental",
+          contentKind: "document",
+          title: "Orphan",
+          path: null,
+          version: hash("orphan"),
+          texts: [["orphan", vector(5)]],
+        }),
+      );
+      await retrieval.replaceSource(source("portfolio:project:kept"));
+
+      // The note's approved original is missing, so it leaves search though it stays approved.
+      expect(await retrieval.unpublishDocumentSources([hash("note")])).toBe(2);
+
+      expect((await retrieval.indexedSources()).map((indexed) => indexed.sourceId).sort()).toEqual([
+        HANDBOOK,
+        "portfolio:project:kept",
+      ]);
+      expect((await retrieval.documentVersion(hash("note")))?.status).toBe("approved");
+      expect(await retrieval.unpublishDocumentSources([])).toBe(0);
+    });
+
+    it("deletes every version of a source with its chunks and returns the kept storage keys", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      await retrieval.addDocumentVersion(pending("v2"));
+      await retrieval.addDocumentVersion(pending("leaky", { status: "blocked", storageKey: null }));
+      await retrieval.addDocumentVersion(
+        pending("other", { sourceId: "document:other-note", storageKey: "development/other.md" }),
+      );
+
+      const keys = await retrieval.deleteDocumentSource(HANDBOOK);
+      expect(keys.sort()).toEqual(
+        [
+          `development/${hash("v1").slice(0, 8)}.md`,
+          `development/${hash("v2").slice(0, 8)}.md`,
+        ].sort(),
+      );
+      expect((await retrieval.documentVersions()).map((version) => version.sourceId)).toEqual([
+        "document:other-note",
+      ]);
+      expect(await retrieval.indexedSources()).toEqual([]);
+      expect(await retrieval.deleteDocumentSource(HANDBOOK)).toEqual([]);
+    });
+
+    it("stores an approved version again with its conflicts, and nothing once it is withdrawn", async () => {
+      await retrieval.addDocumentVersion(pending("v1"));
+      await retrieval.approveDocumentVersion(hash("v1"), documentSource("v1"));
+      await retrieval.removeSourcesExcept("supplemental", []);
+      expect(
+        await retrieval.reindexApprovedDocument(hash("v1"), documentSource("v1"), [conflict]),
+      ).toBe(true);
+      expect(await retrieval.indexedSources()).toMatchObject([{ sourceId: HANDBOOK }]);
+      expect((await retrieval.documentVersion(hash("v1")))?.conflicts).toEqual([conflict]);
+
+      await retrieval.withdrawDocumentVersion(hash("v1"));
+      expect(await retrieval.reindexApprovedDocument(hash("v1"), documentSource("v1"), [])).toBe(
+        false,
+      );
+      expect(await retrieval.indexedSources()).toEqual([]);
+      await expect(
+        retrieval.reindexApprovedDocument(hash("none"), documentSource("none"), []),
+      ).resolves.toBe(false);
+    });
+  });
+
+  it("finds chunks matching any word of a full-text query, best rank first", async () => {
+    await retrieval.replaceSource(
+      source("both", { texts: [["Kafka streams and Postgres replicas", vector(0)]] }),
+    );
+    await retrieval.replaceSource(source("one", { texts: [["Postgres tuning notes", vector(1)]] }));
+    await retrieval.replaceSource(
+      source("none", { texts: [["Gardening for beginners", vector(2)]] }),
+    );
+    await retrieval.replaceSource(
+      source("accented", {
+        contentKind: "glossary_term",
+        texts: [["Café kafka", vector(3)]],
+      }),
+    );
+
+    const found = await retrieval.fullText({ query: "kafka postgres", limit: 10 });
+    expect(found.map((chunk) => chunk.sourceId)).toEqual(
+      expect.arrayContaining(["both", "one", "accented"]),
+    );
+    expect(found).toHaveLength(3);
+    expect(found[0]).toMatchObject({ sourceId: "both", headingPath: ["Title of both", "Summary"] });
+    expect(found[0]?.similarity).toBeGreaterThan(found[found.length - 1]?.similarity ?? 1);
+
+    expect(
+      (await retrieval.fullText({ query: "cafe", kinds: ["glossary_term"], limit: 10 })).map(
+        (chunk) => chunk.sourceId,
+      ),
+    ).toEqual(["accented"]);
+    expect(await retrieval.fullText({ query: "kafka", kinds: ["project"], limit: 10 })).toEqual([]);
+    expect(await retrieval.fullText({ query: "kafka postgres", limit: 1 })).toHaveLength(1);
+    expect(await retrieval.fullText({ query: "  ", limit: 10 })).toEqual([]);
+
+    await retrieval.scheduleWork({
+      removeSourceIds: [],
+      staleSourceIds: ["both"],
+      items: [{ sourceId: "both", operation: "index" }],
+    });
+    expect(
+      (await retrieval.fullText({ query: "kafka", limit: 10 })).map((c) => c.sourceId),
+    ).toEqual(["accented"]);
   });
 });
