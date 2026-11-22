@@ -1076,9 +1076,10 @@ describe("the visitor chat over HTTP", () => {
 
       const conversation = (await (
         await request(CONVERSATION, { headers: { cookie } })
-      ).json()) as { messages: { role: string; status: string }[] };
+      ).json()) as { messages: { role: string; status?: string }[] };
+      // The question stays once; only the failed answer is replaced by the new attempt's.
       expect(conversation.messages.map((message) => [message.role, message.status])).toEqual([
-        ["user", "completed"],
+        ["user", undefined],
         ["assistant", "pending"],
       ]);
     });

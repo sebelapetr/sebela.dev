@@ -65,7 +65,9 @@ const DEFAULT_TIMEOUT_MS = 10_000;
  * The in-process dispatcher and deadline watcher of the API. A dispatch is posted to the AI
  * service with its service token, detached from the visitor's request; anything but `202`, a
  * network failure or a timeout fails the operation through `dispatchRefused`. The watcher
- * interrupts operations still unreconciled after their deadline and the grace. Logs name the
+ * interrupts operations still unreconciled after their deadline and the grace, once at start and
+ * then on its interval; it never redispatches. A Stop or a clear is passed on as a best-effort
+ * cancel of the generation. Logs name the
  * operation and the status or error name only, never the grant, the token or the question.
  */
 export function createChatSupervisor(options: ChatSupervisorOptions): ChatSupervisor {
@@ -111,6 +113,33 @@ export function createChatSupervisor(options: ChatSupervisorOptions): ChatSuperv
     }
   };
 
+  /**
+   * Tells the AI service to stop a generation. Best effort: the operation is already cancelled,
+   * and a generation that keeps running is refused when it reports, so a failure is only logged.
+   */
+  const stop = async (operationId: string) => {
+    const url = new URL(`${generationsPath}/${encodeURIComponent(operationId)}/cancel`, base).href;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${options.aiService.token}` },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      await response.body?.cancel().catch(() => undefined);
+      if (response.status !== generationAcceptedStatus) {
+        log(
+          `chat cancel not accepted for operation ${operationId}: status ${String(response.status)}`,
+        );
+      }
+    } catch (error) {
+      log(
+        redact(
+          `chat cancel failed for operation ${operationId}: ${error instanceof Error ? error.name : "error"}`,
+        ),
+      );
+    }
+  };
+
   const track = (work: Promise<void>) => {
     const tracked = work.catch((error: unknown) => {
       log(redact(`error supervising the chat: ${error instanceof Error ? error.name : "error"}`));
@@ -142,11 +171,13 @@ export function createChatSupervisor(options: ChatSupervisorOptions): ChatSuperv
     dispatch: (dispatch) => {
       track(send(dispatch));
     },
-    cancel: () => {
-      // Not implemented yet.
+    cancel: (operationId) => {
+      track(stop(operationId));
     },
     start: () => {
       if (watcher !== null) return;
+      // Operations a previous process left behind are recovered at once, never redispatched.
+      watch();
       watcher = setInterval(watch, watchIntervalMs);
       watcher.unref();
     },
