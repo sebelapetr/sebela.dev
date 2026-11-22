@@ -12,6 +12,45 @@ from .authentication_check import AuthenticationCheck
 from .case_study import CaseStudy
 from .case_study_create import CaseStudyCreate
 from .case_study_update import CaseStudyUpdate
+from .chat_assistant_message import ChatAssistantMessage
+from .chat_assistant_message_error_type_0 import ChatAssistantMessageErrorType0
+from .chat_assistant_message_error_type_0_code import ChatAssistantMessageErrorType0Code
+from .chat_assistant_message_outcome_type_0 import ChatAssistantMessageOutcomeType0
+from .chat_assistant_message_status import ChatAssistantMessageStatus
+from .chat_block_output_type_0 import ChatBlockOutputType0
+from .chat_block_output_type_1 import ChatBlockOutputType1
+from .chat_block_output_type_2 import ChatBlockOutputType2
+from .chat_block_output_type_3 import ChatBlockOutputType3
+from .chat_block_output_type_3_status import ChatBlockOutputType3Status
+from .chat_block_output_type_4 import ChatBlockOutputType4
+from .chat_block_type_0 import ChatBlockType0
+from .chat_block_type_1 import ChatBlockType1
+from .chat_block_type_2 import ChatBlockType2
+from .chat_block_type_3 import ChatBlockType3
+from .chat_block_type_3_status import ChatBlockType3Status
+from .chat_block_type_4 import ChatBlockType4
+from .chat_contact_link import ChatContactLink
+from .chat_contact_link_output import ChatContactLinkOutput
+from .chat_conversation import ChatConversation
+from .chat_generation_result import ChatGenerationResult
+from .chat_generation_result_language import ChatGenerationResultLanguage
+from .chat_generation_result_outcome import ChatGenerationResultOutcome
+from .chat_generation_result_usage import ChatGenerationResultUsage
+from .chat_generation_result_versions import ChatGenerationResultVersions
+from .chat_grant_claim import ChatGrantClaim
+from .chat_grant_claimed import ChatGrantClaimed
+from .chat_message_submission import ChatMessageSubmission
+from .chat_operation import ChatOperation
+from .chat_operation_status import ChatOperationStatus
+from .chat_related_link import ChatRelatedLink
+from .chat_related_link_output import ChatRelatedLinkOutput
+from .chat_source import ChatSource
+from .chat_source_output import ChatSourceOutput
+from .chat_source_output_record import ChatSourceOutputRecord
+from .chat_source_output_record_kind import ChatSourceOutputRecordKind
+from .chat_source_record import ChatSourceRecord
+from .chat_source_record_kind import ChatSourceRecordKind
+from .chat_user_message import ChatUserMessage
 from .collaboration_step import CollaborationStep
 from .current_focus import CurrentFocus
 from .current_focus_create import CurrentFocusCreate
@@ -191,6 +230,45 @@ __all__ = (
     "CaseStudy",
     "CaseStudyCreate",
     "CaseStudyUpdate",
+    "ChatAssistantMessage",
+    "ChatAssistantMessageErrorType0",
+    "ChatAssistantMessageErrorType0Code",
+    "ChatAssistantMessageOutcomeType0",
+    "ChatAssistantMessageStatus",
+    "ChatBlockOutputType0",
+    "ChatBlockOutputType1",
+    "ChatBlockOutputType2",
+    "ChatBlockOutputType3",
+    "ChatBlockOutputType3Status",
+    "ChatBlockOutputType4",
+    "ChatBlockType0",
+    "ChatBlockType1",
+    "ChatBlockType2",
+    "ChatBlockType3",
+    "ChatBlockType3Status",
+    "ChatBlockType4",
+    "ChatContactLink",
+    "ChatContactLinkOutput",
+    "ChatConversation",
+    "ChatGenerationResult",
+    "ChatGenerationResultLanguage",
+    "ChatGenerationResultOutcome",
+    "ChatGenerationResultUsage",
+    "ChatGenerationResultVersions",
+    "ChatGrantClaim",
+    "ChatGrantClaimed",
+    "ChatMessageSubmission",
+    "ChatOperation",
+    "ChatOperationStatus",
+    "ChatRelatedLink",
+    "ChatRelatedLinkOutput",
+    "ChatSource",
+    "ChatSourceOutput",
+    "ChatSourceOutputRecord",
+    "ChatSourceOutputRecordKind",
+    "ChatSourceRecord",
+    "ChatSourceRecordKind",
+    "ChatUserMessage",
     "CollaborationStep",
     "CurrentFocus",
     "CurrentFocusCreate",

@@ -134,10 +134,15 @@ export type ChatRelatedLink = z.infer<typeof ChatRelatedLinkSchema>;
 
 const IsoDateSchema = z.iso.date();
 
+/** A contact link of the contact card; named so every generated client has one model for it. */
+const ChatContactLinkSchema = z
+  .object({ label: text(100), url: HttpUrlSchema })
+  .meta({ id: "ChatContactLink" });
+
 const ContactCardSchema = z.object({
   type: z.literal("ContactCard"),
   email: z.email().nullable(),
-  links: z.array(z.object({ label: text(100), url: HttpUrlSchema })).max(6),
+  links: z.array(ChatContactLinkSchema).max(6),
 });
 
 const ExperienceCardSchema = z.object({
