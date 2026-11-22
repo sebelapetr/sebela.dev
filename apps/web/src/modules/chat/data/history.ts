@@ -66,6 +66,7 @@ function storedTurn(
   if (answer === null || answer.status === "pending") {
     return question.requestId === activeRequestId ? turn : endChatStream(turn);
   }
-  if (answer.status === "interrupted") return endChatStream(turn);
-  return chatReplayEvents(question.requestId, answer).reduce(receiveChatEvent, turn);
+  const model = answer.model === null ? null : { name: answer.model, effort: answer.effort };
+  if (answer.status === "interrupted") return { ...endChatStream(turn), model };
+  return { ...chatReplayEvents(question.requestId, answer).reduce(receiveChatEvent, turn), model };
 }

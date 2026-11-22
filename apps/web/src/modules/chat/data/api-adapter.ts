@@ -313,7 +313,15 @@ export interface ApiUsageReaderOptions {
 export function createApiUsageReader(
   options: ApiUsageReaderOptions,
 ): (signal: AbortSignal) => Promise<unknown> {
-  throw new Error("not implemented", { cause: options });
+  return async (signal) => {
+    const response = await options.fetch(`${options.basePath}/usage`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal,
+    });
+    if (!response.ok) throw new Error(`The usage could not be read: ${String(response.status)}.`);
+    return (await response.json()) as unknown;
+  };
 }
 
 function parseJson(data: string): unknown {
