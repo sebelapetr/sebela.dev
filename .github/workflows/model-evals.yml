@@ -107,9 +107,9 @@ jobs:
             node scripts/checks/mcp-admin-evals-affected.mjs "$BASE" HEAD >> "$GITHUB_OUTPUT"
           fi
           # Python agent: its package, the API its evals read through (and what is behind it), the
-          # contract its content client is generated from, the Python toolchain and lockfiles and
-          # this workflow.
-          affected llm-agent '^(packages/llm-agent/|apps/api/|packages/(contracts|api-client|services|db)/|pyproject\.toml$|uv\.lock$|\.python-version$|pnpm-lock\.yaml$|\.github/workflows/model-evals\.yml$)' >> "$GITHUB_OUTPUT"
+          # content client and the contract it is generated from, the Python toolchain and lockfiles
+          # and this workflow.
+          affected llm-agent '^(packages/(llm-agent|api-client-python)/|apps/api/|packages/(contracts|api-client|services|db)/|pyproject\.toml$|uv\.lock$|\.python-version$|pnpm-lock\.yaml$|\.github/workflows/model-evals\.yml$)' >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
   mcp-admin:

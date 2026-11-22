@@ -73,7 +73,8 @@ test("is not Markdown that code reads: sources, evals, fixtures and the reposito
 });
 
 test("is not a guide a package's build reads as its readme", () => {
-  // packages/llm-agent/pyproject.toml names AGENTS.md as the readme of the built package, so a
-  // change to it changes the package metadata the build produces.
+  // The pyproject.toml of packages/llm-agent and packages/api-client-python names AGENTS.md as the
+  // readme of the built package, so a change to it changes the package metadata the build produces.
   assert.equal(isDocumentation("packages/llm-agent/AGENTS.md"), false);
+  assert.equal(isDocumentation("packages/api-client-python/AGENTS.md"), false);
 });

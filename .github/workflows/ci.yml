@@ -90,10 +90,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The Python members (packages/llm-agent): the repository's uv, which is the lower bound of
-      # `required-version` in the root pyproject.toml (`lowest` installs exactly it; the bound
-      # admits the newer uv of Dependabot, scripts/checks/uv-version.test.mjs), the Python minor of
-      # .python-version and exactly what uv.lock records. Their pnpm task wrappers run through
+      # The Python members (packages/api-client-python, packages/llm-agent): the repository's uv,
+      # which is the lower bound of `required-version` in the root pyproject.toml (`lowest` installs
+      # exactly it; the bound admits the newer uv of Dependabot, scripts/checks/uv-version.test.mjs),
+      # the Python minor of .python-version and exactly what uv.lock records. Their pnpm task wrappers run through
       # Turborepo like every other package; the drift check below regenerates the Python content
       # client too.
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
@@ -118,7 +118,8 @@ jobs:
         run: pnpm ci:affected
       # Turborepo maps uv.lock, .python-version and the root pyproject.toml to the root only (their
       # $TURBO_ROOT$ inputs affect caching, not selection), so a change to them alone would skip the
-      # Python member. Run its tasks then; when the affected run already ran them they are cache hits.
+      # Python members. Run their tasks then; when the affected run already ran them they are cache
+      # hits.
       - name: Python member tasks when the root Python files changed
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
@@ -128,7 +129,7 @@ jobs:
             echo "No comparison base: the affected run already selected every package."
           elif printf '%s\n' "$changed" | grep -qE "$python_root"; then
             printf '%s\n' "$changed" | grep -E "$python_root"
-            pnpm exec turbo run lint typecheck test build --filter=@sebela/llm-agent --continue
+            pnpm exec turbo run lint typecheck test build --filter=@sebela/api-client-python --filter=@sebela/llm-agent --continue
           else
             echo "No root Python file changed."
           fi
@@ -198,7 +199,7 @@ jobs:
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: |
-          unaffected='^(\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)'
+          unaffected='^(\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(api-client-python|llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)'
           if ! changed=$(node scripts/checks/without-documentation.mjs files "$BASE"); then
             echo "No comparison base: the website job runs in full."
             echo "affected=true" >> "$GITHUB_OUTPUT"
@@ -217,9 +218,9 @@ jobs:
           cache: pnpm
       - if: steps.website.outputs.affected == 'true'
         run: pnpm install --frozen-lockfile
-      # `pnpm test:e2e` builds every package first (turbo.json, test:e2e), the Python member
-      # (packages/llm-agent, `uv build`) included, so the job needs uv: the lower bound of
-      # `required-version` in the root pyproject.toml, as in the quality job.
+      # `pnpm test:e2e` builds every package first (turbo.json, test:e2e), the Python members
+      # (packages/api-client-python, packages/llm-agent, `uv build`) included, so the job needs uv:
+      # the lower bound of `required-version` in the root pyproject.toml, as in the quality job.
       - if: steps.website.outputs.affected == 'true'
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
@@ -363,7 +364,7 @@ jobs:
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: |
-          unaffected='^(\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)'
+          unaffected='^(\.claude/|harness/|apps/(mcp-admin|mcp-public|ai-service)/|packages/(api-client-python|llm-agent|memory)/|\.github/workflows/(model-evals|commit-messages)\.yml$)'
           if ! changed=$(node scripts/checks/without-documentation.mjs files "$BASE"); then
             echo "No comparison base: the website job runs in full."
             echo "affected=true" >> "$GITHUB_OUTPUT"

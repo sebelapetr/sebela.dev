@@ -1,0 +1,33 @@
+[project]
+name = "sebela-api-client"
+version = "0.0.0"
+description = "The Python client of the content API, generated from its OpenAPI document."
+readme = "AGENTS.md"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+# What the generated code imports. It holds no credential and no base URL: every consumer passes
+# its own base URL from its environment.
+dependencies = [
+  "attrs==26.1.0",
+  "httpx2==2.16.2",
+]
+
+[dependency-groups]
+# The generator and the formatter its post hooks run (content-api-client.yaml).
+dev = [
+  "openapi-python-client==0.30.0",
+  "ruff==0.17.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.7.22,<0.8"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "sebela_api_client"
+
+# The whole importable package is generated: its generator formats it (content-api-client.yaml),
+# so Ruff leaves it alone. Consumers skip its bodies in mypy (`ignore_errors`) and keep its
+# signatures for their own strictly typed callers.
+[tool.ruff]
+extend-exclude = ["src/sebela_api_client"]

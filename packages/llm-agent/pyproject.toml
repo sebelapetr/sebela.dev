@@ -7,20 +7,24 @@ license = "MIT"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "anthropic==2.11.0",
-  "attrs==26.1.0",
   "httpx2==2.16.2",
   "langchain-anthropic==1.7.12",
   "langchain-core==1.8.4",
   "langgraph==1.2.24",
   "langsmith==0.15.1",
   "pydantic==2.14.4",
+  "sebela-api-client",
 ]
+
+# The generated client of the content API, a member of the same uv workspace
+# (packages/api-client-python).
+[tool.uv.sources]
+sebela-api-client = { workspace = true }
 
 [dependency-groups]
 dev = [
   "coverage==7.17.3",
   "mypy==2.4.1",
-  "openapi-python-client==0.30.0",
   "pytest==9.2.0",
   "pytest-asyncio==1.5.0",
   "pytest-cov==7.1.0",
@@ -35,12 +39,10 @@ build-backend = "uv_build"
 module-name = "llm_agent"
 
 # Ruff is the formatter and the linter (docs/code-standards.md, Python). The generated content
-# client is not handwritten code: its generator formats it (content-api-client.yaml) and it is
-# excluded here, as in mypy.
+# client lives in its own package (packages/api-client-python), outside the files Ruff checks here.
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["src/llm_agent/generated"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF", "C4", "PT"]
@@ -48,9 +50,9 @@ select = ["E", "W", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF", "C4", "PT"]
 [tool.ruff.lint.isort]
 known-first-party = ["llm_agent", "evals"]
 
-# mypy strict with the Pydantic plugin is the one type checker. Generated code is checked only
-# where handwritten code calls it: its own bodies are skipped (`ignore_errors`), its signatures
-# still type the callers.
+# mypy strict with the Pydantic plugin is the one type checker. The generated content client
+# (`sebela_api_client`, packages/api-client-python) is checked only where handwritten code calls
+# it: its own bodies are skipped (`ignore_errors`), its signatures still type the callers.
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
@@ -59,7 +61,7 @@ files = ["src", "evals", "tests"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = "llm_agent.generated.*"
+module = "sebela_api_client.*"
 ignore_errors = true
 
 [tool.pydantic-mypy]
@@ -79,9 +81,9 @@ markers = [
 
 # Test coverage (docs/testing.md, Coverage): measured only when the `test` task passes `--cov`,
 # which it does when TEST_COVERAGE is `true`; it informs and fails nothing (no `fail_under`).
-# Handwritten package code only: the generated content client is omitted, like in Ruff and mypy.
+# Handwritten package code only: the generated content client is another package
+# (`sebela_api_client`) and is not measured.
 # The evals and tests are not measured. The report is written to `coverage/`, ignored by Git.
 [tool.coverage.run]
 source_pkgs = ["llm_agent"]
-omit = ["*/llm_agent/generated/*"]
 data_file = "coverage/.coverage"

@@ -20,9 +20,8 @@ from urllib.parse import urlsplit
 
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field
-
-from llm_agent.generated.content_api import Client
-from llm_agent.generated.content_api.api.default import (
+from sebela_api_client import Client
+from sebela_api_client.api.default import (
     get_person,
     get_project,
     get_roadmap,
@@ -38,36 +37,36 @@ from llm_agent.generated.content_api.api.default import (
     list_roadmap_events,
     list_services,
 )
-from llm_agent.generated.content_api.models.current_focus import CurrentFocus
-from llm_agent.generated.content_api.models.diary import Diary
-from llm_agent.generated.content_api.models.diary_day import DiaryDay
-from llm_agent.generated.content_api.models.diary_event import DiaryEvent
-from llm_agent.generated.content_api.models.diary_resource import DiaryResource
-from llm_agent.generated.content_api.models.education import Education
-from llm_agent.generated.content_api.models.experience import Experience
-from llm_agent.generated.content_api.models.exploration import Exploration
-from llm_agent.generated.content_api.models.learning_time_area import LearningTimeArea
-from llm_agent.generated.content_api.models.learning_time_event import LearningTimeEvent
-from llm_agent.generated.content_api.models.learning_time_resource import LearningTimeResource
-from llm_agent.generated.content_api.models.person import Person
-from llm_agent.generated.content_api.models.project import Project
-from llm_agent.generated.content_api.models.roadmap import Roadmap
-from llm_agent.generated.content_api.models.roadmap_area_detail import RoadmapAreaDetail
-from llm_agent.generated.content_api.models.roadmap_book import RoadmapBook
-from llm_agent.generated.content_api.models.roadmap_event import RoadmapEvent
-from llm_agent.generated.content_api.models.roadmap_progress import RoadmapProgress
-from llm_agent.generated.content_api.models.roadmap_statistics import RoadmapStatistics
-from llm_agent.generated.content_api.models.roadmap_tree_area import RoadmapTreeArea
-from llm_agent.generated.content_api.models.roadmap_tree_module import RoadmapTreeModule
-from llm_agent.generated.content_api.models.roadmap_tree_resource import RoadmapTreeResource
-from llm_agent.generated.content_api.models.service import Service
-from llm_agent.generated.content_api.models.service_exploration_evidence import (
+from sebela_api_client.models.current_focus import CurrentFocus
+from sebela_api_client.models.diary import Diary
+from sebela_api_client.models.diary_day import DiaryDay
+from sebela_api_client.models.diary_event import DiaryEvent
+from sebela_api_client.models.diary_resource import DiaryResource
+from sebela_api_client.models.education import Education
+from sebela_api_client.models.experience import Experience
+from sebela_api_client.models.exploration import Exploration
+from sebela_api_client.models.learning_time_area import LearningTimeArea
+from sebela_api_client.models.learning_time_event import LearningTimeEvent
+from sebela_api_client.models.learning_time_resource import LearningTimeResource
+from sebela_api_client.models.person import Person
+from sebela_api_client.models.project import Project
+from sebela_api_client.models.roadmap import Roadmap
+from sebela_api_client.models.roadmap_area_detail import RoadmapAreaDetail
+from sebela_api_client.models.roadmap_book import RoadmapBook
+from sebela_api_client.models.roadmap_event import RoadmapEvent
+from sebela_api_client.models.roadmap_progress import RoadmapProgress
+from sebela_api_client.models.roadmap_statistics import RoadmapStatistics
+from sebela_api_client.models.roadmap_tree_area import RoadmapTreeArea
+from sebela_api_client.models.roadmap_tree_module import RoadmapTreeModule
+from sebela_api_client.models.roadmap_tree_resource import RoadmapTreeResource
+from sebela_api_client.models.service import Service
+from sebela_api_client.models.service_exploration_evidence import (
     ServiceExplorationEvidence,
 )
-from llm_agent.generated.content_api.models.service_project_evidence import (
+from sebela_api_client.models.service_project_evidence import (
     ServiceProjectEvidence,
 )
-from llm_agent.generated.content_api.types import Response
+from sebela_api_client.types import Response
 
 #: Transport timeout of one content read; the tool call timeout bounds it further.
 READ_TIMEOUT_S = 5.0
