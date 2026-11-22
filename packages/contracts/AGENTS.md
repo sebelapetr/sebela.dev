@@ -59,7 +59,7 @@ Files outside modules: `errors.ts` (the common error contract, shared by every m
 
 ## Chat contract
 
-The chat's application contract is defined in phase 3: the website's browser-local mock implements it, and the API's visitor chat routes (phase 7, `apps/api/AGENTS.md`, HTTP behaviour) serve the same events in their server-sent stream. Nothing here knows about the transport (server-sent events, fetch, framing); an adapter turns its framing into these events, and the website validates each one with `ChatStreamEventSchema` before it changes a conversation.
+The chat's application contract was defined in phase 3 (for a browser-local mock the website has since dropped); the API's visitor chat routes (phase 7, `apps/api/AGENTS.md`, HTTP behaviour) serve the same events in their server-sent stream. Nothing here knows about the transport (server-sent events, fetch, framing); an adapter turns its framing into these events, and the website validates each one with `ChatStreamEventSchema` before it changes a conversation.
 
 - **Submission.** `ChatSubmissionSchema`: `conversationId` (random UUID from the client; identifies, never authorises), `requestId` (UUID for this one question; a retry reuses it, so phase 7 can make it idempotent) and the trimmed `question`.
 - **Events.** Each carries `requestId`, the assistant `messageId` and an `eventId` that grows with arrival. `start` opens the answer; `text_delta` appends text; `block` delivers one complete typed block; `sources` (once) delivers the Sources block's payload; `related` (once) one or two onward links; `complete` ends with an outcome (`answered`, `insufficient_evidence`, `refused`, `unavailable`); `error` ends with a stable code and `retryable`.
