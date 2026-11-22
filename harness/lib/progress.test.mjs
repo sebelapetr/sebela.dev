@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { currentWork, describeWork, phaseProgress, workChange } from "./progress.mjs";
+import { currentWork, describeWork, workChange } from "./progress.mjs";
 
 const call = (name, input) =>
   JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name, input }] } });
@@ -40,11 +40,6 @@ test("the latest dispatch names the agent working now", () => {
 test("a dispatch alone still gives the issue, from its description or prompt", () => {
   assert.equal(currentWork([dispatch("backend-developer", "Implement issue 31")]).issue, 31);
   assert.equal(currentWork([dispatch("reviewer", "Review", "… against issue #32 …")]).issue, 32);
-});
-
-test("phase progress counts closed issues of all the phase's issues", () => {
-  const issues = [{ state: "CLOSED" }, { state: "OPEN" }, { state: "CLOSED" }, { state: "OPEN" }];
-  assert.deepEqual(phaseProgress(issues), { closed: 2, total: 4 });
 });
 
 test("one line says who works on what, for how long, and how far the phase is", () => {

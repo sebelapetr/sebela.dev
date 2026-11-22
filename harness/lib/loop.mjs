@@ -317,24 +317,32 @@ export function spendComment({ line, paid, iteration, private: hidden = {} }) {
 // What the loop tells the owner after a phase_done report, from what GitHub shows then:
 //   pullRequest  the open pull request from the phase branch to the base ({ number }), null when
 //                there is none, undefined when gh could not check
-//   openIssues   the phase's open issues ([{ number, labels: [name] }]), null when gh could not list
+//   work         the work selection of the phase (selectWork in lib/selection.mjs: its open
+//                sub-issues by kind and the open blockers of its tracking issue), null when
+//                GitHub could not be asked
 // The phase is done only when its pull request is open and nothing but HITL issues is left; failed,
-// blocked or unready issues, or a missing pull request, mean the loop stopped with nothing workable.
+// blocked, unready or still eligible issues, a phase that itself waits for another, or a missing
+// pull request, mean the loop stopped with nothing workable.
 // Returns { status: "done" | "stopped", log: [line], alert: [line] }.
-export function phaseEnd({ pullRequest, openIssues }) {
-  const groups = { failed: [], hitl: [], other: [] };
-  for (const issue of openIssues ?? []) {
-    const labels = issue.labels ?? [];
-    const group = labels.includes(FAILED_LABEL)
-      ? "failed"
-      : labels.includes("hitl")
-        ? "hitl"
-        : "other";
-    groups[group].push(`#${issue.number}`);
-  }
-  const list = (name, numbers) => (numbers.length ? [`${name}: ${numbers.join(", ")}`] : []);
-  const unknownIssues =
-    openIssues == null ? ["could not list the phase's open issues with gh"] : [];
+export function phaseEnd({ pullRequest, work }) {
+  const open = work?.open ?? [];
+  const numbers = (kind) =>
+    open.filter((issue) => issue.kind === kind).map((issue) => `#${issue.number}`);
+  const list = (name, items) => (items.length ? [`${name}: ${items.join(", ")}`] : []);
+  const blocked = open
+    .filter((issue) => issue.kind === "blocked")
+    .map((issue) => `#${issue.number} (by ${issue.openBlockers.map((n) => `#${n}`).join(", ")})`);
+  const hitl = numbers("hitl");
+  const phaseWaits = (work?.phaseBlockers ?? []).map((issue) => `#${issue.number}`);
+  const notDone = [
+    ...(phaseWaits.length ? [`the phase waits for ${phaseWaits.join(", ")}`] : []),
+    ...list("agent-failed", numbers("failed")),
+    ...list("blocked", blocked),
+    ...list("not ready-for-agent", numbers("not-ready")),
+    ...list("has sub-issues of its own", numbers("parent")),
+    ...list("still eligible", numbers("eligible")),
+  ];
+  const unknownIssues = work == null ? ["could not read the phase's issues from GitHub"] : [];
 
   const prLine =
     pullRequest === undefined
@@ -343,23 +351,19 @@ export function phaseEnd({ pullRequest, openIssues }) {
         ? "no phase pull request"
         : `draft pull request #${pullRequest.number} is open`;
 
-  if (pullRequest && groups.failed.length === 0 && groups.other.length === 0) {
+  if (pullRequest && notDone.length === 0) {
     return {
       status: "done",
       log: [
         `phase done: ${prLine}; mark it ready for review when the phase is complete`,
-        ...list("remaining HITL", groups.hitl),
+        ...list("remaining HITL", hitl),
         ...unknownIssues,
       ],
-      alert: ["phase done", prLine, ...list("HITL", groups.hitl)],
+      alert: ["phase done", prLine, ...list("HITL", hitl)],
     };
   }
 
-  const issues = [
-    ...list("agent-failed", groups.failed),
-    ...list("blocked or not ready", groups.other),
-    ...list("HITL", groups.hitl),
-  ];
+  const issues = [...notDone, ...list("HITL", hitl)];
   return {
     status: "stopped",
     log: ["phase stopped: no workable issue left", ...issues, ...unknownIssues, prLine],
