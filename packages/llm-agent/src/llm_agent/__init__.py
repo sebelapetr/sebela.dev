@@ -73,9 +73,11 @@ from llm_agent.tools.content import (
     PublicService,
     PublicServiceEvidence,
     PublicStep,
+    PublicTechnology,
 )
 from llm_agent.tools.registry import (
     READ_CAPABILITIES,
+    READ_CAPABILITY_SPECS,
     TOOL_SPECS,
     InvalidToolArgumentsError,
     ToolNotAvailableError,
@@ -88,6 +90,7 @@ from llm_agent.tools.registry import (
 
 __all__ = [
     "READ_CAPABILITIES",
+    "READ_CAPABILITY_SPECS",
     "TOOL_SPECS",
     "ApiContentReader",
     "Block",
@@ -147,6 +150,7 @@ __all__ = [
     "PublicService",
     "PublicServiceEvidence",
     "PublicStep",
+    "PublicTechnology",
     "RoadmapCard",
     "ServiceCard",
     "Source",

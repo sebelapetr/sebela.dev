@@ -48,6 +48,7 @@ from llm_agent import (
     PublicRoadmapSummary,
     PublicService,
     PublicServiceEvidence,
+    PublicTechnology,
     PublicStep,
 )
 
@@ -263,6 +264,18 @@ EDUCATION = [
         ended_on=datetime.date(2022, 11, 30),
         description=None,
     ),
+]
+
+TECHNOLOGIES = [
+    PublicTechnology(id=_uuid(61), slug="python", name="Python", tier="primary", group="core"),
+    PublicTechnology(
+        id=_uuid(62),
+        slug="langgraph",
+        name="LangGraph",
+        tier="primary",
+        group="ai_engineering_focus",
+    ),
+    PublicTechnology(id=_uuid(63), slug="bash", name="Bash", tier="secondary", group=None),
 ]
 
 
@@ -497,6 +510,7 @@ class FakeContent:
         explorations: Sequence[PublicExploration] = EXPLORATIONS,
         services: Sequence[PublicService] = SERVICES,
         education: Sequence[PublicEducation] = EDUCATION,
+        technologies: Sequence[PublicTechnology] = TECHNOLOGIES,
         current_focus: Sequence[PublicCurrentFocus] = CURRENT_FOCUS,
         roadmap: PublicRoadmap = ROADMAP,
         diary: Sequence[PublicDiaryDay] = DIARY,
@@ -512,6 +526,7 @@ class FakeContent:
         self.explorations = list(explorations)
         self.services = list(services)
         self.education = list(education)
+        self.technologies = list(technologies)
         self.current_focus = list(current_focus)
         self.roadmap = roadmap
         self.diary = list(diary)
@@ -575,6 +590,10 @@ class FakeContent:
     async def read_education(self) -> list[PublicEducation]:
         await self._read("read_education")
         return self.education
+
+    async def read_technologies(self) -> list[PublicTechnology]:
+        await self._read("read_technologies")
+        return self.technologies
 
     async def read_current_focus(self) -> list[PublicCurrentFocus]:
         await self._read("read_current_focus")

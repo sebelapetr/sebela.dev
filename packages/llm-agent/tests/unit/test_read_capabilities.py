@@ -2,7 +2,9 @@
 
 `read_tool` is what the AI service exposes to read callers (and the next phase's public MCP): the
 same allowlist minus the contact read, the same argument validation and the same projections, so
-a capability and the model's tool can never disagree about a record.
+a capability and the model's tool can never disagree about a record. The technology catalogue is
+the one capability without a model tool: the model reads technologies inside the career records,
+and offering it a new tool would change what the model sees.
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ import pytest
 
 from llm_agent import (
     READ_CAPABILITIES,
+    READ_CAPABILITY_SPECS,
+    TOOL_SPECS,
     ContentNotFoundError,
     ContentUnavailableError,
     InvalidToolArgumentsError,
@@ -24,7 +28,7 @@ from llm_agent import (
 from llm_agent.observability.tracing import Tracer
 from llm_agent.reliability.timeouts import Deadline
 from llm_agent.tools.registry import TOOLS, Tools
-from tests.unit.fakes import AGENT_AREA, BOOKS, PROJECTS, FakeContent
+from tests.unit.fakes import AGENT_AREA, BOOKS, PROJECTS, TECHNOLOGIES, FakeContent
 
 #: The arguments each capability is read with in the parity test.
 ARGUMENTS: dict[str, dict[str, str]] = {
@@ -37,12 +41,34 @@ def tools(content: FakeContent) -> Tools:
     return Tools(content, tracer=Tracer(), deadline=Deadline(60), call_s=5.0, result_tokens=5000)
 
 
-def test_every_read_tool_but_the_contact_is_a_capability() -> None:
-    assert set(READ_CAPABILITIES) == set(TOOLS) - {"get_contact"}
+#: The capabilities that are also model tools.
+TOOL_CAPABILITIES = [name for name in READ_CAPABILITIES if name in TOOLS]
+
+
+def test_every_read_tool_but_the_contact_and_the_technologies_are_the_capabilities() -> None:
+    assert set(READ_CAPABILITIES) == (set(TOOLS) - {"get_contact"}) | {"list_technologies"}
     assert "get_contact" not in READ_CAPABILITIES
 
 
-@pytest.mark.parametrize("name", READ_CAPABILITIES)
+def test_the_technology_capability_is_not_offered_to_the_model() -> None:
+    assert "list_technologies" not in TOOLS
+    assert "list_technologies" not in {spec["name"] for spec in TOOL_SPECS}
+
+
+def test_each_capability_has_one_spec_and_a_tool_keeps_its_own() -> None:
+    specs = {spec["name"]: spec for spec in READ_CAPABILITY_SPECS}
+    assert list(specs) == list(READ_CAPABILITIES)
+    tool_specs = {spec["name"]: spec for spec in TOOL_SPECS}
+    for name in TOOL_CAPABILITIES:
+        assert specs[name] == tool_specs[name]
+    assert specs["list_technologies"]["input_schema"] == {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+
+
+@pytest.mark.parametrize("name", TOOL_CAPABILITIES)
 async def test_a_capability_returns_what_the_in_process_tool_gives_the_model(name: str) -> None:
     content = FakeContent()
     arguments = ARGUMENTS.get(name, {})
@@ -68,6 +94,28 @@ async def test_the_profile_capability_carries_no_contact_fields() -> None:
     assert record.record_id == "profile"
     assert record.href == "/"
     assert {"id", "email", "links"}.isdisjoint(record.data)
+
+
+async def test_the_technology_capability_lists_the_catalogue_in_order() -> None:
+    content = FakeContent()
+    page = await read_tool(content, "list_technologies", {})
+    assert page.capability == "list_technologies"
+    assert (page.page, page.page_count) == (1, 1)
+    assert [(r.kind, r.record_id, r.title) for r in page.records] == [
+        ("technology", t.slug, t.name) for t in TECHNOLOGIES
+    ]
+    assert [r.data for r in page.records] == [
+        {"slug": t.slug, "name": t.name, "tier": t.tier, "group": t.group} for t in TECHNOLOGIES
+    ]
+    assert {r.href for r in page.records} == {"/experience#technologies-heading"}
+    assert content.calls == ["read_technologies"]
+
+
+async def test_the_model_cannot_call_the_technology_capability() -> None:
+    content = FakeContent()
+    result = json.loads(await tools(content).call("list_technologies", {}))
+    assert result["error"] == "not_available"
+    assert content.reads == 0
 
 
 async def test_a_long_list_is_split_into_pages_in_order() -> None:
@@ -105,6 +153,8 @@ async def test_an_unknown_capability_reads_nothing(name: str) -> None:
         ("get_project", {"slug": "a", "path": "/etc/passwd"}),
         ("get_roadmap_area", {"area": "x" * 500}),
         ("get_roadmap_area", {"slug": "agents"}),
+        ("list_technologies", {"group": "core"}),
+        ("list_technologies", {"url": "http://x.test/"}),
     ],
 )
 async def test_invalid_arguments_read_nothing(name: str, arguments: dict[str, Any]) -> None:

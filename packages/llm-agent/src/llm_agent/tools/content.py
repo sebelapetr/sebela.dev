@@ -207,6 +207,20 @@ class PublicService(_Read):
     evidence: list[PublicServiceEvidence]
 
 
+TechnologyTier = Literal["primary", "secondary"]
+TechnologyGroup = Literal["core", "ai_engineering_focus"]
+
+
+class PublicTechnology(_Read):
+    """A technology of the catalogue: its tier and, when primary, its group; no logo."""
+
+    id: str
+    slug: Slug
+    name: str
+    tier: TechnologyTier
+    group: TechnologyGroup | None
+
+
 class PublicEducation(_Read):
     """A school, course, certification or milestone; missing dates stay missing."""
 
@@ -474,6 +488,8 @@ class ContentReader(Protocol):
     async def read_services(self) -> list[PublicService]: ...
 
     async def read_education(self) -> list[PublicEducation]: ...
+
+    async def read_technologies(self) -> list[PublicTechnology]: ...
 
     async def read_current_focus(self) -> list[PublicCurrentFocus]: ...
 
@@ -909,6 +925,9 @@ class ApiContentReader:
     async def read_education(self) -> list[PublicEducation]:
         items = await self._fetch(list_education.asyncio_detailed(client=self._client), list)
         return self._map(lambda rows: [_education(row) for row in rows], items)
+
+    async def read_technologies(self) -> list[PublicTechnology]:
+        raise NotImplementedError
 
     async def read_current_focus(self) -> list[PublicCurrentFocus]:
         items = await self._fetch(list_current_focus.asyncio_detailed(client=self._client), list)

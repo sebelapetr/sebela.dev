@@ -766,6 +766,8 @@ def _error(code: str, message: str) -> str:
 #: The tools a read caller may use outside a chat execution: every read tool but the contact read,
 #: whose e-mail and links reach a visitor only as the chat's trusted contact card.
 READ_CAPABILITIES: Final[tuple[ToolName, ...]] = tuple(t for t in TOOLS if t != "get_contact")
+#: The name, description and input schema of each read capability.
+READ_CAPABILITY_SPECS: Final[tuple[dict[str, Any], ...]] = TOOL_SPECS
 #: Records one capability page carries by default.
 PAGE_RECORDS: Final = 10
 #: Records one capability read may list across all its pages; a longer list is refused.
