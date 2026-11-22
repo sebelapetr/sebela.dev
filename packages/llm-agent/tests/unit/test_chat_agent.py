@@ -772,6 +772,19 @@ async def test_every_model_attempt_is_a_span_with_its_model_effort_and_tokens() 
     assert attempts[2].attributes["effort"] == "medium"
 
 
+async def test_every_model_attempt_records_its_estimated_input_against_its_cap() -> None:
+    models = ScriptedModels(security=[verdict()], main=[draft()])
+    result = await run(models)
+    attempts = {
+        item.name: item.attributes for item in result.trace if item.name.startswith("model.")
+    }
+    main = attempts["model.main"]
+    assert main["input_cap"] == 16000
+    assert isinstance(main["estimated_input_tokens"], int)
+    assert 0 < main["estimated_input_tokens"] <= 16000
+    assert attempts["model.security"]["input_cap"] != main["input_cap"]
+
+
 async def test_the_retry_allowance_is_one_for_the_whole_execution() -> None:
     models = ScriptedModels(
         security=[status_error(500), verdict()],

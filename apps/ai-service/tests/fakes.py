@@ -118,6 +118,7 @@ class FakeApi:
     claim_started: asyncio.Event = field(default_factory=asyncio.Event)
     #: The bound terms the claim returns; the defaults are this agent's and the request's.
     claim_model: str = "claude-haiku-5-5"
+    claim_effort: str | None = "medium"
     claim_pricing_version: str = "anthropic-2026-11-19"
     claim_context_revision: int = 1
     person_status: int = 200
@@ -145,6 +146,7 @@ class FakeApi:
             "deadlineAt": deadline_at,
             "contextRevision": 1,
             "model": "claude-haiku-5-5",
+            "effort": "medium",
             "pricingVersion": "anthropic-2026-11-19",
             "allowanceUsd": 0.02,
         }
@@ -193,6 +195,7 @@ class FakeApi:
                 "deadlineAt": self.claim_deadline or self.deadlines[operation],
                 "allowanceUsd": self.claim_allowance,
                 "model": self.claim_model,
+                "effort": self.claim_effort,
                 "pricingVersion": self.claim_pricing_version,
                 "contextRevision": self.claim_context_revision,
             },

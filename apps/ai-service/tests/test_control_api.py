@@ -52,6 +52,7 @@ async def test_a_claim_returns_the_grant_terms_once() -> None:
     assert isinstance(first, ChatGrantClaimed)
     assert first.allowance_usd == 0.02
     assert (first.model, first.pricing_version) == ("claude-haiku-5-5", "anthropic-2026-11-19")
+    assert first.effort == "medium"
     assert first.context_revision == 1
     assert first.deadline_at.tzinfo is not None
     assert second is None
@@ -117,6 +118,7 @@ CLAIMED: dict[str, Any] = {
     "deadlineAt": "2026-11-22T12:00:00.000Z",
     "allowanceUsd": 0.02,
     "model": "claude-haiku-5-5",
+    "effort": "medium",
     "pricingVersion": "anthropic-2026-11-19",
     "contextRevision": 1,
 }
@@ -157,6 +159,9 @@ async def test_a_claim_sends_the_contract_body_with_the_control_bearer() -> None
         {**CLAIMED, "allowanceUsd": 0},
         {**CLAIMED, "allowanceUsd": "0.02"},
         {**CLAIMED, "model": ""},
+        {**CLAIMED, "effort": ""},
+        {**CLAIMED, "effort": 7},
+        {key: value for key, value in CLAIMED.items() if key != "effort"},
         {**CLAIMED, "pricingVersion": 7},
         {**CLAIMED, "contextRevision": -1},
         {**CLAIMED, "contextRevision": 1.5},

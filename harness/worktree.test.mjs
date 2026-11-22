@@ -756,6 +756,7 @@ test("a generated environment file turns the chat on with test keys and the agen
   assert.equal(settings.API_CHAT_COOKIE_SECURE, "false");
   // The versions the AI service accepts, from the same revision as the harness.
   assert.equal(settings.API_CHAT_MODEL, constant("HAIKU"));
+  assert.equal(settings.API_CHAT_EFFORT, constant("MAIN_EFFORT"));
   assert.equal(settings.API_CHAT_PRICING_VERSION, constant("PRICING_VERSION"));
   // Cloudflare's published always-pass test keys, issued for the worktree's website host.
   assert.equal(settings.API_TURNSTILE_SECRET_KEY, "1x0000000000000000000000000000000AA");

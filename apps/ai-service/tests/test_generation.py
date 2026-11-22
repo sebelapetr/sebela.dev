@@ -196,6 +196,21 @@ async def test_a_version_mismatch_is_refused_before_admission() -> None:
     assert api.claims == []
 
 
+async def test_an_effort_other_than_this_agents_is_refused_before_admission() -> None:
+    api = FakeApi()
+    models = FakeModels()
+    async with running(api, models) as (_, client):
+        response = await client.post(
+            ROUTE, json={**api.issue(), "effort": "high"}, headers=bearer()
+        )
+        missing = {key: value for key, value in api.issue().items() if key != "effort"}
+        unbound = await client.post(ROUTE, json=missing, headers=bearer())
+    assert response.status_code == 422
+    assert response.json() == {"code": "version_mismatch"}
+    assert unbound.status_code == 422
+    assert api.claims == []
+
+
 async def test_the_refuse_and_fail_scenarios_reconcile_their_outcomes() -> None:
     for scenario, outcome in (("refuse", "refused"), ("fail", "unavailable")):
         api = FakeApi()
@@ -268,6 +283,20 @@ async def test_a_claimed_pricing_version_other_than_the_requests_makes_no_model_
     _assert_a_mismatch_stop(api, models, stored)
 
 
+async def test_a_claimed_effort_other_than_the_requests_makes_no_model_call() -> None:
+    api = FakeApi(claim_effort="high")
+    models = FakeModels()
+    stored = await _stopped_by_the_claim(api, models)
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def test_a_claim_admitted_without_an_effort_makes_no_model_call() -> None:
+    api = FakeApi(claim_effort=None)
+    models = FakeModels()
+    stored = await _stopped_by_the_claim(api, models)
+    _assert_a_mismatch_stop(api, models, stored)
+
+
 async def test_a_claimed_context_revision_other_than_the_requests_makes_no_model_call() -> None:
     api = FakeApi(claim_context_revision=2)
     models = FakeModels()
@@ -298,6 +327,15 @@ async def test_a_pricing_the_request_and_claim_agree_on_but_this_agent_lacks_mak
     api = FakeApi(claim_pricing_version="anthropic-2020-01-01")
     models = FakeModels()
     stored = await _submitted_directly(api, models, pricingVersion="anthropic-2020-01-01")
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def test_an_effort_the_request_and_claim_agree_on_but_this_agent_lacks_makes_no_call() -> (
+    None
+):
+    api = FakeApi(claim_effort="high")
+    models = FakeModels()
+    stored = await _submitted_directly(api, models, effort="high")
     _assert_a_mismatch_stop(api, models, stored)
 
 
