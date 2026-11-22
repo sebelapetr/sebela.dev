@@ -247,3 +247,42 @@ test("a phase whose iterations logged no spend says it is unknown, not zero", ()
   });
   assert.match(report.split("## Eval spend")[1], /Unknown: no iteration logged its eval spend/);
 });
+
+// --- what is left of the phase (issue #420) -------------------------------------------
+
+test("the report says what is left of the phase, from its tracking issue", () => {
+  const report = renderReport({
+    phase: "07-ai-service",
+    iterations: [],
+    steward: [],
+    memory: [],
+    suggestions: null,
+    work: {
+      phase: "07-ai-service",
+      tracking: { number: 414, title: "Phase 07" },
+      status: "waiting",
+      next: null,
+      phaseBlockers: [],
+      progress: { closed: 14, total: 15 },
+      open: [{ number: 216, title: "Accept", kind: "hitl", openBlockers: [] }],
+    },
+  });
+  assert.match(report, /## What is left/);
+  assert.match(report, /tracking issue #414 · 14\/15 sub-issues closed/);
+  assert.match(report, /waiting for a human \(hitl\): #216/);
+});
+
+test("a report written without GitHub says the phase's issues are unknown", () => {
+  const report = renderReport({
+    phase: "p",
+    iterations: [],
+    steward: [],
+    memory: [],
+    suggestions: null,
+    work: null,
+  });
+  assert.match(
+    report,
+    /## What is left\n\nUnknown: the phase's tracking issue could not be read\./,
+  );
+});

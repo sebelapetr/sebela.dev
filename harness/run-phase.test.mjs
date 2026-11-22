@@ -43,10 +43,21 @@ if (args[0] === "compose") console.log(JSON.stringify({ Health: "healthy", State
 else console.log("27.0.0");
 `;
 
-// gh: signed in, no issues, no pull requests, no workflow runs; every call is recorded.
+// gh: signed in, no pull requests, no workflow runs; every call is recorded. A GraphQL query is
+// answered from graphql.json by its name when a test wrote one (the phase's tracking issue and
+// sub-issues); without it GitHub's issues cannot be read, as when the network is down.
 const GH = `${STUB_HEAD}
 record("gh-calls.jsonl", args);
 if (args[0] === "auth" || args[1] === "comment" || args[1] === "edit") process.exit(0);
+const query = args.find((arg) => arg.startsWith("query="));
+const answers = path.join(dir, "graphql.json");
+if (args[1] === "graphql" && fs.existsSync(answers)) {
+  const operation = /query (\\w+)/.exec(query ?? "")?.[1];
+  const data = JSON.parse(fs.readFileSync(answers, "utf8"))[operation];
+  if (!data) process.exit(1);
+  console.log(JSON.stringify({ data }));
+  process.exit(0);
+}
 console.log("[]");
 `;
 
@@ -66,6 +77,7 @@ record("claude-calls.jsonl", {
   campaign: process.env.SEBELA_EVAL_CAMPAIGN ?? null,
   kept: process.env.SEBELA_EVAL_KEPT_RUNS ?? null,
 });
+record("claude-prompts.jsonl", { prompt: value("-p") });
 if (process.env.CLAUDE_STUB === "hang") {
   fs.writeFileSync(path.join(dir, "claude.pid"), String(process.pid));
   const root = process.cwd();
@@ -197,7 +209,10 @@ function fixture(name) {
         CLAUDE_CONFIG_DIR: path.join(created.dir, "claude"),
       },
     });
-  return { main, dir: created.dir, lines, loop, start };
+  // What GitHub answers to the work selection's queries (harness/phase-work.mjs).
+  const github = (answers) =>
+    fs.writeFileSync(path.join(created.dir, "graphql.json"), JSON.stringify(answers));
+  return { main, dir: created.dir, lines, loop, start, github };
 }
 
 const alive = (pid) => {
@@ -290,4 +305,87 @@ test("Ctrl+C ends the run through the same path, and the loop says it was interr
   assert.equal(alive(Number(fs.readFileSync(pidFile, "utf8"))), false);
   assert.match(stdout, /interrupted; run the same command again to continue/);
   assert.ok(!lines("gh-calls.jsonl").some((call) => call[1] === "edit"), "a label was set");
+});
+
+// --- work from the phase's tracking issue (issue #420) --------------------------------
+
+const list = (nodes) => ({ totalCount: nodes.length, nodes });
+const names = (...labels) => list(labels.map((name) => ({ name })));
+const paged = (nodes) => ({ ...list(nodes), pageInfo: { hasNextPage: false, endCursor: null } });
+const subIssue = (number, state, labels, blockedBy = []) => ({
+  number,
+  title: `Issue ${number}`,
+  state,
+  labels: names(...labels),
+  subIssues: { totalCount: 0 },
+  blockedBy: list(blockedBy),
+});
+const openIssues = (...issues) => ({
+  repository: {
+    issues: paged(issues.map((issue) => ({ labels: names(), blockedBy: list([]), ...issue }))),
+  },
+});
+// No issue carries a `phase:` label and none has a `## Blocked by` section.
+const TRACKED = {
+  OpenIssues: openIssues({ number: 414, title: "Phase 07", body: `Plan: .plan/${PHASE}` }),
+  TrackingIssue: {
+    repository: {
+      issue: {
+        number: 414,
+        title: "Phase 07",
+        state: "OPEN",
+        body: `Plan: .plan/${PHASE}`,
+        blockedBy: list([]),
+        subIssues: paged([
+          subIssue(302, "CLOSED", ["ready-for-agent", "afk"]),
+          subIssue(216, "OPEN", ["ready-for-agent", "hitl"]),
+          subIssue(
+            217,
+            "OPEN",
+            ["ready-for-agent", "afk"],
+            [{ number: 216, state: "OPEN", title: "Issue 216" }],
+          ),
+        ]),
+      },
+    },
+  },
+};
+
+test("the loop runs a phase from its tracking issue: progress, the orchestrator's instruction and the end", () => {
+  const { lines, loop, github } = fixture("tracked");
+  github(TRACKED);
+  const run = loop("report");
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /starting the orchestrator for 07-ai-service \(1\/3 issues closed\)/);
+  const [{ prompt }] = lines("claude-prompts.jsonl");
+  assert.match(prompt, /node harness\/phase-work\.mjs next 07-ai-service/);
+  assert.doesNotMatch(prompt, /phase:07-ai-service|labelled `phase:/);
+  // The end names what is left, from the same selection.
+  assert.match(run.stdout, /phase stopped: no workable issue left/);
+  assert.match(run.stdout, /blocked: #217 \(by #216\)/);
+  assert.match(run.stdout, /HITL: #216/);
+  // Nothing asks GitHub for a phase label.
+  for (const call of lines("gh-calls.jsonl")) {
+    assert.ok(!call.some((arg) => arg.startsWith("phase:")), `label query: ${call.join(" ")}`);
+  }
+});
+
+test("a folder no tracking issue names stops the loop before an orchestrator is started", () => {
+  const { lines, loop, github } = fixture("untracked");
+  github({
+    OpenIssues: openIssues({ number: 418, title: "Phase 08", body: "Plan: .plan/08-mcp-public" }),
+  });
+  const run = loop("report");
+  assert.equal(run.status, 1, run.stdout + run.stderr);
+  assert.match(run.stdout, /no open tracking issue/i);
+  assert.match(run.stdout, /Plan: \.plan\/07-ai-service/);
+  assert.deepEqual(lines("claude-calls.jsonl"), [], "no orchestrator was started");
+});
+
+test("GitHub's issues being unreadable does not stop the loop by itself", () => {
+  const { lines, loop } = fixture("unreadable");
+  const run = loop("report");
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.equal(lines("claude-calls.jsonl").length, 1);
+  assert.match(run.stdout, /could not read the phase's issues/);
 });
