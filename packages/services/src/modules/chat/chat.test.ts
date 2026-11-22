@@ -705,6 +705,212 @@ describe("visitor chat service", () => {
       expect(after.caller.conversationId).not.toBe(opened.caller.conversationId);
     });
   });
+  describe("the conversation lifecycle", () => {
+    const token = () => `fictional-token-${randomUUID()}`;
+    const retrySubmission = (retryId = randomUUID()) => ({ retryId, challengeToken: token() });
+    const context = () => ({ clientAddress: nextAddress() });
+
+    /** A claimed attempt that ended with a retryable timeout. */
+    const timedOut = async (caller: ChatCaller, question?: string) => {
+      const dispatch = await admitted(caller, question);
+      await chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+      await chat.reconcile(dispatch.operationId, {
+        ...answerFor(dispatch.grant, ""),
+        outcome: "limit_reached",
+        reason: "deadline",
+        blocks: [],
+        sources: [],
+      });
+      now = new Date(now.getTime() + 1000);
+      return dispatch;
+    };
+
+    describe("retry", () => {
+      it("asks the same question again as a new attempt of the same request", async () => {
+        const caller = await newCaller();
+        const failed = await timedOut(caller, "What is the newest project?");
+        const original = await chat.operation(caller, failed.operationId);
+        const calls = verifier.calls;
+
+        const result = await chat.retry(caller, failed.operationId, retrySubmission(), context());
+
+        expect(result.status).toBe("admitted");
+        if (result.status !== "admitted") return;
+        expect(verifier.calls).toBe(calls + 1);
+        expect(result.operation.requestId).toBe(original?.requestId);
+        expect(result.operation.operationId).not.toBe(failed.operationId);
+        expect(result.dispatch).toMatchObject({
+          operationId: result.operation.operationId,
+          question: "What is the newest project?",
+          history: [],
+        });
+        expect(result.dispatch.grant).not.toBe(failed.grant);
+        const conversation = await chat.conversation(caller, { limit: 20 });
+        expect(conversation.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+        expect(conversation.messages[1]).toMatchObject({
+          id: result.operation.assistantMessageId,
+          status: "pending",
+        });
+        expect(conversation.activeOperation).toEqual(result.operation);
+      });
+
+      it("recovers a repeated retry and an active or completed attempt without a challenge", async () => {
+        const caller = await newCaller();
+        const failed = await timedOut(caller);
+        const submission = retrySubmission();
+        const first = await chat.retry(caller, failed.operationId, submission, context());
+        if (first.status !== "admitted") throw new Error(first.status);
+        const calls = verifier.calls;
+
+        await expect(
+          chat.retry(
+            caller,
+            failed.operationId,
+            { ...submission, challengeToken: token() },
+            context(),
+          ),
+        ).resolves.toEqual({ status: "existing", operation: first.operation });
+        await expect(chat.retry(caller, randomUUID(), submission, context())).resolves.toEqual({
+          status: "conflict",
+        });
+        await expect(
+          chat.retry(caller, failed.operationId, retrySubmission(), context()),
+        ).resolves.toEqual({ status: "existing", operation: first.operation });
+        expect(verifier.calls).toBe(calls);
+      });
+
+      it("refuses a failed challenge, another identity's attempt and a non-retryable failure", async () => {
+        const caller = await newCaller();
+        const failed = await timedOut(caller);
+        verifier.answer = false;
+        await expect(
+          chat.retry(caller, failed.operationId, retrySubmission(), context()),
+        ).resolves.toEqual({ status: "challenge_failed" });
+        verifier.answer = true;
+        expect((await chat.conversation(caller, { limit: 20 })).activeOperation).toBeNull();
+
+        const stranger = await newCaller();
+        await expect(
+          chat.retry(stranger, failed.operationId, retrySubmission(), context()),
+        ).resolves.toEqual({ status: "not_found" });
+        await expect(
+          chat.retry(caller, "not-an-id", retrySubmission(), context()),
+        ).resolves.toEqual({ status: "not_found" });
+
+        const other = await newCaller();
+        const invalid = await admitted(other);
+        await chat.claim({ operationId: invalid.operationId, grant: invalid.grant });
+        await chat.reconcile(invalid.operationId, { ...answerFor(invalid.grant), blocks: [{}] });
+        await expect(
+          chat.retry(other, invalid.operationId, retrySubmission(), context()),
+        ).resolves.toEqual({ status: "not_retryable" });
+      });
+    });
+
+    describe("stop", () => {
+      it("cancels a running generation as a retryable cancellation and frees the identity", async () => {
+        const caller = await newCaller();
+        const dispatch = await admitted(caller);
+        await chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+
+        const stopped = await chat.stop(caller, dispatch.operationId);
+
+        expect(stopped).toMatchObject({
+          status: "stopped",
+          running: true,
+          operation: { operationId: dispatch.operationId, status: "cancelled" },
+        });
+        const observed = await chat.observe(caller, dispatch.operationId);
+        expect(observed?.terminal).toBe(true);
+        expect(observed?.assistant).toMatchObject({
+          status: "cancelled",
+          error: { code: "cancelled", retryable: true },
+          text: null,
+        });
+        expect(observed?.events.at(-1)).toMatchObject({
+          type: "error",
+          code: "cancelled",
+          retryable: true,
+        });
+        await expect(
+          chat.reconcile(dispatch.operationId, answerFor(dispatch.grant)),
+        ).resolves.toMatchObject({ status: "already" });
+        expect((await chat.observe(caller, dispatch.operationId))?.assistant.text).toBeNull();
+        await expect(chat.stop(caller, dispatch.operationId)).resolves.toMatchObject({
+          status: "finished",
+        });
+        now = new Date(now.getTime() + 1000);
+        await admitted(caller, "Again?");
+      });
+
+      it("cancels an unclaimed operation without a generation to stop and refuses its grant", async () => {
+        const caller = await newCaller();
+        const dispatch = await admitted(caller);
+        await expect(chat.stop(caller, dispatch.operationId)).resolves.toMatchObject({
+          status: "stopped",
+          running: false,
+        });
+        await expect(
+          chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant }),
+        ).resolves.toEqual({ status: "refused" });
+      });
+
+      it("never stops another identity's operation or an unknown one", async () => {
+        const dispatch = await admitted(await newCaller());
+        const stranger = await newCaller();
+        await expect(chat.stop(stranger, dispatch.operationId)).resolves.toBeNull();
+        await expect(chat.stop(stranger, "not-an-id")).resolves.toBeNull();
+        await expect(chat.stop(stranger, randomUUID())).resolves.toBeNull();
+      });
+    });
+
+    describe("clear", () => {
+      it("cancels active work, deletes the messages and opens a fresh conversation", async () => {
+        const opened = await chat.open(null);
+        const caller = opened.caller;
+        await answer(await admitted(caller));
+        now = new Date(now.getTime() + 1000);
+        const active = await admitted(caller, "Another question?");
+        await chat.claim({ operationId: active.operationId, grant: active.grant });
+
+        const result = await chat.clear(caller, { conversationId: caller.conversationId });
+
+        expect(result.cancelled).toEqual([active.operationId]);
+        expect(result.cleared).toMatchObject({
+          cleared: true,
+          telemetryDeletion: "none",
+          conversation: {
+            messages: [],
+            nextCursor: null,
+            activeOperation: null,
+            retentionDays: 730,
+          },
+        });
+        expect(result.cleared.conversation.conversationId).not.toBe(caller.conversationId);
+        const again = await chat.open(opened.cookie);
+        expect(again.caller).toEqual({
+          identityId: caller.identityId,
+          conversationId: result.cleared.conversation.conversationId,
+        });
+        await expect(chat.observe(again.caller, active.operationId)).resolves.toBeNull();
+        await expect(chat.reconcile(active.operationId, answerFor(active.grant))).resolves.toEqual({
+          status: "deleted",
+        });
+        expect((await chat.conversation(again.caller, { limit: 20 })).messages).toEqual([]);
+      });
+
+      it("clears nothing when the conversation id is not the caller's", async () => {
+        const caller = await newCaller();
+        await answer(await admitted(caller));
+        const result = await chat.clear(caller, { conversationId: randomUUID() });
+        expect(result.cancelled).toEqual([]);
+        expect(result.cleared.cleared).toBe(false);
+        expect(result.cleared.telemetryDeletion).toBe("none");
+        expect(result.cleared.conversation.conversationId).toBe(caller.conversationId);
+        expect(result.cleared.conversation.messages).toHaveLength(2);
+      });
+    });
+  });
 });
 
 describe("chat policy", () => {

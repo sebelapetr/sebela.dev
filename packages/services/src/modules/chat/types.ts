@@ -1,12 +1,15 @@
 import type {
   ChatAssistantMessage,
   ChatConversation,
+  ChatConversationClear,
+  ChatConversationCleared,
   ChatConversationQuery,
   ChatGrantClaim,
   ChatGrantClaimed,
   ChatMessageSubmission,
   ChatOperation,
   ChatProgressStage,
+  ChatRetrySubmission,
   ChatSourceKind,
   ChatStreamEvent,
 } from "@sebela/contracts";
@@ -85,6 +88,25 @@ export type ChatSubmitResult =
   | { status: "quota_exceeded"; retryAt: Date }
   | { status: "budget_exhausted" };
 
+/** A retry is a submission keyed by its own id, of an attempt that must exist and have failed. */
+export type ChatRetryOutcome =
+  | ChatSubmitResult
+  | { status: "not_found" }
+  /** Not a retryable failure of the conversation's latest question. */
+  | { status: "not_retryable" };
+
+export type ChatStopOutcome =
+  /** `running` tells whether a generation claimed the grant and must be told to stop. */
+  | { status: "stopped"; operation: ChatOperation; running: boolean }
+  /** It had already ended; returned unchanged. */
+  | { status: "finished"; operation: ChatOperation };
+
+export interface ChatClearOutcome {
+  readonly cleared: ChatConversationCleared;
+  /** The operations that were active and are cancelled; the AI service is told to stop them. */
+  readonly cancelled: readonly string[];
+}
+
 export interface ChatObservation {
   readonly operation: ChatOperation;
   readonly assistant: ChatAssistantMessage;
@@ -102,6 +124,8 @@ export type ChatClaimOutcome =
 
 export type ChatReconcileOutcome =
   | { status: "reconciled" | "already"; operation: ChatOperation }
+  /** Its conversation was cleared; nothing was stored but the measured cost. */
+  | { status: "deleted" }
   | { status: "not_claimed" }
   | { status: "wrong_grant" }
   | { status: "invalid" };
@@ -115,6 +139,24 @@ export interface ChatService {
     submission: ChatMessageSubmission,
     context: { clientAddress: string | null },
   ): Promise<ChatSubmitResult>;
+  /**
+   * Retries a failed attempt as a new attempt of the same request: a used `retryId` and an
+   * active or completed attempt are recovered before the challenge; then the same gates as a
+   * submission apply.
+   */
+  retry(
+    caller: ChatCaller,
+    operationId: string,
+    submission: ChatRetrySubmission,
+    context: { clientAddress: string | null },
+  ): Promise<ChatRetryOutcome>;
+  /** Stops the caller's active operation; `null` for another identity's or an unknown one. */
+  stop(caller: ChatCaller, operationId: string): Promise<ChatStopOutcome | null>;
+  /**
+   * Clears the caller's conversation when `conversationId` names it: cancels active work, deletes
+   * the messages and starts a fresh conversation; quotas and spend stay. Another id clears nothing.
+   */
+  clear(caller: ChatCaller, request: ChatConversationClear): Promise<ChatClearOutcome>;
   operation(caller: ChatCaller, operationId: string): Promise<ChatOperation | null>;
   observe(caller: ChatCaller, operationId: string): Promise<ChatObservation | null>;
   claim(claim: ChatGrantClaim): Promise<ChatClaimOutcome>;

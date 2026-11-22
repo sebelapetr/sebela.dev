@@ -392,6 +392,10 @@ export function createChatService(
       }
     },
 
+    retry: notYet,
+    stop: notYet,
+    clear: notYet,
+
     async operation(caller, operationId) {
       if (!uuidPattern.test(operationId)) return null;
       const found = await persistence.findOperation(caller.identityId, operationId);
@@ -475,6 +479,10 @@ export function createChatService(
   };
 }
 
+const notYet = (): never => {
+  throw new Error("Not implemented yet.");
+};
+
 const chatOff = (): never => {
   throw new Error("Visitor chat is not configured.");
 };
@@ -485,6 +493,9 @@ export const unconfiguredChat: ChatService = {
   open: chatOff,
   conversation: chatOff,
   submit: chatOff,
+  retry: chatOff,
+  stop: chatOff,
+  clear: chatOff,
   operation: chatOff,
   observe: chatOff,
   claim: chatOff,

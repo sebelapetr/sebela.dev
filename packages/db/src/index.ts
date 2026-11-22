@@ -38,6 +38,8 @@ export type {
   ChatAdmissionInput,
   ChatAdmissionResult,
   ChatClaimResult,
+  ChatClearInput,
+  ChatClearResult,
   ChatConversationRecord,
   ChatExchangeRecord,
   ChatIdentityRecord,
@@ -49,9 +51,14 @@ export type {
   ChatQuotaRule,
   ChatReconcileResult,
   ChatResultRecord,
+  ChatRetryInput,
+  ChatRetryResult,
   ChatSpendKind,
   ChatSpendWindow,
+  ChatStopResult,
   ChatStoredError,
+  ChatTelemetryDeletion,
+  ChatTelemetryReferenceInput,
 } from "./modules/chat/index.js";
 export type { MaintenancePersistence } from "./modules/maintenance/index.js";
 export type {

@@ -13,6 +13,7 @@ export type {
   ChallengeVerifier,
   ChatCaller,
   ChatClaimOutcome,
+  ChatClearOutcome,
   ChatConfig,
   ChatDispatch,
   ChatHistoryExchange,
@@ -20,7 +21,9 @@ export type {
   ChatOpened,
   ChatOptions,
   ChatReconcileOutcome,
+  ChatRetryOutcome,
   ChatService,
   ChatServiceOptions,
+  ChatStopOutcome,
   ChatSubmitResult,
 } from "./types.js";

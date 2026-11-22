@@ -35,6 +35,8 @@ export const chatCookieName = "sebela_chat";
 /** Hands an admitted question to the AI service; never waits for the generation. */
 export interface ChatDispatcher {
   dispatch(dispatch: ChatDispatch): void;
+  /** Tells the AI service to stop a claimed generation; never waits and never fails the caller. */
+  cancel(operationId: string): void;
 }
 
 export interface ChatRouteOptions {
@@ -427,6 +429,8 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
         throw new ApiError(403, "forbidden", "The grant is not the operation's.");
       case "not_claimed":
         throw new ApiError(409, "conflict", "The operation's grant has not been claimed.");
+      case "deleted":
+        throw new ApiError(409, "conflict", "The operation's conversation was cleared.");
       case "invalid":
         throw new ApiError(400, "validation_failed", "The result names no grant.");
     }

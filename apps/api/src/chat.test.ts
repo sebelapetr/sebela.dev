@@ -52,6 +52,8 @@ const CLAIM = "/v1/internal/chat/grants/claim";
 const operationPath = (id: string) => `/v1/chat/operations/${id}`;
 const eventsPath = (id: string) => `/v1/chat/operations/${id}/events`;
 const resultPath = (id: string) => `/v1/internal/chat/operations/${id}/result`;
+const stopPath = (id: string) => `/v1/chat/operations/${id}/stop`;
+const retryPath = (id: string) => `/v1/chat/operations/${id}/retry`;
 
 const answerFor = (grant: string, text = "A fictional answer."): ChatGenerationResult => ({
   grant,
@@ -103,12 +105,19 @@ function fakeVerifier(): ChallengeVerifier & {
   return verifier;
 }
 
-/** A dispatcher that only records what it was handed. */
-function capturingDispatcher(): ChatDispatcher & { dispatched: ChatDispatch[] } {
+/** A dispatcher that only records what it was handed and what it was told to stop. */
+function capturingDispatcher(): ChatDispatcher & {
+  dispatched: ChatDispatch[];
+  cancelled: string[];
+} {
   const dispatcher = {
     dispatched: [] as ChatDispatch[],
+    cancelled: [] as string[],
     dispatch: (dispatch: ChatDispatch) => {
       dispatcher.dispatched.push(dispatch);
+    },
+    cancel: (operationId: string) => {
+      dispatcher.cancelled.push(operationId);
     },
   };
   return dispatcher;
@@ -894,6 +903,375 @@ describe("the visitor chat over HTTP", () => {
     });
   });
 
+  describe("the conversation lifecycle", () => {
+    const stop = (cookie: string, operationId: string, headers: Record<string, string> = {}) =>
+      request(stopPath(operationId), {
+        method: "POST",
+        headers: { cookie, origin: ORIGIN, ...headers },
+      });
+    const retry = (cookie: string, operationId: string, retryId: string = randomUUID()) =>
+      request(retryPath(operationId), {
+        method: "POST",
+        ...json(
+          { retryId, challengeToken: `fictional-token-${randomUUID()}` },
+          { cookie, origin: ORIGIN },
+        ),
+      });
+    const clear = (cookie: string, conversationId: string, headers: Record<string, string> = {}) =>
+      request(CONVERSATION, {
+        method: "DELETE",
+        ...json({ conversationId }, { cookie, origin: ORIGIN, ...headers }),
+      });
+
+    /** Asks, claims and ends the attempt with a retryable timeout, as the AI service reports it. */
+    async function timedOut(cookie: string, question = "What do you build?") {
+      const asked = (await (await ask(cookie, question)).json()) as { operationId: string };
+      const dispatch = lastDispatch();
+      await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant });
+      await control(resultPath(dispatch.operationId), {
+        ...answerFor(dispatch.grant, ""),
+        outcome: "limit_reached",
+        reason: "deadline",
+        blocks: [],
+        sources: [],
+      });
+      clock = new Date(clock.getTime() + 1000);
+      return asked.operationId;
+    }
+
+    it("shares one conversation and one active operation between two tabs (C02)", async () => {
+      verifier.delayMs = 30;
+      const { cookie, conversationId } = await visitor();
+      const requestId = randomUUID();
+      const body = { requestId, question: "Two tabs?", challengeToken: "fictional-token-tabs" };
+      const submit = () =>
+        request(MESSAGES, { method: "POST", ...json(body, { cookie, origin: ORIGIN }) });
+
+      const [first, second] = await Promise.all([submit(), submit()]);
+      const ids = await Promise.all(
+        [first, second].map(
+          async (response) => ((await response.json()) as { operationId: string }).operationId,
+        ),
+      );
+      expect(ids[1]).toBe(ids[0]);
+      expect(dispatcher.dispatched).toHaveLength(1);
+      const operationId = ids[0] ?? "";
+
+      const hidden = await ask(cookie, "A second question from the other tab?");
+      expect(hidden.status).toBe(409);
+      expect(await hidden.json()).toEqual({ error: { code: "chat_busy", message: anyText } });
+      expect(dispatcher.dispatched).toHaveLength(1);
+
+      const tabs = await Promise.all(
+        [0, 1].map(
+          async () =>
+            (await (await request(CONVERSATION, { headers: { cookie } })).json()) as {
+              conversationId: string;
+              activeOperation: { operationId: string } | null;
+            },
+        ),
+      );
+      for (const tab of tabs) {
+        expect(tab).toMatchObject({ conversationId, activeOperation: { operationId } });
+      }
+
+      const streams = await Promise.all(
+        [0, 1].map(async () => request(eventsPath(operationId), { headers: { cookie } })),
+      );
+      await Promise.all(streams.map((stream) => readFrames(stream, (f) => f.event === "chat")));
+      const dispatch = lastDispatch();
+      await control(CLAIM, { operationId, grant: dispatch.grant });
+      await control(resultPath(operationId), answerFor(dispatch.grant));
+      const rests = await Promise.all(streams.map((stream) => readFrames(stream, terminal)));
+      const [a, b] = rests.map((rest) =>
+        rest.frames
+          .filter((frame) => frame.event === "chat")
+          .map((frame) => [frame.id, frame.data]),
+      );
+      expect(a).toEqual(b);
+      expect(a?.at(-1)?.[1]).toMatchObject({ type: "complete", outcome: "answered" });
+
+      const stranger = await visitor();
+      for (const path of [operationPath(operationId), eventsPath(operationId)]) {
+        expect((await request(path, { headers: { cookie: stranger.cookie } })).status).toBe(404);
+      }
+      const foreign = (await (
+        await request(CONVERSATION, { headers: { cookie: stranger.cookie } })
+      ).json()) as { messages: unknown[] };
+      expect(foreign.messages).toEqual([]);
+    });
+
+    it("stops the active operation from either tab, without a challenge, and tells the AI service", async () => {
+      const { cookie } = await visitor();
+      const asked = (await (await ask(cookie)).json()) as { operationId: string };
+      const dispatch = lastDispatch();
+      await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant });
+      const watching = await request(eventsPath(asked.operationId), { headers: { cookie } });
+      await readFrames(watching, (frame) => frame.event === "chat");
+      const challenged = verifier.tokens.length;
+
+      const stopped = await stop(cookie, asked.operationId);
+
+      expect(stopped.status).toBe(200);
+      expect(stopped.headers.get("cache-control")).toBe("no-store");
+      expect(await stopped.json()).toMatchObject({
+        operationId: asked.operationId,
+        status: "cancelled",
+      });
+      expect(dispatcher.cancelled).toEqual([asked.operationId]);
+      expect(verifier.tokens).toHaveLength(challenged);
+      const rest = await readFrames(watching, terminal);
+      expect(rest.frames.at(-1)?.data).toMatchObject({
+        type: "error",
+        code: "cancelled",
+        retryable: true,
+      });
+
+      const late = await control(resultPath(dispatch.operationId), answerFor(dispatch.grant));
+      expect(late.status).toBe(200);
+      expect(await late.json()).toMatchObject({ status: "cancelled" });
+      const conversation = (await (
+        await request(CONVERSATION, { headers: { cookie } })
+      ).json()) as { messages: { role: string; text: string | null; status: string }[] };
+      expect(conversation.messages.at(-1)).toMatchObject({ status: "cancelled", text: null });
+
+      const again = await stop(cookie, asked.operationId);
+      expect(again.status).toBe(200);
+      expect(await again.json()).toMatchObject({ status: "cancelled" });
+      expect(dispatcher.cancelled).toHaveLength(1);
+      expect((await ask(cookie, "And now?")).status).toBe(202);
+    });
+
+    it("does not tell the AI service to stop a generation that never claimed its grant", async () => {
+      const { cookie } = await visitor();
+      const asked = (await (await ask(cookie)).json()) as { operationId: string };
+      expect((await stop(cookie, asked.operationId)).status).toBe(200);
+      expect(dispatcher.cancelled).toEqual([]);
+      const dispatch = lastDispatch();
+      expect(
+        (await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant })).status,
+      ).toBe(409);
+    });
+
+    it("retries a retryable failure as a new attempt of the same question", async () => {
+      const { cookie } = await visitor();
+      const failed = await timedOut(cookie, "Retry me?");
+      const retryId = randomUUID();
+
+      const retried = await retry(cookie, failed, retryId);
+
+      expect(retried.status).toBe(202);
+      const operation = (await retried.json()) as { operationId: string; status: string };
+      expect(operation.operationId).not.toBe(failed);
+      expect(operation.status).toBe("accepted");
+      expect(dispatcher.dispatched).toHaveLength(2);
+      expect(lastDispatch()).toMatchObject({
+        operationId: operation.operationId,
+        question: "Retry me?",
+      });
+      const repeated = await retry(cookie, failed, retryId);
+      expect(repeated.status).toBe(200);
+      expect(await repeated.json()).toMatchObject({ operationId: operation.operationId });
+      expect(dispatcher.dispatched).toHaveLength(2);
+
+      const conversation = (await (
+        await request(CONVERSATION, { headers: { cookie } })
+      ).json()) as { messages: { role: string; status: string }[] };
+      expect(conversation.messages.map((message) => [message.role, message.status])).toEqual([
+        ["user", "completed"],
+        ["assistant", "pending"],
+      ]);
+    });
+
+    it("refuses a retry of another visitor's, an answered or an unknown operation", async () => {
+      const owner = await visitor();
+      const failed = await timedOut(owner.cookie);
+      const stranger = await visitor();
+      for (const [cookie, id] of [
+        [stranger.cookie, failed],
+        [owner.cookie, randomUUID()],
+      ] as const) {
+        const refused = await retry(cookie, id);
+        expect(refused.status).toBe(404);
+        expect(await refused.json()).toEqual({ error: { code: "not_found", message: anyText } });
+      }
+
+      const answered = await visitor();
+      const asked = (await (await ask(answered.cookie)).json()) as { operationId: string };
+      await settleLast();
+      const recovered = await retry(answered.cookie, asked.operationId);
+      expect(recovered.status).toBe(200);
+      expect(await recovered.json()).toMatchObject({
+        operationId: asked.operationId,
+        status: "completed",
+      });
+
+      const other = await visitor();
+      await ask(other.cookie);
+      const dispatch = lastDispatch();
+      await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant });
+      await control(resultPath(dispatch.operationId), {
+        ...answerFor(dispatch.grant),
+        blocks: [{}],
+      });
+      const notRetryable = await retry(other.cookie, dispatch.operationId);
+      expect(notRetryable.status).toBe(409);
+      expect(await notRetryable.json()).toEqual({
+        error: { code: "chat_not_retryable", message: anyText },
+      });
+      expect((await retry(other.cookie, "not-an-id")).status).toBe(400);
+    });
+
+    it("clears the conversation after a confirmation, cancels active work and keeps the quota", async () => {
+      const { cookie, conversationId } = await visitor();
+      await ask(cookie);
+      await settleLast();
+      clock = new Date(clock.getTime() + 1000);
+      await ask(cookie, "Still running?");
+      const active = lastDispatch();
+      await control(CLAIM, { operationId: active.operationId, grant: active.grant });
+      const challenged = verifier.tokens.length;
+
+      const unconfirmed = await clear(cookie, randomUUID());
+      expect(unconfirmed.status).toBe(200);
+      expect(await unconfirmed.json()).toMatchObject({
+        cleared: false,
+        telemetryDeletion: "none",
+        conversation: { conversationId, activeOperation: { operationId: active.operationId } },
+      });
+      expect(dispatcher.cancelled).toEqual([]);
+
+      const cleared = await clear(cookie, conversationId);
+
+      expect(cleared.status).toBe(200);
+      expect(cleared.headers.get("cache-control")).toBe("no-store");
+      const body = (await cleared.json()) as {
+        cleared: boolean;
+        telemetryDeletion: string;
+        conversation: { conversationId: string; messages: unknown[]; activeOperation: unknown };
+      };
+      expect(body).toMatchObject({
+        cleared: true,
+        telemetryDeletion: "none",
+        conversation: { messages: [], activeOperation: null },
+      });
+      expect(body.conversation.conversationId).not.toBe(conversationId);
+      expect(dispatcher.cancelled).toEqual([active.operationId]);
+      expect(verifier.tokens).toHaveLength(challenged);
+      const late = await control(resultPath(active.operationId), answerFor(active.grant));
+      expect(late.status).toBe(409);
+      expect(
+        (await request(operationPath(active.operationId), { headers: { cookie } })).status,
+      ).toBe(404);
+      const after = (await (await request(CONVERSATION, { headers: { cookie } })).json()) as {
+        conversationId: string;
+        messages: unknown[];
+      };
+      expect(after).toMatchObject({
+        conversationId: body.conversation.conversationId,
+        messages: [],
+      });
+
+      for (let index = 0; index < 3; index += 1) {
+        clock = new Date(clock.getTime() + 1000);
+        expect((await ask(cookie, `Question ${String(index)}?`)).status).toBe(202);
+        await settleLast();
+      }
+      clock = new Date(clock.getTime() + 1000);
+      expect((await ask(cookie, "One too many?")).status).toBe(429);
+    });
+
+    it("refuses a clear, Stop and retry without the website's origin, before any state change", async () => {
+      const { cookie, conversationId } = await visitor();
+      const asked = (await (await ask(cookie)).json()) as { operationId: string };
+      for (const response of [
+        await request(CONVERSATION, {
+          method: "DELETE",
+          ...json({ conversationId }, { cookie }),
+        }),
+        await request(CONVERSATION, {
+          method: "DELETE",
+          ...json({ conversationId }, { cookie, origin: "https://elsewhere.example.test" }),
+        }),
+        await request(stopPath(asked.operationId), { method: "POST", headers: { cookie } }),
+        await request(retryPath(asked.operationId), {
+          method: "POST",
+          ...json({ retryId: randomUUID(), challengeToken: "fictional-token" }, { cookie }),
+        }),
+      ]) {
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: { code: "forbidden", message: anyText } });
+      }
+      const operation = (await (
+        await request(operationPath(asked.operationId), { headers: { cookie } })
+      ).json()) as { status: string };
+      expect(operation.status).toBe("accepted");
+      expect(dispatcher.cancelled).toEqual([]);
+    });
+
+    it("never stops or clears another visitor's work, whatever the URL names", async () => {
+      const owner = await visitor();
+      const asked = (await (await ask(owner.cookie)).json()) as { operationId: string };
+      const stranger = await visitor();
+
+      const stopped = await stop(stranger.cookie, asked.operationId);
+      expect(stopped.status).toBe(404);
+      const cleared = await clear(stranger.cookie, owner.conversationId);
+      expect(cleared.status).toBe(200);
+      expect(await cleared.json()).toMatchObject({
+        cleared: false,
+        conversation: { conversationId: stranger.conversationId },
+      });
+      expect(dispatcher.cancelled).toEqual([]);
+      expect(
+        await (
+          await request(operationPath(asked.operationId), { headers: { cookie: owner.cookie } })
+        ).json(),
+      ).toMatchObject({ status: "accepted" });
+    });
+
+    it("keeps the visitor routes from service tokens and the control routes from the relay", async () => {
+      const { cookie, conversationId } = await visitor();
+      const asked = (await (await ask(cookie)).json()) as { operationId: string };
+      const dispatch = lastDispatch();
+      for (const token of [CONTROL_TOKEN, AI_TOKEN, contentKey]) {
+        for (const response of [
+          await request(
+            stopPath(asked.operationId),
+            { method: "POST", headers: { cookie, origin: ORIGIN, ...bearer(token) } },
+            api,
+            CLIENT,
+            null,
+          ),
+          await request(
+            CONVERSATION,
+            {
+              method: "DELETE",
+              ...json({ conversationId }, { cookie, origin: ORIGIN, ...bearer(token) }),
+            },
+            api,
+            CLIENT,
+            null,
+          ),
+        ]) {
+          expect(response.status).toBe(403);
+        }
+      }
+      for (const [path, body] of [
+        [CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant }],
+        [resultPath(dispatch.operationId), answerFor(dispatch.grant)],
+      ] as const) {
+        const relayedOnly = await request(path, { method: "POST", ...json(body, { cookie }) });
+        expect(relayedOnly.status).toBe(401);
+        expect((await control(path, body, RELAY_TOKEN)).status).toBe(401);
+      }
+      expect(dispatcher.cancelled).toEqual([]);
+      expect(
+        await (await request(operationPath(asked.operationId), { headers: { cookie } })).json(),
+      ).toMatchObject({ status: "accepted" });
+    });
+  });
+
   describe("without chat settings", () => {
     it("answers unavailable on every visitor route, and refuses the control routes", async () => {
       const off = backend.api();
@@ -1070,6 +1448,59 @@ describe("the chat supervisor", () => {
       expect(logged).not.toContain(AI_TOKEN);
       expect(logged).not.toContain(dispatch.question);
     }
+  });
+
+  it("tells the AI service to stop a generation, and only logs a failure without secrets", async () => {
+    const operationId = randomUUID();
+    for (const answer of [
+      () => Promise.resolve(Response.json({ cancelled: true }, { status: 202 })),
+      () => Promise.resolve(new Response(null, { status: 404 })),
+      () => Promise.reject(new TypeError("fetch failed")),
+    ]) {
+      const chat = fakeChat();
+      const lines: string[] = [];
+      const fake = fakeFetch(answer);
+      const supervisor = createChatSupervisor({
+        chat,
+        aiService: { url: AI_SERVICE, token: AI_TOKEN },
+        log: (line) => lines.push(line),
+        fetch: fake.fetch,
+      });
+
+      supervisor.cancel(operationId);
+      await supervisor.close();
+
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0]?.url).toBe(
+        `${AI_SERVICE}/internal/v1/generations/${operationId}/cancel`,
+      );
+      expect(fake.calls[0]?.init?.method).toBe("POST");
+      expect(new Headers(fake.calls[0]?.init?.headers).get("authorization")).toBe(
+        `Bearer ${AI_TOKEN}`,
+      );
+      expect(chat.refused).toEqual([]);
+      expect(lines.join("\n")).not.toContain(AI_TOKEN);
+    }
+  });
+
+  it("recovers stale operations from their durable deadlines at once on start, never redispatching", async () => {
+    const chat = fakeChat();
+    const fake = fakeFetch(() => Promise.resolve(new Response(null, { status: 202 })));
+    const supervisor = createChatSupervisor({
+      chat,
+      aiService: { url: AI_SERVICE, token: AI_TOKEN },
+      log: () => undefined,
+      graceMs: 2_500,
+      watchIntervalMs: 60_000,
+      fetch: fake.fetch,
+    });
+
+    supervisor.start();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await supervisor.close();
+
+    expect(chat.overdue).toEqual([2_500]);
+    expect(fake.calls).toEqual([]);
   });
 
   it("interrupts overdue operations on its watch until it is closed", async () => {

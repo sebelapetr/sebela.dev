@@ -20,9 +20,10 @@ import {
 /** The UTC window a spend reservation counts in. */
 export type ChatSpendKind = "day" | "month";
 
-export type ChatOperationState = "accepted" | "running" | "completed" | "failed" | "interrupted";
+export type ChatOperationState =
+  "accepted" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
 
-export type ChatMessageState = "pending" | "completed" | "failed" | "interrupted";
+export type ChatMessageState = "pending" | "completed" | "failed" | "interrupted" | "cancelled";
 
 /** An identity's single conversation. */
 export interface ChatConversationRecord {
@@ -69,6 +70,8 @@ export interface ChatOperationRecord {
   pricingVersion: string;
   allowanceMicroUsd: number;
   contextRevision: number;
+  /** The attempt this one retries, or `null` for the first attempt of its request. */
+  retryOf: string | null;
 }
 
 /** One quota: at most `limit` admissions of the scope since `since`. */
@@ -192,8 +195,78 @@ export interface ChatResultRecord {
 export type ChatReconcileResult =
   | { status: "reconciled"; operation: ChatOperationRecord }
   | { status: "already"; operation: ChatOperationRecord }
+  /** The operation's conversation was cleared; at most its measured cost was settled. */
+  | { status: "deleted" }
   | { status: "not_claimed" }
   | { status: "wrong_grant" };
+
+/**
+ * An explicit retry of one failed attempt: the same gates as an admission, keyed by its own
+ * `retryId`, for the attempt `operationId` of the identity's conversation.
+ */
+export type ChatRetryInput = Omit<ChatAdmissionInput, "requestId" | "question" | "questionHash"> & {
+  operationId: string;
+  retryId: string;
+};
+
+export type ChatRetryResult =
+  /** The new attempt and the question it asks again. */
+  | { status: "admitted"; operation: ChatOperationRecord; question: string }
+  /** `retryId` was already used; `sameTarget` tells a recovery from a conflict. */
+  | { status: "duplicate"; operation: ChatOperationRecord; sameTarget: boolean }
+  /** The request's latest attempt is active or completed: recovered, never generated again. */
+  | { status: "recovered"; operation: ChatOperationRecord }
+  | { status: "not_found" }
+  /** Not a retryable failure of the conversation's latest question. */
+  | { status: "not_retryable" }
+  | { status: "busy"; operation: ChatOperationRecord }
+  | { status: "challenge_reused" }
+  | { status: "quota_exceeded"; scope: ChatQuotaRule["scope"]; retryAt: Date }
+  | { status: "budget_exhausted" };
+
+export type ChatStopResult =
+  /** `claimed` tells whether a generation may be running and so must be told to stop. */
+  | { status: "stopped"; operation: ChatOperationRecord; claimed: boolean }
+  /** It had already ended; returned as it is. */
+  | { status: "finished"; operation: ChatOperationRecord };
+
+export interface ChatClearInput {
+  identityId: string;
+  /** The conversation the visitor confirmed clearing; another one clears nothing. */
+  conversationId: string;
+  at: Date;
+  /** The error a cancelled active answer ends with. */
+  error: ChatStoredError;
+  /** How long a deleted operation's tombstone refuses and settles late results. */
+  tombstoneExpiresAt: Date;
+}
+
+export type ChatClearResult =
+  | {
+      status: "cleared";
+      /** The fresh empty conversation of the same identity. */
+      conversation: ChatConversationRecord;
+      /** The operations that were active and were cancelled. */
+      cancelled: string[];
+      /** How many telemetry references were handed over for remote deletion. */
+      telemetryPending: number;
+    }
+  | { status: "mismatch" };
+
+/** A telemetry trace recorded for a conversation, so deleting it can delete the export too. */
+export interface ChatTelemetryReferenceInput {
+  traceId: string;
+  conversationId: string;
+  operationId: string | null;
+  at: Date;
+}
+
+/** A remote telemetry deletion still to be done. */
+export interface ChatTelemetryDeletion {
+  traceId: string;
+  requestedAt: Date;
+  attempts: number;
+}
 
 /** A visitor's message error, as stored. */
 export interface ChatStoredError {
@@ -277,6 +350,50 @@ export interface ChatPersistence {
    * conversations it deleted.
    */
   deleteInactive(cutoff: Date, at: Date, limit: number): Promise<number>;
+  /** The identity's attempt with this request id or retry id; `null` when none. */
+  findOperationByAttempt(
+    identityId: string,
+    attemptKey: string,
+  ): Promise<ChatOperationRecord | null>;
+  /**
+   * Retries a failed attempt atomically, serialised per identity: recovers a used `retryId`, or
+   * the request's active or completed attempt; otherwise only a retryable failure of the latest
+   * question passes the admission gates. Then supersedes the failed answer with a pending one and
+   * creates the new `accepted` attempt of the same request. Any refusal changes nothing.
+   */
+  retry(input: ChatRetryInput): Promise<ChatRetryResult>;
+  /**
+   * Stops the identity's active operation: it and its answer end `cancelled`; a claimed one keeps
+   * its reservations as uncertain, an unclaimed one releases them. `null` for another identity's.
+   */
+  stop(
+    identityId: string,
+    operationId: string,
+    at: Date,
+    error: ChatStoredError,
+  ): Promise<ChatStopResult | null>;
+  /**
+   * Clears the identity's conversation atomically: cancels active work, tombstones operations that
+   * may still report, hands its telemetry references to pending deletion, deletes the
+   * conversation with its messages and starts a fresh one. Quotas, spend and redeemed challenge
+   * tokens stay.
+   */
+  clear(input: ChatClearInput): Promise<ChatClearResult>;
+  /**
+   * Records a telemetry trace of a conversation; one of a deleted conversation or operation goes
+   * straight to pending deletion.
+   */
+  recordTelemetryReference(
+    input: ChatTelemetryReferenceInput,
+  ): Promise<"recorded" | "deletion_pending">;
+  /** The oldest pending remote telemetry deletions, at most `limit`. */
+  pendingTelemetryDeletions(limit: number): Promise<ChatTelemetryDeletion[]>;
+  /** Records a remote deletion's outcome: `completed` ends it, `failed` keeps it pending. */
+  settleTelemetryDeletion(
+    traceId: string,
+    outcome: "completed" | "failed",
+    at: Date,
+  ): Promise<void>;
   /** The committed spend of one window in millionths of a US dollar; 0 when it has none. */
   committedSpend(kind: ChatSpendKind, startsOn: string): Promise<number>;
 }
@@ -310,6 +427,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     pricingVersion: row.pricingVersion,
     allowanceMicroUsd: row.allowanceMicroUsd,
     contextRevision: row.contextRevision,
+    retryOf: null,
   };
 }
 
@@ -413,6 +531,10 @@ async function endWithError(
     .set({ status, errorCode: error.code, errorRetryable: error.retryable })
     .where(eq(messages.id, row.assistantMessageId));
 }
+
+const notYet = (): never => {
+  throw new Error("Not implemented yet.");
+};
 
 export function createChatPersistence(db: Database): ChatPersistence {
   const conversationOf = async (identityId: string): Promise<ChatConversationRecord> => {
@@ -961,6 +1083,14 @@ export function createChatPersistence(db: Database): ChatPersistence {
         return deleted.length;
       });
     },
+
+    findOperationByAttempt: notYet,
+    retry: notYet,
+    stop: notYet,
+    clear: notYet,
+    recordTelemetryReference: notYet,
+    pendingTelemetryDeletions: notYet,
+    settleTelemetryDeletion: notYet,
 
     async committedSpend(kind, startsOn) {
       const [row] = await db

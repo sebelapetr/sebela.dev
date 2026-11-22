@@ -142,6 +142,9 @@ export function createChatSupervisor(options: ChatSupervisorOptions): ChatSuperv
     dispatch: (dispatch) => {
       track(send(dispatch));
     },
+    cancel: () => {
+      // Not implemented yet.
+    },
     start: () => {
       if (watcher !== null) return;
       watcher = setInterval(watch, watchIntervalMs);
