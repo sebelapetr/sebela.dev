@@ -72,9 +72,19 @@ from llm_agent.tools.content import (
     PublicServiceEvidence,
     PublicStep,
 )
-from llm_agent.tools.registry import profile_view
+from llm_agent.tools.registry import (
+    READ_CAPABILITIES,
+    InvalidToolArgumentsError,
+    ToolNotAvailableError,
+    ToolPage,
+    ToolRecord,
+    ToolResultTooLargeError,
+    profile_view,
+    read_tool,
+)
 
 __all__ = [
+    "READ_CAPABILITIES",
     "ApiContentReader",
     "Block",
     "ChatAgent",
@@ -93,6 +103,7 @@ __all__ = [
     "ExecutionRecord",
     "ExperienceCard",
     "ExplorationCard",
+    "InvalidToolArgumentsError",
     "Language",
     "ModelCall",
     "ModelFactory",
@@ -137,9 +148,14 @@ __all__ = [
     "Source",
     "Span",
     "TelemetrySink",
+    "ToolNotAvailableError",
+    "ToolPage",
+    "ToolRecord",
+    "ToolResultTooLargeError",
     "Usage",
     "Versions",
     "anthropic_model_factory",
     "profile_view",
+    "read_tool",
     "versions",
 ]

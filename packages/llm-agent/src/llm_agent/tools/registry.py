@@ -556,6 +556,17 @@ class Tools:
         self._tracer.finish(f"tool.{tool}", outcome.status, started)
         return outcome.status == "ok"
 
+    async def close(self) -> None:
+        """Cancels the reads still in flight; a stopped execution leaves no read running.
+
+        A read is shared between requests through a shielded task, so cancelling the waiting
+        graph does not cancel the read itself; the execution calls this once it ends.
+        """
+        pending = [task for task in self._reads.values() if not task.done()]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+
     # --- Reads ------------------------------------------------------------------------------------
 
     async def _fetch(self, tool: ToolName, slug: str | None) -> Any:
@@ -575,27 +586,7 @@ class Tools:
     def _read(
         self, tool: ToolName, slug: str | None
     ) -> tuple[tuple[str, ...], Callable[[], Awaitable[Any]]]:
-        content = self._content
-        if tool in ("get_profile", "get_contact"):
-            return ("person",), content.read_person
-        if tool == "get_project" and slug is not None:
-            return ("project", slug), lambda: content.read_project(slug)
-        if tool == "get_roadmap_area" and slug is not None:
-            return ("roadmap_area", slug), lambda: content.read_roadmap_area(slug)
-        reads: dict[str, Callable[[], Awaitable[Any]]] = {
-            "list_experiences": content.read_experiences,
-            "list_projects": content.read_projects,
-            "list_services": content.read_services,
-            "list_explorations": content.read_explorations,
-            "list_education": content.read_education,
-            "list_current_focus": content.read_current_focus,
-            "get_roadmap": content.read_roadmap,
-            "get_learning_diary": content.read_diary,
-            "get_learning_statistics": content.read_statistics,
-            "list_books": content.read_books,
-            "list_events": content.read_events,
-        }
-        return (tool,), reads[tool]
+        return _reader(self._content, tool, slug)
 
     async def _bounded(self, read: Callable[[], Awaitable[Any]]) -> Any:
         async with self._slots:
@@ -691,6 +682,31 @@ class Tools:
         return evidence
 
 
+def _reader(
+    content: ContentReader, tool: ToolName, slug: str | None
+) -> tuple[tuple[str, ...], Callable[[], Awaitable[Any]]]:
+    if tool in ("get_profile", "get_contact"):
+        return ("person",), content.read_person
+    if tool == "get_project" and slug is not None:
+        return ("project", slug), lambda: content.read_project(slug)
+    if tool == "get_roadmap_area" and slug is not None:
+        return ("roadmap_area", slug), lambda: content.read_roadmap_area(slug)
+    reads: dict[str, Callable[[], Awaitable[Any]]] = {
+        "list_experiences": content.read_experiences,
+        "list_projects": content.read_projects,
+        "list_services": content.read_services,
+        "list_explorations": content.read_explorations,
+        "list_education": content.read_education,
+        "list_current_focus": content.read_current_focus,
+        "get_roadmap": content.read_roadmap,
+        "get_learning_diary": content.read_diary,
+        "get_learning_statistics": content.read_statistics,
+        "list_books": content.read_books,
+        "list_events": content.read_events,
+    }
+    return (tool,), reads[tool]
+
+
 def _tool(name: str) -> ToolName | None:
     for tool in TOOLS:
         if tool == name:
@@ -743,3 +759,99 @@ def _block(item: Evidence) -> Block | None:
 
 def _error(code: str, message: str) -> str:
     return json.dumps({"error": code, "message": message})
+
+
+# --- Read capabilities ----------------------------------------------------------------------------
+
+#: The tools a read caller may use outside a chat execution: every read tool but the contact read,
+#: whose e-mail and links reach a visitor only as the chat's trusted contact card.
+READ_CAPABILITIES: Final[tuple[ToolName, ...]] = tuple(t for t in TOOLS if t != "get_contact")
+#: Records one capability page carries by default.
+PAGE_RECORDS: Final = 10
+#: Records one capability read may list across all its pages; a longer list is refused.
+MAX_LISTED_RECORDS: Final = 300
+#: Tokens one capability page may carry (`ExecutionLimits.tool_result_tokens`).
+PAGE_TOKENS: Final = 5000
+
+
+class ToolNotAvailableError(LookupError):
+    """The name is not one of the read capabilities; nothing was read."""
+
+
+class InvalidToolArgumentsError(ValueError):
+    """The arguments or the page are not ones the capability takes; nothing was read."""
+
+
+class ToolResultTooLargeError(Exception):
+    """The result exceeds the record or token bounds; it is refused, never truncated."""
+
+
+@dataclass(frozen=True)
+class ToolRecord:
+    """One projected record: its kind, its own identifier, title and canonical site path."""
+
+    kind: SourceKind
+    record_id: str
+    title: str
+    href: str
+    data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolPage:
+    capability: ToolName
+    records: tuple[ToolRecord, ...]
+    page: int
+    page_count: int
+
+
+async def read_tool(
+    content: ContentReader,
+    name: str,
+    arguments: Mapping[str, Any],
+    *,
+    page: int = 1,
+    page_records: int = PAGE_RECORDS,
+    page_tokens: int = PAGE_TOKENS,
+) -> ToolPage:
+    """One page of a read capability: the in-process tool's projection of the same read.
+
+    The name and arguments are validated before any read, with the tools' own rules; the records
+    are the projections `Tools` gives the model, in the same order. Raises `ToolNotAvailableError`,
+    `InvalidToolArgumentsError` (also for a page outside the result), `ToolResultTooLargeError`,
+    `ContentNotFoundError` or `ContentUnavailableError`.
+    """
+    tool = _tool(name)
+    if tool is None or tool not in READ_CAPABILITIES:
+        raise ToolNotAvailableError(name)
+    try:
+        slug = _arguments(tool, arguments)
+    except _Rejected as rejected:
+        raise InvalidToolArgumentsError(rejected.message) from None
+    if page < 1 or page_records < 1:
+        raise InvalidToolArgumentsError("The page must be a positive number.")
+    _, read = _reader(content, tool, slug)
+    value = await read()
+    if tool == "get_profile":
+        records = [
+            ToolRecord(
+                "profile", value.id, value.name, CANONICAL_HREF["profile"], profile_view(value)
+            )
+        ]
+    else:
+        projected = _records(tool, value)
+        if len({(record.kind, record.slug) for record in projected}) != len(projected):
+            raise ContentUnavailableError("the published data has duplicate records")
+        records = [
+            ToolRecord(record.kind, record.slug, record.title, record.href, record.data)
+            for record in projected
+        ]
+    if len(records) > MAX_LISTED_RECORDS:
+        raise ToolResultTooLargeError("the result has too many records")
+    page_count = max(1, -(-len(records) // page_records))
+    if page > page_count:
+        raise InvalidToolArgumentsError("There is no such page.")
+    selected = tuple(records[(page - 1) * page_records : page * page_records])
+    if json_tokens([record.data for record in selected]) > page_tokens:
+        raise ToolResultTooLargeError("the page is too large")
+    return ToolPage(tool, selected, page, page_count)
