@@ -190,9 +190,14 @@ class Stack:
     secrets: tuple[str, ...]
 
     def calls(self) -> list[dict[str, Any]]:
-        if not self.calls_file.exists():
-            return []
-        return [json.loads(line) for line in self.calls_file.read_text().splitlines() if line]
+        return read_calls(self.calls_file)
+
+
+def read_calls(calls_file: Path) -> list[dict[str, Any]]:
+    """The fictional model's calls, in order, from its test-only calls file."""
+    if not calls_file.exists():
+        return []
+    return [json.loads(line) for line in calls_file.read_text().splitlines() if line]
 
 
 def _api_env(port: str, chat: Mapping[str, str], scratch: Path, **extra: str) -> dict[str, str]:
@@ -240,76 +245,121 @@ def service_environment(
     return {**kept, **settings}
 
 
-@pytest.fixture(scope="module")
-def stack() -> Iterator[Stack]:
-    scratch = ROOT / ".tmp" / f"chat-stack-{secrets.token_hex(4)}"
-    scratch.mkdir(parents=True)
-    api_host = setting("API_HOST")
-    service_host = setting("AI_SERVICE_HOST")
-    service_port = free_port(service_host)
-    service_url = address(service_host, service_port)
-    token = secrets.token_urlsafe(32)
-    control_token = secrets.token_urlsafe(32)
-    calls_file = scratch / "calls.jsonl"
-    gate_file = scratch / "gate"
+@dataclass
+class _Pair:
+    """The settings one API and its AI service share: the service's address and both bearers."""
 
+    scratch: Path
+    service_host: str
+    service_port: int
+    token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+    control_token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+
+    @property
+    def service_url(self) -> str:
+        return address(self.service_host, self.service_port)
+
+    @property
+    def calls_file(self) -> Path:
+        return self.scratch / "calls.jsonl"
+
+    @property
+    def gate_file(self) -> Path:
+        return self.scratch / "gate"
+
+    def chat(self, siteverify_url: str) -> dict[str, str]:
+        """The API's chat settings for this pair."""
+        return {
+            "API_CHAT_ALLOWED_ORIGINS": ORIGIN,
+            "API_CHAT_COOKIE_SECURE": "false",
+            "API_AI_SERVICE_URL": self.service_url,
+            "API_AI_SERVICE_TOKEN": self.token,
+            "API_AI_CONTROL_TOKEN": self.control_token,
+            "API_CHAT_RELAY_TOKEN": RELAY_TOKEN,
+            "API_CHAT_FINGERPRINT_KEY": secrets.token_urlsafe(32),
+            "API_CHAT_RETENTION_DAYS": "",
+            # The versions this agent generates with; the service refuses any other.
+            "API_CHAT_MODEL": versions().main_model,
+            "API_CHAT_PRICING_VERSION": versions().pricing,
+            # Not a Turnstile test secret, so the hostname and action checks run as in production.
+            "API_TURNSTILE_SECRET_KEY": secrets.token_urlsafe(24),
+            "API_TURNSTILE_EXPECTED_HOSTNAME": EXPECTED_HOSTNAME,
+            "API_TURNSTILE_VERIFY_URL": siteverify_url,
+        }
+
+    def start_service(self, api_url: str, **extra: str) -> Process:
+        """This pair's AI service with the fictional `slow` model, healthy."""
+        service_env = service_environment(
+            os.environ,
+            {
+                "AI_SERVICE_HOST": self.service_host,
+                "LLM_AGENT_PORT": str(self.service_port),
+                "AI_SERVICE_API_URL": api_url,
+                "AI_SERVICE_TOKEN": self.token,
+                "AI_SERVICE_CONTROL_TOKEN": self.control_token,
+                "AI_SERVICE_MODEL": "fake",
+                "AI_SERVICE_FAKE_SCENARIO": "slow",
+                "AI_SERVICE_FAKE_CALLS_FILE": str(self.calls_file),
+                "AI_SERVICE_FAKE_GATE_FILE": str(self.gate_file),
+                **extra,
+            },
+        )
+        assert not [k for k in service_env if k.startswith(("DATABASE_", "POSTGRES_"))]
+        service = Process([sys.executable, "-m", "ai_service"], SERVICE_FOLDER, service_env)
+        _wait_healthy(service, self.service_url)
+        return service
+
+
+def _pair(name: str) -> _Pair:
+    scratch = ROOT / ".tmp" / f"{name}-{secrets.token_hex(4)}"
+    scratch.mkdir(parents=True)
+    service_host = setting("AI_SERVICE_HOST")
+    return _Pair(scratch, service_host, free_port(service_host))
+
+
+@pytest.fixture(scope="module")
+def siteverify_url() -> Iterator[str]:
+    """The fake Siteverify, shared by every API of the module."""
+    api_host = setting("API_HOST")
     siteverify = ThreadingHTTPServer((api_host, 0), _Siteverify)
     threading.Thread(target=siteverify.serve_forever, daemon=True).start()
-    chat = {
-        "API_CHAT_ALLOWED_ORIGINS": ORIGIN,
-        "API_CHAT_COOKIE_SECURE": "false",
-        "API_AI_SERVICE_URL": service_url,
-        "API_AI_SERVICE_TOKEN": token,
-        "API_AI_CONTROL_TOKEN": control_token,
-        "API_CHAT_RELAY_TOKEN": RELAY_TOKEN,
-        "API_CHAT_FINGERPRINT_KEY": secrets.token_urlsafe(32),
-        "API_CHAT_RETENTION_DAYS": "",
-        # The versions this agent generates with; the service refuses any other.
-        "API_CHAT_MODEL": versions().main_model,
-        "API_CHAT_PRICING_VERSION": versions().pricing,
-        # Not a Turnstile test secret, so the hostname and action checks run as in production.
-        "API_TURNSTILE_SECRET_KEY": secrets.token_urlsafe(24),
-        "API_TURNSTILE_EXPECTED_HOSTNAME": EXPECTED_HOSTNAME,
-        "API_TURNSTILE_VERIFY_URL": address(api_host, siteverify.server_address[1]) + "/siteverify",
-    }
+    try:
+        yield address(api_host, siteverify.server_address[1]) + "/siteverify"
+    finally:
+        siteverify.shutdown()
+        siteverify.server_close()
+
+
+@pytest.fixture(scope="module")
+def stack(siteverify_url: str) -> Iterator[Stack]:
+    pair = _pair("chat-stack")
+    chat = pair.chat(siteverify_url)
     started: list[Process] = []
     try:
-        api, api_url = _start_api(_api_env("0", chat, scratch))
+        api, api_url = _start_api(_api_env("0", chat, pair.scratch))
         started.append(api)
         spent, spent_url = _start_api(
             _api_env(
                 "0",
                 chat,
-                scratch,
+                pair.scratch,
                 API_E2E_CHAT_DAILY_SPEND_LIMIT_MICRO_USD=SPENT_DAILY_LIMIT,
             )
         )
         started.append(spent)
-        service_env = service_environment(
-            os.environ,
-            {
-                "AI_SERVICE_HOST": service_host,
-                "LLM_AGENT_PORT": str(service_port),
-                "AI_SERVICE_API_URL": api_url,
-                "AI_SERVICE_TOKEN": token,
-                "AI_SERVICE_CONTROL_TOKEN": control_token,
-                "AI_SERVICE_MODEL": "fake",
-                "AI_SERVICE_FAKE_SCENARIO": "slow",
-                "AI_SERVICE_FAKE_CALLS_FILE": str(calls_file),
-                "AI_SERVICE_FAKE_GATE_FILE": str(gate_file),
-            },
+        started.append(pair.start_service(api_url))
+        yield Stack(
+            api_url,
+            spent_url,
+            pair.calls_file,
+            pair.gate_file,
+            pair.service_url,
+            (pair.token, pair.control_token),
         )
-        assert not [k for k in service_env if k.startswith(("DATABASE_", "POSTGRES_"))]
-        service = Process([sys.executable, "-m", "ai_service"], SERVICE_FOLDER, service_env)
-        started.append(service)
-        _wait_healthy(service, service_url)
-        yield Stack(api_url, spent_url, calls_file, gate_file, service_url, (token, control_token))
     finally:
         for process in reversed(started):
             process.stop()
-        siteverify.shutdown()
-        siteverify.server_close()
-        shutil.rmtree(scratch, ignore_errors=True)
+        shutil.rmtree(pair.scratch, ignore_errors=True)
 
 
 def _wait_healthy(service: Process, url: str) -> None:
@@ -429,7 +479,9 @@ def chat_events(frames: list[Frame]) -> list[dict[str, Any]]:
     return [frame.data for frame in frames if frame.event == "chat"]
 
 
-def wait_for_calls(stack: Stack, count: int, timeout_s: float = 30.0) -> list[dict[str, Any]]:
+def wait_for_calls(
+    stack: Stack | BusyStack, count: int, timeout_s: float = 30.0
+) -> list[dict[str, Any]]:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         calls = stack.calls()
@@ -787,6 +839,130 @@ def test_a_stop_while_the_browser_is_away_holds_and_a_retry_survives_a_reload(
     assert replay.json()["operationId"] == attempt_id
     settle()
     assert len(stack.calls()) == before + 4
+
+
+#: The busy stack's daily spend limit: exactly five questions' allowances
+#: (`chatPolicy.allowanceMicroUsd`), so a sixth reservation is refused while five are held.
+FIVE_ALLOWANCES = str(5 * 20_000)
+#: The busy stack's AI service: four operations at once, a dispatch waits at most two seconds.
+MAX_OPERATIONS = 4
+ADMISSION_WAIT_S = 2.0
+
+
+@dataclass
+class BusyStack:
+    api_url: str
+    calls_file: Path
+    gate_file: Path
+
+    def calls(self) -> list[dict[str, Any]]:
+        return read_calls(self.calls_file)
+
+    def main_calls(self) -> int:
+        """Main calls: two per generated answer (the profile read, then the draft).
+
+        Security calls are not counted per operation: a held operation's Security attempt ends
+        after `security_attempt_s` and is retried once, so their number depends on the hold.
+        """
+        return sum(call["stage"] == "main" for call in self.calls())
+
+
+@pytest.fixture(scope="module")
+def busy_stack(siteverify_url: str) -> Iterator[BusyStack]:
+    """Its own API (own temporary database, five allowances a day) and its own AI service."""
+    pair = _pair("chat-busy")
+    started: list[Process] = []
+    try:
+        api, api_url = _start_api(
+            _api_env(
+                "0",
+                pair.chat(siteverify_url),
+                pair.scratch,
+                API_E2E_CHAT_DAILY_SPEND_LIMIT_MICRO_USD=FIVE_ALLOWANCES,
+            )
+        )
+        started.append(api)
+        started.append(
+            pair.start_service(
+                api_url,
+                AI_SERVICE_MAX_OPERATIONS=str(MAX_OPERATIONS),
+                AI_SERVICE_ADMISSION_WAIT_S=str(ADMISSION_WAIT_S),
+            )
+        )
+        yield BusyStack(api_url, pair.calls_file, pair.gate_file)
+    finally:
+        for process in reversed(started):
+            process.stop()
+        shutil.rmtree(pair.scratch, ignore_errors=True)
+
+
+def ends_unavailable(visitor: Visitor, operation_id: str) -> list[dict[str, Any]]:
+    events = chat_events(visitor.events(operation_id))
+    assert events[-1] == {**events[-1], "type": "error", "code": "unavailable", "retryable": True}
+    assert_only_approved_output(events)
+    return events
+
+
+def test_four_operations_run_and_a_fifth_is_busy_within_two_seconds(
+    busy_stack: BusyStack,
+) -> None:
+    """Four held operations, their browsers gone; a fifth is busy, its reservation released."""
+    busy_stack.gate_file.unlink(missing_ok=True)
+    visitors = [Visitor(busy_stack.api_url) for _ in range(MAX_OPERATIONS)]
+    held = []
+    for number, visitor in enumerate(visitors):
+        admitted = visitor.ask(f"Question {number + 1} about Ilsa Marrow?")
+        assert admitted.status_code == 202, admitted.text
+        held.append(admitted.json()["operationId"])
+    calls = wait_for_calls(busy_stack, MAX_OPERATIONS)
+    assert [call["stage"] for call in calls] == ["security"] * MAX_OPERATIONS
+    for visitor, operation_id in zip(visitors, held, strict=True):
+        visitor.events(operation_id, first_only=True)  # every browser goes away
+
+    # A fifth question finds every slot held: it fails as unavailable within the admission wait.
+    fifth = Visitor(busy_stack.api_url)
+    started = time.monotonic()
+    admitted = fifth.ask("Which services does Ilsa Marrow offer?")
+    assert admitted.status_code == 202, admitted.text
+    fifth_id = admitted.json()["operationId"]
+    ends_unavailable(fifth, fifth_id)
+    assert time.monotonic() - started < ADMISSION_WAIT_S + 1.0
+    assert fifth.conversation()["activeOperation"] is None
+
+    # Its reservation was released: a sixth question reserves the fifth allowance, and while
+    # that one waits for a slot, a seventh finds the day's spend limit taken.
+    sixth = Visitor(busy_stack.api_url)
+    admitted = sixth.ask("Which projects has Ilsa Marrow built?")
+    assert admitted.status_code == 202, admitted.text
+    sixth_id = admitted.json()["operationId"]
+    seventh = Visitor(busy_stack.api_url)
+    refused = seventh.ask("What does Ilsa Marrow work on now?")
+    assert refused.status_code == 503, refused.text
+    assert refused.json()["error"]["code"] == "chat_budget_exhausted"
+    ends_unavailable(sixth, sixth_id)
+    admitted = seventh.ask("What does Ilsa Marrow work on now?")
+    assert admitted.status_code == 202, admitted.text
+    ends_unavailable(seventh, admitted.json()["operationId"])
+    settle()
+    assert busy_stack.main_calls() == 0
+
+    # The four held operations finish for their returning browsers, each generated once; a
+    # refused operation that had reached the model would add its own two Main calls here.
+    busy_stack.gate_file.touch()
+    for visitor, operation_id in zip(visitors, held, strict=True):
+        events = chat_events(visitor.events(operation_id))
+        assert events[-1] == {**events[-1], "type": "complete", "outcome": "answered"}
+        assert_only_approved_output(events)
+    settle()
+    assert busy_stack.main_calls() == 2 * MAX_OPERATIONS
+
+    # With the slots free, Try again on the busy answer is generated.
+    retried = try_again(fifth, fifth_id)
+    assert retried.status_code == 202, retried.text
+    answer = chat_events(fifth.events(retried.json()["operationId"]))
+    assert answer[-1] == {**answer[-1], "type": "complete", "outcome": "answered"}
+    settle()
+    assert busy_stack.main_calls() == 2 * MAX_OPERATIONS + 2
 
 
 def test_a_failed_challenge_dispatches_nothing(stack: Stack) -> None:
