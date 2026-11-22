@@ -496,9 +496,14 @@ describe("workflows", () => {
   });
 });
 
-describe("committed exceptions against the published images (2026-11-22)", () => {
+describe("the exceptions decided on 2026-11-22 against the published images", () => {
   const dir = import.meta.dirname;
-  const text = fs.readFileSync(path.join(dir, "image-scan-exceptions.json"), "utf8");
+  // A copy of the exceptions as decided on 2026-11-22, not the committed file: the committed
+  // entries are removed as the base image is bumped, and that must not touch these tests.
+  const text = fs.readFileSync(
+    path.join(dir, "fixtures", "image-scan", "exceptions-2026-11-22.json"),
+    "utf8",
+  );
   const real = JSON.parse(
     fs.readFileSync(path.join(dir, "fixtures", "image-scan", "published-api.json"), "utf8"),
   );
@@ -603,9 +608,9 @@ describe("exceptions limited to a path", () => {
     assert.deepEqual(problems, []);
   });
 
-  it("the committed entries limit undici and brace-expansion to the bundled npm", () => {
+  it("the 2026-11-22 entries limit undici and brace-expansion to the bundled npm", () => {
     const text = fs.readFileSync(
-      path.join(import.meta.dirname, "image-scan-exceptions.json"),
+      path.join(import.meta.dirname, "fixtures", "image-scan", "exceptions-2026-11-22.json"),
       "utf8",
     );
     const { exceptions } = parseExceptions(text, { today: "2026-11-22" });
