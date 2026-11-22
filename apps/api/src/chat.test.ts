@@ -403,8 +403,8 @@ describe("the visitor chat over HTTP", () => {
       expect(flooded.headers.get("retry-after")).not.toBeNull();
       expect((await read(on, "198.51.100.2")).status).toBe(200);
       expect((await read(on, null)).status).toBe(200);
-      // The website's own public reads from the same connection keep their budget.
-      expect((await on.app.request("/v1/person", {}, connection(WEBSITE))).status).toBe(200);
+      // The website's own public reads from the same connection keep their budget (no person here).
+      expect((await on.app.request("/v1/person", {}, connection(WEBSITE))).status).toBe(404);
       // The flooding visitor's question is refused by the same budget, before any state change.
       expect(
         (

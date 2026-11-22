@@ -243,14 +243,32 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     await next();
   };
 
+  const fromRelay = (c: Context<ApiEnv>) => {
+    const presented = c.req.header(chatRelayHeader);
+    return (
+      relayDigest !== null &&
+      presented !== undefined &&
+      timingSafeEqual(digest(presented), relayDigest)
+    );
+  };
+
+  /** The visitor's address as the relay named it: one IP literal, or null when it named none. */
+  const namedAddress = (c: Context<ApiEnv>) => {
+    const named = c.req.header(chatClientHeader) ?? "";
+    return isIP(named) === 0 ? null : named;
+  };
+
+  /**
+   * Whom a visitor request is counted against: with the relay token, the visitor the relay names
+   * (relayed requests naming none share one bucket), never the website's own connection; without
+   * it, the connection, as every other public route.
+   */
+  const relayedVisitor = (c: Context<ApiEnv>) =>
+    fromRelay(c) ? `chat-visitor:${namedAddress(c) ?? "unknown"}` : null;
+
   /** Only the website's chat relay reaches the visitor routes; checked before any state change. */
   const relayed: MiddlewareHandler<ApiEnv> = async (c, next) => {
-    const presented = c.req.header(chatRelayHeader);
-    if (
-      relayDigest === null ||
-      presented === undefined ||
-      !timingSafeEqual(digest(presented), relayDigest)
-    ) {
+    if (!fromRelay(c)) {
       throw new ApiError(403, "forbidden", "Ask through the website.");
     }
     await next();
@@ -266,7 +284,7 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
 
   const visitor = (route: RouteDocumentation): MiddlewareHandler<ApiEnv> =>
     every(
-      limits.perClient("public"),
+      limits.perClient("public", relayedVisitor),
       refuseCredentialsInUrl,
       available,
       relayed,
@@ -306,9 +324,7 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     const caller = await callerOf(c);
     const submission = c.get("body") as ChatMessageSubmission;
     // Behind the relay token, so the website named it; anything but one IP literal is unknown.
-    const named = c.req.header(chatClientHeader) ?? "";
-    const address = isIP(named) === 0 ? null : named;
-    const result = await chat.submit(caller, submission, { clientAddress: address });
+    const result = await chat.submit(caller, submission, { clientAddress: namedAddress(c) });
     switch (result.status) {
       case "admitted":
         dispatcher?.dispatch(result.dispatch);
