@@ -319,6 +319,12 @@ test("a plan line inside an HTML comment is not the plan line", () => {
   assert.equal(planFolder("<!-- hint -->\nPlan: .plan/07-ai-service"), "07-ai-service");
 });
 
+test("a comment that only forms once another is removed still hides its plan line", () => {
+  // Removing the inner comment leaves `<!--` … `-->` around the line: one pass is not enough.
+  assert.equal(planFolder("<!<!-- x -->--\nPlan: .plan/07-ai-service\n-->\nText"), null);
+  assert.equal(planFolder("<!<!-- x -->-- open, never closed\nPlan: .plan/07-ai-service"), null);
+});
+
 test("an indented or quoted plan line is not the plan line", () => {
   assert.equal(planFolder("    Plan: .plan/07-ai-service"), null);
   assert.equal(planFolder("> Plan: .plan/07-ai-service"), null);

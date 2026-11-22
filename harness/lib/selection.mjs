@@ -33,10 +33,19 @@ export function planLine(folder) {
 }
 
 // The phase folder an issue's text names, or null.
+// The text without its HTML comments. Removing one comment can leave the pieces of another
+// (`<!<!-- x -->--`), so the removal repeats until nothing is left to remove.
+function withoutComments(text) {
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(COMMENT, "");
+  } while (text !== previous);
+  return text;
+}
+
 export function planFolder(body) {
-  const text = String(body ?? "")
-    .replace(FENCED, "")
-    .replace(COMMENT, "");
+  const text = withoutComments(String(body ?? "").replace(FENCED, ""));
   return PLAN_LINE.exec(text)?.[1] ?? null;
 }
 
