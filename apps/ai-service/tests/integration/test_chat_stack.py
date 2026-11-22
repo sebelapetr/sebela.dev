@@ -660,6 +660,135 @@ def test_clearing_stops_the_active_generation_and_starts_empty(stack: Stack) -> 
     assert first.conversation()["messages"] == []
 
 
+def try_again(visitor: Visitor, operation_id: str, retry_id: str | None = None) -> httpx2.Response:
+    """The website's "Try again" on an answer: a retry of its request with its own retry ID."""
+    body = {
+        "retryId": retry_id or str(uuid.uuid4()),
+        "challengeToken": f"pass-{secrets.token_hex(8)}",
+    }
+    return visitor.send("POST", f"/v1/chat/operations/{operation_id}/retry", body)
+
+
+def answers_of(visitor: Visitor, request_id: str) -> list[dict[str, Any]]:
+    return [
+        message
+        for message in visitor.conversation()["messages"]
+        if message["role"] == "assistant" and message["requestId"] == request_id
+    ]
+
+
+def test_try_again_while_the_attempt_is_open_recovers_it_without_a_new_call(
+    stack: Stack,
+) -> None:
+    """C01: a browser that went away and presses Try again joins its open attempt."""
+    stack.gate_file.unlink(missing_ok=True)
+    before = len(stack.calls())
+    visitor = Visitor(stack.api_url)
+    request_id = str(uuid.uuid4())
+    admitted = visitor.ask("Which services does Ilsa Marrow offer?", request_id)
+    assert admitted.status_code == 202, admitted.text
+    operation_id = admitted.json()["operationId"]
+    assert len(wait_for_calls(stack, before + 1)) == before + 1
+    visitor.events(operation_id, first_only=True)  # the browser goes away mid-generation
+
+    # Try again from a reloaded page, with a fresh retry ID each press: the open attempt answers.
+    for _ in range(2):
+        recovered = try_again(Visitor(stack.api_url, cookie=visitor.cookie), operation_id)
+        assert recovered.status_code == 200, recovered.text
+        assert recovered.json()["operationId"] == operation_id
+    settle()
+    assert stages(stack, before) == ["security"]
+
+    stack.gate_file.touch()
+    events = chat_events(visitor.events(operation_id))
+    assert events[-1] == {**events[-1], "type": "complete", "outcome": "answered"}
+    assert_only_approved_output(events)
+    settle()
+    assert stages(stack, before) == ["security", "main", "main"]
+    answers = answers_of(visitor, request_id)
+    assert [answer["status"] for answer in answers] == ["completed"]
+    assert visitor.conversation()["activeOperation"] is None
+
+    # Try again on the answered attempt is the same answer, not another generation.
+    late = try_again(visitor, operation_id)
+    assert late.status_code == 200, late.text
+    assert late.json()["operationId"] == operation_id
+    settle()
+    assert len(stack.calls()) == before + 3
+
+
+def test_a_stop_while_the_browser_is_away_holds_and_a_retry_survives_a_reload(
+    stack: Stack,
+) -> None:
+    """C01: a Stop around a disconnect ends the attempt once; a retry survives a reload."""
+    stack.gate_file.unlink(missing_ok=True)
+    before = len(stack.calls())
+    visitor = Visitor(stack.api_url)
+    request_id = str(uuid.uuid4())
+    question = "What does Ilsa Marrow work on now?"
+    admitted = visitor.ask(question, request_id)
+    assert admitted.status_code == 202, admitted.text
+    operation_id = admitted.json()["operationId"]
+    assert len(wait_for_calls(stack, before + 1)) == before + 1
+
+    # The browser goes away, the visitor stops it from another tab, then the browser comes back.
+    visitor.events(operation_id, first_only=True)
+    stopped = visitor.tab().send("POST", f"/v1/chat/operations/{operation_id}/stop")
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["status"] == "cancelled"
+    events = chat_events(visitor.events(operation_id))
+    assert events[-1] == {**events[-1], "type": "error", "code": "cancelled", "retryable": True}
+    assert chat_events(visitor.tab().events(operation_id)) == events
+    assert visitor.conversation()["activeOperation"] is None
+    stack.gate_file.touch()
+    settle()
+    assert stages(stack, before) == ["security"]
+
+    # The stopped request, asked again by a browser that missed the Stop, is not regenerated.
+    again = visitor.ask(question, request_id)
+    assert again.status_code == 200, again.text
+    assert again.json()["operationId"] == operation_id
+    settle()
+    assert stages(stack, before) == ["security"]
+
+    # Try again; the browser goes away during the retry and presses Try again with the same ID.
+    stack.gate_file.unlink(missing_ok=True)
+    retry_id = str(uuid.uuid4())
+    retried = try_again(visitor, operation_id, retry_id)
+    assert retried.status_code == 202, retried.text
+    attempt_id = retried.json()["operationId"]
+    assert attempt_id != operation_id
+    assert len(wait_for_calls(stack, before + 2)) == before + 2
+    visitor.events(attempt_id, first_only=True)
+    reloaded = Visitor(stack.api_url, cookie=visitor.cookie)
+    active = reloaded.conversation()["activeOperation"]
+    assert active is not None
+    assert active["operationId"] == attempt_id
+    recovered = try_again(reloaded, operation_id, retry_id)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["operationId"] == attempt_id
+
+    stack.gate_file.touch()
+    answer = chat_events(reloaded.events(attempt_id))
+    assert answer[-1] == {**answer[-1], "type": "complete", "outcome": "answered"}
+    assert_only_approved_output(answer)
+    settle()
+    assert stages(stack, before) == ["security", "security", "main", "main"]
+
+    # A reload after the retry shows the one question with its one answer and nothing running.
+    view = Visitor(stack.api_url, cookie=visitor.cookie).conversation()
+    assert view["activeOperation"] is None
+    questions = [m for m in view["messages"] if m["role"] == "user"]
+    assert [m["requestId"] for m in questions] == [request_id]
+    assert [answer["status"] for answer in answers_of(reloaded, request_id)] == ["completed"]
+    assert chat_events(reloaded.events(attempt_id)) == answer
+    replay = try_again(reloaded, operation_id, retry_id)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["operationId"] == attempt_id
+    settle()
+    assert len(stack.calls()) == before + 4
+
+
 def test_a_failed_challenge_dispatches_nothing(stack: Stack) -> None:
     stack.gate_file.touch()
     before = len(stack.calls())
