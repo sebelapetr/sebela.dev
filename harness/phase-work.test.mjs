@@ -292,6 +292,16 @@ test("a sub-issue that lives in another repository is refused", () => {
   );
 });
 
+test("another phase's empty tracking issue, nested and labelled by mistake, is never the next issue", () => {
+  const { graphql } = github({
+    open: [[openIssue(414, PLAN_07), openIssue(418, PLAN_08)]],
+    tracking: { 414: { pages: [[subIssue(418), subIssue(210)]] } },
+  });
+  const work = phaseWork("07-ai-service", { graphql });
+  assert.equal(work.next.number, 210);
+  assert.equal(work.open[0].kind, "parent");
+});
+
 test("a tracking issue without a plan line is an epic: the loop's folder never resolves to it", () => {
   const { graphql, calls } = github({
     open: [[openIssue(500, "Tracking issue of the audit fixes."), openIssue(414, PLAN_07)]],

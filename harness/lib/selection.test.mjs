@@ -403,6 +403,15 @@ test("an epic among a phase's sub-issues is never selected as work", () => {
   assert.equal(work.open[0].kind, "parent");
 });
 
+test("a tracking issue without sub-issues among a phase's sub-issues is never selected", () => {
+  // A phase that is not broken down yet has an empty tracking issue; nested under another phase
+  // and labelled by mistake, it must still not become work.
+  const work = select([{ ...sub(418), tracking: true }, sub(210)]);
+  assert.equal(work.next.number, 210);
+  assert.equal(work.open[0].kind, "parent");
+  assert.equal(select([{ ...sub(418), tracking: true }]).next, null);
+});
+
 // --- sub-issues of another repository ------------------------------------------------------
 
 test("a sub-issue from another repository is refused loudly", () => {
