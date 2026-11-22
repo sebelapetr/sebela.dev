@@ -5,7 +5,7 @@
 //
 //   node scripts/release/image-scan.mjs install >> "$GITHUB_ENV"
 //   TRIVY=<binary> SHA=<commit> BUILD='["web"]' node scripts/release/image-scan.mjs gate
-//   TRIVY=<binary> OUT_DIR=<dir> node scripts/release/image-scan.mjs report
+//   TRIVY=<binary> OUT_DIR=<dir> [INCLUDE_UNFIXED=true] node scripts/release/image-scan.mjs report
 //
 // Plain Node with no dependencies. Every command explains itself on standard error.
 //
@@ -19,8 +19,9 @@
 //   expired, incomplete or unbounded entry. Findings no release fixes, and findings below high,
 //   fail nothing.
 // - report: scans the `current` image of every service in the registry into SARIF files
-//   (OUT_DIR/<service>.sarif) for code scanning. Findings never fail it; a scan that cannot run
-//   does, so a silent gap is noticed.
+//   (OUT_DIR/<service>.sarif) for code scanning, only the findings a newer package fixes (Trivy's
+//   --ignore-unfixed), unless INCLUDE_UNFIXED=true asks for all of them. Findings never fail it; a
+//   scan that cannot run does, so a silent gap is noticed.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -389,7 +390,16 @@ function gateCommand() {
   }
 }
 
+/** INCLUDE_UNFIXED: unset, empty or `false` (the default) or `true`; anything else is refused. */
+function includeUnfixed() {
+  const value = (process.env.INCLUDE_UNFIXED ?? "").trim();
+  if (value === "" || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error(`INCLUDE_UNFIXED must be true or false, not ${value}.`);
+}
+
 function reportCommand() {
+  const unfixed = includeUnfixed();
   const out = process.env.OUT_DIR || "image-scan-sarif";
   fs.mkdirSync(out, { recursive: true });
   for (const service of SERVICES) {
@@ -406,6 +416,7 @@ function reportCommand() {
       "vuln",
       "--severity",
       "CRITICAL,HIGH,MEDIUM",
+      ...(unfixed ? [] : ["--ignore-unfixed"]),
       "--format",
       "sarif",
       "--output",
