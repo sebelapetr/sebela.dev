@@ -18,7 +18,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 ## Issues
 
-Work is organised on GitHub with native features only ([decision 0027](decisions/0027-native-work-selection.md)). There are three kinds of work, and all three may sit in a **milestone** (one per release, today `v1.0 · phases 00–10`):
+Work is organised on GitHub with native features only ([decision 0028](decisions/0027-native-work-selection.md)). There are three kinds of work, and all three may sit in a **milestone** (one per release, today `v1.0 · phases 00–10`):
 
 | Kind                      | What it is                                                                                                                                      | How it is told apart                                                           | Issue type of the tracking issue | How it is worked                                                                   |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------------------- |
@@ -117,6 +117,7 @@ Issues of a phase depend on each other. The owner reviews at the end of a phase,
 - [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <summary>`. The scope is the app or package, for example `feat(api): add experience endpoints`.
 - Summary in the imperative, lower case, no trailing period.
 - The types are `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `!` before the colon marks a breaking change (`feat(api)!: drop the legacy profile route`). The scope is optional and in lower case. A body follows one blank line.
+- Attribution is copied, not composed: the session that dispatches an agent states in the brief the exact trailer lines (`Co-Authored-By` and `Claude-Session` for commits, the "Generated with" line and the session link for pull request bodies), and the agent appends them verbatim. It never writes its own model name there. Without such lines in the brief, an agent adds no attribution trailer.
 - Commits on an issue branch may be small and frequent; they are squashed when the issue is merged. Where test-first is mandatory, the test commit comes before the implementation commit so the reviewer can see the order.
 
 ### Local hooks

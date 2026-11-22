@@ -32,7 +32,7 @@ Do not change code outside your area unless the issue requires it; if it does, s
    - Build mobile-first. Layout and visual polish are verified with Playwright and screenshots at 360, 768 and 1280 px, in light and dark mode. Look at every screenshot yourself before you finish and fix what is wrong.
    - Logic in the frontend (data mapping, formatting, state) is still tested first.
    - The website reaches data only through the public API routes. It never imports `@sebela/db` or `@sebela/services` and never holds an API key.
-3. Make small commits in Conventional Commits form. Where test-first is mandatory, commit the failing test before the implementation.
+3. Make small commits in Conventional Commits form. Append the trailer lines the brief gives, verbatim; never write your own model name in one (`docs/git-workflow.md`, Commits). Where test-first is mandatory, commit the failing test before the implementation.
 4. Update the documentation in the same branch when you change behaviour or structure.
 5. Before you finish, run lint, typecheck, unit tests and build for what you changed. All must be green.
 6. Browser tests: run only the spec files your change adds or touches (`pnpm --filter @sebela/web test:e2e e2e/<name>.spec.ts` after building), and while you fix one failure only that test (`-g "<title>"`). Never run the whole suite; CI runs it before the merge (`docs/testing.md`, Browser tests by role).

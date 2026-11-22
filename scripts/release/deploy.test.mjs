@@ -227,6 +227,20 @@ describe("input validation", () => {
     }
   });
 
+  it("names the setting, not a path, when the environment file or state folder is wrong", () => {
+    const wrong = {
+      DEPLOY_ENV_FILE: [path.join(dir, "no-such-environment-file"), /DEPLOY_ENV_FILE/],
+      DEPLOY_STATE_DIR: [path.join(dir, "no-such-state-folder"), /DEPLOY_STATE_DIR/],
+    };
+    for (const [name, [value, setting]] of Object.entries(wrong)) {
+      const result = deploy(deployInput(B), { env: { [name]: value } });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, setting);
+      assert.equal(result.stderr.includes(dir), false, "the message names no path");
+      assert.deepEqual(result.calls, []);
+    }
+  });
+
   it("refuses a second deployment while one is running", async () => {
     record(line(A));
     scenario({ migrations: MIGRATIONS });
@@ -530,6 +544,8 @@ describe("migration detection", () => {
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /new migration/);
     assert.match(result.stderr, /backup/);
+    assert.match(result.stderr, /DEPLOY_BACKUP/);
+    assert.equal(result.stderr.includes(dir), false, "the message names no path");
     assert.equal(steps(result.calls).includes("migrate"), false);
     assert.equal(ups(result.calls).length, 0, "nothing was recreated");
     assert.deepEqual(releases(), [line(A)]);
