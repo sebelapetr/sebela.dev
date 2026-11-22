@@ -1,10 +1,1 @@
-{
-  "exceptions": [
-    {
-      "id": "CVE-2026-85091",
-      "package": "zlib1g",
-      "reason": "Fixed version exists upstream; waiting for a rebuilt node:26 trixie-slim base image; Dependabot bumps it.",
-      "expires": "2027-01-21"
-    }
-  ]
-}
+{ "exceptions": [] }
