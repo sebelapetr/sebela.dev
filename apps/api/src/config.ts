@@ -66,6 +66,11 @@ export interface ChatHttpConfig {
   readonly aiService: { readonly url: string; readonly token: string };
   /** The bearer token the AI service presents on the internal control routes; never logged. */
   readonly controlToken: string;
+  /**
+   * The token the website's chat relay presents on every visitor chat route; never logged. Only a
+   * request with it may name the visitor's address.
+   */
+  readonly relayToken: string;
 }
 
 export interface WebsiteInvalidationConfig {
@@ -183,6 +188,7 @@ function readChatSettings(settings: ChatEnvironment): ChatHttpConfig | null | st
     cookieSecure: secureText === "true",
     aiService: { url, token },
     controlToken,
+    relayToken: "",
   };
 }
 

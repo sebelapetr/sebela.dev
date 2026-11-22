@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { ChatGenerationResult } from "@sebela/contracts";
+import { chatPolicy } from "@sebela/services";
 import type { ChallengeVerifier, ChatDispatch, ChatPolicy } from "@sebela/services";
 
 import type { Api } from "./app.js";
@@ -30,12 +31,18 @@ const ORIGIN = "https://www.example.test";
 const AI_SERVICE = "https://ai.example.test";
 const AI_TOKEN = "fictional-ai-service-token-0123456789abcdef";
 const CONTROL_TOKEN = "fictional-control-token-0123456789abcdefgh";
+const RELAY_TOKEN = "fictional-chat-relay-token-0123456789abcdef";
 const chatHttp: ChatHttpConfig = {
   allowedOrigins: [ORIGIN],
   cookieSecure: true,
   aiService: { url: AI_SERVICE, token: AI_TOKEN },
   controlToken: CONTROL_TOKEN,
+  relayToken: RELAY_TOKEN,
 };
+/** The headers the website's chat relay adds: its token and, when it knows it, the visitor's address. */
+const RELAY_HEADER = "x-sebela-chat-relay";
+const CLIENT_HEADER = "x-sebela-chat-client";
+const relayed = { [RELAY_HEADER]: RELAY_TOKEN };
 const GRACE_MS = 1_000;
 const timing = { pollMs: 10, progressMs: 30, graceMs: GRACE_MS };
 
@@ -68,14 +75,29 @@ const answerFor = (grant: string, text = "A fictional answer."): ChatGenerationR
   latencyMs: 1200,
 });
 
-/** A verifier that answers as told and records the addresses it was given. */
-function fakeVerifier(): ChallengeVerifier & { addresses: string[]; answer: boolean } {
+/**
+ * A verifier that answers as told and records the tokens and addresses it was given. Like
+ * Siteverify, it refuses a token it has already redeemed; `delayMs` makes it answer late.
+ */
+function fakeVerifier(): ChallengeVerifier & {
+  addresses: (string | null)[];
+  tokens: string[];
+  answer: boolean;
+  delayMs: number;
+} {
   const verifier = {
-    addresses: [] as string[],
+    addresses: [] as (string | null)[],
+    tokens: [] as string[],
     answer: true,
-    verify: (token: string, remoteAddress: string) => {
+    delayMs: 0,
+    verify: async (token: string, remoteAddress: string | null) => {
+      const redeemed = verifier.tokens.includes(token);
+      verifier.tokens.push(token);
       verifier.addresses.push(remoteAddress);
-      return Promise.resolve(verifier.answer && token.length > 0);
+      if (verifier.delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, verifier.delayMs));
+      }
+      return verifier.answer && token.length > 0 && !redeemed;
     },
   };
   return verifier;
@@ -178,10 +200,15 @@ describe("the visitor chat over HTTP", () => {
     await backend.close();
   });
 
+  let day = 0;
   beforeEach(() => {
-    clock = new Date("2031-03-10T12:00:00.000Z");
+    // Each test asks on a day of its own, so no test meets another's fingerprint quota.
+    day += 1;
+    clock = new Date(Date.UTC(2031, 2, day, 12));
     verifier.answer = true;
     verifier.addresses.length = 0;
+    verifier.tokens.length = 0;
+    verifier.delayMs = 0;
     dispatcher = capturingDispatcher();
     api = chatApi();
   });
@@ -195,8 +222,18 @@ describe("the visitor chat over HTTP", () => {
     });
   }
 
-  const request = (path: string, init: RequestInit = {}, on: Api = api, address = CLIENT) =>
-    on.app.request(path, init, connection(address));
+  /** A request as the website's relay sends it: with the relay token unless `relay` is `null`. */
+  const request = (
+    path: string,
+    init: RequestInit = {},
+    on: Api = api,
+    address = CLIENT,
+    relay: string | null = RELAY_TOKEN,
+  ) => {
+    const headers = new Headers(init.headers);
+    if (relay !== null) headers.set(RELAY_HEADER, relay);
+    return on.app.request(path, { ...init, headers }, connection(address));
+  };
 
   /** A visitor with a cookie, as the website's server forwards it. */
   async function visitor(on: Api = api) {
@@ -234,6 +271,13 @@ describe("the visitor chat over HTTP", () => {
     if (dispatch === undefined) throw new Error("Nothing was dispatched.");
     return dispatch;
   };
+
+  /** Answers the last dispatched operation, so its visitor may ask again. */
+  async function settleLast() {
+    const dispatch = lastDispatch();
+    await backend.services.chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+    await backend.services.chat.reconcile(dispatch.operationId, answerFor(dispatch.grant));
+  }
 
   describe("identity", () => {
     it("sets a first-party HttpOnly cookie for the retention period, then reuses it", async () => {
@@ -284,6 +328,51 @@ describe("the visitor chat over HTTP", () => {
     });
   });
 
+  describe("the relay token", () => {
+    it("is required on every visitor route, before any state change", async () => {
+      const { cookie, conversationId } = await visitor();
+      const asked = (await (await ask(cookie)).json()) as { operationId: string };
+      await settleLast();
+      const read = async () => (await request(CONVERSATION, { headers: { cookie } })).json();
+      const before: unknown = await read();
+      const routes: [string, RequestInit][] = [
+        [CONVERSATION, { headers: { cookie } }],
+        [CONVERSATION, {}],
+        [
+          MESSAGES,
+          {
+            method: "POST",
+            ...json(
+              {
+                requestId: randomUUID(),
+                question: "Without the relay?",
+                challengeToken: "fictional-token",
+              },
+              { cookie, origin: ORIGIN, [CLIENT_HEADER]: "198.51.100.9" },
+            ),
+          },
+        ],
+        [operationPath(asked.operationId), { headers: { cookie } }],
+        [eventsPath(asked.operationId), { headers: { cookie } }],
+      ];
+      verifier.addresses.length = 0;
+
+      for (const relay of [null, "fictional-wrong-relay-token-0123456789abcdef", ""]) {
+        for (const [path, init] of routes) {
+          const response = await request(path, init, api, CLIENT, relay);
+          expect(response.status, path).toBe(403);
+          expect(await response.json()).toEqual({ error: { code: "forbidden", message: anyText } });
+          expect(response.headers.get("set-cookie"), path).toBeNull();
+        }
+      }
+
+      expect(verifier.addresses).toEqual([]);
+      expect(dispatcher.dispatched).toHaveLength(1);
+      expect(await read()).toEqual(before);
+      expect(before).toMatchObject({ conversationId });
+    });
+  });
+
   describe("cross-site protection", () => {
     it("refuses a question without the website's origin or as non-JSON, before any state change", async () => {
       const { cookie } = await visitor();
@@ -330,7 +419,7 @@ describe("the visitor chat over HTTP", () => {
         model: "fictional-model",
         pricingVersion: "fictional-pricing-1",
         allowanceUsd: 0.02,
-        today: "2031-03-10",
+        today: clock.toISOString().slice(0, 10),
       });
 
       const opened = await request(eventsPath(operation.operationId), { headers: { cookie } });
@@ -470,21 +559,90 @@ describe("the visitor chat over HTTP", () => {
       expect(await malformed.json()).toMatchObject({ error: { code: "validation_failed" } });
     });
 
-    it("hands the challenge the client address a trusted proxy forwarded, and only then", async () => {
+    it("hands the challenge the address the relay names, and trusts no forwarded address", async () => {
+      const { cookie } = await visitor();
+      await ask(cookie, "Relayed?", randomUUID(), { [CLIENT_HEADER]: "198.51.100.7" });
+      await settleLast();
+      await ask(cookie, "IPv6?", randomUUID(), { [CLIENT_HEADER]: "2001:db8::7" });
+      await settleLast();
+
       const proxied = chatApi({}, [CLIENT]);
-      const { cookie } = await visitor(proxied);
+      const viaProxy = await visitor(proxied);
       await ask(
-        cookie,
-        "Via the proxy?",
+        viaProxy.cookie,
+        "Via a trusted proxy?",
         randomUUID(),
-        { "x-forwarded-for": "198.51.100.7" },
+        { "x-forwarded-for": "198.51.100.8" },
         proxied,
       );
 
-      const direct = await visitor();
-      await ask(direct.cookie, "Directly?", randomUUID(), { "x-forwarded-for": "198.51.100.8" });
+      expect(verifier.addresses).toEqual(["198.51.100.7", "2001:db8::7", null]);
+    });
 
-      expect(verifier.addresses).toEqual(["198.51.100.7", CLIENT]);
+    it("treats an address that is not one IP literal as unknown", async () => {
+      for (const address of ["not-an-address", "198.51.100.7, 198.51.100.8", "198.51.100.7:443"]) {
+        const { cookie } = await visitor();
+        expect((await ask(cookie, "Odd?", randomUUID(), { [CLIENT_HEADER]: address })).status).toBe(
+          202,
+        );
+      }
+
+      expect(verifier.addresses).toEqual([null, null, null]);
+    });
+
+    it("counts each relayed address on its own, and every unknown one together", async () => {
+      // The fingerprint quota is 20 questions a minute; the identity quota is five.
+      const askFrom = async (address: string | null, times: number) => {
+        const statuses: number[] = [];
+        let { cookie } = await visitor();
+        for (let question = 0; question < times; question += 1) {
+          if (question > 0 && question % 5 === 0) ({ cookie } = await visitor());
+          const headers: Record<string, string> =
+            address === null ? {} : { [CLIENT_HEADER]: address };
+          const response = await ask(
+            cookie,
+            `Question ${String(question)}?`,
+            randomUUID(),
+            headers,
+          );
+          statuses.push(response.status);
+          if (response.status === 202) await settleLast();
+        }
+        return statuses;
+      };
+
+      expect(await askFrom("198.51.100.21", 20)).toEqual(Array<number>(20).fill(202));
+      expect(await askFrom("198.51.100.21", 1)).toEqual([429]);
+      expect(await askFrom("198.51.100.22", 1)).toEqual([202]);
+
+      expect(await askFrom(null, 10)).toEqual(Array<number>(10).fill(202));
+      expect(await askFrom("not-an-address", 10)).toEqual(Array<number>(10).fill(202));
+      expect(await askFrom(null, 1)).toEqual([429]);
+    });
+
+    it("redeems the challenge once for two concurrent equal submissions", async () => {
+      verifier.delayMs = 50;
+      const { cookie } = await visitor();
+      const body = {
+        requestId: randomUUID(),
+        question: "Twice at once?",
+        challengeToken: `fictional-token-${randomUUID()}`,
+      };
+      const submit = () =>
+        request(MESSAGES, { method: "POST", ...json(body, { cookie, origin: ORIGIN }) });
+
+      const responses = await Promise.all([submit(), submit()]);
+
+      for (const response of responses) expect([200, 202]).toContain(response.status);
+      const operations = await Promise.all(
+        responses.map(
+          async (response) => ((await response.json()) as { operationId: string }).operationId,
+        ),
+      );
+      expect(operations[0]).toBeDefined();
+      expect(operations[1]).toBe(operations[0]);
+      expect(verifier.tokens).toEqual([body.challengeToken]);
+      expect(dispatcher.dispatched).toHaveLength(1);
     });
 
     it("reads only the caller's operations", async () => {
@@ -696,6 +854,7 @@ describe("the visitor chat over HTTP", () => {
 
 describe("the chat budget over HTTP", () => {
   const smallPolicy: ChatPolicy = {
+    ...chatPolicy,
     allowanceMicroUsd: 20_000,
     dailySpendLimitMicroUsd: 20_000,
     monthlySpendLimitMicroUsd: 20_000,
@@ -719,7 +878,7 @@ describe("the chat budget over HTTP", () => {
       config: testConfig({ chat: chatHttp }),
       chatDispatcher: dispatcher,
     });
-    const opened = await app.request(CONVERSATION, {}, connection());
+    const opened = await app.request(CONVERSATION, { headers: relayed }, connection());
     const cookie = `${chatCookieName}=${cookieOf(opened)}`;
     const ask = () =>
       app.request(
@@ -732,7 +891,7 @@ describe("the chat budget over HTTP", () => {
               question: "Budget?",
               challengeToken: `fictional-token-${randomUUID()}`,
             },
-            { cookie, origin: ORIGIN },
+            { cookie, origin: ORIGIN, ...relayed },
           ),
         },
         connection(),
@@ -884,7 +1043,7 @@ describe("the chat supervisor", () => {
         config: testConfig({ chat: chatHttp }),
         chatDispatcher: supervisor,
       });
-      const opened = await app.request(CONVERSATION, {}, connection());
+      const opened = await app.request(CONVERSATION, { headers: relayed }, connection());
       const cookie = `${chatCookieName}=${cookieOf(opened)}`;
       const asked = await app.request(
         MESSAGES,
@@ -892,7 +1051,7 @@ describe("the chat supervisor", () => {
           method: "POST",
           ...json(
             { requestId: randomUUID(), question: "Hello?", challengeToken: "fictional-token" },
-            { cookie, origin: ORIGIN },
+            { cookie, origin: ORIGIN, ...relayed },
           ),
         },
         connection(),
@@ -903,7 +1062,7 @@ describe("the chat supervisor", () => {
 
       const operation = await app.request(
         operationPath(operationId),
-        { headers: { cookie } },
+        { headers: { cookie, ...relayed } },
         connection(),
       );
       expect(await operation.json()).toMatchObject({ status: "failed" });

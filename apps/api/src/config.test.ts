@@ -138,6 +138,7 @@ describe("readApiConfig", () => {
     // Disposable fixture tokens and fictional addresses.
     const AI_TOKEN = "fixture-ai-service-token-0123456789abcdef";
     const CONTROL_TOKEN = "fixture-control-token-0123456789abcdefgh";
+    const RELAY_TOKEN = "fixture-chat-relay-token-0123456789abcdef";
     const configured = {
       ...env,
       API_CHAT_ALLOWED_ORIGINS: "https://www.example.test, https://example.test",
@@ -145,14 +146,16 @@ describe("readApiConfig", () => {
       API_AI_SERVICE_URL: "https://ai.example.test",
       API_AI_SERVICE_TOKEN: AI_TOKEN,
       API_AI_CONTROL_TOKEN: CONTROL_TOKEN,
+      API_CHAT_RELAY_TOKEN: RELAY_TOKEN,
     };
 
-    it("reads the origins, the cookie flag, the AI service and the control token together", () => {
+    it("reads the origins, the cookie flag, the AI service, the control and relay tokens together", () => {
       expect(readApiConfig(configured).chat).toEqual({
         allowedOrigins: ["https://www.example.test", "https://example.test"],
         cookieSecure: true,
         aiService: { url: "https://ai.example.test", token: AI_TOKEN },
         controlToken: CONTROL_TOKEN,
+        relayToken: RELAY_TOKEN,
       });
       expect(readApiConfig({ ...configured, API_CHAT_COOKIE_SECURE: "false" }).chat).toMatchObject({
         cookieSecure: false,
@@ -169,8 +172,18 @@ describe("readApiConfig", () => {
           API_AI_SERVICE_URL: "",
           API_AI_SERVICE_TOKEN: "",
           API_AI_CONTROL_TOKEN: "",
+          API_CHAT_RELAY_TOKEN: "",
         }).chat,
       ).toBeNull();
+    });
+
+    it("needs the relay token with the other chat settings, and switches on with it alone", () => {
+      const missing = () => readApiConfig({ ...configured, API_CHAT_RELAY_TOKEN: "" });
+      expect(missing).toThrow(/API_CHAT_RELAY_TOKEN/);
+
+      const alone = () => readApiConfig({ ...env, API_CHAT_RELAY_TOKEN: RELAY_TOKEN });
+      expect(alone).toThrow(/API_AI_SERVICE_URL/);
+      expect(alone).not.toThrow(/API_CHAT_RELAY_TOKEN/);
     });
 
     it("refuses a partial set, naming each missing setting", () => {
@@ -219,6 +232,16 @@ describe("readApiConfig", () => {
       const shared = () => readApiConfig({ ...configured, API_AI_CONTROL_TOKEN: AI_TOKEN });
       expect(shared).toThrow(/API_AI_CONTROL_TOKEN/);
       expect(shared).not.toThrow(new RegExp(AI_TOKEN));
+
+      const shortRelay = () =>
+        readApiConfig({ ...configured, API_CHAT_RELAY_TOKEN: "short-fixture-relay" });
+      expect(shortRelay).toThrow(/API_CHAT_RELAY_TOKEN/);
+      expect(shortRelay).not.toThrow(/short-fixture-relay/);
+      for (const reused of [AI_TOKEN, CONTROL_TOKEN]) {
+        expect(() => readApiConfig({ ...configured, API_CHAT_RELAY_TOKEN: reused })).toThrow(
+          /API_CHAT_RELAY_TOKEN/,
+        );
+      }
     });
   });
 });
