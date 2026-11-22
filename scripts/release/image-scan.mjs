@@ -100,6 +100,13 @@ export function blockingFindings(report) {
   return found;
 }
 
+/** Whether a path has an empty, `.` or `..` segment (a trailing slash is not an empty segment). */
+const hasDotSegment = (value) =>
+  value
+    .replace(/\/$/, "")
+    .split("/")
+    .some((segment) => segment === "" || segment === "." || segment === "..");
+
 function dayNumber(text) {
   if (typeof text !== "string" || !DAY.test(text)) return undefined;
   const [year, month, day] = text.split("-").map(Number);
@@ -152,9 +159,11 @@ export function parseExceptions(text, { today, horizonDays = HORIZON_DAYS }) {
       (typeof item.path !== "string" ||
         item.path.startsWith("/") ||
         !item.path.endsWith("/") ||
-        item.path === "/")
+        hasDotSegment(item.path))
     ) {
-      bad.push("has a bad path (a folder prefix without a leading slash, ending in /)");
+      bad.push(
+        "has a bad path (a folder prefix without a leading slash, ending in /, with no empty, . or .. segment)",
+      );
     }
     const expires = dayNumber(item.expires);
     if (expires === undefined) {
@@ -209,7 +218,10 @@ export function evaluateGate({ reports, exceptionsText, today }) {
           item.id === finding.id &&
           (item.package === undefined || item.package === finding.package) &&
           (item.service === undefined || item.service === service) &&
-          (item.path === undefined || finding.path?.startsWith(item.path) === true),
+          (item.path === undefined ||
+            (finding.path !== undefined &&
+              !hasDotSegment(finding.path) &&
+              finding.path.startsWith(item.path))),
       );
       if (excuse) {
         used.add(excuse);
