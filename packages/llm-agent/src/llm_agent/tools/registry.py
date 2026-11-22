@@ -413,6 +413,11 @@ def _profile(person: PublicPerson) -> dict[str, Any]:
     return person.model_dump(mode="json", exclude={"id", "email", "links"})
 
 
+def profile_view(person: PublicPerson) -> dict[str, Any]:
+    """The public profile projection `get_profile` gives the model (stub)."""
+    raise NotImplementedError(person)
+
+
 def _contact(person: PublicPerson) -> dict[str, Any]:
     return person.model_dump(mode="json", include={"name", "email", "links"})
 
