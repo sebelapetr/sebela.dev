@@ -60,17 +60,28 @@ _MAX_HISTORY_RECORD_ID = 128
 
 
 def report_for(
-    result: ChatResult, *, grant: str, latency_ms: int, interrupted: bool = False
+    result: ChatResult,
+    *,
+    grant: str,
+    latency_ms: int,
+    interrupted: bool = False,
+    stopped: bool = False,
 ) -> ResultReport:
-    """The result body for `result`; `interrupted` reports it cancelled with uncertain usage."""
+    """The result body for `result`.
+
+    `interrupted` (shutdown) reports it `cancelled (interrupted)` with uncertain usage; `stopped`
+    (the API's Stop) reports it `cancelled (stopped)` with the usage the agent measured, which is
+    uncertain exactly when a model call was in flight.
+    """
     usage = result.usage
+    reason = "interrupted" if interrupted else "stopped" if stopped else result.reason
     blocks = [block.model_dump(mode="json", by_alias=True) for block in result.blocks]
     if result.contact is not None:
         blocks = [*blocks[: MAX_BLOCKS - 1], _contact_block(result.contact)]
     return ResultReport(
         grant=grant,
-        outcome="cancelled" if interrupted else result.outcome,
-        reason="interrupted" if interrupted else result.reason,
+        outcome="cancelled" if interrupted or stopped else result.outcome,
+        reason=reason,
         language=result.language,
         text=result.text,
         blocks=blocks,

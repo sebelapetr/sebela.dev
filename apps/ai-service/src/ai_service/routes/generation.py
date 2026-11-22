@@ -4,11 +4,16 @@ The bearer (`AI_SERVICE_TOKEN`) is checked in constant time before the body is r
 unauthenticated caller learns nothing about the body's shape. A model or pricing version other
 than this agent's is refused before admission. An admitted operation answers 202 at once and
 runs on, independent of this request.
+
+`POST /internal/v1/generations/{operationId}/cancel` is the API's Stop of one operation, behind
+the same bearer: 202 whether it runs here, already ended or was never dispatched, so the answer
+says nothing about other operations.
 """
 
 from __future__ import annotations
 
 import hmac
+import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -62,6 +67,39 @@ async def generate(request: Request) -> Accepted | JSONResponse:
         return problem(422, "version_mismatch")
     if not await service.generations.submit(generation):
         return problem(503, "busy")
+    return Accepted()
+
+
+@router.post(
+    PATH + "/{operation_id}/cancel",
+    status_code=202,
+    response_model=Accepted,
+    responses={
+        401: {"model": Problem, "description": "No valid bearer"},
+        422: {"model": Problem, "description": "The operation is not a UUID"},
+    },
+    openapi_extra={
+        "security": [{"bearer": []}],
+        "parameters": [
+            {
+                "name": "operation_id",
+                "in": "path",
+                "required": True,
+                "schema": {"type": "string", "format": "uuid"},
+            }
+        ],
+    },
+)
+async def cancel(request: Request) -> Accepted | JSONResponse:
+    """Stops one generation; repeating it, or stopping one that ended, changes nothing."""
+    service = services(request)
+    if not _authorized(request, service.settings.token.get_secret_value()):
+        return problem(401, "unauthorized")
+    try:
+        operation = uuid.UUID(request.path_params["operation_id"])
+    except ValueError:
+        return JSONResponse(status_code=422, content={"detail": "the operation is not a UUID"})
+    service.generations.cancel(str(operation))
     return Accepted()
 
 

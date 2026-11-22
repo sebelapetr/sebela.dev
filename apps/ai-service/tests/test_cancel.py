@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Callable
 
 from ai_service.models.fake import FakeModels
 from tests.fakes import CONTROL_TOKEN, FakeApi, bearer, running
@@ -21,10 +22,12 @@ def cancel_path(operation: str) -> str:
     return f"{ROUTE}/{operation}/cancel"
 
 
-async def wait_for(condition: object, timeout_s: float = 5.0) -> None:
-    async with asyncio.timeout(timeout_s):
-        while not condition():  # type: ignore[operator]
-            await asyncio.sleep(0.01)
+async def wait_for(condition: Callable[[], object], timeout_s: float = 5.0) -> None:
+    for _ in range(round(timeout_s / 0.01)):
+        if condition():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("the condition was not met in time")
 
 
 async def test_a_cancel_without_the_bearer_is_refused_before_anything_else() -> None:

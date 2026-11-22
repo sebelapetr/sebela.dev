@@ -69,6 +69,61 @@
         ]
       }
     },
+    "/internal/v1/generations/{operation_id}/cancel": {
+      "post": {
+        "summary": "Cancel",
+        "description": "Stops one generation; repeating it, or stopping one that ended, changes nothing.",
+        "operationId": "cancel_internal_v1_generations__operation_id__cancel_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The operation is not a UUID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
     "/v1/capabilities/profile": {
       "get": {
         "summary": "Profile",
