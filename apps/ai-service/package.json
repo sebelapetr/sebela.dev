@@ -1,0 +1,18 @@
+{
+  "name": "@sebela/ai-service",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The internal AI service (Python, FastAPI): pnpm and Turborepo task wrappers; Python metadata lives in pyproject.toml.",
+  "license": "MIT",
+  "scripts": {
+    "build": "uv build --quiet --out-dir dist",
+    "dev": "uv run --locked python -m ai_service",
+    "export:openapi": "uv run --locked python scripts/export_openapi.py",
+    "lint": "uv run --locked ruff format --check && uv run --locked ruff check",
+    "test": "uv run --locked pytest $([ \"$TEST_COVERAGE\" = true ] && echo --cov --cov-report=lcov:coverage/lcov.info)",
+    "typecheck": "uv run --locked mypy"
+  },
+  "dependencies": {
+    "@sebela/llm-agent": "workspace:*"
+  }
+}
