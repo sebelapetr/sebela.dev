@@ -497,6 +497,64 @@ describe("changelog", () => {
     );
   });
 
+  describe("layout of the existing file", () => {
+    const link = (version) => `[${version}]: ${GITHUB}/releases/tag/${version}`;
+    const header = "# Changelog\n\nIntro.\n";
+    const sectionOf = (version) => `## [${version}] - 2026-11-21\n\n${notesOf(version)}`;
+    const add = (changelog) =>
+      addToChangelog(changelog, {
+        version: "v0.8.0",
+        date: "2026-11-22",
+        notes: notesOf("v0.8.0"),
+        repository: REPOSITORY,
+      });
+
+    // Shaped like master before #412: three links stand after their own sections.
+    const misplaced = [
+      header,
+      `${sectionOf("v0.7.1")}${link("v0.7.1")}\n`,
+      `${sectionOf("v0.7.0")}${link("v0.7.0")}\n`,
+      `${sectionOf("v0.6.0")}${link("v0.6.0")}\n`,
+      `${sectionOf("v0.5.0")}`,
+      `${link("v0.5.0")}\n`,
+    ].join("\n");
+
+    const wellFormed = [
+      header,
+      sectionOf("v0.2.0"),
+      sectionOf("v0.1.0"),
+      `${link("v0.2.0")}\n${link("v0.1.0")}\n`,
+    ].join("\n");
+
+    it("refuses a link that stands before the last run of links, naming its line", () => {
+      assert.throws(
+        () => add(misplaced),
+        (error) => {
+          assert.match(error.message, /line 10\b/);
+          assert.ok(error.message.includes(link("v0.7.1")), error.message);
+          assert.match(error.message, /end of the file/);
+          return true;
+        },
+      );
+    });
+
+    it("keeps every existing section byte for byte and adds the new one first", () => {
+      const result = add(wellFormed);
+      assert.ok(result.includes(sectionOf("v0.2.0")));
+      assert.ok(result.includes(sectionOf("v0.1.0")));
+      assert.equal(
+        result,
+        [
+          header,
+          sectionOf("v0.8.0").replace("2026-11-21", "2026-11-22"),
+          sectionOf("v0.2.0"),
+          sectionOf("v0.1.0"),
+          `${link("v0.8.0")}\n${link("v0.2.0")}\n${link("v0.1.0")}\n`,
+        ].join("\n"),
+      );
+    });
+  });
+
   it("is the same document whether built at once or one release at a time", () => {
     const releases = [
       { version: "v0.1.0", date: "2026-11-20", notes: notesOf("v0.1.0") },
