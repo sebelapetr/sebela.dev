@@ -191,7 +191,7 @@ apps/api/src/
   modules/media/index.ts            # media HTTP entry
   modules/roadmap/index.ts          # roadmap HTTP entry
   modules/chat/index.ts             # visitor chat and generation control HTTP entry; dispatch to the AI service
-  generated/ai-service/index.ts     # the AI service's dispatch interface (handwritten until its OpenAPI document exists)
+  generated/ai-service/schema.ts    # the AI service's OpenAPI types, generated from apps/ai-service/openapi.json
 packages/services/src/
   index.ts                          # explicit package exports
   services.ts                       # composition of the backend services from validated configuration

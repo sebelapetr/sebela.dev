@@ -7,3 +7,8 @@
 # The nightly encrypted backup of the production database. Its Better Stack heartbeat alerts when
 # no successful backup has arrived for a day; the output goes to the system log.
 30 2 * * * BACKUP_ENV_FILE=<production environment file> <checkout>/infra/scripts/backup.sh 2>&1 | logger --tag sebela-backup
+
+# The daily deletion of visitor chat conversations past their retention (apps/api/AGENTS.md,
+# chat-maintenance), in the API container. Entered only when the visitor chat is enabled
+# (infra/README.md, "The AI service and the visitor chat"); until then it stays commented out.
+# 30 3 * * * cd <checkout> && COMPOSE_FILE=compose.yaml:infra/production/compose.yaml docker compose --env-file <production environment file> exec -T api node dist/cli/chat-maintenance.js delete-expired 2>&1 | logger --tag sebela-chat-maintenance
