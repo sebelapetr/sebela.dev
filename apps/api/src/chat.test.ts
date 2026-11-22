@@ -373,6 +373,71 @@ describe("the visitor chat over HTTP", () => {
     });
   });
 
+  describe("the per-client budget", () => {
+    /** The website's server: every relayed request arrives from its one connection. */
+    const WEBSITE = "203.0.113.20";
+    const limitedApi = (max: number) =>
+      backend.api({
+        config: testConfig({ chat: chatHttp, rateLimits: { public: { max, windowMs: 60_000 } } }),
+        chatDispatcher: dispatcher,
+        chatTiming: timing,
+        now: () => clock.getTime(),
+      });
+    const read = (on: Api, client: string | null, relay: string | null = RELAY_TOKEN) =>
+      request(
+        CONVERSATION,
+        client === null ? {} : { headers: { [CLIENT_HEADER]: client } },
+        on,
+        WEBSITE,
+        relay,
+      );
+
+    it("counts a relayed request against the visitor the relay names, so one flood refuses no one else", async () => {
+      const on = limitedApi(3);
+      for (let index = 0; index < 3; index += 1) {
+        expect((await read(on, "198.51.100.1")).status).toBe(200);
+      }
+
+      const flooded = await read(on, "198.51.100.1");
+      expect(flooded.status).toBe(429);
+      expect(flooded.headers.get("retry-after")).not.toBeNull();
+      expect((await read(on, "198.51.100.2")).status).toBe(200);
+      expect((await read(on, null)).status).toBe(200);
+      // The website's own public reads from the same connection keep their budget.
+      expect((await on.app.request("/v1/person", {}, connection(WEBSITE))).status).toBe(200);
+      // The flooding visitor's question is refused by the same budget, before any state change.
+      expect(
+        (
+          await on.app.request(
+            MESSAGES,
+            {
+              method: "POST",
+              ...json(
+                { requestId: randomUUID(), question: "Flood?", challengeToken: "fictional-token" },
+                { origin: ORIGIN, [RELAY_HEADER]: RELAY_TOKEN, [CLIENT_HEADER]: "198.51.100.1" },
+              ),
+            },
+            connection(WEBSITE),
+          )
+        ).status,
+      ).toBe(429);
+    });
+
+    it("believes the named visitor only with the relay token", async () => {
+      const on = limitedApi(2);
+      for (let index = 0; index < 2; index += 1) {
+        expect((await read(on, "198.51.100.3", null)).status).toBe(403);
+      }
+
+      // The forged requests spent the connection's budget, not the named visitor's.
+      expect((await read(on, "198.51.100.4", null)).status).toBe(429);
+      expect((await on.app.request("/v1/person", {}, connection(WEBSITE))).status).toBe(429);
+      expect((await read(on, "198.51.100.3")).status).toBe(200);
+      expect((await read(on, "198.51.100.3")).status).toBe(200);
+      expect((await read(on, "198.51.100.3")).status).toBe(429);
+    });
+  });
+
   describe("cross-site protection", () => {
     it("refuses a question without the website's origin or as non-JSON, before any state change", async () => {
       const { cookie } = await visitor();
