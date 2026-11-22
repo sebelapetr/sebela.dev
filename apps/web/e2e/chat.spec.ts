@@ -15,7 +15,7 @@ const name = "Ilsa Marrow";
 const answerText = "Ilsa Marrow is a fictional engineer who builds evaluated assistants.";
 const question = "What does Ilsa Marrow build?";
 const storageNotice =
-  "This conversation is stored for 730 days after its last message, so you can come back to it in this browser.";
+  "This conversation is stored for 730 days after its last activity, so you can come back to it in this browser.";
 const handOffAddress =
   /\/ask\?c=[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const askAddress = /\/ask$/u;
