@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+from typing import Any
 
 from ai_service.models.fake import FakeModels
+from ai_service.schemas import GenerationRequest
 from tests.fakes import CONTROL_TOKEN, FakeApi, bearer, running, settings
 
 ROUTE = "/internal/v1/generations"
@@ -225,3 +227,83 @@ async def test_the_paid_mode_ceiling_stops_before_any_model_call() -> None:
         gate.set()
         await api.wait_reported(2)
     assert slow.calls.count("security") == 1
+
+
+async def _stopped_by_the_claim(api: FakeApi, models: FakeModels) -> dict[str, Any]:
+    body = api.issue()
+    async with running(api, models) as (_, client):
+        assert (await client.post(ROUTE, json=body, headers=bearer())).status_code == 202
+        await api.wait_reported()
+    return api.stored[body["operationId"]]
+
+
+def _assert_a_mismatch_stop(api: FakeApi, models: FakeModels, stored: dict[str, Any]) -> None:
+    """No model call, one report: a cancelled non-answer the API stores as a failure, no cost."""
+    assert len(models.calls) == 0
+    assert len(api.report_attempts) == 1
+    assert (stored["outcome"], stored["reason"]) == ("cancelled", "grant_mismatch")
+    assert stored["text"] == ""
+    assert stored["blocks"] == []
+    assert stored["sources"] == []
+    assert stored["usage"] == {
+        "costUsd": 0.0,
+        "costUncertain": False,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelAttempts": 0,
+    }
+
+
+async def test_a_claimed_model_other_than_the_requests_makes_no_model_call() -> None:
+    api = FakeApi(claim_model="claude-other")
+    models = FakeModels()
+    stored = await _stopped_by_the_claim(api, models)
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def test_a_claimed_pricing_version_other_than_the_requests_makes_no_model_call() -> None:
+    api = FakeApi(claim_pricing_version="anthropic-2020-01-01")
+    models = FakeModels()
+    stored = await _stopped_by_the_claim(api, models)
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def test_a_claimed_context_revision_other_than_the_requests_makes_no_model_call() -> None:
+    api = FakeApi(claim_context_revision=2)
+    models = FakeModels()
+    stored = await _stopped_by_the_claim(api, models)
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def _submitted_directly(api: FakeApi, models: FakeModels, **terms: str) -> dict[str, Any]:
+    """An operation that reaches the runtime without the route's version check."""
+    body = {**api.issue(), **terms}
+    async with running(api, models) as (app, _):
+        generations = app.state.services.generations
+        assert await generations.submit(GenerationRequest.model_validate(body))
+        await api.wait_reported()
+    return api.stored[body["operationId"]]
+
+
+async def test_a_model_the_request_and_claim_agree_on_but_this_agent_lacks_makes_no_call() -> None:
+    api = FakeApi(claim_model="claude-other")
+    models = FakeModels()
+    stored = await _submitted_directly(api, models, model="claude-other")
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def test_a_pricing_the_request_and_claim_agree_on_but_this_agent_lacks_makes_no_call() -> (
+    None
+):
+    api = FakeApi(claim_pricing_version="anthropic-2020-01-01")
+    models = FakeModels()
+    stored = await _submitted_directly(api, models, pricingVersion="anthropic-2020-01-01")
+    _assert_a_mismatch_stop(api, models, stored)
+
+
+async def test_matching_claimed_terms_still_generate() -> None:
+    api = FakeApi()
+    models = FakeModels()
+    stored = await _stopped_by_the_claim(api, models)
+    assert stored["outcome"] == "answered"
+    assert len(models.calls) == 3

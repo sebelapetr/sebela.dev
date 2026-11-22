@@ -217,6 +217,12 @@ def _start_api(env: Mapping[str, str]) -> tuple[Process, str]:
     return api, api.wait_for(r"e2e API listening on (http://\S+)")[1]
 
 
+def service_environment(
+    inherited: Mapping[str, str], settings: Mapping[str, str]
+) -> dict[str, str]:
+    raise NotImplementedError(f"{len(inherited)} inherited, {len(settings)} settings")
+
+
 @pytest.fixture(scope="module")
 def stack() -> Iterator[Stack]:
     scratch = ROOT / ".tmp" / f"chat-stack-{secrets.token_hex(4)}"
@@ -537,3 +543,18 @@ def test_a_spent_budget_dispatches_nothing(stack: Stack) -> None:
     settle()
     assert len(stack.calls()) == before
     assert visitor.conversation()["messages"] == []
+
+
+def test_the_service_environment_holds_no_database_setting() -> None:
+    inherited = {
+        "PATH": "/usr/bin",
+        "DATABASE_URL": "postgres://fictional",
+        "DATABASE_USER": "fictional",
+        "DATABASE_PASSWORD": "fictional",
+        "POSTGRES_PASSWORD": "fictional",
+        "POSTGRES_HOST": "db.example.test",
+        "AI_SERVICE_MODEL": "anthropic",
+        "ANTHROPIC_API_KEY": "fictional",
+    }
+    env = service_environment(inherited, {"AI_SERVICE_MODEL": "fake"})
+    assert env == {"PATH": "/usr/bin", "AI_SERVICE_MODEL": "fake"}
