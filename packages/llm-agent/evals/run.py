@@ -562,8 +562,8 @@ async def _drain(process: asyncio.subprocess.Process) -> None:
 
 async def read_person(url: str) -> dict[str, Any]:
     """The person as the public API serves it (the S11 state check and the fixture check)."""
-    from llm_agent.generated.content_api.api.default import get_person
-    from llm_agent.generated.content_api.client import Client
+    from sebela_api_client.api.default import get_person
+    from sebela_api_client.client import Client
 
     async with Client(base_url=url) as client:
         response = await get_person.asyncio_detailed(client=client)

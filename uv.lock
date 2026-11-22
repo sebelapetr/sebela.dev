@@ -5,6 +5,7 @@ requires-python = "==3.13.*"
 [manifest]
 members = [
     "llm-agent",
+    "sebela-api-client",
 ]
 
 [[package]]
@@ -536,20 +537,19 @@ version = "0.0.0"
 source = { editable = "packages/llm-agent" }
 dependencies = [
     { name = "anthropic" },
-    { name = "attrs" },
     { name = "httpx2" },
     { name = "langchain-anthropic" },
     { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langsmith" },
     { name = "pydantic" },
+    { name = "sebela-api-client" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
     { name = "mypy" },
-    { name = "openapi-python-client" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -559,20 +559,19 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = "==2.11.0" },
-    { name = "attrs", specifier = "==26.1.0" },
     { name = "httpx2", specifier = "==2.16.2" },
     { name = "langchain-anthropic", specifier = "==1.7.12" },
     { name = "langchain-core", specifier = "==1.8.4" },
     { name = "langgraph", specifier = "==1.2.24" },
     { name = "langsmith", specifier = "==0.15.1" },
     { name = "pydantic", specifier = "==2.14.4" },
+    { name = "sebela-api-client", editable = "packages/api-client-python" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = "==7.17.3" },
     { name = "mypy", specifier = "==2.4.1" },
-    { name = "openapi-python-client", specifier = "==0.30.0" },
     { name = "pytest", specifier = "==9.2.0" },
     { name = "pytest-asyncio", specifier = "==1.5.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
@@ -937,6 +936,33 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2e/09/28329441dfa2c463e2d377a69d4ebbe4d51665e9dbd49fb421f3bc80d775/ruff-0.17.6-py3-none-win32.whl", hash = "sha256:c2f4af6670b7a0501904e881bb3f1f24bd0d964dec1eedbd85f0eb73786e1128", size = 9966266, upload-time = "2026-11-19T15:56:21.581Z" },
     { url = "https://files.pythonhosted.org/packages/4b/9d/18ba9730addfc7554c70d6f171fb8dc2c08e774d9fb2b98e7946ef845c59/ruff-0.17.6-py3-none-win_amd64.whl", hash = "sha256:9cd2fd9923e9806b8b6b67a3469e2258e84bd4d21e45d5a1a690afdfb9c8e57d", size = 10365847, upload-time = "2026-11-19T15:56:23.582Z" },
     { url = "https://files.pythonhosted.org/packages/70/8a/59c33e2a64a4f9672f7f842a0dc522915cfbbaffd13d37d0cec57d1c5c5d/ruff-0.17.6-py3-none-win_arm64.whl", hash = "sha256:d8b14e1473dc86ab9069cf7a2ba5041dc012f59110201844ed04cfddf07055a0", size = 9926224, upload-time = "2026-11-19T15:56:25.269Z" },
+]
+
+[[package]]
+name = "sebela-api-client"
+version = "0.0.0"
+source = { editable = "packages/api-client-python" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx2" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "openapi-python-client" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "attrs", specifier = "==26.1.0" },
+    { name = "httpx2", specifier = "==2.16.2" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "openapi-python-client", specifier = "==0.30.0" },
+    { name = "ruff", specifier = "==0.17.6" },
 ]
 
 [[package]]

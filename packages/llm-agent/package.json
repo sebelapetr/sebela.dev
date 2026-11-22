@@ -7,9 +7,11 @@
   "scripts": {
     "build": "uv build --quiet --out-dir dist",
     "eval": "node ../../harness/with-secrets.mjs -- uv run --locked python -m evals.run",
-    "generate": "uv run --locked openapi-python-client generate --path ../api-client/src/generated/openapi.json --meta none --config content-api-client.yaml --output-path src/llm_agent/generated/content_api --overwrite",
     "lint": "uv run --locked ruff format --check && uv run --locked ruff check",
     "test": "uv run --locked pytest $([ \"$TEST_COVERAGE\" = true ] && echo --cov --cov-report=lcov:coverage/lcov.info)",
     "typecheck": "uv run --locked mypy"
+  },
+  "dependencies": {
+    "@sebela/api-client-python": "workspace:*"
   }
 }
