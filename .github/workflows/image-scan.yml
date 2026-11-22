@@ -4,13 +4,19 @@
 # and never gates anything: findings never fail it (a scan that cannot run does, so a gap is
 # noticed). The release gate and the exceptions file are described in docs/release-workflow.md,
 # "Image scan"; the exceptions do not apply here, so code scanning shows every finding of medium
-# severity and above, with the exceptions' reasons kept in the repository.
+# severity and above that a newer package fixes, with the exceptions' reasons kept in the
+# repository. A manual run with include-unfixed also uploads the findings no package fixes yet.
 name: Image scan
 
 on:
   schedule:
     - cron: "40 5 * * 1"
   workflow_dispatch:
+    inputs:
+      include-unfixed:
+        description: Also report the findings that no package version fixes yet
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}
@@ -45,6 +51,8 @@ jobs:
       - name: Scan the current images
         env:
           OUT_DIR: ${{ runner.temp }}/image-scan-sarif
+          # Empty on the schedule, which means false.
+          INCLUDE_UNFIXED: ${{ inputs.include-unfixed }}
         run: node scripts/release/image-scan.mjs report
       - name: Upload the api image to code scanning
         uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
