@@ -170,8 +170,10 @@ test.describe("a question the person check does not confirm", () => {
     await fakeTurnstile(page, ["fail-1"]);
     await ask(page, stack().url);
     await answered(page);
-    // Shift+Tab from the composer reaches the contact link, then Try again.
+    // Shift+Tab from the composer reaches the usage line, the contact link, then Try again.
     await expect(composer(page)).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("button", { name: /^Usage/ })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(contactLink(page)).toBeFocused();
     await page.keyboard.press("Shift+Tab");
@@ -402,8 +404,10 @@ test.describe("the recovery controls' layout", () => {
         await page.screenshot({
           path: testInfo.outputPath(`ask-challenge-failed-${String(width)}-${scheme}.png`),
         });
-        // By keyboard, so the focus ring shows: the composer, then the contact link, then retry.
+        // By keyboard, so the focus ring shows: the composer, the usage line, the contact link,
+        // then retry.
         await expect(composer(page)).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
         await page.keyboard.press("Shift+Tab");
         await page.keyboard.press("Shift+Tab");
         await expect(retryButton(page)).toBeFocused();
