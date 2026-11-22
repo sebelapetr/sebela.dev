@@ -22,6 +22,15 @@ import { z } from "zod";
  * - `budget_exhausted` (503): the month's spend on an outside provider reached its ceiling.
  * - `unavailable` (503): something the API depends on, such as the database, cannot be reached now;
  *   the readiness check answers it. No detail of the failure is included.
+ * - `forbidden` (403): a visitor chat write from another origin or without a JSON body, or an
+ *   internal generation result carrying another grant. Refused before any state changes.
+ * - `chat_request_conflict` (409): a chat request identifier reused for a different question.
+ * - `chat_busy` (409): the visitor already has an answer in progress.
+ * - `chat_challenge_failed` (403): the bot challenge was missing, invalid, expired or already
+ *   used; a new challenge may succeed. No question was admitted.
+ * - `chat_quota_exceeded` (429): the visitor or the address reached a question quota;
+ *   `Retry-After` says when to retry.
+ * - `chat_budget_exhausted` (503): the chat's global daily or monthly spend is reserved in full.
  */
 export const errorCodes = [
   "validation_failed",
@@ -37,6 +46,12 @@ export const errorCodes = [
   "provider_unavailable",
   "budget_exhausted",
   "unavailable",
+  "forbidden",
+  "chat_request_conflict",
+  "chat_busy",
+  "chat_challenge_failed",
+  "chat_quota_exceeded",
+  "chat_budget_exhausted",
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
