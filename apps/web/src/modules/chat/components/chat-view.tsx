@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowRight, ArrowUp, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, RotateCcw, Square } from "lucide-react";
 
 import { Button } from "@sebela/ui/components/button";
 import { Input } from "@sebela/ui/components/input";
@@ -19,6 +19,7 @@ import { describeChatTurn } from "../data/turn-status";
 import { chatTurnParts, useChatScroll } from "../hooks/use-chat-scroll";
 import { useConversation } from "../hooks/use-conversation";
 import { AnswerBlock, AnswerSources } from "./answer-blocks";
+import { ClearConversation } from "./clear-conversation";
 
 /**
  * The latest turn asked on this page reaches from just below the header (the question's scroll
@@ -115,6 +116,19 @@ function storageNotice(retentionDays: number): string {
   return `This conversation is stored for ${days} after its last activity, so you can come back to it in this browser.`;
 }
 
+/** What a clear did, as the page says it; a pending deletion is never said to be done. */
+function clearedNotice(telemetryDeletion: "none" | "pending"): string {
+  return telemetryDeletion === "pending"
+    ? "Your conversation was cleared. Copies kept for monitoring the assistant are scheduled for deletion and are not deleted yet."
+    : "Your conversation was cleared.";
+}
+
+const clearNotices = {
+  changed:
+    "The conversation changed in another tab, so nothing was cleared. It is shown as it is now.",
+  failed: "The conversation could not be cleared right now. Try again later.",
+} as const;
+
 /**
  * The chat on the Ask page: the visitor's own conversation as the API stores it (the newest page,
  * with "Show earlier messages" for the rest), its questions and streamed answers with their cards,
@@ -124,7 +138,10 @@ function storageNotice(retentionDays: number): string {
  * (`?c=`) only carries the hero's question here, once: it never names or opens a conversation, and
  * the page drops it after use, so a reload, back or forward never resends. A question the reader
  * sends goes to just below the header and its answer streams below it without moving the page;
- * "Latest" brings back the end once it is out of view (`useChatScroll`).
+ * "Latest" brings back the end once it is out of view (`useChatScroll`). While the latest answer
+ * is open, in this tab or another of the visitor's, "Stop answering" takes the send button's place
+ * and no other question can be sent. "Clear conversation" deletes the conversation after a
+ * confirmation; the page says when copies are still to be deleted, never that they were.
  */
 export function ChatView({
   name,
@@ -139,10 +156,12 @@ export function ChatView({
 }) {
   const searchParams = useSearchParams();
   const handOffId = handOffIdFromParam(searchParams.get("c"));
-  const { snapshot, current, open, submit, retry, loadEarlier, challengeRef } = useConversation(
-    siteKey,
-    available,
-  );
+  const { snapshot, current, open, submit, retry, stop, clear, loadEarlier, challengeRef } =
+    useConversation(siteKey, available);
+  /** Why the last clear did nothing, until the next one or the next question. */
+  const [clearNotice, setClearNotice] = useState<keyof typeof clearNotices | null>(null);
+  /** Whether the last stop could not reach the API, until the next stop or question. */
+  const [stopFailed, setStopFailed] = useState(false);
   const [question, setQuestion] = useState("");
   const conversationRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -189,6 +208,8 @@ export function ChatView({
 
   function ask(text: string): void {
     if (submit(text) !== "sent") return;
+    setClearNotice(null);
+    setStopFailed(false);
     setQuestion("");
     request("sent");
   }
@@ -205,6 +226,29 @@ export function ChatView({
     // page moves only to bring its question to the top.
     lastAnswerRef.current?.focus({ preventScroll: true });
   }
+
+  function stopLatest(requestId: string): void {
+    setStopFailed(false);
+    void stop(requestId).then((result) => {
+      setStopFailed(result === "failed");
+    });
+  }
+
+  function clearConversation(): void {
+    setClearNotice(null);
+    setStopFailed(false);
+    void clear().then((result) => {
+      setClearNotice(result === "cleared" ? null : result);
+    });
+  }
+
+  const answering = latest !== undefined && isChatTurnOpen(latest) ? latest : null;
+  const notice =
+    clearNotice !== null
+      ? clearNotices[clearNotice]
+      : snapshot.telemetryDeletion === null
+        ? null
+        : clearedNotice(snapshot.telemetryDeletion);
 
   function showLatest(): void {
     toLatest();
@@ -228,6 +272,18 @@ export function ChatView({
             {storageNotice(snapshot.retentionDays)}
           </p>
         )}
+        {snapshot.history === "ready" && turnCount > 0 ? (
+          <ClearConversation
+            disabled={snapshot.busy && answering === null}
+            onConfirm={clearConversation}
+          />
+        ) : null}
+        <p
+          role="status"
+          className="max-w-prose text-sm text-pretty text-muted-foreground empty:hidden"
+        >
+          {notice}
+        </p>
       </header>
 
       {snapshot.history === "unavailable" ? (
@@ -342,6 +398,9 @@ export function ChatView({
         ) : null}
         {/* The person check shows here only when it needs the visitor. */}
         <div ref={challengeRef} className="empty:hidden [&:has(iframe)]:pb-3" />
+        <p role="status" className="pb-3 text-sm text-muted-foreground empty:hidden">
+          {stopFailed ? "The answer could not be stopped. It is still being prepared." : null}
+        </p>
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question
@@ -360,14 +419,29 @@ export function ChatView({
               setQuestion(event.target.value);
             }}
           />
-          <Button
-            type="submit"
-            className="size-12"
-            aria-label="Send"
-            disabled={snapshot.busy || question.trim().length === 0}
-          >
-            <ArrowUp aria-hidden="true" />
-          </Button>
+          {answering === null ? (
+            <Button
+              type="submit"
+              className="size-12"
+              aria-label="Send"
+              disabled={snapshot.busy || question.trim().length === 0}
+            >
+              <ArrowUp aria-hidden="true" />
+            </Button>
+          ) : (
+            // In place of the send button while the latest answer is open, in whichever tab it
+            // was asked; the answer's stream says when it stopped.
+            <Button
+              type="button"
+              className="size-12"
+              aria-label="Stop answering"
+              onClick={() => {
+                stopLatest(answering.requestId);
+              }}
+            >
+              <Square aria-hidden="true" className="fill-current" />
+            </Button>
+          )}
         </form>
       </div>
     </div>
