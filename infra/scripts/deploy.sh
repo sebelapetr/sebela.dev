@@ -132,8 +132,8 @@ esac
 
 [[ -n "${DEPLOY_ENV_FILE:-}" ]] || fail "set DEPLOY_ENV_FILE to the production environment file"
 [[ -n "${DEPLOY_STATE_DIR:-}" ]] || fail "set DEPLOY_STATE_DIR to the deployment state folder"
-[[ -f "$DEPLOY_ENV_FILE" ]] || fail "DEPLOY_ENV_FILE is not a file: $DEPLOY_ENV_FILE"
-[[ -d "$DEPLOY_STATE_DIR" ]] || fail "DEPLOY_STATE_DIR is not a folder: $DEPLOY_STATE_DIR"
+[[ -f "$DEPLOY_ENV_FILE" ]] || fail "DEPLOY_ENV_FILE does not name a file"
+[[ -d "$DEPLOY_STATE_DIR" ]] || fail "DEPLOY_STATE_DIR does not name a folder"
 REGISTRY="${DEPLOY_REGISTRY:-ghcr.io/sebelapetr}"
 BACKUP="${DEPLOY_BACKUP:-$SCRIPT_DIR/backup.sh}"
 WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-300}"
@@ -301,7 +301,7 @@ compose pull --policy missing || fail "pulling the images failed; nothing change
 
 if adds_migration; then
   [[ -x "$BACKUP" ]] ||
-    fail "the release adds a new migration and there is no backup script at $BACKUP;" \
+    fail "the release adds a new migration and there is no executable backup script (DEPLOY_BACKUP);" \
       "refusing to migrate without a backup; nothing changed"
   say "the release adds a new migration: backing up first"
   "$BACKUP" || fail "the backup failed; nothing changed"
