@@ -45,3 +45,4 @@ Date: YYYY-MM-DD
 | 0024 | [The Main Agent runs Claude Haiku 5.5 at medium effort](0024-main-agent-haiku-medium.md)                                     |
 | 0025 | [A deployment brings the server's checkout to the release commit](0025-deployment-brings-the-checkout-to-the-release.md)     |
 | 0026 | [Eval cost controls for phases 7, 7.1 and 8](0026-eval-cost-controls-for-later-phases.md)                                    |
+| 0027 | [Work is selected from milestones, phase tracking issues and native dependencies](0027-native-work-selection.md)             |

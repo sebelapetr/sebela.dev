@@ -7,6 +7,7 @@ body:
       value: |
         Thank you for the report. **Security vulnerabilities go to private reporting, not here** (see `SECURITY.md`).
         Please do not paste API keys, tokens or personal data.
+        Labels, the milestone and links to other issues are set by the owner when the report is triaged (`docs/git-workflow.md`, Issues).
   - type: dropdown
     id: area
     attributes:

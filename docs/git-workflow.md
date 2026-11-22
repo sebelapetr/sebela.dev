@@ -5,6 +5,7 @@ The git history of this repository is public and part of the portfolio. It must 
 ## Flow
 
 ```
+milestone → phase tracking issue → sub-issues (in order, with native blockers)
 issue → branch → worktree → implementation → checks → review → issue pull request
       → orchestrator squash-merges into the phase branch
                                   ...all issues of the phase...
@@ -14,6 +15,38 @@ phase branch → phase pull request → owner approval → merge into master
 ```
 
 One issue, one branch, one worktree, one pull request. One phase, one integration branch, one pull request to `master`.
+
+## Issues
+
+Work is organised on GitHub in three levels, all native ([decision 0027](decisions/0027-native-work-selection.md)):
+
+```
+milestone (a release)
+├── phase tracking issue            Plan: .plan/<phase-folder>
+│   ├── sub-issue                   in the intended order
+│   ├── sub-issue                   blocked by ← native link
+│   └── …
+└── small issue without a phase
+```
+
+- **Milestone.** One per release (today `v1.0 · phases 00–10`). It holds the tracking issues of the release's phases, their sub-issues and smaller issues that belong to no phase.
+- **Phase tracking issue.** One open issue per phase. Its text names the plan folder in a line of its own, exactly `Plan: .plan/<phase-folder>` — that line is how the harness finds it, so only the tracking issue may carry it, and it stays the same when the plan is archived in `.plan/done/`. The phase branch `phase/<phase-folder>`, the eval campaign and the loop's argument all use that folder name. A tracking issue is never work: it carries no `ready-for-agent` label, and the selection refuses any issue that has sub-issues. It is closed when the phase's acceptance issue is closed and the phase pull request is merged into `master`.
+- **Sub-issues.** A phase's issues are the sub-issues of its tracking issue, **in the order they are to be worked on**. The order of the sub-issues is the order of the phase; issue numbers mean nothing.
+- **Blockers.** What an issue waits for is a native blocked-by link, inside a phase and across phases. A link between two tracking issues orders the phases: the blocked phase does not start while the other tracking issue is open.
+- **Labels say who may take an issue, not where it belongs:**
+
+  | Label             | Meaning                                                       | Set by      |
+  | ----------------- | ------------------------------------------------------------- | ----------- |
+  | `ready-for-agent` | The owner approved the breakdown; an agent may take the issue | `to-issues` |
+  | `afk`             | Can be finished by agents alone                               | `to-issues` |
+  | `hitl`            | Needs the owner: a decision or a design review; never taken   | `to-issues` |
+  | `agent-retry`     | Failed once in the phase loop; one more attempt               | The loop    |
+  | `agent-failed`    | Failed twice; skipped until the owner looks                   | The loop    |
+
+- **Creating issues.** The `to-issues` skill breaks a PRD into issues: it finds or creates the tracking issue, creates every issue as a sub-issue in the intended order, sets the native blockers and the milestone (`.claude/skills/to-issues/SKILL.md`). An issue added to a phase later is added the same way (`gh issue edit <tracking> --add-sub-issue <n>`, `gh issue edit <n> --add-blocked-by <m>`, `--milestone`), and moved to its place in the order when it is not the last.
+- **Which issue is next** follows from this structure alone: [agents, Work selection](agents.md#work-selection).
+
+**Migration.** Until one whole phase has run on the new selection, issues keep what the old selection read, beside the native structure: the label `phase:<phase-folder>` and a `## Blocked by` section in the text, written as a rendering of the native links. Nothing in the harness reads either. `node harness/phase-work.mjs blockers` reports every open issue whose section and native blockers disagree; the text is corrected to match the links. After that phase the owner finishes the migration: remove the `phase:` labels from open issues and delete the label definitions (closed issues keep them as history), take the phase labels out of `harness/setup-github.sh`, stop writing the label and the section in `to-issues`, and remove the `blockers` check with them.
 
 ## Branches
 
@@ -25,7 +58,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 - `<type>` is a Conventional Commits type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 - An issue branch is cut from the phase branch and its pull request targets the phase branch.
-- A sub-phase `NN.M-<name>` (`.plan/00-overview/prd.md`, Phases) is a phase in every respect: branch `phase/NN.M-<name>`, label `phase:NN.M-<name>`, its own phase pull request.
+- A sub-phase `NN.M-<name>` (`.plan/00-overview/prd.md`, Phases) is a phase in every respect: branch `phase/NN.M-<name>`, its own tracking issue (`Plan: .plan/NN.M-<name>`), its own phase pull request.
 - Phase 0 (planning, docs, agent configuration and the harness) has no issues. It is done directly on `phase/00-overview` and reaches `master` through the same kind of phase pull request, after the trial has passed.
 - The trial is the one phase whose base is not `master`: `phase/00-trial` is cut from `phase/00-overview`, and its phase pull request targets that branch and is closed without merging.
 - Other work without an issue uses `<type>/<short-slug>`, for example `docs/fix-testing-guide`, and targets `master` through a pull request the owner merges.
@@ -115,7 +148,7 @@ Orchestrated by: <agent>
 
 ## Phase pull request
 
-- Opened by the orchestrator from the phase branch to `master` **as a draft** when no ready issue of the phase remains; HITL issues may still be open.
+- Opened by the orchestrator from the phase branch to `master` **as a draft** when the work selection names no issue of the phase ([agents, Work selection](agents.md#work-selection)); HITL issues may still be open.
 - It **stays a draft until the owner switches it.** No agent creates a phase pull request without `--draft`, marks it ready, closes or reopens it — not the orchestrator in the loop, not an agent in an interactive session: the guard refuses `gh pr create` for a `phase/*` head without `--draft`, `gh pr ready`, `gh pr close`, `gh pr reopen` and the same change through `gh api` for a pull request whose head is `phase/*`, and in an interactive main session asks the owner (`docs/permissions.md`, Denied).
 - When the phase is complete, the owner marks it **ready for review**. That runs the paid model evals of the affected suites once on the final state — the one full paid run of the phase, paid from the phase campaign's reserve (`docs/testing.md`, Evals-driven development); a draft runs none. Only a phase pull request starts paid evals by itself: any other pull request into `master` starts none, and a change that really needs a suite gets a manual, charged run of the `Model evals` workflow (`docs/testing.md`, CI).
 - It also moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, so merging the phase into `master` archives its PRD and issue overview. The orchestrator does this once, on a short-lived branch merged into the phase branch, when it first opens the pull request; a phase already in `.plan/done/` is left there.
@@ -159,4 +192,4 @@ No `fix`, `fix2`, `try again` on `master`. Each commit there is one issue with o
 
 ## The phase loop
 
-A phase can be processed unattended. See `docs/agents.md`.
+A phase can be processed unattended. See `docs/agents.md`. It takes its issues from the phase's tracking issue, in sub-issue order ([Issues](#issues)).

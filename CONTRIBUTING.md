@@ -8,7 +8,7 @@ The code is written by the owner together with coding agents. The owner decides 
 
 ### Phases and issues
 
-Work is planned in **phases**. Each phase has a product specification (PRD) in [`.plan/`](.plan/00-overview/prd.md); finished phases are archived in `.plan/done/`. A phase is broken into GitHub issues, each a thin vertical slice with acceptance criteria and a `phase:<phase-folder>` label. Issues marked `hitl` need the owner (a decision or a design review); the rest can be finished by agents alone.
+Work is planned in **phases**. Each phase has a product specification (PRD) in [`.plan/`](.plan/00-overview/prd.md); finished phases are archived in `.plan/done/`. A phase is broken into GitHub issues, each a thin vertical slice with acceptance criteria. On GitHub a release is a **milestone**; each phase has one **tracking issue** in it, and the phase's issues are that issue's **sub-issues**, in the order they are worked on, with native blocked-by links for what must come first. Small issues that belong to no phase sit in the milestone directly. Labels only say who may take an issue: `ready-for-agent` (approved for agents), `hitl` (needs the owner: a decision or a design review) and `afk` (agents can finish it alone).
 
 ### One issue, one branch, one worktree, one pull request
 
@@ -23,7 +23,7 @@ all issues of the phase → phase pull request → owner review → merge into m
 - A reviewer agent checks the branch against the issue and the repository rules before a pull request is opened. The orchestrator agent squash-merges reviewed issue pull requests into the phase branch.
 - The phase pull request into `master` is reviewed and **merged only by the owner**. Nobody pushes to `master`.
 
-The owner can run a whole phase unattended with `harness/run-phase.sh <phase-folder>`: a loop that takes one ready issue at a time, each with a fresh agent, and skips issues that need a human. Hooks keep the agents inside the rules: a guard refuses forbidden actions, edited files are formatted, and a handoff is refused while lint or typecheck fail.
+The owner can run a whole phase unattended with `harness/run-phase.sh <phase-folder>`: a loop that takes one issue at a time — the first sub-issue of the phase's tracking issue that is ready and not blocked — each with a fresh agent, and skips issues that need a human. Hooks keep the agents inside the rules: a guard refuses forbidden actions, edited files are formatted, and a handoff is refused while lint or typecheck fail.
 
 Details: [git workflow](docs/git-workflow.md), [agents](docs/agents.md), [permissions](docs/permissions.md), [harness](harness/README.md).
 

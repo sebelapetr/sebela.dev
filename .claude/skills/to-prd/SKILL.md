@@ -11,7 +11,7 @@ Adapted from the `to-prd` skill in mattpocock/skills. Differences for this repos
 
 - `.plan/00-overview/prd.md` — the overview PRD: vision, phases, architecture, cross-cutting rules. Every other PRD defers to it.
 - `.plan/NN-<phase>/prd.md` — one PRD per phase (see the phase table in the overview PRD for the folder names).
-- `.plan/NN.M-<name>/prd.md` — a sub-phase: independently deliverable work that builds on phase NN without blocking or bloating it (connecting a capability, measured improvements, an experiment swapping a component). Suggest one when a request would otherwise stretch a running phase; add a row right after the parent in the overview PRD's phase table and name its dependencies. A few issues that belong to a running phase go into that phase instead. A phase merged into `master` is archived in `.plan/done/NN-<phase>/`; earlier decisions are read there.
+- `.plan/NN.M-<name>/prd.md` — a sub-phase: independently deliverable work that builds on phase NN without blocking or bloating it (connecting a capability, measured improvements, an experiment swapping a component). Suggest one when a request would otherwise stretch a running phase; add a row right after the parent in the overview PRD's phase table and name its dependencies. On GitHub a phase or sub-phase is one tracking issue with the line `Plan: .plan/<folder>`, its issues are that issue's sub-issues, and its dependencies on other phases become native blocked-by links between the tracking issues; `to-issues` creates all of that from the PRD (`docs/git-workflow.md`, Issues) — there is no phase label to invent and no order by issue number. A few issues that belong to a running phase go into that phase instead. A phase merged into `master` is archived in `.plan/done/NN-<phase>/`; earlier decisions are read there.
 
 `.plan/` is committed. Never put personal raw notes or private data in it — those belong in `.context/` (gitignored).
 
@@ -27,7 +27,7 @@ Adapted from the `to-prd` skill in mattpocock/skills. Differences for this repos
 
    Check with the user that these modules match their expectations. Check with the user which modules they want tests written for.
 
-4. Write the PRD using the template below and save it to the right folder in `.plan/`. Do not publish it to the issue tracker — issues are created from it later with the `to-issues` skill.
+4. Write the PRD using the template below and save it to the right folder in `.plan/`. Do not publish it to the issue tracker — the phase's tracking issue and its ordered sub-issues are created from it later with the `to-issues` skill.
 
 <prd-template>
 
