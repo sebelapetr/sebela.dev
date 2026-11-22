@@ -299,6 +299,23 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
   };
 }
 
+export interface ApiUsageReaderOptions {
+  /** The browser's `fetch`; the cookie goes with every same-origin request. */
+  readonly fetch: typeof globalThis.fetch;
+  /** Where the chat routes are, such as `/api/chat`. */
+  readonly basePath: string;
+}
+
+/**
+ * Builds the read of the caller's usage snapshot: a plain GET that never admits, retries or
+ * consumes anything. It returns the body unchecked and throws when it cannot be read.
+ */
+export function createApiUsageReader(
+  options: ApiUsageReaderOptions,
+): (signal: AbortSignal) => Promise<unknown> {
+  throw new Error("not implemented", { cause: options });
+}
+
 function parseJson(data: string): unknown {
   try {
     return JSON.parse(data) as unknown;

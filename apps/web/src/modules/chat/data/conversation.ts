@@ -41,6 +41,12 @@ export interface ChatTurnError {
   readonly retryAfterSeconds?: number;
 }
 
+/** The main model and effort an answer was produced with, as its stored message recorded them. */
+export interface ChatTurnModel {
+  readonly name: string;
+  readonly effort: string | null;
+}
+
 /** One question of a conversation and the answer received for it so far. */
 export interface ChatTurn {
   readonly requestId: string;
@@ -53,6 +59,11 @@ export interface ChatTurn {
   readonly related: readonly ChatRelatedLink[];
   readonly outcome: ChatOutcome | null;
   readonly error: ChatTurnError | null;
+  /**
+   * The model its stored answer was produced with; null for an answer only streamed in this tab
+   * so far, or one stored without it.
+   */
+  readonly model: ChatTurnModel | null;
 }
 
 /** A question just sent: pending, with no answer yet. */
@@ -68,6 +79,7 @@ export function startChatTurn(requestId: string, question: string): ChatTurn {
     related: [],
     outcome: null,
     error: null,
+    model: null,
   };
 }
 

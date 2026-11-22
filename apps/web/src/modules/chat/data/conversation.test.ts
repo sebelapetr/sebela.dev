@@ -35,6 +35,7 @@ describe("startChatTurn", () => {
       related: [],
       outcome: null,
       error: null,
+      model: null,
     });
   });
 });

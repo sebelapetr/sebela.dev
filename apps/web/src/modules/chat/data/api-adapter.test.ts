@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ChatAdmissionError } from "./admission";
-import { createApiChatAdapter, type ApiChatAdapterOptions } from "./api-adapter";
+import {
+  createApiChatAdapter,
+  createApiUsageReader,
+  type ApiChatAdapterOptions,
+} from "./api-adapter";
 
 const REQUEST = "11111111-0000-4000-8000-000000000001";
 const OPERATION = "22222222-0000-4000-8000-000000000001";
@@ -622,5 +626,26 @@ describe("createApiChatAdapter clear", () => {
     const { fetch } = fakeFetch([failure(503, "unavailable")]);
 
     await expect(adapter(fetch).clear("c", { signal: signal() })).rejects.toThrow();
+  });
+});
+
+describe("createApiUsageReader", () => {
+  it("reads the caller's usage as a plain GET, with nothing that could admit a question", async () => {
+    const snapshot = { serverTime: "2026-11-20T10:00:00.000Z" };
+    const { fetch, calls } = fakeFetch([json(200, snapshot)]);
+    const read = createApiUsageReader({ fetch, basePath: "/api/chat" });
+
+    await expect(read(signal())).resolves.toEqual(snapshot);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ url: "/api/chat/usage", method: "GET", body: undefined });
+    expect(calls[0]?.headers.get("accept")).toBe("application/json");
+  });
+
+  it("throws when the usage cannot be read", async () => {
+    const { fetch } = fakeFetch([failure(503, "unavailable")]);
+
+    await expect(
+      createApiUsageReader({ fetch, basePath: "/api/chat" })(signal()),
+    ).rejects.toThrow();
   });
 });
