@@ -260,6 +260,12 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
 
+  apps/ai-service:
+    dependencies:
+      '@sebela/llm-agent':
+        specifier: workspace:*
+        version: link:../../packages/llm-agent
+
   apps/api:
     dependencies:
       '@hono/node-server':
