@@ -205,6 +205,42 @@ async def test_the_prior_summary_and_older_exchanges_fold_and_the_newest_two_sta
     assert str(messages[0].content) == COMPACT_PROMPT
 
 
+async def test_only_the_current_working_context_is_folded_never_excluded_history() -> None:
+    """Exchanges the history envelope already excludes, and a summary hidden with them, stay out."""
+    huge = "Ilsa built fictional things. " * 700
+    exchanges = (
+        exchange(1, answer=huge),
+        exchange(2, answer=huge),
+        *(exchange(number) for number in range(3, 6)),
+    )
+    limits = ExecutionLimits()
+    _shown_summary, shown = select_context(
+        exchanges, PRIOR, max_exchanges=limits.history_exchanges, max_tokens=limits.history_tokens
+    )
+    assert len(shown) == 3
+    models = ScriptedModels(main=[summary_reply()])
+    result = await compact(models, exchanges, summary=PRIOR)
+    assert result.outcome == "compacted"
+    assert result.kept == KEPT_EXCHANGES
+    ((_call, messages),) = compact_calls(models)
+    text = visitor_text(messages)
+    assert "Question 3?" in text
+    assert "Question 1?" not in text
+    assert "Question 2?" not in text
+    assert "Find a consultant for an evaluation review" not in text
+
+
+async def test_a_working_context_the_envelope_shrinks_to_the_kept_exchanges_is_a_no_op() -> None:
+    huge = "Ilsa built fictional things. " * 1100
+    exchanges = (exchange(1, answer=huge), exchange(2, answer=huge), *conversation(2))
+    models = ScriptedModels(main=[summary_reply()])
+    result = await compact(models, exchanges, summary=PRIOR)
+    assert result.outcome == "unchanged"
+    assert result.reason == "nothing_to_compact"
+    assert result.summary == PRIOR
+    assert models.calls == []
+
+
 async def test_compaction_uses_the_main_model_without_tools_in_one_logical_call() -> None:
     models = ScriptedModels(main=[summary_reply()])
     result = await compact(models, conversation(4))
@@ -417,9 +453,9 @@ async def test_a_cost_allowance_too_small_for_the_call_fails_without_a_call() ->
 
 
 async def test_a_working_context_over_the_input_cap_fails_without_a_call() -> None:
-    big = tuple(exchange(n, answer="Ilsa built fictional things. " * 1000) for n in range(1, 6))
+    big = tuple(exchange(n, answer="Ilsa built fictional things. " * 40) for n in range(1, 6))
     models = ScriptedModels(main=[summary_reply()])
-    result = await compact(models, big, limits=ExecutionLimits(main_input_tokens=2000))
+    result = await compact(models, big, limits=ExecutionLimits(main_input_tokens=500))
     assert result.outcome == "failed"
     assert result.reason == "context_too_large"
     assert models.calls == []
