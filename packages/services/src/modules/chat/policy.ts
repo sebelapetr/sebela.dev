@@ -1,5 +1,7 @@
 import type { ChatQuotaRule, ChatSpendWindow } from "@sebela/db";
 
+import { siteverifyTimeoutMs } from "./siteverify.js";
+
 /** The server's chat policy; changed only in code, never by a request. */
 export interface ChatPolicy {
   /** The whole-attempt allowance reserved per question, in millionths of a US dollar. */
@@ -8,6 +10,13 @@ export interface ChatPolicy {
   readonly monthlySpendLimitMicroUsd: number;
   /** The absolute generation deadline after admission. */
   readonly deadlineMs: number;
+  /**
+   * How long a submission's request claim holds while its challenge is verified; longer than
+   * Siteverify may take, so a crashed holder's claim lapses soon after.
+   */
+  readonly requestClaimMs: number;
+  /** How often a concurrent equal submission looks again for the holder's outcome. */
+  readonly requestClaimPollMs: number;
 }
 
 export const chatPolicy: ChatPolicy = {
@@ -15,6 +24,8 @@ export const chatPolicy: ChatPolicy = {
   dailySpendLimitMicroUsd: 2_000_000,
   monthlySpendLimitMicroUsd: 20_000_000,
   deadlineMs: 60_000,
+  requestClaimMs: siteverifyTimeoutMs + 2_000,
+  requestClaimPollMs: 100,
 };
 
 const minute = 60_000;

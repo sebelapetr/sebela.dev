@@ -15,7 +15,8 @@ const challengeMaxAgeMs = 300_000;
 /** How far ahead of this server's clock a challenge time may be. */
 const clockSkewMs = 60_000;
 
-const defaultTimeoutMs = 5_000;
+/** How long a Siteverify call may take before the challenge counts as failed. */
+export const siteverifyTimeoutMs = 5_000;
 
 /**
  * Cloudflare's published test secrets (always passes, always fails, token already spent). They
@@ -57,7 +58,7 @@ export function createSiteverifyVerifier(options: SiteverifyOptions): ChallengeV
   }
   const fetcher = options.fetch ?? fetch;
   const now = options.now ?? (() => new Date());
-  const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
+  const timeoutMs = options.timeoutMs ?? siteverifyTimeoutMs;
 
   return {
     async verify(token, remoteAddress) {
@@ -67,7 +68,7 @@ export function createSiteverifyVerifier(options: SiteverifyOptions): ChallengeV
           body: new URLSearchParams({
             secret: options.secret,
             response: token,
-            remoteip: remoteAddress ?? "",
+            ...(remoteAddress === null ? {} : { remoteip: remoteAddress }),
           }),
           signal: AbortSignal.timeout(timeoutMs),
         });

@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import {
   ChatAssistantMessageSchema,
@@ -25,10 +26,12 @@ import type {
 
 import { admissionExpiry, chatPolicy, pragueDate, quotaRules, spendWindows } from "./policy.js";
 import type {
+  ChatCaller,
   ChatHistoryExchange,
   ChatObservation,
   ChatService,
   ChatServiceOptions,
+  ChatSubmitResult,
 } from "./types.js";
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -39,6 +42,9 @@ const checkingMs = 5_000;
 /** An opaque cookie value or grant: 32 random bytes, base64url. */
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** What an unknown visitor address is fingerprinted as; never a valid address itself. */
+const unknownAddressBucket = "unknown";
 
 const newToken = () => randomBytes(32).toString("base64url");
 const digest = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
@@ -191,8 +197,79 @@ export function createChatService(
   const { config, verifier } = options;
   const policy = options.policy ?? chatPolicy;
   const now = options.now ?? (() => new Date());
-  const fingerprint = (address: string) =>
-    createHmac("sha256", config.fingerprintKey).update(address, "utf8").digest("hex");
+  /** Every visitor whose address is unknown shares one fingerprint, and so the strict quota. */
+  const fingerprint = (address: string | null) =>
+    createHmac("sha256", config.fingerprintKey)
+      .update(address ?? unknownAddressBucket, "utf8")
+      .digest("hex");
+
+  const admit = async (
+    caller: ChatCaller,
+    question: string,
+    questionHash: string,
+    challengeTokenHash: string,
+    context: { clientAddress: string | null },
+    requestId: string,
+  ): Promise<ChatSubmitResult> => {
+    const at = now();
+    const deadlineAt = new Date(at.getTime() + policy.deadlineMs);
+    const grant = newToken();
+    const result = await persistence.admit({
+      identityId: caller.identityId,
+      conversationId: caller.conversationId,
+      requestId,
+      question,
+      questionHash,
+      challengeTokenHash,
+      fingerprint: fingerprint(context.clientAddress),
+      at,
+      deadlineAt,
+      grantVerifier: digest(grant),
+      model: config.model,
+      pricingVersion: config.pricingVersion,
+      allowanceMicroUsd: policy.allowanceMicroUsd,
+      quotas: quotaRules(at),
+      admissionExpiresAt: admissionExpiry(at),
+      spend: spendWindows(at, deadlineAt, policy),
+    });
+    switch (result.status) {
+      case "duplicate":
+        return result.sameQuestion
+          ? { status: "existing", operation: toOperation(result.operation) }
+          : { status: "conflict" };
+      case "busy":
+        return { status: "busy", operation: toOperation(result.operation) };
+      case "challenge_reused":
+        return { status: "challenge_failed" };
+      case "quota_exceeded":
+        return { status: "quota_exceeded", retryAt: result.retryAt };
+      case "budget_exhausted":
+        return { status: "budget_exhausted" };
+      case "admitted": {
+        const { operation } = result;
+        const history = await persistence.recentExchanges(
+          caller.conversationId,
+          chatHistoryExchangeLimit,
+        );
+        return {
+          status: "admitted",
+          operation: toOperation(operation),
+          dispatch: {
+            operationId: operation.id,
+            grant,
+            question,
+            history: history.flatMap((record) => toExchange(record) ?? []),
+            today: pragueDate(at),
+            deadlineAt: operation.deadlineAt.toISOString(),
+            contextRevision: operation.contextRevision,
+            model: operation.model,
+            pricingVersion: operation.pricingVersion,
+            allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
+          },
+        };
+      }
+    }
+  };
 
   return {
     retentionDays: config.retentionDays,
@@ -235,79 +312,83 @@ export function createChatService(
     async submit(caller, submission, context) {
       const question = submission.question.trim();
       const questionHash = digest(question);
-      const earlier = await persistence.findOperationByRequest(
-        caller.identityId,
-        submission.requestId,
-      );
-      if (earlier !== null) {
+      const recovered = async (): Promise<ChatSubmitResult | null> => {
+        const earlier = await persistence.findOperationByRequest(
+          caller.identityId,
+          submission.requestId,
+        );
+        if (earlier === null) return null;
         return earlier.questionHash === questionHash
           ? { status: "existing", operation: toOperation(earlier) }
           : { status: "conflict" };
-      }
+      };
+      const known = await recovered();
+      if (known !== null) return known;
       const active = await persistence.findActiveOperation(caller.identityId);
       if (active !== null) return { status: "busy", operation: toOperation(active) };
-      if (context.clientAddress === null) throw new Error("not implemented");
-      if (!(await verifier.verify(submission.challengeToken, context.clientAddress))) {
-        return { status: "challenge_failed" };
-      }
 
-      const at = now();
-      const deadlineAt = new Date(at.getTime() + policy.deadlineMs);
-      const grant = newToken();
-      const result = await persistence.admit({
+      const token = submission.challengeToken;
+      const claim = {
         identityId: caller.identityId,
-        conversationId: caller.conversationId,
         requestId: submission.requestId,
-        question,
         questionHash,
-        challengeTokenHash: digest(submission.challengeToken),
-        fingerprint: fingerprint(context.clientAddress),
-        at,
-        deadlineAt,
-        grantVerifier: digest(grant),
-        model: config.model,
-        pricingVersion: config.pricingVersion,
-        allowanceMicroUsd: policy.allowanceMicroUsd,
-        quotas: quotaRules(at),
-        admissionExpiresAt: admissionExpiry(at),
-        spend: spendWindows(at, deadlineAt, policy),
-      });
-      switch (result.status) {
-        case "duplicate":
-          return result.sameQuestion
-            ? { status: "existing", operation: toOperation(result.operation) }
-            : { status: "conflict" };
-        case "busy":
-          return { status: "busy", operation: toOperation(result.operation) };
-        case "challenge_reused":
+        challengeTokenHash: digest(token),
+      };
+      const verifyAndAdmit = async (): Promise<ChatSubmitResult> => {
+        if (!(await verifier.verify(token, context.clientAddress))) {
           return { status: "challenge_failed" };
-        case "quota_exceeded":
-          return { status: "quota_exceeded", retryAt: result.retryAt };
-        case "budget_exhausted":
-          return { status: "budget_exhausted" };
-        case "admitted": {
-          const { operation } = result;
-          const history = await persistence.recentExchanges(
-            caller.conversationId,
-            chatHistoryExchangeLimit,
-          );
-          return {
-            status: "admitted",
-            operation: toOperation(operation),
-            dispatch: {
-              operationId: operation.id,
-              grant,
-              question,
-              history: history.flatMap((record) => toExchange(record) ?? []),
-              today: pragueDate(at),
-              deadlineAt: operation.deadlineAt.toISOString(),
-              contextRevision: operation.contextRevision,
-              model: operation.model,
-              pricingVersion: operation.pricingVersion,
-              allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
-            },
-          };
         }
+        return admit(
+          caller,
+          question,
+          questionHash,
+          claim.challengeTokenHash,
+          context,
+          submission.requestId,
+        );
+      };
+      // Concurrent equal submissions redeem the single-use token once: one claims the request and
+      // verifies; the others wait, bounded, for its operation or the end of its verification.
+      const polls = Math.ceil(policy.requestClaimMs / policy.requestClaimPollMs);
+      for (let poll = 0; ; poll += 1) {
+        const at = now();
+        const held = await persistence.claimRequest({
+          ...claim,
+          at,
+          expiresAt: new Date(at.getTime() + policy.requestClaimMs),
+        });
+        if (held.status === "claimed") {
+          const passed = await verifier.verify(token, context.clientAddress);
+          await persistence.settleRequestClaim(claim, passed ? "verified" : "failed");
+          if (!passed) return { status: "challenge_failed" };
+          return admit(
+            caller,
+            question,
+            questionHash,
+            claim.challengeTokenHash,
+            context,
+            submission.requestId,
+          );
+        }
+        if (!held.sameQuestion) return { status: "conflict" };
+        // Another token cannot be redeemed twice by this claim; it is verified on its own.
+        if (!held.sameToken) return verifyAndAdmit();
+        if (held.state === "failed") return { status: "challenge_failed" };
+        // The token passed for this very request: admitting again recovers its operation.
+        if (held.state === "verified") {
+          return admit(
+            caller,
+            question,
+            questionHash,
+            claim.challengeTokenHash,
+            context,
+            submission.requestId,
+          );
+        }
+        if (poll >= polls) return { status: "challenge_failed" };
+        await sleep(policy.requestClaimPollMs);
+        const settled = await recovered();
+        if (settled !== null) return settled;
       }
     },
 
