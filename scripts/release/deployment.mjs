@@ -348,6 +348,7 @@ export function addToChangelog(changelog, release) {
   return result;
 }
 
+const isBlank = (line) => line.trim() === "";
 const isReference = (line) => /^\[[^\]]+\]: /.test(line.replace(/\r$/, ""));
 const isVersionLink = (line) => /^\[v\d+\.\d+\.\d+\]: /.test(line);
 
@@ -356,7 +357,7 @@ function sectionsOf(text) {
   const parts = text.split(/^(?=## \[)/m).filter((part) => part.startsWith("## ["));
   return parts.map((part) => {
     const lines = part.split("\n");
-    while (lines.length > 0 && (lines.at(-1) === "" || isReference(lines.at(-1)))) lines.pop();
+    while (lines.length > 0 && (isBlank(lines.at(-1)) || isReference(lines.at(-1)))) lines.pop();
     return lines.join("\n");
   });
 }
@@ -366,20 +367,21 @@ function sectionsOf(text) {
  * order, in `after`: a release only adds a section, it never rewrites an older one.
  */
 export function assertSectionsUnchanged(before, after) {
+  const kept = sectionsOf(after);
   let from = 0;
   for (const section of sectionsOf(before)) {
-    const at = after.indexOf(section, from);
+    const at = kept.indexOf(section, from);
     if (at === -1) {
-      const heading = section.split("\n")[0];
+      const heading = section.split("\n")[0].replace(/\r$/, "");
       throw new Error(
         `The changelog section "${heading}" would be changed or lost; nothing was written.`,
       );
     }
-    from = at + section.length;
+    from = at + 1;
   }
 }
 
-function addSection(changelog, { version, date, notes, repository }) {
+function addSection(changelog, { version, date, notes, repository, file = "CHANGELOG.md" }) {
   if (!VERSION.test(version ?? "")) throw new Error(`Not a vX.Y.Z version: ${String(version)}`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) throw new Error(`Not a date: ${String(date)}`);
   const text = changelog.trim() === "" ? CHANGELOG_HEADER : changelog;
@@ -392,17 +394,14 @@ function addSection(changelog, { version, date, notes, repository }) {
   const firstSection = lines.findIndex((line) => line.startsWith("## ["));
   // The link list is only the run of reference-link lines at the very end of the file.
   let firstLink = lines.length;
-  while (
-    firstLink > 0 &&
-    (lines[firstLink - 1].trim() === "" || isReference(lines[firstLink - 1]))
-  ) {
+  while (firstLink > 0 && (isBlank(lines[firstLink - 1]) || isReference(lines[firstLink - 1]))) {
     firstLink -= 1;
   }
-  while (firstLink < lines.length && lines[firstLink].trim() === "") firstLink += 1;
+  while (firstLink < lines.length && isBlank(lines[firstLink])) firstLink += 1;
   const misplaced = lines.findIndex((line, index) => index < firstLink && isVersionLink(line));
   if (misplaced !== -1) {
     throw new Error(
-      `CHANGELOG.md line ${misplaced + 1} is a release link (${lines[misplaced].replace(/\r$/, "")}) ` +
+      `${file} line ${misplaced + 1} is a release link (${lines[misplaced].replace(/\r$/, "")}) ` +
         "before the end of the file; all links belong in one list at the end of the file. Move it " +
         "there (newest first) and run again; nothing was changed.",
     );
@@ -412,8 +411,8 @@ function addSection(changelog, { version, date, notes, repository }) {
   }
   const head = lines.slice(0, firstSection).join("\n").trimEnd();
   const bodyLines = lines.slice(firstSection, firstLink);
-  while (bodyLines.length > 0 && bodyLines.at(-1).trim() === "") bodyLines.pop();
-  const links = lines.slice(firstLink).filter((line) => line.trim() !== "");
+  while (bodyLines.length > 0 && isBlank(bodyLines.at(-1))) bodyLines.pop();
+  const links = lines.slice(firstLink).filter((line) => !isBlank(line));
   return `${head}\n\n${section}\n${bodyLines.join("\n")}\n\n${[link, ...links].join("\n")}\n`;
 }
 
@@ -526,7 +525,13 @@ function changelogEntryCommand() {
   const notes = fs.readFileSync(notesFile, "utf8");
   fs.writeFileSync(
     changelogFile,
-    addToChangelog(changelog, { version, date: today(), notes, repository }),
+    addToChangelog(changelog, {
+      version,
+      date: today(),
+      notes,
+      repository,
+      file: changelogFile,
+    }),
   );
 }
 
