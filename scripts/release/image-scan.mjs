@@ -110,8 +110,9 @@ function dayNumber(text) {
 }
 
 /**
- * The reviewed exceptions: `{"exceptions": [{ "id", "reason", "expires", "package"?, "service"? }]}`.
- * An exception excuses the finding `id` (in `package` and `service` when it names them) through
+ * The reviewed exceptions: `{"exceptions": [{ "id", "reason", "expires", "package"?, "service"?,
+ * "path"? }]}`. An exception excuses the finding `id` (in `package`, `service` and under the folder
+ * `path`, a PkgPath prefix such as `usr/local/lib/node_modules/npm/`, when it names them) through
  * the day `expires` (YYYY-MM-DD, UTC). Returns the entries that are complete and unexpired, and
  * the problems of the others: an expired entry, one whose expiry is more than `horizonDays` ahead
  * of `today`, a missing or empty field, a repeated entry. Never throws on bad content.
@@ -146,6 +147,15 @@ export function parseExceptions(text, { today, horizonDays = HORIZON_DAYS }) {
     if (item.service !== undefined && !SERVICES.includes(item.service)) {
       bad.push(`names an unknown service (${String(item.service)})`);
     }
+    if (
+      item.path !== undefined &&
+      (typeof item.path !== "string" ||
+        item.path.startsWith("/") ||
+        !item.path.endsWith("/") ||
+        item.path === "/")
+    ) {
+      bad.push("has a bad path (a folder prefix without a leading slash, ending in /)");
+    }
     const expires = dayNumber(item.expires);
     if (expires === undefined) {
       bad.push("has no valid expiry date (YYYY-MM-DD)");
@@ -154,7 +164,12 @@ export function parseExceptions(text, { today, horizonDays = HORIZON_DAYS }) {
     } else if (expires - now > horizonDays) {
       bad.push(`expires ${item.expires}, more than ${horizonDays} days ahead`);
     }
-    const key = JSON.stringify([item.id, item.package ?? null, item.service ?? null]);
+    const key = JSON.stringify([
+      item.id,
+      item.package ?? null,
+      item.service ?? null,
+      item.path ?? null,
+    ]);
     if (seen.has(key)) bad.push("is listed twice");
     seen.add(key);
     if (bad.length > 0) {
@@ -166,6 +181,7 @@ export function parseExceptions(text, { today, horizonDays = HORIZON_DAYS }) {
         expires: item.expires,
         ...(item.package === undefined ? {} : { package: item.package }),
         ...(item.service === undefined ? {} : { service: item.service }),
+        ...(item.path === undefined ? {} : { path: item.path }),
       });
     }
   });
@@ -176,7 +192,8 @@ export function parseExceptions(text, { today, horizonDays = HORIZON_DAYS }) {
  * The gate's verdict for the Trivy reports of the built images (`reports`, service to report) and
  * the text of the exceptions file, on the day `today`. `blocking` holds the findings no exception
  * excuses, `excepted` those one does (with its reason and expiry), `problems` what is wrong with
- * the exceptions file; `ok` only when there are no blocking findings and no problems.
+ * the exceptions file, `unused` the valid exceptions that matched no finding (reported, never a
+ * failure); `ok` only when there are no blocking findings and no problems.
  */
 export function evaluateGate({ reports, exceptionsText, today }) {
   const services = SERVICES.filter((service) => reports[service] !== undefined);
@@ -184,20 +201,30 @@ export function evaluateGate({ reports, exceptionsText, today }) {
   const { exceptions, problems } = parseExceptions(exceptionsText, { today });
   const blocking = [];
   const excepted = [];
+  const used = new Set();
   for (const service of services) {
     for (const finding of blockingFindings(reports[service])) {
       const excuse = exceptions.find(
         (item) =>
           item.id === finding.id &&
           (item.package === undefined || item.package === finding.package) &&
-          (item.service === undefined || item.service === service),
+          (item.service === undefined || item.service === service) &&
+          (item.path === undefined || finding.path?.startsWith(item.path) === true),
       );
-      if (excuse)
+      if (excuse) {
+        used.add(excuse);
         excepted.push({ service, ...finding, reason: excuse.reason, expires: excuse.expires });
-      else blocking.push({ service, ...finding });
+      } else blocking.push({ service, ...finding });
     }
   }
-  return { ok: blocking.length === 0 && problems.length === 0, blocking, excepted, problems };
+  const unused = exceptions.filter((item) => !used.has(item));
+  return {
+    ok: blocking.length === 0 && problems.length === 0,
+    blocking,
+    excepted,
+    unused,
+    problems,
+  };
 }
 
 /** Throws unless the SHA-256 of `bytes` is `sha256` (lower-case hex). */
@@ -214,8 +241,19 @@ function trivyBinary() {
   return binary;
 }
 
+/** Trivy needs no GitHub token: the OIDC token request variables are not passed to it. */
+function trivyEnvironment() {
+  const env = { ...process.env };
+  delete env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  delete env.ACTIONS_ID_TOKEN_REQUEST_URL;
+  return env;
+}
+
 function runTrivy(args) {
-  const result = spawnSync(trivyBinary(), args, { stdio: ["ignore", 2, 2] });
+  const result = spawnSync(trivyBinary(), args, {
+    stdio: ["ignore", 2, 2],
+    env: trivyEnvironment(),
+  });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`trivy ${args[0]} exited with status ${result.status}.`);
 }
@@ -235,18 +273,17 @@ function builtServices() {
   return SERVICES.filter((service) => list.includes(service));
 }
 
-async function installCommand() {
-  if (process.platform !== "linux" || process.arch !== "arm64") {
-    throw new Error(
-      `The pinned Trivy is for linux/arm64, not ${process.platform}/${process.arch}.`,
-    );
-  }
-  const dir = process.env.INSTALL_DIR || path.join(process.env.RUNNER_TEMP || os.tmpdir(), "trivy");
+/**
+ * Downloads the archive of `pin` (default: the pinned Trivy), refuses it unless its SHA-256 is the
+ * pinned one, unpacks the `trivy` binary into `dir` and returns its path. Nothing is written to
+ * `dir` before the checksum is verified.
+ */
+export async function installTrivy({ dir, pin = TRIVY, fetchFn = fetch }) {
   fs.mkdirSync(dir, { recursive: true });
-  const response = await fetch(TRIVY.url);
+  const response = await fetchFn(pin.url);
   if (!response.ok) throw new Error(`Downloading Trivy failed: ${response.status}.`);
   const bytes = Buffer.from(await response.arrayBuffer());
-  verifyArchive(bytes, TRIVY.sha256);
+  verifyArchive(bytes, pin.sha256);
   const archive = path.join(dir, "trivy.tar.gz");
   fs.writeFileSync(archive, bytes);
   const unpacked = spawnSync("tar", ["-xzf", archive, "-C", dir, "trivy"], {
@@ -254,8 +291,19 @@ async function installCommand() {
   });
   if (unpacked.status !== 0) throw new Error("Unpacking the Trivy archive failed.");
   fs.rmSync(archive);
+  return path.join(dir, "trivy");
+}
+
+async function installCommand() {
+  if (process.platform !== "linux" || process.arch !== "arm64") {
+    throw new Error(
+      `The pinned Trivy is for linux/arm64, not ${process.platform}/${process.arch}.`,
+    );
+  }
+  const dir = process.env.INSTALL_DIR || path.join(process.env.RUNNER_TEMP || os.tmpdir(), "trivy");
+  const binary = await installTrivy({ dir });
   log(`Installed Trivy ${TRIVY.version} (checksum verified).`);
-  process.stdout.write(`TRIVY=${path.join(dir, "trivy")}\n`);
+  process.stdout.write(`TRIVY=${binary}\n`);
 }
 
 function gateCommand() {
@@ -301,6 +349,9 @@ function gateCommand() {
     ...verdict.blocking.map((item) => `blocking: ${line(item)}`),
     ...verdict.excepted.map(
       (item) => `excepted until ${item.expires}: ${line(item)} - ${item.reason}`,
+    ),
+    ...verdict.unused.map(
+      (item) => `unused exception ${item.id} (${item.package ?? "any package"}) matched no finding`,
     ),
     ...verdict.problems.map((problem) => `exceptions file: ${problem}`),
   ];

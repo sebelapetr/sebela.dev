@@ -74,9 +74,10 @@ jobs:
   # with the commit SHA, starts them all as the production composition with the demo seed and runs
   # the production stack smoke check with the complete-stack browser tests (the mock Ask page; no
   # model is called), then scans the built images for known vulnerabilities. Only when both pass are
-  # the built images pushed, the very images that were verified. Each pushed image then gets a signed SLSA build provenance attestation and an SPDX
-  # SBOM attestation for its pushed digest, stored beside it in GHCR; the job's OIDC token
-  # (`id-token: write`) signs them and `attestations: write` records them.
+  # the built images pushed, the very images that were verified. Each pushed image then gets a
+  # signed SLSA build provenance attestation and an SPDX SBOM attestation for its pushed digest,
+  # stored beside it in GHCR; the job's OIDC token (`id-token: write`) signs them and
+  # `attestations: write` records them.
   images:
     name: Build, verify and publish the images
     needs: plan
