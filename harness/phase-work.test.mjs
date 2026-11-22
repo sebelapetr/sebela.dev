@@ -463,7 +463,10 @@ const withAnswers = (change) => {
 
 test("`next` says the status in a line of its own, whatever it is", () => {
   const waiting = withAnswers((answers) => {
-    answers.TrackingIssue.repository.issue.subIssues.nodes.splice(1, 1);
+    const { subIssues } = answers.TrackingIssue.repository.issue;
+    answers.TrackingIssue.repository.issue.subIssues = page(
+      subIssues.nodes.filter((issue) => issue.number !== 210),
+    );
   });
   assert.match(command(waiting, ["next", "07-ai-service"]).stdout, /^status: waiting$/m);
   const finished = withAnswers((answers) => {

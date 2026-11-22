@@ -1,6 +1,8 @@
 // Decision logic of the phase loop. Pure functions only: no shell, no network, no agent.
 // The table it implements is in .plan/00-overview/harness-prd.md ("The loop").
 
+import { phaseBlockerRefs } from "./selection.mjs";
+
 // What the orchestrator reports at the end of one unattended run (validated by --json-schema).
 export const RUN_REPORT_SCHEMA = Object.freeze({
   type: "object",
@@ -369,4 +371,30 @@ export function phaseEnd({ pullRequest, work }) {
     log: ["phase stopped: no workable issue left", ...issues, ...unknownIssues, prLine],
     alert: ["phase stopped: no workable issue left", [...issues, prLine].join("; ")],
   };
+}
+
+// Why the loop must not start an iteration for a phase, from its work selection
+// (lib/selection.mjs), or null when it may. What each status makes the loop do:
+//   next         start the orchestrator; it takes the named issue
+//   finished     start the orchestrator; it ends the phase (archives the plan, opens the draft
+//                phase pull request)
+//   waiting      the same: nothing is left for an agent, the open issues wait for a human, are
+//                blocked, failed or not released — phaseEnd then names them
+//   phase-waits  stop: the tracking issue has an open blocker, so the phase has not started.
+//                An agent would cut the phase branch from a base without the other phase,
+//                archive the plan and open a pull request
+//   empty        stop: the phase is not broken into issues
+// A selection that could not be read (null) stops nothing here; the orchestrator asks again.
+export function phaseNotStarted(work) {
+  if (!work) return null;
+  if (work.status === "phase-waits") {
+    const cycle = work.phaseCycle
+      ? `; these tracking issues block each other in a cycle (${work.phaseCycle.map((n) => `#${n}`).join(" → ")} → #${work.phaseCycle[0]}): remove one link`
+      : "";
+    return `phase ${work.phase} waits for ${phaseBlockerRefs(work.phaseBlockers)}: its tracking issue #${work.tracking.number} is blocked by them and nothing of the phase is started until they are closed${cycle}`;
+  }
+  if (work.status === "empty") {
+    return `phase ${work.phase} has no issues yet: its tracking issue #${work.tracking.number} has no sub-issues; break the PRD into issues first (the to-issues skill)`;
+  }
+  return null;
 }

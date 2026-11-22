@@ -435,11 +435,11 @@ test("a phase that waits for another phase stops the loop before an orchestrator
   assert.equal(run.status, 1, run.stdout + run.stderr);
   assert.match(run.stdout, /not ready: phase 07-ai-service waits for #300 \(06-llm-agent\)/);
   assert.deepEqual(lines("claude-calls.jsonl"), [], "no orchestrator was started");
-  // Nothing of the phase is started: no branch is cut, no pull request is looked for.
-  assert.ok(
-    !lines("gh-calls.jsonl").some((call) => call[0] === "pr"),
-    "a pull request was asked for",
+  // Nothing of the phase is started or changed on GitHub: the loop only read.
+  const changed = lines("gh-calls.jsonl").filter((call) =>
+    ["create", "edit", "comment", "merge", "close"].includes(call[1]),
   );
+  assert.deepEqual(changed, []);
   assert.ok(!fs.existsSync(path.join(main, ".plan", "done")));
 });
 

@@ -10,6 +10,7 @@ import {
   noteAfter,
   ownerNoteSection,
   phaseEnd,
+  phaseNotStarted,
   scrubPrivate,
   spendComment,
   stewardStop,
@@ -496,6 +497,48 @@ test("issues GitHub could not be asked for are said to be unknown", () => {
   const end = phaseEnd({ pullRequest: { number: 240 }, work: null });
   assert.equal(end.status, "done");
   assert.match(end.log.join("\n"), /could not read the phase's issues/);
+});
+
+// --- phaseNotStarted (review of #423) ---------------------------------------------------
+
+const selection = (status, extra = {}) => ({
+  phase: "08-mcp-public",
+  tracking: { number: 418, title: "Phase 08" },
+  status,
+  phaseBlockers: [],
+  phaseCycle: null,
+  ...extra,
+});
+
+test("a phase with a next issue, a finished one and one waiting on its issues get an iteration", () => {
+  for (const status of ["next", "finished", "waiting"]) {
+    assert.equal(phaseNotStarted(selection(status)), null, status);
+  }
+  assert.equal(phaseNotStarted(null), null, "an unread selection stops nothing by itself");
+});
+
+test("a phase that waits for another phase is not started, and the phases are named", () => {
+  const why = phaseNotStarted(
+    selection("phase-waits", {
+      phaseBlockers: [{ number: 414, title: "Phase 07", folder: "07-ai-service" }],
+    }),
+  );
+  assert.match(why, /phase 08-mcp-public waits for #414 \(07-ai-service\)/);
+  assert.match(why, /#418/);
+});
+
+test("a cycle between phases is said when the phase is refused", () => {
+  const why = phaseNotStarted(
+    selection("phase-waits", {
+      phaseBlockers: [{ number: 414, title: "Phase 07", folder: "07-ai-service" }],
+      phaseCycle: [418, 414],
+    }),
+  );
+  assert.match(why, /cycle \(#418 → #414 → #418\)/);
+});
+
+test("a phase without issues is not started", () => {
+  assert.match(phaseNotStarted(selection("empty")), /has no issues yet/);
 });
 
 // --- a stop by the steward (issue #371) ---------------------------------------------

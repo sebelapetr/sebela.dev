@@ -2,7 +2,9 @@
 // What a phase works on next, read from GitHub's native structure (issue #420):
 //
 //   node harness/phase-work.mjs next <phase-folder> [--json]   the next issue of the phase, or
-//                                                              why there is none
+//                                                              why there is none; always with a
+//                                                              `status:` line (next, waiting,
+//                                                              finished, empty, phase-waits)
 //   node harness/phase-work.mjs phases [--json]                the open phases and which may start
 //   node harness/phase-work.mjs blockers [--json]              open issues whose `## Blocked by`
 //                                                              text and native blockers disagree;
@@ -15,14 +17,18 @@
 // Rules: lib/selection.mjs, lib/blocked-by.mjs. Intent: docs/agents.md, "Work selection".
 
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { blockerDisagreements, disagreementLines, textOnlyBlockers } from "./lib/blocked-by.mjs";
 import {
   PhaseWorkError,
   assertComplete,
+  ignoredLines,
   phaseLines,
   phaseOrder,
   selectWork,
   trackingIssue,
+  untrustedPlanIssues,
   workLines,
 } from "./lib/selection.mjs";
 
@@ -40,7 +46,7 @@ const OPEN_ISSUES = `query OpenIssues($owner: String!, $name: String!, $after: S
   repository(owner: $owner, name: $name) {
     issues(first: ${PAGE}, after: $after, states: OPEN, orderBy: { field: CREATED_AT, direction: ASC }) {
       pageInfo { hasNextPage endCursor }
-      nodes { number title body ${ISSUE_FACTS} }
+      nodes { number title body authorAssociation ${ISSUE_FACTS} }
     }
   }
 }`;
@@ -49,11 +55,12 @@ const TRACKING_ISSUE = `query TrackingIssue($owner: String!, $name: String!, $nu
   repository(owner: $owner, name: $name) {
     issue(number: $number) {
       number title state body
+      repository { nameWithOwner }
       blockedBy(first: ${PAGE}) { totalCount nodes { number state title } }
       subIssues(first: ${PAGE}, after: $after) {
         totalCount
         pageInfo { hasNextPage endCursor }
-        nodes { number title state subIssues { totalCount } ${ISSUE_FACTS} }
+        nodes { number title state repository { nameWithOwner } subIssues { totalCount } ${ISSUE_FACTS} }
       }
     }
   }
@@ -129,7 +136,11 @@ function everyPage(read) {
 // Every open issue with its text, labels and blockers.
 function openIssues(graphql) {
   const { nodes } = everyPage((after) => graphql(OPEN_ISSUES, { after }).repository.issues);
-  return nodes.map((node) => ({ ...issueFacts(node), body: node.body ?? "" }));
+  return nodes.map((node) => ({
+    ...issueFacts(node),
+    body: node.body ?? "",
+    authorAssociation: node.authorAssociation ?? null,
+  }));
 }
 
 // A tracking issue with every sub-issue, in sub-issue order.
@@ -145,10 +156,12 @@ function trackingWithSubIssues(number, graphql) {
   return {
     number: issue.number,
     title: issue.title,
+    repository: issue.repository?.nameWithOwner ?? null,
     blockedBy: issue.blockedBy.nodes,
     subIssues: nodes.map((node) => ({
       ...issueFacts(node),
       state: node.state,
+      repository: node.repository?.nameWithOwner ?? null,
       subIssues: node.subIssues.totalCount,
     })),
   };
@@ -160,8 +173,23 @@ function trackingWithSubIssues(number, graphql) {
 // the structure cannot answer (no or several tracking issues, a list cut short) and a plain
 // Error when GitHub cannot be asked. Nothing is kept between calls.
 export function phaseWork(phase, { graphql = ghGraphql } = {}) {
-  const tracking = trackingIssue(phase, openIssues(graphql));
-  return selectWork({ phase, tracking: trackingWithSubIssues(tracking.number, graphql) });
+  const issues = openIssues(graphql);
+  const found = trackingIssue(phase, issues);
+  const order = phaseOrder(issues);
+  const folders = new Map(order.map((entry) => [entry.number, entry.folder]));
+  const tracking = trackingWithSubIssues(found.number, graphql);
+  return selectWork({
+    phase,
+    tracking: {
+      ...tracking,
+      blockedBy: tracking.blockedBy.map((blocker) => ({
+        ...blocker,
+        folder: folders.get(blocker.number) ?? null,
+      })),
+    },
+    ignored: untrustedPlanIssues(issues, phase),
+    phaseCycle: order.find((entry) => entry.number === found.number)?.cycle ?? null,
+  });
 }
 
 // The same for callers that go on without GitHub (the loop's progress, the steward): null when
@@ -175,9 +203,15 @@ export function phaseWorkOrNull(phase, options) {
   }
 }
 
-// The open phases and which may start (phaseOrder in lib/selection.mjs).
-export function phases({ graphql = ghGraphql } = {}) {
-  return phaseOrder(openIssues(graphql));
+// The open phases and which may start (phaseOrder in lib/selection.mjs), and the issues that
+// carry a plan line but are ignored for their author.
+export function phaseOverview({ graphql = ghGraphql } = {}) {
+  const issues = openIssues(graphql);
+  return { phases: phaseOrder(issues), ignored: untrustedPlanIssues(issues) };
+}
+
+export function phases(options) {
+  return phaseOverview(options).phases;
 }
 
 // The open issues whose `## Blocked by` text and native blockers disagree
@@ -211,8 +245,13 @@ function main(argv) {
     return 0;
   }
   if (command === "phases") {
-    const found = phases();
-    print(found, found.length > 0 ? phaseLines(found) : ["no open tracking issue names a plan"]);
+    const found = phaseOverview();
+    print(found, [
+      ...(found.phases.length > 0
+        ? phaseLines(found.phases)
+        : ["no open tracking issue names a plan"]),
+      ...ignoredLines(found.ignored),
+    ]);
     return 0;
   }
   if (command === "blockers") {
@@ -229,7 +268,19 @@ function main(argv) {
   return 64;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Whether this file is the program that was started, also through a symbolic link or from a
+// path with characters a URL encodes. Comparing the URL with the argument as text would fail
+// there, and the command would then print nothing and exit 0 — which must never happen to a
+// command whose answer decides what an agent does.
+function startedAsProgram() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (startedAsProgram()) {
   try {
     process.exitCode = main(process.argv.slice(2));
   } catch (error) {
