@@ -26,6 +26,21 @@ test("is Markdown anywhere, docs/ and .plan/", () => {
   }
 });
 
+test("is everything in docs/ and .plan/, whatever a folder inside them is called", () => {
+  // docs/evals/ holds the evaluation reports, not the inputs of an eval: a folder name that marks
+  // Markdown code reads elsewhere says nothing inside the two documentation folders.
+  for (const file of [
+    "docs/evals/06-llm-agent.md",
+    "docs/evals/grading-criteria.md",
+    "docs/src/overview.md",
+    "docs/fixtures/example.png",
+    ".plan/done/06-llm-agent/evals/notes.md",
+    ".plan/07-ai-service/fixtures/sample.json",
+  ]) {
+    assert.equal(isDocumentation(file), true, file);
+  }
+});
+
 test("is not code, configuration or data, whatever its folder", () => {
   for (const file of [
     "apps/api/src/app.ts",
