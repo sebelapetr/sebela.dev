@@ -18,6 +18,7 @@ import {
   FIXABLE_MEDIUM,
   UNFIXED_CRITICAL,
   report,
+  vulnerability,
 } from "./fixtures/image-scan.mjs";
 import {
   TRIVY,
@@ -469,5 +470,47 @@ describe("workflows", () => {
       const text = fs.readFileSync(path.join(workflows, name), "utf8");
       assert.doesNotMatch(text, /uses:\s*aquasecurity\//, name);
     }
+  });
+});
+
+describe("committed exceptions against the published images (2026-11-22)", () => {
+  const dir = import.meta.dirname;
+  const text = fs.readFileSync(path.join(dir, "image-scan-exceptions.json"), "utf8");
+  const real = JSON.parse(
+    fs.readFileSync(path.join(dir, "fixtures", "image-scan", "published-api.json"), "utf8"),
+  );
+  const reports = { api: real, web: real, "mcp-admin": real };
+
+  it("excuse exactly the fixable high findings of the published images", () => {
+    const verdict = evaluateGate({ reports, exceptionsText: text, today: "2026-11-22" });
+    assert.deepEqual(verdict.problems, []);
+    assert.deepEqual(verdict.blocking, []);
+    assert.equal(verdict.excepted.length, 21);
+  });
+
+  it("do not hide a new fixable finding, even in an excepted package", () => {
+    const fresh = structuredClone(real);
+    fresh.Results[0].Vulnerabilities.push(
+      vulnerability({ id: "CVE-2030-9999", pkg: "zlib1g", severity: "HIGH", fixed: "9" }),
+      vulnerability({ id: "CVE-2030-9998", pkg: "libnew", severity: "CRITICAL", fixed: "9" }),
+    );
+    const verdict = evaluateGate({
+      reports: { api: fresh },
+      exceptionsText: text,
+      today: "2026-11-22",
+    });
+    assert.deepEqual(verdict.blocking.map(({ id }) => id).sort(), [
+      "CVE-2030-9998",
+      "CVE-2030-9999",
+    ]);
+  });
+
+  it("expire within 60 days, and then the gate fails", () => {
+    const { exceptions } = parseExceptions(text, { today: "2026-11-22" });
+    assert.equal(exceptions.length, 7);
+    assert.ok(exceptions.every(({ expires }) => expires === "2027-01-21"));
+    const verdict = evaluateGate({ reports, exceptionsText: text, today: "2027-01-22" });
+    assert.equal(verdict.ok, false);
+    assert.match(verdict.problems.join("\n"), /expired/);
   });
 });
