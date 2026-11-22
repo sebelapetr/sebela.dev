@@ -6,11 +6,14 @@ Each operation:
 
 1. claims its one-use grant; anything but a successful claim ends it without a model call and
    without a report (the API's own deadline watch settles it);
-2. binds itself to the earlier of the request's and the claim's deadline and to the smaller of
+2. stops without a model call when the claim's model, pricing version or context revision differs
+   from the dispatched request's, or its model or pricing version from this agent's: it reports
+   `cancelled (grant_mismatch)` with zero, certain usage, which the API stores as a failure;
+3. binds itself to the earlier of the request's and the claim's deadline and to the smaller of
    their allowances, so neither the claim nor this service can extend them;
-3. stops without a model call when the deadline already passed, or (paid mode) when the daily
+4. stops without a model call when the deadline already passed, or (paid mode) when the daily
    ceiling refuses the allowance;
-4. runs the agent, maps its result to the contract and reports it once, with bounded retries
+5. runs the agent, maps its result to the contract and reports it once, with bounded retries
    until a few seconds after the deadline.
 
 `shutdown` closes admission, lets running operations finish within the grace, then cancels the
@@ -27,8 +30,9 @@ from dataclasses import dataclass
 from typing import Final
 
 from llm_agent import ChatAgent, ChatRequest, ExecutionLimits, versions
+from sebela_api_client.models import ChatGrantClaimed
 
-from ai_service.clients.control_api import Claim, ControlApi
+from ai_service.clients.control_api import ControlApi
 from ai_service.runtime.admission import Admission, Slot
 from ai_service.runtime.ceiling import DailyCeiling
 from ai_service.runtime.mapping import history_for, report_for, stopped_report
@@ -128,7 +132,7 @@ class Generations:
     async def _generate(
         self,
         request: GenerationRequest,
-        claim: Claim,
+        claim: ChatGrantClaimed,
         deadline_at: datetime.datetime,
         received: float,
         cancel: asyncio.Event,
@@ -136,6 +140,22 @@ class Generations:
         def latency() -> int:
             return round((time.monotonic() - received) * 1000)
 
+        agent = versions()
+        if (
+            claim.model != request.model
+            or claim.model != agent.main_model
+            or claim.pricing_version != request.pricing_version
+            or claim.pricing_version != agent.pricing
+            or claim.context_revision != request.context_revision
+        ):
+            _log.warning("operation %s: the claimed terms differ", request.operation_id)
+            return stopped_report(
+                "cancelled",
+                "grant_mismatch",
+                grant=request.grant,
+                latency_ms=latency(),
+                versions=agent,
+            )
         remaining = _seconds_until(deadline_at)
         if remaining <= 0:
             return stopped_report(
