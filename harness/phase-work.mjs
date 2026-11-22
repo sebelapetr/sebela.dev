@@ -14,8 +14,9 @@
 //                                                              for the owner, exits 1 when any does
 //
 // The orchestrator, the phase loop, the steward and the phase report all ask here, so nothing
-// selects by `phase:` label, by issue number or by reading an issue's text — nor by issue type,
-// issue field, assignee or project, which are for people reading GitHub. Read-only: three
+// selects by `phase:` label, by issue number or from a `## Blocked by` text (the plan line is
+// all that is read of an issue's text) — nor by issue type, issue field, assignee or project,
+// which are for people reading GitHub. Read-only: three
 // GraphQL queries through `gh api graphql`, on what belongs to issues (body, labels, sub-issues,
 // blockers). The token needs the `repo` scope and nothing else; no project is read.
 // Rules: lib/selection.mjs, lib/blocked-by.mjs. Intent: docs/agents.md, "Work selection".
@@ -197,6 +198,11 @@ export function phaseWork(phase, { graphql = ghGraphql } = {}) {
     phase,
     tracking: {
       ...tracking,
+      // A phase's tracking issue nested here is never work, also while it has no sub-issues.
+      subIssues: tracking.subIssues.map((issue) => ({
+        ...issue,
+        tracking: folders.has(issue.number),
+      })),
       blockedBy: tracking.blockedBy.map((blocker) => ({
         ...blocker,
         folder: folders.get(blocker.number) ?? null,

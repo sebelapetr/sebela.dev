@@ -122,7 +122,9 @@ const cycleLine = (cycle) =>
 const openOnly = (blockers) => (blockers ?? []).filter((blocker) => blocker.state !== "CLOSED");
 
 // Why an open sub-issue is or is not work for an agent. The first that applies:
-//   parent     it has sub-issues of its own: a tracking issue is never work, whatever it carries
+//   parent     it has sub-issues of its own, or it is a phase's tracking issue (`tracking`, set
+//              by the caller from the plan lines) that has none yet: a tracking issue is never
+//              work, whatever it carries
 //   failed     `agent-failed`: skipped until the owner looks
 //   hitl       `hitl`: waits for a human
 //   not-ready  no `ready-for-agent`: the owner has not released it
@@ -133,7 +135,7 @@ function classify(issue) {
   const labels = issue.labels ?? [];
   const openBlockers = openOnly(issue.blockedBy).map((blocker) => blocker.number);
   const kind =
-    (issue.subIssues ?? 0) > 0
+    (issue.subIssues ?? 0) > 0 || issue.tracking === true
       ? "parent"
       : labels.includes(FAILED_LABEL)
         ? "failed"
@@ -151,6 +153,7 @@ function classify(issue) {
 
 // tracking: { number, title, repository?, blockedBy: [{ number, state, title, folder? }],
 //             subIssues: [{ number, title, state, labels: [name], subIssues: count, repository?,
+//                           tracking?: true when the issue is itself a phase's tracking issue,
 //                           blockedBy: [{ number, state }] }] in sub-issue order }
 // ignored:    issues that name the folder but are not the tracking issue (untrustedPlanIssues)
 // phaseCycle: the tracking issues that block each other in a circle with this one, or null
