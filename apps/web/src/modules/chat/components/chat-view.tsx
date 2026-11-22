@@ -112,7 +112,7 @@ function AnswerEvidence({ turn }: { readonly turn: ChatTurn }) {
 /** How long the API keeps the conversation, said before anything is asked. */
 function storageNotice(retentionDays: number): string {
   const days = retentionDays === 1 ? "1 day" : `${String(retentionDays)} days`;
-  return `This conversation is stored for ${days} after its last message, so you can come back to it in this browser.`;
+  return `This conversation is stored for ${days} after its last activity, so you can come back to it in this browser.`;
 }
 
 /**

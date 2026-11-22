@@ -37,7 +37,7 @@ export interface ConversationSnapshot {
   readonly turns: readonly ChatTurn[];
   /** The history is loading or a question is answering; another cannot be sent. */
   readonly busy: boolean;
-  /** How many days the conversation is kept after its last message; null until it is read. */
+  /** How many days the conversation is kept after its last activity; null until it is read. */
   readonly retentionDays: number | null;
   /** Whether older messages can be read, are being read, or there are none. */
   readonly earlier: "none" | "available" | "loading";
