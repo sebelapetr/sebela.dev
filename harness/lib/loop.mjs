@@ -1,6 +1,8 @@
 // Decision logic of the phase loop. Pure functions only: no shell, no network, no agent.
 // The table it implements is in .plan/00-overview/harness-prd.md ("The loop").
 
+import { phaseBlockerRefs } from "./selection.mjs";
+
 // What the orchestrator reports at the end of one unattended run (validated by --json-schema).
 export const RUN_REPORT_SCHEMA = Object.freeze({
   type: "object",
@@ -317,24 +319,32 @@ export function spendComment({ line, paid, iteration, private: hidden = {} }) {
 // What the loop tells the owner after a phase_done report, from what GitHub shows then:
 //   pullRequest  the open pull request from the phase branch to the base ({ number }), null when
 //                there is none, undefined when gh could not check
-//   openIssues   the phase's open issues ([{ number, labels: [name] }]), null when gh could not list
+//   work         the work selection of the phase (selectWork in lib/selection.mjs: its open
+//                sub-issues by kind and the open blockers of its tracking issue), null when
+//                GitHub could not be asked
 // The phase is done only when its pull request is open and nothing but HITL issues is left; failed,
-// blocked or unready issues, or a missing pull request, mean the loop stopped with nothing workable.
+// blocked, unready or still eligible issues, a phase that itself waits for another, or a missing
+// pull request, mean the loop stopped with nothing workable.
 // Returns { status: "done" | "stopped", log: [line], alert: [line] }.
-export function phaseEnd({ pullRequest, openIssues }) {
-  const groups = { failed: [], hitl: [], other: [] };
-  for (const issue of openIssues ?? []) {
-    const labels = issue.labels ?? [];
-    const group = labels.includes(FAILED_LABEL)
-      ? "failed"
-      : labels.includes("hitl")
-        ? "hitl"
-        : "other";
-    groups[group].push(`#${issue.number}`);
-  }
-  const list = (name, numbers) => (numbers.length ? [`${name}: ${numbers.join(", ")}`] : []);
-  const unknownIssues =
-    openIssues == null ? ["could not list the phase's open issues with gh"] : [];
+export function phaseEnd({ pullRequest, work }) {
+  const open = work?.open ?? [];
+  const numbers = (kind) =>
+    open.filter((issue) => issue.kind === kind).map((issue) => `#${issue.number}`);
+  const list = (name, items) => (items.length ? [`${name}: ${items.join(", ")}`] : []);
+  const blocked = open
+    .filter((issue) => issue.kind === "blocked")
+    .map((issue) => `#${issue.number} (by ${issue.openBlockers.map((n) => `#${n}`).join(", ")})`);
+  const hitl = numbers("hitl");
+  const phaseWaits = (work?.phaseBlockers ?? []).map((issue) => `#${issue.number}`);
+  const notDone = [
+    ...(phaseWaits.length ? [`the phase waits for ${phaseWaits.join(", ")}`] : []),
+    ...list("agent-failed", numbers("failed")),
+    ...list("blocked", blocked),
+    ...list("not ready-for-agent", numbers("not-ready")),
+    ...list("has sub-issues of its own", numbers("parent")),
+    ...list("still eligible", numbers("eligible")),
+  ];
+  const unknownIssues = work == null ? ["could not read the phase's issues from GitHub"] : [];
 
   const prLine =
     pullRequest === undefined
@@ -343,26 +353,48 @@ export function phaseEnd({ pullRequest, openIssues }) {
         ? "no phase pull request"
         : `draft pull request #${pullRequest.number} is open`;
 
-  if (pullRequest && groups.failed.length === 0 && groups.other.length === 0) {
+  if (pullRequest && notDone.length === 0) {
     return {
       status: "done",
       log: [
         `phase done: ${prLine}; mark it ready for review when the phase is complete`,
-        ...list("remaining HITL", groups.hitl),
+        ...list("remaining HITL", hitl),
         ...unknownIssues,
       ],
-      alert: ["phase done", prLine, ...list("HITL", groups.hitl)],
+      alert: ["phase done", prLine, ...list("HITL", hitl)],
     };
   }
 
-  const issues = [
-    ...list("agent-failed", groups.failed),
-    ...list("blocked or not ready", groups.other),
-    ...list("HITL", groups.hitl),
-  ];
+  const issues = [...notDone, ...list("HITL", hitl)];
   return {
     status: "stopped",
     log: ["phase stopped: no workable issue left", ...issues, ...unknownIssues, prLine],
     alert: ["phase stopped: no workable issue left", [...issues, prLine].join("; ")],
   };
+}
+
+// Why the loop must not start an iteration for a phase, from its work selection
+// (lib/selection.mjs), or null when it may. What each status makes the loop do:
+//   next         start the orchestrator; it takes the named issue
+//   finished     start the orchestrator; it ends the phase (archives the plan, opens the draft
+//                phase pull request)
+//   waiting      the same: nothing is left for an agent, the open issues wait for a human, are
+//                blocked, failed or not released — phaseEnd then names them
+//   phase-waits  stop: the tracking issue has an open blocker, so the phase has not started.
+//                An agent would cut the phase branch from a base without the other phase,
+//                archive the plan and open a pull request
+//   empty        stop: the phase is not broken into issues
+// A selection that could not be read (null) stops nothing here; the orchestrator asks again.
+export function phaseNotStarted(work) {
+  if (!work) return null;
+  if (work.status === "phase-waits") {
+    const cycle = work.phaseCycle
+      ? `; these tracking issues block each other in a cycle (${work.phaseCycle.map((n) => `#${n}`).join(" → ")} → #${work.phaseCycle[0]}): remove one link`
+      : "";
+    return `phase ${work.phase} waits for ${phaseBlockerRefs(work.phaseBlockers)}: its tracking issue #${work.tracking.number} is blocked by them and nothing of the phase is started until they are closed${cycle}`;
+  }
+  if (work.status === "empty") {
+    return `phase ${work.phase} has no issues yet: its tracking issue #${work.tracking.number} has no sub-issues; break the PRD into issues first (the to-issues skill)`;
+  }
+  return null;
 }

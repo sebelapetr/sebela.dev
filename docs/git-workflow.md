@@ -5,6 +5,7 @@ The git history of this repository is public and part of the portfolio. It must 
 ## Flow
 
 ```
+milestone → phase or epic tracking issue → sub-issues (in order, with native blockers)
 issue → branch → worktree → implementation → checks → review → issue pull request
       → orchestrator squash-merges into the phase branch
                                   ...all issues of the phase...
@@ -14,6 +15,74 @@ phase branch → phase pull request → owner approval → merge into master
 ```
 
 One issue, one branch, one worktree, one pull request. One phase, one integration branch, one pull request to `master`.
+
+## Issues
+
+Work is organised on GitHub with native features only ([decision 0028](decisions/0027-native-work-selection.md)). There are three kinds of work, and all three may sit in a **milestone** (one per release, today `v1.0 · phases 00–10`):
+
+| Kind                      | What it is                                                                                                                                      | How it is told apart                                                           | Issue type of the tracking issue | How it is worked                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------------------- |
+| **Phase**                 | An epic with a PRD in `.plan/<phase-folder>/`, its own branch `phase/<phase-folder>`, the owner's acceptance and one pull request into `master` | A tracking issue with sub-issues **and** the line `Plan: .plan/<phase-folder>` | `Phase`                          | Started by the owner with the phase loop, which takes its sub-issues one at a time |
+| **Epic**                  | A group of related issues without a PRD, a phase branch or a loop (for example the fixes from an audit)                                         | A tracking issue with sub-issues and **no** `Plan:` line                       | `Epic`                           | By hand or by agents, each issue with its own pull request into `master`           |
+| **Issue without an epic** | A single piece of work                                                                                                                          | No parent                                                                      | —                                | The same, on its own                                                               |
+
+```
+milestone (a release)
+├── phase tracking issue            Plan: .plan/<phase-folder>
+│   ├── sub-issue                   in the intended order
+│   ├── sub-issue                   blocked by ← native link
+│   └── …
+├── epic tracking issue             no Plan: line
+│   └── sub-issue …
+└── issue without an epic
+```
+
+- **Tracking issue.** The parent issue of a phase or an epic; its sub-issues are the work. It is never work itself: it carries no `ready-for-agent` label, and the selection refuses any issue that has sub-issues. A phase's tracking issue is closed when the phase's acceptance issue is closed and the phase pull request is merged into `master`.
+- **The plan line** makes a tracking issue a phase. Its exact form: a line of its own in the issue text, starting at the first character of the line, `Plan: .plan/<phase-folder>` — the word `Plan`, a colon, one space, the path of the plan folder, nothing after it (the path may be in backticks, and may end with a slash). `<phase-folder>` is the folder name in `.plan/`, letters, digits, dots, underscores and hyphens; the line stays the same when the plan is archived in `.plan/done/`. A line inside a fenced code block or an HTML comment, an indented or a quoted one does not count. Only the phase's tracking issue may carry it, and only an issue opened by the owner, a member or a collaborator is read: an outsider's issue with such a line is ignored. The phase branch `phase/<phase-folder>`, the eval campaign and the loop's argument all use that folder name.
+- **Sub-issues.** A phase's or an epic's issues are the sub-issues of its tracking issue, of this repository, **in the order they are to be worked on**. For a phase that order is the order of the loop; issue numbers mean nothing. GitHub allows 100 sub-issues per parent.
+- **Blockers.** What an issue waits for is a native blocked-by link, inside a phase and across phases. A link between two tracking issues orders the phases: the blocked phase does not start while the other tracking issue is open. A condition that is not another issue — a merge, a date, a decision — is written in the issue's `## When` section.
+- **Labels say who may take an issue, not where it belongs.** These, the plan line, the sub-issue order and the native blockers are all the phase loop reads ([agents, Work selection](agents.md#work-selection)):
+
+  | Label             | Meaning                                                       | Set by      |
+  | ----------------- | ------------------------------------------------------------- | ----------- |
+  | `ready-for-agent` | The owner approved the breakdown; an agent may take the issue | `to-issues` |
+  | `afk`             | Can be finished by agents alone                               | `to-issues` |
+  | `hitl`            | Needs the owner: a decision or a design review; never taken   | `to-issues` |
+  | `agent-retry`     | Failed once in the phase loop; one more attempt               | The loop    |
+  | `agent-failed`    | Failed twice; skipped until the owner looks                   | The loop    |
+
+- **For people reading GitHub, never for the loop.** Issue types, issue fields and assignees make the plan readable in GitHub's lists and views. The harness reads none of them, on purpose: a value set by mistake must not change what an unattended loop does.
+  - **Issue type** — what kind of issue it is:
+
+    | Type      | For                                                                                                                     |
+    | --------- | ----------------------------------------------------------------------------------------------------------------------- |
+    | `Phase`   | The tracking issue of a phase (it has the `Plan:` line)                                                                 |
+    | `Epic`    | The tracking issue of an epic (no `Plan:` line)                                                                         |
+    | `Feature` | An issue that delivers new behaviour a user of the site, the API or an MCP server can see; its pull request is a `feat` |
+    | `Bug`     | An issue that fixes wrong behaviour; its pull request is a `fix`                                                        |
+    | `Task`    | Everything else: documentation, CI, tests, refactoring, evals, acceptance and other owner work                          |
+
+    The types belong to the owner's account, and only the owner can create one (in the account's settings). `to-issues` and the issue forms set the type; when a type does not exist, the issue is still created, without a type, and that is reported. The type is what is set from now on: the labels `bug` and `enhancement` say the same and are no longer required. Existing labels are left alone.
+
+  - **Issue fields:**
+
+    | Field         | Values                    | Means                                             | Set by                                          |
+    | ------------- | ------------------------- | ------------------------------------------------- | ----------------------------------------------- |
+    | `Priority`    | Urgent, High, Medium, Low | The owner's ordering aid across open issues       | The owner                                       |
+    | `Start date`  | A date                    | When work on a phase or an epic is meant to start | The owner, on tracking issues, when dates exist |
+    | `Target date` | A date                    | When a phase or an epic is meant to be done       | The owner, on tracking issues, when dates exist |
+    | `Effort`      | High, Medium, Low         | Not used for now                                  | —                                               |
+
+    `to-issues` sets none of them unless the PRD or the owner gives a value. `Priority` does not order a phase: the sub-issue order does.
+
+  - **Assignee.** An issue that waits for the owner (label `hitl`) is assigned to the owner; an issue an agent may take has no assignee. Every agent acts through the owner's GitHub account, so an assignee cannot tell an agent from the owner: it only means "this waits for a person". The label stays the signal the selection reads; the assignee is the visible one. `node harness/phase-work.mjs assignees` reports open issues where the two disagree.
+
+- **Creating issues.** The `to-issues` skill breaks a PRD into a **phase**: it finds or creates the tracking issue, creates every issue as a sub-issue in the intended order, and sets the native blockers, the milestone, the types and, for `hitl` issues, the assignee (`.claude/skills/to-issues/SKILL.md`). An issue added to a phase later is added the same way (`gh issue edit <tracking> --add-sub-issue <n>`, `gh issue edit <n> --add-blocked-by <m>`, `--milestone`, `--type`), and moved to its place in the order when it is not the last. An **epic** has no PRD and is made by hand: a tracking issue of type `Epic` without a `Plan:` line, and its issues added as sub-issues.
+- **Which issue of a phase is next** follows from this structure alone: [agents, Work selection](agents.md#work-selection).
+
+**Migration.** Until one whole phase has run on the new selection, issues keep what the old selection read, beside the native structure: the label `phase:<phase-folder>` and a `## Blocked by` section in the text, written as a rendering of the native links (a list of `- #<n>` lines and nothing else; conditions go under `## When`). Nothing in the harness reads either. `node harness/phase-work.mjs blockers` reports every open issue whose section and native blockers disagree; the text is corrected to match the links. After that phase the owner finishes the migration: remove the `phase:` labels from open issues and delete the label definitions (closed issues keep them as history), take the phase labels out of `harness/setup-github.sh`, stop writing the label and the section in `to-issues`, and remove the `blockers` check with them.
+
+The selection is not switched in the middle of a running phase: the main checkout is not pulled while a phase loop runs ([agents, Work selection](agents.md#work-selection), Changing the harness while a loop runs).
 
 ## Branches
 
@@ -25,7 +94,7 @@ One issue, one branch, one worktree, one pull request. One phase, one integratio
 
 - `<type>` is a Conventional Commits type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 - An issue branch is cut from the phase branch and its pull request targets the phase branch.
-- A sub-phase `NN.M-<name>` (`.plan/00-overview/prd.md`, Phases) is a phase in every respect: branch `phase/NN.M-<name>`, label `phase:NN.M-<name>`, its own phase pull request.
+- A sub-phase `NN.M-<name>` (`.plan/00-overview/prd.md`, Phases) is a phase in every respect: branch `phase/NN.M-<name>`, its own tracking issue (`Plan: .plan/NN.M-<name>`), its own phase pull request.
 - Phase 0 (planning, docs, agent configuration and the harness) has no issues. It is done directly on `phase/00-overview` and reaches `master` through the same kind of phase pull request, after the trial has passed.
 - The trial is the one phase whose base is not `master`: `phase/00-trial` is cut from `phase/00-overview`, and its phase pull request targets that branch and is closed without merging.
 - Other work without an issue uses `<type>/<short-slug>`, for example `docs/fix-testing-guide`, and targets `master` through a pull request the owner merges.
@@ -116,7 +185,7 @@ Orchestrated by: <agent>
 
 ## Phase pull request
 
-- Opened by the orchestrator from the phase branch to `master` **as a draft** when no ready issue of the phase remains; HITL issues may still be open.
+- Opened by the orchestrator from the phase branch to `master` **as a draft** when the work selection says the phase is `finished` or `waiting` on issues agents cannot take ([agents, Work selection](agents.md#work-selection)); HITL issues may still be open. Never for a phase that waits for another phase or has no issues.
 - It **stays a draft until the owner switches it.** No agent creates a phase pull request without `--draft`, marks it ready, closes or reopens it — not the orchestrator in the loop, not an agent in an interactive session: the guard refuses `gh pr create` for a `phase/*` head without `--draft`, `gh pr ready`, `gh pr close`, `gh pr reopen` and the same change through `gh api` for a pull request whose head is `phase/*`, and in an interactive main session asks the owner (`docs/permissions.md`, Denied).
 - When the phase is complete, the owner marks it **ready for review**. That runs the paid model evals of the affected suites once on the final state — the one full paid run of the phase, paid from the phase campaign's reserve (`docs/testing.md`, Evals-driven development); a draft runs none. Only a phase pull request starts paid evals by itself: any other pull request into `master` starts none, and a change that really needs a suite gets a manual, charged run of the `Model evals` workflow (`docs/testing.md`, CI).
 - It also moves the phase's plan folder `.plan/<phase>/` to `.plan/done/<phase>/` with `git mv` and updates every reference to the old path in the repository, so merging the phase into `master` archives its PRD and issue overview. The orchestrator does this once, on a short-lived branch merged into the phase branch, when it first opens the pull request; a phase already in `.plan/done/` is left there.
@@ -160,4 +229,4 @@ No `fix`, `fix2`, `try again` on `master`. Each commit there is one issue with o
 
 ## The phase loop
 
-A phase can be processed unattended. See `docs/agents.md`.
+A phase can be processed unattended. See `docs/agents.md`. It takes its issues from the phase's tracking issue, in sub-issue order ([Issues](#issues)).

@@ -1,4 +1,4 @@
-# 0027 — A merge that builds no image reaches the server with the next release
+# 0028 — A merge that builds no image reaches the server with the next release
 
 Status: accepted
 Date: 2026-11-22

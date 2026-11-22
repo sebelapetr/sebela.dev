@@ -13,6 +13,9 @@
 //
 //   [RELEASES_FILE=<json>] node scripts/release/deployment.mjs changelog
 //
+// `changelog-entry` fails, writing nothing, when CHANGELOG.md has a release link before the final
+// list of links or would lose or alter an existing section (docs/release-workflow.md, Changelog).
+//
 // Every command reads GITHUB_REPOSITORY (owner/name, set by GitHub Actions) for its links.
 //
 // `input` prints the forced-command input, which names SHA as the release commit the server's
@@ -334,9 +337,51 @@ const releaseLink = (version, repository) =>
  * `changelog` (the text of CHANGELOG.md, or "" for a new one) with the section of release
  * `version` from `date` (YYYY-MM-DD) added as the newest: the heading `## [version] - date`
  * followed by exactly its release `notes`, and the heading's link to the GitHub release added as
- * the first of the links at the end. Throws when the changelog already has the version.
+ * the first of the links at the end. Throws, before anything is written, when the changelog
+ * already has the version, when a release link stands anywhere but in the list at the end (older
+ * sections are never rewritten to make it fit) or when the result would not hold every existing
+ * section byte for byte (`assertSectionsUnchanged`).
  */
-export function addToChangelog(changelog, { version, date, notes, repository }) {
+export function addToChangelog(changelog, release) {
+  const result = addSection(changelog, release);
+  assertSectionsUnchanged(changelog, result);
+  return result;
+}
+
+const isBlank = (line) => line.trim() === "";
+const isReference = (line) => /^\[[^\]]+\]: /.test(line.replace(/\r$/, ""));
+const isVersionLink = (line) => /^\[v\d+\.\d+\.\d+\]: /.test(line);
+
+/** The `## [` sections of `text`, each without the blank and link lines that follow its notes. */
+function sectionsOf(text) {
+  const parts = text.split(/^(?=## \[)/m).filter((part) => part.startsWith("## ["));
+  return parts.map((part) => {
+    const lines = part.split("\n");
+    while (lines.length > 0 && (isBlank(lines.at(-1)) || isReference(lines.at(-1)))) lines.pop();
+    return lines.join("\n");
+  });
+}
+
+/**
+ * Throws unless every `## [` section of `before` (CHANGELOG.md text) stands unchanged, in the same
+ * order, in `after`: a release only adds a section, it never rewrites an older one.
+ */
+export function assertSectionsUnchanged(before, after) {
+  const kept = sectionsOf(after);
+  let from = 0;
+  for (const section of sectionsOf(before)) {
+    const at = kept.indexOf(section, from);
+    if (at === -1) {
+      const heading = section.split("\n")[0].replace(/\r$/, "");
+      throw new Error(
+        `The changelog section "${heading}" would be changed or lost; nothing was written.`,
+      );
+    }
+    from = at + 1;
+  }
+}
+
+function addSection(changelog, { version, date, notes, repository, file = "CHANGELOG.md" }) {
   if (!VERSION.test(version ?? "")) throw new Error(`Not a vX.Y.Z version: ${String(version)}`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) throw new Error(`Not a date: ${String(date)}`);
   const text = changelog.trim() === "" ? CHANGELOG_HEADER : changelog;
@@ -347,14 +392,28 @@ export function addToChangelog(changelog, { version, date, notes, repository }) 
   const link = releaseLink(version, repository);
   const lines = text.split("\n");
   const firstSection = lines.findIndex((line) => line.startsWith("## ["));
-  const firstLink = lines.findIndex((line) => /^\[v\d+\.\d+\.\d+\]: /.test(line));
+  // The link list is only the run of reference-link lines at the very end of the file.
+  let firstLink = lines.length;
+  while (firstLink > 0 && (isBlank(lines[firstLink - 1]) || isReference(lines[firstLink - 1]))) {
+    firstLink -= 1;
+  }
+  while (firstLink < lines.length && isBlank(lines[firstLink])) firstLink += 1;
+  const misplaced = lines.findIndex((line, index) => index < firstLink && isVersionLink(line));
+  if (misplaced !== -1) {
+    throw new Error(
+      `${file} line ${misplaced + 1} is a release link (${lines[misplaced].replace(/\r$/, "")}) ` +
+        "before the end of the file; all links belong in one list at the end of the file. Move it " +
+        "there (newest first) and run again; nothing was changed.",
+    );
+  }
   if (firstSection === -1) {
     return `${text.trimEnd()}\n\n${section}\n${link}\n`;
   }
   const head = lines.slice(0, firstSection).join("\n").trimEnd();
-  const body = lines.slice(firstSection, firstLink === -1 ? undefined : firstLink).join("\n");
-  const links = firstLink === -1 ? [] : lines.slice(firstLink).filter(Boolean);
-  return `${head}\n\n${section}\n${body.trimEnd()}\n\n${[link, ...links].join("\n")}\n`;
+  const bodyLines = lines.slice(firstSection, firstLink);
+  while (bodyLines.length > 0 && isBlank(bodyLines.at(-1))) bodyLines.pop();
+  const links = lines.slice(firstLink).filter((line) => !isBlank(line));
+  return `${head}\n\n${section}\n${bodyLines.join("\n")}\n\n${[link, ...links].join("\n")}\n`;
 }
 
 /** CHANGELOG.md for `releases` ({ version, date, notes }, oldest first): each added in turn. */
@@ -466,7 +525,13 @@ function changelogEntryCommand() {
   const notes = fs.readFileSync(notesFile, "utf8");
   fs.writeFileSync(
     changelogFile,
-    addToChangelog(changelog, { version, date: today(), notes, repository }),
+    addToChangelog(changelog, {
+      version,
+      date: today(),
+      notes,
+      repository,
+      file: changelogFile,
+    }),
   );
 }
 

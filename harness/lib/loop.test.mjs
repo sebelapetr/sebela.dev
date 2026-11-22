@@ -10,6 +10,7 @@ import {
   noteAfter,
   ownerNoteSection,
   phaseEnd,
+  phaseNotStarted,
   scrubPrivate,
   spendComment,
   stewardStop,
@@ -398,12 +399,23 @@ test("the owner note stays while the loop waits for the usage limit and ends wit
 
 // --- phaseEnd ---------------------------------------------------------------
 
-const issue = (number, ...labels) => ({ number, labels });
+// What the work selection (lib/selection.mjs) says of the phase: its open sub-issues by kind.
+const open = (number, kind, openBlockers = []) => ({
+  number,
+  title: `Issue ${number}`,
+  kind,
+  openBlockers,
+});
+const work = (issues, phaseBlockers = []) => ({
+  status: issues.some((issue) => issue.kind === "eligible") ? "next" : "waiting",
+  open: issues,
+  phaseBlockers,
+});
 
 test("a phase whose pull request is open and only HITL issues remain is done", () => {
   const end = phaseEnd({
     pullRequest: { number: 240 },
-    openIssues: [issue(51, "phase:09-rag", "hitl")],
+    work: work([open(51, "hitl")]),
   });
   assert.equal(end.status, "done");
   assert.match(
@@ -416,7 +428,7 @@ test("a phase whose pull request is open and only HITL issues remain is done", (
 });
 
 test("a done phase without open issues lists nothing more", () => {
-  const end = phaseEnd({ pullRequest: { number: 240 }, openIssues: [] });
+  const end = phaseEnd({ pullRequest: { number: 240 }, work: work([]) });
   assert.equal(end.status, "done");
   assert.equal(end.log.length, 1);
 });
@@ -424,17 +436,21 @@ test("a done phase without open issues lists nothing more", () => {
 test("a phase without a pull request has stopped and says so", () => {
   const end = phaseEnd({
     pullRequest: null,
-    openIssues: [
-      issue(222, "phase:09-rag", "agent-failed"),
-      issue(223, "phase:09-rag", "ready-for-agent"),
-      issue(224, "phase:09-rag", "hitl"),
-    ],
+    work: work([
+      open(222, "failed"),
+      open(223, "blocked", [900, 901]),
+      open(224, "hitl", [223]),
+      open(225, "not-ready"),
+      open(226, "parent"),
+    ]),
   });
   assert.equal(end.status, "stopped");
   assert.equal(end.log[0], "phase stopped: no workable issue left");
   const text = end.log.join("\n");
   assert.match(text, /agent-failed: #222/);
-  assert.match(text, /blocked or not ready: #223/);
+  assert.match(text, /blocked: #223 \(by #900, #901\)/);
+  assert.match(text, /not ready-for-agent: #225/);
+  assert.match(text, /has sub-issues of its own: #226/);
   assert.match(text, /HITL: #224/);
   assert.match(text, /no phase pull request/);
   assert.doesNotMatch(text, /mark it ready/);
@@ -445,7 +461,7 @@ test("a phase without a pull request has stopped and says so", () => {
 test("failed or blocked issues make a phase with a pull request read as stopped", () => {
   const end = phaseEnd({
     pullRequest: { number: 240 },
-    openIssues: [issue(222, "agent-failed"), issue(224, "hitl")],
+    work: work([open(222, "failed"), open(224, "hitl")]),
   });
   assert.equal(end.status, "stopped");
   const text = end.log.join("\n");
@@ -454,28 +470,75 @@ test("failed or blocked issues make a phase with a pull request read as stopped"
   assert.doesNotMatch(text, /mark it ready/);
 });
 
-test("an issue labelled both HITL and agent-failed counts as failed", () => {
+test("an issue an agent could still take makes a reported phase end read as stopped", () => {
+  const end = phaseEnd({ pullRequest: { number: 240 }, work: work([open(210, "eligible")]) });
+  assert.equal(end.status, "stopped");
+  assert.match(end.log.join("\n"), /still eligible: #210/);
+});
+
+test("a phase that waits for another phase says which", () => {
   const end = phaseEnd({
-    pullRequest: { number: 1 },
-    openIssues: [issue(9, "hitl", "agent-failed")],
+    pullRequest: null,
+    work: work([open(1, "eligible")], [{ number: 414, title: "Phase 07" }]),
   });
   assert.equal(end.status, "stopped");
-  assert.match(end.log.join("\n"), /agent-failed: #9/);
-  assert.doesNotMatch(end.log.join("\n"), /HITL/);
+  assert.match(end.log.join("\n"), /the phase waits for #414/);
 });
 
 test("a pull request gh could not look up is not reported as open or missing", () => {
-  const end = phaseEnd({ pullRequest: undefined, openIssues: [] });
+  const end = phaseEnd({ pullRequest: undefined, work: work([]) });
   assert.equal(end.status, "stopped");
   const text = end.log.join("\n");
   assert.match(text, /could not check/);
   assert.doesNotMatch(text, /no phase pull request|is open/);
 });
 
-test("open issues gh could not list are said to be unknown", () => {
-  const end = phaseEnd({ pullRequest: { number: 240 }, openIssues: null });
+test("issues GitHub could not be asked for are said to be unknown", () => {
+  const end = phaseEnd({ pullRequest: { number: 240 }, work: null });
   assert.equal(end.status, "done");
-  assert.match(end.log.join("\n"), /could not list/);
+  assert.match(end.log.join("\n"), /could not read the phase's issues/);
+});
+
+// --- phaseNotStarted (review of #423) ---------------------------------------------------
+
+const selection = (status, extra = {}) => ({
+  phase: "08-mcp-public",
+  tracking: { number: 418, title: "Phase 08" },
+  status,
+  phaseBlockers: [],
+  phaseCycle: null,
+  ...extra,
+});
+
+test("a phase with a next issue, a finished one and one waiting on its issues get an iteration", () => {
+  for (const status of ["next", "finished", "waiting"]) {
+    assert.equal(phaseNotStarted(selection(status)), null, status);
+  }
+  assert.equal(phaseNotStarted(null), null, "an unread selection stops nothing by itself");
+});
+
+test("a phase that waits for another phase is not started, and the phases are named", () => {
+  const why = phaseNotStarted(
+    selection("phase-waits", {
+      phaseBlockers: [{ number: 414, title: "Phase 07", folder: "07-ai-service" }],
+    }),
+  );
+  assert.match(why, /phase 08-mcp-public waits for #414 \(07-ai-service\)/);
+  assert.match(why, /#418/);
+});
+
+test("a cycle between phases is said when the phase is refused", () => {
+  const why = phaseNotStarted(
+    selection("phase-waits", {
+      phaseBlockers: [{ number: 414, title: "Phase 07", folder: "07-ai-service" }],
+      phaseCycle: [418, 414],
+    }),
+  );
+  assert.match(why, /cycle \(#418 → #414 → #418\)/);
+});
+
+test("a phase without issues is not started", () => {
+  assert.match(phaseNotStarted(selection("empty")), /has no issues yet/);
 });
 
 // --- a stop by the steward (issue #371) ---------------------------------------------
