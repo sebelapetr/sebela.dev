@@ -46,6 +46,8 @@ export const chatErrorCodes = [
   "timeout",
   "invalid_stream",
   "internal",
+  /** The visitor stopped the answer or cleared the conversation; asking again may help. */
+  "cancelled",
 ] as const;
 
 export type ChatErrorCode = (typeof chatErrorCodes)[number];

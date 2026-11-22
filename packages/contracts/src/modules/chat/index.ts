@@ -58,6 +58,7 @@ export {
   chatGrantMaxLength,
   chatHistoryExchangeLimit,
   chatOperationStatuses,
+  chatTelemetryDeletionStates,
   chatProgressStages,
   chatReplayEvents,
   chatRetentionDaysDefault,
