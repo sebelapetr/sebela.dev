@@ -11,9 +11,10 @@
 FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS base
 # BEGIN debian-package-fixes (identical in every Dockerfile; scripts/checks/image-debian-packages.test.mjs)
 # Debian packages upgraded past the base image to at least the version that fixes a finding, from
-# the suites the base already lists: zlib1g from trixie-security, libc6 and libc-bin from trixie
-# (a point release). The floors are minimums, not pins: apt installs the newest version those suites
-# offer, so a Debian point release cannot break the build, and the build fails if none reaches a
+# the suites the base already lists: zlib1g from trixie-security (its floor version is also in
+# trixie main), libc6 and libc-bin from trixie (a point release). The floors are minimums, not pins:
+# apt installs the newest version those suites offer, so a Debian point release cannot break the
+# build, and the build fails if the newest version the suites offer for a package is below its
 # floor. Dependabot does not see these floors. Remove a package from the list, and its entry in
 # scripts/release/image-scan-exceptions.json, when the base image already has its floor (the build
 # fails here as soon as it does, so the step cannot rot); remove the whole block when none is left

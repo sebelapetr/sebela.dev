@@ -1,7 +1,8 @@
 // The images upgrade a few Debian packages past the base image (docs/release-workflow.md, "Image
-// scan"). Dependabot cannot see those pins, so these tests keep the step the same in every
-// Dockerfile, pinned, minimal and in the base stage, so each image and each of its stages has it.
-// The step itself fails the build once the base image carries the pinned versions.
+// scan"). Dependabot cannot see those floors, so these tests keep the step the same in every
+// Dockerfile, a floor (a minimum version) per package, minimal and in the base stage, so each image
+// and each of its stages has it. The step itself fails the build as soon as the base image has any
+// one package's floor.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
