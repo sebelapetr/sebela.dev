@@ -453,7 +453,8 @@ describe("chat persistence", () => {
         later(70_000, when),
         timeout,
       );
-      expect(interrupted.sort()).toEqual([claimed.id, unclaimed.id].sort());
+      // Operations other tests left active are overdue too.
+      expect(interrupted).toEqual(expect.arrayContaining([claimed.id, unclaimed.id]));
       expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
       const found = await chat.findOperation(claimedCaller.identityId, claimed.id);
       expect(found?.operation.status).toBe("interrupted");
