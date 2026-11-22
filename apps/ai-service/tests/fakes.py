@@ -87,6 +87,9 @@ class FakeApi:
     #: The deadline the claim returns; None returns the request's own deadline.
     claim_deadline: str | None = None
     claim_allowance: float = 0.02
+    #: How long the claim takes; `claim_started` is set when one arrives.
+    claim_delay_s: float = 0.0
+    claim_started: asyncio.Event = field(default_factory=asyncio.Event)
     #: The bound terms the claim returns; the defaults are this agent's and the request's.
     claim_model: str = "claude-haiku-5-5"
     claim_pricing_version: str = "anthropic-2026-11-19"
@@ -134,6 +137,9 @@ class FakeApi:
             return httpx2.Response(401, json=error("unauthorized"))
         body = json.loads(request.content)
         if path == "/v1/internal/chat/grants/claim" and request.method == "POST":
+            self.claim_started.set()
+            if self.claim_delay_s:
+                await asyncio.sleep(self.claim_delay_s)
             return self._claim(body)
         prefix, _, rest = path.partition("/v1/internal/chat/operations/")
         if not prefix and rest.endswith("/result") and request.method == "POST":
