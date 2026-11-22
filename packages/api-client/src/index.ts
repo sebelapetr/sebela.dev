@@ -138,6 +138,18 @@ export type RecentChanges = Schemas["RecentChanges"];
 export type AuditChange = Schemas["AuditChange"];
 export type AuditEntity = AuditChange["entity"];
 export type AuditAction = AuditChange["action"];
+export type ChatConversation = Schemas["ChatConversation"];
+export type ChatMessage = Schemas["ChatMessage"];
+export type ChatUserMessage = Schemas["ChatUserMessage"];
+export type ChatAssistantMessage = Schemas["ChatAssistantMessage"];
+export type ChatMessageSubmission = Schemas["ChatMessageSubmission"];
+export type ChatOperation = Schemas["ChatOperation"];
+export type ChatOperationStatus = ChatOperation["status"];
+/** The read side of the answer's typed parts; the AI service's result is not a website DTO. */
+export type ChatBlock = Schemas["ChatBlockOutput"];
+export type ChatSource = Schemas["ChatSourceOutput"];
+export type ChatRelatedLink = Schemas["ChatRelatedLinkOutput"];
+export type ChatContactLink = Schemas["ChatContactLinkOutput"];
 export type ErrorResponse = Schemas["ErrorResponse"];
 export type ErrorField = Schemas["ErrorField"];
 export type ErrorCode = ErrorResponse["error"]["code"];
@@ -162,21 +174,25 @@ export interface ApiClientOptions {
 /** What the client reads from the committed document: each operation's security requirement. */
 interface DocumentedSecurity {
   readonly paths: Readonly<
-    Record<string, Readonly<Record<string, { readonly security?: readonly object[] } | undefined>>>
+    Record<
+      string,
+      Readonly<Record<string, { readonly security?: readonly Readonly<object>[] } | undefined>>
+    >
   >;
 }
 
 const documented: DocumentedSecurity = document;
 
 /**
- * Whether the contract requires credentials for the operation at `schemaPath` and `method`.
+ * Whether the contract requires the API key (`bearerAuth`) for the operation at `schemaPath` and
+ * `method`. Another scheme, such as the AI service's `controlToken`, never receives the key.
  * The API declares security per operation and none at the document level (`apps/api/src/openapi.ts`),
  * so a document-level `security` is not consulted; if the API ever adds one, extend this lookup
  * and the consumer contract tests together.
  */
 function requiresKey(schemaPath: string, method: string): boolean {
   const security = documented.paths[schemaPath]?.[method.toLowerCase()]?.security;
-  return security !== undefined && security.length > 0;
+  return security?.some((requirement) => "bearerAuth" in requirement) ?? false;
 }
 
 /**

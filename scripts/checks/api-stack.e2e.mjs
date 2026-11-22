@@ -4,7 +4,7 @@
 //
 //   node scripts/checks/api-stack.e2e.mjs
 //
-// Needs Docker with Compose. It builds the API image and starts its own disposable Compose project
+// Needs Docker with Compose. It builds the API and AI service images and starts its own disposable Compose project
 // from this checkout's compose.yaml, with the documented settings of `.env.example` only (never a
 // `.env`), free host ports and a random database password that exists only in this run. It checks:
 //
@@ -17,7 +17,9 @@
 // - the first API key created by its explicit command, a refused write without it and a media
 //   upload with it, downloaded again from the local storage volume;
 // - a restart of the API that keeps the content and the uploaded file;
-// - no key or password in the logs of the stack.
+// - the AI service (profile `ai-service`) with the visitor chat switched on: healthy on the
+//   fictional model, no published port, the API reachable by its service name and Postgres not;
+// - no key, token or password in the logs of the stack.
 //
 // It removes the project, its containers, volumes and images at the end, also when a step fails.
 // Plain Node with no dependencies. Exits with 1 when a step fails.
@@ -38,6 +40,10 @@ const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
 const host = example.API_HOST;
 const password = randomBytes(24).toString("hex");
 const apiPort = await freePort(host);
+// The visitor chat on, with tokens and keys of this run only, so the AI service starts with the API.
+const chatToken = randomBytes(24).toString("hex");
+const controlToken = randomBytes(24).toString("hex");
+const relayToken = randomBytes(24).toString("hex");
 
 // Compose reads `.env.example` (`--env-file`); these process variables take precedence over it.
 const env = {
@@ -50,6 +56,20 @@ const env = {
   DATABASE_PASSWORD: password,
   API_PORT: String(apiPort),
   STORAGE_PUBLIC_BASE_URL: `http://${host}:${String(apiPort)}/v1/media/files`,
+  API_CHAT_ALLOWED_ORIGINS: `http://${example.WEB_HOST}:${example.WEB_PORT}`,
+  API_CHAT_COOKIE_SECURE: "false",
+  API_CHAT_FINGERPRINT_KEY: randomBytes(24).toString("hex"),
+  API_CHAT_MODEL: "smoke-model",
+  API_CHAT_PRICING_VERSION: "smoke-pricing",
+  API_CHAT_RELAY_TOKEN: relayToken,
+  API_TURNSTILE_SECRET_KEY: randomBytes(24).toString("hex"),
+  API_TURNSTILE_EXPECTED_HOSTNAME: example.WEB_HOST,
+  API_AI_SERVICE_TOKEN: chatToken,
+  API_AI_CONTROL_TOKEN: controlToken,
+  // Never the paid model, whatever the calling shell holds.
+  AI_SERVICE_MODEL: "",
+  AI_SERVICE_ALLOW_PAID: "",
+  ANTHROPIC_API_KEY: "",
 };
 const base = `http://${host}:${String(apiPort)}`;
 
@@ -75,6 +95,8 @@ function compose(args, overrides = {}) {
       EXAMPLE_FILE,
       "--profile",
       "api",
+      "--profile",
+      "ai-service",
       ...args,
     ],
     {
@@ -117,7 +139,7 @@ function postgresOnlyConfig() {
   const envFile = path.join(scratch, `api-stack-postgres-only-${String(process.pid)}.env`);
   const postgresSettings = Object.entries(example).filter(([name]) => name.startsWith("POSTGRES_"));
   fs.writeFileSync(envFile, postgresSettings.map(([name, value]) => `${name}=${value}\n`).join(""));
-  const apiSettings = /^(?:API_|STORAGE_|MEDIA_|DATABASE_)/;
+  const apiSettings = /^(?:API_|STORAGE_|MEDIA_|DATABASE_|AI_SERVICE_|ANTHROPIC_)/;
   try {
     execFileSync(
       "docker",
@@ -227,10 +249,54 @@ try {
   assert.equal(again.status, 200);
   assert.deepEqual(Buffer.from(await again.arrayBuffer()), sample);
 
-  step("no key or password in the logs");
+  step("the AI service: healthy, unpublished, reaches the API but not Postgres");
+  assert.equal(containerState("ai-service").state, "running");
+  const aiHealth = compose(["ps", "--format", "{{.Health}}", "ai-service"]);
+  assert.equal(aiHealth, "healthy");
+  const aiPorts = compose(["ps", "--format", "{{.Publishers}}", "ai-service"]);
+  assert.doesNotMatch(aiPorts, /->/, "the AI service publishes no port");
+  const apiContainerPort = compose(["exec", "-T", "api", "printenv", "API_PORT"]);
+  // The port the API itself reaches Postgres on inside the network.
+  const postgresContainerPort = compose(["exec", "-T", "api", "printenv", "POSTGRES_PORT"]);
+  const probe = (target) =>
+    compose([
+      "exec",
+      "-T",
+      "ai-service",
+      "python",
+      "-c",
+      [
+        "import socket, sys",
+        "try:",
+        `    socket.create_connection((${JSON.stringify(target)}, int(sys.argv[1])), timeout=3).close()`,
+        "    print('reachable')",
+        "except OSError:",
+        "    print('unreachable')",
+      ].join("\n"),
+      target === "api" ? apiContainerPort : postgresContainerPort,
+    ]);
+  assert.equal(probe("api"), "reachable", "the AI service reaches the API");
+  assert.equal(probe("postgres"), "unreachable", "the AI service cannot reach Postgres");
+  const unsigned = await fetch(`${base}/v1/internal/chat/grants/claim`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(unsigned.status, 401, "the chat control routes refuse a caller without the token");
+  const unrelayed = await fetch(`${base}/v1/chat/conversation`);
+  assert.equal(unrelayed.status, 403, "the visitor chat routes refuse a caller but the website");
+  const relayed = await fetch(`${base}/v1/chat/conversation`, {
+    headers: { "x-sebela-chat-relay": relayToken },
+  });
+  assert.equal(relayed.status, 200, "the visitor chat routes answer the website's relay");
+
+  step("no key, token or password in the logs");
   const logs = compose(["logs", "--no-color"]);
   assert.ok(!logs.includes(key), "the logs do not contain the key");
   assert.ok(!logs.includes(password), "the logs do not contain the password");
+  for (const token of [chatToken, controlToken, relayToken]) {
+    assert.ok(!logs.includes(token), "the logs do not contain a chat token");
+  }
 
   process.stdout.write("API stack smoke check passed.\n");
 } catch (error) {
@@ -239,7 +305,7 @@ try {
     `API stack smoke check failed: ${error instanceof Error ? error.message : String(error)}\n`,
   );
   try {
-    process.stderr.write(`${compose(["logs", "--no-color", "migrate", "api"])}\n`);
+    process.stderr.write(`${compose(["logs", "--no-color", "migrate", "api", "ai-service"])}\n`);
   } catch {
     // The stack may not exist.
   }

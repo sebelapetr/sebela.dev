@@ -1,7 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { serveChatStack } from "./chat-stack";
 import { startApi, startWebsite, type Fixture, type Started } from "./stack";
+import { queueTokens } from "./turnstile-fake";
 
 // The phase's handoff checks (issue #61): every page with the longest fictional content of
 // e2e/fixtures/with-long-content/ at every width and in both themes, and the visitors' journeys
@@ -13,6 +15,10 @@ const schemes = ["light", "dark"] as const;
 
 const longName = "Maximiliana Featherstonehaugh-Cholmondeley von Wolkenstein-Trostburg";
 const name = "Casey Morrow";
+
+/** The chat stack's fictional person and the fictional model's answer about them. */
+const chatName = "Ilsa Marrow";
+const chatAnswer = "Ilsa Marrow is a fictional engineer who builds evaluated assistants.";
 
 /** Serves the fixture to the tests of one block, so the public rate limit counts only theirs. */
 function serveFixture(fixture: Fixture): { readonly url: () => string } {
@@ -175,13 +181,11 @@ test.describe("long content", () => {
           await page.goto(`${site.url()}/cv/pdf/unavailable`);
           await shot("cv-unavailable");
 
-          // The sticky composer covers content in a full-page shot, so the viewport is taken.
+          // The sticky composer covers content in a full-page shot, so the viewport is taken. This
+          // website has no chat, so the page says so; the chat itself is fitted below.
           await page.goto(`${site.url()}/ask`);
           await hydrated(page);
-          await page
-            .getByRole("button", { name: `What could ${longName} automate for my company?` })
-            .click();
-          await answered(page);
+          await expect(page.getByText("The chat is not available right now.")).toBeVisible();
           await shot("ask", false);
         });
       }
@@ -200,6 +204,39 @@ test.describe("long content", () => {
         await page.pdf({ path: testInfo.outputPath(`long-cv-print-${scheme}.pdf`), format: "A4" });
       });
     });
+  }
+});
+
+test.describe("the long name in the chat", () => {
+  // The real chat path on the long content: the suggested questions and the question asked carry
+  // the longest fictional name.
+  const stack = serveChatStack({ fixture: "with-long-content" });
+
+  for (const scheme of schemes) {
+    for (const width of widths) {
+      test(`fits the asked suggestion and its answer at ${String(width)} px in ${scheme} mode`, async ({
+        page,
+      }, testInfo) => {
+        await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${stack().url}/ask`);
+        await hydrated(page);
+        await expect(page.getByRole("heading", { level: 1 })).toContainText(longName);
+        const question = `What could ${longName} automate for my company?`;
+        await page.getByRole("button", { name: question }).click();
+        await answered(page);
+        await expect(turns(page).last()).toContainText(question);
+        await expectLoaded(page);
+        await expectNoHorizontalScroll(page);
+        await expectAccessible(page);
+        await expectWordsWhole(page);
+        await expectNavigationOnOneLine(page);
+        // The sticky composer covers content in a full-page shot, so the viewport is taken.
+        await page.screenshot({
+          path: testInfo.outputPath(`long-ask-chat-${String(width)}-${scheme}.png`),
+        });
+      });
+    }
   }
 });
 
@@ -296,32 +333,31 @@ test.describe("an evaluator", () => {
 });
 
 test.describe("a visitor asking", () => {
-  const site = serveFixture("with-experience");
+  // The real chat path with the fictional model and the chat's own fictional profile.
+  const stack = serveChatStack();
 
-  test("asks from the hero, follows a source and recovers from a failed answer", async ({
+  test("asks from the hero, recovers from a failed person check and follows a source", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto(site.url());
+    await page.goto(stack().url);
     await hydrated(page);
     await page
       .getByRole("list", { name: "Suggested questions" })
       .getByRole("button", { name: "AI role fit?" })
       .click();
-    await expect(page).toHaveURL(/\/ask\?c=/u);
+    await expect(page).toHaveURL(/\/ask$/u);
     await answered(page);
-    const sources = turns(page).last().getByRole("list", { name: "Sources", exact: true });
-    await expect(sources.getByRole("link")).toHaveCount(5);
+    await expect(turns(page).last()).toContainText(chatAnswer);
 
-    // A failed answer is labelled and offered again; the retry answers in place.
-    await page.evaluate(() => {
-      window.__sebelaMockChatScenarios = ["error-after-start"];
-    });
+    // A question the person check does not confirm is labelled and offered again; the retry
+    // answers in place.
+    await queueTokens(page, ["fail-1"]);
     const composer = page.getByRole("textbox", { name: "Your question" });
-    await composer.fill(`What could ${name} automate for my company?`);
+    await composer.fill(`What could ${chatName} automate for my company?`);
     await composer.press("Enter");
     await answered(page);
-    await expect(turns(page).last().getByText("Incomplete", { exact: true })).toBeVisible();
+    await expect(turns(page).last().getByText("Not answered", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Try again" }).click();
     await answered(page);
     await expect(turns(page)).toHaveCount(2);
@@ -330,10 +366,9 @@ test.describe("a visitor asking", () => {
     await turns(page)
       .last()
       .getByRole("list", { name: "Sources", exact: true })
-      .getByRole("link", { name: "AI integration", exact: true })
+      .getByRole("link", { name: chatName, exact: true })
       .click();
-    await expect(page).toHaveURL(/\/services#service-ai-integration$/u);
-    await expect(item(page, "service-ai-integration")).toBeInViewport();
+    await expect(page).toHaveURL(new RegExp(`^${stack().url}/?$`, "u"));
   });
 });
 

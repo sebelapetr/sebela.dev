@@ -49,6 +49,28 @@ export interface ApiConfig {
    * and the server-only secret they are signed with. `null`: no notifications are sent.
    */
   readonly websiteInvalidation: WebsiteInvalidationConfig | null;
+  /**
+   * The visitor chat's HTTP settings: the website origins its writes must come from, whether its
+   * cookie is `Secure`, the AI service it dispatches to and the token the AI service presents on
+   * the internal control routes. `null`: the chat is off and its routes answer `unavailable`.
+   */
+  readonly chat: ChatHttpConfig | null;
+}
+
+export interface ChatHttpConfig {
+  /** Exact origins, such as `https://www.example.test`, a visitor write must name in `Origin`. */
+  readonly allowedOrigins: readonly string[];
+  /** Whether the chat cookie is sent with `Secure`; `true` in production. */
+  readonly cookieSecure: boolean;
+  /** The AI service's base address and the bearer token it accepts from the API. */
+  readonly aiService: { readonly url: string; readonly token: string };
+  /** The bearer token the AI service presents on the internal control routes; never logged. */
+  readonly controlToken: string;
+  /**
+   * The token the website's chat relay presents on every visitor chat route; never logged. Only a
+   * request with it may name the visitor's address.
+   */
+  readonly relayToken: string;
 }
 
 export interface WebsiteInvalidationConfig {
@@ -86,7 +108,17 @@ const ApiEnvironmentSchema = z.object({
   // Present and empty switches notifications off; set, both are validated below.
   API_WEB_INVALIDATION_URL: z.string(),
   API_WEB_INVALIDATION_SECRET: z.string(),
+  // Absent or all empty switch the visitor chat off; any one set requires all, validated below.
+  API_CHAT_ALLOWED_ORIGINS: z.string().optional(),
+  API_CHAT_COOKIE_SECURE: z.string().optional(),
+  API_AI_SERVICE_URL: z.string().optional(),
+  API_AI_SERVICE_TOKEN: z.string().optional(),
+  API_AI_CONTROL_TOKEN: z.string().optional(),
+  API_CHAT_RELAY_TOKEN: z.string().optional(),
 });
+
+/** The shortest accepted AI service, control and relay token. */
+export const chatTokenMinLength = 32;
 
 /** A plain http or https address: no credentials, query or fragment that could carry a secret. */
 function isPlainWebAddress(value: string): boolean {
@@ -112,6 +144,66 @@ function invalidInvalidationSettings(url: string, secret: string): string[] {
   return names;
 }
 
+/** An exact web origin: http or https, a host and maybe a port, nothing else. */
+function isWebOrigin(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (url.protocol === "http:" || url.protocol === "https:") && url.origin === value;
+}
+
+type ChatEnvironment = Pick<
+  z.infer<typeof ApiEnvironmentSchema>,
+  | "API_CHAT_ALLOWED_ORIGINS"
+  | "API_CHAT_COOKIE_SECURE"
+  | "API_AI_SERVICE_URL"
+  | "API_AI_SERVICE_TOKEN"
+  | "API_AI_CONTROL_TOKEN"
+  | "API_CHAT_RELAY_TOKEN"
+>;
+
+/**
+ * The chat settings, `null` when none of the origins, AI service or tokens is given, or the names of
+ * the variables that are missing or invalid. The cookie flag alone does not switch the chat on.
+ */
+function readChatSettings(settings: ChatEnvironment): ChatHttpConfig | null | string[] {
+  const originsText = settings.API_CHAT_ALLOWED_ORIGINS ?? "";
+  const secureText = settings.API_CHAT_COOKIE_SECURE ?? "";
+  const url = settings.API_AI_SERVICE_URL ?? "";
+  const token = settings.API_AI_SERVICE_TOKEN ?? "";
+  const controlToken = settings.API_AI_CONTROL_TOKEN ?? "";
+  const relayToken = settings.API_CHAT_RELAY_TOKEN ?? "";
+  if ([originsText, url, token, controlToken, relayToken].every((value) => value === "")) {
+    return null;
+  }
+  const origins = originsText
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const names: string[] = [];
+  if (origins.length === 0 || !origins.every(isWebOrigin)) names.push("API_CHAT_ALLOWED_ORIGINS");
+  if (secureText !== "true" && secureText !== "false") names.push("API_CHAT_COOKIE_SECURE");
+  if (!isPlainWebAddress(url)) names.push("API_AI_SERVICE_URL");
+  if (token.length < chatTokenMinLength) names.push("API_AI_SERVICE_TOKEN");
+  if (controlToken.length < chatTokenMinLength || controlToken === token) {
+    names.push("API_AI_CONTROL_TOKEN");
+  }
+  if (
+    relayToken.length < chatTokenMinLength ||
+    relayToken === token ||
+    relayToken === controlToken
+  ) {
+    names.push("API_CHAT_RELAY_TOKEN");
+  }
+  if (names.length > 0) return names;
+  return {
+    allowedOrigins: origins,
+    cookieSecure: secureText === "true",
+    aiService: { url, token },
+    controlToken,
+    relayToken,
+  };
+}
+
 /** Names the variables to fix; their values are never included. */
 const configurationError = (names: readonly string[]) =>
   new Error(`Invalid API configuration: set ${names.join(", ")} (documented in .env.example)`);
@@ -131,7 +223,9 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
   const url = settings.API_WEB_INVALIDATION_URL;
   const secret = settings.API_WEB_INVALIDATION_SECRET;
   const invalid = invalidInvalidationSettings(url, secret);
-  if (invalid.length > 0) throw configurationError(invalid);
+  const chat = readChatSettings(settings);
+  const problems = [...invalid, ...(Array.isArray(chat) ? chat : [])];
+  if (problems.length > 0) throw configurationError(problems);
   return {
     host: settings.API_HOST,
     port: settings.API_PORT,
@@ -147,5 +241,6 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
       maxTrackedCallers: settings.API_RATE_LIMIT_MAX_TRACKED,
     },
     websiteInvalidation: url === "" ? null : { url, secret },
+    chat: Array.isArray(chat) ? null : chat,
   };
 }

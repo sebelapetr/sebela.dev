@@ -261,3 +261,71 @@ export function readIndexingConfig(env: Readonly<Record<string, string | undefin
     "Invalid website configuration (documented in .env.example): WEB_INDEXING must be on or off",
   );
 }
+
+/**
+ * The public Turnstile site key of the chat's person check (`WEB_TURNSTILE_SITE_KEY`), read per
+ * request on the server and given to the Ask page; null when unset or empty, so the chat cannot
+ * send a question. Throws an error naming the variable, never its value, for a key that is not up
+ * to 100 letters, digits, `_` or `-`.
+ */
+export function readTurnstileSiteKey(
+  env: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const value = env["WEB_TURNSTILE_SITE_KEY"]?.trim() ?? "";
+  if (value === "") return null;
+  if (!/^[\w-]{1,100}$/.test(value)) {
+    throw new Error(
+      "Invalid website configuration (documented in .env.example): WEB_TURNSTILE_SITE_KEY must be up to 100 letters, digits, _ or -",
+    );
+  }
+  return value;
+}
+
+/** The shortest accepted chat relay token, as the API's `API_CHAT_RELAY_TOKEN` requires. */
+const CHAT_RELAY_TOKEN_MIN_LENGTH = 32;
+/** The most proxy hops in front of the website the relay can be told to trust. */
+const MAX_TRUSTED_PROXY_HOPS = 10;
+
+/** The website side of the chat relay. */
+export interface ChatRelayConfig {
+  /** `WEB_CHAT_RELAY_TOKEN`: the same value as the API's `API_CHAT_RELAY_TOKEN`; never logged. */
+  readonly token: string;
+  /**
+   * `WEB_TRUSTED_PROXY_HOPS`: how many proxies in front of the website append to
+   * `X-Forwarded-For`; the visitor's address is that many entries from the right. 0 when unset or
+   * empty: no address is named.
+   */
+  readonly trustedProxyHops: number;
+}
+
+/**
+ * Reads the chat relay's settings (`WEB_CHAT_RELAY_TOKEN`, `WEB_TRUSTED_PROXY_HOPS`) per request.
+ * Null when the token is unset or empty: the relay answers `unavailable` without reaching the API.
+ * Throws an error naming every invalid variable, never its value, for a token shorter than 32
+ * characters or hops that are not a whole number from 0 to 10.
+ */
+export function readChatRelayConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): ChatRelayConfig | null {
+  const token = env["WEB_CHAT_RELAY_TOKEN"] ?? "";
+  if (token === "") return null;
+  const hopsText = env["WEB_TRUSTED_PROXY_HOPS"] ?? "";
+  const hops = hopsText === "" ? 0 : /^\d{1,2}$/.test(hopsText) ? Number(hopsText) : Number.NaN;
+  const problems: string[] = [];
+  if (token.length < CHAT_RELAY_TOKEN_MIN_LENGTH) {
+    problems.push(
+      `WEB_CHAT_RELAY_TOKEN must be at least ${String(CHAT_RELAY_TOKEN_MIN_LENGTH)} characters`,
+    );
+  }
+  if (!(hops >= 0 && hops <= MAX_TRUSTED_PROXY_HOPS)) {
+    problems.push(
+      `WEB_TRUSTED_PROXY_HOPS must be a whole number from 0 to ${String(MAX_TRUSTED_PROXY_HOPS)}`,
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `Invalid website configuration (documented in .env.example): ${problems.join("; ")}`,
+    );
+  }
+  return { token, trustedProxyHops: hops };
+}

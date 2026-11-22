@@ -590,30 +590,6 @@ test.describe("the roadmap overview", () => {
     await expect(resource).toBeInViewport();
   });
 
-  test("the chat's roadmap card and source lead to the module being learned", async ({ page }) => {
-    await page.goto(`${website.url}/ask`);
-    await hydrated(page);
-    await page.getByRole("button", { name: `What is ${name} working on now?` }).click();
-    const answer = page.getByRole("list", { name: "Conversation" }).locator(":scope > li").last();
-    await expect(answer.locator("[aria-busy='false']")).toHaveCount(1);
-    await expect(answer).toContainText("Signal basics is still being learned");
-
-    const card = answer.getByRole("list", { name: "Cards" }).locator(":scope > li");
-    await expect(card).toHaveCount(1);
-    await expect(card).toContainText("AI Roadmap");
-    await expect(card.getByRole("link", { name: "Signal basics" })).toHaveAttribute(
-      "href",
-      "/ai-roadmap/orbit-foundations/signal-basics",
-    );
-    const source = answer
-      .getByRole("list", { name: "Sources", exact: true })
-      .getByRole("link", { name: "Signal basics, AI Roadmap" });
-    await expect(source).toHaveAttribute("href", "/ai-roadmap/orbit-foundations/signal-basics");
-    await source.click();
-    await expect(page).toHaveURL(/\/ai-roadmap\/orbit-foundations\/signal-basics$/u);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Signal basics");
-  });
-
   test("the homepage's Exploring shows the learning in progress and leads to its pages", async ({
     page,
   }) => {

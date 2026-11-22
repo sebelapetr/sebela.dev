@@ -1,19 +1,20 @@
-// The Ask page's address of a conversation: `/ask?c=<id>`, where the identifier is random and the
-// question is never part of it.
+// The Ask page's address of a question the hero hands off: `/ask?c=<id>`, where the identifier is
+// random, names only the question left in this tab, and never names or opens a conversation (the
+// API resolves the visitor's conversation from its cookie). The question is never part of it.
 import { z } from "zod";
 
 import { routes } from "../../_shared";
 
-const ConversationIdSchema = z.uuid();
+const HandOffIdSchema = z.uuid();
 
-/** The Ask page's address of the conversation; the page itself (a new chat) without one. */
-export function conversationHref(conversationId: string | null): string {
-  return conversationId === null ? routes.ask : `${routes.ask}?c=${conversationId}`;
+/** The Ask page's address that takes the hand-off there; the page itself without one. */
+export function handOffHref(handOffId: string | null): string {
+  return handOffId === null ? routes.ask : `${routes.ask}?c=${handOffId}`;
 }
 
-/** The conversation an address's `c` parameter names; null (a new chat) when it names none. */
-export function conversationIdFromParam(param: string | null): string | null {
+/** The hand-off an address's `c` parameter names; null when it names none. */
+export function handOffIdFromParam(param: string | null): string | null {
   if (param === null) return null;
   const id = param.toLowerCase();
-  return ConversationIdSchema.safeParse(id).success ? id : null;
+  return HandOffIdSchema.safeParse(id).success ? id : null;
 }

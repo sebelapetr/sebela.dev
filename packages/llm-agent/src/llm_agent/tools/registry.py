@@ -409,7 +409,11 @@ def _events(items: Sequence[PublicEvent]) -> list[_Record]:
     ]
 
 
-def _profile(person: PublicPerson) -> dict[str, Any]:
+def profile_view(person: PublicPerson) -> dict[str, Any]:
+    """The public profile projection `get_profile` gives the model: no identifier, e-mail or links.
+
+    The AI service's profile capability returns the same projection, so both paths stay equal.
+    """
     return person.model_dump(mode="json", exclude={"id", "email", "links"})
 
 
@@ -634,7 +638,7 @@ class Tools:
 
     def _person(self, tool: ToolName, person: PublicPerson) -> dict[str, Any]:
         kind = _PERSON_KIND[tool]
-        data = _profile(person) if kind == "profile" else _contact(person)
+        data = profile_view(person) if kind == "profile" else _contact(person)
         existing = next((item for item in self.evidence if item.kind == kind), None)
         if existing is None:
             if json_tokens(data) > self._result_tokens:

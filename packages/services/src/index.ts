@@ -68,6 +68,29 @@ export type {
   TimeEntryDeletion,
 } from "./modules/roadmap/index.js";
 export { readRetrievalOptions } from "./modules/retrieval/index.js";
+export {
+  chatPolicy,
+  createSiteverifyVerifier,
+  readChatOptions,
+  siteverifyUrl,
+} from "./modules/chat/index.js";
+export type {
+  ChallengeVerifier,
+  ChatCaller,
+  ChatClaimOutcome,
+  ChatConfig,
+  ChatDispatch,
+  ChatHistoryExchange,
+  ChatObservation,
+  ChatOpened,
+  ChatOptions,
+  ChatPolicy,
+  ChatReconcileOutcome,
+  ChatService,
+  ChatServiceOptions,
+  ChatSubmitResult,
+  SiteverifyOptions,
+} from "./modules/chat/index.js";
 export type {
   Embedder,
   IndexReport,

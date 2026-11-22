@@ -8,6 +8,9 @@ import {
   type ApiClient,
   type AuditChange,
   type AuthenticationCheck,
+  type ChatConversation,
+  type ChatMessageSubmission,
+  type ChatOperation,
   type Cv,
   type Diary,
   type DiaryDay,
@@ -141,6 +144,36 @@ describe("the generated API client", () => {
       expect(refused.error?.error.code).toBe("unauthorized");
       expect(authorizations).toEqual([apiKey === undefined ? null : `Bearer ${apiKey}`]);
     }
+  });
+
+  it("sends the API key to no chat route, the control routes included", async () => {
+    const { client, authorizations } = consumer(key);
+
+    const conversation = await client.GET("/v1/chat/conversation");
+    // The test configuration leaves the chat off: a typed refusal, never cached.
+    expect(conversation.response.status).toBe(503);
+    expect(conversation.error?.error.code).toBe("unavailable");
+    const read: ChatConversation | undefined = conversation.data;
+    expect(read).toBeUndefined();
+
+    const submission: ChatMessageSubmission = {
+      requestId: "00000000-0000-4000-8000-000000000001",
+      question: "What does he build?",
+      challengeToken: "fictional-token",
+    };
+    const asked = await client.POST("/v1/chat/conversation/messages", { body: submission });
+    expect(asked.response.status).toBeGreaterThanOrEqual(400);
+    const operation: ChatOperation | undefined = asked.data;
+    expect(operation).toBeUndefined();
+
+    const claimed = await client.POST("/v1/internal/chat/grants/claim", {
+      body: { operationId: "00000000-0000-4000-8000-000000000002", grant: "fictional-grant" },
+    });
+    expect(claimed.response.status).toBe(401);
+    expect(claimed.error?.error.code).toBe("unauthorized");
+
+    // The control routes take the AI service's control token; the owner's key never goes there.
+    expect(authorizations).toEqual([null, null, null]);
   });
 
   it("checks a key: authenticated with it, refused without it or once revoked", async () => {

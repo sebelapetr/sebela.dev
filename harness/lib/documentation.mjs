@@ -20,10 +20,12 @@ const READ_BY_CODE = /(^|\/)(src|evals|fixtures)\/|^\.claude\/skills\//;
 
 /**
  * Markdown a package's build reads, so it is not documentation: the guide that the pyproject.toml
- * of packages/llm-agent and of packages/api-client-python names as the readme of the built package. A test finds every
+ * of apps/ai-service, packages/llm-agent and packages/api-client-python names as the readme of the
+ * built package. A test finds every
  * such readme in the repository (scripts/checks/without-documentation.test.mjs).
  */
 const READ_BY_BUILD = new Set([
+  "apps/ai-service/AGENTS.md",
   "packages/api-client-python/AGENTS.md",
   "packages/llm-agent/AGENTS.md",
 ]);

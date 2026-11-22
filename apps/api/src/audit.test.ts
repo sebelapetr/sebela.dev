@@ -36,6 +36,18 @@ const topic = { slug: "agents", name: "Agents", position: 0 };
 const READ_ONLY = new Set(["POST /v1/retrieval/search"]);
 
 /**
+ * The reviewed chat writes: they change a visitor's private conversation or an operation's state,
+ * never content, so they are not audited as content changes. The visitor's own question is the one
+ * public write; the control routes take the AI service's control token, not an API key.
+ */
+const VISITOR_WRITE = "POST /v1/chat/conversation/messages";
+const CHAT_WRITES = new Set([
+  VISITOR_WRITE,
+  "POST /v1/internal/chat/grants/claim",
+  "POST /v1/internal/chat/operations/:operationId/result",
+]);
+
+/**
  * The mutations a Hono app answers that no audited route accounts for: every route registered for
  * a write method, or for every method, that is not a write route the API documents as audited. The
  * catch-all 404 and the middleware every request passes are the reviewed exceptions.
@@ -46,7 +58,7 @@ function unauditedMutations(api: Api): string[] {
       .filter((route) => route.method !== "GET" && route.audit !== null)
       .map((route) => `${route.method} ${route.path}`),
   );
-  const reviewed = new Set(["ALL *", "ALL /*", ...READ_ONLY]);
+  const reviewed = new Set(["ALL *", "ALL /*", ...READ_ONLY, ...CHAT_WRITES]);
   const found = new Set<string>();
   for (const { method, path } of api.app.routes) {
     if (method === "GET" || method === "HEAD" || method === "OPTIONS") continue;
@@ -419,6 +431,11 @@ describe("the content audit", () => {
     for (const route of writes) {
       const path = unknownRecordPath(route.path);
       const anonymous = await send(path, route.method, json({}), api);
+      if (`${route.method} ${route.path}` === VISITOR_WRITE) {
+        // Public: refused for its origin, or unavailable while the chat is off; never a 2xx.
+        expect(anonymous.status, VISITOR_WRITE).toBeGreaterThanOrEqual(400);
+        continue;
+      }
       expect(anonymous.status, `${route.method} ${route.path}`).toBe(401);
       const refused = await send(path, route.method, json({}, auth), api);
       expect(refused.status, `${route.method} ${route.path}`).toBeGreaterThanOrEqual(400);
@@ -436,14 +453,15 @@ describe("the content audit", () => {
 
     for (const route of api.routes) {
       const name = `${route.method} ${route.path}`;
-      if (route.method === "GET" || READ_ONLY.has(name)) expect(route.audit, name).toBeNull();
-      else expect(route.audit, name).not.toBeNull();
+      if (route.method === "GET" || READ_ONLY.has(name) || CHAT_WRITES.has(name)) {
+        expect(route.audit, name).toBeNull();
+      } else expect(route.audit, name).not.toBeNull();
     }
     expect(
       api.routes
         .filter((route) => route.method !== "GET" && route.audit === null)
         .map((route) => `${route.method} ${route.path}`),
-    ).toEqual([...READ_ONLY]);
+    ).toEqual([...READ_ONLY, ...CHAT_WRITES]);
     expect(unauditedMutations(api)).toEqual([]);
 
     api.app.post("/v1/unaudited", (c) => c.body(null, 204));

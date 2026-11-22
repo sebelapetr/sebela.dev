@@ -72,6 +72,7 @@ from llm_agent.tools.content import (
     PublicServiceEvidence,
     PublicStep,
 )
+from llm_agent.tools.registry import profile_view
 
 __all__ = [
     "ApiContentReader",
@@ -139,5 +140,6 @@ __all__ = [
     "Usage",
     "Versions",
     "anthropic_model_factory",
+    "profile_view",
     "versions",
 ]

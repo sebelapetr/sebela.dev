@@ -223,6 +223,27 @@ test.describe("navigation and theme", () => {
       });
     }
 
+    // The fixture's website has no chat relay token, as production before the chat is enabled.
+    test("/ask on a website without the chat says so and asks the API nothing", async ({
+      page,
+    }) => {
+      const chatRequests: string[] = [];
+      page.on("request", (request) => {
+        if (new URL(request.url()).pathname.startsWith("/api/chat"))
+          chatRequests.push(request.url());
+      });
+      await page.goto(`${website.url}/ask`);
+      await hydrated(page);
+      await expect(page.getByText("The chat is not available right now.")).toBeVisible();
+      await expect(page.getByRole("main").getByRole("link", { name: "Contact" })).toHaveAttribute(
+        "href",
+        "/#contact",
+      );
+      await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+      await expect(page.getByRole("textbox", { name: "Your question" })).toBeDisabled();
+      expect(chatRequests).toEqual([]);
+    });
+
     for (const path of [
       "/experience",
       "/services",

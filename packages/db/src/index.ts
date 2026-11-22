@@ -34,6 +34,25 @@ export type {
   RetrievalWorkOperation,
 } from "./modules/retrieval/index.js";
 export type { AuditEntryInput, AuditEntryRecord, AuditPersistence } from "./modules/audit/index.js";
+export type {
+  ChatAdmissionInput,
+  ChatAdmissionResult,
+  ChatClaimResult,
+  ChatConversationRecord,
+  ChatExchangeRecord,
+  ChatIdentityRecord,
+  ChatMessageRecord,
+  ChatMessageState,
+  ChatOperationRecord,
+  ChatOperationState,
+  ChatPersistence,
+  ChatQuotaRule,
+  ChatReconcileResult,
+  ChatResultRecord,
+  ChatSpendKind,
+  ChatSpendWindow,
+  ChatStoredError,
+} from "./modules/chat/index.js";
 export type { MaintenancePersistence } from "./modules/maintenance/index.js";
 export type {
   CaseStudyFields,

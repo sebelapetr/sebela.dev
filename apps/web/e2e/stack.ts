@@ -50,9 +50,9 @@ export function fixtureFolder(fixture: Fixture): string {
  * the file `apps/api` documents as this interface, not `serve:e2e`, whose build step would run
  * again for every server the tests start at the same time (`apps/api/AGENTS.md`).
  */
-export function apiCommand(fixture: Fixture) {
+export function apiCommand(fixture: Fixture, seedFolder = fixtureFolder(fixture)) {
   return {
-    command: `node --import tsx src/cli/e2e-server.ts ${JSON.stringify(fixtureFolder(fixture))}`,
+    command: `node --import tsx src/cli/e2e-server.ts ${JSON.stringify(seedFolder)}`,
     cwd: apiFolder,
   };
 }
@@ -101,7 +101,8 @@ export interface StartedApi extends Started {
 /** The checkout's scratch folder, where every end-to-end API keeps its storage folder. */
 const scratch = fileURLToPath(new URL("../../../.tmp", import.meta.url));
 
-async function start(
+/** Starts a command and waits until `url` + `readyPath` answers; its process group stops it. */
+export async function start(
   { command, cwd }: { command: string; cwd: string },
   env: Record<string, string>,
   url: string,
@@ -149,11 +150,37 @@ export interface ApiOptions {
   readonly invalidation?: Invalidation;
   /** An absolute file the server writes a new API key to, for tests that write content. */
   readonly keyFile?: string;
+  /** Another seed folder than the fixture's, such as the chat's (`e2e/chat-stack.ts`). */
+  readonly seedFolder?: string;
+  /** More settings, such as the visitor chat's; they win over the defaults here. */
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 /**
+ * The visitor chat's settings, all empty: the chat is off (its routes answer 503 `unavailable`)
+ * whatever the checkout's environment says, unless a test turns it on (`e2e/chat-stack.ts`).
+ */
+export const chatOff: Readonly<Record<string, string>> = {
+  API_CHAT_ALLOWED_ORIGINS: "",
+  API_CHAT_COOKIE_SECURE: "",
+  API_CHAT_FINGERPRINT_KEY: "",
+  API_CHAT_RETENTION_DAYS: "",
+  API_CHAT_MODEL: "",
+  API_CHAT_PRICING_VERSION: "",
+  API_CHAT_RELAY_TOKEN: "",
+  API_TURNSTILE_SECRET_KEY: "",
+  API_TURNSTILE_EXPECTED_HOSTNAME: "",
+  API_TURNSTILE_VERIFY_URL: "",
+  API_AI_SERVICE_URL: "",
+  API_AI_SERVICE_TOKEN: "",
+  API_AI_CONTROL_TOKEN: "",
+  API_E2E_CHAT_DAILY_SPEND_LIMIT_MICRO_USD: "",
+};
+
+/**
  * Serves the API's end-to-end server for the fixture. It sends no invalidation notifications
- * unless `invalidation` names a receiver, whatever the checkout's environment says.
+ * unless `invalidation` names a receiver, and its chat is off unless `env` turns it on, whatever
+ * the checkout's environment says.
  */
 export async function startApi(fixture: Fixture, options: ApiOptions = {}): Promise<StartedApi> {
   const host = required("API_HOST");
@@ -162,13 +189,15 @@ export async function startApi(fixture: Fixture, options: ApiOptions = {}): Prom
   await mkdir(scratch, { recursive: true });
   const storage = await mkdtemp(join(scratch, "e2e-storage-"));
   const started = await start(
-    apiCommand(fixture),
+    apiCommand(fixture, options.seedFolder),
     {
+      ...chatOff,
       API_PORT: String(port),
       API_WEB_INVALIDATION_URL: options.invalidation?.url ?? "",
       API_WEB_INVALIDATION_SECRET: options.invalidation?.secret ?? "",
       API_E2E_KEY_FILE: options.keyFile ?? "",
       API_E2E_STORAGE_ROOT: storage,
+      ...options.env,
     },
     origin(host, port),
     "/health",
@@ -193,6 +222,15 @@ export interface WebsiteOptions {
    * stack not yet launched.
    */
   readonly indexing?: boolean;
+  /** The public site key of the chat's person check (`WEB_TURNSTILE_SITE_KEY`); none by default. */
+  readonly chatSiteKey?: string;
+  /** The chat relay's token (`WEB_CHAT_RELAY_TOKEN`), the API's `API_CHAT_RELAY_TOKEN`; none by default. */
+  readonly chatRelayToken?: string;
+  /**
+   * How many proxies in front of the website append to `X-Forwarded-For`
+   * (`WEB_TRUSTED_PROXY_HOPS`); none by default, so the relay names no visitor address.
+   */
+  readonly trustedProxyHops?: number;
 }
 
 /** Serves the built website, reading the API at `apiBaseUrl`. */
@@ -205,6 +243,9 @@ export async function startWebsite(
     contentRevalidateSeconds,
     analytics,
     indexing = true,
+    chatSiteKey,
+    chatRelayToken,
+    trustedProxyHops,
   }: WebsiteOptions = {},
 ): Promise<Started> {
   const host = required("WEB_HOST");
@@ -224,6 +265,9 @@ export async function startWebsite(
       WEB_ANALYTICS_SCRIPT_URL: analytics?.scriptUrl ?? "",
       WEB_ANALYTICS_WEBSITE_ID: analytics?.websiteId ?? "",
       WEB_INDEXING: indexing ? "on" : "",
+      WEB_TURNSTILE_SITE_KEY: chatSiteKey ?? "",
+      WEB_CHAT_RELAY_TOKEN: chatRelayToken ?? "",
+      WEB_TRUSTED_PROXY_HOPS: trustedProxyHops === undefined ? "" : String(trustedProxyHops),
     },
     url,
     "/favicon.ico",

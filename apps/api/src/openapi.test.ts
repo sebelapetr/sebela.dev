@@ -13,6 +13,14 @@ import { demoSeedFolder } from "@sebela/services";
 
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
+/** The internal chat control routes: authorised by the AI service's control token, not an API key. */
+const CONTROL_ROUTES = new Set([
+  "POST /v1/internal/chat/grants/claim",
+  "POST /v1/internal/chat/operations/:operationId/result",
+]);
+/** The one public write, the visitor's question. */
+const VISITOR_WRITE = "POST /v1/chat/conversation/messages";
+
 interface Operation {
   operationId?: string;
   parameters?: { name: string; in: string; required?: boolean; schema: Record<string, unknown> }[];
@@ -65,6 +73,7 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.openapi).toBe("3.1.0");
     expect(document.components.securitySchemes).toEqual({
       bearerAuth: expect.objectContaining({ type: "http", scheme: "bearer" }) as unknown,
+      controlToken: expect.objectContaining({ type: "http", scheme: "bearer" }) as unknown,
     });
   });
 
@@ -73,7 +82,11 @@ describe("the OpenAPI document and the reference", () => {
       const documented = operation(route.method, route.path);
       const statuses = Object.keys(documented.responses);
 
-      if (route.access === "private") {
+      const name = `${route.method} ${route.path}`;
+      if (CONTROL_ROUTES.has(name)) {
+        expect(documented.security, name).toEqual([{ controlToken: [] }]);
+        expect(statuses).toContain("401");
+      } else if (route.access === "private") {
         expect(documented.security).toEqual([{ bearerAuth: [] }]);
         expect(statuses).toContain("401");
       } else {
@@ -81,7 +94,9 @@ describe("the OpenAPI document and the reference", () => {
         expect(statuses).not.toContain("401");
       }
       if (route.hasBody) {
-        expect(statuses).toEqual(expect.arrayContaining(["400", "413", "415"]));
+        // The visitor's question refuses a body that is not JSON as 403 before reading it.
+        const media = name === VISITOR_WRITE ? "403" : "415";
+        expect(statuses, name).toEqual(expect.arrayContaining(["400", "413", media]));
       }
       expect(statuses).toEqual(expect.arrayContaining(["429", "500"]));
       expect(documented.responses["429"]?.headers).toHaveProperty("Retry-After");
@@ -846,7 +861,11 @@ describe("the OpenAPI document and the reference", () => {
         (parameter) => parameter.in === "header",
       );
       if (route.audit === null) {
-        expect(headers, `${route.method} ${route.path}`).toEqual([]);
+        // A read may document a request header of its own, such as `Last-Event-ID`.
+        expect(
+          headers.filter((header) => header.name === auditProvenanceHeader),
+          `${route.method} ${route.path}`,
+        ).toEqual([]);
         continue;
       }
       expect(headers, `${route.method} ${route.path}`).toEqual([

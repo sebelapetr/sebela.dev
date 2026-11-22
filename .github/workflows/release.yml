@@ -72,8 +72,8 @@ jobs:
 
   # Natively on arm64, as the server runs: pulls the reused images, builds the planned ones tagged
   # with the commit SHA, starts them all as the production composition with the demo seed and runs
-  # the production stack smoke check with the complete-stack browser tests (the mock Ask page; no
-  # model is called). Only when that passes are the built images pushed, the very images that were
+  # the production stack smoke check with the complete-stack browser tests (the Ask page with the
+  # chat off, as without the AI service; no model is called). Only when that passes are the built images pushed, the very images that were
   # verified. Each pushed image then gets a signed SLSA build provenance attestation and an SPDX
   # SBOM attestation for its pushed digest, stored beside it in GHCR; the job's OIDC token
   # (`id-token: write`) signs them and `attestations: write` records them.

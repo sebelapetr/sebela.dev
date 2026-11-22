@@ -216,6 +216,12 @@ export function createWorktree({
       "STORAGE_ENVIRONMENT is not set; set it in the environment (documented in .env.example)",
     );
   }
+  if (!settings.AI_SERVICE_HOST) {
+    throw new Error(
+      "AI_SERVICE_HOST is not set; set it in the environment (documented in .env.example)",
+    );
+  }
+  const agent = agentVersions();
   const p = paths(mainRoot);
   fs.mkdirSync(p.dir, { recursive: true });
   const resumed = branchExistsIn(mainRoot, requested)
@@ -296,6 +302,8 @@ export function createWorktree({
           // The API signs its invalidations for the worktree's own website with a secret of its own.
           API_WEB_INVALIDATION_URL: `http://${settings.WEB_HOST}:${portsForSlot(slot, basePorts).WEB_PORT}/internal/invalidation`,
           ...invalidationSecrets(randomPassword()),
+          // The visitor chat runs against the worktree's own AI service, with secrets of its own.
+          ...chatSettings({ settings, ports: portsForSlot(slot, basePorts), agent }),
         }),
         { flag: "wx", mode: 0o600 },
       );
@@ -325,6 +333,57 @@ export function continuedNotice(requested, resumed) {
 // The same server-only signing secret for the API's sender and the website's receiver.
 function invalidationSecrets(secret) {
   return { API_WEB_INVALIDATION_SECRET: secret, WEB_INVALIDATION_SECRET: secret };
+}
+
+// Cloudflare's published Turnstile test keys: they always pass and are refused in production.
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
+const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA";
+
+// The model and pricing version the AI service accepts, read from the agent package of the
+// harness's own revision, so the API's dispatches match the agent of the same checkout.
+const AGENT_CONFIG_FILE = path.join(
+  CHECKOUT_ROOT,
+  "packages/llm-agent/src/llm_agent/models/config.py",
+);
+
+function agentVersions(file = AGENT_CONFIG_FILE) {
+  const source = fs.readFileSync(file, "utf8");
+  const constant = (name) => {
+    const match = new RegExp(`^${name}: Final = "([^"]+)"$`, "m").exec(source);
+    if (!match) throw new Error(`${file} does not define ${name}`);
+    return match[1];
+  };
+  return { model: constant("HAIKU"), pricingVersion: constant("PRICING_VERSION") };
+}
+
+// The visitor chat's development settings for one worktree. The API's sender and the AI service's
+// receiver share one generated token, the reverse direction a second; the quota fingerprint key is a
+// third, and the website's chat relay and the API share a fourth. Every address is derived from the worktree's own ports; the Turnstile keys are the test
+// keys, issued for the worktree's website host; the model is the fictional one.
+function chatSettings({ settings, ports, agent }) {
+  const serviceToken = randomPassword();
+  const controlToken = randomPassword();
+  const relayToken = randomPassword();
+  return {
+    API_CHAT_ALLOWED_ORIGINS: `http://${settings.WEB_HOST}:${ports.WEB_PORT}`,
+    API_CHAT_COOKIE_SECURE: "false",
+    API_CHAT_FINGERPRINT_KEY: randomPassword(),
+    API_CHAT_MODEL: agent.model,
+    API_CHAT_PRICING_VERSION: agent.pricingVersion,
+    API_CHAT_RELAY_TOKEN: relayToken,
+    API_TURNSTILE_SECRET_KEY: TURNSTILE_TEST_SECRET_KEY,
+    API_TURNSTILE_EXPECTED_HOSTNAME: settings.WEB_HOST,
+    API_AI_SERVICE_URL: `http://${settings.AI_SERVICE_HOST}:${ports.LLM_AGENT_PORT}`,
+    API_AI_SERVICE_TOKEN: serviceToken,
+    API_AI_CONTROL_TOKEN: controlToken,
+    WEB_TURNSTILE_SITE_KEY: TURNSTILE_TEST_SITE_KEY,
+    WEB_CHAT_RELAY_TOKEN: relayToken,
+    AI_SERVICE_HOST: settings.AI_SERVICE_HOST,
+    AI_SERVICE_API_URL: `http://${settings.API_HOST}:${ports.API_PORT}`,
+    AI_SERVICE_TOKEN: serviceToken,
+    AI_SERVICE_CONTROL_TOKEN: controlToken,
+    AI_SERVICE_MODEL: "fake",
+  };
 }
 
 // Also true for a symbolic link, whether or not it leads anywhere.
