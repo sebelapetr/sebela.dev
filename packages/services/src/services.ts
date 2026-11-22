@@ -8,8 +8,8 @@ import {
 import { createAuditService, type AuditService } from "./modules/audit/index.js";
 import {
   createChatService,
-  type ChatOptions,
   type ChatService,
+  type ChatServiceOptions,
   unconfiguredChat,
 } from "./modules/chat/index.js";
 import { createHealthService, type HealthService } from "./modules/health/index.js";
@@ -68,9 +68,10 @@ export interface ServicesOptions {
    */
   readonly retrieval?: KnowledgeServiceOptions;
   /**
-   * The chat settings and the bot-challenge verifier. Without them every chat operation throws.
+   * The chat settings and the bot-challenge verifier, optionally with a clock and a policy for
+   * tests. Without them every chat operation throws.
    */
-  readonly chat?: ChatOptions;
+  readonly chat?: ChatServiceOptions;
 }
 
 const unconfigured = (): never => {

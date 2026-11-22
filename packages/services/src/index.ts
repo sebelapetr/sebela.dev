@@ -87,6 +87,7 @@ export type {
   ChatPolicy,
   ChatReconcileOutcome,
   ChatService,
+  ChatServiceOptions,
   ChatSubmitResult,
   SiteverifyOptions,
 } from "./modules/chat/index.js";
