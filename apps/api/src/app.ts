@@ -29,6 +29,7 @@ import { pathParams } from "./middleware/path-params.js";
 import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
 import { auditRoutes } from "./modules/audit/index.js";
+import { type ChatDispatcher, type ChatTiming } from "./modules/chat/index.js";
 import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { retrievalRoutes } from "./modules/retrieval/index.js";
@@ -144,7 +145,7 @@ function changesOf(
 export interface AppDependencies {
   readonly services: Pick<
     Services,
-    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "knowledge" | "health"
+    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "knowledge" | "health" | "chat"
   >;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
@@ -156,6 +157,13 @@ export interface AppDependencies {
    * a later notifier from being called.
    */
   readonly onWrite?: WriteNotifier | readonly WriteNotifier[];
+  /**
+   * Hands each admitted chat question to the AI service, required when `config.chat` is set. The
+   * request that admitted the question never waits for it.
+   */
+  readonly chatDispatcher?: ChatDispatcher;
+  /** The chat event stream's polling, progress and deadline grace, for tests. */
+  readonly chatTiming?: Partial<ChatTiming>;
 }
 
 /** A route as it is registered and documented. */

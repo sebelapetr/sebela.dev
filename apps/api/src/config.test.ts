@@ -42,6 +42,7 @@ describe("readApiConfig", () => {
         maxTrackedCallers: 5000,
       },
       websiteInvalidation: null,
+      chat: null,
     });
   });
 
@@ -130,6 +131,94 @@ describe("readApiConfig", () => {
 
       expect(attempt).toThrow(/API_WEB_INVALIDATION_SECRET/);
       expect(attempt).not.toThrow(/short-fixture-secret/);
+    });
+  });
+
+  describe("visitor chat", () => {
+    // Disposable fixture tokens and fictional addresses.
+    const AI_TOKEN = "fixture-ai-service-token-0123456789abcdef";
+    const CONTROL_TOKEN = "fixture-control-token-0123456789abcdefgh";
+    const configured = {
+      ...env,
+      API_CHAT_ALLOWED_ORIGINS: "https://www.example.test, https://example.test",
+      API_CHAT_COOKIE_SECURE: "true",
+      API_AI_SERVICE_URL: "https://ai.example.test",
+      API_AI_SERVICE_TOKEN: AI_TOKEN,
+      API_AI_CONTROL_TOKEN: CONTROL_TOKEN,
+    };
+
+    it("reads the origins, the cookie flag, the AI service and the control token together", () => {
+      expect(readApiConfig(configured).chat).toEqual({
+        allowedOrigins: ["https://www.example.test", "https://example.test"],
+        cookieSecure: true,
+        aiService: { url: "https://ai.example.test", token: AI_TOKEN },
+        controlToken: CONTROL_TOKEN,
+      });
+      expect(readApiConfig({ ...configured, API_CHAT_COOKIE_SECURE: "false" }).chat).toMatchObject({
+        cookieSecure: false,
+      });
+    });
+
+    it("is off when no chat setting is given or every one is empty", () => {
+      expect(readApiConfig(env).chat).toBeNull();
+      expect(
+        readApiConfig({
+          ...env,
+          API_CHAT_ALLOWED_ORIGINS: "",
+          API_CHAT_COOKIE_SECURE: "",
+          API_AI_SERVICE_URL: "",
+          API_AI_SERVICE_TOKEN: "",
+          API_AI_CONTROL_TOKEN: "",
+        }).chat,
+      ).toBeNull();
+    });
+
+    it("refuses a partial set, naming each missing setting", () => {
+      const attempt = () =>
+        readApiConfig({ ...configured, API_AI_SERVICE_URL: "", API_CHAT_COOKIE_SECURE: "" });
+
+      expect(attempt).toThrow(/API_AI_SERVICE_URL/);
+      expect(attempt).toThrow(/API_CHAT_COOKIE_SECURE/);
+      expect(attempt).not.toThrow(/API_AI_CONTROL_TOKEN/);
+    });
+
+    it("refuses an origin that is not exactly a web origin", () => {
+      for (const origins of [
+        "https://www.example.test/",
+        "https://www.example.test/chat",
+        "www.example.test",
+        "ftp://www.example.test",
+        "https://user@www.example.test",
+        " , ",
+      ]) {
+        expect(
+          () => readApiConfig({ ...configured, API_CHAT_ALLOWED_ORIGINS: origins }),
+          origins,
+        ).toThrow(/API_CHAT_ALLOWED_ORIGINS/);
+      }
+    });
+
+    it("refuses a cookie flag other than true or false", () => {
+      expect(() => readApiConfig({ ...configured, API_CHAT_COOKIE_SECURE: "yes" })).toThrow(
+        /API_CHAT_COOKIE_SECURE/,
+      );
+    });
+
+    it("refuses an AI service address that is not a plain web address", () => {
+      expect(() =>
+        readApiConfig({ ...configured, API_AI_SERVICE_URL: "https://ai.example.test/?key=x" }),
+      ).toThrow(/API_AI_SERVICE_URL/);
+    });
+
+    it("refuses short or shared tokens without echoing them", () => {
+      const short = () =>
+        readApiConfig({ ...configured, API_AI_SERVICE_TOKEN: "short-fixture-token" });
+      expect(short).toThrow(/API_AI_SERVICE_TOKEN/);
+      expect(short).not.toThrow(/short-fixture-token/);
+
+      const shared = () => readApiConfig({ ...configured, API_AI_CONTROL_TOKEN: AI_TOKEN });
+      expect(shared).toThrow(/API_AI_CONTROL_TOKEN/);
+      expect(shared).not.toThrow(new RegExp(AI_TOKEN));
     });
   });
 });

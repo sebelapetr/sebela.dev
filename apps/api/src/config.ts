@@ -49,6 +49,23 @@ export interface ApiConfig {
    * and the server-only secret they are signed with. `null`: no notifications are sent.
    */
   readonly websiteInvalidation: WebsiteInvalidationConfig | null;
+  /**
+   * The visitor chat's HTTP settings: the website origins its writes must come from, whether its
+   * cookie is `Secure`, the AI service it dispatches to and the token the AI service presents on
+   * the internal control routes. `null`: the chat is off and its routes answer `unavailable`.
+   */
+  readonly chat: ChatHttpConfig | null;
+}
+
+export interface ChatHttpConfig {
+  /** Exact origins, such as `https://www.example.test`, a visitor write must name in `Origin`. */
+  readonly allowedOrigins: readonly string[];
+  /** Whether the chat cookie is sent with `Secure`; `true` in production. */
+  readonly cookieSecure: boolean;
+  /** The AI service's base address and the bearer token it accepts from the API. */
+  readonly aiService: { readonly url: string; readonly token: string };
+  /** The bearer token the AI service presents on the internal control routes; never logged. */
+  readonly controlToken: string;
 }
 
 export interface WebsiteInvalidationConfig {
@@ -147,5 +164,6 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
       maxTrackedCallers: settings.API_RATE_LIMIT_MAX_TRACKED,
     },
     websiteInvalidation: url === "" ? null : { url, secret },
+    chat: null,
   };
 }
