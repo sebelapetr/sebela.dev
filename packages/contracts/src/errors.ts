@@ -31,6 +31,8 @@ import { z } from "zod";
  * - `chat_quota_exceeded` (429): the visitor or the address reached a question quota;
  *   `Retry-After` says when to retry.
  * - `chat_budget_exhausted` (503): the chat's global daily or monthly spend is reserved in full.
+ * - `chat_not_retryable` (409): a retry named an attempt that did not end with a retryable
+ *   failure of the conversation's latest question. Nothing was admitted.
  */
 export const errorCodes = [
   "validation_failed",
@@ -52,6 +54,7 @@ export const errorCodes = [
   "chat_challenge_failed",
   "chat_quota_exceeded",
   "chat_budget_exhausted",
+  "chat_not_retryable",
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
