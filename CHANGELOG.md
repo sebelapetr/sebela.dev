@@ -2,6 +2,30 @@
 
 All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). From v0.3.0 on, each section is byte for byte the notes of its GitHub release, added by the release workflow after a healthy deployment; the sections of v0.1.0 to v0.2.1 were rendered again in this format from the same commits, so they differ from the older notes of their releases. There is no Unreleased section, because every merge into master that builds an image is deployed.
 
+## [v0.8.1] - 2026-11-22
+
+### Fixes
+
+- **docker**
+  - remove the bundled npm from the runtime images ([#437](https://github.com/sebelapetr/sebela.dev/pull/437))
+  - upgrade zlib1g, libc6 and libc-bin past the base image ([#436](https://github.com/sebelapetr/sebela.dev/pull/436))
+
+### Other changes
+
+- list the image scan in the repository structure ([#434](https://github.com/sebelapetr/sebela.dev/pull/434))
+- **release:** report only fixable findings in the weekly image scan ([#435](https://github.com/sebelapetr/sebela.dev/pull/435))
+- **release:** scan the built images for vulnerabilities before publishing ([#430](https://github.com/sebelapetr/sebela.dev/pull/430))
+
+**Full Changelog**: [v0.8.0...v0.8.1](https://github.com/sebelapetr/sebela.dev/compare/v0.8.0...v0.8.1)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:c3e3578bc59397a5df917e3576d75071754f4d6d`, built for this release: `sebela-api-v0.8.1.spdx.json` and `sebela-api-v0.8.1.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-web:c3e3578bc59397a5df917e3576d75071754f4d6d`, built for this release: `sebela-web-v0.8.1.spdx.json` and `sebela-web-v0.8.1.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-mcp-admin:c3e3578bc59397a5df917e3576d75071754f4d6d`, built for this release: `sebela-mcp-admin-v0.8.1.spdx.json` and `sebela-mcp-admin-v0.8.1.intoto.jsonl` are attached.
+
+How to verify the files and the images: [docs/release-workflow.md](https://github.com/sebelapetr/sebela.dev/blob/master/docs/release-workflow.md#release-files).
+
 ## [v0.8.0] - 2026-11-22
 
 ### Features
@@ -436,6 +460,7 @@ No changes since v0.2.0; re-release of the same commit.
 - `ghcr.io/sebelapetr/sebela-web:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 
+[v0.8.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.8.1
 [v0.8.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.8.0
 [v0.7.3]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.3
 [v0.7.2]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.2
