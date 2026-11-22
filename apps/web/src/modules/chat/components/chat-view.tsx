@@ -354,6 +354,7 @@ export function ChatView({
             enterKeyHint="send"
             maxLength={chatQuestionMaxLength}
             placeholder="Ask a question"
+            disabled={snapshot.history === "unavailable"}
             value={question}
             onChange={(event) => {
               setQuestion(event.target.value);
