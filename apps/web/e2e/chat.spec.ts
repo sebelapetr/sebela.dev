@@ -215,8 +215,12 @@ test.describe("the Ask page", () => {
     await send(page, question);
     await expect(page).toHaveURL(askAddress);
     await composer(page).fill("And another one?");
-    await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+    // While the answer is open, Stop takes the place of Send and Enter sends nothing.
+    await expect(page.getByRole("button", { name: "Send" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Stop answering" })).toBeVisible();
+    await composer(page).press("Enter");
     await answered(page);
+    await expect(turns(page)).toHaveCount(1);
     await expect(turns(page).first()).toContainText(answerText);
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   });
