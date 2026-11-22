@@ -319,10 +319,18 @@ const subIssue = (number, state, labels, blockedBy = []) => ({
   labels: names(...labels),
   subIssues: { totalCount: 0 },
   blockedBy: list(blockedBy),
+  repository: { nameWithOwner: "example/site" },
 });
 const openIssues = (...issues) => ({
   repository: {
-    issues: paged(issues.map((issue) => ({ labels: names(), blockedBy: list([]), ...issue }))),
+    issues: paged(
+      issues.map((issue) => ({
+        labels: names(),
+        blockedBy: list([]),
+        authorAssociation: "OWNER",
+        ...issue,
+      })),
+    ),
   },
 });
 // No issue carries a `phase:` label and none has a `## Blocked by` section.
@@ -335,6 +343,7 @@ const TRACKED = {
         title: "Phase 07",
         state: "OPEN",
         body: `Plan: .plan/${PHASE}`,
+        repository: { nameWithOwner: "example/site" },
         blockedBy: list([]),
         subIssues: paged([
           subIssue(302, "CLOSED", ["ready-for-agent", "afk"]),
@@ -352,13 +361,20 @@ const TRACKED = {
 };
 
 test("the loop runs a phase from its tracking issue: progress, the orchestrator's instruction and the end", () => {
-  const { lines, loop, github } = fixture("tracked");
+  const { main, lines, loop, github } = fixture("tracked");
   github(TRACKED);
   const run = loop("report");
   assert.equal(run.status, 0, run.stdout + run.stderr);
   assert.match(run.stdout, /starting the orchestrator for 07-ai-service \(1\/3 issues closed\)/);
   const [{ prompt }] = lines("claude-prompts.jsonl");
-  assert.match(prompt, /node harness\/phase-work\.mjs next 07-ai-service/);
+  // The command is named by the absolute path of the checkout the loop runs from, so a shell
+  // that sits in an older worktree still finds it.
+  const command = `node ${path.join(fs.realpathSync(main), "harness", "phase-work.mjs")} next 07-ai-service`;
+  assert.ok(prompt.includes(command), prompt);
+  // The phase end is keyed on the status the command says, never on a missing line.
+  assert.match(prompt, /`status: finished`/);
+  assert.match(prompt, /`status: waiting`/);
+  assert.doesNotMatch(prompt, /prints no/);
   assert.doesNotMatch(prompt, /phase:07-ai-service|labelled `phase:/);
   // The end names what is left, from the same selection.
   assert.match(run.stdout, /phase stopped: no workable issue left/);
@@ -388,4 +404,67 @@ test("GitHub's issues being unreadable does not stop the loop by itself", () => 
   assert.equal(run.status, 0, run.stdout + run.stderr);
   assert.equal(lines("claude-calls.jsonl").length, 1);
   assert.match(run.stdout, /could not read the phase's issues/);
+});
+
+// --- review of pull request #423 ---------------------------------------------------------
+
+const withTracking = (change) => {
+  const answers = structuredClone(TRACKED);
+  change(answers.TrackingIssue.repository.issue, answers.OpenIssues.repository.issues.nodes);
+  return answers;
+};
+
+test("a phase that waits for another phase stops the loop before an orchestrator is started", () => {
+  const { main, lines, loop, github } = fixture("phase-waits");
+  github(
+    withTracking((tracking, open) => {
+      const blocker = { number: 300, state: "OPEN", title: "Phase 06" };
+      tracking.blockedBy = list([blocker]);
+      open[0].blockedBy = list([blocker]);
+      open.push({
+        number: 300,
+        title: "Phase 06",
+        body: "Plan: .plan/06-llm-agent",
+        labels: names(),
+        blockedBy: list([]),
+        authorAssociation: "OWNER",
+      });
+    }),
+  );
+  const run = loop("report");
+  assert.equal(run.status, 1, run.stdout + run.stderr);
+  assert.match(run.stdout, /not ready: phase 07-ai-service waits for #300 \(06-llm-agent\)/);
+  assert.deepEqual(lines("claude-calls.jsonl"), [], "no orchestrator was started");
+  // Nothing of the phase is started: no branch is cut, no pull request is looked for.
+  assert.ok(
+    !lines("gh-calls.jsonl").some((call) => call[0] === "pr"),
+    "a pull request was asked for",
+  );
+  assert.ok(!fs.existsSync(path.join(main, ".plan", "done")));
+});
+
+test("a phase that is not broken into issues stops the loop before an orchestrator is started", () => {
+  const { lines, loop, github } = fixture("empty");
+  github(
+    withTracking((tracking) => {
+      tracking.subIssues = paged([]);
+    }),
+  );
+  const run = loop("report");
+  assert.equal(run.status, 1, run.stdout + run.stderr);
+  assert.match(run.stdout, /not ready: phase 07-ai-service has no issues yet/);
+  assert.deepEqual(lines("claude-calls.jsonl"), [], "no orchestrator was started");
+});
+
+test("a phase whose issues are all closed still gets its iteration: the phase end", () => {
+  const { lines, loop, github } = fixture("finished");
+  github(
+    withTracking((tracking) => {
+      tracking.subIssues = paged([subIssue(302, "CLOSED", ["ready-for-agent", "afk"])]);
+    }),
+  );
+  const run = loop("report");
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.equal(lines("claude-calls.jsonl").length, 1);
+  assert.match(run.stdout, /\(1\/1 issues closed\)/);
 });

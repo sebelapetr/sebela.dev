@@ -13,6 +13,7 @@ import { blockerCheck, phaseWork, phaseWorkOrNull, phases } from "./phase-work.m
 
 const COMMAND = path.join(import.meta.dirname, "phase-work.mjs");
 const READY = "ready-for-agent";
+const REPOSITORY = "example/site";
 
 // --- fixtures: what GitHub answers ------------------------------------------------
 
@@ -29,11 +30,13 @@ const subIssue = (
   labels: labels(...names),
   subIssues: { totalCount: children },
   blockedBy: connection(blockedBy),
+  repository: { nameWithOwner: REPOSITORY },
 });
-const openIssue = (number, body, { blockedBy = [], names = [] } = {}) => ({
+const openIssue = (number, body, { blockedBy = [], names = [], author = "OWNER" } = {}) => ({
   number,
   title: `Issue ${number}`,
   body,
+  authorAssociation: author,
   labels: labels(...names),
   blockedBy: connection(blockedBy),
 });
@@ -67,6 +70,7 @@ function github({ open = [[]], tracking = {}, states = {} } = {}) {
             title: found.title ?? `Phase ${variables.number}`,
             state: "OPEN",
             body: found.body ?? "",
+            repository: { nameWithOwner: REPOSITORY },
             blockedBy: connection(found.blockedBy ?? []),
             subIssues,
           },
@@ -187,10 +191,11 @@ test("a phase without issues is empty and waits for the phase it is linked to", 
     tracking: { 418: { pages: [[]], blockedBy: [link(414)] } },
   });
   const work = phaseWork("08-mcp-public", { graphql });
-  assert.equal(work.status, "empty");
+  assert.equal(work.status, "phase-waits");
+  assert.deepEqual(work.progress, { closed: 0, total: 0 });
   assert.deepEqual(
-    work.phaseBlockers.map((issue) => issue.number),
-    [414],
+    work.phaseBlockers.map((issue) => [issue.number, issue.folder]),
+    [[414, "07-ai-service"]],
   );
 });
 
@@ -244,6 +249,72 @@ test("the blocker check asks for the state of what only the text names", () => {
   assert.deepEqual(calls.at(-1).variables.numbers, [183, 345]);
 });
 
+// --- review of pull request #423 ---------------------------------------------------------
+
+test("an outsider's issue that names the folder is ignored and reported", () => {
+  const { graphql } = github({
+    open: [[openIssue(414, PLAN_07), openIssue(900, PLAN_07, { author: "NONE" })]],
+    tracking: { 414: { pages: [[subIssue(210)]] } },
+  });
+  const work = phaseWork("07-ai-service", { graphql });
+  assert.equal(work.tracking.number, 414);
+  assert.equal(work.next.number, 210);
+  assert.deepEqual(
+    work.ignored.map((issue) => issue.number),
+    [900],
+  );
+});
+
+test("an outsider cannot make or halt a phase with a plan line", () => {
+  const { graphql } = github({ open: [[openIssue(900, PLAN_08, { author: "CONTRIBUTOR" })]] });
+  assert.throws(
+    () => phaseWork("08-mcp-public", { graphql }),
+    (error) => error instanceof PhaseWorkError && /#900.*ignored/.test(error.message),
+  );
+  assert.deepEqual(phases({ graphql }), []);
+});
+
+test("a sub-issue that lives in another repository is refused", () => {
+  const foreign = subIssue(7);
+  foreign.repository = { nameWithOwner: "someone/else" };
+  const { graphql } = github({
+    open: [[openIssue(414, PLAN_07)]],
+    tracking: { 414: { pages: [[subIssue(210), foreign]] } },
+  });
+  assert.throws(
+    () => phaseWork("07-ai-service", { graphql }),
+    (error) => error instanceof PhaseWorkError && /#7.*someone\/else/.test(error.message),
+  );
+});
+
+test("a tracking issue without a plan line is an epic: the loop's folder never resolves to it", () => {
+  const { graphql, calls } = github({
+    open: [[openIssue(500, "Tracking issue of the audit fixes."), openIssue(414, PLAN_07)]],
+  });
+  assert.throws(() => phaseWork("audit-fixes", { graphql }), PhaseWorkError);
+  assert.ok(!calls.some((call) => call.operation === "TrackingIssue"));
+  assert.deepEqual(
+    phases({ graphql }).map((phase) => phase.number),
+    [414],
+  );
+});
+
+test("phases that block each other are a cycle, named when either is asked for", () => {
+  const { graphql } = github({
+    open: [
+      [
+        openIssue(414, PLAN_07, { blockedBy: [link(418)] }),
+        openIssue(418, PLAN_08, { blockedBy: [link(414)] }),
+      ],
+    ],
+    tracking: { 414: { pages: [[subIssue(210)]], blockedBy: [link(418)] } },
+  });
+  const work = phaseWork("07-ai-service", { graphql });
+  assert.equal(work.status, "phase-waits");
+  assert.deepEqual(work.phaseCycle, [414, 418]);
+  assert.deepEqual(phases({ graphql })[1].cycle, [418, 414]);
+});
+
 // --- the command, with a stand-in for gh ----------------------------------------------
 
 const dirs = [];
@@ -265,7 +336,7 @@ if (!answers[operation]) process.exit(1);
 console.log(JSON.stringify({ data: answers[operation] }));
 `;
 
-function command(answers, args) {
+function command(answers, args, script = () => COMMAND) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-phase-work-"));
   dirs.push(dir);
   const stubs = path.join(dir, "stubs");
@@ -273,7 +344,7 @@ function command(answers, args) {
   fs.writeFileSync(path.join(stubs, "gh"), GH, { mode: 0o755 });
   fs.writeFileSync(path.join(stubs, "package.json"), JSON.stringify({ type: "module" }));
   fs.writeFileSync(path.join(dir, "answers.json"), JSON.stringify(answers));
-  const run = spawnSync(process.execPath, [COMMAND, ...args], {
+  const run = spawnSync(process.execPath, [script(dir), ...args], {
     encoding: "utf8",
     timeout: 30_000,
     env: {
@@ -309,6 +380,7 @@ const ANSWERS = {
         title: "Phase 07 · AI service",
         state: "OPEN",
         body: PLAN_07,
+        repository: { nameWithOwner: REPOSITORY },
         blockedBy: connection([]),
         subIssues: page([
           subIssue(302, { state: "CLOSED" }),
@@ -324,6 +396,7 @@ test("`next` prints the issue to take and reads GitHub only through GraphQL quer
   const run = command(ANSWERS, ["next", "07-ai-service"]);
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /phase 07-ai-service · tracking issue #414/);
+  assert.match(run.stdout, /^status: next$/m);
   assert.match(run.stdout, /^next: #210 Issue 210$/m);
   assert.match(run.stdout, /waiting for a human \(hitl\): #216 \(blocked by #215, #393\)/);
   assert.ok(run.calls.length > 0);
@@ -378,4 +451,74 @@ test("GitHub not answering is an error, never an empty phase", () => {
 test("without a command or a folder it prints the usage", () => {
   assert.equal(command(ANSWERS, []).status, 64);
   assert.equal(command(ANSWERS, ["next"]).status, 64);
+});
+
+// --- review of pull request #423: the command ----------------------------------------------
+
+const withAnswers = (change) => {
+  const answers = structuredClone(ANSWERS);
+  change(answers);
+  return answers;
+};
+
+test("`next` says the status in a line of its own, whatever it is", () => {
+  const waiting = withAnswers((answers) => {
+    answers.TrackingIssue.repository.issue.subIssues.nodes.splice(1, 1);
+  });
+  assert.match(command(waiting, ["next", "07-ai-service"]).stdout, /^status: waiting$/m);
+  const finished = withAnswers((answers) => {
+    answers.TrackingIssue.repository.issue.subIssues = page([subIssue(302, { state: "CLOSED" })]);
+  });
+  assert.match(command(finished, ["next", "07-ai-service"]).stdout, /^status: finished$/m);
+  const empty = withAnswers((answers) => {
+    answers.TrackingIssue.repository.issue.subIssues = page([]);
+  });
+  assert.match(command(empty, ["next", "07-ai-service"]).stdout, /^status: empty$/m);
+  const blocked = withAnswers((answers) => {
+    answers.TrackingIssue.repository.issue.blockedBy = connection([link(418)]);
+  });
+  const run = command(blocked, ["next", "07-ai-service"]);
+  assert.match(run.stdout, /^status: phase-waits$/m);
+  assert.match(run.stdout, /the phase waits for #418 \(08-mcp-public\)/);
+  assert.doesNotMatch(run.stdout, /^next:/m);
+});
+
+test("the command answers when it is started through a link or from a folder with a space", () => {
+  const linked = (dir) => {
+    const folder = path.join(dir, "a folder");
+    fs.mkdirSync(folder);
+    const link = path.join(folder, "phase work.mjs");
+    fs.symlinkSync(COMMAND, link);
+    return link;
+  };
+  const run = command(ANSWERS, ["next", "07-ai-service"], linked);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^status: next$/m);
+  assert.match(run.stdout, /^next: #210 Issue 210$/m);
+});
+
+test("`next` reports an outsider's issue that names the folder as ignored", () => {
+  const answers = withAnswers((data) => {
+    data.OpenIssues.repository.issues.nodes.push(openIssue(900, PLAN_07, { author: "NONE" }));
+  });
+  const run = command(answers, ["next", "07-ai-service"]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^next: #210 Issue 210$/m);
+  assert.match(run.stdout, /^ignored: #900 /m);
+});
+
+test("`phases` names a cycle and the issues it ignored", () => {
+  const answers = withAnswers((data) => {
+    const nodes = data.OpenIssues.repository.issues.nodes;
+    nodes[0].blockedBy = connection([link(418)]);
+    nodes.push(openIssue(900, "Plan: .plan/99-outsider", { author: "NONE" }));
+  });
+  const run = command(answers, ["phases"]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(
+    run.stdout,
+    /07-ai-service · #414 · waits for #418 \(08-mcp-public\) · cycle: #414 → #418 → #414/,
+  );
+  assert.match(run.stdout, /^ignored: #900 /m);
+  assert.doesNotMatch(run.stdout, /99-outsider ·/);
 });

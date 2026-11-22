@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   PhaseWorkError,
   assertComplete,
+  phaseLines,
   phaseOrder,
   planFolder,
+  untrustedPlanIssues,
   planLine,
   selectWork,
   trackingIssue,
@@ -60,10 +62,11 @@ test("prose that only mentions a plan folder is not the plan line", () => {
 
 // --- the tracking issue of a folder -------------------------------------------
 
-const issueWithPlan = (number, folder) => ({
+const issueWithPlan = (number, folder, authorAssociation = "OWNER") => ({
   number,
   title: `Phase ${folder}`,
   body: folder ? planLine(folder) : "no plan here",
+  authorAssociation,
 });
 
 test("a phase folder resolves to the one open issue that names it", () => {
@@ -209,7 +212,7 @@ test("the lines say finished and empty in plain words", () => {
 
 test("a phase whose tracking issue has an open blocker waits, and nothing of it is selected", () => {
   const work = select([sub(1)], { blockedBy: [blocker(414), blocker(300, "CLOSED")], number: 418 });
-  assert.equal(work.status, "waiting");
+  assert.equal(work.status, "phase-waits");
   assert.equal(work.next, null);
   assert.deepEqual(
     work.phaseBlockers.map((issue) => issue.number),
@@ -224,17 +227,17 @@ test("a phase whose tracking issue's blockers are closed may start", () => {
   assert.deepEqual(work.phaseBlockers, []);
 });
 
+const phaseIssue = (number, folder, blockedBy = [], authorAssociation = "OWNER") => ({
+  ...issueWithPlan(number, folder, authorAssociation),
+  blockedBy,
+});
+
 test("the order between phases is read from the links between tracking issues", () => {
   const phases = phaseOrder([
-    { number: 414, title: "Phase 07", body: planLine("07-ai-service"), blockedBy: [] },
-    { number: 418, title: "Phase 08", body: planLine("08-mcp-public"), blockedBy: [blocker(414)] },
-    {
-      number: 416,
-      title: "Phase 09.1",
-      body: planLine("09.1-rag-integration"),
-      blockedBy: [blocker(414), blocker(418), blocker(7, "CLOSED")],
-    },
-    { number: 210, title: "An issue", body: "## Blocked by\n\n- #302", blockedBy: [] },
+    phaseIssue(414, "07-ai-service"),
+    phaseIssue(418, "08-mcp-public", [blocker(414)]),
+    phaseIssue(416, "09.1-rag-integration", [blocker(414), blocker(418), blocker(7, "CLOSED")]),
+    { ...phaseIssue(210, null), body: "## Blocked by\n\n- #302" },
   ]);
   assert.deepEqual(
     phases.map((phase) => [phase.folder, phase.number, phase.mayStart]),
@@ -251,9 +254,7 @@ test("the order between phases is read from the links between tracking issues", 
 });
 
 test("a phase may also wait for an issue that is no tracking issue", () => {
-  const [phase] = phaseOrder([
-    { number: 418, title: "Phase 08", body: planLine("08-mcp-public"), blockedBy: [blocker(99)] },
-  ]);
+  const [phase] = phaseOrder([phaseIssue(418, "08-mcp-public", [blocker(99)])]);
   assert.deepEqual(phase.waitsFor, [{ number: 99, folder: null }]);
   assert.equal(phase.mayStart, false);
 });
@@ -269,4 +270,193 @@ test("a list GitHub returned only in part is refused loudly", () => {
       /blockers of #216/.test(error.message) &&
       /100 of 101/.test(error.message),
   );
+});
+
+// --- review of pull request #423 ----------------------------------------------------
+
+// The status is said in a line of its own, so nothing is ever read from a missing line.
+test("every selection says its status in a line of its own", () => {
+  const status = (work) => workLines(work).find((line) => line.startsWith("status: "));
+  assert.equal(status(select([sub(1)])), "status: next");
+  assert.equal(status(select([sub(1, { labels: [READY, "hitl"] })])), "status: waiting");
+  assert.equal(status(select([sub(1, { state: "CLOSED" })])), "status: finished");
+  assert.equal(status(select([])), "status: empty");
+  assert.equal(status(select([sub(1)], { blockedBy: [blocker(414)] })), "status: phase-waits");
+});
+
+test("a phase that waits for another phase is not empty or waiting on issues: it has not started", () => {
+  assert.equal(select([], { blockedBy: [blocker(414)] }).status, "phase-waits");
+  assert.equal(
+    select([sub(1, { labels: [READY, "hitl"] })], { blockedBy: [blocker(414)] }).status,
+    "phase-waits",
+  );
+});
+
+test("the blocking phases are named with their folders when known", () => {
+  const work = select([sub(1)], {
+    blockedBy: [{ ...blocker(414), folder: "07-ai-service" }],
+    number: 418,
+  });
+  assert.deepEqual(work.phaseBlockers, [
+    { number: 414, title: "Issue 414", folder: "07-ai-service" },
+  ]);
+  assert.match(workLines(work).join("\n"), /the phase waits for #414 \(07-ai-service\)/);
+});
+
+// --- the plan line, strictly ----------------------------------------------------------
+
+test("a plan line inside a fenced code block is an example, not the plan line", () => {
+  assert.equal(planFolder("Write this:\n\n```\nPlan: .plan/07-ai-service\n```\n"), null);
+  assert.equal(planFolder("~~~text\nPlan: .plan/07-ai-service\n~~~"), null);
+  assert.equal(
+    planFolder("```\nPlan: .plan/00-example\n```\n\nPlan: .plan/07-ai-service\n"),
+    "07-ai-service",
+  );
+});
+
+test("a plan line inside an HTML comment is not the plan line", () => {
+  assert.equal(planFolder("<!--\nPlan: .plan/07-ai-service\n-->\nText"), null);
+  assert.equal(planFolder("<!-- hint -->\nPlan: .plan/07-ai-service"), "07-ai-service");
+});
+
+test("an indented or quoted plan line is not the plan line", () => {
+  assert.equal(planFolder("    Plan: .plan/07-ai-service"), null);
+  assert.equal(planFolder("> Plan: .plan/07-ai-service"), null);
+});
+
+// --- who may name a phase ----------------------------------------------------------------
+
+test("only the owner, a member or a collaborator can name a phase's tracking issue", () => {
+  const issues = [
+    issueWithPlan(414, "07-ai-service"),
+    issueWithPlan(900, "07-ai-service", "NONE"),
+    issueWithPlan(901, "07-ai-service", "CONTRIBUTOR"),
+    issueWithPlan(902, "08-mcp-public", "FIRST_TIME_CONTRIBUTOR"),
+  ];
+  assert.equal(trackingIssue("07-ai-service", issues).number, 414);
+  assert.deepEqual(
+    untrustedPlanIssues(issues, "07-ai-service").map((issue) => issue.number),
+    [900, 901],
+  );
+  assert.deepEqual(
+    untrustedPlanIssues(issues).map((issue) => issue.number),
+    [900, 901, 902],
+  );
+  for (const association of ["OWNER", "MEMBER", "COLLABORATOR"]) {
+    assert.equal(trackingIssue("x", [issueWithPlan(1, "x", association)]).number, 1);
+  }
+});
+
+test("an outsider's issue alone does not make a phase, and the refusal says it was ignored", () => {
+  assert.throws(
+    () => trackingIssue("08-mcp-public", [issueWithPlan(902, "08-mcp-public", "NONE")]),
+    (error) =>
+      error instanceof PhaseWorkError &&
+      /no open tracking issue/i.test(error.message) &&
+      /#902.*ignored/.test(error.message),
+  );
+});
+
+test("the selection reports the issues it ignored", () => {
+  const work = selectWork({
+    phase: "07-ai-service",
+    tracking: tracking([sub(210)]),
+    ignored: [{ number: 900, authorAssociation: "NONE" }],
+  });
+  assert.equal(work.next.number, 210);
+  assert.deepEqual(work.ignored, [{ number: 900, authorAssociation: "NONE" }]);
+  assert.match(
+    workLines(work).join("\n"),
+    /ignored: #900 .*not the owner, a member or a collaborator/,
+  );
+});
+
+test("the phases are those a trusted author named", () => {
+  const phases = phaseOrder([
+    phaseIssue(414, "07-ai-service"),
+    phaseIssue(900, "99-outsider", [], "NONE"),
+  ]);
+  assert.deepEqual(
+    phases.map((phase) => phase.folder),
+    ["07-ai-service"],
+  );
+});
+
+// --- phases and epics (the owner's decision of 2026-11-22) ---------------------------------
+
+test("an epic — a tracking issue without a plan line — is no phase: no folder resolves to it", () => {
+  const epic = { ...issueWithPlan(500, null), body: "Tracking issue of the audit fixes." };
+  assert.throws(() => trackingIssue("audit-fixes", [epic]), PhaseWorkError);
+  assert.throws(() => trackingIssue("500", [epic]), PhaseWorkError);
+  assert.deepEqual(phaseOrder([{ ...epic, blockedBy: [] }]), []);
+});
+
+test("an epic among a phase's sub-issues is never selected as work", () => {
+  const work = select([sub(500, { subIssues: 4 }), sub(210)]);
+  assert.equal(work.next.number, 210);
+  assert.equal(work.open[0].kind, "parent");
+});
+
+// --- sub-issues of another repository ------------------------------------------------------
+
+test("a sub-issue from another repository is refused loudly", () => {
+  const own = { ...tracking([]), repository: "owner/site" };
+  own.subIssues = [
+    { ...sub(210), repository: "owner/site" },
+    { ...sub(7), repository: "someone/else" },
+  ];
+  assert.throws(
+    () => selectWork({ phase: "07-ai-service", tracking: own }),
+    (error) =>
+      error instanceof PhaseWorkError &&
+      /#7/.test(error.message) &&
+      /someone\/else/.test(error.message),
+  );
+  own.subIssues.pop();
+  assert.equal(selectWork({ phase: "07-ai-service", tracking: own }).next.number, 210);
+});
+
+// --- cycles ----------------------------------------------------------------------------------
+
+test("issues of a phase that block each other are named as a cycle", () => {
+  const work = select([
+    sub(211, { blockedBy: [blocker(213)] }),
+    sub(212, { blockedBy: [blocker(211)] }),
+    sub(213, { blockedBy: [blocker(212)] }),
+    sub(214, { blockedBy: [blocker(900)] }),
+  ]);
+  assert.equal(work.status, "waiting");
+  assert.deepEqual(work.cycles, [[211, 213, 212]]);
+  const text = workLines(work).join("\n");
+  assert.match(text, /cycle: #211 → #213 → #212 → #211/);
+});
+
+test("a chain of blockers is no cycle", () => {
+  const work = select([sub(210), sub(211, { blockedBy: [blocker(210)] })]);
+  assert.deepEqual(work.cycles, []);
+  assert.doesNotMatch(workLines(work).join("\n"), /cycle/);
+});
+
+test("tracking issues that block each other are named as a cycle in the phases", () => {
+  const phases = phaseOrder([
+    phaseIssue(414, "07-ai-service", [blocker(418)]),
+    phaseIssue(418, "08-mcp-public", [blocker(414)]),
+    phaseIssue(417, "15-pages"),
+  ]);
+  assert.deepEqual(phases[0].cycle, [414, 418]);
+  assert.deepEqual(phases[1].cycle, [418, 414]);
+  assert.equal(phases[2].cycle, null);
+  const lines = phaseLines(phases);
+  assert.match(lines[0], /cycle: #414 → #418 → #414/);
+  assert.doesNotMatch(lines[2], /cycle/);
+});
+
+test("a phase caught in a cycle says so when asked for its next issue", () => {
+  const work = selectWork({
+    phase: "07-ai-service",
+    tracking: tracking([sub(210)], { blockedBy: [blocker(418)] }),
+    phaseCycle: [414, 418],
+  });
+  assert.equal(work.status, "phase-waits");
+  assert.match(workLines(work).join("\n"), /cycle: #414 → #418 → #414/);
 });
