@@ -802,6 +802,54 @@ describe("chat persistence", () => {
       ]);
     });
 
+    it("admits exactly a shared fingerprint's rolling minute limit under concurrent identities", async () => {
+      const fingerprint = unique("fingerprint");
+      const callers = await Promise.all(Array.from({ length: 25 }, () => identity()));
+      const quotas = [rolling("fingerprint", at, minute, 20)];
+      const results = await Promise.all(
+        callers.map((caller) => chat.admit(admission(caller, { fingerprint, quotas }))),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(20);
+      const refused = results.filter((result) => result.status !== "admitted");
+      expect(refused).toEqual(
+        Array.from({ length: 5 }, () => ({
+          status: "quota_exceeded",
+          scope: "fingerprint",
+          retryAt: later(minute),
+        })),
+      );
+      const usage = await usageOf(await identity(), { fingerprint, quotas });
+      expect(usage.quotas).toEqual([
+        { used: 20, retryAt: later(minute), nextReleaseAt: later(minute) },
+      ]);
+    });
+
+    it("admits exactly a shared fingerprint's UTC-day limit under concurrent identities", async () => {
+      const fingerprint = unique("fingerprint");
+      const since = new Date("2026-11-22T00:00:00.000Z");
+      const resetsAt = new Date("2026-11-23T00:00:00.000Z");
+      const quotas = [{ scope: "fingerprint" as const, since, limit: 100, resetsAt }];
+      // Ninety admissions earlier in the day, spread so that no minute window is involved.
+      const earlier = await Promise.all(Array.from({ length: 90 }, () => identity()));
+      await Promise.all(
+        earlier.map((caller, index) =>
+          admitted(admission(caller, { fingerprint, at: later(-(index + 1) * minute) })),
+        ),
+      );
+      const callers = await Promise.all(Array.from({ length: 15 }, () => identity()));
+      const results = await Promise.all(
+        callers.map((caller) => chat.admit(admission(caller, { fingerprint, quotas }))),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(10);
+      expect(results.filter((result) => result.status !== "admitted")).toEqual(
+        Array.from({ length: 5 }, () => ({
+          status: "quota_exceeded",
+          scope: "fingerprint",
+          retryAt: resetsAt,
+        })),
+      );
+    });
+
     it("tells whether another allowance fits each spend window without exposing its balance", async () => {
       const spend = [
         { kind: "day" as const, startsOn: "2036-02-28", limitMicroUsd: 2 * allowance },
