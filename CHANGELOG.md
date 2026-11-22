@@ -2,6 +2,43 @@
 
 All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). From v0.3.0 on, each section is byte for byte the notes of its GitHub release, added by the release workflow after a healthy deployment; the sections of v0.1.0 to v0.2.1 were rendered again in this format from the same commits, so they differ from the older notes of their releases. There is no Unreleased section, because every merge into master that builds an image is deployed.
 
+## [v0.8.0] - 2026-11-22
+
+### Features
+
+- **harness**
+  - select work by tracking issue, sub-issue order and native blockers ([#423](https://github.com/sebelapetr/sebela.dev/pull/423))
+
+### Fixes
+
+- **harness**
+  - close the gaps in the spend and efficiency guards ([#392](https://github.com/sebelapetr/sebela.dev/pull/392))
+  - decide the documentation folders before the folders code reads ([#406](https://github.com/sebelapetr/sebela.dev/pull/406))
+- **release**
+  - refuse a changelog whose links are not all at the end ([#427](https://github.com/sebelapetr/sebela.dev/pull/427))
+- repository hygiene follow-ups from #377 ([#429](https://github.com/sebelapetr/sebela.dev/pull/429))
+
+### Other changes
+
+- bump astral-sh/setup-uv ([#402](https://github.com/sebelapetr/sebela.dev/pull/402))
+- **llm-agent:** measure the Python test coverage when TEST_COVERAGE is true ([#390](https://github.com/sebelapetr/sebela.dev/pull/390))
+- record criteria-v1, the grading criteria of the phase 06 grades ([#405](https://github.com/sebelapetr/sebela.dev/pull/405))
+- add a threat model for the chatbot and the public MCP server ([#386](https://github.com/sebelapetr/sebela.dev/pull/386))
+- name the property tests in the README and the theme script's encoding in the design guide ([#403](https://github.com/sebelapetr/sebela.dev/pull/403))
+- **plan:** say how public MCP results mark record text as untrusted ([#399](https://github.com/sebelapetr/sebela.dev/pull/399))
+- publish the phase 06 evaluation report and the grading criteria rule ([#387](https://github.com/sebelapetr/sebela.dev/pull/387))
+- extend dependabot to the uv workspace ([#391](https://github.com/sebelapetr/sebela.dev/pull/391))
+
+**Full Changelog**: [v0.7.3...v0.8.0](https://github.com/sebelapetr/sebela.dev/compare/v0.7.3...v0.8.0)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:2e6b8dc70e4c3e0bba6794505bb0e248b0c86515`, built for this release: `sebela-api-v0.8.0.spdx.json` and `sebela-api-v0.8.0.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-web:2e6b8dc70e4c3e0bba6794505bb0e248b0c86515`, built for this release: `sebela-web-v0.8.0.spdx.json` and `sebela-web-v0.8.0.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-mcp-admin:2e6b8dc70e4c3e0bba6794505bb0e248b0c86515`, built for this release: `sebela-mcp-admin-v0.8.0.spdx.json` and `sebela-mcp-admin-v0.8.0.intoto.jsonl` are attached.
+
+How to verify the files and the images: [docs/release-workflow.md](https://github.com/sebelapetr/sebela.dev/blob/master/docs/release-workflow.md#release-files).
+
 ## [v0.7.3] - 2026-11-21
 
 ### Fixes
@@ -399,6 +436,7 @@ No changes since v0.2.0; re-release of the same commit.
 - `ghcr.io/sebelapetr/sebela-web:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 
+[v0.8.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.8.0
 [v0.7.3]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.3
 [v0.7.2]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.2
 [v0.7.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.1
