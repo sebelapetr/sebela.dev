@@ -175,6 +175,8 @@ function answered(n: number, text: string): ChatAssistantMessage {
     blocks: [],
     sources: [],
     related: [],
+    model: "fictional-model",
+    effort: "medium",
     createdAt: CREATED,
   };
 }

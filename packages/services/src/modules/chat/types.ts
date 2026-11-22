@@ -78,6 +78,8 @@ export interface ChatDispatch {
   readonly deadlineAt: string;
   readonly contextRevision: number;
   readonly model: string;
+  /** The main model's reasoning effort bound at admission. */
+  readonly effort: string;
   readonly pricingVersion: string;
   readonly allowanceUsd: number;
 }

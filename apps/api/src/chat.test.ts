@@ -1456,7 +1456,7 @@ describe("the visitor chat over HTTP", () => {
       expect(one).toMatchObject({
         rollingTwoHours: { used: 1, limit: 10, percent: 10 },
         utcDay: { used: 1, limit: 30 },
-        activeOperation: { operationId: asked.operationId, status: "admitted" },
+        activeOperation: { operationId: asked.operationId, status: "accepted" },
       });
       expect(first.headers.get("set-cookie")).toBeNull();
 
@@ -1587,6 +1587,7 @@ describe("the chat supervisor", () => {
     deadlineAt: "2031-03-10T12:01:00.000Z",
     contextRevision: 0,
     model: "fictional-model",
+    effort: "medium",
     pricingVersion: "fictional-pricing-1",
     allowanceUsd: 0.02,
   };

@@ -500,6 +500,41 @@ type GateRefusal = Extract<
 type GateInput = Omit<ChatAdmissionInput, "requestId" | "question" | "questionHash">;
 
 /**
+ * Counts one quota's admissions of the identity or the fingerprint as an admission at `at` would:
+ * a rolling window after its start, a fixed one from its start. A full quota has room again when
+ * enough of its oldest admissions age out of a rolling window, or when a fixed one resets.
+ */
+async function countQuota(
+  tx: Transaction,
+  owner: { identityId: string; fingerprint: string; at: Date },
+  quota: ChatQuotaRule,
+): Promise<ChatQuotaUsage> {
+  const whose =
+    quota.scope === "identity"
+      ? eq(admissions.identityId, owner.identityId)
+      : eq(admissions.fingerprint, owner.fingerprint);
+  const window =
+    quota.resetsAt === null
+      ? gt(admissions.admittedAt, quota.since)
+      : gte(admissions.admittedAt, quota.since);
+  const counted = await tx
+    .select({ admittedAt: admissions.admittedAt })
+    .from(admissions)
+    .where(and(whose, window))
+    .orderBy(asc(admissions.admittedAt));
+  const span = owner.at.getTime() - quota.since.getTime();
+  const ageingOut = (index: number) => {
+    const admittedAt = counted[index]?.admittedAt ?? owner.at;
+    return quota.resetsAt ?? new Date(admittedAt.getTime() + span);
+  };
+  return {
+    used: counted.length,
+    retryAt: counted.length < quota.limit ? null : ageingOut(counted.length - quota.limit),
+    nextReleaseAt: counted.length === 0 ? null : ageingOut(0),
+  };
+}
+
+/**
  * Passes the gates an admission and a retry share, in the identity's locked transaction: the
  * challenge token is unredeemed, every quota has room and the allowance fits every spend window,
  * which it reserves. Throws a `Refusal` otherwise, rolling the transaction back. Returns the
@@ -515,26 +550,10 @@ async function passGates(tx: Transaction, input: GateInput) {
   // Serialise the admissions of one fingerprint across identities while its quota is counted.
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.fingerprint}, 0))`);
   for (const quota of input.quotas) {
-    const owner =
-      quota.scope === "identity"
-        ? eq(admissions.identityId, input.identityId)
-        : eq(admissions.fingerprint, input.fingerprint);
-    const window =
-      quota.resetsAt === null
-        ? gt(admissions.admittedAt, quota.since)
-        : gte(admissions.admittedAt, quota.since);
-    const counted = await tx
-      .select({ admittedAt: admissions.admittedAt })
-      .from(admissions)
-      .where(and(owner, window))
-      .orderBy(asc(admissions.admittedAt));
-    if (counted.length < quota.limit) continue;
-    // A rolling window has room again when enough of its oldest admissions age out.
-    const ageingOut = counted[counted.length - quota.limit]?.admittedAt ?? input.at;
-    const retryAt =
-      quota.resetsAt ??
-      new Date(ageingOut.getTime() + (input.at.getTime() - quota.since.getTime()));
-    throw new Refusal({ status: "quota_exceeded", scope: quota.scope, retryAt });
+    const { retryAt } = await countQuota(tx, input, quota);
+    if (retryAt !== null) {
+      throw new Refusal({ status: "quota_exceeded", scope: quota.scope, retryAt });
+    }
   }
 
   // Reserve in a fixed order, so concurrent admissions lock the windows without deadlocking.
@@ -606,6 +625,7 @@ async function recordAdmission(
   await tx.insert(admissions).values({
     identityId: input.identityId,
     fingerprint: input.fingerprint,
+    operationId,
     admittedAt: input.at,
     expiresAt: input.admissionExpiresAt,
   });
@@ -649,7 +669,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     admittedAt: row.admittedAt,
     deadlineAt: row.deadlineAt,
     model: row.model,
-    effort: null,
+    effort: row.effort,
     pricingVersion: row.pricingVersion,
     allowanceMicroUsd: row.allowanceMicroUsd,
     contextRevision: row.contextRevision,
@@ -657,7 +677,29 @@ function operationOf(row: OperationRow): ChatOperationRecord {
   };
 }
 
-function messageOf(row: MessageRow): ChatMessageRecord {
+/** The main-call measurement an operation stored, with when it finished; `null` without one. */
+function contextOf(row: OperationRow | undefined): ChatUsageRecord["context"] {
+  if (
+    row?.contextEstimatedInputTokens == null ||
+    row.contextCapTokens === null ||
+    row.finishedAt === null
+  ) {
+    return null;
+  }
+  return {
+    operationId: row.id,
+    measuredAt: row.finishedAt,
+    estimatedInputTokens: row.contextEstimatedInputTokens,
+    reportedInputTokens: row.contextReportedInputTokens,
+    capTokens: row.contextCapTokens,
+  };
+}
+
+/** A message with the model and effort of the operation that answers it, if any. */
+function messageOf(
+  row: MessageRow,
+  answeredBy: { model: string; effort: string | null } | null = null,
+): ChatMessageRecord {
   return {
     id: row.id,
     role: row.role as ChatMessageRecord["role"],
@@ -672,8 +714,8 @@ function messageOf(row: MessageRow): ChatMessageRecord {
     sources: row.sources,
     related: row.related,
     createdAt: row.createdAt,
-    model: null,
-    effort: null,
+    model: answeredBy?.model ?? null,
+    effort: answeredBy?.effort ?? null,
   };
 }
 
@@ -698,6 +740,11 @@ async function releaseReservations(tx: Transaction, operationId: string) {
   for (const row of reserved) {
     await adjustWindow(tx, row.kind, row.startsOn, -row.amountMicroUsd);
   }
+}
+
+/** Stops counting the quota admission of an operation that never started any work. */
+async function releaseAdmission(tx: Transaction, operationId: string) {
+  await tx.delete(admissions).where(eq(admissions.operationId, operationId));
 }
 
 /** Keeps every open reservation of an operation in full, because its cost is unknown. */
@@ -929,6 +976,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
         admittedAt: input.at,
         deadlineAt: input.deadlineAt,
         model: input.model,
+        effort: input.effort,
         pricingVersion: input.pricingVersion,
         allowanceMicroUsd: input.allowanceMicroUsd,
         contextRevision: conversation.revision,
@@ -1051,6 +1099,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
         admittedAt: input.at,
         deadlineAt: input.deadlineAt,
         model: input.model,
+        effort: input.effort,
         pricingVersion: input.pricingVersion,
         allowanceMicroUsd: input.allowanceMicroUsd,
         contextRevision: conversation.revision,
@@ -1113,15 +1162,24 @@ export function createChatPersistence(db: Database): ChatPersistence {
         bound = lt(messages.position, cursor.position);
       }
       const rows = await db
-        .select()
+        .select({ message: messages, model: operations.model, effort: operations.effort })
         .from(messages)
+        .leftJoin(operations, eq(operations.assistantMessageId, messages.id))
         .where(
           and(eq(messages.conversationId, conversationId), isNull(messages.supersededAt), bound),
         )
         .orderBy(desc(messages.position))
         .limit(page.limit + 1);
       return {
-        messages: rows.slice(0, page.limit).reverse().map(messageOf),
+        messages: rows
+          .slice(0, page.limit)
+          .reverse()
+          .map((row) =>
+            messageOf(
+              row.message,
+              row.model === null ? null : { model: row.model, effort: row.effort },
+            ),
+          ),
         hasMore: rows.length > page.limit,
       };
     },
@@ -1133,7 +1191,10 @@ export function createChatPersistence(db: Database): ChatPersistence {
         .innerJoin(messages, eq(messages.id, operations.assistantMessageId))
         .where(and(eq(operations.id, operationId), eq(operations.identityId, identityId)));
       if (row === undefined) return null;
-      return { operation: operationOf(row.operation), assistant: messageOf(row.assistant) };
+      return {
+        operation: operationOf(row.operation),
+        assistant: messageOf(row.assistant, row.operation),
+      };
     },
 
     async findActiveOperation(identityId) {
@@ -1350,12 +1411,19 @@ export function createChatPersistence(db: Database): ChatPersistence {
             modelAttempts: result.modelAttempts,
             latencyMs: result.latencyMs,
             versions: result.versions,
+            contextEstimatedInputTokens: result.context?.estimatedInputTokens ?? null,
+            contextReportedInputTokens: result.context?.reportedInputTokens ?? null,
+            contextCapTokens: result.context?.capTokens ?? null,
           })
           .where(eq(operations.id, operationId))
           .returning();
         if (finished === undefined) throw new Error("The reconciled operation disappeared.");
         if (result.costMicroUsd === null) await retainReservations(tx, operationId);
         else await settleReservations(tx, operationId, result.costMicroUsd);
+        // A failure before any model call did no work, so it does not count against the quotas.
+        if (result.status === "failed" && result.modelAttempts === 0 && result.costMicroUsd === 0) {
+          await releaseAdmission(tx, operationId);
+        }
         await tx
           .update(conversations)
           .set({
@@ -1382,6 +1450,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
         if (grant !== undefined && grant.claimedAt !== null) return false;
         await endWithError(tx, row, "failed", at, error, false);
         await releaseReservations(tx, operationId);
+        await releaseAdmission(tx, operationId);
         return true;
       });
     },
@@ -1401,7 +1470,10 @@ export function createChatPersistence(db: Database): ChatPersistence {
           const claimed = grant !== undefined && grant.claimedAt !== null;
           await endWithError(tx, operation, "interrupted", at, error, claimed);
           if (claimed) await retainReservations(tx, operation.id);
-          else await releaseReservations(tx, operation.id);
+          else {
+            await releaseReservations(tx, operation.id);
+            await releaseAdmission(tx, operation.id);
+          }
         }
         return overdue.map((operation) => operation.id);
       });
@@ -1611,8 +1683,51 @@ export function createChatPersistence(db: Database): ChatPersistence {
       }
     },
 
-    usage() {
-      return Promise.reject(new Error("Not implemented."));
+    async usage(input) {
+      return db.transaction(
+        async (tx): Promise<ChatUsageRecord> => {
+          const quotas: ChatQuotaUsage[] = [];
+          for (const quota of input.quotas) quotas.push(await countQuota(tx, input, quota));
+          const spendRoom: boolean[] = [];
+          for (const window of input.spend) {
+            const [row] = await tx
+              .select({ committed: spendWindows.committedMicroUsd })
+              .from(spendWindows)
+              .where(
+                and(eq(spendWindows.kind, window.kind), eq(spendWindows.startsOn, window.startsOn)),
+              );
+            spendRoom.push((row?.committed ?? 0) + input.allowanceMicroUsd <= window.limitMicroUsd);
+          }
+          const [running] = await tx
+            .select()
+            .from(operations)
+            .where(
+              and(eq(operations.identityId, input.identityId), inArray(operations.status, active)),
+            )
+            .orderBy(desc(operations.admittedAt))
+            .limit(1);
+          const [measured] = await tx
+            .select()
+            .from(operations)
+            .where(
+              and(
+                eq(operations.identityId, input.identityId),
+                eq(operations.conversationId, input.conversationId),
+                isNotNull(operations.contextEstimatedInputTokens),
+                isNotNull(operations.finishedAt),
+              ),
+            )
+            .orderBy(desc(operations.finishedAt))
+            .limit(1);
+          return {
+            quotas,
+            spendRoom,
+            activeOperation: running === undefined ? null : operationOf(running),
+            context: contextOf(measured),
+          };
+        },
+        { isolationLevel: "repeatable read", accessMode: "read only" },
+      );
     },
 
     async committedSpend(kind, startsOn) {

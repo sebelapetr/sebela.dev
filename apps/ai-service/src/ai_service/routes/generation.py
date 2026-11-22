@@ -63,7 +63,8 @@ async def generate(request: Request) -> Accepted | JSONResponse:
         detail = [{"loc": item["loc"], "type": item["type"]} for item in error.errors()]
         return JSONResponse(status_code=422, content={"detail": detail})
     current = versions()
-    if (generation.model, generation.pricing_version) != (current.main_model, current.pricing):
+    terms = (generation.model, generation.effort, generation.pricing_version)
+    if terms != (current.main_model, current.main_effort, current.pricing):
         return problem(422, "version_mismatch")
     if not await service.generations.submit(generation):
         return problem(503, "busy")

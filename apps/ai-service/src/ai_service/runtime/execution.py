@@ -6,8 +6,9 @@ Each operation:
 
 1. claims its one-use grant; anything but a successful claim ends it without a model call and
    without a report (the API's own deadline watch settles it);
-2. stops without a model call when the claim's model, pricing version or context revision differs
-   from the dispatched request's, or its model or pricing version from this agent's: it reports
+2. stops without a model call when the claim's model, effort, pricing version or context revision
+   differs from the dispatched request's, or its model, effort (an operation admitted without one
+   included) or pricing version from this agent's: it reports
    `cancelled (grant_mismatch)` with zero, certain usage, which the API stores as a failure;
 3. binds itself to the earlier of the request's and the claim's deadline and to the smaller of
    their allowances, so neither the claim nor this service can extend them;
@@ -178,6 +179,8 @@ class Generations:
         if (
             claim.model != request.model
             or claim.model != agent.main_model
+            or claim.effort != request.effort
+            or claim.effort != agent.main_effort
             or claim.pricing_version != request.pricing_version
             or claim.pricing_version != agent.pricing
             or claim.context_revision != request.context_revision

@@ -17,6 +17,7 @@ import {
   ChatMessageSubmissionSchema,
   ChatOperationSchema,
   ChatRetrySubmissionSchema,
+  ChatUsageSchema,
   type ChatConversationClear,
   type ChatGrantClaim,
   type ChatMessageSubmission,
@@ -158,6 +159,24 @@ const visitorRoutes = {
       mediaType: "text/event-stream",
     },
     errors: ["not_found"],
+    refusals: { 403: `${relayRefusal}.`, 503: unavailableRefusal },
+  },
+  usage: {
+    operationId: "getChatUsage",
+    method: "GET",
+    path: "/v1/chat/usage",
+    access: "public",
+    summary: "Read the visitor's chat usage and limits",
+    description:
+      "The caller's own meters (questions in the rolling two hours and the UTC day), the " +
+      "restriction a new question would meet now and when it may pass again, the effective main " +
+      "model and effort, the active operation and the conversation's last measured main-call " +
+      "input against its cap. Reading consumes nothing and admits nothing; the meters are " +
+      "informative, admission decides alone. Never another visitor's counts or the site's spend. " +
+      "Never cached.",
+    cookie,
+    response: { status: 200, description: "The usage snapshot.", schema: ChatUsageSchema },
+    errors: [],
     refusals: { 403: `${relayRefusal}.`, 503: unavailableRefusal },
   },
   stop: {
@@ -514,6 +533,11 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
       timing,
       headers: setCookie === null ? {} : { "set-cookie": setCookie },
     });
+  });
+
+  app.get(visitorRoutes.usage.path, visitor(visitorRoutes.usage), async (c) => {
+    const caller = await callerOf(c);
+    return c.json(await chat.usage(caller, { clientAddress: namedAddress(c) }), 200);
   });
 
   const controlToken: MiddlewareHandler<ApiEnv> = async (c, next) => {

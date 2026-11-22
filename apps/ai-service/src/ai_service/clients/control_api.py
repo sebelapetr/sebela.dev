@@ -136,6 +136,7 @@ def _within_contract(claimed: ChatGrantClaimed) -> bool:
         and math.isfinite(allowance)
         and allowance > 0
         and _version(claimed.model)
+        and (claimed.effort is None or _version(claimed.effort))
         and _version(claimed.pricing_version)
         and isinstance(revision, int)
         and not isinstance(revision, bool)

@@ -60,6 +60,7 @@ const env = {
   API_CHAT_COOKIE_SECURE: "false",
   API_CHAT_FINGERPRINT_KEY: randomBytes(24).toString("hex"),
   API_CHAT_MODEL: "smoke-model",
+  API_CHAT_EFFORT: "smoke-effort",
   API_CHAT_PRICING_VERSION: "smoke-pricing",
   API_CHAT_RELAY_TOKEN: relayToken,
   API_TURNSTILE_SECRET_KEY: randomBytes(24).toString("hex"),

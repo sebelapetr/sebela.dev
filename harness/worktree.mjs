@@ -353,7 +353,11 @@ function agentVersions(file = AGENT_CONFIG_FILE) {
     if (!match) throw new Error(`${file} does not define ${name}`);
     return match[1];
   };
-  return { model: constant("HAIKU"), pricingVersion: constant("PRICING_VERSION") };
+  return {
+    model: constant("HAIKU"),
+    effort: constant("MAIN_EFFORT"),
+    pricingVersion: constant("PRICING_VERSION"),
+  };
 }
 
 // The visitor chat's development settings for one worktree. The API's sender and the AI service's
@@ -369,6 +373,7 @@ function chatSettings({ settings, ports, agent }) {
     API_CHAT_COOKIE_SECURE: "false",
     API_CHAT_FINGERPRINT_KEY: randomPassword(),
     API_CHAT_MODEL: agent.model,
+    API_CHAT_EFFORT: agent.effort,
     API_CHAT_PRICING_VERSION: agent.pricingVersion,
     API_CHAT_RELAY_TOKEN: relayToken,
     API_TURNSTILE_SECRET_KEY: TURNSTILE_TEST_SECRET_KEY,

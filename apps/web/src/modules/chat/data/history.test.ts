@@ -40,6 +40,8 @@ function answered(n: number, text: string): ChatAssistantMessage {
     blocks: [block],
     sources: [source],
     related: [],
+    model: "fictional-model",
+    effort: "medium",
     createdAt: CREATED,
   };
 }

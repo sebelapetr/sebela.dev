@@ -1,9 +1,9 @@
 """The agent's result as the API's result body, and the API's history as the agent's.
 
 Only what the contract carries leaves the service: the approved text, the typed blocks, the
-sources and the usage. Evidence data, the trace, the execution identifiers and any draft stay
-inside. Agent source kinds become the contract's record kinds; the contact card becomes a
-`ContactCard` block without the name, with only `http`/`https` links.
+sources, the usage and the last main call's context size. Evidence data, the trace, the execution
+identifiers and any draft stay inside. Agent source kinds become the contract's record kinds; the
+contact card becomes a `ContactCard` block without the name, with only `http`/`https` links.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from typing import Final
 from urllib.parse import urlsplit
 
-from llm_agent import ChatExchange, ChatResult, ContactCard, ExchangeSource, Versions
+from llm_agent import ChatExchange, ChatResult, ContactCard, ExchangeSource, Span, Versions
 from llm_agent.schemas.responses import SourceKind
 from pydantic.alias_generators import to_camel
 
@@ -25,6 +25,7 @@ from ai_service.schemas import (
     HistoryExchange,
     Language,
     Outcome,
+    ReportContext,
     ReportRecord,
     ReportSource,
     ReportUsage,
@@ -54,6 +55,8 @@ _AGENT_KIND: Final[dict[ContractKind, SourceKind]] = {
 }
 
 _SITE_PATH = re.compile(SITE_PATH_PATTERN)
+#: The trace span of one main model attempt (`llm_agent`'s gateway).
+_MAIN_ATTEMPT: Final = "model.main"
 _MAX_CONTACT_LINKS = 6
 #: The agent's own bound on an earlier exchange's record identifier.
 _MAX_HISTORY_RECORD_ID = 128
@@ -96,6 +99,7 @@ def report_for(
         ),
         versions=_versions(result.versions),
         latency_ms=max(0, latency_ms),
+        context=_context(result.trace),
     )
 
 
@@ -143,6 +147,32 @@ def history_for(history: Sequence[HistoryExchange]) -> list[ChatExchange]:
         )
         for exchange in history
     ]
+
+
+def _context(trace: Sequence[Span]) -> ReportContext | None:
+    """The last main model attempt's estimated input against its cap, with the provider's count.
+
+    The estimate is the agent's conservative token estimate of everything the attempt sent
+    (instructions, tool definitions, history, question, evidence); the count is what the provider
+    reported, `None` when it reported nothing. No measured main attempt is no context, never zero.
+    """
+    for span in reversed(trace):
+        if span.name != _MAIN_ATTEMPT:
+            continue
+        estimate = _count(span.attributes.get("estimated_input_tokens"))
+        cap = _count(span.attributes.get("input_cap"))
+        if estimate is None or cap is None or cap == 0:
+            return None
+        return ReportContext(
+            estimated_input_tokens=estimate,
+            reported_input_tokens=_count(span.attributes.get("input_tokens")),
+            cap_tokens=cap,
+        )
+    return None
+
+
+def _count(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
 def _sources(result: ChatResult) -> list[ReportSource]:
