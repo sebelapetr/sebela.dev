@@ -14,7 +14,7 @@ import asyncio
 import pytest
 from llm_agent import ApiContentReader, profile_view
 
-from ai_service.app import CapabilityLimits
+from ai_service.app import CapabilityLimits, openapi_document
 from ai_service.models.fake import FakeModels
 from tests.fakes import API_URL, CONTROL_TOKEN, PERSON, TOKEN, FakeApi, running
 
@@ -73,12 +73,13 @@ async def test_the_profile_is_one_record_of_the_tool_projection_without_private_
         assert private not in text
 
 
-async def test_the_capability_routes_are_exactly_the_read_tools_but_the_contact() -> None:
-    api = FakeApi()
-    async with running(api, FakeModels()) as (app, _):
-        paths = {str(getattr(route, "path", "")) for route in app.routes}
-    paths = {path for path in paths if path.startswith("/v1/capabilities")}
-    assert paths == set(ROUTES.values())
+def test_the_capability_routes_are_exactly_the_read_tools_but_the_contact() -> None:
+    paths = openapi_document()["paths"]
+    capabilities = {path for path in paths if path.startswith("/v1/capabilities")}
+    assert capabilities == set(ROUTES.values())
+    for path in capabilities:
+        assert set(paths[path]) == {"get"}
+        assert "security" not in paths[path]["get"]
 
 
 async def test_the_capability_needs_no_bearer_and_ignores_one() -> None:

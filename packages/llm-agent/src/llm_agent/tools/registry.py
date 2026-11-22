@@ -834,8 +834,9 @@ async def read_tool(
     value = await read()
     if tool == "get_profile":
         records = [
+            # The profile view omits the person's identifier; the record is the one profile.
             ToolRecord(
-                "profile", value.id, value.name, CANONICAL_HREF["profile"], profile_view(value)
+                "profile", "profile", value.name, CANONICAL_HREF["profile"], profile_view(value)
             )
         ]
     else:

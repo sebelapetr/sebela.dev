@@ -126,22 +126,51 @@
     },
     "/v1/capabilities/profile": {
       "get": {
-        "summary": "Profile",
-        "description": "The published profile, as the agent's `get_profile` tool projects it.",
-        "operationId": "profile_v1_capabilities_profile_get",
+        "summary": "Read the published professional profile: name, headline, biography, location, availability, career start, services introduction, collaboration steps and the services note.",
+        "operationId": "get_profile_v1_capabilities_profile_get",
         "responses": {
           "200": {
-            "description": "The public profile view (no identifier, e-mail or links)",
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
           },
           "503": {
-            "description": "Busy or the content is unavailable",
+            "description": "Busy, or the content is unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -150,7 +179,979 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/experiences": {
+      "get": {
+        "summary": "Read every published experience (job, contract or other role): title, kind, organization, start and end dates (no end date means current), summary, responsibilities, technologies and the projects it contains.",
+        "operationId": "list_experiences_v1_capabilities_experiences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/projects": {
+      "get": {
+        "summary": "Read every published project: the experience it belongs to, summary, problem, work done, result, dates, technologies and whether it has a case study.",
+        "operationId": "list_projects_v1_capabilities_projects_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/project": {
+      "get": {
+        "summary": "Read one published project by its slug, including its case study (role and body) when it has one.",
+        "operationId": "get_project_v1_capabilities_project_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 100
+            },
+            "description": "The project slug that list_projects or an experience gives."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/services": {
+      "get": {
+        "summary": "Read every published service: summary, audience, deliverable and the projects and explorations it rests on, with each exploration's status.",
+        "operationId": "list_services_v1_capabilities_services_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/explorations": {
+      "get": {
+        "summary": "Read every published exploration with its stored status: built, tested (tried, not delivered) or designed (not implemented); also concepts, dates, technologies and topics.",
+        "operationId": "list_explorations_v1_capabilities_explorations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/education": {
+      "get": {
+        "summary": "Read every published education record: school, course, certification or milestone, with its institution and dates where they are published.",
+        "operationId": "list_education_v1_capabilities_education_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/current-focus": {
+      "get": {
+        "summary": "Read what the person is focused on now: each focus entry's title, description, topics and the project it builds on, if any. A focus is current, not delivered work.",
+        "operationId": "list_current_focus_v1_capabilities_current_focus_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/roadmap": {
+      "get": {
+        "summary": "Read the AI Roadmap of what the person is learning: overall counts and progress, and every area with its stored progress (completed of total resources, status, estimated time) and its modules' progress. Estimated time is a plan, not logged time.",
+        "operationId": "get_roadmap_v1_capabilities_roadmap_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/roadmap-area": {
+      "get": {
+        "summary": "Read one AI Roadmap area by its slug with every module and each module's learning resources: type, stored status, estimated time, linked book and topics.",
+        "operationId": "get_roadmap_area_v1_capabilities_roadmap_area_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "area",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 100
+            },
+            "description": "The area slug that get_roadmap gives."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/learning-diary": {
+      "get": {
+        "summary": "Read the learning diary: each Europe/Prague calendar day with its notes, the logged study sessions (resource or attended event, and time) and the day's total logged time. Newest day first.",
+        "operationId": "get_learning_diary_v1_capabilities_learning_diary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/learning-statistics": {
+      "get": {
+        "summary": "Read the logged learning time as the website computes it: totals and active days, per Monday-start week, per calendar month, per area and module, per resource and per attended event, split into resource, book and event time.",
+        "operationId": "get_learning_statistics_v1_capabilities_learning_statistics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/books": {
+      "get": {
+        "summary": "Read the bookshelf: each book's author, year, pages, stored status (to-read, reading, completed), dates, summary, the roadmap resource it belongs to and the reading time logged on that resource.",
+        "operationId": "list_books_v1_capabilities_books_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/events": {
+      "get": {
+        "summary": "Read the conferences, meetups, workshops and lectures the person attended: organizer, dates, place, takeaways, topics and the attendance time logged on each.",
+        "operationId": "list_events_v1_capabilities_events_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
       }
     },
     "/health": {
@@ -216,6 +1217,118 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Accepted"
+      },
+      "CapabilityPage": {
+        "properties": {
+          "capability": {
+            "type": "string",
+            "enum": [
+              "get_profile",
+              "get_contact",
+              "list_experiences",
+              "list_projects",
+              "get_project",
+              "list_services",
+              "list_explorations",
+              "list_education",
+              "list_current_focus",
+              "get_roadmap",
+              "get_roadmap_area",
+              "get_learning_diary",
+              "get_learning_statistics",
+              "list_books",
+              "list_events"
+            ],
+            "title": "Capability"
+          },
+          "page": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Page"
+          },
+          "pageCount": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Pagecount"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "capability",
+          "page",
+          "pageCount",
+          "records"
+        ],
+        "title": "CapabilityPage",
+        "description": "One page of a read capability; `page_count` pages hold every record, in order."
+      },
+      "CapabilityRecord": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "contact",
+              "experience",
+              "project",
+              "exploration",
+              "service",
+              "education",
+              "current_focus",
+              "roadmap",
+              "roadmap_area",
+              "roadmap_module",
+              "diary_day",
+              "statistics",
+              "book",
+              "event"
+            ],
+            "title": "Kind"
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Title"
+          },
+          "href": {
+            "type": "string",
+            "maxLength": 500,
+            "pattern": "^/(?:[^/\\s\\\\\\x00-\\x1f\\x7f][^\\s\\\\\\x00-\\x1f\\x7f]*)?$",
+            "title": "Href"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "title",
+          "href",
+          "data"
+        ],
+        "title": "CapabilityRecord",
+        "description": "One projected record, exactly as the in-process tool gives it to the model."
       },
       "GenerationRequest": {
         "additionalProperties": false,
@@ -391,7 +1504,10 @@
               "busy",
               "unauthorized",
               "version_mismatch",
-              "unavailable"
+              "unavailable",
+              "not_found",
+              "invalid_arguments",
+              "rate_limited"
             ],
             "title": "Code"
           }

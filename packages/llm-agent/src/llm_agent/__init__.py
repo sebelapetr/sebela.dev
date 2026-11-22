@@ -26,7 +26,9 @@ from llm_agent.schemas import (
     RoadmapCard,
     ServiceCard,
     Source,
+    SourceKind,
     Span,
+    ToolName,
     Usage,
     Versions,
 )
@@ -74,6 +76,7 @@ from llm_agent.tools.content import (
 )
 from llm_agent.tools.registry import (
     READ_CAPABILITIES,
+    TOOL_SPECS,
     InvalidToolArgumentsError,
     ToolNotAvailableError,
     ToolPage,
@@ -85,6 +88,7 @@ from llm_agent.tools.registry import (
 
 __all__ = [
     "READ_CAPABILITIES",
+    "TOOL_SPECS",
     "ApiContentReader",
     "Block",
     "ChatAgent",
@@ -146,8 +150,10 @@ __all__ = [
     "RoadmapCard",
     "ServiceCard",
     "Source",
+    "SourceKind",
     "Span",
     "TelemetrySink",
+    "ToolName",
     "ToolNotAvailableError",
     "ToolPage",
     "ToolRecord",

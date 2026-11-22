@@ -13,6 +13,7 @@ import datetime
 import uuid
 from typing import Annotated, Any, Literal
 
+from llm_agent import SourceKind, ToolName
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 from pydantic.alias_generators import to_camel
 
@@ -92,7 +93,38 @@ class Accepted(_Body):
 class Problem(_Body):
     """A refusal with a stable code and nothing else."""
 
-    code: Literal["busy", "unauthorized", "version_mismatch", "unavailable"]
+    code: Literal[
+        "busy",
+        "unauthorized",
+        "version_mismatch",
+        "unavailable",
+        "not_found",
+        "invalid_arguments",
+        "rate_limited",
+    ]
+
+
+#: The most pages one capability read may have (`llm_agent`'s listed-record and page bounds).
+MAX_CAPABILITY_PAGE = 30
+
+
+class CapabilityRecord(_Body):
+    """One projected record, exactly as the in-process tool gives it to the model."""
+
+    kind: SourceKind
+    id: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    title: Annotated[str, StringConstraints(max_length=500)]
+    href: Annotated[str, StringConstraints(pattern=SITE_PATH_PATTERN, max_length=500)]
+    data: dict[str, Any]
+
+
+class CapabilityPage(_Body):
+    """One page of a read capability; `page_count` pages hold every record, in order."""
+
+    capability: ToolName
+    page: Annotated[int, Field(ge=1, le=MAX_CAPABILITY_PAGE)]
+    page_count: Annotated[int, Field(ge=1, le=MAX_CAPABILITY_PAGE)]
+    records: list[CapabilityRecord]
 
 
 class ReportRecord(_Body):
