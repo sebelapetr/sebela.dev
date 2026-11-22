@@ -334,7 +334,8 @@ const releaseLink = (version, repository) =>
  * `changelog` (the text of CHANGELOG.md, or "" for a new one) with the section of release
  * `version` from `date` (YYYY-MM-DD) added as the newest: the heading `## [version] - date`
  * followed by exactly its release `notes`, and the heading's link to the GitHub release added as
- * the first of the links at the end. Throws when the changelog already has the version.
+ * the first of the links at the end. Throws when the changelog already has the version, or when a release link stands anywhere but
+ * in the list at the end (older sections are never rewritten to make it fit).
  */
 export function addToChangelog(changelog, { version, date, notes, repository }) {
   if (!VERSION.test(version ?? "")) throw new Error(`Not a vX.Y.Z version: ${String(version)}`);
@@ -347,13 +348,27 @@ export function addToChangelog(changelog, { version, date, notes, repository }) 
   const link = releaseLink(version, repository);
   const lines = text.split("\n");
   const firstSection = lines.findIndex((line) => line.startsWith("## ["));
-  const firstLink = lines.findIndex((line) => /^\[v\d+\.\d+\.\d+\]: /.test(line));
+  const isLink = (line) => /^\[v\d+\.\d+\.\d+\]: /.test(line);
+  // The link list is only the run of link lines at the very end of the file.
+  let firstLink = lines.length;
+  while (firstLink > 0 && (lines[firstLink - 1] === "" || isLink(lines[firstLink - 1]))) {
+    firstLink -= 1;
+  }
+  while (firstLink < lines.length && lines[firstLink] === "") firstLink += 1;
+  const misplaced = lines.findIndex((line, index) => index < firstLink && isLink(line));
+  if (misplaced !== -1) {
+    throw new Error(
+      `CHANGELOG.md line ${misplaced + 1} is a release link (${lines[misplaced]}) before the end of the file; ` +
+        "all links belong in one list at the end of the file. Move it there (newest first) and run again; " +
+        "nothing was changed.",
+    );
+  }
   if (firstSection === -1) {
     return `${text.trimEnd()}\n\n${section}\n${link}\n`;
   }
   const head = lines.slice(0, firstSection).join("\n").trimEnd();
-  const body = lines.slice(firstSection, firstLink === -1 ? undefined : firstLink).join("\n");
-  const links = firstLink === -1 ? [] : lines.slice(firstLink).filter(Boolean);
+  const body = lines.slice(firstSection, firstLink).join("\n");
+  const links = lines.slice(firstLink).filter(Boolean);
   return `${head}\n\n${section}\n${body.trimEnd()}\n\n${[link, ...links].join("\n")}\n`;
 }
 
