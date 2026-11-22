@@ -1,8 +1,9 @@
 """The fixed read capabilities: the in-process tools' projections, paged, bounded, read-only.
 
 Every capability is one literal `GET /v1/capabilities/<name>` route over one read tool (the contact
-read excluded). Its arguments are the tool's own, as query parameters, validated before any API
-read; unknown names, unknown or repeated parameters and bad pages read nothing. Reads are bounded
+read excluded), or over the technology catalogue, which no model tool reads. Its arguments are the
+tool's own, as query parameters, validated before any API read; unknown names, unknown or repeated
+parameters and bad pages read nothing. Reads are bounded
 in parallelism, time and rate. Parity with the in-process tools over the real API is proven in
 `tests/integration/test_chat_stack.py`.
 """
@@ -16,7 +17,17 @@ from llm_agent import ApiContentReader, profile_view
 
 from ai_service.app import CapabilityLimits, openapi_document
 from ai_service.models.fake import FakeModels
-from tests.fakes import API_URL, CONTROL_TOKEN, PERSON, TOKEN, FakeApi, bearer, running, settings
+from tests.fakes import (
+    API_URL,
+    CONTROL_TOKEN,
+    PERSON,
+    TECHNOLOGIES,
+    TOKEN,
+    FakeApi,
+    bearer,
+    running,
+    settings,
+)
 
 ROUTE = "/v1/capabilities/profile"
 GENERATIONS = "/internal/v1/generations"
@@ -37,6 +48,7 @@ ROUTES = {
     "get_learning_statistics": "/v1/capabilities/learning-statistics",
     "list_books": "/v1/capabilities/books",
     "list_events": "/v1/capabilities/events",
+    "list_technologies": "/v1/capabilities/technologies",
 }
 
 
@@ -72,6 +84,41 @@ async def test_the_profile_is_one_record_of_the_tool_projection_without_private_
     text = response.text
     for private in (PERSON["id"], PERSON["email"], "marrow.example.test/", TOKEN, CONTROL_TOKEN):
         assert private not in text
+
+
+async def test_the_technologies_are_the_catalogue_without_ids_or_logos() -> None:
+    api = FakeApi()
+    async with running(api, FakeModels()) as (_, client):
+        response = await client.get("/v1/capabilities/technologies")
+    assert response.status_code == 200
+    assert response.json() == {
+        "capability": "list_technologies",
+        "page": 1,
+        "pageCount": 1,
+        "records": [
+            {
+                "kind": "technology",
+                "id": technology["slug"],
+                "title": technology["name"],
+                "href": "/experience#technologies-heading",
+                "data": {
+                    "slug": technology["slug"],
+                    "name": technology["name"],
+                    "tier": technology["tier"],
+                    "group": technology["group"],
+                },
+            }
+            for technology in TECHNOLOGIES
+        ],
+    }
+    for technology in TECHNOLOGIES:
+        assert technology["id"] not in response.text
+    assert api.public_reads == ["/v1/technologies"]
+
+
+def test_the_technologies_route_takes_only_a_page() -> None:
+    operation = openapi_document()["paths"]["/v1/capabilities/technologies"]["get"]
+    assert [parameter["name"] for parameter in operation["parameters"]] == ["page"]
 
 
 def test_the_capability_routes_are_exactly_the_read_tools_but_the_contact() -> None:
@@ -189,6 +236,8 @@ async def test_an_unknown_capability_is_not_found_and_reads_nothing(path: str) -
         "/v1/capabilities/project?slug=a&command=ls",
         "/v1/capabilities/roadmap-area?area=" + "x" * 500,
         "/v1/capabilities/roadmap-area?slug=agents",
+        "/v1/capabilities/technologies?group=core",
+        "/v1/capabilities/technologies?url=http://api.example.test/v1/technologies",
     ],
 )
 async def test_invalid_arguments_are_refused_before_any_read(query: str) -> None:

@@ -1,8 +1,8 @@
 """Fakes for the service's deterministic tests: a fictional API (public reads and control routes).
 
-No test calls a provider or a real API. The fake API answers the public person read and the two
-control routes over an httpx2 `MockTransport`; it records every claim and every reported result.
-It is shared between two service instances to simulate a restart. Its bodies have the API
+No test calls a provider or a real API. The fake API answers the public person and technology
+reads and the two control routes over an httpx2 `MockTransport`; it records every claim and every
+reported result. It is shared between two service instances to simulate a restart. Its bodies have the API
 document's shapes (`ChatGrantClaimed`, `ChatOperation`, `ErrorResponse`).
 """
 
@@ -59,6 +59,32 @@ PERSON: dict[str, Any] = {
     "createdAt": "2026-01-01T00:00:00.000Z",
     "updatedAt": "2026-01-01T00:00:00.000Z",
 }
+
+#: The fictional technology catalogue the public API returns, in the API's JSON shape.
+TECHNOLOGIES: list[dict[str, Any]] = [
+    {
+        "id": "00000000-0000-4000-8000-000000000061",
+        "slug": "python",
+        "name": "Python",
+        "tier": "primary",
+        "group": "core",
+        "logoKey": "python",
+        "position": 0,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+    },
+    {
+        "id": "00000000-0000-4000-8000-000000000062",
+        "slug": "bash",
+        "name": "Bash",
+        "tier": "secondary",
+        "group": None,
+        "logoKey": None,
+        "position": 0,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+    },
+]
 
 
 def error(code: str) -> dict[str, Any]:
@@ -137,6 +163,8 @@ class FakeApi:
             if self.person_status != 200:
                 return httpx2.Response(self.person_status, json=error("unavailable"))
             return httpx2.Response(200, json=PERSON)
+        if path == "/v1/technologies" and request.method == "GET":
+            return httpx2.Response(200, json=TECHNOLOGIES)
         if request.headers.get("authorization") != f"Bearer {CONTROL_TOKEN}":
             return httpx2.Response(401, json=error("unauthorized"))
         body = json.loads(request.content)

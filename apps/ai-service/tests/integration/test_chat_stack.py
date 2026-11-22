@@ -35,7 +35,7 @@ import pytest
 from llm_agent import READ_CAPABILITIES, ApiContentReader, read_tool, versions
 from llm_agent.observability.tracing import Tracer
 from llm_agent.reliability.timeouts import Deadline
-from llm_agent.tools.registry import Tools
+from llm_agent.tools.registry import TOOLS, Tools
 
 ROOT = Path(__file__).resolve().parents[4]
 API_FOLDER = ROOT / "apps" / "api"
@@ -731,6 +731,7 @@ CAPABILITY_READS: dict[str, tuple[str, dict[str, str]]] = {
     "get_learning_statistics": ("learning-statistics", {}),
     "list_books": ("books", {}),
     "list_events": ("events", {}),
+    "list_technologies": ("technologies", {}),
 }
 
 
@@ -783,7 +784,7 @@ def test_the_capability_table_covers_every_read_capability() -> None:
     assert set(CAPABILITY_READS) == set(READ_CAPABILITIES)
 
 
-@pytest.mark.parametrize("name", list(CAPABILITY_READS))
+@pytest.mark.parametrize("name", [name for name in CAPABILITY_READS if name in TOOLS])
 async def test_a_capability_equals_the_in_process_tool_over_the_real_api(
     stack: Stack, name: str
 ) -> None:
@@ -794,6 +795,29 @@ async def test_a_capability_equals_the_in_process_tool_over_the_real_api(
     assert served, name
     assert [(r["kind"], r["data"]) for r in served] == [(r["kind"], r["data"]) for r in model]
     text = json.dumps(served)
+    for secret in stack.secrets:
+        assert secret not in text
+
+
+async def test_the_technology_capability_is_the_published_catalogue_over_the_real_api(
+    stack: Stack,
+) -> None:
+    served = await asyncio.to_thread(capability_records, stack, "technologies", {})
+    async with ApiContentReader(stack.api_url) as content:
+        page = await read_tool(content, "list_technologies", {}, page=1, page_records=300)
+    with httpx2.Client(timeout=10.0) as client:
+        catalogue = client.get(f"{stack.api_url}/v1/technologies").json()
+    assert catalogue, "the demo seed publishes technologies"
+    assert [(r["kind"], r["id"], r["title"], r["href"], r["data"]) for r in served] == [
+        (r.kind, r.record_id, r.title, r.href, r.data) for r in page.records
+    ]
+    assert [r["data"] for r in served] == [
+        {"slug": t["slug"], "name": t["name"], "tier": t["tier"], "group": t["group"]}
+        for t in catalogue
+    ]
+    text = json.dumps(served)
+    for technology in catalogue:
+        assert technology["id"] not in text
     for secret in stack.secrets:
         assert secret not in text
 
