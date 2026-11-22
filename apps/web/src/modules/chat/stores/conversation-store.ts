@@ -1,7 +1,9 @@
 // The chat's state in this tab: the caller's one conversation as the API stores it, the question in
 // flight and the hand-off of a question from the hero. The API resolves the conversation from the
-// visitor's cookie; an address on the page never authorises anything.
+// visitor's cookie; an address on the page never authorises anything. Every tab of the visitor
+// shows the same conversation: a tab told that another changed it reads it again.
 import {
+  ChatConversationClearedSchema,
   chatQuestionMaxLength,
   type ChatAssistantMessage,
   type ChatConversation,
@@ -16,6 +18,7 @@ import {
   rejectChatTurn,
   restartChatTurn,
   startChatTurn,
+  stopChatTurn,
   timeOutChatTurn,
   type ChatTurn,
 } from "../data/conversation";
@@ -38,15 +41,22 @@ export interface ConversationSnapshot {
   readonly history: "loading" | "ready" | "failed" | "unavailable";
   /** The conversation's questions and answers, oldest first. */
   readonly turns: readonly ChatTurn[];
-  /** The history is loading or a question is answering; another cannot be sent. */
+  /**
+   * The history is loading, a question is answering (in this tab or another) or the conversation
+   * is being cleared; another question cannot be sent.
+   */
   readonly busy: boolean;
   /** How many days the conversation is kept after its last activity; null until it is read. */
   readonly retentionDays: number | null;
   /** Whether older messages can be read, are being read, or there are none. */
   readonly earlier: "none" | "available" | "loading";
-  /** Stub. */
+  /** The conversation the chat shows, which a clear names; null until it is read. */
   readonly conversationId: string | null;
-  /** Stub. */
+  /**
+   * After a clear: whether copies of the conversation in the monitoring service are still to be
+   * deleted ("pending" is never done) or there were none; null when nothing was cleared since the
+   * last question.
+   */
   readonly telemetryDeletion: "none" | "pending" | null;
 }
 
@@ -87,25 +97,39 @@ export interface ConversationStore {
    */
   submit(question: string): SubmitResult;
   /**
-   * Asks the latest question again when its answer was interrupted or failed with a retryable
-   * error. An attempt the API never ended (interrupted, timed out on the page, not admitted) is
-   * followed or asked again under the same request, so an admitted question is never paid twice;
-   * an answer the API ended with an error is asked again under a new request. The failed answer is
-   * replaced in place. Never called by the store itself: a failure waits for the visitor.
+   * Asks the latest question again when its answer was interrupted, stopped or failed with a
+   * retryable error, always under the same request and a new random retry ID, so one press is one
+   * attempt and an admitted attempt is never paid twice: an attempt the API never ended is only
+   * followed again. The failed answer is replaced in place. Never called by the store itself: a
+   * failure waits for the visitor.
    */
   retry(requestId: string): RetryResult;
-  /** Stub. */
+  /**
+   * Stops the latest question's answer while it is open, in whichever tab it was asked. The API
+   * ends it and its stream says so; a question the API has not admitted yet is stopped on the page
+   * and never sent. "failed" when the API could not be asked, and the answer is still followed.
+   */
   stop(requestId: string): Promise<StopResult>;
-  /** Stub. */
+  /**
+   * Deletes the conversation shown, by its ID, and shows the fresh empty one; an answer being
+   * prepared is cancelled. "changed" when the conversation changed before the clear (another tab
+   * asked or cleared): nothing was deleted and it is shown as it now is. "failed" before the
+   * conversation was read or when the API could not be asked; nothing changes.
+   */
   clear(): Promise<ClearResult>;
-  /** Stub. */
+  /**
+   * Reads the newest page again, after another tab said the conversation changed, and follows the
+   * answer it is preparing. Waits while this tab follows an answer; older pages already read stay
+   * when the newest still begins with a question shown. A question the API did not admit stays at
+   * the end, to be asked again.
+   */
   refresh(): Promise<void>;
 }
 
-/** Stub. */
+/** What became of a stop: the answer was stopped, the API could not be asked, or nothing is open. */
 export type StopResult = "stopped" | "failed" | "none";
 
-/** Stub. */
+/** What became of a clear: cleared, refused because the conversation changed, or not done. */
 export type ClearResult = "cleared" | "changed" | "failed";
 
 export interface ConversationStoreOptions {
@@ -124,7 +148,10 @@ export interface ConversationStoreOptions {
    * question is refused as busy. True by default.
    */
   readonly available?: boolean;
-  /** Stub. */
+  /**
+   * Called when this tab changed the conversation for the other tabs: a question or retry was
+   * admitted (its first event), an answer was stopped or the conversation was cleared.
+   */
   readonly onChange?: () => void;
 }
 
@@ -179,17 +206,23 @@ interface Attempt {
  * attempt that was replaced, timed out or abandoned is ignored. An admission refusal fails the
  * turn with its reason and no answer; a transport that throws or ends early interrupts it; an
  * answer quiet for longer than the idle time (no event and no sign of life) fails as timed out and
- * is no longer followed. A failure is never retried by the store.
+ * is no longer followed. A failure is never retried by the store. A refusal because another
+ * answer is being prepared, or because the attempt is no longer the latest, reads the conversation
+ * again, so the other tab's answer is shown and followed instead.
  */
 export function createConversationStore(options: ConversationStoreOptions): ConversationStore {
   const { adapter, storage, createId } = options;
   const idleTimeoutMs = options.idleTimeoutMs ?? 20_000;
+  const onChange = options.onChange ?? (() => undefined);
   const listeners = new Set<() => void>();
   const taken = new Set<string>();
+  /** The questions shown that the API never admitted, so no stored page has them. */
+  const unadmitted = new Set<string>();
 
   const available = options.available ?? true;
 
   let history: ConversationSnapshot["history"] = available ? "loading" : "unavailable";
+  let conversationId: string | null = null;
   let turns: readonly ChatTurn[] = [];
   let retentionDays: number | null = null;
   let earlier: ConversationSnapshot["earlier"] = "none";
@@ -197,10 +230,15 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
   let carried: ChatAssistantMessage | null = null;
   let attempt: Attempt | null = null;
   let restoring: Promise<void> | null = null;
+  let clearing = false;
+  let telemetryDeletion: ConversationSnapshot["telemetryDeletion"] = null;
+  let refreshing: Promise<void> | null = null;
+  /** A read of the newest page waits for the attempt followed, or for the read in flight. */
+  let refreshWanted = false;
   let snapshot: ConversationSnapshot | null = null;
 
   const isBusy = () =>
-    history === "loading" || history === "unavailable" || turns.some(isChatTurnOpen);
+    history === "loading" || history === "unavailable" || clearing || turns.some(isChatTurnOpen);
 
   function changed(): void {
     snapshot = null;
@@ -217,29 +255,40 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     changed();
   }
 
-  function stop(current: Attempt): void {
+  function abandon(current: Attempt): void {
     current.controller.abort();
     if (attempt === current) attempt = null;
   }
 
-  async function follow(question: ChatQuestion): Promise<void> {
-    if (attempt !== null) stop(attempt);
+  type Source = (signal: AbortSignal) => AsyncIterable<unknown>;
+
+  /**
+   * Follows one attempt of the question. `announced`: a question or retry this tab sent, whose
+   * admission (its first event) the other tabs are told about.
+   */
+  async function follow(question: ChatQuestion, source: Source, announced: boolean): Promise<void> {
+    if (attempt !== null) abandon(attempt);
     const current: Attempt = { requestId: question.requestId, controller: new AbortController() };
     attempt = current;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let first = announced;
     const quiet = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (attempt !== current) return;
-        stop(current);
+        abandon(current);
         update(question.requestId, timeOutChatTurn);
       }, idleTimeoutMs);
     };
     quiet();
     try {
-      for await (const raw of adapter.send(question, { signal: current.controller.signal })) {
+      for await (const raw of source(current.controller.signal)) {
         if (attempt !== current) return;
         quiet();
+        if (first) {
+          first = false;
+          onChange();
+        }
         update(question.requestId, (turn) => receiveChatEvent(turn, raw));
         if (!turns.some((turn) => turn.requestId === question.requestId && isChatTurnOpen(turn)))
           return;
@@ -247,6 +296,10 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       if (attempt === current) update(question.requestId, endChatStream);
     } catch (error) {
       if (attempt !== current) return;
+      if (error instanceof ChatAdmissionError) {
+        unadmitted.add(question.requestId);
+        if (error.code === "busy" || error.code === "not_retryable") refreshWanted = true;
+      }
       update(question.requestId, (turn) =>
         error instanceof ChatAdmissionError
           ? rejectChatTurn(turn, error.code, error.retryAfterSeconds)
@@ -254,16 +307,32 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       );
     } finally {
       clearTimeout(timer);
-      if (attempt === current) stop(current);
+      if (attempt === current) {
+        abandon(current);
+        if (refreshWanted) void refresh();
+      }
     }
   }
 
-  function readHistory(page: ChatConversation): void {
+  /** Follows the answer the API is still preparing, which the page shows open. */
+  function followActive(page: ChatConversation): void {
     const active = page.activeOperation;
+    const running =
+      active === null ? undefined : turns.find((turn) => turn.requestId === active.requestId);
+    if (running !== undefined && isChatTurnOpen(running)) {
+      const question = { requestId: running.requestId, question: running.question };
+      void follow(question, (signal) => adapter.send(question, { signal }), false);
+    }
+  }
+
+  /** Shows the newest page as the whole conversation. */
+  function readHistory(page: ChatConversation): void {
     const read = historyTurns(page.messages, {
       carried: null,
-      activeRequestId: active?.requestId ?? null,
+      activeRequestId: page.activeOperation?.requestId ?? null,
     });
+    unadmitted.clear();
+    conversationId = page.conversationId;
     turns = read.turns;
     carried = read.leading;
     cursor = page.nextCursor;
@@ -271,11 +340,42 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     retentionDays = page.retentionDays;
     history = "ready";
     changed();
-    const running =
-      active === null ? undefined : turns.find((turn) => turn.requestId === active.requestId);
-    if (running !== undefined && isChatTurnOpen(running)) {
-      void follow({ requestId: running.requestId, question: running.question });
+    followActive(page);
+  }
+
+  /**
+   * Shows the newest page read again: the older turns already read stay when the page still
+   * begins with a question shown, and the questions the API never admitted stay at the end.
+   */
+  function mergeNewest(page: ChatConversation): void {
+    if (page.conversationId !== conversationId) {
+      readHistory(page);
+      return;
     }
+    const read = historyTurns(page.messages, {
+      carried: null,
+      activeRequestId: page.activeOperation?.requestId ?? null,
+    });
+    const stored = new Set(read.turns.map((turn) => turn.requestId));
+    const local = turns.filter(
+      (turn) => unadmitted.has(turn.requestId) && !stored.has(turn.requestId),
+    );
+    const firstRequest = read.turns[0]?.requestId;
+    const index =
+      firstRequest === undefined ? -1 : turns.findIndex((turn) => turn.requestId === firstRequest);
+    if (index > 0) {
+      turns = [...turns.slice(0, index).filter((turn) => !local.includes(turn)), ...read.turns];
+    } else {
+      turns = read.turns;
+      carried = read.leading;
+      cursor = page.nextCursor;
+      earlier = cursor === null ? "none" : "available";
+    }
+    turns = [...turns, ...local];
+    for (const requestId of unadmitted) if (stored.has(requestId)) unadmitted.delete(requestId);
+    retentionDays = page.retentionDays;
+    changed();
+    followActive(page);
   }
 
   async function restore(): Promise<void> {
@@ -289,6 +389,39 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       history = "failed";
       changed();
     }
+  }
+
+  // Read through functions: they change while a read is awaited.
+  const following = () => attempt !== null;
+  const clearingNow = () => clearing;
+  const wantsRefresh = () => refreshWanted;
+
+  function refresh(): Promise<void> {
+    if (history !== "ready" || clearing) return Promise.resolve();
+    if (attempt !== null || refreshing !== null) {
+      refreshWanted = true;
+      return refreshing ?? Promise.resolve();
+    }
+    refreshWanted = false;
+    const read = (async () => {
+      try {
+        const page = parseChatConversation(
+          await adapter.restore({ signal: new AbortController().signal }),
+        );
+        if (page === null) return;
+        // A question followed meanwhile wins and the page is read again after it; a clear shows
+        // the conversation it left.
+        if (following()) refreshWanted = true;
+        else if (!clearingNow()) mergeNewest(page);
+      } catch {
+        // The conversation stays as shown; the next change reads it again.
+      } finally {
+        refreshing = null;
+        if (wantsRefresh() && !following()) void refresh();
+      }
+    })();
+    refreshing = read;
+    return read;
   }
 
   function takeHandOff(id: string): string | null {
@@ -309,8 +442,10 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     if (isBusy()) return "busy";
     const turn = startChatTurn(createId(), trimmed);
     turns = [...turns, turn];
+    telemetryDeletion = null;
     changed();
-    void follow({ requestId: turn.requestId, question: turn.question });
+    const asked = { requestId: turn.requestId, question: turn.question };
+    void follow(asked, (signal) => adapter.send(asked, { signal }), true);
     return "sent";
   }
 
@@ -322,8 +457,8 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         busy: isBusy(),
         retentionDays,
         earlier,
-        conversationId: null,
-        telemetryDeletion: null,
+        conversationId,
+        telemetryDeletion,
       };
       return snapshot;
     },
@@ -371,24 +506,60 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         return isBusy() && latest?.requestId === requestId ? "busy" : "not_retryable";
       }
       if (isBusy()) return "busy";
-      // An attempt the API never ended may still be admitted: follow or ask it under its request.
-      const next =
-        latest.attempt.terminal === null
-          ? restartChatTurn(latest)
-          : startChatTurn(createId(), latest.question);
+      const next = restartChatTurn(latest);
       turns = [...turns.slice(0, -1), next];
+      telemetryDeletion = null;
       changed();
-      void follow({ requestId: next.requestId, question: next.question });
+      const asked = { requestId: next.requestId, question: next.question };
+      const retryId = createId();
+      void follow(asked, (signal) => adapter.retry(asked, { retryId, signal }), true);
       return "sent";
     },
-    stop() {
-      return Promise.resolve("none");
+    async stop(requestId) {
+      const latest = turns.at(-1);
+      if (latest?.requestId !== requestId || !isChatTurnOpen(latest)) return "none";
+      let stopped: "stopped" | "none";
+      try {
+        stopped = await adapter.stop(requestId, { signal: new AbortController().signal });
+      } catch {
+        return "failed";
+      }
+      if (stopped === "none") {
+        // Never admitted, so no stream will say it stopped.
+        if (attempt?.requestId === requestId) abandon(attempt);
+        unadmitted.add(requestId);
+        update(requestId, stopChatTurn);
+      }
+      onChange();
+      return "stopped";
     },
-    clear() {
-      return Promise.resolve("failed");
+    async clear() {
+      const shown = conversationId;
+      if (shown === null || history !== "ready" || clearing) return "failed";
+      clearing = true;
+      changed();
+      try {
+        const parsed = ChatConversationClearedSchema.safeParse(
+          await adapter.clear(shown, { signal: new AbortController().signal }),
+        );
+        if (!parsed.success) return "failed";
+        if (attempt !== null) abandon(attempt);
+        clearing = false;
+        readHistory(parsed.data.conversation);
+        if (!parsed.data.cleared) {
+          telemetryDeletion = null;
+          return "changed";
+        }
+        telemetryDeletion = parsed.data.telemetryDeletion;
+        onChange();
+        return "cleared";
+      } catch {
+        return "failed";
+      } finally {
+        clearing = false;
+        changed();
+      }
     },
-    refresh() {
-      return Promise.resolve();
-    },
+    refresh,
   };
 }

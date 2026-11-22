@@ -3,7 +3,9 @@
 // The chat's store for this tab, shared by the hero and the Ask page: one store per page load,
 // created on first use in the browser and answered by the API through the website's same-origin
 // chat routes, so a conversation keeps streaming across client navigation and opening it again
-// never resends. The server renders an empty chat.
+// never resends. The server renders an empty chat. The visitor's tabs tell each other that the
+// conversation changed over a broadcast channel; the message carries nothing of the conversation,
+// and a tab told reads it again from the API.
 import { useCallback, useSyncExternalStore } from "react";
 
 import { createApiChatAdapter } from "../data/api-adapter";
@@ -19,6 +21,10 @@ import {
 
 /** Where the website relays the visitor chat routes to the API. */
 const chatBasePath = "/api/chat";
+
+/** The broadcast channel the visitor's tabs of this website share, and its only message. */
+const tabsChannelName = "sebela-chat";
+const changedMessage = "changed";
 
 const emptySnapshot: ConversationSnapshot = {
   history: "loading",
@@ -45,6 +51,7 @@ let current:
       readonly siteKey: string | null;
       readonly available: boolean;
       readonly store: ConversationStore;
+      readonly tabs: BroadcastChannel | null;
     }
   | undefined;
 let turnstile: Promise<TurnstileApi> | undefined;
@@ -90,24 +97,30 @@ function loadTurnstile(): Promise<TurnstileApi> {
 /** The tab's store, kept while the site key and the chat's availability stay. */
 function conversationStore(siteKey: string | null, available: boolean): ConversationStore {
   if (current?.siteKey !== siteKey || current.available !== available) {
-    current = {
-      siteKey,
-      available,
-      store: createConversationStore({
-        adapter: createApiChatAdapter({
-          fetch: (input, init) => window.fetch(input, init),
-          basePath: chatBasePath,
-          challenge: createTurnstileChallenge({
-            load: loadTurnstile,
-            container: () => challengeContainer,
-            siteKey,
-          }),
+    current?.tabs?.close();
+    const tabs =
+      typeof BroadcastChannel === "function" ? new BroadcastChannel(tabsChannelName) : null;
+    const store = createConversationStore({
+      adapter: createApiChatAdapter({
+        fetch: (input, init) => window.fetch(input, init),
+        basePath: chatBasePath,
+        challenge: createTurnstileChallenge({
+          load: loadTurnstile,
+          container: () => challengeContainer,
+          siteKey,
         }),
-        storage: chatStorage(),
-        createId,
-        available,
       }),
-    };
+      storage: chatStorage(),
+      createId,
+      available,
+      onChange: () => {
+        tabs?.postMessage(changedMessage);
+      },
+    });
+    tabs?.addEventListener("message", (event: MessageEvent) => {
+      if (event.data === changedMessage) void store.refresh();
+    });
+    current = { siteKey, available, store, tabs };
   }
   return current.store;
 }
@@ -130,11 +143,13 @@ export function useConversation(siteKey: string | null, available: boolean) {
   const now = useCallback(() => store().getSnapshot(), [store]);
   const submit = useCallback((question: string) => store().submit(question), [store]);
   const retry = useCallback((requestId: string) => store().retry(requestId), [store]);
+  const stop = useCallback((requestId: string) => store().stop(requestId), [store]);
+  const clear = useCallback(() => store().clear(), [store]);
   const loadEarlier = useCallback(() => store().loadEarlier(), [store]);
   const challengeRef = useCallback((element: HTMLElement | null) => {
     challengeContainer = element;
   }, []);
-  return { snapshot, current: now, open, submit, retry, loadEarlier, challengeRef };
+  return { snapshot, current: now, open, submit, retry, stop, clear, loadEarlier, challengeRef };
 }
 
 /**
