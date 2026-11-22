@@ -289,7 +289,13 @@ try {
     [PLAYWRIGHT_CLI, "test", "--config", "playwright.complete-stack.config.ts"],
     {
       cwd: WEB_ROOT,
-      env: { ...process.env, WEB_STACK_URL: b.web, WEB_STACK_PERSON_NAME: seededPerson.name },
+      env: {
+        ...process.env,
+        WEB_STACK_URL: b.web,
+        WEB_STACK_PERSON_NAME: seededPerson.name,
+        // The stack has no AI service and no relay token.
+        WEB_STACK_CHAT: "off",
+      },
       stdio: "inherit",
     },
   );

@@ -345,7 +345,7 @@ jobs:
   # Compose projects side by side, each with its own ports, volumes, storage folder and secrets,
   # seeded with the fictional demo seed. Real pages, the CV PDF and stored images through the website
   # container, an authenticated edit the website shows at once, isolation of keys, files and signed
-  # invalidations between the two, and the hero's question to the mock Ask page in Chromium with
+  # invalidations between the two, and the hero's question to the chat-off Ask page in Chromium with
   # screenshots kept as an artifact. Removed at the end. The dependencies are installed only for
   # Playwright; the stack itself is built from the images.
   web-stack:

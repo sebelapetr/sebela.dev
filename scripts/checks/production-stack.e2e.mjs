@@ -11,7 +11,8 @@
 //   it the AI service and the chat stay off, as in production today. They are kept at the end.
 // --browser: also run the complete-stack browser tests of apps/web against the website (needs the
 //   website's installed dependencies with Chromium; screenshots in
-//   apps/web/test-results/complete-stack/).
+//   apps/web/test-results/complete-stack/), told whether the chat is on (WEB_STACK_CHAT): on with
+//   the AI service, off without it.
 //
 // Needs Docker with Compose, `tar` and `openssl`; plain Node with no dependencies. It builds the API, website
 // and MCP Admin images, and the AI service's, under the GHCR names the composition runs, with a tag
@@ -34,7 +35,9 @@
 //   to its `_rsc` URL), a 404, Ask, a POST, the closed internal route and the proxy's own 502 while
 //   the website is unreachable get `no-store`; the website's own header stays on the health route
 //   and robots.txt; with the AI service, the visitor chat answers through the website's relay;
-// - with --browser, the hero's question to the mock Ask page in a browser (no model is called);
+// - with --browser, the hero's question to the Ask page in a browser (no model is called): with the
+//   AI service it goes through the relay and ends "Not answered" (no site key, so no person check
+//   passes); without it the Ask page says the chat is off and keeps the question unsent;
 // - checks that the website's /health reports the database failing when Postgres is stopped and the
 //   API failing when the API is stopped;
 // - checks that no password or secret is in the logs.
@@ -572,7 +575,9 @@ try {
   }
 
   if (BROWSER) {
-    step("the hero's question to the mock Ask page in a browser, with screenshots");
+    step(
+      `the hero's question to the Ask page with the chat ${WITH_AI_SERVICE ? "on" : "off"} in a browser, with screenshots`,
+    );
     // Asynchronously: a blocked event loop would miss the website closing this process's idle
     // keep-alive connections meanwhile, and the next request would go out on a closed socket.
     const browser = spawn(
@@ -580,7 +585,12 @@ try {
       [PLAYWRIGHT_CLI, "test", "--config", "playwright.complete-stack.config.ts"],
       {
         cwd: WEB_ROOT,
-        env: { ...process.env, WEB_STACK_URL: web, WEB_STACK_PERSON_NAME: seededPerson.name },
+        env: {
+          ...process.env,
+          WEB_STACK_URL: web,
+          WEB_STACK_PERSON_NAME: seededPerson.name,
+          WEB_STACK_CHAT: WITH_AI_SERVICE ? "on" : "off",
+        },
         stdio: "inherit",
       },
     );
