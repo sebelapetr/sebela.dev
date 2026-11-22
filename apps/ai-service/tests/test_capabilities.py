@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 
-from llm_agent import PublicPerson, profile_view
+from llm_agent import ApiContentReader, profile_view
 
 from ai_service.app import CapabilityLimits
 from ai_service.models.fake import FakeModels
-from tests.fakes import PERSON, FakeApi, running
+from tests.fakes import API_URL, FakeApi, running
 
 ROUTE = "/v1/capabilities/profile"
 
@@ -19,7 +19,9 @@ async def test_the_profile_is_the_tool_projection_without_private_fields() -> No
         response = await client.get(ROUTE)
     assert response.status_code == 200
     payload = response.json()
-    assert payload == profile_view(PublicPerson.model_validate(PERSON))
+    async with ApiContentReader(API_URL, transport=api.transport()) as content:
+        expected = profile_view(await content.read_person())
+    assert payload == expected
     assert payload["name"] == "Ilsa Marrow"
     assert {"id", "email", "links"}.isdisjoint(payload)
 

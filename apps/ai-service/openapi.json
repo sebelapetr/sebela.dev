@@ -1,0 +1,354 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sebela AI service",
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/internal/v1/generations": {
+      "post": {
+        "summary": "Generate",
+        "description": "Admits one generation and answers before it runs.",
+        "operationId": "generate_internal_v1_generations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An invalid body or another model version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy: no slot freed in time, or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/capabilities/profile": {
+      "get": {
+        "summary": "Profile",
+        "description": "The published profile, as the agent's `get_profile` tool projects it.",
+        "operationId": "profile_v1_capabilities_profile_get",
+        "responses": {
+          "200": {
+            "description": "The public profile view (no identifier, e-mail or links)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "The process answers.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Ready",
+        "description": "The settings are loaded and the service admits generations (it is not shutting down).",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ready"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Stopping",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ready"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Accepted": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "const": true,
+            "title": "Accepted",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Accepted"
+      },
+      "GenerationRequest": {
+        "additionalProperties": false,
+        "description": "One admitted question the API dispatches with its one-use grant and its deadline.",
+        "properties": {
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "grant": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Grant",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryExchange"
+            },
+            "maxItems": 6,
+            "title": "History",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          },
+          "deadlineAt": {
+            "format": "date-time",
+            "title": "Deadlineat",
+            "type": "string"
+          },
+          "contextRevision": {
+            "minimum": 0,
+            "title": "Contextrevision",
+            "type": "integer"
+          },
+          "model": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "pricingVersion": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Pricingversion",
+            "type": "string"
+          },
+          "allowanceUsd": {
+            "exclusiveMinimum": 0,
+            "maximum": 0.02,
+            "title": "Allowanceusd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "operationId",
+          "grant",
+          "question",
+          "today",
+          "deadlineAt",
+          "contextRevision",
+          "model",
+          "pricingVersion",
+          "allowanceUsd"
+        ],
+        "title": "GenerationRequest",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "default": "ok"
+          }
+        },
+        "type": "object",
+        "title": "Health"
+      },
+      "HistoryExchange": {
+        "additionalProperties": false,
+        "description": "One earlier answered exchange, as the API projects it; untrusted conversation data.",
+        "properties": {
+          "question": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "answer": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Answer",
+            "type": "string"
+          },
+          "language": {
+            "enum": ["en", "cs"],
+            "title": "Language",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/HistorySource"
+            },
+            "maxItems": 8,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": ["question", "answer", "language"],
+        "title": "HistoryExchange",
+        "type": "object"
+      },
+      "HistorySource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "person",
+              "experience",
+              "project",
+              "exploration",
+              "service",
+              "technology_group",
+              "roadmap_item"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recordId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Recordid",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": ["kind", "recordId", "title"],
+        "title": "HistorySource",
+        "type": "object"
+      },
+      "Problem": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["busy", "unauthorized", "version_mismatch", "unavailable"],
+            "title": "Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["code"],
+        "title": "Problem",
+        "description": "A refusal with a stable code and nothing else."
+      },
+      "Ready": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ready", "stopping"],
+            "title": "Status",
+            "default": "ready"
+          }
+        },
+        "type": "object",
+        "title": "Ready"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

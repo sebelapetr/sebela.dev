@@ -30,7 +30,7 @@ API_URL = "http://api.example.test"
 
 ENV: dict[str, str] = {
     "AI_SERVICE_HOST": "service.example.test",
-    "LLM_AGENT_PORT": "4999",
+    "LLM_AGENT_PORT": "1",
     "AI_SERVICE_API_URL": API_URL,
     "AI_SERVICE_TOKEN": TOKEN,
     "AI_SERVICE_CONTROL_TOKEN": CONTROL_TOKEN,

@@ -170,7 +170,7 @@ A task with no package defining it, such as `build` before the first package wit
 - The root depends on `@sebela/config`, so a change to the shared configuration selects every package, its consumers included.
 - A base Turborepo cannot resolve in the checkout — a new branch, a rewritten history, a shallow clone — selects every package.
 
-- The root Python files (`uv.lock`, `.python-version` and the root `pyproject.toml`) belong to the root in Turborepo's view, so `--affected` does not select the Python members for them. CI adds a step after `pnpm ci:affected` that runs the lint, typecheck, test and build tasks of the Python members (`@sebela/api-client-python` and `@sebela/llm-agent`) whenever one of them changed; locally, run `pnpm exec turbo run lint typecheck test build --filter=@sebela/api-client-python --filter=@sebela/llm-agent` after changing them.
+- The root Python files (`uv.lock`, `.python-version` and the root `pyproject.toml`) belong to the root in Turborepo's view, so `--affected` does not select the Python members for them. CI adds a step after `pnpm ci:affected` that runs the lint, typecheck, test and build tasks of the Python members (`@sebela/api-client-python`, `@sebela/llm-agent` and `@sebela/ai-service`) whenever one of them changed; locally, run `pnpm exec turbo run lint typecheck test build --filter=@sebela/api-client-python --filter=@sebela/llm-agent --filter=@sebela/ai-service` after changing them.
 
 Root files that belong to no package (the harness, the repository checks, docs) select no package; the root tasks cover them, and CI runs those on every change (`pnpm ci:root`). Documentation never selects a package, not even inside the package's folder: CI and the release plan give Turborepo the change without its documentation (`scripts/checks/without-documentation.mjs`; [CI](testing.md#ci), "Documentation selects no work"). Run by hand, `turbo query affected` still counts it. `pnpm exec turbo query affected --packages` lists the selection with the reason for each package.
 
@@ -269,21 +269,21 @@ apps/web/src/
 
 The API is the trust boundary: content writes and content authentication are enforced there. FastAPI separately authenticates internal generation and limits AI execution. The import rules exist to keep it that way.
 
-| Package or app                | May import                                                                                                           |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP            |
-| `apps/ai-service` (Python)    | `packages/llm-agent`, `packages/api-client-python`; reaches content only through public API routes                   |
-| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app               |
-| `packages/llm-agent` (Python) | `packages/api-client-python` (public reads only, in `llm_agent.tools.content`); no TypeScript packages or DB drivers |
-| `apps/api`                    | `services`, `contracts`, `config`; `api-client` only in test files (`*.test.<ext>`), for its consumer contract tests |
-| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                                |
-| `packages/db`                 | nothing from this repository except `config`                                                                         |
-| `packages/contracts`          | nothing from this repository except `config`                                                                         |
-| `packages/memory`             | `contracts`, `config`; never `db` — `packages/db` implements its ports and `services` composes it                    |
-| `packages/api-client`         | nothing from this repository except `config`; generated from the API's OpenAPI document, never its source            |
-| `packages/api-client-python`  | nothing from this repository; generated from the committed OpenAPI document of `api-client`, never the API's source  |
-| `packages/ui`                 | nothing from this repository except `config`; design tokens, fonts and React components with no data access          |
-| `packages/config`             | nothing from this repository                                                                                         |
+| Package or app                | May import                                                                                                                                                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`, `apps/mcp-admin`  | `api-client`, `contracts`, `ui` (web only), `config` — and they reach data only through the API over HTTP                                                                                                                              |
+| `apps/ai-service` (Python)    | `packages/llm-agent`, `packages/api-client-python`; reads content only through public API routes, and reaches the API's internal chat control routes (grant claim, result report) with its own control bearer, never a content API key |
+| `apps/mcp-public` (Python)    | `packages/llm-agent` public capability contracts; reaches FastAPI over HTTP, never imports another app                                                                                                                                 |
+| `packages/llm-agent` (Python) | `packages/api-client-python` (public reads only, in `llm_agent.tools.content`); no TypeScript packages or DB drivers                                                                                                                   |
+| `apps/api`                    | `services`, `contracts`, `config`; `api-client` only in test files (`*.test.<ext>`), for its consumer contract tests                                                                                                                   |
+| `packages/services`           | `db`, `contracts`, `memory`, `config`                                                                                                                                                                                                  |
+| `packages/db`                 | nothing from this repository except `config`                                                                                                                                                                                           |
+| `packages/contracts`          | nothing from this repository except `config`                                                                                                                                                                                           |
+| `packages/memory`             | `contracts`, `config`; never `db` — `packages/db` implements its ports and `services` composes it                                                                                                                                      |
+| `packages/api-client`         | nothing from this repository except `config`; generated from the API's OpenAPI document, never its source                                                                                                                              |
+| `packages/api-client-python`  | nothing from this repository; generated from the committed OpenAPI document of `api-client`, never the API's source                                                                                                                    |
+| `packages/ui`                 | nothing from this repository except `config`; design tokens, fonts and React components with no data access                                                                                                                            |
+| `packages/config`             | nothing from this repository                                                                                                                                                                                                           |
 
 `packages/db` and `packages/services` must never be imported by `web` or `mcp-admin`, and both Python apps and the Python packages (`packages/api-client-python`, `packages/llm-agent`) have no database access at all. A lint rule enforces this; do not disable it.
 
