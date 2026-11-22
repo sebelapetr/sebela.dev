@@ -7,24 +7,27 @@
 //
 // --images: verify images that already exist locally instead of building them, by the tags in
 //   API_IMAGE_TAG, WEB_IMAGE_TAG and MCP_ADMIN_IMAGE_TAG (the release workflow, which pushes only
-//   images that passed). They are kept at the end.
+//   images that passed), and the AI service's in AI_SERVICE_IMAGE_TAG only when it is set: without
+//   it the AI service and the chat stay off, as in production today. They are kept at the end.
 // --browser: also run the complete-stack browser tests of apps/web against the website (needs the
 //   website's installed dependencies with Chromium; screenshots in
 //   apps/web/test-results/complete-stack/).
 //
 // Needs Docker with Compose, `tar` and `openssl`; plain Node with no dependencies. It builds the API, website
-// and MCP Admin images under the GHCR names the composition runs, with a tag of this run (or takes
-// the given ones, --images), and:
+// and MCP Admin images, and the AI service's, under the GHCR names the composition runs, with a tag
+// of this run (or takes the given ones, --images), and:
 //
 // - checks them with the image-content check (scripts/checks/image-content.mjs), which must pass on
 //   them and refuse its fixture image (scripts/checks/fixtures/image-content/);
 // - starts the composition in a disposable Compose project from the documented production example
 //   settings (infra/production/.env.example) with only what a test run must replace: those image
 //   tags, random passwords and secrets, local storage instead of Bunny, the website on a free
-//   loopback port;
+//   loopback port; with the AI service also its profile and the visitor chat switched on as
+//   production would run it (secure cookies, a Turnstile secret that is no test key, random tokens);
 // - loads the demo seed and checks that Postgres, the API, the website and MCP Admin are healthy,
 //   that the migration finished, that only the website and MCP Admin publish a port, only on the loopback
-//   interface, and that pages show the seed with `noindex` and without the analytics script;
+//   interface, and that pages show the seed with `noindex` and without the analytics script; that
+//   the AI service, when it runs, is healthy, unpublished and reaches the API but not Postgres;
 // - runs the reference reverse-proxy configuration (infra/nginx/sebela.dev.conf) in a throwaway nginx
 //   container in front of the website, with a self-signed certificate, and checks its shared-cache
 //   rule: a page answered 200 gets the public rule; a client navigation (also Next's header-less 307
@@ -58,8 +61,18 @@ const DEMO_SEED = path.join(CHECKOUT_ROOT, "packages", "db", "seed", "demo");
 const WEB_ROOT = path.join(CHECKOUT_ROOT, "apps", "web");
 const PLAYWRIGHT_CLI = path.join(WEB_ROOT, "node_modules", "@playwright", "test", "cli.js");
 const REGISTRY = "ghcr.io/sebelapetr";
-const APPS = ["api", "web", "mcp-admin"];
-const HEALTHY_SERVICES = ["api", "mcp-admin", "postgres", "web"];
+const GIVEN_IMAGES = process.argv.includes("--images");
+// The AI service (profile `ai-service`) runs whenever its image is built here, and with --images
+// only when AI_SERVICE_IMAGE_TAG names one: the release pipeline does not publish it yet.
+const WITH_AI_SERVICE = !GIVEN_IMAGES || (process.env.AI_SERVICE_IMAGE_TAG ?? "") !== "";
+const APPS = ["api", "web", "mcp-admin", ...(WITH_AI_SERVICE ? ["ai-service"] : [])];
+const HEALTHY_SERVICES = [
+  "api",
+  "mcp-admin",
+  "postgres",
+  "web",
+  ...(WITH_AI_SERVICE ? ["ai-service"] : []),
+];
 const PROXY_FILE = path.join(CHECKOUT_ROOT, "infra", "nginx", "sebela.dev.conf");
 const PROXY_IMAGE =
   "nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236";
@@ -69,12 +82,12 @@ const PUBLIC_RULE =
 
 const example = parseEnv(fs.readFileSync(EXAMPLE_FILE, "utf8"));
 const seededPerson = JSON.parse(fs.readFileSync(path.join(DEMO_SEED, "person.json"), "utf8"));
-const GIVEN_IMAGES = process.argv.includes("--images");
 const BROWSER = process.argv.includes("--browser");
 const TAG_VARIABLES = {
   api: "API_IMAGE_TAG",
   web: "WEB_IMAGE_TAG",
   "mcp-admin": "MCP_ADMIN_IMAGE_TAG",
+  "ai-service": "AI_SERVICE_IMAGE_TAG",
 };
 const tag = `smoke-${String(process.pid)}`;
 const tags = Object.fromEntries(
@@ -115,6 +128,34 @@ const secret = randomBytes(32).toString("hex");
 const webPort = String(await freePort(example.WEB_HOST));
 const adminPort = String(await freePort(example.MCP_ADMIN_HOST));
 const web = `http://${example.WEB_HOST}:${webPort}`;
+const chatToken = randomBytes(32).toString("hex");
+const controlToken = randomBytes(32).toString("hex");
+
+/**
+ * The visitor chat switched on as production would run it, with random values: secure cookies, the
+ * website's origin, a Turnstile secret that is no test key and the default Siteverify address. The
+ * smoke sends no chat request, so the model and pricing labels are its own. Without the AI service
+ * every chat setting stays empty, as in the production example.
+ */
+const chatSettings = WITH_AI_SERVICE
+  ? {
+      COMPOSE_PROFILES: "ai-service",
+      AI_SERVICE_IMAGE_TAG: tags["ai-service"],
+      API_CHAT_ALLOWED_ORIGINS: web,
+      API_CHAT_COOKIE_SECURE: "true",
+      API_CHAT_FINGERPRINT_KEY: randomBytes(32).toString("hex"),
+      API_CHAT_MODEL: "smoke-model",
+      API_CHAT_PRICING_VERSION: "smoke-pricing",
+      API_TURNSTILE_SECRET_KEY: randomBytes(32).toString("hex"),
+      API_TURNSTILE_EXPECTED_HOSTNAME: example.WEB_HOST,
+      API_TURNSTILE_VERIFY_URL: "",
+      API_AI_SERVICE_TOKEN: chatToken,
+      API_AI_CONTROL_TOKEN: controlToken,
+      AI_SERVICE_MODEL: "",
+      AI_SERVICE_ALLOW_PAID: "",
+      ANTHROPIC_API_KEY: "",
+    }
+  : { COMPOSE_PROFILES: "" };
 
 // Compose reads the production example (`--env-file`); these process variables take precedence.
 const env = {
@@ -141,6 +182,7 @@ const env = {
   WEB_ANALYTICS_SCRIPT_URL: "",
   WEB_ANALYTICS_WEBSITE_ID: "",
   WEB_INDEXING: "",
+  ...chatSettings,
 };
 
 /** The command's standard output, trimmed; empty when `options.stdio` does not pipe it. */
@@ -304,7 +346,7 @@ try {
     step(`the given images: ${Object.values(images).join(", ")}`);
     for (const image of Object.values(images)) run("docker", ["image", "inspect", image]);
   } else {
-    step("the API, website and MCP Admin images build under their published names");
+    step(`the ${APPS.join(", ")} images build under their published names`);
     for (const app of APPS) {
       run(
         "docker",
@@ -372,6 +414,36 @@ try {
       );
       assert.equal(String(entry.PublishedPort), expected);
     }
+  }
+
+  if (WITH_AI_SERVICE) {
+    step("the AI service reaches the API but not Postgres");
+    const apiContainerPort = compose(["exec", "-T", "api", "printenv", "API_PORT"]);
+    // The port the API itself reaches Postgres on inside the network.
+    const postgresContainerPort = compose(["exec", "-T", "api", "printenv", "POSTGRES_PORT"]);
+    const probe = (target, port) =>
+      compose([
+        "exec",
+        "-T",
+        "ai-service",
+        "python",
+        "-c",
+        [
+          "import socket, sys",
+          "try:",
+          `    socket.create_connection((${JSON.stringify(target)}, int(sys.argv[1])), timeout=3).close()`,
+          "    print('reachable')",
+          "except OSError:",
+          "    print('unreachable')",
+        ].join("\n"),
+        port,
+      ]);
+    assert.equal(probe("api", apiContainerPort), "reachable", "the AI service reaches the API");
+    assert.equal(
+      probe("postgres", postgresContainerPort),
+      "unreachable",
+      "the AI service cannot reach Postgres",
+    );
   }
 
   step("pages show the seed, noindex and no analytics script");
@@ -533,8 +605,15 @@ try {
 
   step("no password or secret in the logs");
   const logs = compose(["logs", "--no-color"]);
-  for (const value of [password, secret]) {
-    assert.ok(!logs.includes(value), "the logs contain no credential");
+  for (const value of [
+    password,
+    secret,
+    chatToken,
+    controlToken,
+    chatSettings.API_CHAT_FINGERPRINT_KEY,
+    chatSettings.API_TURNSTILE_SECRET_KEY,
+  ]) {
+    if (value !== undefined) assert.ok(!logs.includes(value), "the logs contain no credential");
   }
 
   process.stdout.write("Production stack smoke check passed.\n");
@@ -542,9 +621,7 @@ try {
   process.exitCode = 1;
   process.stderr.write(`Production stack smoke check failed: ${describe(error)}\n`);
   try {
-    process.stderr.write(
-      `${compose(["logs", "--no-color", "migrate", "api", "web", "mcp-admin"])}\n`,
-    );
+    process.stderr.write(`${compose(["logs", "--no-color", "migrate", ...APPS])}\n`);
   } catch {
     // The project may not exist.
   }

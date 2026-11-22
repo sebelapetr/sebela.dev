@@ -16,7 +16,10 @@
 # API, both from the image of apps/api/Dockerfile. The profile `web` adds the website from the
 # image of apps/web/Dockerfile (apps/web/AGENTS.md, "Container"); `pnpm stack:up` starts both.
 # The profile `mcp-admin` adds MCP Admin from apps/mcp-admin/Dockerfile (apps/mcp-admin/AGENTS.md,
-# "Container"); start it with `--profile api --profile mcp-admin`.
+# "Container"); start it with `--profile api --profile mcp-admin`. The profile `ai-service` adds the
+# AI service from apps/ai-service/Dockerfile, with the fictional model unless the paid one is chosen
+# explicitly (apps/ai-service/AGENTS.md, "Container"); start it with
+# `--profile api --profile ai-service` and the chat settings (all empty: the chat is off).
 # Worktrees run the API and the website on the host instead; a disposable complete stack of its own
 # (another project name, ports, password and storage folder) is what `pnpm test:web-stack` starts.
 #
@@ -109,6 +112,22 @@ services:
       # no notifications. The website's WEB_INVALIDATION_SECRET must be the same value.
       API_WEB_INVALIDATION_URL: ${API_WEB_INVALIDATION_SECRET:+http://web:8080/internal/invalidation}
       API_WEB_INVALIDATION_SECRET: ${API_WEB_INVALIDATION_SECRET:-}
+      # The visitor chat (apps/api/AGENTS.md, "Configuration"): all empty leaves it off. In the
+      # stack the API calls the AI service's container by its service name, never the host's
+      # API_AI_SERVICE_URL: with the generation token, the service below (profile `ai-service`);
+      # without one, no AI service. The AI service is given the same two tokens.
+      API_CHAT_ALLOWED_ORIGINS: ${API_CHAT_ALLOWED_ORIGINS:-}
+      API_CHAT_COOKIE_SECURE: ${API_CHAT_COOKIE_SECURE:-}
+      API_CHAT_FINGERPRINT_KEY: ${API_CHAT_FINGERPRINT_KEY:-}
+      API_CHAT_RETENTION_DAYS: ${API_CHAT_RETENTION_DAYS:-}
+      API_CHAT_MODEL: ${API_CHAT_MODEL:-}
+      API_CHAT_PRICING_VERSION: ${API_CHAT_PRICING_VERSION:-}
+      API_TURNSTILE_SECRET_KEY: ${API_TURNSTILE_SECRET_KEY:-}
+      API_TURNSTILE_EXPECTED_HOSTNAME: ${API_TURNSTILE_EXPECTED_HOSTNAME:-}
+      API_TURNSTILE_VERIFY_URL: ${API_TURNSTILE_VERIFY_URL:-}
+      API_AI_SERVICE_URL: ${API_AI_SERVICE_TOKEN:+http://ai-service:8080}
+      API_AI_SERVICE_TOKEN: ${API_AI_SERVICE_TOKEN:-}
+      API_AI_CONTROL_TOKEN: ${API_AI_CONTROL_TOKEN:-}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       # Local files live on the media volume below, not in the checkout, so they survive a restart
       # or a rebuilt container. The key namespaces (environment, worktree) apply below this folder.
@@ -145,7 +164,7 @@ services:
     volumes:
       - api-media:/var/lib/sebela/media
     # The only service on every network: Postgres on one, its clients on the others.
-    networks: [admin, content, database]
+    networks: [admin, chat, content, database]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -264,14 +283,69 @@ services:
     # Stopped with SIGTERM: it ends in-flight MCP exchanges and closes its socket.
     restart: unless-stopped
 
+  # The AI service (apps/ai-service/AGENTS.md, "Container"): the chat's generation behind the API.
+  # It reads public content from the API and reports results to its internal control routes, by
+  # the API's service name; it has no database, storage, media or API key setting and no volume,
+  # so private originals never reach it. It shares the chat network with the API only and publishes
+  # no port: only the API calls its generation route. Every setting empty runs the fictional model
+  # (`fake`), so the stack never calls a paid provider unless AI_SERVICE_MODEL=anthropic,
+  # AI_SERVICE_ALLOW_PAID=true, a ceiling and the provider key are all given explicitly. The
+  # provider key is a secret: never put ANTHROPIC_API_KEY in a file Compose reads; start the stack
+  # through the secret wrapper. The fictional model's test files are not passed.
+  ai-service:
+    profiles: [ai-service]
+    build:
+      context: .
+      dockerfile: apps/ai-service/Dockerfile
+    environment:
+      # The container listens on every interface on its own declared port, inside the chat network.
+      AI_SERVICE_HOST: 0.0.0.0
+      LLM_AGENT_PORT: "8080"
+      AI_SERVICE_API_URL: http://api:8080
+      # The same tokens as the API's, so the pair always matches.
+      AI_SERVICE_TOKEN: ${API_AI_SERVICE_TOKEN:-}
+      AI_SERVICE_CONTROL_TOKEN: ${API_AI_CONTROL_TOKEN:-}
+      AI_SERVICE_MODEL: ${AI_SERVICE_MODEL:-}
+      AI_SERVICE_FAKE_SCENARIO: ${AI_SERVICE_FAKE_SCENARIO:-}
+      AI_SERVICE_ALLOW_PAID: ${AI_SERVICE_ALLOW_PAID:-}
+      AI_SERVICE_DAILY_CEILING_USD: ${AI_SERVICE_DAILY_CEILING_USD:-}
+      AI_SERVICE_MAX_OPERATIONS: ${AI_SERVICE_MAX_OPERATIONS:-}
+      AI_SERVICE_ADMISSION_WAIT_S: ${AI_SERVICE_ADMISSION_WAIT_S:-}
+      AI_SERVICE_SHUTDOWN_GRACE_S: ${AI_SERVICE_SHUTDOWN_GRACE_S:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    networks: [chat]
+    depends_on:
+      api:
+        condition: service_healthy
+    # Healthy once it answers its health route, which calls no model and no API.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, sys, urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:" + os.environ["LLM_AGENT_PORT"]
+          + "/health", timeout=4).status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+    # Stopped with SIGTERM: it refuses new generations, waits up to AI_SERVICE_SHUTDOWN_GRACE_S (at
+    # most 65 s) for running ones and Uvicorn adds 10 s, so Compose waits longer before SIGKILL.
+    stop_grace_period: 75s
+    restart: unless-stopped
+
 # Postgres and its clients (the migration and the API) share `database`; the API and the website
-# share `content`; the API and MCP Admin share `admin`. Only the API is on all three, so nothing but
-# the API and the migration can reach Postgres, and nothing but the API can reach MCP Admin, inside
-# Compose.
+# share `content`; the API and MCP Admin share `admin`; the API and the AI service share `chat`.
+# Only the API is on all four, so nothing but the API and the migration can reach Postgres, and
+# nothing but the API can reach MCP Admin or the AI service, inside Compose.
 networks:
   database:
   content:
   admin:
+  chat:
 
 volumes:
   postgres-data:
