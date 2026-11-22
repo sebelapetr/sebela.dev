@@ -2,6 +2,40 @@
 
 All notable changes to sebela.dev, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are counted from the Conventional Commits since the previous version (docs/release-workflow.md, Versions). From v0.3.0 on, each section is byte for byte the notes of its GitHub release, added by the release workflow after a healthy deployment; the sections of v0.1.0 to v0.2.1 were rendered again in this format from the same commits, so they differ from the older notes of their releases. There is no Unreleased section, because every merge into master is deployed.
 
+## [v0.7.3] - 2026-11-21
+
+### Fixes
+
+- escape the theme script's values and add property tests ([#368](https://github.com/sebelapetr/sebela.dev/pull/368))
+
+**Full Changelog**: [v0.7.2...v0.7.3](https://github.com/sebelapetr/sebela.dev/compare/v0.7.2...v0.7.3)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:0d9bec70e31329a2dcf58d9f88725807bf58ee10`, built for this release: `sebela-api-v0.7.3.spdx.json` and `sebela-api-v0.7.3.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-web:0d9bec70e31329a2dcf58d9f88725807bf58ee10`, built for this release: `sebela-web-v0.7.3.spdx.json` and `sebela-web-v0.7.3.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-mcp-admin:0d9bec70e31329a2dcf58d9f88725807bf58ee10`, built for this release: `sebela-mcp-admin-v0.7.3.spdx.json` and `sebela-mcp-admin-v0.7.3.intoto.jsonl` are attached.
+
+How to verify the files and the images: [docs/release-workflow.md](https://github.com/sebelapetr/sebela.dev/blob/master/docs/release-workflow.md#release-files).
+
+
+## [v0.7.2] - 2026-11-21
+
+### Other changes
+
+- **mcp-admin:** take the whole secret of a key in the log-redaction tests ([#388](https://github.com/sebelapetr/sebela.dev/pull/388))
+
+**Full Changelog**: [v0.7.1...v0.7.2](https://github.com/sebelapetr/sebela.dev/compare/v0.7.1...v0.7.2)
+
+### Images
+
+- `ghcr.io/sebelapetr/sebela-api:ec98777ac94d864ff03435f49c0e74c26b3ae98c`, built for this release: `sebela-api-v0.7.2.spdx.json` and `sebela-api-v0.7.2.intoto.jsonl` are attached.
+- `ghcr.io/sebelapetr/sebela-web:569e5b4bd1eabf8accda53232cb8c42b17466c12`, reused unchanged: no files are attached for it; its SBOM and provenance attestations were made by the release run that built it and are stored beside it in GHCR.
+- `ghcr.io/sebelapetr/sebela-mcp-admin:ec98777ac94d864ff03435f49c0e74c26b3ae98c`, built for this release: `sebela-mcp-admin-v0.7.2.spdx.json` and `sebela-mcp-admin-v0.7.2.intoto.jsonl` are attached.
+
+How to verify the files and the images: [docs/release-workflow.md](https://github.com/sebelapetr/sebela.dev/blob/master/docs/release-workflow.md#release-files).
+
+
 ## [v0.7.1] - 2026-11-21
 
 ### Other changes
@@ -18,8 +52,6 @@ All notable changes to sebela.dev, newest first. The format follows [Keep a Chan
 - `ghcr.io/sebelapetr/sebela-mcp-admin:569e5b4bd1eabf8accda53232cb8c42b17466c12`, reused unchanged: no files are attached for it; its SBOM and provenance attestations were made by the release run that built it and are stored beside it in GHCR.
 
 How to verify the files and the images: [docs/release-workflow.md](https://github.com/sebelapetr/sebela.dev/blob/master/docs/release-workflow.md#release-files).
-
-[v0.7.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.1
 
 ## [v0.7.0] - 2026-11-21
 
@@ -45,8 +77,6 @@ How to verify the files and the images: [docs/release-workflow.md](https://githu
 - `ghcr.io/sebelapetr/sebela-web:569e5b4bd1eabf8accda53232cb8c42b17466c12`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:569e5b4bd1eabf8accda53232cb8c42b17466c12`
 
-[v0.7.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.0
-
 ## [v0.6.0] - 2026-11-21
 
 ### Features
@@ -61,8 +91,6 @@ How to verify the files and the images: [docs/release-workflow.md](https://githu
 - `ghcr.io/sebelapetr/sebela-api:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
 - `ghcr.io/sebelapetr/sebela-web:59f0922904c625ad1dd18b89c955bb15aeb9a711`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:14f5e1ca4a9d33b34ab7b008c5f2c8fecfa933c0`
-
-[v0.6.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.6.0
 
 ## [v0.5.0] - 2026-11-21
 
@@ -371,6 +399,11 @@ No changes since v0.2.0; re-release of the same commit.
 - `ghcr.io/sebelapetr/sebela-web:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 - `ghcr.io/sebelapetr/sebela-mcp-admin:92e99dfc8a25bcabedfbf866e17c706f7d65b981`
 
+[v0.7.3]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.3
+[v0.7.2]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.2
+[v0.7.1]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.1
+[v0.7.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.7.0
+[v0.6.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.6.0
 [v0.5.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.5.0
 [v0.4.0]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.4.0
 [v0.3.2]: https://github.com/sebelapetr/sebela.dev/releases/tag/v0.3.2
