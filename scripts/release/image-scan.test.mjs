@@ -151,11 +151,11 @@ describe("exceptions file", () => {
   });
 
   it("refuses an expiry more than 90 days ahead, so no exception is indefinite", () => {
-    const { problems } = parseExceptions(exceptionsText(entry({ expires: "2027-02-20" })), {
+    const { problems } = parseExceptions(exceptionsText(entry({ expires: "2027-02-21" })), {
       today: TODAY,
     });
     assert.match(problems.join("\n"), /CVE-2030-0001.*90 days/);
-    const ok = parseExceptions(exceptionsText(entry({ expires: "2027-02-20" })), {
+    const ok = parseExceptions(exceptionsText(entry({ expires: "2027-02-21" })), {
       today: "2026-11-22",
       horizonDays: 100,
     });
@@ -439,6 +439,35 @@ describe("report command", () => {
       assert.match(call, /--format sarif/);
       assert.match(call, /--exit-code 0/);
       assert.match(call, /--platform linux\/arm64/);
+    }
+  });
+});
+
+describe("workflows", () => {
+  const workflows = path.join(import.meta.dirname, "..", "..", ".github", "workflows");
+  const release = fs.readFileSync(path.join(workflows, "release.yml"), "utf8");
+  const weekly = fs.readFileSync(path.join(workflows, "image-scan.yml"), "utf8");
+
+  it("the release gates the built images after the stack verification and before publishing", () => {
+    const verify = release.indexOf("scripts/checks/production-stack.e2e.mjs --images");
+    const gate = release.indexOf("node scripts/release/image-scan.mjs gate");
+    const publish = release.indexOf("node scripts/release/images.mjs publish");
+    assert.ok(verify > 0 && gate > verify && publish > gate);
+  });
+
+  it("the weekly scan reports on a schedule, needs no secret and runs Trivy from the pinned CLI", () => {
+    assert.match(weekly, /schedule:\s+- cron:/);
+    assert.doesNotMatch(weekly, /secrets\./);
+    assert.doesNotMatch(weekly, /aquasecurity\//);
+    assert.match(weekly, /node scripts\/release\/image-scan\.mjs install/);
+    assert.match(weekly, /node scripts\/release\/image-scan\.mjs report/);
+    assert.match(weekly, /security-events: write/);
+  });
+
+  it("no workflow uses the Trivy or setup-trivy action", () => {
+    for (const name of fs.readdirSync(workflows)) {
+      const text = fs.readFileSync(path.join(workflows, name), "utf8");
+      assert.doesNotMatch(text, /uses:\s*aquasecurity\//, name);
     }
   });
 });
