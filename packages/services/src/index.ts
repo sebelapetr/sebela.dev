@@ -78,6 +78,8 @@ export type {
   ChallengeVerifier,
   ChatCaller,
   ChatClaimOutcome,
+  ChatCompactionDispatch,
+  ChatCompactResult,
   ChatConfig,
   ChatDispatch,
   ChatHistoryExchange,

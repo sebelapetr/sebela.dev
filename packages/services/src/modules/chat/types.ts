@@ -1,5 +1,7 @@
 import type {
   ChatAssistantMessage,
+  ChatCompactionSubmission,
+  ChatContextSummary,
   ChatConversation,
   ChatConversationClear,
   ChatConversationCleared,
@@ -72,6 +74,9 @@ export interface ChatDispatch {
   readonly operationId: string;
   readonly grant: string;
   readonly question: string;
+  /** The summary a compaction installed before `history`; `null` when there is none. */
+  readonly summary: ChatContextSummary | null;
+  /** The working context's exchanges after the summary, oldest first. */
   readonly history: readonly ChatHistoryExchange[];
   /** The question's date in the site's time zone, `YYYY-MM-DD`. */
   readonly today: string;
@@ -92,6 +97,31 @@ export type ChatSubmitResult =
   | { status: "challenge_failed" }
   | { status: "quota_exceeded"; retryAt: Date }
   | { status: "budget_exhausted" };
+
+/**
+ * Everything the AI service needs for one admitted compaction: the working context at
+ * `contextRevision` (the summary and the exchanges after it, oldest first) and the bound terms.
+ */
+export interface ChatCompactionDispatch {
+  readonly operationId: string;
+  readonly grant: string;
+  readonly summary: ChatContextSummary | null;
+  readonly exchanges: readonly ChatHistoryExchange[];
+  readonly deadlineAt: string;
+  readonly contextRevision: number;
+  readonly model: string;
+  readonly effort: string;
+  readonly pricingVersion: string;
+  readonly allowanceUsd: number;
+}
+
+export type ChatCompactResult =
+  | { status: "started"; operation: ChatOperation; dispatch: ChatCompactionDispatch }
+  /** The request id already started this compaction; recovered without a challenge. */
+  | { status: "existing"; operation: ChatOperation }
+  /** The working context is already small: nothing was verified, counted or reserved. */
+  | { status: "noop"; reason: "nothing_to_compact" }
+  | Exclude<ChatSubmitResult, { status: "admitted" | "existing" }>;
 
 /** A retry is a submission keyed by its own id, of an attempt that must exist and have failed. */
 export type ChatRetryOutcome =
@@ -166,6 +196,23 @@ export interface ChatService {
   observe(caller: ChatCaller, operationId: string): Promise<ChatObservation | null>;
   claim(claim: ChatGrantClaim): Promise<ChatClaimOutcome>;
   reconcile(operationId: string, body: unknown): Promise<ChatReconcileOutcome>;
+  /**
+   * Compacts the caller's working context. A request id already used is recovered and an active
+   * operation refuses before any challenge; a context of fewer than three exchanges is a local
+   * no-op. Otherwise the same challenge, quota and spend gates as a question apply, and no
+   * message is appended. Never retried automatically.
+   */
+  compact(
+    caller: ChatCaller,
+    submission: ChatCompactionSubmission,
+    context: { clientAddress: string | null },
+  ): Promise<ChatCompactResult>;
+  /**
+   * Stores a compaction's result once: a valid `compacted` one installs its summary at the
+   * operation's context revision; an invalid body with a grant is stored as a failure. The prior
+   * working context stays for anything else. An answer's operation is `wrong_grant`.
+   */
+  reconcileCompaction(operationId: string, body: unknown): Promise<ChatReconcileOutcome>;
   dispatchRefused(operationId: string): Promise<boolean>;
   interruptOverdue(graceMs: number): Promise<string[]>;
   deleteExpired(limit: number): Promise<number>;
