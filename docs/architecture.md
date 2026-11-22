@@ -26,17 +26,18 @@ The cost is extra HTTP hops and independently managed runtime processes. This is
 
 ## Layers
 
-| Layer                        | Responsibility                                                                                              | Knows about                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Clients (`web`, `mcp-admin`) | Presentation and administration protocol                                                                    | The content API contract                                               |
-| `mcp-public`                 | Public read-only MCP transport                                                                              | The AI read-capability contract                                        |
-| `ai-service`                 | FastAPI AI routes, lifecycle and execution admission                                                        | `llm-agent` package and public content API                             |
-| `llm-agent` package          | Three-stage pipelines, read tools, models, guardrails and evals                                             | Generated content API models/client; no TypeScript imports or database |
-| `api`                        | HTTP, authentication, validation, OpenAPI                                                                   | `services`, `contracts`                                                |
-| `services`                   | Domain logic, composition (for example assembling the CV)                                                   | `db`, `contracts`, `memory`                                            |
-| `db`                         | Schema, migrations, repositories, seed                                                                      | PostgreSQL                                                             |
-| `contracts`                  | Zod schemas and types shared by the API and its clients                                                     | Nothing else in the repository                                         |
-| `api-client`                 | The typed HTTP client of the content API, generated from its OpenAPI document; server-side bearer injection | The committed OpenAPI document; nothing else in the repository         |
+| Layer                        | Responsibility                                                                                              | Knows about                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Clients (`web`, `mcp-admin`) | Presentation and administration protocol                                                                    | The content API contract                                           |
+| `mcp-public`                 | Public read-only MCP transport                                                                              | The AI read-capability contract                                    |
+| `ai-service`                 | FastAPI AI routes, lifecycle and execution admission                                                        | `llm-agent` package and public content API                         |
+| `llm-agent` package          | Three-stage pipelines, read tools, models, guardrails and evals                                             | `api-client-python` (public reads only); no TypeScript or database |
+| `api`                        | HTTP, authentication, validation, OpenAPI                                                                   | `services`, `contracts`                                            |
+| `services`                   | Domain logic, composition (for example assembling the CV)                                                   | `db`, `contracts`, `memory`                                        |
+| `db`                         | Schema, migrations, repositories, seed                                                                      | PostgreSQL                                                         |
+| `contracts`                  | Zod schemas and types shared by the API and its clients                                                     | Nothing else in the repository                                     |
+| `api-client`                 | The typed HTTP client of the content API, generated from its OpenAPI document; server-side bearer injection | The committed OpenAPI document; nothing else in the repository     |
+| `api-client-python`          | The Python client of the content API, generated from the same document; no credential or default address    | The committed OpenAPI document; nothing else in the repository     |
 
 A controller in the API stays thin: it validates input, calls a service, returns the result. Authentication is middleware on the private route group, not logic inside handlers.
 
