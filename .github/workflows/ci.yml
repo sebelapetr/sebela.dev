@@ -90,13 +90,16 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The Python members (packages/llm-agent): the uv version pinned in the root pyproject.toml,
-      # the Python minor of .python-version and exactly what uv.lock records. Their pnpm task
-      # wrappers run through Turborepo like every other package; the drift check below regenerates
-      # the Python content client too.
+      # The Python members (packages/llm-agent): the repository's uv, which is the lower bound of
+      # `required-version` in the root pyproject.toml (`lowest` installs exactly it; the bound
+      # admits the newer uv of Dependabot, scripts/checks/uv-version.test.mjs), the Python minor of
+      # .python-version and exactly what uv.lock records. Their pnpm task wrappers run through
+      # Turborepo like every other package; the drift check below regenerates the Python content
+      # client too.
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version-file: pyproject.toml
+          resolution-strategy: lowest
       - run: uv sync --locked --all-packages
       - name: Postgres for the integration tests
         run: docker compose --env-file .env.example up --detach --wait
@@ -215,12 +218,13 @@ jobs:
       - if: steps.website.outputs.affected == 'true'
         run: pnpm install --frozen-lockfile
       # `pnpm test:e2e` builds every package first (turbo.json, test:e2e), the Python member
-      # (packages/llm-agent, `uv build`) included, so the job needs uv: the version pinned in the
-      # root pyproject.toml.
+      # (packages/llm-agent, `uv build`) included, so the job needs uv: the lower bound of
+      # `required-version` in the root pyproject.toml, as in the quality job.
       - if: steps.website.outputs.affected == 'true'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version-file: pyproject.toml
+          resolution-strategy: lowest
       - name: Chromium for Playwright
         if: steps.website.outputs.affected == 'true'
         run: pnpm --filter @sebela/web exec playwright install --with-deps chromium

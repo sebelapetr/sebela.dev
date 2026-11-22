@@ -86,16 +86,16 @@ Read the [architecture](docs/architecture.md), [package boundaries](docs/reposit
 
 ### Stack
 
-| Area             | Technology                                                          | Status                                                                                                        |
-| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier            | Delivered                                                                                                     |
-| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide       | Delivered; the chat answers from prepared scenarios until phase 7                                             |
-| API & contracts  | Hono, Zod, OpenAPI, generated clients                               | Delivered; the TypeScript client is generated, the Python client follows in phase 6                           |
-| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search | Delivered, with private retrieval behind an authenticated route (phase 9); public search follows in phase 9.1 |
-| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic  | Planned (phase 7)                                                                                             |
-| Verification     | Node's test runner, Vitest, Playwright, Promptfoo                   | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                      |
-| Observability    | Langfuse for AI traces, cost and scoring                            | Planned                                                                                                       |
-| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                 | Delivered: merges into `master` deploy automatically, with rollback and backups, then a release (phase 10).   |
+| Area             | Technology                                                                       | Status                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Workspace        | TypeScript, pnpm workspaces, Turborepo, ESLint, Prettier                         | Delivered                                                                                                     |
+| Website          | Next.js, Tailwind CSS v4, shadcn/ui on Base UI, Geist, Lucide                    | Delivered; the chat answers from prepared scenarios until phase 7                                             |
+| API & contracts  | Hono, Zod, OpenAPI, generated clients                                            | Delivered; the TypeScript client is generated, the Python client follows in phase 6                           |
+| Data & retrieval | PostgreSQL, Drizzle, pgvector, vector similarity + full-text search              | Delivered, with private retrieval behind an authenticated route (phase 9); public search follows in phase 9.1 |
+| AI service       | Python, FastAPI, LangGraph, LangChain model integrations, Pydantic               | Planned (phase 7)                                                                                             |
+| Verification     | Node's test runner, Vitest with fast-check property tests, Playwright, Promptfoo | Deterministic checks and MCP Admin model evals available. pytest is planned for phase 6.                      |
+| Observability    | Langfuse for AI traces, cost and scoring                                         | Planned                                                                                                       |
+| Delivery         | Docker Compose, GitHub Actions, deployment to a VPS                              | Delivered: merges into `master` deploy automatically, with rollback and backups, then a release (phase 10).   |
 
 The visual direction is editorial and monochrome: strong typography, generous whitespace, light and dark themes. See [design](docs/design.md).
 
@@ -106,7 +106,7 @@ The visual direction is editorial and monochrome: strong typography, generous wh
 
 ### Planned visitor assistant
 
-The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers.
+The browser reaches the assistant through the website and API. The API owns conversations and access controls; the Python service produces answers. The [threat model](docs/threat-model.md) lists what a visitor may try, which layer stops it and what remains a residual risk.
 
 1. **Check access and cost.** The API verifies conversation ownership, applies rate limits and bot checks, and checks the available budget before a model call.
 2. **Guard the input.** A small model checks for off-topic requests, manipulation and abuse.
@@ -116,6 +116,8 @@ The browser reaches the assistant through the website and API. The API owns conv
 Answers include typed blocks such as experience, services, roadmap items and sources. Missing evidence leads to an explicit “I don't know” and a contact option. Built, tested and designed work must retain its recorded status.
 
 The approved phase 6 design defines three stages (Security Gateway, Main Agent and deterministic Output Guard), along with the initial models, spending limits and evaluation thresholds. Phase 7 connects runtime tracing to Langfuse. [LLM agent specification](.plan/done/06-llm-agent/prd.md)
+
+What the phase 6 evals measured, what failed on the way and what they do not test: [phase 06 evaluation report](docs/evals/06-llm-agent.md).
 
 ### Two servers, two responsibilities
 
@@ -349,18 +351,19 @@ MCP Admin has deterministic integration tests against the real API and a Promptf
 
 ## Documentation
 
-| Read this                                                                                            | For                                                      |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [Overview PRD](.plan/00-overview/prd.md)                                                             | Product scope, audiences and phase boundaries            |
-| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md)                         | Data flow, trust boundary and engineering tradeoffs      |
-| [Repository structure](docs/repository-structure.md)                                                 | Target layout, allowed imports and worktree isolation    |
-| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md)                                   | Canonical terms, entity relationships and access rules   |
-| [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements     |
-| [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations             |
-| [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries       |
-| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback               |
-| [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)                                     | How to help, and how to report a vulnerability privately |
-| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                       |
+| Read this                                                                                            | For                                                                          |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Overview PRD](.plan/00-overview/prd.md)                                                             | Product scope, audiences and phase boundaries                                |
+| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md)                         | Data flow, trust boundary and engineering tradeoffs                          |
+| [Threat model](docs/threat-model.md)                                                                 | What a visitor may try against the chatbot and public MCP, and what stops it |
+| [Repository structure](docs/repository-structure.md)                                                 | Target layout, allowed imports and worktree isolation                        |
+| [Glossary](GLOSSARY.md) · [Domain context](docs/domain-context.md)                                   | Canonical terms, entity relationships and access rules                       |
+| [Design](docs/design.md)                                                                             | Visual direction, themes and responsive requirements                         |
+| [Code standards](docs/code-standards.md) · [Testing](docs/testing.md)                                | Implementation and verification expectations                                 |
+| [Git workflow](docs/git-workflow.md) · [Agents](docs/agents.md) · [Permissions](docs/permissions.md) | Branches, reviews, roles and automation boundaries                           |
+| [Release workflow](docs/release-workflow.md)                                                         | Deployment, releases, backups and rollback                                   |
+| [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)                                     | How to help, and how to report a vulnerability privately                     |
+| [Changelog](CHANGELOG.md)                                                                            | What each released version brought                                           |
 
 ## License
 

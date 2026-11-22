@@ -9,7 +9,7 @@ import { fixtureFolder, revokeKey, startApi } from "../evals/fixture.js";
 
 import { startMcpAdminServer } from "./app.js";
 import { readMcpAdminConfig } from "./config.js";
-import { toolText } from "./test-support/index.js";
+import { secretOf, toolText, UNDERSCORE_SECRET_KEY } from "./test-support/index.js";
 
 type RunningApi = Awaited<ReturnType<typeof startApi>>;
 
@@ -67,6 +67,7 @@ describe("the authenticated read path", () => {
   it("refuses a client without a key, or with an unknown one, before discovery", async () => {
     await expect(connect(null)).rejects.toThrow();
     await expect(connect(`sebela_${"0".repeat(16)}_${"Z".repeat(43)}`)).rejects.toThrow();
+    await expect(connect(UNDERSCORE_SECRET_KEY)).rejects.toThrow();
   });
 
   it("lists the content tools and reads the fixture's person", async () => {
@@ -141,9 +142,16 @@ describe("the authenticated read path", () => {
 
   it("keeps every fixture key out of the log", () => {
     expect(lines.length).toBeGreaterThan(0);
-    for (const name of ["owner", "second", "revoked"]) {
-      const secret = keyOf(name).split("_")[2] ?? keyOf(name);
-      for (const line of lines) expect(line).not.toContain(secret);
+    // The secret is everything after the public id and may itself contain `_`, as the refused
+    // UNDERSCORE_SECRET_KEY's does every run; the random fixture keys' secrets may or may not.
+    expect(secretOf(UNDERSCORE_SECRET_KEY)).toHaveLength(43);
+    expect(secretOf(UNDERSCORE_SECRET_KEY).startsWith("_")).toBe(true);
+    const keys = [...["owner", "second", "revoked"].map(keyOf), UNDERSCORE_SECRET_KEY];
+    for (const key of keys) {
+      for (const line of lines) {
+        expect(line).not.toContain(key);
+        expect(line).not.toContain(secretOf(key));
+      }
     }
   });
 });

@@ -13,6 +13,7 @@
 | Branches, commits, pull requests             | `docs/git-workflow.md`                                                                                                                                                               |
 | Dispatching or acting as an agent            | `docs/agents.md`                                                                                                                                                                     |
 | Unsure whether an action is allowed          | `docs/permissions.md`                                                                                                                                                                |
+| Chat, agent library or public MCP security   | `docs/threat-model.md`                                                                                                                                                               |
 | Any UI                                       | `docs/design.md`                                                                                                                                                                     |
 
 - If the code and a document disagree, fix one of them in the same pull request.

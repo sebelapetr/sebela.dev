@@ -25,7 +25,7 @@ In scope:
 - the release and deployment pipeline (`.github/workflows/`, `scripts/release/`, `infra/`);
 - this repository itself: the code, the agent harness (`harness/`), its hooks and the checks that protect `master`.
 
-Particularly interesting are anything that crosses the [trust boundary](docs/architecture.md#the-api-is-the-trust-boundary) — a public caller writing content, reading private operational data or reaching the database — a leaked or bypassed API key, a prompt injection that makes the chat or an MCP server act outside its rules, and a way to get unreviewed code deployed.
+Particularly interesting are anything that crosses the [trust boundary](docs/architecture.md#the-api-is-the-trust-boundary) — a public caller writing content, reading private operational data or reaching the database — a leaked or bypassed API key, a prompt injection that makes the chat or an MCP server act outside its rules, and a way to get unreviewed code deployed. The [threat model](docs/threat-model.md) lists the known defences and accepted residual risks of the chat and the public MCP server; a way around a listed defence, other than the residual risks it accepts, is in scope.
 
 Out of scope:
 

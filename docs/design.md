@@ -42,7 +42,7 @@ Only these two sets exist. Tokens are defined once in the shared UI package (`pa
 Light and dark, following the system preference by default, with a toggle in the header.
 
 - **Choice.** The toggle is a button named "Dark theme", pressed while dark shows (`aria-pressed`); its icon is a moon in light and a sun in dark. Pressing it stores the visitor's explicit choice in `localStorage` (`sebela-theme`); from then on the choice wins over the system on every page and after a reload. Without a choice the site follows the system, also when it changes while the page is open.
-- **No flash.** An inline script at the top of `<head>` reads the stored choice and sets `data-theme` on `<html>` before anything is painted. The dark tokens apply under `prefers-color-scheme: dark` unless `data-theme="light"`, and always under `data-theme="dark"`; Tailwind's `dark:` variant follows the same rule. The server renders no theme, so nothing mismatches on hydration.
+- **No flash.** An inline script at the top of `<head>` reads the stored choice and sets `data-theme` on `<html>` before anything is painted. The script's values are written as string literals that cannot end the script element. The dark tokens apply under `prefers-color-scheme: dark` unless `data-theme="light"`, and always under `data-theme="dark"`; Tailwind's `dark:` variant follows the same rule. The server renders no theme, so nothing mismatches on hydration.
 - **No storage.** When the browser refuses storage, the toggle still switches the page and the choice lasts until the next page load.
 - **Print** is always light.
 

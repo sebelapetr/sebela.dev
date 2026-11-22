@@ -72,16 +72,18 @@ Run them from this folder, or through pnpm from the root (`pnpm --filter @sebela
 
 **Toolchain:**
 
-| Tool                  | Version | Pinned in                                       |
-| --------------------- | ------- | ----------------------------------------------- |
-| Python                | 3.13    | `.python-version` and `requires-python`         |
-| uv                    | 0.7.22  | `required-version` in the root `pyproject.toml` |
-| Ruff                  | 0.17.6  | this package's `pyproject.toml`, dev group      |
-| mypy                  | 2.4.1   | this package's `pyproject.toml`, dev group      |
-| pytest                | 9.2.0   | this package's `pyproject.toml`, dev group      |
-| pytest-cov            | 7.1.0   | this package's `pyproject.toml`, dev group      |
-| coverage              | 7.17.3  | this package's `pyproject.toml`, dev group      |
-| openapi-python-client | 0.30.0  | this package's `pyproject.toml`, dev group      |
+| Tool                  | Version | Pinned in                                                          |
+| --------------------- | ------- | ------------------------------------------------------------------ |
+| Python                | 3.13    | `.python-version` and `requires-python`                            |
+| uv                    | 0.7.22  | the lower bound of `required-version` in the root `pyproject.toml` |
+| Ruff                  | 0.17.6  | this package's `pyproject.toml`, dev group                         |
+| mypy                  | 2.4.1   | this package's `pyproject.toml`, dev group                         |
+| pytest                | 9.2.0   | this package's `pyproject.toml`, dev group                         |
+| pytest-cov            | 7.1.0   | this package's `pyproject.toml`, dev group                         |
+| coverage              | 7.17.3  | this package's `pyproject.toml`, dev group                         |
+| openapi-python-client | 0.30.0  | this package's `pyproject.toml`, dev group                         |
+
+Install exactly that uv locally. uv refuses an older version but not a newer one (the bound admits Dependabot's uv, `docs/git-workflow.md`, Dependency pull requests), and CI runs the lower bound.
 
 The rest of the toolchain:
 
