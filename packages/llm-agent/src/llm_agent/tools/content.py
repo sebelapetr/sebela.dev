@@ -36,6 +36,7 @@ from sebela_api_client.api.default import (
     list_roadmap_books,
     list_roadmap_events,
     list_services,
+    list_technologies,
 )
 from sebela_api_client.models.current_focus import CurrentFocus
 from sebela_api_client.models.diary import Diary
@@ -66,6 +67,7 @@ from sebela_api_client.models.service_exploration_evidence import (
 from sebela_api_client.models.service_project_evidence import (
     ServiceProjectEvidence,
 )
+from sebela_api_client.models.technology import Technology
 from sebela_api_client.types import Response
 
 #: Transport timeout of one content read; the tool call timeout bounds it further.
@@ -642,6 +644,18 @@ def _education(education: Education) -> PublicEducation:
     )
 
 
+def _technology(technology: Technology) -> PublicTechnology:
+    return PublicTechnology.model_validate(
+        {
+            "id": str(technology.id),
+            "slug": technology.slug,
+            "name": technology.name,
+            "tier": str(technology.tier),
+            "group": None if technology.group is None else str(technology.group),
+        }
+    )
+
+
 def _focus(focus: CurrentFocus) -> PublicCurrentFocus:
     project = focus.project
     return PublicCurrentFocus(
@@ -927,7 +941,8 @@ class ApiContentReader:
         return self._map(lambda rows: [_education(row) for row in rows], items)
 
     async def read_technologies(self) -> list[PublicTechnology]:
-        raise NotImplementedError
+        items = await self._fetch(list_technologies.asyncio_detailed(client=self._client), list)
+        return self._map(lambda rows: [_technology(row) for row in rows], items)
 
     async def read_current_focus(self) -> list[PublicCurrentFocus]:
         items = await self._fetch(list_current_focus.asyncio_detailed(client=self._client), list)

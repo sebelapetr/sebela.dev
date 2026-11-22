@@ -24,7 +24,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, get_args
+from typing import Any, Final, Literal, get_args
 
 from pydantic import BaseModel, ValidationError
 
@@ -62,6 +62,7 @@ from llm_agent.tools.content import (
     PublicRoadmap,
     PublicRoadmapArea,
     PublicService,
+    PublicTechnology,
     valid_slug,
 )
 
@@ -763,11 +764,45 @@ def _error(code: str, message: str) -> str:
 
 # --- Read capabilities ----------------------------------------------------------------------------
 
-#: The tools a read caller may use outside a chat execution: every read tool but the contact read,
-#: whose e-mail and links reach a visitor only as the chat's trusted contact card.
-READ_CAPABILITIES: Final[tuple[ToolName, ...]] = tuple(t for t in TOOLS if t != "get_contact")
-#: The name, description and input schema of each read capability.
-READ_CAPABILITY_SPECS: Final[tuple[dict[str, Any], ...]] = TOOL_SPECS
+#: The read capabilities: every read tool but the contact read, whose e-mail and links reach a
+#: visitor only as the chat's trusted contact card, and the technology catalogue, which no model
+#: tool reads (the model sees technologies inside the career records).
+CapabilityName = Literal[
+    "get_profile",
+    "list_experiences",
+    "list_projects",
+    "get_project",
+    "list_services",
+    "list_explorations",
+    "list_education",
+    "list_current_focus",
+    "get_roadmap",
+    "get_roadmap_area",
+    "get_learning_diary",
+    "get_learning_statistics",
+    "list_books",
+    "list_events",
+    "list_technologies",
+]
+#: The kind of a capability record: a source kind, or a technology of the catalogue.
+RecordKind = Literal[SourceKind, "technology"]
+READ_CAPABILITIES: Final[tuple[CapabilityName, ...]] = get_args(CapabilityName)
+#: The canonical site section of the technology catalogue.
+TECHNOLOGY_HREF: Final = "/experience#technologies-heading"
+_TECHNOLOGY_SPEC: Final[dict[str, Any]] = {
+    "name": "list_technologies",
+    "description": (
+        "Read the published technology catalogue: each technology's name, its tier (primary or"
+        " secondary) and, for a primary technology, its group (core or AI engineering focus)."
+    ),
+    "input_schema": _NO_ARGUMENTS,
+}
+#: The name, description and input schema of each read capability, in `READ_CAPABILITIES` order;
+#: a capability that is a model tool keeps the tool's own spec.
+READ_CAPABILITY_SPECS: Final[tuple[dict[str, Any], ...]] = tuple(
+    next(spec for spec in (*TOOL_SPECS, _TECHNOLOGY_SPEC) if spec["name"] == name)
+    for name in READ_CAPABILITIES
+)
 #: Records one capability page carries by default.
 PAGE_RECORDS: Final = 10
 #: Records one capability read may list across all its pages; a longer list is refused.
@@ -792,7 +827,7 @@ class ToolResultTooLargeError(Exception):
 class ToolRecord:
     """One projected record: its kind, its own identifier, title and canonical site path."""
 
-    kind: SourceKind
+    kind: RecordKind
     record_id: str
     title: str
     href: str
@@ -801,7 +836,7 @@ class ToolRecord:
 
 @dataclass(frozen=True)
 class ToolPage:
-    capability: ToolName
+    capability: CapabilityName
     records: tuple[ToolRecord, ...]
     page: int
     page_count: int
@@ -819,36 +854,29 @@ async def read_tool(
     """One page of a read capability: the in-process tool's projection of the same read.
 
     The name and arguments are validated before any read, with the tools' own rules; the records
-    are the projections `Tools` gives the model, in the same order. Raises `ToolNotAvailableError`,
+    are the projections `Tools` gives the model, in the same order. `list_technologies`, which no
+    model tool reads, takes no arguments and lists the catalogue in its published order, each
+    record without its identifier or logo. Raises `ToolNotAvailableError`,
     `InvalidToolArgumentsError` (also for a page outside the result), `ToolResultTooLargeError`,
     `ContentNotFoundError` or `ContentUnavailableError`.
     """
-    tool = _tool(name)
-    if tool is None or tool not in READ_CAPABILITIES:
+    capability = next((item for item in READ_CAPABILITIES if item == name), None)
+    if capability is None:
         raise ToolNotAvailableError(name)
-    try:
-        slug = _arguments(tool, arguments)
-    except _Rejected as rejected:
-        raise InvalidToolArgumentsError(rejected.message) from None
+    if capability == "list_technologies":
+        if arguments:
+            raise InvalidToolArgumentsError("This capability takes no arguments.")
+        slug = None
+    else:
+        try:
+            slug = _arguments(capability, arguments)
+        except _Rejected as rejected:
+            raise InvalidToolArgumentsError(rejected.message) from None
     if page < 1 or page_records < 1:
         raise InvalidToolArgumentsError("The page must be a positive number.")
-    _, read = _reader(content, tool, slug)
-    value = await read()
-    if tool == "get_profile":
-        records = [
-            # The profile view omits the person's identifier; the record is the one profile.
-            ToolRecord(
-                "profile", "profile", value.name, CANONICAL_HREF["profile"], profile_view(value)
-            )
-        ]
-    else:
-        projected = _records(tool, value)
-        if len({(record.kind, record.slug) for record in projected}) != len(projected):
-            raise ContentUnavailableError("the published data has duplicate records")
-        records = [
-            ToolRecord(record.kind, record.slug, record.title, record.href, record.data)
-            for record in projected
-        ]
+    records = await _capability_records(content, capability, slug)
+    if len({(record.kind, record.record_id) for record in records}) != len(records):
+        raise ContentUnavailableError("the published data has duplicate records")
     if len(records) > MAX_LISTED_RECORDS:
         raise ToolResultTooLargeError("the result has too many records")
     page_count = max(1, -(-len(records) // page_records))
@@ -857,4 +885,28 @@ async def read_tool(
     selected = tuple(records[(page - 1) * page_records : page * page_records])
     if json_tokens([record.data for record in selected]) > page_tokens:
         raise ToolResultTooLargeError("the page is too large")
-    return ToolPage(tool, selected, page, page_count)
+    return ToolPage(capability, selected, page, page_count)
+
+
+async def _capability_records(
+    content: ContentReader, capability: CapabilityName, slug: str | None
+) -> list[ToolRecord]:
+    if capability == "list_technologies":
+        technologies: list[PublicTechnology] = await content.read_technologies()
+        return [
+            ToolRecord("technology", t.slug, t.name, TECHNOLOGY_HREF, _dump(t))
+            for t in technologies
+        ]
+    _, read = _reader(content, capability, slug)
+    value = await read()
+    if capability == "get_profile":
+        # The profile view omits the person's identifier; the record is the one profile.
+        return [
+            ToolRecord(
+                "profile", "profile", value.name, CANONICAL_HREF["profile"], profile_view(value)
+            )
+        ]
+    return [
+        ToolRecord(record.kind, record.slug, record.title, record.href, record.data)
+        for record in _records(capability, value)
+    ]
