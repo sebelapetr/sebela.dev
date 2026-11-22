@@ -1,6 +1,7 @@
 // The website's same-origin chat routes, relayed to the API's visitor chat routes: the browser's
-// cookie, origin and client address go through unchanged, nothing is added (no API key, no
-// invented origin), and the API's answer comes back as it is, event streams unbuffered.
+// cookie and origin go through unchanged, the relay adds its own token and the visitor's address
+// as the trusted proxies saw it (never an API key, an invented origin or the browser's
+// X-Forwarded-For), and the API's answer comes back as it is, event streams unbuffered.
 
 /** Which visitor chat route a request is for; the operation as the website's route named it. */
 export type ChatRelayRoute =
@@ -34,8 +35,24 @@ const forwardedRequestHeaders = [
   "cookie",
   "last-event-id",
   "origin",
-  "x-forwarded-for",
 ] as const;
+
+/** The header with the relay's token, which the API's visitor routes require. */
+const relayHeader = "x-sebela-chat-relay";
+/** The header with the visitor's address, which the API believes only with the token. */
+const clientHeader = "x-sebela-chat-client";
+
+/**
+ * The visitor's address: the `hops`-th `X-Forwarded-For` entry from the right, which the nearest
+ * trusted proxy appended. Entries further left are the visitor's own claims and never used. Null
+ * without trusted hops or with too few entries.
+ */
+function visitorAddress(forwardedFor: string | null, hops: number): string | null {
+  if (hops === 0 || forwardedFor === null) return null;
+  const entries = forwardedFor.split(",").map((entry) => entry.trim());
+  const address = entries.length >= hops ? entries[entries.length - hops] : undefined;
+  return address === undefined || address === "" ? null : address;
+}
 
 /** The response headers the browser needs; everything else the API sent stays behind. */
 const forwardedResponseHeaders = ["content-type", "retry-after"] as const;
@@ -104,11 +121,12 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
 
 /**
  * Builds the relay. It forwards only the headers the visitor routes read (cookie, origin, content
- * type, accept, last event ID, client address) and never an API key or authorisation; a question
+ * type, accept, last event ID), adds its token and, with trusted proxy hops, the visitor's address
+ * from X-Forwarded-For counted from the right, and never an API key or authorisation; a question
  * body over `chatRelayMaxBodyBytes` is refused with 413, an operation ID that is not a UUID with
  * 404, both without reaching the API. The answer keeps the API's status and body stream with its
  * content type, every cookie and Retry-After, is never cached, and an event stream is marked
- * unbuffered. An API it cannot reach answers 503 `unavailable`.
+ * unbuffered. Without its settings, or with an API it cannot reach, it answers 503 `unavailable`.
  */
 export function createChatRelay(
   options: ChatRelayOptions,
@@ -116,12 +134,22 @@ export function createChatRelay(
   return async (request, route) => {
     const path = upstreamPath(request, route);
     if (path === null) return errorResponse(404, "not_found", "There is no such operation.");
+    const settings = options.settings();
+    if (settings === null) {
+      return errorResponse(503, "unavailable", "The chat is not available right now.");
+    }
 
     const headers = new Headers();
     for (const name of forwardedRequestHeaders) {
       const value = request.headers.get(name);
       if (value !== null) headers.set(name, value);
     }
+    headers.set(relayHeader, settings.token);
+    const address = visitorAddress(
+      request.headers.get("x-forwarded-for"),
+      settings.trustedProxyHops,
+    );
+    if (address !== null) headers.set(clientHeader, address);
 
     let body: Uint8Array<ArrayBuffer> | undefined;
     if (route.kind === "messages") {

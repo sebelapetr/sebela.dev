@@ -1,8 +1,10 @@
 // The chat relay module: the website's same-origin chat routes (`/api/chat/*`), relayed to the
-// API's visitor chat routes over HTTP. The browser's cookie, origin and client address go through
-// unchanged and nothing is added (no API key); the API's answer, cookies and event streams come
-// back unbuffered and never cached. An operation ID that is not a UUID answers 404 and an oversized
-// question 413 without reaching the API; an API it cannot reach answers 503 `unavailable`. It also
+// API's visitor chat routes over HTTP. The browser's cookie and origin go through unchanged; the
+// relay adds its token (`WEB_CHAT_RELAY_TOKEN`) and the visitor's address as the trusted proxies
+// saw it (`WEB_TRUSTED_PROXY_HOPS`), never an API key or the browser's X-Forwarded-For. The API's
+// answer, cookies and event streams come back unbuffered and never cached. An operation ID that is
+// not a UUID answers 404 and an oversized question 413 without reaching the API; without the token,
+// or with an API it cannot reach, it answers 503 `unavailable`. It also
 // gives the Ask page the person check's public site key, read per request.
 import "server-only";
 

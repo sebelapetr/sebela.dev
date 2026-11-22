@@ -281,14 +281,51 @@ export function readTurnstileSiteKey(
   return value;
 }
 
+/** The shortest accepted chat relay token, as the API's `API_CHAT_RELAY_TOKEN` requires. */
+const CHAT_RELAY_TOKEN_MIN_LENGTH = 32;
+/** The most proxy hops in front of the website the relay can be told to trust. */
+const MAX_TRUSTED_PROXY_HOPS = 10;
+
 /** The website side of the chat relay. */
 export interface ChatRelayConfig {
+  /** `WEB_CHAT_RELAY_TOKEN`: the same value as the API's `API_CHAT_RELAY_TOKEN`; never logged. */
   readonly token: string;
+  /**
+   * `WEB_TRUSTED_PROXY_HOPS`: how many proxies in front of the website append to
+   * `X-Forwarded-For`; the visitor's address is that many entries from the right. 0 when unset or
+   * empty: no address is named.
+   */
   readonly trustedProxyHops: number;
 }
 
+/**
+ * Reads the chat relay's settings (`WEB_CHAT_RELAY_TOKEN`, `WEB_TRUSTED_PROXY_HOPS`) per request.
+ * Null when the token is unset or empty: the relay answers `unavailable` without reaching the API.
+ * Throws an error naming every invalid variable, never its value, for a token shorter than 32
+ * characters or hops that are not a whole number from 0 to 10.
+ */
 export function readChatRelayConfig(
   env: Readonly<Record<string, string | undefined>>,
 ): ChatRelayConfig | null {
-  throw new Error(`not implemented: ${String(Object.keys(env).length)}`);
+  const token = env["WEB_CHAT_RELAY_TOKEN"] ?? "";
+  if (token === "") return null;
+  const hopsText = env["WEB_TRUSTED_PROXY_HOPS"] ?? "";
+  const hops = hopsText === "" ? 0 : /^\d{1,2}$/.test(hopsText) ? Number(hopsText) : Number.NaN;
+  const problems: string[] = [];
+  if (token.length < CHAT_RELAY_TOKEN_MIN_LENGTH) {
+    problems.push(
+      `WEB_CHAT_RELAY_TOKEN must be at least ${String(CHAT_RELAY_TOKEN_MIN_LENGTH)} characters`,
+    );
+  }
+  if (!(hops >= 0 && hops <= MAX_TRUSTED_PROXY_HOPS)) {
+    problems.push(
+      `WEB_TRUSTED_PROXY_HOPS must be a whole number from 0 to ${String(MAX_TRUSTED_PROXY_HOPS)}`,
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `Invalid website configuration (documented in .env.example): ${problems.join("; ")}`,
+    );
+  }
+  return { token, trustedProxyHops: hops };
 }
