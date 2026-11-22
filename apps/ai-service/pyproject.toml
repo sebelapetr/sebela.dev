@@ -12,12 +12,15 @@ dependencies = [
   "langchain-core==1.8.4",
   "llm-agent",
   "pydantic==2.14.4",
+  "sebela-api-client",
   "uvicorn==0.54.0",
 ]
 
-# The agent library, a member of the same uv workspace (packages/llm-agent).
+# The agent library and the generated API client, members of the same uv workspace
+# (packages/llm-agent, packages/api-client-python).
 [tool.uv.sources]
 llm-agent = { workspace = true }
+sebela-api-client = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -50,9 +53,10 @@ select = ["E", "W", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF", "C4", "PT"]
 [tool.ruff.lint.isort]
 known-first-party = ["ai_service"]
 
-# mypy strict with the Pydantic plugin is the one type checker. The generated content client
-# (`sebela_api_client`, packages/api-client-python) reaches this app only through llm-agent: its
-# own bodies are skipped (`ignore_errors`).
+# mypy strict with the Pydantic plugin is the one type checker. The generated API client
+# (`sebela_api_client`, packages/api-client-python) is imported here only by the control client
+# (`ai_service.clients.control_api`) and, for its content reads, through llm-agent: its own bodies
+# are skipped (`ignore_errors`), its signatures type the callers.
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]

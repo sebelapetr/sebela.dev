@@ -1,9 +1,10 @@
 """The service's wire bodies, in the API contract's camelCase shapes.
 
 `GenerationRequest` is what the API dispatches (`POST /internal/v1/generations`); it forbids any
-field it does not name, so no request can choose a model scenario or a limit. `Claimed` is the
-API's answer to a grant claim, and `ResultReport` the one result this service reconciles
-(`ChatGenerationResult` in `@sebela/contracts`).
+field it does not name, so no request can choose a model scenario or a limit. `ResultReport` is the
+one result this service reconciles: a validating guard of `ChatGenerationResult` in the API
+document, tied to it field by field by `tests/test_contract.py`; the control client sends it as the
+generated model. The grant claim's answer has no local copy: it is the generated `ChatGrantClaimed`.
 """
 
 from __future__ import annotations
@@ -94,19 +95,6 @@ class Problem(_Body):
     code: Literal["busy", "unauthorized", "version_mismatch", "unavailable"]
 
 
-class Claimed(BaseModel):
-    """The API's answer to a successful grant claim: the terms the generation is bound to."""
-
-    model_config = ConfigDict(frozen=True, alias_generator=to_camel, populate_by_name=True)
-
-    claimed: Literal[True]
-    deadline_at: AwareDatetime
-    allowance_usd: float = Field(gt=0)
-    model: str
-    pricing_version: str
-    context_revision: int = Field(ge=0)
-
-
 class ReportRecord(_Body):
     kind: ContractKind
     id: Annotated[str, StringConstraints(min_length=1, max_length=200)]
@@ -137,7 +125,7 @@ class ResultReport(_Body):
     #: Typed blocks in the contract's camelCase shape (`ChatBlock`).
     blocks: list[dict[str, Any]] = Field(max_length=MAX_BLOCKS)
     sources: list[ReportSource] = Field(max_length=MAX_SOURCES)
-    related: list[dict[str, str]] = Field(default_factory=list, max_length=2)
+    related: list[dict[str, str]] = Field(max_length=2)
     usage: ReportUsage
     versions: dict[str, str] = Field(max_length=MAX_VERSIONS)
     latency_ms: int = Field(ge=0)

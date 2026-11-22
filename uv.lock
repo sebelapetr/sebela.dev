@@ -20,6 +20,7 @@ dependencies = [
     { name = "langchain-core" },
     { name = "llm-agent" },
     { name = "pydantic" },
+    { name = "sebela-api-client" },
     { name = "uvicorn" },
 ]
 
@@ -41,6 +42,7 @@ requires-dist = [
     { name = "langchain-core", specifier = "==1.8.4" },
     { name = "llm-agent", editable = "packages/llm-agent" },
     { name = "pydantic", specifier = "==2.14.4" },
+    { name = "sebela-api-client", editable = "packages/api-client-python" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 

@@ -2,7 +2,8 @@
 
 No test calls a provider or a real API. The fake API answers the public person read and the two
 control routes over an httpx2 `MockTransport`; it records every claim and every reported result.
-It is shared between two service instances to simulate a restart.
+It is shared between two service instances to simulate a restart. Its bodies have the API
+document's shapes (`ChatGrantClaimed`, `ChatOperation`, `ErrorResponse`).
 """
 
 from __future__ import annotations
@@ -60,6 +61,11 @@ PERSON: dict[str, Any] = {
 }
 
 
+def error(code: str) -> dict[str, Any]:
+    """The API's common error body (`ErrorResponse`)."""
+    return {"error": {"code": code, "message": "A fictional failure."}}
+
+
 def settings(**overrides: str) -> Settings:
     return Settings.from_env({**ENV, **overrides})
 
@@ -81,6 +87,10 @@ class FakeApi:
     #: The deadline the claim returns; None returns the request's own deadline.
     claim_deadline: str | None = None
     claim_allowance: float = 0.02
+    #: The bound terms the claim returns; the defaults are this agent's and the request's.
+    claim_model: str = "claude-haiku-5-5"
+    claim_pricing_version: str = "anthropic-2026-11-19"
+    claim_context_revision: int = 1
     person_status: int = 200
     person_delay_s: float = 0.0
     person_reads: int = 0
@@ -118,25 +128,25 @@ class FakeApi:
             if self.person_delay_s:
                 await asyncio.sleep(self.person_delay_s)
             if self.person_status != 200:
-                return httpx2.Response(self.person_status, json={"error": "unavailable"})
+                return httpx2.Response(self.person_status, json=error("unavailable"))
             return httpx2.Response(200, json=PERSON)
         if request.headers.get("authorization") != f"Bearer {CONTROL_TOKEN}":
-            return httpx2.Response(401, json={"error": "unauthorized"})
+            return httpx2.Response(401, json=error("unauthorized"))
         body = json.loads(request.content)
         if path == "/v1/internal/chat/grants/claim" and request.method == "POST":
             return self._claim(body)
         prefix, _, rest = path.partition("/v1/internal/chat/operations/")
         if not prefix and rest.endswith("/result") and request.method == "POST":
             return self._result(rest.removesuffix("/result"), body)
-        return httpx2.Response(404, json={"error": "not_found"})
+        return httpx2.Response(404, json=error("not_found"))
 
     def _claim(self, body: dict[str, Any]) -> httpx2.Response:
         self.claims.append(body)
         operation = body["operationId"]
         if self.grants.get(operation) != body["grant"]:
-            return httpx2.Response(403, json={"error": "forbidden"})
+            return httpx2.Response(403, json=error("forbidden"))
         if operation in self.claimed:
-            return httpx2.Response(409, json={"error": "conflict"})
+            return httpx2.Response(409, json=error("conflict"))
         self.claimed.add(operation)
         return httpx2.Response(
             200,
@@ -144,21 +154,31 @@ class FakeApi:
                 "claimed": True,
                 "deadlineAt": self.claim_deadline or self.deadlines[operation],
                 "allowanceUsd": self.claim_allowance,
-                "model": "claude-haiku-5-5",
-                "pricingVersion": "anthropic-2026-11-19",
-                "contextRevision": 1,
+                "model": self.claim_model,
+                "pricingVersion": self.claim_pricing_version,
+                "contextRevision": self.claim_context_revision,
             },
         )
 
     def _result(self, operation: str, body: dict[str, Any]) -> httpx2.Response:
         self.report_attempts.append(body)
         if self.report_failures:
-            return httpx2.Response(self.report_failures.pop(0), json={"error": "failed"})
+            status = self.report_failures.pop(0)
+            return httpx2.Response(status, json=error("internal_error"))
         if self.grants.get(operation) != body.get("grant"):
-            return httpx2.Response(403, json={"error": "forbidden"})
+            return httpx2.Response(403, json=error("forbidden"))
         self.stored.setdefault(operation, body)
         self.reported.set()
-        return httpx2.Response(200, json={"stored": True})
+        return httpx2.Response(
+            200,
+            json={
+                "operationId": operation,
+                "requestId": str(uuid.uuid4()),
+                "status": "completed",
+                "deadlineAt": self.deadlines[operation],
+                "assistantMessageId": str(uuid.uuid4()),
+            },
+        )
 
     async def wait_reported(self, count: int = 1, timeout_s: float = 10.0) -> None:
         async with asyncio.timeout(timeout_s):

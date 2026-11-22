@@ -4,7 +4,7 @@ The Python client of the content API (import name `sebela_api_client`), generate
 
 ## What it is
 
-A library for the Python members of the repository: `packages/llm-agent` now, `apps/ai-service` later in phase 7. It is a member of the root uv workspace (distribution name `sebela-api-client`); its `package.json` holds only the pnpm task wrappers. It depends on nothing in this repository: its code is generated from the committed contract `packages/api-client/src/generated/openapi.json`, never from the API's source, and it has no database access.
+A library for the Python members of the repository: `packages/llm-agent` and `apps/ai-service`. It is a member of the root uv workspace (distribution name `sebela-api-client`); its `package.json` holds only the pnpm task wrappers. It depends on nothing in this repository: its code is generated from the committed contract `packages/api-client/src/generated/openapi.json`, never from the API's source, and it has no database access.
 
 **Never edit it by hand.** Everything under `src/sebela_api_client/` is written by the `generate` script. A change to the API's routes or contract schemas is picked up by regenerating, not by editing.
 
@@ -13,7 +13,7 @@ A library for the Python members of the repository: `packages/llm-agent` now, `a
 The package keeps the **complete** generated client: every route and model of the contract, private write operations included (the owner's decision of 2026-11-21, `docs/threat-model.md`). It is plain generated code and decides nothing about access:
 
 - It holds no credential and no default base URL. Every consumer constructs `Client(base_url=...)` with an address from its own environment; `AuthenticatedClient` exists because the generator writes it, and nothing in the repository constructs it with a content-write key.
-- Each consumer keeps its own handwritten allowlist of the operations it may call, and only that module imports this package. In `packages/llm-agent` that is `llm_agent.tools.content`, which calls only the public read routes the agent uses and sends no credential (plus the eval harness's fixture check, which reads `GET /v1/person`). The agent's use stays limited to those public reads; the write operations of this package are never called by the agent. `apps/ai-service` adds its own adapter later in this phase.
+- Each consumer keeps its own handwritten allowlist of the operations it may call, and only that module imports this package. In `packages/llm-agent` that is `llm_agent.tools.content`, which calls only the public read routes the agent uses and sends no credential (plus the eval harness's fixture check, which reads `GET /v1/person`). The agent's use stays limited to those public reads; the write operations of this package are never called by the agent. In `apps/ai-service` that is `ai_service.clients.control_api`, which calls only the two internal chat control routes (`claim_chat_grant`, `report_chat_result`) with the service's control bearer, never a content API key; the service's public reads go through `llm_agent`.
 - Keeping write operations here is the accepted risk: they sit one import away from a consumer. The mitigation is that a consumer depends on this package explicitly and imports it in one reviewed module.
 
 ## Generation

@@ -217,6 +217,19 @@ def _start_api(env: Mapping[str, str]) -> tuple[Process, str]:
     return api, api.wait_for(r"e2e API listening on (http://\S+)")[1]
 
 
+#: Inherited settings the AI service never receives: its own (given explicitly), the provider's
+#: and every database setting, since Python has no database access.
+_NOT_INHERITED = ("AI_SERVICE_", "LLM_AGENT_", "ANTHROPIC_", "DATABASE_", "POSTGRES_")
+
+
+def service_environment(
+    inherited: Mapping[str, str], settings: Mapping[str, str]
+) -> dict[str, str]:
+    """The AI service's environment: the inherited one without hidden keys, then `settings`."""
+    kept = {k: v for k, v in inherited.items() if not k.startswith(_NOT_INHERITED)}
+    return {**kept, **settings}
+
+
 @pytest.fixture(scope="module")
 def stack() -> Iterator[Stack]:
     scratch = ROOT / ".tmp" / f"chat-stack-{secrets.token_hex(4)}"
@@ -261,19 +274,21 @@ def stack() -> Iterator[Stack]:
             )
         )
         started.append(spent)
-        hidden = ("AI_SERVICE_", "LLM_AGENT_", "ANTHROPIC_")
-        service_env = {
-            **{k: v for k, v in os.environ.items() if not k.startswith(hidden)},
-            "AI_SERVICE_HOST": service_host,
-            "LLM_AGENT_PORT": str(service_port),
-            "AI_SERVICE_API_URL": api_url,
-            "AI_SERVICE_TOKEN": token,
-            "AI_SERVICE_CONTROL_TOKEN": control_token,
-            "AI_SERVICE_MODEL": "fake",
-            "AI_SERVICE_FAKE_SCENARIO": "slow",
-            "AI_SERVICE_FAKE_CALLS_FILE": str(calls_file),
-            "AI_SERVICE_FAKE_GATE_FILE": str(gate_file),
-        }
+        service_env = service_environment(
+            os.environ,
+            {
+                "AI_SERVICE_HOST": service_host,
+                "LLM_AGENT_PORT": str(service_port),
+                "AI_SERVICE_API_URL": api_url,
+                "AI_SERVICE_TOKEN": token,
+                "AI_SERVICE_CONTROL_TOKEN": control_token,
+                "AI_SERVICE_MODEL": "fake",
+                "AI_SERVICE_FAKE_SCENARIO": "slow",
+                "AI_SERVICE_FAKE_CALLS_FILE": str(calls_file),
+                "AI_SERVICE_FAKE_GATE_FILE": str(gate_file),
+            },
+        )
+        assert not [k for k in service_env if k.startswith(("DATABASE_", "POSTGRES_"))]
         service = Process([sys.executable, "-m", "ai_service"], SERVICE_FOLDER, service_env)
         started.append(service)
         _wait_healthy(service, service_url)
@@ -537,3 +552,18 @@ def test_a_spent_budget_dispatches_nothing(stack: Stack) -> None:
     settle()
     assert len(stack.calls()) == before
     assert visitor.conversation()["messages"] == []
+
+
+def test_the_service_environment_holds_no_database_setting() -> None:
+    inherited = {
+        "PATH": "/usr/bin",
+        "DATABASE_URL": "postgres://fictional",
+        "DATABASE_USER": "fictional",
+        "DATABASE_PASSWORD": "fictional",
+        "POSTGRES_PASSWORD": "fictional",
+        "POSTGRES_HOST": "db.example.test",
+        "AI_SERVICE_MODEL": "anthropic",
+        "ANTHROPIC_API_KEY": "fictional",
+    }
+    env = service_environment(inherited, {"AI_SERVICE_MODEL": "fake"})
+    assert env == {"PATH": "/usr/bin", "AI_SERVICE_MODEL": "fake"}
