@@ -292,6 +292,33 @@ describe("visitor chat service", () => {
       expect(dispatch.history[5]?.question).toBe("Question 6?");
     });
 
+    it("sends only stored exchanges the AI service accepts: a language, a question and an answer", async () => {
+      const stored = [
+        { question: "Kept?", answer: "Kept.", language: "cs", sources: [] },
+        { question: "No language?", answer: "None.", language: null, sources: [] },
+        { question: "Another language?", answer: "Other.", language: "de", sources: [] },
+        { question: "Empty answer?", answer: "", language: "en", sources: [] },
+        { question: "", answer: "Empty question.", language: "en", sources: [] },
+      ];
+      const projecting = createChatService(
+        { ...persistence.chat, recentExchanges: () => Promise.resolve(stored) },
+        { config, verifier, now: () => now },
+      );
+      const caller = (await projecting.open(null)).caller;
+
+      const result = await projecting.submit(
+        caller,
+        { requestId: randomUUID(), question: "And now?", challengeToken: "fictional-token" },
+        { clientAddress: nextAddress() },
+      );
+
+      if (result.status !== "admitted")
+        throw new Error(`Expected admission, got ${result.status}.`);
+      expect(result.dispatch.history).toEqual([
+        { question: "Kept?", answer: "Kept.", language: "cs", sources: [] },
+      ]);
+    });
+
     it("pages the conversation backwards with a cursor of its own messages", async () => {
       const caller = await newCaller();
       for (let index = 0; index < 3; index += 1) {
