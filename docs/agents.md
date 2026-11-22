@@ -79,7 +79,7 @@ For each issue of a phase:
 
 1. The orchestrator picks an issue labelled `ready-for-agent` whose blockers are closed. Before dispatching any agent it reads the whole issue, the `## Blocked by` and `## When` sections included, and every comment, and starts no issue whose blocker is still open (an issue blocked by an unmerged phase was once implemented early and its pull request started a paid eval run). It reads the issue with its comments: an `Owner note` in a comment is as binding as the body, and the orchestrator passes every owner note, as written, to the developer and the reviewer.
 2. It creates an issue branch from the phase branch and a worktree; the worktree gets its own database, database role, ports and storage folder, is installed and migrated, and an empty profile is loaded with the demo seed.
-3. It dispatches the developer agent that matches the area of the issue.
+3. It dispatches the developer agent that matches the area of the issue. The brief carries the exact commit trailer lines and the pull request attribution text the session was given, for the agent to copy verbatim ([Git workflow](git-workflow.md#commits)).
 4. The developer implements according to `docs/testing.md` and finishes with green checks and a summary. Its edits are formatted as it works, and its handoff is refused while lint or typecheck of what it changed fail (see [handoff checks](permissions.md#handoff-checks)).
 5. The orchestrator dispatches the reviewer.
 6. The reviewer approves or returns objections; objections go back to the developer.
