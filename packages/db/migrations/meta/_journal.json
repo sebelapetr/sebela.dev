@@ -183,6 +183,13 @@
       "when": 1795234417034,
       "tag": "0025_provider_usage_rerank",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795312967433,
+      "tag": "0026_chat_conversations",
+      "breakpoints": true
     }
   ]
 }
