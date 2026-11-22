@@ -6,7 +6,7 @@
 // gives the Ask page the person check's public site key, read per request.
 import "server-only";
 
-import { readTurnstileSiteKey, readWebConfig } from "../../config";
+import { readChatRelayConfig, readTurnstileSiteKey, readWebConfig } from "../../config";
 import { createChatRelay, type ChatRelayRoute } from "./data/relay";
 
 export type { ChatRelayRoute } from "./data/relay";
@@ -14,6 +14,7 @@ export type { ChatRelayRoute } from "./data/relay";
 const relay = createChatRelay({
   fetch: (input, init) => globalThis.fetch(input, init),
   apiBaseUrl: () => readWebConfig(process.env).apiBaseUrl,
+  settings: () => readChatRelayConfig(process.env),
 });
 
 /** Relays one visitor chat request to the API and returns the API's answer. */

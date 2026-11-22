@@ -280,3 +280,15 @@ export function readTurnstileSiteKey(
   }
   return value;
 }
+
+/** The website side of the chat relay. */
+export interface ChatRelayConfig {
+  readonly token: string;
+  readonly trustedProxyHops: number;
+}
+
+export function readChatRelayConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): ChatRelayConfig | null {
+  throw new Error(`not implemented: ${String(Object.keys(env).length)}`);
+}

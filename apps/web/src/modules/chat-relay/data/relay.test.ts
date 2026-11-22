@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { chatRelayMaxBodyBytes, createChatRelay } from "./relay";
+import { chatRelayMaxBodyBytes, createChatRelay, type ChatRelaySettings } from "./relay";
 
 const API = "http://api.example.test";
 const SITE = "https://site.example.test";
@@ -33,8 +33,14 @@ function fakeApi(response: Response | Error = new Response("{}", { status: 200 }
   return { fetch: fetch as unknown as typeof globalThis.fetch, calls };
 }
 
-function relay(api: ReturnType<typeof fakeApi>) {
-  return createChatRelay({ fetch: api.fetch, apiBaseUrl: () => API });
+// A disposable fixture token.
+const TOKEN = "fixture-chat-relay-token-0123456789abcdef";
+
+function relay(
+  api: ReturnType<typeof fakeApi>,
+  settings: ChatRelaySettings | null = { token: TOKEN, trustedProxyHops: 1 },
+) {
+  return createChatRelay({ fetch: api.fetch, apiBaseUrl: () => API, settings: () => settings });
 }
 
 const question = JSON.stringify({
@@ -74,7 +80,7 @@ describe("createChatRelay", () => {
     expect(api.calls[0]?.headers.get("cookie")).toBe("sebela_chat=visitor");
   });
 
-  it("relays a question with its body, origin, content type and client address, adding nothing", async () => {
+  it("relays a question with its body, origin, content type and the relay's token and visitor address only", async () => {
     const api = fakeApi();
 
     await relay(api)(post(question, { authorization: "Bearer stolen", "x-api-key": "k" }), {
@@ -89,9 +95,74 @@ describe("createChatRelay", () => {
     });
     expect(call?.headers.get("origin")).toBe(SITE);
     expect(call?.headers.get("content-type")).toBe("application/json");
-    expect(call?.headers.get("x-forwarded-for")).toBe("203.0.113.7");
+    expect(call?.headers.get("x-sebela-chat-relay")).toBe(TOKEN);
+    expect(call?.headers.get("x-sebela-chat-client")).toBe("203.0.113.7");
+    expect(call?.headers.get("x-forwarded-for")).toBeNull();
     expect(call?.headers.get("authorization")).toBeNull();
     expect(call?.headers.get("x-api-key")).toBeNull();
+  });
+
+  it("sends its token on every route", async () => {
+    const api = fakeApi();
+    const routes = [
+      [new Request(`${SITE}/api/chat/conversation`), { kind: "conversation" }],
+      [post(question), { kind: "messages" }],
+      [
+        new Request(`${SITE}/api/chat/operations/${OPERATION}`),
+        { kind: "operation", operationId: OPERATION },
+      ],
+      [
+        new Request(`${SITE}/api/chat/operations/${OPERATION}/events`),
+        { kind: "events", operationId: OPERATION },
+      ],
+    ] as const;
+
+    for (const [request, route] of routes) await relay(api)(request, route);
+
+    expect(api.calls.map((call) => call.headers.get("x-sebela-chat-relay"))).toEqual([
+      TOKEN,
+      TOKEN,
+      TOKEN,
+      TOKEN,
+    ]);
+  });
+
+  it("names the address the trusted proxies saw, counted from the right, and ignores the rest", async () => {
+    const addressFor = async (forwardedFor: string | null, trustedProxyHops: number) => {
+      const api = fakeApi();
+      const headers: Record<string, string> =
+        forwardedFor === null ? {} : { "x-forwarded-for": forwardedFor };
+      const request = new Request(`${SITE}/api/chat/conversation/messages`, {
+        method: "POST",
+        body: question,
+        headers: { "content-type": "application/json", origin: SITE, ...headers },
+      });
+      await relay(api, { token: TOKEN, trustedProxyHops })(request, { kind: "messages" });
+      const call = api.calls[0];
+      expect(call?.headers.get("x-forwarded-for")).toBeNull();
+      return call?.headers.get("x-sebela-chat-client") ?? null;
+    };
+
+    // The visitor wrote the left entries; the host proxy appended the address it saw.
+    expect(await addressFor("198.51.100.66, 203.0.113.7", 1)).toBe("203.0.113.7");
+    expect(await addressFor("198.51.100.66,203.0.113.7", 1)).toBe("203.0.113.7");
+    expect(await addressFor("198.51.100.66, 203.0.113.7, 192.0.2.1", 2)).toBe("203.0.113.7");
+    expect(await addressFor("203.0.113.7", 1)).toBe("203.0.113.7");
+    // No trusted hop, too few entries or none: no address.
+    expect(await addressFor("198.51.100.66, 203.0.113.7", 0)).toBeNull();
+    expect(await addressFor("203.0.113.7", 2)).toBeNull();
+    expect(await addressFor(null, 1)).toBeNull();
+    expect(await addressFor("", 1)).toBeNull();
+  });
+
+  it("answers 503 unavailable without its token, without reaching the API", async () => {
+    const api = fakeApi();
+
+    const response = await relay(api, null)(post(question), { kind: "messages" });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "unavailable" } });
+    expect(api.calls).toHaveLength(0);
   });
 
   it("never invents an origin the browser did not send", async () => {

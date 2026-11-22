@@ -9,11 +9,19 @@ export type ChatRelayRoute =
   | { readonly kind: "operation"; readonly operationId: string }
   | { readonly kind: "events"; readonly operationId: string };
 
+/** The relay's token and how many proxies in front of the website append to X-Forwarded-For. */
+export interface ChatRelaySettings {
+  readonly token: string;
+  readonly trustedProxyHops: number;
+}
+
 export interface ChatRelayOptions {
   /** The server's `fetch`. */
   readonly fetch: typeof globalThis.fetch;
   /** The API's base address (`WEB_API_BASE_URL`); read per request. */
   readonly apiBaseUrl: () => string;
+  /** The relay's settings, read per request; `null`: not configured. */
+  readonly settings: () => ChatRelaySettings | null;
 }
 
 /** The largest question body the relay reads, well above the contract's longest submission. */
