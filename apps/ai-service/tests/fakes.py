@@ -97,6 +97,8 @@ class FakeApi:
     person_status: int = 200
     person_delay_s: float = 0.0
     person_reads: int = 0
+    #: Every public read the service made, by path.
+    public_reads: list[str] = field(default_factory=list)
     reported: asyncio.Event = field(default_factory=asyncio.Event)
     deadlines: dict[str, str] = field(default_factory=dict)
 
@@ -126,6 +128,8 @@ class FakeApi:
 
     async def _handle(self, request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
+        if request.method == "GET":
+            self.public_reads.append(path)
         if path == "/v1/person" and request.method == "GET":
             self.person_reads += 1
             if self.person_delay_s:

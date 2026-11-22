@@ -65,6 +65,7 @@ async def test_the_profile_capability_carries_no_contact_fields() -> None:
     page = await read_tool(FakeContent(), "get_profile", {})
     (record,) = page.records
     assert record.kind == "profile"
+    assert record.record_id == "profile"
     assert record.href == "/"
     assert {"id", "email", "links"}.isdisjoint(record.data)
 

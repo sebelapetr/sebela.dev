@@ -9,6 +9,7 @@ environment files; every port is free and chosen at run time. It needs the runni
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -31,7 +32,10 @@ from urllib.parse import parse_qs
 
 import httpx2
 import pytest
-from llm_agent import versions
+from llm_agent import READ_CAPABILITIES, ApiContentReader, read_tool, versions
+from llm_agent.observability.tracing import Tracer
+from llm_agent.reliability.timeouts import Deadline
+from llm_agent.tools.registry import Tools
 
 ROOT = Path(__file__).resolve().parents[4]
 API_FOLDER = ROOT / "apps" / "api"
@@ -180,6 +184,10 @@ class Stack:
     spent_api_url: str
     calls_file: Path
     gate_file: Path
+    #: The AI service itself, as a read caller (the next phase's public MCP) reaches it.
+    service_url: str
+    #: The service's own credentials; no read caller may ever see them.
+    secrets: tuple[str, ...]
 
     def calls(self) -> list[dict[str, Any]]:
         if not self.calls_file.exists():
@@ -295,7 +303,7 @@ def stack() -> Iterator[Stack]:
         service = Process([sys.executable, "-m", "ai_service"], SERVICE_FOLDER, service_env)
         started.append(service)
         _wait_healthy(service, service_url)
-        yield Stack(api_url, spent_url, calls_file, gate_file)
+        yield Stack(api_url, spent_url, calls_file, gate_file, service_url, (token, control_token))
     finally:
         for process in reversed(started):
             process.stop()
@@ -705,3 +713,137 @@ def test_the_service_environment_holds_no_database_setting() -> None:
     }
     env = service_environment(inherited, {"AI_SERVICE_MODEL": "fake"})
     assert env == {"PATH": "/usr/bin", "AI_SERVICE_MODEL": "fake"}
+
+
+#: Each capability's route and arguments over the fictional profile fixture.
+CAPABILITY_READS: dict[str, tuple[str, dict[str, str]]] = {
+    "get_profile": ("profile", {}),
+    "list_experiences": ("experiences", {}),
+    "list_projects": ("projects", {}),
+    "get_project": ("project", {"slug": "support-answer-engine"}),
+    "list_services": ("services", {}),
+    "list_explorations": ("explorations", {}),
+    "list_education": ("education", {}),
+    "list_current_focus": ("current-focus", {}),
+    "get_roadmap": ("roadmap", {}),
+    "get_roadmap_area": ("roadmap-area", {"area": "agent-systems"}),
+    "get_learning_diary": ("learning-diary", {}),
+    "get_learning_statistics": ("learning-statistics", {}),
+    "list_books": ("books", {}),
+    "list_events": ("events", {}),
+}
+
+
+def capability_records(stack: Stack, route: str, arguments: dict[str, str]) -> list[Any]:
+    """Every record of one capability, page by page, as a read caller receives them."""
+    records: list[Any] = []
+    page, page_count = 1, 1
+    with httpx2.Client(timeout=10.0) as client:
+        while page <= page_count:
+            response = client.get(
+                f"{stack.service_url}/v1/capabilities/{route}", params={**arguments, "page": page}
+            )
+            assert response.status_code == 200, (route, response.text)
+            body = response.json()
+            assert body["page"] == page
+            page_count = body["pageCount"]
+            records.extend(body["records"])
+            page += 1
+    return records
+
+
+async def in_process(stack: Stack, name: str, arguments: dict[str, str]) -> tuple[Any, Any]:
+    """The same read through `read_tool` and through the model's own tool, over the real API."""
+    async with ApiContentReader(stack.api_url) as content:
+        pages = [await read_tool(content, name, arguments, page=1)]
+        while pages[-1].page < pages[-1].page_count:
+            pages.append(await read_tool(content, name, arguments, page=pages[-1].page + 1))
+        tools = Tools(
+            content, tracer=Tracer(), deadline=Deadline(60), call_s=5.0, result_tokens=50000
+        )
+        try:
+            model = json.loads(await tools.call(name, arguments))
+        finally:
+            await tools.close()
+    records = [
+        {
+            "kind": record.kind,
+            "id": record.record_id,
+            "title": record.title,
+            "href": record.href,
+            "data": record.data,
+        }
+        for page in pages
+        for record in page.records
+    ]
+    return records, model.get("records", [model])
+
+
+def test_the_capability_table_covers_every_read_capability() -> None:
+    assert set(CAPABILITY_READS) == set(READ_CAPABILITIES)
+
+
+@pytest.mark.parametrize("name", list(CAPABILITY_READS))
+async def test_a_capability_equals_the_in_process_tool_over_the_real_api(
+    stack: Stack, name: str
+) -> None:
+    route, arguments = CAPABILITY_READS[name]
+    served = await asyncio.to_thread(capability_records, stack, route, arguments)
+    expected, model = await in_process(stack, name, arguments)
+    assert served == expected
+    assert served, name
+    assert [(r["kind"], r["data"]) for r in served] == [(r["kind"], r["data"]) for r in model]
+    text = json.dumps(served)
+    for secret in stack.secrets:
+        assert secret not in text
+
+
+def test_a_read_caller_reaches_no_generation_conversation_or_private_route(stack: Stack) -> None:
+    before = len(stack.calls())
+    operation = str(uuid.uuid4())
+    with httpx2.Client(timeout=10.0) as client:
+        refused = [
+            client.post(f"{stack.service_url}/internal/v1/generations", json={}),
+            client.post(f"{stack.service_url}/internal/v1/generations/{operation}/cancel"),
+            client.post(
+                f"{stack.service_url}/internal/v1/generations/{operation}/cancel",
+                headers={"authorization": "Bearer " + RELAY_TOKEN},
+            ),
+        ]
+        missing = [
+            client.get(f"{stack.service_url}{path}")
+            for path in (
+                "/v1/capabilities/contact",
+                "/v1/capabilities/conversations",
+                "/v1/capabilities/ledger",
+                "/v1/capabilities/audit",
+                "/v1/capabilities/compaction",
+                "/v1/capabilities/media/originals",
+                "/v1/chat/conversation",
+                "/v1/internal/chat/grants/claim",
+                "/v1/person",
+            )
+        ]
+        written = [
+            client.request(method, f"{stack.service_url}/v1/capabilities/projects", json={})
+            for method in ("POST", "PUT", "PATCH", "DELETE")
+        ]
+        invalid = [
+            client.get(f"{stack.service_url}/v1/capabilities/project", params=params)
+            for params in (
+                {"slug": f"{stack.api_url}/v1/internal/chat"},
+                {"slug": "x'; SELECT * FROM chat_messages; --"},
+                {"slug": "../../../../etc/passwd"},
+                {"slug": "support-answer-engine", "command": "cat secrets.txt"},
+                {"slug": "support-answer-engine", "url": stack.api_url},
+            )
+        ]
+    assert [r.status_code for r in refused] == [401, 401, 401]
+    assert [r.status_code for r in missing] == [404] * len(missing)
+    assert [r.status_code for r in written] == [405] * len(written)
+    assert [r.status_code for r in invalid] == [422] * len(invalid)
+    text = "".join(r.text for r in [*refused, *missing, *written, *invalid])
+    for secret in stack.secrets:
+        assert secret not in text
+    settle()
+    assert len(stack.calls()) == before
