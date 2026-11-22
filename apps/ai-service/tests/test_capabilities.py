@@ -16,9 +16,10 @@ from llm_agent import ApiContentReader, profile_view
 
 from ai_service.app import CapabilityLimits, openapi_document
 from ai_service.models.fake import FakeModels
-from tests.fakes import API_URL, CONTROL_TOKEN, PERSON, TOKEN, FakeApi, running
+from tests.fakes import API_URL, CONTROL_TOKEN, PERSON, TOKEN, FakeApi, bearer, running, settings
 
 ROUTE = "/v1/capabilities/profile"
+GENERATIONS = "/internal/v1/generations"
 
 #: Every capability route, by the read tool behind it.
 ROUTES = {
@@ -229,3 +230,20 @@ async def test_no_generation_route_is_reachable_without_the_bearer() -> None:
         assert [refused.status_code, cancel.status_code] == [401, 401]
     assert api.claims == []
     assert models.calls == []
+
+
+async def test_reads_stay_available_while_four_generations_hold_every_slot() -> None:
+    api = FakeApi()
+    gate = asyncio.Event()
+    models = FakeModels("slow", gate=gate)
+    service = settings(AI_SERVICE_ADMISSION_WAIT_S="0.2")
+    async with running(api, models, service) as (_, client):
+        for _ in range(4):
+            accepted = await client.post(GENERATIONS, json=api.issue(), headers=bearer())
+            assert accepted.status_code == 202
+        busy = await client.post(GENERATIONS, json=api.issue(), headers=bearer())
+        read = await client.get(ROUTE)
+        assert [busy.status_code, read.status_code] == [503, 200]
+        assert len(api.claims) == 4
+        gate.set()
+        await api.wait_reported(4)
