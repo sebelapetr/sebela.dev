@@ -1,6 +1,6 @@
 name: Idea or feature
 description: Suggest an improvement to the website, the AI features, the tooling or the docs.
-labels: ["enhancement"]
+type: Feature
 body:
   - type: markdown
     attributes:
