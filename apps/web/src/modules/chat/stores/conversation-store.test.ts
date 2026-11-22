@@ -94,13 +94,18 @@ function manualAdapter() {
   return { adapter, sent, restores };
 }
 
-function setup(storage: ChatStorage = createMemoryStorage(), idleTimeoutMs?: number) {
+function setup(
+  storage: ChatStorage = createMemoryStorage(),
+  idleTimeoutMs?: number,
+  available?: boolean,
+) {
   const { adapter, sent, restores } = manualAdapter();
   const store = createConversationStore({
     adapter,
     storage,
     createId: sequentialIds(),
     ...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
+    ...(available === undefined ? {} : { available }),
   });
   return { store, sent, restores, storage };
 }
@@ -279,6 +284,37 @@ describe("opening the conversation", () => {
       turns: [{ requestId: storedRequest(1), status: "complete", text: "Recovered once." }],
     });
     expect(context.sent).toHaveLength(1);
+  });
+});
+
+describe("a website without the chat", () => {
+  it("asks the API nothing and refuses every question", async () => {
+    const context = setup(createMemoryStorage(), undefined, false);
+
+    await expect(context.store.open(null)).resolves.toEqual({ kind: "shown" });
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      history: "unavailable",
+      busy: true,
+      turns: [],
+      retentionDays: null,
+      earlier: "none",
+    });
+    expect(context.store.submit("Q?")).toBe("busy");
+    expect(context.restores).toHaveLength(0);
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it("gives the hero's question back instead of sending it", async () => {
+    const context = setup(createMemoryStorage(), undefined, false);
+    const id = handOffQuestion(context.storage, "What does Ilsa build?", sequentialIds());
+
+    await expect(context.store.open(id)).resolves.toEqual({
+      kind: "held",
+      question: "What does Ilsa build?",
+    });
+    expect(context.restores).toHaveLength(0);
+    expect(context.sent).toHaveLength(0);
   });
 });
 
