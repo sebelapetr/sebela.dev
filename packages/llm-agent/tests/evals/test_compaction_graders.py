@@ -178,7 +178,8 @@ def test_a_reference_the_folded_exchanges_never_cited_fails() -> None:
 
 @pytest.mark.parametrize("field", ["goals", "covered"])
 def test_a_visitor_assertion_stated_as_known_fails(field: str) -> None:
-    data = compacted("C06-en", summary(**{field: ["The harness team had 12 engineers."]}))
+    fields: dict[str, Any] = {field: ["The harness team had 12 engineers."]}
+    data = compacted("C06-en", summary(**fields))
     failures = compaction_failures("C06-en", data)
     assert len(failures) == 1
     assert failures[0].startswith(f"compaction 1: {field} states '12 engineers")

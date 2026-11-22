@@ -1,7 +1,8 @@
 """The portfolio chat agent: a guarded, bounded, bilingual answer over public content reads.
 
 This is the package's public interface; every other module is private to the package.
-`ChatAgent.run` is the one operation. Content arrives only through a `ContentReader` (the public
+`ChatAgent.run` answers one question; `ChatAgent.compact` folds a working context into a summary
+the caller passes with later questions. Content arrives only through a `ContentReader` (the public
 API in production) and models only through a `ModelFactory` (Anthropic in production, scripted
 fakes in tests).
 """
@@ -15,8 +16,12 @@ from llm_agent.schemas import (
     ChatExchange,
     ChatRequest,
     ChatResult,
+    CompactionOutcome,
+    CompactionRequest,
+    CompactionResult,
     ContactCard,
     ContactLink,
+    ContextSummary,
     Evidence,
     ExchangeSource,
     ExecutionLimits,
@@ -28,6 +33,7 @@ from llm_agent.schemas import (
     Source,
     SourceKind,
     Span,
+    SummaryReference,
     ToolName,
     Usage,
     Versions,
@@ -102,11 +108,15 @@ __all__ = [
     "ChatModel",
     "ChatRequest",
     "ChatResult",
+    "CompactionOutcome",
+    "CompactionRequest",
+    "CompactionResult",
     "ContactCard",
     "ContactLink",
     "ContentNotFoundError",
     "ContentReader",
     "ContentUnavailableError",
+    "ContextSummary",
     "Evidence",
     "ExchangeSource",
     "ExecutionLimits",
@@ -160,6 +170,7 @@ __all__ = [
     "Source",
     "SourceKind",
     "Span",
+    "SummaryReference",
     "TelemetrySink",
     "ToolName",
     "ToolNotAvailableError",

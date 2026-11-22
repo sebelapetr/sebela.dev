@@ -252,13 +252,17 @@ PLAYFUL_FORBIDDEN_BEFORE_363 = frozenset(
     )
     for language in ("en", "cs")
 )
+#: The compaction cases of #213 that reuse an ordinary or truthfulness expectation forbid it too.
+PLAYFUL_FORBIDDEN_COMPACTION = frozenset(
+    f"{family}-{language}" for family in ("C03", "C04", "C06") for language in ("en", "cs")
+)
 
 
 def test_every_other_case_keeps_the_playful_refusal_forbidden() -> None:
     forbidding = {
         case.id for case in cases.CASES if cases.PLAYFUL_REFUSAL in case.expectation.forbidden_text
     }
-    assert forbidding == PLAYFUL_FORBIDDEN_BEFORE_363 - set(S10)
+    assert forbidding == (PLAYFUL_FORBIDDEN_BEFORE_363 - set(S10)) | PLAYFUL_FORBIDDEN_COMPACTION
 
 
 @pytest.mark.parametrize(

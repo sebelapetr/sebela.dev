@@ -276,6 +276,8 @@ def compaction_failures(case: EvalCase, record: Mapping[str, Any]) -> list[str]:
     """Every planned compaction installed a summary in the case's language whose references are
     fixture records the folded exchanges cited, that states no forbidden text as known, and whose
     last version keeps the required records and text."""
+    from llm_agent.context.compact import KEPT_EXCHANGES
+
     if case.compaction is None:
         return []
     expected = case.compaction.expectation
@@ -298,9 +300,10 @@ def compaction_failures(case: EvalCase, record: Mapping[str, Any]) -> list[str]:
         summary = _mapping(compaction.get("summary"))
         if summary.get("language") != case.language:
             failures.append(f"{label}: summary language {summary.get('language')}")
+        # Only folded exchanges reach the summary; the newest ones stay verbatim after it.
         cited_before = {
             f"{source.kind}:{source.record_id}"
-            for exchange in case.history[:point]
+            for exchange in case.history[: max(point - KEPT_EXCHANGES, 0)]
             for source in exchange.sources
         }
         for reference in _list(summary.get("references")):

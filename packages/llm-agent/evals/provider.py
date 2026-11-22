@@ -106,8 +106,9 @@ async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]
     started = time.monotonic()
     async with ApiContentReader(os.environ["LLM_AGENT_API_URL"]) as content:
         agent = ChatAgent(content=content, models=anthropic_model_factory())
+        compactions: list[CompactionResult] = []
         if case.compaction is None:
-            request, compactions = chat_request(case), []
+            request = chat_request(case)
         else:
             request, compactions = await compacted_request(agent, case)
         result = await agent.run(request, limits=limits)
@@ -125,10 +126,14 @@ async def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]
     if case.compaction is not None:
         record["compactions"] = [item.model_dump(mode="json") for item in compactions]
     usages = [result.usage, *(item.usage for item in compactions)]
-    prompt = sum(usage.input_tokens for usage in usages)
+    prompt_tokens = sum(usage.input_tokens for usage in usages)
     completion = sum(usage.output_tokens for usage in usages)
     return {
         "output": json.dumps(record, ensure_ascii=False),
         "cost": sum(usage.cost_usd for usage in usages),
-        "tokenUsage": {"prompt": prompt, "completion": completion, "total": prompt + completion},
+        "tokenUsage": {
+            "prompt": prompt_tokens,
+            "completion": completion,
+            "total": prompt_tokens + completion,
+        },
     }

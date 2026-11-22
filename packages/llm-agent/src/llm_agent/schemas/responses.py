@@ -185,6 +185,8 @@ class Versions(_Frozen):
     main_effort: str
     security_prompt: str
     chat_prompt: str
+    #: The compaction prompt and the summary schema the model returns (`ChatAgent.compact`).
+    compact_prompt: str
     tools: str
     output_guard: str
     #: The fingerprint of every module of the package: guard rules, tool projections, settings.

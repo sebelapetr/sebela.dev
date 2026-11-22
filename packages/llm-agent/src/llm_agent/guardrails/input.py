@@ -396,12 +396,17 @@ def _switch(question: str) -> Language | None:
     return found
 
 
-def select_language(question: str, history: Sequence[ChatExchange] = ()) -> Language:
+def select_language(
+    question: str,
+    history: Sequence[ChatExchange] = (),
+    summary_language: Language | None = None,
+) -> Language:
     """The language of this turn.
 
     An explicit switch in the question wins (the last one when there are several). Otherwise a
     question that is recognisably Czech or English sets the language, and an ambiguous short
-    follow-up ("Brindle Labs?") inherits the newest earlier exchange's language, initially English.
+    follow-up ("Brindle Labs?") inherits the newest earlier exchange's language, else the language
+    of the installed summary, initially English.
     """
     switch = _switch(question)
     if switch is not None:
@@ -409,7 +414,9 @@ def select_language(question: str, history: Sequence[ChatExchange] = ()) -> Lang
     detected = _detected(question)
     if detected is not None:
         return detected
-    return history[-1].language if history else "en"
+    if history:
+        return history[-1].language
+    return summary_language or "en"
 
 
 def _detected(question: str) -> Language | None:
