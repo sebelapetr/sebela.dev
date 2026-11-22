@@ -184,10 +184,12 @@ apps/api/src/
   config.ts                         # validated runtime configuration
   routing.ts, openapi.ts            # route descriptions and the generated OpenAPI document
   middleware/                       # HTTP authentication, limits, errors
-  cli/                              # maintenance adapters using services: api-keys, seed, clear-content, storage, media, knowledge, openapi
+  cli/                              # maintenance adapters using services: api-keys, seed, clear-content, storage, media, knowledge, chat-maintenance, openapi
   modules/profile/index.ts          # profile HTTP entry
   modules/media/index.ts            # media HTTP entry
   modules/roadmap/index.ts          # roadmap HTTP entry
+  modules/chat/index.ts             # visitor chat and generation control HTTP entry; dispatch to the AI service
+  generated/ai-service/index.ts     # the AI service's dispatch interface (handwritten until its OpenAPI document exists)
 packages/services/src/
   index.ts                          # explicit package exports
   services.ts                       # composition of the backend services from validated configuration
@@ -199,6 +201,7 @@ packages/services/src/
   modules/storage/drivers/          # private local and Bunny implementations
   modules/api-keys/index.ts         # generation, verification, revocation
   modules/seed/index.ts             # loading a seed folder through profile, roadmap and media
+  modules/chat/index.ts             # visitor identity, admission, quotas, spend, grants, results, retention; private policy.ts, siteverify.ts
 packages/db/src/
   index.ts                          # explicit persistence exports
   testing.ts                        # test support: temporary databases (`@sebela/db/testing`)
@@ -208,12 +211,14 @@ packages/db/src/
   modules/api-keys/index.ts
   modules/api-keys/schema.ts
   modules/roadmap/index.ts          # roadmap persistence; private schema.ts in schema `ai_roadmap`
+  modules/chat/index.ts             # visitor chat persistence; private schema.ts in schema `chat`
 packages/contracts/src/
   index.ts                          # explicit contract exports
   errors.ts
   modules/profile/index.ts
   modules/media/index.ts
   modules/roadmap/index.ts
+  modules/chat/index.ts             # the chat contract; conversation.ts holds the visitor conversation and generation control
 packages/api-client/src/
   index.ts                          # createApiClient and the contract's DTO types
   generated/                        # committed generated code: openapi.json and schema.ts

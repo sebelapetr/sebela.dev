@@ -107,7 +107,7 @@ The retrieval evals of `packages/memory/evals/` (`packages/memory/AGENTS.md`, Ev
 
 ## Authentication as a property
 
-There is one test that walks every route of the API and asserts: each write route and each private route returns 401 without a valid API key. A new route is covered automatically, so a write can never be left open by mistake. The chat conversation routes are the one named exception, with their own tests that they can touch only the caller's own conversation.
+There is one test that walks every route of the API and asserts: each write route and each private route returns 401 without a valid API key. A new route is covered automatically, so a write can never be left open by mistake. The visitor chat routes are the one named exception (`VISITOR_WRITE` in `apps/api/src/audit.test.ts` and `apps/api/src/openapi.test.ts`): they need no key but the website's origin, and their own tests in `apps/api/src/chat.test.ts` show they touch only the caller's own conversation. The AI service's generation control routes (`CONTROL_ROUTES` in `apps/api/src/openapi.test.ts`) refuse every request without the control token, which no other route accepts. Neither is a content write, so the audit property lists both as reviewed chat writes without an audit entry (`CHAT_WRITES`).
 
 The API's audit coverage is the same kind of property (`apps/api/src/audit.test.ts`): it walks every route the HTTP framework registered, and any route for a method other than `GET`, `HEAD` or `OPTIONS` that is not an audited content write fails it, so a newly registered write cannot skip the audit. For every audited write it also checks that a refusal without a key or an invalid request stores no audit entry, and that reads store none.
 
