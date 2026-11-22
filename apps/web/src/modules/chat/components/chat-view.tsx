@@ -128,16 +128,21 @@ function storageNotice(retentionDays: number): string {
  */
 export function ChatView({
   name,
+  available,
   siteKey,
 }: {
   readonly name: string;
+  /** Whether the website has the chat; without it the page asks the API nothing. */
+  readonly available: boolean;
   /** The public key of the person check; null when the website has none. */
   readonly siteKey: string | null;
 }) {
   const searchParams = useSearchParams();
   const handOffId = handOffIdFromParam(searchParams.get("c"));
-  const { snapshot, current, open, submit, retry, loadEarlier, challengeRef } =
-    useConversation(siteKey);
+  const { snapshot, current, open, submit, retry, loadEarlier, challengeRef } = useConversation(
+    siteKey,
+    available,
+  );
   const [question, setQuestion] = useState("");
   const conversationRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -225,7 +230,15 @@ export function ChatView({
         )}
       </header>
 
-      {snapshot.history === "loading" && turnCount === 0 ? (
+      {snapshot.history === "unavailable" ? (
+        <div className="flex flex-col gap-3">
+          <p className="text-muted-foreground">The chat is not available right now.</p>
+          <Link href={routes.contact} prefetch={false} className={cn(textLinkClass, "self-start")}>
+            Contact
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </Link>
+        </div>
+      ) : snapshot.history === "loading" && turnCount === 0 ? (
         <p aria-busy="true" className="text-muted-foreground">
           Loading your conversation…
         </p>

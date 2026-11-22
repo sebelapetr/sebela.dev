@@ -181,13 +181,11 @@ test.describe("long content", () => {
           await page.goto(`${site.url()}/cv/pdf/unavailable`);
           await shot("cv-unavailable");
 
-          // The sticky composer covers content in a full-page shot, so the viewport is taken.
+          // The sticky composer covers content in a full-page shot, so the viewport is taken. This
+          // website has no chat, so the page says so; long answers are fitted in `chat.spec.ts`.
           await page.goto(`${site.url()}/ask`);
           await hydrated(page);
-          await page
-            .getByRole("button", { name: `What could ${longName} automate for my company?` })
-            .click();
-          await answered(page);
+          await expect(page.getByText("The chat is not available right now.")).toBeVisible();
           await shot("ask", false);
         });
       }

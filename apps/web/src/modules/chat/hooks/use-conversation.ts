@@ -38,7 +38,13 @@ declare global {
 }
 
 let storage: ChatStorage | undefined;
-let current: { readonly siteKey: string | null; readonly store: ConversationStore } | undefined;
+let current:
+  | {
+      readonly siteKey: string | null;
+      readonly available: boolean;
+      readonly store: ConversationStore;
+    }
+  | undefined;
 let turnstile: Promise<TurnstileApi> | undefined;
 /** The element the person check is shown in, while the chat is on the page. */
 let challengeContainer: HTMLElement | null = null;
@@ -79,11 +85,12 @@ function loadTurnstile(): Promise<TurnstileApi> {
   return turnstile;
 }
 
-/** The tab's store, kept while the site key stays. */
-function conversationStore(siteKey: string | null): ConversationStore {
-  if (current?.siteKey !== siteKey) {
+/** The tab's store, kept while the site key and the chat's availability stay. */
+function conversationStore(siteKey: string | null, available: boolean): ConversationStore {
+  if (current?.siteKey !== siteKey || current.available !== available) {
     current = {
       siteKey,
+      available,
       store: createConversationStore({
         adapter: createApiChatAdapter({
           fetch: (input, init) => window.fetch(input, init),
@@ -96,6 +103,7 @@ function conversationStore(siteKey: string | null): ConversationStore {
         }),
         storage: chatStorage(),
         createId,
+        available,
       }),
     };
   }
@@ -104,10 +112,11 @@ function conversationStore(siteKey: string | null): ConversationStore {
 
 /**
  * The visitor's conversation and what can be done with it. `siteKey` is the public key of the
- * person check; `challengeRef` goes on the element the check is shown in when it needs the visitor.
+ * person check; `available` is false on a website without the chat, which then asks the API nothing;
+ * `challengeRef` goes on the element the check is shown in when it needs the visitor.
  */
-export function useConversation(siteKey: string | null) {
-  const store = useCallback(() => conversationStore(siteKey), [siteKey]);
+export function useConversation(siteKey: string | null, available: boolean) {
+  const store = useCallback(() => conversationStore(siteKey, available), [siteKey, available]);
   const subscribe = useCallback((listener: () => void) => store().subscribe(listener), [store]);
   const snapshot = useSyncExternalStore(
     subscribe,

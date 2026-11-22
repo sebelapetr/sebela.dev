@@ -31,8 +31,11 @@ export interface ChatStorage {
 
 /** What the chat shows. */
 export interface ConversationSnapshot {
-  /** Whether the stored conversation is still being read, was read or could not be read. */
-  readonly history: "loading" | "ready" | "failed";
+  /**
+   * Whether the stored conversation is still being read, was read or could not be read; or the
+   * website has no chat, so nothing is read and no question can be sent.
+   */
+  readonly history: "loading" | "ready" | "failed" | "unavailable";
   /** The conversation's questions and answers, oldest first. */
   readonly turns: readonly ChatTurn[];
   /** The history is loading or a question is answering; another cannot be sent. */
@@ -68,7 +71,8 @@ export interface ConversationStore {
    * Shows the caller's conversation. The first call reads its newest page and follows the answer
    * still being prepared, if any, without asking again; later calls read nothing. Then it sends the
    * question the hero left under `handOffId`, exactly once across opens and reloads. An unknown or
-   * foreign `handOffId` sends nothing and shows the caller's own conversation.
+   * foreign `handOffId` sends nothing and shows the caller's own conversation. On a website
+   * without the chat it reads nothing and gives a handed-off question back.
    */
   open(handOffId: string | null): Promise<OpenResult>;
   /** Reads the page of messages before the oldest shown; a failed read leaves it available. */
@@ -99,6 +103,11 @@ export interface ConversationStoreOptions {
    * the page and stops being followed; 20 s by default.
    */
   readonly idleTimeoutMs?: number;
+  /**
+   * Whether the website has the chat; when false the store never calls the adapter and every
+   * question is refused as busy. True by default.
+   */
+  readonly available?: boolean;
 }
 
 const handOffKey = (id: string) => `sebela-chat-handoff:${id}`;
@@ -160,7 +169,9 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
   const listeners = new Set<() => void>();
   const taken = new Set<string>();
 
-  let history: ConversationSnapshot["history"] = "loading";
+  const available = options.available ?? true;
+
+  let history: ConversationSnapshot["history"] = available ? "loading" : "unavailable";
   let turns: readonly ChatTurn[] = [];
   let retentionDays: number | null = null;
   let earlier: ConversationSnapshot["earlier"] = "none";
@@ -170,7 +181,8 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
   let restoring: Promise<void> | null = null;
   let snapshot: ConversationSnapshot | null = null;
 
-  const isBusy = () => history === "loading" || turns.some(isChatTurnOpen);
+  const isBusy = () =>
+    history === "loading" || history === "unavailable" || turns.some(isChatTurnOpen);
 
   function changed(): void {
     snapshot = null;
@@ -296,8 +308,10 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       };
     },
     async open(handOffId) {
-      restoring ??= restore();
-      await restoring;
+      if (available) {
+        restoring ??= restore();
+        await restoring;
+      }
       if (handOffId === null) return { kind: "shown" };
       const question = takeHandOff(handOffId);
       if (question === null) return { kind: "shown" };
