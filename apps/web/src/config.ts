@@ -261,3 +261,15 @@ export function readIndexingConfig(env: Readonly<Record<string, string | undefin
     "Invalid website configuration (documented in .env.example): WEB_INDEXING must be on or off",
   );
 }
+
+/**
+ * The public Turnstile site key of the chat's person check (`WEB_TURNSTILE_SITE_KEY`), read per
+ * request on the server and given to the Ask page; null when unset or empty, so the chat cannot
+ * send a question. Throws an error naming the variable, never its value, for a key that is not up
+ * to 100 letters, digits, `_` or `-`.
+ */
+export const readTurnstileSiteKey: (
+  env: Readonly<Record<string, string | undefined>>,
+) => string | null = () => {
+  throw new Error("not implemented");
+};

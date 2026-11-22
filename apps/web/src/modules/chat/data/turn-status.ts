@@ -29,6 +29,8 @@ export interface ChatTurnDescription {
    * is complete, never for an answer that failed or was interrupted, which is not a finished one.
    */
   readonly showsEvidence: boolean;
+  /** Whether the contact link is offered, where the assistant cannot help with this question. */
+  readonly contact: boolean;
   readonly announcement: string;
 }
 
@@ -66,6 +68,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
         note: null,
         retry: false,
         showsEvidence: true,
+        contact: false,
         announcement: ANSWERING,
       };
     case "complete": {
@@ -76,6 +79,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
         note: null,
         retry: false,
         showsEvidence: true,
+        contact: false,
         announcement: turn.text,
       };
     }
@@ -85,7 +89,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
       const reason =
         turn.status === "interrupted" || turn.error === null
           ? INTERRUPTED_NOTE
-          : ERROR_NOTES[turn.error.code];
+          : ERROR_NOTES[turn.error.code as ChatErrorCode];
       const note = retry ? reason : `${reason} ${NOT_RETRYABLE_HINT}`;
       return {
         state: turn.status,
@@ -93,6 +97,7 @@ export function describeChatTurn(turn: ChatTurn): ChatTurnDescription {
         note,
         retry,
         showsEvidence: false,
+        contact: false,
         announcement: retry ? `${note} ${RETRY_HINT}` : note,
       };
     }

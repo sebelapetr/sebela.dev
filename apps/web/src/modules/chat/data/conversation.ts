@@ -13,11 +13,23 @@ import {
   type ChatSource,
 } from "@sebela/contracts";
 
+import type { ChatAdmissionCode } from "./admission";
+
 /**
  * Where one question's answer stands: waiting for its first event, streaming, complete (with its
  * outcome), failed (with an error) or interrupted (its stream ended without a terminal event).
  */
 export type ChatTurnStatus = "pending" | "streaming" | "complete" | "failed" | "interrupted";
+
+/** Why an answer failed: a stream error, or a question the API did not admit. */
+export type ChatTurnErrorCode = ChatErrorCode | ChatAdmissionCode;
+
+/** The failure of a turn; `retryAfterSeconds` only where the API said when to try again. */
+export interface ChatTurnError {
+  readonly code: ChatTurnErrorCode;
+  readonly retryable: boolean;
+  readonly retryAfterSeconds?: number;
+}
 
 /** One question of a conversation and the answer received for it so far. */
 export interface ChatTurn {
@@ -30,7 +42,7 @@ export interface ChatTurn {
   readonly sources: readonly ChatSource[];
   readonly related: readonly ChatRelatedLink[];
   readonly outcome: ChatOutcome | null;
-  readonly error: { readonly code: ChatErrorCode; readonly retryable: boolean } | null;
+  readonly error: ChatTurnError | null;
 }
 
 /** A question just sent: pending, with no answer yet. */
@@ -88,6 +100,20 @@ export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
       return { ...next, status: "failed", error: { code: event.code, retryable: event.retryable } };
   }
 }
+
+/**
+ * The API did not admit the question: an open turn fails with the reason, retryable where a new
+ * attempt may pass (a failed person check, a busy conversation, a spent visitor allowance, a burst
+ * limit, an unreachable assistant), never for a spent site budget, a request already used or an
+ * invalid question. Pure.
+ */
+export const rejectChatTurn: (
+  turn: ChatTurn,
+  code: ChatAdmissionCode,
+  retryAfterSeconds?: number | null,
+) => ChatTurn = () => {
+  throw new Error("not implemented");
+};
 
 /** The stream is over: a turn still waiting for its terminal event is interrupted. */
 export function endChatStream(turn: ChatTurn): ChatTurn {

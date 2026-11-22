@@ -4,6 +4,7 @@ import {
   readAnalyticsConfig,
   readIndexingConfig,
   readInvalidationSecret,
+  readTurnstileSiteKey,
   readWebConfig,
 } from "./config";
 
@@ -393,5 +394,31 @@ describe("readIndexingConfig", () => {
       );
     }
     expect(() => readIndexingConfig({ WEB_INDEXING: "s3cret" })).not.toThrow(/s3cret/);
+  });
+});
+
+describe("readTurnstileSiteKey", () => {
+  it("reads the public site key, such as the official always-passing test key", () => {
+    expect(readTurnstileSiteKey({ WEB_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" })).toBe(
+      "1x00000000000000000000AA",
+    );
+  });
+
+  it.each([
+    ["unset", {}],
+    ["empty", { WEB_TURNSTILE_SITE_KEY: "" }],
+  ])("is null when %s, so the chat cannot send a question", (_label, env) => {
+    expect(readTurnstileSiteKey(env)).toBeNull();
+  });
+
+  it.each([
+    ["markup", "<script>"],
+    ["a space", "0x4AAA BBBB"],
+    ["too long", "k".repeat(101)],
+  ])("refuses a key with %s and names the variable, not the value", (_label, value) => {
+    expect(() => readTurnstileSiteKey({ WEB_TURNSTILE_SITE_KEY: value })).toThrow(
+      /^Invalid website configuration \(documented in \.env\.example\): WEB_TURNSTILE_SITE_KEY must be/,
+    );
+    expect(() => readTurnstileSiteKey({ WEB_TURNSTILE_SITE_KEY: value })).not.toThrow(value);
   });
 });
