@@ -171,6 +171,19 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
       const operation = operations.get(question.requestId) ?? (await submit(question, signal));
       yield* follow(operation, signal);
     },
+    retry() {
+      return {
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.reject(new Error("Not implemented.")),
+        }),
+      };
+    },
+    stop() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+    clear() {
+      return Promise.reject(new Error("Not implemented."));
+    },
   };
 }
 

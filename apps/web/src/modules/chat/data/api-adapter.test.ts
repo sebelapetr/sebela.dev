@@ -338,3 +338,289 @@ describe("createApiChatAdapter send", () => {
     ]);
   });
 });
+
+const RETRY = "44444444-0000-4000-8000-000000000001";
+const RETRIED = "22222222-0000-4000-8000-000000000002";
+const RETRIED_MESSAGE = "33333333-0000-4000-8000-000000000002";
+const retried = { ...operation, operationId: RETRIED, assistantMessageId: RETRIED_MESSAGE };
+const retriedIds = { requestId: REQUEST, messageId: RETRIED_MESSAGE };
+const retriedStart = { ...retriedIds, eventId: 0, type: "start" };
+const retriedComplete = { ...retriedIds, eventId: 1, type: "complete", outcome: "answered" };
+const failed = { ...ids, eventId: 1, type: "error", code: "internal", retryable: true };
+
+/** A promise and the function that settles it, to hold a fetch or a person check open. */
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+describe("createApiChatAdapter retry", () => {
+  it("asks a failed attempt again under its own retry ID with a fresh person check, then follows the new attempt", async () => {
+    const challenge = vi.fn(() => Promise.resolve(`token-${String(challenge.mock.calls.length)}`));
+    const { fetch, calls } = fakeFetch([
+      json(202, operation),
+      stream([chatFrame(start), chatFrame(failed)]),
+      json(202, retried),
+      stream([chatFrame(retriedStart), chatFrame(retriedComplete)]),
+    ]);
+    const chat = adapter(fetch, { challenge });
+
+    await collect(chat.send(question, { signal: signal() }));
+    const events = await collect(chat.retry(question, { retryId: RETRY, signal: signal() }));
+
+    expect(challenge).toHaveBeenCalledTimes(2);
+    expect(calls[2]).toMatchObject({
+      url: `/api/chat/operations/${OPERATION}/retry`,
+      method: "POST",
+      body: { retryId: RETRY, challengeToken: "token-2" },
+    });
+    expect(calls[2]?.headers.get("content-type")).toBe("application/json");
+    expect(calls[3]?.url).toBe(`/api/chat/operations/${RETRIED}/events`);
+    expect(events).toEqual([retriedStart, retriedComplete]);
+  });
+
+  it("follows an admitted attempt it never saw end again, without a person check or a retry", async () => {
+    const challenge = vi.fn(() => Promise.resolve("token-1"));
+    const { fetch, calls } = fakeFetch([
+      json(202, operation),
+      stream([chatFrame(start)]),
+      stream([chatFrame(start), chatFrame(complete)]),
+    ]);
+    const chat = adapter(fetch, {
+      challenge,
+      deadlineGraceMs: 0,
+      now: () => Date.parse(operation.deadlineAt) + 1,
+    });
+
+    await collect(chat.send(question, { signal: signal() }));
+    const events = await collect(chat.retry(question, { retryId: RETRY, signal: signal() }));
+
+    expect(challenge).toHaveBeenCalledTimes(1);
+    expect(calls.map((call) => call.url)).not.toContain(`/api/chat/operations/${OPERATION}/retry`);
+    expect(events).toEqual([start, complete]);
+  });
+
+  it("finds the failed attempt of a request it does not know by repeating the request, then retries it with the same token", async () => {
+    const challenge = vi.fn(() => Promise.resolve("token-1"));
+    const { fetch, calls } = fakeFetch([
+      json(200, { ...operation, status: "failed" }),
+      json(202, retried),
+      stream([chatFrame(retriedStart), chatFrame(retriedComplete)]),
+    ]);
+
+    const events = await collect(
+      adapter(fetch, { challenge }).retry(question, { retryId: RETRY, signal: signal() }),
+    );
+
+    expect(challenge).toHaveBeenCalledTimes(1);
+    expect(calls[0]).toMatchObject({
+      url: "/api/chat/conversation/messages",
+      method: "POST",
+      body: { ...question, challengeToken: "token-1" },
+    });
+    expect(calls[1]).toMatchObject({
+      url: `/api/chat/operations/${OPERATION}/retry`,
+      body: { retryId: RETRY, challengeToken: "token-1" },
+    });
+    expect(events).toEqual([retriedStart, retriedComplete]);
+  });
+
+  it.each([
+    [202, "accepted"],
+    [200, "running"],
+    [200, "completed"],
+  ])(
+    "follows the attempt a repeated request returns (%i %s) without a retry",
+    async (status, state) => {
+      const { fetch, calls } = fakeFetch([
+        json(status, { ...operation, status: state }),
+        stream([chatFrame(start), chatFrame(complete)]),
+      ]);
+
+      const events = await collect(
+        adapter(fetch).retry(question, { retryId: RETRY, signal: signal() }),
+      );
+
+      expect(calls.map((call) => call.method)).toEqual(["POST", "GET"]);
+      expect(events).toEqual([start, complete]);
+    },
+  );
+
+  it.each([
+    [409, "chat_not_retryable", "not_retryable"],
+    [409, "chat_busy", "busy"],
+    [409, "chat_request_conflict", "conflict"],
+    [403, "chat_challenge_failed", "challenge_failed"],
+    [503, "chat_budget_exhausted", "budget_exhausted"],
+    [404, "not_found", "unavailable"],
+  ])("reports a retry refused with %i %s as not admitted: %s", async (status, apiCode, code) => {
+    const { fetch } = fakeFetch([
+      json(202, operation),
+      stream([chatFrame(start), chatFrame(failed)]),
+      failure(status, apiCode),
+    ]);
+    const chat = adapter(fetch);
+
+    await collect(chat.send(question, { signal: signal() }));
+    const error = await collect(chat.retry(question, { retryId: RETRY, signal: signal() })).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toBeInstanceOf(ChatAdmissionError);
+    expect(error).toMatchObject({ code });
+  });
+
+  it("keeps the API's Retry-After of a retry refused for a spent allowance", async () => {
+    const { fetch } = fakeFetch([
+      json(202, operation),
+      stream([chatFrame(start), chatFrame(failed)]),
+      failure(429, "chat_quota_exceeded", { "retry-after": "60" }),
+    ]);
+    const chat = adapter(fetch);
+
+    await collect(chat.send(question, { signal: signal() }));
+
+    await expect(
+      collect(chat.retry(question, { retryId: RETRY, signal: signal() })),
+    ).rejects.toMatchObject({ code: "quota_exceeded", retryAfterSeconds: 60 });
+  });
+
+  it("reports a failed person check of a retry without asking the API", async () => {
+    const challenge = vi.fn(() => Promise.reject(new Error("challenge error")));
+    const { fetch, calls } = fakeFetch([]);
+
+    await expect(
+      collect(adapter(fetch, { challenge }).retry(question, { retryId: RETRY, signal: signal() })),
+    ).rejects.toMatchObject({ code: "challenge_failed" });
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("createApiChatAdapter stop", () => {
+  it("stops the request's operation without a person check or a body", async () => {
+    const challenge = vi.fn(() => Promise.resolve("token-1"));
+    const { fetch, calls } = fakeFetch([
+      json(200, { conversationId: "c", activeOperation: operation }),
+      json(200, { ...operation, status: "cancelled" }),
+    ]);
+    const chat = adapter(fetch, { challenge });
+
+    await chat.restore({ signal: signal() });
+
+    await expect(chat.stop(REQUEST, { signal: signal() })).resolves.toBe("stopped");
+    expect(challenge).not.toHaveBeenCalled();
+    expect(calls[1]).toMatchObject({
+      url: `/api/chat/operations/${OPERATION}/stop`,
+      method: "POST",
+      body: undefined,
+    });
+  });
+
+  it("has nothing to stop for a request it knows no operation of", async () => {
+    const { fetch, calls } = fakeFetch([]);
+
+    await expect(adapter(fetch).stop(REQUEST, { signal: signal() })).resolves.toBe("none");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("abandons a question still waiting for its person check, so it is never sent", async () => {
+    const check = deferred<string>();
+    const { fetch, calls } = fakeFetch([]);
+    const chat = adapter(fetch, { challenge: () => check.promise });
+
+    const sending = collect(chat.send(question, { signal: signal() })).catch(
+      (thrown: unknown) => thrown,
+    );
+    await Promise.resolve();
+    await expect(chat.stop(REQUEST, { signal: signal() })).resolves.toBe("none");
+    check.resolve("token-1");
+
+    await expect(sending).resolves.toBeInstanceOf(ChatAdmissionError);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("waits for a submission already sent, then stops the operation it admitted", async () => {
+    const admitted = deferred<Response>();
+    const calls: string[] = [];
+    const fetch = vi.fn((input: string) => {
+      const url = input;
+      calls.push(url);
+      if (url.endsWith("/messages")) return admitted.promise;
+      if (url.endsWith("/stop"))
+        return Promise.resolve(json(200, { ...operation, status: "cancelled" }));
+      const cancelled = { ...failed, code: "cancelled" };
+      return Promise.resolve(stream([chatFrame(start), chatFrame(cancelled)]));
+    }) as unknown as typeof globalThis.fetch;
+    const chat = adapter(fetch);
+
+    const sending = collect(chat.send(question, { signal: signal() }));
+    await vi.waitFor(() => {
+      expect(calls).toHaveLength(1);
+    });
+    const stopping = chat.stop(REQUEST, { signal: signal() });
+    admitted.resolve(json(202, operation));
+
+    await expect(stopping).resolves.toBe("stopped");
+    await sending;
+    expect(calls).toContain(`/api/chat/operations/${OPERATION}/stop`);
+  });
+
+  it("throws when the API could not be asked to stop", async () => {
+    const { fetch } = fakeFetch([
+      json(200, { conversationId: "c", activeOperation: operation }),
+      failure(503, "unavailable"),
+    ]);
+    const chat = adapter(fetch);
+
+    await chat.restore({ signal: signal() });
+
+    await expect(chat.stop(REQUEST, { signal: signal() })).rejects.toThrow();
+  });
+
+  it("asks a stopped attempt again under a retry, not by following it", async () => {
+    const { fetch, calls } = fakeFetch([
+      json(200, { conversationId: "c", activeOperation: operation }),
+      json(200, { ...operation, status: "cancelled" }),
+      json(202, retried),
+      stream([chatFrame(retriedStart), chatFrame(retriedComplete)]),
+    ]);
+    const chat = adapter(fetch);
+
+    await chat.restore({ signal: signal() });
+    await chat.stop(REQUEST, { signal: signal() });
+    await collect(chat.retry(question, { retryId: RETRY, signal: signal() }));
+
+    expect(calls[2]?.url).toBe(`/api/chat/operations/${OPERATION}/retry`);
+  });
+});
+
+describe("createApiChatAdapter clear", () => {
+  const cleared = {
+    cleared: true,
+    conversation: { conversationId: "d", messages: [], nextCursor: null, activeOperation: null },
+    telemetryDeletion: "pending",
+  };
+
+  it("deletes the conversation the visitor confirmed and returns the API's answer", async () => {
+    const { fetch, calls } = fakeFetch([json(200, cleared)]);
+
+    await expect(
+      adapter(fetch).clear("55555555-0000-4000-8000-000000000001", { signal: signal() }),
+    ).resolves.toEqual(cleared);
+    expect(calls[0]).toMatchObject({
+      url: "/api/chat/conversation",
+      method: "DELETE",
+      body: { conversationId: "55555555-0000-4000-8000-000000000001" },
+    });
+    expect(calls[0]?.headers.get("content-type")).toBe("application/json");
+  });
+
+  it("throws when the conversation could not be cleared", async () => {
+    const { fetch } = fakeFetch([failure(503, "unavailable")]);
+
+    await expect(adapter(fetch).clear("c", { signal: signal() })).rejects.toThrow();
+  });
+});

@@ -26,4 +26,10 @@ export interface ChatAdapter {
     readonly signal: AbortSignal;
   }): Promise<unknown>;
   send(question: ChatQuestion, options: { readonly signal: AbortSignal }): AsyncIterable<unknown>;
+  retry(
+    question: ChatQuestion,
+    options: { readonly retryId: string; readonly signal: AbortSignal },
+  ): AsyncIterable<unknown>;
+  stop(requestId: string, options: { readonly signal: AbortSignal }): Promise<"stopped" | "none">;
+  clear(conversationId: string, options: { readonly signal: AbortSignal }): Promise<unknown>;
 }

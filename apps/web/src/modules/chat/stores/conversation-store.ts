@@ -44,6 +44,10 @@ export interface ConversationSnapshot {
   readonly retentionDays: number | null;
   /** Whether older messages can be read, are being read, or there are none. */
   readonly earlier: "none" | "available" | "loading";
+  /** Stub. */
+  readonly conversationId: string | null;
+  /** Stub. */
+  readonly telemetryDeletion: "none" | "pending" | null;
 }
 
 /** What became of a question: sent, refused while another is answering, or not a valid question. */
@@ -90,7 +94,19 @@ export interface ConversationStore {
    * replaced in place. Never called by the store itself: a failure waits for the visitor.
    */
   retry(requestId: string): RetryResult;
+  /** Stub. */
+  stop(requestId: string): Promise<StopResult>;
+  /** Stub. */
+  clear(): Promise<ClearResult>;
+  /** Stub. */
+  refresh(): Promise<void>;
 }
+
+/** Stub. */
+export type StopResult = "stopped" | "failed" | "none";
+
+/** Stub. */
+export type ClearResult = "cleared" | "changed" | "failed";
 
 export interface ConversationStoreOptions {
   readonly adapter: ChatAdapter;
@@ -108,6 +124,8 @@ export interface ConversationStoreOptions {
    * question is refused as busy. True by default.
    */
   readonly available?: boolean;
+  /** Stub. */
+  readonly onChange?: () => void;
 }
 
 const handOffKey = (id: string) => `sebela-chat-handoff:${id}`;
@@ -298,7 +316,15 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
 
   return {
     getSnapshot() {
-      snapshot ??= { history, turns, busy: isBusy(), retentionDays, earlier };
+      snapshot ??= {
+        history,
+        turns,
+        busy: isBusy(),
+        retentionDays,
+        earlier,
+        conversationId: null,
+        telemetryDeletion: null,
+      };
       return snapshot;
     },
     subscribe(listener) {
@@ -354,6 +380,15 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       changed();
       void follow({ requestId: next.requestId, question: next.question });
       return "sent";
+    },
+    stop() {
+      return Promise.resolve("none");
+    },
+    clear() {
+      return Promise.resolve("failed");
+    },
+    refresh() {
+      return Promise.resolve();
     },
   };
 }

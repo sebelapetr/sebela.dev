@@ -167,6 +167,11 @@ export function restartChatTurn(turn: ChatTurn): ChatTurn {
   return startChatTurn(turn.requestId, turn.question);
 }
 
+/** Stub. */
+export function stopChatTurn(turn: ChatTurn): ChatTurn {
+  return turn;
+}
+
 /** No event came for too long: an open turn fails as timed out, keeping its partial answer. */
 export function timeOutChatTurn(turn: ChatTurn): ChatTurn {
   return isChatTurnOpen(turn) ? fail(turn, "timeout") : turn;

@@ -236,6 +236,100 @@ describe("createChatRelay", () => {
     expect(api.calls).toHaveLength(0);
   });
 
+  it("relays a stop as a POST without a body, with the visitor's cookie and origin", async () => {
+    const api = fakeApi();
+    const request = new Request(`${SITE}/api/chat/operations/${OPERATION}/stop`, {
+      method: "POST",
+      body: "ignored",
+      headers: { cookie: "sebela_chat=visitor", origin: SITE },
+    });
+
+    await relay(api)(request, { kind: "stop", operationId: OPERATION });
+
+    expect(api.calls[0]).toMatchObject({
+      url: `${API}/v1/chat/operations/${OPERATION}/stop`,
+      method: "POST",
+      body: null,
+    });
+    expect(api.calls[0]?.headers.get("cookie")).toBe("sebela_chat=visitor");
+    expect(api.calls[0]?.headers.get("origin")).toBe(SITE);
+  });
+
+  it("relays a retry as a POST with its body", async () => {
+    const api = fakeApi();
+    const retry = JSON.stringify({
+      retryId: "44444444-0000-4000-8000-000000000001",
+      challengeToken: "token",
+    });
+    const request = new Request(`${SITE}/api/chat/operations/${OPERATION}/retry`, {
+      method: "POST",
+      body: retry,
+      headers: { "content-type": "application/json", origin: SITE },
+    });
+
+    await relay(api)(request, { kind: "retry", operationId: OPERATION });
+
+    expect(api.calls[0]).toMatchObject({
+      url: `${API}/v1/chat/operations/${OPERATION}/retry`,
+      method: "POST",
+      body: retry,
+    });
+    expect(api.calls[0]?.headers.get("content-type")).toBe("application/json");
+  });
+
+  it("relays a clear as a DELETE of the conversation with the confirmed conversation in its body", async () => {
+    const api = fakeApi();
+    const clear = JSON.stringify({ conversationId: "55555555-0000-4000-8000-000000000001" });
+    const request = new Request(`${SITE}/api/chat/conversation?before=x`, {
+      method: "DELETE",
+      body: clear,
+      headers: { "content-type": "application/json", origin: SITE },
+    });
+
+    await relay(api)(request, { kind: "clear" });
+
+    expect(api.calls[0]).toMatchObject({
+      url: `${API}/v1/chat/conversation`,
+      method: "DELETE",
+      body: clear,
+    });
+  });
+
+  it("refuses an oversized retry or clear body without reaching the API", async () => {
+    const api = fakeApi();
+    const oversized = (url: string, method: string) =>
+      new Request(url, {
+        method,
+        body: "x".repeat(chatRelayMaxBodyBytes + 1),
+        headers: { "content-type": "application/json" },
+      });
+
+    const retry = await relay(api)(
+      oversized(`${SITE}/api/chat/operations/${OPERATION}/retry`, "POST"),
+      { kind: "retry", operationId: OPERATION },
+    );
+    const clear = await relay(api)(oversized(`${SITE}/api/chat/conversation`, "DELETE"), {
+      kind: "clear",
+    });
+
+    expect(retry.status).toBe(413);
+    expect(clear.status).toBe(413);
+    expect(api.calls).toHaveLength(0);
+  });
+
+  it("answers a stop or retry of an operation that is not one 404 without reaching the API", async () => {
+    const api = fakeApi();
+    const request = () =>
+      new Request(`${SITE}/api/chat/operations/x/stop`, { method: "POST", body: "{}" });
+
+    const stop = await relay(api)(request(), { kind: "stop", operationId: "../admin" });
+    const retry = await relay(api)(request(), { kind: "retry", operationId: "not-a-uuid" });
+
+    expect(stop.status).toBe(404);
+    expect(retry.status).toBe(404);
+    expect(api.calls).toHaveLength(0);
+  });
+
   it("returns the API's answer as it is: status, body, every cookie and Retry-After, never cached", async () => {
     const headers = new Headers({
       "content-type": "application/json",

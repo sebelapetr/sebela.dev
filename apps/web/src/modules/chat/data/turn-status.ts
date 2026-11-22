@@ -136,6 +136,8 @@ function errorNote(error: ChatTurnError): { readonly reason: string; readonly fi
     case "conflict":
     case "budget_exhausted":
       return { reason: ADMISSION_NOTES[code].note, final: ADMISSION_NOTES[code].final };
+    case "not_retryable":
+      return { reason: "", final: false };
     default:
       return { reason: ERROR_NOTES[code], final: false };
   }

@@ -8,7 +8,10 @@ export type ChatRelayRoute =
   | { readonly kind: "conversation" }
   | { readonly kind: "messages" }
   | { readonly kind: "operation"; readonly operationId: string }
-  | { readonly kind: "events"; readonly operationId: string };
+  | { readonly kind: "events"; readonly operationId: string }
+  | { readonly kind: "stop"; readonly operationId: string }
+  | { readonly kind: "retry"; readonly operationId: string }
+  | { readonly kind: "clear" };
 
 /** The relay's token and how many proxies in front of the website append to X-Forwarded-For. */
 export interface ChatRelaySettings {
@@ -116,6 +119,10 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
       const base = `/v1/chat/operations/${route.operationId}`;
       return route.kind === "events" ? `${base}/events` : base;
     }
+    case "stop":
+    case "retry":
+    case "clear":
+      return null;
   }
 }
 

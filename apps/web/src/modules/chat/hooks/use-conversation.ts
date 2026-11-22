@@ -26,6 +26,8 @@ const emptySnapshot: ConversationSnapshot = {
   busy: true,
   retentionDays: null,
   earlier: "none",
+  conversationId: null,
+  telemetryDeletion: null,
 };
 
 const createId = () => crypto.randomUUID();

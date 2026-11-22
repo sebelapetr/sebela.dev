@@ -15,6 +15,7 @@ export const chatAdmissionCodes = [
   "rate_limited",
   "invalid_request",
   "unavailable",
+  "not_retryable",
 ] as const;
 
 export type ChatAdmissionCode = (typeof chatAdmissionCodes)[number];

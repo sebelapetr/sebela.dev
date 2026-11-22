@@ -108,6 +108,7 @@ describe("describeChatTurn", () => {
     ["unavailable", "The assistant is unavailable right now."],
     ["invalid_stream", "The answer could not be read."],
     ["internal", "Something went wrong while answering."],
+    ["cancelled", "The answer was stopped."],
   ])("explains a retryable %s error and offers a retry", (code, note) => {
     expect(describeChatTurn(failed(code, true))).toEqual({
       state: "failed",
@@ -237,6 +238,14 @@ describe("describeChatTurn for a question that was not admitted", () => {
   it("says a conflicting request could not be sent and offers no retry", () => {
     expect(describeChatTurn(rejected("conflict", false))).toMatchObject({
       note: "This question could not be sent. Try asking something else.",
+      retry: false,
+      contact: false,
+    });
+  });
+
+  it("says an answer can no longer be asked again and offers no retry", () => {
+    expect(describeChatTurn(rejected("not_retryable", false))).toMatchObject({
+      note: "This answer can no longer be asked again. Try asking something else.",
       retry: false,
       contact: false,
     });
