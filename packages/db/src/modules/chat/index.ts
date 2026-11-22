@@ -15,8 +15,6 @@ import {
   type SQL,
 } from "drizzle-orm";
 
-import { alias } from "drizzle-orm/pg-core";
-
 import type { Database } from "../../database.js";
 import {
   admissions,
@@ -82,8 +80,12 @@ export interface ChatOperationRecord {
   conversationId: string;
   requestId: string;
   questionHash: string;
-  userMessageId: string;
-  assistantMessageId: string;
+  /** What the operation does; a compaction has no question and no answer message. */
+  kind: ChatOperationKind;
+  /** The question an answer asks; `null` for a compaction. */
+  userMessageId: string | null;
+  /** The answer an answer fills; `null` for a compaction. */
+  assistantMessageId: string | null;
   status: ChatOperationState;
   admittedAt: Date;
   deadlineAt: Date;
@@ -95,7 +97,15 @@ export interface ChatOperationRecord {
   contextRevision: number;
   /** The attempt this one retries, or `null` for the first attempt of its request. */
   retryOf: string | null;
+  /** How a compaction ended once its result was stored; `null` for an answer and before. */
+  compaction: { outcome: ChatCompactionOutcome; reason: string | null } | null;
 }
+
+/** An answer of one question, or a compaction of the working context. */
+export type ChatOperationKind = "answer" | "compaction";
+
+/** How a stored compaction ended: only `compacted` installed a summary. */
+export type ChatCompactionOutcome = "compacted" | "unchanged" | "failed";
 
 /** One quota: at most `limit` admissions of the scope since `since`. */
 export interface ChatQuotaRule {
@@ -184,6 +194,52 @@ export interface ChatExchangeRecord {
   sources: unknown[];
 }
 
+/**
+ * A conversation's working context: the installed summary (validated by the services before it is
+ * stored and after it is read) and the latest answered exchanges after it, oldest first.
+ */
+export interface ChatWorkingContextRecord {
+  revision: number;
+  summary: unknown;
+  exchanges: ChatExchangeRecord[];
+}
+
+/** One compaction's admission: the same gates as a question, but no message is appended. */
+export type ChatCompactionAdmissionInput = Omit<ChatAdmissionInput, "question"> & {
+  /** Fewer working-context exchanges than this is nothing to compact; nothing is admitted. */
+  minimumExchanges: number;
+  /** How many of the latest exchanges the working context holds at most. */
+  exchangeLimit: number;
+};
+
+export type ChatCompactionAdmissionResult =
+  /** The admitted compaction and the working context it compacts, read under the same lock. */
+  | { status: "admitted"; operation: ChatOperationRecord; context: ChatWorkingContextRecord }
+  | { status: "nothing_to_compact" }
+  | Exclude<ChatAdmissionResult, { status: "admitted" }>;
+
+/** The validated result of a compaction, as the services decided to store it. */
+export interface ChatCompactionRecord {
+  outcome: ChatCompactionOutcome;
+  reason: string | null;
+  /** The new summary; only a `compacted` result has one. */
+  summary: unknown;
+  /** How many of the compacted exchanges, newest first, stay verbatim after the summary. */
+  kept: number;
+  summaryTokens: number;
+  /** The estimate of the working context after the compaction; `null` when not measured. */
+  nextInputTokens: number | null;
+  /** The reported cost; `null` when it is uncertain, which keeps the full reservation. */
+  costMicroUsd: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  modelAttempts: number;
+  latencyMs: number;
+  versions: Record<string, string>;
+  /** The working context's exchange limit the compaction was dispatched with. */
+  exchangeLimit: number;
+}
+
 export type ChatClaimResult =
   | { status: "claimed"; operation: ChatOperationRecord }
   /** Already claimed, expired or no longer accepted. */
@@ -260,6 +316,11 @@ export interface ChatUsageRecord {
   activeOperation: ChatOperationRecord | null;
   /** The conversation's latest measured main call, with its operation and when it finished. */
   context: (ChatContextMeasurement & { operationId: string; measuredAt: Date }) | null;
+  /**
+   * The history estimate of the installed compaction, when it is the conversation's latest
+   * measured operation; `null` otherwise.
+   */
+  nextRequest: { operationId: string; measuredAt: Date; historyTokens: number } | null;
 }
 
 export type ChatReconcileResult =
@@ -361,18 +422,44 @@ export interface ChatPersistence {
     conversationId: string,
     page: { before?: string; limit: number },
   ): Promise<{ messages: ChatMessageRecord[]; hasMore: boolean }>;
-  /** The identity's operation and its assistant message; `null` for another identity's. */
+  /**
+   * The identity's operation and its assistant message (`null` for a compaction); `null` for
+   * another identity's.
+   */
   findOperation(
     identityId: string,
     operationId: string,
-  ): Promise<{ operation: ChatOperationRecord; assistant: ChatMessageRecord } | null>;
+  ): Promise<{ operation: ChatOperationRecord; assistant: ChatMessageRecord | null } | null>;
   findActiveOperation(identityId: string): Promise<ChatOperationRecord | null>;
   findOperationByRequest(
     identityId: string,
     requestId: string,
   ): Promise<ChatOperationRecord | null>;
-  /** The latest completed answered exchanges, at most `limit`, oldest first. */
-  recentExchanges(conversationId: string, limit: number): Promise<ChatExchangeRecord[]>;
+  /**
+   * The conversation's working context: its installed summary and at most `limit` of the latest
+   * completed answered exchanges after the summary, oldest first. Stored history is never cut.
+   */
+  workingContext(conversationId: string, limit: number): Promise<ChatWorkingContextRecord>;
+  /**
+   * Admits one compaction atomically, under the same per-identity lock and gates as a question:
+   * the request id is unused, no operation is active, the working context has at least
+   * `minimumExchanges` exchanges, then the challenge, quotas and spend. Creates the `accepted`
+   * compaction with its grant and no message. Any refusal changes nothing.
+   */
+  admitCompaction(input: ChatCompactionAdmissionInput): Promise<ChatCompactionAdmissionResult>;
+  /**
+   * Stores the result of a claimed compaction once and settles its spend like `reconcile`. A
+   * `compacted` result installs its summary only while the conversation is still at the
+   * operation's context revision, then advances the revision; any other result, or a stale one,
+   * keeps the prior working context and is stored as `unchanged` with reason `stale`. No message
+   * is ever deleted. A cleared conversation's compaction settles only a measured cost.
+   */
+  reconcileCompaction(
+    operationId: string,
+    verifier: string,
+    at: Date,
+    result: ChatCompactionRecord,
+  ): Promise<ChatReconcileResult>;
   /**
    * Admits one question atomically, serialised per identity and per fingerprint: the request id
    * is unused, no operation is active, the challenge token is unredeemed, every quota has room and
@@ -663,6 +750,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     conversationId: row.conversationId,
     requestId: row.requestId,
     questionHash: row.questionHash,
+    kind: "answer",
     userMessageId: row.userMessageId,
     assistantMessageId: row.assistantMessageId,
     status: row.status as ChatOperationState,
@@ -674,6 +762,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     allowanceMicroUsd: row.allowanceMicroUsd,
     contextRevision: row.contextRevision,
     retryOf: row.retryOf,
+    compaction: null,
   };
 }
 
@@ -1219,33 +1308,16 @@ export function createChatPersistence(db: Database): ChatPersistence {
       return row === undefined ? null : operationOf(row);
     },
 
-    async recentExchanges(conversationId, limit) {
-      const asked = alias(messages, "asked");
-      const rows = await db
-        .select({
-          question: asked.text,
-          answer: messages.text,
-          language: messages.language,
-          sources: messages.sources,
-        })
-        .from(operations)
-        .innerJoin(messages, eq(messages.id, operations.assistantMessageId))
-        .innerJoin(asked, eq(asked.id, operations.userMessageId))
-        .where(
-          and(
-            eq(operations.conversationId, conversationId),
-            eq(messages.status, "completed"),
-            eq(messages.outcome, "answered"),
-          ),
-        )
-        .orderBy(desc(messages.position))
-        .limit(limit);
-      return rows.reverse().map((row) => ({
-        question: row.question ?? "",
-        answer: row.answer ?? "",
-        language: row.language,
-        sources: row.sources,
-      }));
+    workingContext() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+
+    admitCompaction() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+
+    reconcileCompaction() {
+      return Promise.reject(new Error("Not implemented."));
     },
 
     async admit(input) {
@@ -1724,6 +1796,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
             spendRoom,
             activeOperation: running === undefined ? null : operationOf(running),
             context: contextOf(measured),
+            nextRequest: null,
           };
         },
         { isolationLevel: "repeatable read", accessMode: "read only" },
