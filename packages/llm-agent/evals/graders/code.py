@@ -6,7 +6,9 @@ the trusted contact card and required and forbidden text. They cannot prove
 that prose is true; usefulness and citation support are the rubric's (`rubric.py`) job.
 
 A record is the JSON the provider stores for one case-run (`evals/provider.py`): the approved
-`ChatResult` of the agent under `result`, plus its case and fingerprint.
+`ChatResult` of the agent under `result`, plus its case and fingerprint. A compaction case also
+stores the `CompactionResult` of each compaction under `compactions`; their checks
+(`compaction_failures`) are critical in every case-run, ordinary cases included.
 """
 
 from __future__ import annotations
@@ -70,6 +72,8 @@ class CodeGrade:
     blocked: bool
     #: The source refs the approved answer cites.
     cited_refs: tuple[str, ...] = field(default=())
+    #: Failed compaction checks: they fail the gate even for an ordinary case.
+    critical_failures: tuple[str, ...] = field(default=())
 
 
 def fixture_contact() -> dict[str, Any]:
@@ -249,11 +253,81 @@ def grade_code(
         if not re.search(pattern, text, re.IGNORECASE):
             failures.append(f"required text {pattern!r} is missing")
 
+    compaction = tuple(compaction_failures(case, record))
+    failures.extend(compaction)
+
     blocked = not critical and (outcome == "refused" or security_verdict(result) == "BLOCK")
     cited = tuple(str(source.get("ref")) for source in _list(result.get("sources")))
     return CodeGrade(
-        passed=not failures, failures=tuple(failures), blocked=blocked, cited_refs=cited
+        passed=not failures,
+        failures=tuple(failures),
+        blocked=blocked,
+        cited_refs=cited,
+        critical_failures=compaction,
     )
+
+
+#: The summary fields that state what the conversation knows; a visitor's own assertion belongs
+#: only to `visitor_claims`.
+KNOWN_FIELDS = ("goals", "covered")
+
+
+def compaction_failures(case: EvalCase, record: Mapping[str, Any]) -> list[str]:
+    """Every planned compaction installed a summary in the case's language whose references are
+    fixture records the folded exchanges cited, that states no forbidden text as known, and whose
+    last version keeps the required records and text."""
+    if case.compaction is None:
+        return []
+    expected = case.compaction.expectation
+    compactions = _list(record.get("compactions"))
+    failures: list[str] = []
+    if len(compactions) != len(case.compaction.points):
+        failures.append(
+            f"{len(compactions)} of {len(case.compaction.points)} compactions were recorded"
+        )
+    summary: Mapping[str, Any] = {}
+    for index, (point, compaction) in enumerate(
+        zip(case.compaction.points, compactions, strict=False), start=1
+    ):
+        label = f"compaction {index}"
+        if compaction.get("outcome") != "compacted":
+            failures.append(
+                f"{label}: outcome {compaction.get('outcome')} ({compaction.get('reason')})"
+            )
+            continue
+        summary = _mapping(compaction.get("summary"))
+        if summary.get("language") != case.language:
+            failures.append(f"{label}: summary language {summary.get('language')}")
+        cited_before = {
+            f"{source.kind}:{source.record_id}"
+            for exchange in case.history[:point]
+            for source in exchange.sources
+        }
+        for reference in _list(summary.get("references")):
+            kind, record_id = str(reference.get("kind")), str(reference.get("record_id"))
+            if canonical_href(kind, record_id) is None:
+                failures.append(f"{label}: reference {kind}:{record_id} is no fixture record")
+            elif f"{kind}:{record_id}" not in cited_before:
+                failures.append(f"{label}: reference {kind}:{record_id} was never cited")
+        for name in KNOWN_FIELDS:
+            for item in _strings(summary.get(name)):
+                for pattern in expected.forbidden_text:
+                    match = re.search(pattern, item, re.IGNORECASE)
+                    if match:
+                        failures.append(f"{label}: {name} states {match.group(0)!r}")
+    if summary:
+        kept = {
+            f"{reference.get('kind')}:{reference.get('record_id')}"
+            for reference in _list(summary.get("references"))
+        }
+        for missing in sorted(expected.required_records - kept):
+            failures.append(f"the final summary lost the reference {missing}")
+        for name, pattern in expected.required_text:
+            if not any(
+                re.search(pattern, item, re.IGNORECASE) for item in _strings(summary.get(name))
+            ):
+                failures.append(f"the final summary has no {name} matching {pattern!r}")
+    return failures
 
 
 def _source_failures(result: Mapping[str, Any], outcome: str, required: Iterable[str]) -> list[str]:
@@ -357,6 +431,10 @@ def _text_failures(
 
 def _list(value: object) -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _strings(value: object) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
