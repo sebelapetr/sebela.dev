@@ -29,6 +29,9 @@ RUN pnpm install --frozen-lockfile --ignore-scripts --filter "@sebela/web..." \
 # Runtime stage: the traced server with the production files it needs and the static assets, no
 # package manager and no development dependency. `@sebela/ui` was compiled into the build.
 FROM base AS runtime
+# npm installed pnpm in the base stage and is not needed to run: remove the npm the Node.js base image
+# bundles, so its packages are not part of the image (docs/release-workflow.md, "Image scan").
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/web/.next/static apps/web/.next/static

@@ -27,6 +27,9 @@ RUN pnpm install --frozen-lockfile --ignore-scripts --filter "@sebela/mcp-admin.
 # Runtime stage: production dependencies only and the built output, in the workspace layout the
 # packages resolve them in.
 FROM base AS runtime
+# npm installed pnpm in the base stage and is not needed to run: remove the npm the Node.js base image
+# bundles, so its packages are not part of the image (docs/release-workflow.md, "Image scan").
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 ENV NODE_ENV=production
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/mcp-admin/package.json apps/mcp-admin/
