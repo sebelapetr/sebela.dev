@@ -23,7 +23,13 @@ import {
   type ChatMessageSubmission,
   type ChatRetrySubmission,
 } from "@sebela/contracts";
-import type { ChatCaller, ChatDispatch, ChatService, ChatSubmitResult } from "@sebela/services";
+import type {
+  ChatCaller,
+  ChatCompactionDispatch,
+  ChatDispatch,
+  ChatService,
+  ChatSubmitResult,
+} from "@sebela/services";
 
 import type { ApiConfig, ChatHttpConfig } from "../../config.js";
 import { refuseCredentialsInUrl } from "../../middleware/authentication.js";
@@ -38,9 +44,9 @@ import { chatEventStream, defaultChatTiming, lastEventIdOf, type ChatTiming } fr
 /** The first-party cookie that carries the visitor's opaque chat identity. */
 export const chatCookieName = "sebela_chat";
 
-/** Hands an admitted question to the AI service; never waits for the generation. */
+/** Hands an admitted question or compaction to the AI service; never waits for the run. */
 export interface ChatDispatcher {
-  dispatch(dispatch: ChatDispatch): void;
+  dispatch(dispatch: ChatDispatch | ChatCompactionDispatch): void;
   /** Tells the AI service to stop a claimed generation; never waits and never fails the caller. */
   cancel(operationId: string): void;
 }

@@ -2,9 +2,18 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { ChatGenerationResult } from "@sebela/contracts";
+import type {
+  ChatCompactionResult,
+  ChatContextSummary,
+  ChatGenerationResult,
+} from "@sebela/contracts";
 import { chatPolicy } from "@sebela/services";
-import type { ChallengeVerifier, ChatDispatch, ChatPolicy } from "@sebela/services";
+import type {
+  ChallengeVerifier,
+  ChatCompactionDispatch,
+  ChatDispatch,
+  ChatPolicy,
+} from "@sebela/services";
 
 import type { Api } from "./app.js";
 import type { ChatHttpConfig } from "./config.js";
@@ -56,6 +65,8 @@ const eventsPath = (id: string) => `/v1/chat/operations/${id}/events`;
 const resultPath = (id: string) => `/v1/internal/chat/operations/${id}/result`;
 const stopPath = (id: string) => `/v1/chat/operations/${id}/stop`;
 const retryPath = (id: string) => `/v1/chat/operations/${id}/retry`;
+const COMPACT = "/v1/chat/conversation/compact";
+const compactionPath = (id: string) => `/v1/internal/chat/operations/${id}/compaction`;
 
 const answerFor = (grant: string, text = "A fictional answer."): ChatGenerationResult => ({
   grant,
@@ -77,6 +88,34 @@ const answerFor = (grant: string, text = "A fictional answer."): ChatGenerationR
   },
   versions: { agent: "1" },
   latencyMs: 1200,
+});
+
+const summary: ChatContextSummary = {
+  language: "en",
+  goals: ["Find a fictional service for a small team"],
+  openQuestions: ["The fictional timeline"],
+  covered: ["Fictional services"],
+  visitorClaims: [],
+  references: [{ kind: "service", recordId: "svc-1", title: "Fictional service" }],
+};
+
+const compactedFor = (grant: string, kept = 1): ChatCompactionResult => ({
+  grant,
+  outcome: "compacted",
+  reason: null,
+  summary,
+  kept,
+  summaryTokens: 120,
+  nextInputTokens: 900,
+  usage: {
+    costUsd: 0.003,
+    costUncertain: false,
+    inputTokens: 2000,
+    outputTokens: 150,
+    modelAttempts: 1,
+  },
+  versions: { prompt: "compaction-v1" },
+  latencyMs: 900,
 });
 
 /**
@@ -107,16 +146,22 @@ function fakeVerifier(): ChallengeVerifier & {
   return verifier;
 }
 
-/** A dispatcher that only records what it was handed and what it was told to stop. */
+/**
+ * A dispatcher that only records what it was handed, questions and compactions apart, and what it
+ * was told to stop.
+ */
 function capturingDispatcher(): ChatDispatcher & {
   dispatched: ChatDispatch[];
+  compactions: ChatCompactionDispatch[];
   cancelled: string[];
 } {
   const dispatcher = {
     dispatched: [] as ChatDispatch[],
+    compactions: [] as ChatCompactionDispatch[],
     cancelled: [] as string[],
-    dispatch: (dispatch: ChatDispatch) => {
-      dispatcher.dispatched.push(dispatch);
+    dispatch: (dispatch: ChatDispatch | ChatCompactionDispatch) => {
+      if ("question" in dispatch) dispatcher.dispatched.push(dispatch);
+      else dispatcher.compactions.push(dispatch);
     },
     cancel: (operationId: string) => {
       dispatcher.cancelled.push(operationId);
@@ -363,6 +408,16 @@ describe("the visitor chat over HTTP", () => {
             ),
           },
         ],
+        [
+          COMPACT,
+          {
+            method: "POST",
+            ...json(
+              { requestId: randomUUID(), challengeToken: "fictional-token" },
+              { cookie, origin: ORIGIN },
+            ),
+          },
+        ],
         [operationPath(asked.operationId), { headers: { cookie } }],
         [eventsPath(asked.operationId), { headers: { cookie } }],
         [USAGE, { headers: { cookie } }],
@@ -381,6 +436,7 @@ describe("the visitor chat over HTTP", () => {
 
       expect(verifier.addresses).toEqual([]);
       expect(dispatcher.dispatched).toHaveLength(1);
+      expect(dispatcher.compactions).toEqual([]);
       expect(await read()).toEqual(before);
       expect(before).toMatchObject({ conversationId });
     });
@@ -1358,7 +1414,11 @@ describe("the visitor chat over HTTP", () => {
     it("gives the AI service's credentials no private route and no visitor conversation", async () => {
       const { cookie, conversationId } = await visitor();
       const asked = (await (await ask(cookie)).json()) as { operationId: string };
-      const control = new Set([CLAIM, "/v1/internal/chat/operations/:operationId/result"]);
+      const control = new Set([
+        CLAIM,
+        "/v1/internal/chat/operations/:operationId/result",
+        "/v1/internal/chat/operations/:operationId/compaction",
+      ]);
       const credentials = [CONTROL_TOKEN, AI_TOKEN, RELAY_TOKEN];
       const privateRoutes = api.routes.filter(
         (route) => route.access === "private" && !control.has(route.path),
@@ -1413,6 +1473,293 @@ describe("the visitor chat over HTTP", () => {
       ).json()) as { conversationId: string; messages: unknown[] };
       expect(conversation).toMatchObject({ conversationId });
       expect(conversation.messages).toHaveLength(2);
+    });
+  });
+
+  describe("compaction", () => {
+    const compact = (
+      cookie: string,
+      requestId: string = randomUUID(),
+      headers: Record<string, string> = {},
+    ) =>
+      request(COMPACT, {
+        method: "POST",
+        ...json(
+          { requestId, challengeToken: `fictional-token-${randomUUID()}` },
+          { cookie, origin: ORIGIN, ...headers },
+        ),
+      });
+
+    const lastCompaction = () => {
+      const dispatch = dispatcher.compactions.at(-1);
+      if (dispatch === undefined) throw new Error("No compaction was dispatched.");
+      return dispatch;
+    };
+
+    /** A visitor whose conversation holds `count` answered exchanges. */
+    async function withExchanges(count: number) {
+      const opened = await visitor();
+      for (let index = 0; index < count; index += 1) {
+        clock = new Date(clock.getTime() + 1000);
+        expect((await ask(opened.cookie, `Question ${String(index)}?`)).status).toBe(202);
+        await settleLast();
+      }
+      clock = new Date(clock.getTime() + 1000);
+      return opened;
+    }
+
+    const conversationOf = async (cookie: string) =>
+      (await (await request(CONVERSATION, { headers: { cookie } })).json()) as {
+        messages: { role: string; text: string | null }[];
+        activeOperation: unknown;
+      };
+
+    it("answers a small context locally, with no challenge, quota or dispatch", async () => {
+      for (const count of [0, 2]) {
+        const { cookie } = await withExchanges(count);
+        verifier.tokens.length = 0;
+
+        const response = await compact(cookie);
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(await response.json()).toEqual({ status: "noop", reason: "nothing_to_compact" });
+        expect(verifier.tokens).toEqual([]);
+        expect(dispatcher.compactions).toEqual([]);
+        const usage = (await (await request(USAGE, { headers: { cookie } })).json()) as {
+          utcDay: { used: number };
+        };
+        expect(usage.utcDay.used).toBe(count);
+      }
+    });
+
+    it("starts a compaction that is no message, that another tab sees, and that blocks asking", async () => {
+      const { cookie } = await withExchanges(3);
+      const before = await conversationOf(cookie);
+      const requestId = randomUUID();
+
+      const started = await compact(cookie, requestId);
+
+      expect(started.status).toBe(202);
+      const body = (await started.json()) as {
+        status: string;
+        operation: { operationId: string };
+      };
+      expect(body).toMatchObject({
+        status: "started",
+        operation: {
+          requestId,
+          kind: "compaction",
+          status: "accepted",
+          assistantMessageId: null,
+          compaction: null,
+        },
+      });
+      const dispatch = lastCompaction();
+      expect(dispatch).toMatchObject({
+        operationId: body.operation.operationId,
+        summary: null,
+        contextRevision: 3,
+        model: "fictional-model",
+        effort: "medium",
+      });
+      expect(dispatch.exchanges.map((exchange) => exchange.question)).toEqual([
+        "Question 0?",
+        "Question 1?",
+        "Question 2?",
+      ]);
+      expect(dispatcher.dispatched).toHaveLength(3);
+      // The other tab: the same conversation, unchanged, with the compaction active.
+      const seen = await conversationOf(cookie);
+      expect(seen.messages).toEqual(before.messages);
+      expect(seen.activeOperation).toMatchObject({ operationId: body.operation.operationId });
+      expect(
+        await (
+          await request(operationPath(body.operation.operationId), { headers: { cookie } })
+        ).json(),
+      ).toMatchObject({ kind: "compaction", status: "accepted" });
+
+      const again = await compact(cookie, requestId);
+      expect(again.status).toBe(200);
+      expect(await again.json()).toEqual(body);
+      const asking = await ask(cookie, "Meanwhile?");
+      expect(asking.status).toBe(409);
+      expect(await asking.json()).toEqual({ error: { code: "chat_busy", message: anyText } });
+      const second = await compact(cookie);
+      expect(second.status).toBe(409);
+      expect(await second.json()).toEqual({ error: { code: "chat_busy", message: anyText } });
+      expect(dispatcher.compactions).toHaveLength(1);
+    });
+
+    it("installs a reported summary: later questions carry it with only the newer exchanges", async () => {
+      const { cookie } = await withExchanges(3);
+      const before = await conversationOf(cookie);
+      await compact(cookie);
+      const dispatch = lastCompaction();
+
+      const claimed = await control(CLAIM, {
+        operationId: dispatch.operationId,
+        grant: dispatch.grant,
+      });
+      expect(claimed.status).toBe(200);
+      expect(await claimed.json()).toMatchObject({ claimed: true, kind: "compaction" });
+      const asAnswer = await control(resultPath(dispatch.operationId), answerFor(dispatch.grant));
+      expect(asAnswer.status).toBe(403);
+      const reported = await control(
+        compactionPath(dispatch.operationId),
+        compactedFor(dispatch.grant),
+      );
+      expect(reported.status).toBe(200);
+      const operation: unknown = await reported.json();
+      expect(operation).toMatchObject({
+        kind: "compaction",
+        status: "completed",
+        compaction: { outcome: "compacted", reason: null },
+      });
+      const repeat = await control(
+        compactionPath(dispatch.operationId),
+        compactedFor(dispatch.grant, 0),
+      );
+      expect(repeat.status).toBe(200);
+      expect(await repeat.json()).toEqual(operation);
+
+      // The visible history is unchanged; the working context is the summary and the kept exchange.
+      expect((await conversationOf(cookie)).messages).toEqual(before.messages);
+      const usage = (await (await request(USAGE, { headers: { cookie } })).json()) as Record<
+        string,
+        unknown
+      >;
+      expect(usage).toMatchObject({
+        utcDay: { used: 4 },
+        nextRequest: {
+          status: "estimated",
+          historyTokens: 900,
+          operationId: dispatch.operationId,
+          measuredAt: clock.toISOString(),
+        },
+      });
+      expect(JSON.stringify(usage)).not.toContain("fictional service for a small team");
+      expect((await ask(cookie, "And the price?")).status).toBe(202);
+      expect(lastDispatch()).toMatchObject({ summary, contextRevision: 4 });
+      expect(lastDispatch().history.map((exchange) => exchange.question)).toEqual(["Question 2?"]);
+    });
+
+    it("keeps the context after a failed or stopped compaction, and tells the AI service to stop", async () => {
+      const { cookie } = await withExchanges(3);
+      await compact(cookie);
+      const failed = lastCompaction();
+      await control(CLAIM, { operationId: failed.operationId, grant: failed.grant });
+      const invalid = await control(compactionPath(failed.operationId), {
+        ...compactedFor(failed.grant),
+        summary: "not a summary",
+      });
+      expect(invalid.status).toBe(200);
+      expect(await invalid.json()).toMatchObject({
+        status: "failed",
+        compaction: { outcome: "failed", reason: "invalid_result" },
+      });
+
+      await compact(cookie);
+      const stopped = lastCompaction();
+      await control(CLAIM, { operationId: stopped.operationId, grant: stopped.grant });
+      const stop = await request(stopPath(stopped.operationId), {
+        method: "POST",
+        headers: { cookie, origin: ORIGIN },
+      });
+      expect(stop.status).toBe(200);
+      expect(await stop.json()).toMatchObject({ kind: "compaction", status: "cancelled" });
+      expect(dispatcher.cancelled).toEqual([stopped.operationId]);
+      const late = await control(compactionPath(stopped.operationId), compactedFor(stopped.grant));
+      expect(late.status).toBe(200);
+      expect(await late.json()).toMatchObject({ status: "cancelled", compaction: null });
+
+      expect((await ask(cookie, "Where were we?")).status).toBe(202);
+      expect(lastDispatch()).toMatchObject({ summary: null, contextRevision: 3 });
+      expect(lastDispatch().history).toHaveLength(3);
+    });
+
+    it("cancels an active compaction when the conversation is cleared", async () => {
+      const { cookie, conversationId } = await withExchanges(3);
+      await compact(cookie);
+      const dispatch = lastCompaction();
+      await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant });
+
+      const cleared = await request(CONVERSATION, {
+        method: "DELETE",
+        ...json({ conversationId }, { cookie, origin: ORIGIN }),
+      });
+
+      expect(cleared.status).toBe(200);
+      expect(dispatcher.cancelled).toEqual([dispatch.operationId]);
+      const late = await control(
+        compactionPath(dispatch.operationId),
+        compactedFor(dispatch.grant),
+      );
+      expect(late.status).toBe(409);
+    });
+
+    it("refuses as a question is refused, before any state change", async () => {
+      const { cookie } = await withExchanges(3);
+      const body = JSON.stringify({ requestId: randomUUID(), challengeToken: "fictional-token" });
+      for (const headers of [
+        { cookie, "content-type": "application/json" },
+        { cookie, "content-type": "application/json", origin: "https://evil.example.test" },
+        { cookie, "content-type": "text/plain", origin: ORIGIN },
+      ]) {
+        const response = await request(COMPACT, { method: "POST", headers, body });
+        expect(response.status, JSON.stringify(headers)).toBe(403);
+        expect(await response.json()).toEqual({ error: { code: "forbidden", message: anyText } });
+      }
+      const malformed = await request(COMPACT, {
+        method: "POST",
+        ...json({ requestId: "not-a-uuid", challengeToken: "" }, { cookie, origin: ORIGIN }),
+      });
+      expect(malformed.status).toBe(400);
+      expect(dispatcher.compactions).toEqual([]);
+
+      verifier.answer = false;
+      const challenged = await compact(cookie);
+      expect(challenged.status).toBe(403);
+      expect(await challenged.json()).toEqual({
+        error: { code: "chat_challenge_failed", message: anyText },
+      });
+      verifier.answer = true;
+
+      const questionRequest = randomUUID();
+      expect((await ask(cookie, "Asked once?", questionRequest)).status).toBe(202);
+      await settleLast();
+      const reused = await compact(cookie, questionRequest);
+      expect(reused.status).toBe(409);
+      expect(await reused.json()).toEqual({
+        error: { code: "chat_request_conflict", message: anyText },
+      });
+      expect(dispatcher.compactions).toEqual([]);
+    });
+
+    it("accepts a compaction report only with the control token and a claimed grant", async () => {
+      const { cookie } = await withExchanges(3);
+      await compact(cookie);
+      const dispatch = lastCompaction();
+      const path = compactionPath(dispatch.operationId);
+
+      for (const token of [contentKey, AI_TOKEN, RELAY_TOKEN]) {
+        expect((await control(path, compactedFor(dispatch.grant), token)).status).toBe(401);
+      }
+      const unclaimed = await control(path, compactedFor(dispatch.grant));
+      expect(unclaimed.status).toBe(409);
+      expect(await unclaimed.json()).toEqual({ error: { code: "conflict", message: anyText } });
+      await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant });
+      const wrong = await control(path, compactedFor("fictional-wrong-grant"));
+      expect(wrong.status).toBe(403);
+      const noGrant = await control(path, { outcome: "compacted" });
+      expect(noGrant.status).toBe(400);
+      expect(await noGrant.json()).toMatchObject({ error: { code: "validation_failed" } });
+      // An answer's operation takes no compaction report.
+      await withExchanges(1);
+      const answer = lastDispatch();
+      expect(
+        (await control(compactionPath(answer.operationId), compactedFor(answer.grant))).status,
+      ).toBe(403);
     });
   });
 
@@ -1499,6 +1846,7 @@ describe("the visitor chat over HTTP", () => {
       for (const [path, init] of [
         [CONVERSATION, {}],
         [MESSAGES, { method: "POST", ...json({}, { origin: ORIGIN }) }],
+        [COMPACT, { method: "POST", ...json({}, { origin: ORIGIN }) }],
         [operationPath(randomUUID()), {}],
         [eventsPath(randomUUID()), {}],
         [USAGE, {}],
@@ -1513,6 +1861,12 @@ describe("the visitor chat over HTTP", () => {
         connection(),
       );
       expect(claim.status).toBe(401);
+      const report = await off.app.request(
+        compactionPath(randomUUID()),
+        { method: "POST", ...json({}, bearer(CONTROL_TOKEN)) },
+        connection(),
+      );
+      expect(report.status).toBe(401);
     });
   });
 });
@@ -1582,6 +1936,7 @@ describe("the chat supervisor", () => {
     operationId: randomUUID(),
     grant: "fictional-grant-value",
     question: "What do you build?",
+    summary: null,
     history: [],
     today: "2031-03-10",
     deadlineAt: "2031-03-10T12:01:00.000Z",
@@ -1644,6 +1999,57 @@ describe("the chat supervisor", () => {
     expect(JSON.parse(typeof body === "string" ? body : "null")).toEqual(dispatch);
     expect(chat.refused).toEqual([]);
     expect(lines.join("\n")).not.toContain(dispatch.grant);
+  });
+
+  it("posts a compaction to the AI service's compaction route, and fails one it refuses", async () => {
+    const compaction: ChatCompactionDispatch = {
+      operationId: randomUUID(),
+      grant: "fictional-compaction-grant",
+      summary,
+      exchanges: [
+        {
+          question: "What do you build?",
+          answer: "Fictional services.",
+          language: "en",
+          sources: [{ kind: "service", recordId: "svc-1", title: "Fictional service" }],
+        },
+      ],
+      deadlineAt: "2031-03-10T12:01:00.000Z",
+      contextRevision: 3,
+      model: "fictional-model",
+      effort: "medium",
+      pricingVersion: "fictional-pricing-1",
+      allowanceUsd: 0.02,
+    };
+    for (const [status, refused] of [
+      [202, []],
+      [503, [compaction.operationId]],
+    ] as const) {
+      const chat = fakeChat();
+      const lines: string[] = [];
+      const fake = fakeFetch(() => Promise.resolve(Response.json({}, { status })));
+      const supervisor = createChatSupervisor({
+        chat,
+        aiService: { url: AI_SERVICE, token: AI_TOKEN },
+        log: (line) => lines.push(line),
+        fetch: fake.fetch,
+      });
+
+      supervisor.dispatch(compaction);
+      await supervisor.close();
+
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0]?.url).toBe(`${AI_SERVICE}/internal/v1/compactions`);
+      expect(new Headers(fake.calls[0]?.init?.headers).get("authorization")).toBe(
+        `Bearer ${AI_TOKEN}`,
+      );
+      const body = fake.calls[0]?.init?.body;
+      expect(JSON.parse(typeof body === "string" ? body : "null")).toEqual(compaction);
+      expect(chat.refused).toEqual(refused);
+      const logged = lines.join("\n");
+      expect(logged).not.toContain(compaction.grant);
+      expect(logged).not.toContain("Fictional services.");
+    }
   });
 
   it("fails an operation the AI service refuses or cannot be reached for, without logging secrets", async () => {
