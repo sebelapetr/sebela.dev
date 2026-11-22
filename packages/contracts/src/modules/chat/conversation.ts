@@ -102,6 +102,16 @@ export const ChatMessageSubmissionSchema = z
 
 export type ChatMessageSubmission = z.infer<typeof ChatMessageSubmissionSchema>;
 
+/** Not implemented yet. */
+export const ChatRetrySubmissionSchema = z.strictObject({}).meta({ id: "ChatRetrySubmission" });
+
+export type ChatRetrySubmission = z.infer<typeof ChatRetrySubmissionSchema>;
+
+/** Not implemented yet. */
+export const ChatConversationClearSchema = z.strictObject({}).meta({ id: "ChatConversationClear" });
+
+export type ChatConversationClear = z.infer<typeof ChatConversationClearSchema>;
+
 /** The page of a conversation to read: the newest messages, or those before a message. */
 export const ChatConversationQuerySchema = z.strictObject({
   before: z.uuid().optional().meta({
@@ -307,3 +317,10 @@ export function chatReplayEvents(
   events.push({ ...ids, eventId: next(), type: "error", ...error });
   return events;
 }
+
+/** Not implemented yet. */
+export const ChatConversationClearedSchema = z
+  .strictObject({})
+  .meta({ id: "ChatConversationCleared" });
+
+export type ChatConversationCleared = z.infer<typeof ChatConversationClearedSchema>;

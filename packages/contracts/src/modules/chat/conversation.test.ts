@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   ChatAssistantMessageSchema,
+  ChatConversationClearSchema,
+  ChatConversationClearedSchema,
   ChatConversationQuerySchema,
   ChatConversationSchema,
   ChatGenerationResultSchema,
@@ -11,7 +13,11 @@ import {
   ChatMessageSubmissionSchema,
   ChatOperationSchema,
   ChatProgressSchema,
+  ChatRetrySubmissionSchema,
+  chatAssistantStatuses,
   chatConversationPageLimit,
+  chatErrorCodes,
+  chatOperationStatuses,
   chatReplayEvents,
   chatTerminalForGeneration,
   validateChatStream,
@@ -323,5 +329,67 @@ describe("chatReplayEvents", () => {
       retryable: true,
     });
     expect(validateChatStream(requestId, events).status).toBe("complete");
+  });
+});
+
+describe("the conversation lifecycle", () => {
+  it("knows a cancelled operation, answer and error", () => {
+    expect(chatOperationStatuses).toContain("cancelled");
+    expect(chatAssistantStatuses).toContain("cancelled");
+    expect(chatErrorCodes).toContain("cancelled");
+  });
+
+  it("replays a stopped answer as a retryable cancellation without text", () => {
+    const message = ChatAssistantMessageSchema.parse({
+      ...pending,
+      status: "cancelled",
+      error: { code: "cancelled", retryable: true },
+    });
+    const events = chatReplayEvents(requestId, message);
+    expect(events.map((event) => event.type)).toEqual(["start", "error"]);
+    expect(events.at(-1)).toMatchObject({ code: "cancelled", retryable: true });
+    expect(validateChatStream(requestId, events).status).toBe("complete");
+  });
+
+  const retry = { retryId: operationId, challengeToken: "token" };
+
+  it("retries with its own request id and a fresh challenge token", () => {
+    expect(ChatRetrySubmissionSchema.parse(retry)).toEqual(retry);
+  });
+
+  it.each([
+    ["a missing challenge token", { retryId: operationId }],
+    ["a retry id that is not a UUID", { ...retry, retryId: "r1" }],
+    ["a new question", { ...retry, question: "Something else?" }],
+    ["a supplied conversation id", { ...retry, conversationId }],
+  ])("refuses a retry with %s", (_name, body) => {
+    expect(ChatRetrySubmissionSchema.safeParse(body).success).toBe(false);
+  });
+
+  it("clears only the conversation the caller confirms", () => {
+    expect(ChatConversationClearSchema.parse({ conversationId })).toEqual({ conversationId });
+    expect(ChatConversationClearSchema.safeParse({}).success).toBe(false);
+    expect(
+      ChatConversationClearSchema.safeParse({ conversationId, identityId: conversationId }).success,
+    ).toBe(false);
+  });
+
+  it("answers a clear with the fresh conversation and the telemetry deletion state", () => {
+    const cleared = {
+      cleared: true,
+      conversation: {
+        conversationId,
+        messages: [],
+        nextCursor: null,
+        activeOperation: null,
+        retentionDays: 730,
+      },
+      telemetryDeletion: "none",
+    };
+    expect(ChatConversationClearedSchema.parse(cleared)).toEqual(cleared);
+    expect(
+      ChatConversationClearedSchema.safeParse({ ...cleared, telemetryDeletion: "completed" })
+        .success,
+    ).toBe(false);
   });
 });

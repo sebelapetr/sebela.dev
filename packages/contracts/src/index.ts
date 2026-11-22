@@ -322,6 +322,8 @@ export {
   startChatAttempt,
   validateChatStream,
   ChatAssistantMessageSchema,
+  ChatConversationClearSchema,
+  ChatConversationClearedSchema,
   ChatConversationQuerySchema,
   ChatConversationSchema,
   ChatGenerationResultSchema,
@@ -331,6 +333,7 @@ export {
   ChatMessageSubmissionSchema,
   ChatOperationSchema,
   ChatProgressSchema,
+  ChatRetrySubmissionSchema,
   ChatUserMessageSchema,
   chatAnswerMaxLength,
   chatAssistantStatuses,
@@ -363,6 +366,8 @@ export type {
   ChatAssistantMessage,
   ChatAssistantStatus,
   ChatConversation,
+  ChatConversationClear,
+  ChatConversationCleared,
   ChatConversationQuery,
   ChatGenerationOutcome,
   ChatGenerationResult,
@@ -374,6 +379,7 @@ export type {
   ChatOperationStatus,
   ChatProgress,
   ChatProgressStage,
+  ChatRetrySubmission,
   ChatUserMessage,
 } from "./modules/chat/index.js";
 export {

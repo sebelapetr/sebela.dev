@@ -37,6 +37,8 @@ export type {
 } from "./stream.js";
 export {
   ChatAssistantMessageSchema,
+  ChatConversationClearSchema,
+  ChatConversationClearedSchema,
   ChatConversationQuerySchema,
   ChatConversationSchema,
   ChatGenerationResultSchema,
@@ -46,6 +48,7 @@ export {
   ChatMessageSubmissionSchema,
   ChatOperationSchema,
   ChatProgressSchema,
+  ChatRetrySubmissionSchema,
   ChatUserMessageSchema,
   chatAnswerMaxLength,
   chatAssistantStatuses,
@@ -64,6 +67,8 @@ export type {
   ChatAssistantMessage,
   ChatAssistantStatus,
   ChatConversation,
+  ChatConversationClear,
+  ChatConversationCleared,
   ChatConversationQuery,
   ChatGenerationOutcome,
   ChatGenerationResult,
@@ -75,5 +80,6 @@ export type {
   ChatOperationStatus,
   ChatProgress,
   ChatProgressStage,
+  ChatRetrySubmission,
   ChatUserMessage,
 } from "./conversation.js";
