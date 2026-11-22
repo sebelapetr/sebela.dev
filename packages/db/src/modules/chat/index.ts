@@ -118,6 +118,36 @@ export type ChatAdmissionResult =
   | { status: "quota_exceeded"; scope: ChatQuotaRule["scope"]; retryAt: Date }
   | { status: "budget_exhausted" };
 
+/**
+ * A short-lived claim on one request of an identity, taken before its challenge token is verified,
+ * so concurrent equal submissions redeem the token once. Holds the digests only.
+ */
+export interface ChatRequestClaimInput {
+  identityId: string;
+  requestId: string;
+  questionHash: string;
+  challengeTokenHash: string;
+  at: Date;
+  /** When the claim lapses and another submission may take it over. */
+  expiresAt: Date;
+}
+
+/** `pending` while the holder verifies; then whether its verification passed. */
+export type ChatRequestClaimState = "pending" | "verified" | "failed";
+
+export type ChatRequestClaimResult =
+  | { status: "claimed" }
+  /** An unexpired claim exists: its state, and whether it names the same question and token. */
+  | {
+      status: "held";
+      state: ChatRequestClaimState;
+      sameQuestion: boolean;
+      sameToken: boolean;
+    };
+
+/** How many expired admissions and request claims one admission deletes, at most, of each. */
+export const chatPruneBatch = 50;
+
 /** A completed answered exchange, for the bounded history the AI service receives. */
 export interface ChatExchangeRecord {
   question: string;
@@ -207,6 +237,16 @@ export interface ChatPersistence {
    * refusal changes nothing.
    */
   admit(input: ChatAdmissionInput): Promise<ChatAdmissionResult>;
+  /**
+   * Claims a request atomically before its challenge is verified: `claimed` when no unexpired
+   * claim exists (an expired one is taken over), otherwise what the holding claim says.
+   */
+  claimRequest(input: ChatRequestClaimInput): Promise<ChatRequestClaimResult>;
+  /** Records the holder's verification on its pending claim; a settled claim stays as it is. */
+  settleRequestClaim(
+    claim: Pick<ChatRequestClaimInput, "identityId" | "requestId" | "challengeTokenHash">,
+    state: "verified" | "failed",
+  ): Promise<void>;
   /** Claims the grant once while it is unexpired and the operation `accepted`; moves it to `running`. */
   claimGrant(operationId: string, verifier: string, at: Date): Promise<ChatClaimResult>;
   /**
@@ -696,6 +736,10 @@ export function createChatPersistence(db: Database): ChatPersistence {
         throw error;
       }
     },
+
+    claimRequest: () => Promise.reject(new Error("not implemented")),
+
+    settleRequestClaim: () => Promise.reject(new Error("not implemented")),
 
     async claimGrant(operationId, verifier, at) {
       return db.transaction(async (tx): Promise<ChatClaimResult> => {

@@ -7,8 +7,10 @@ import { readDatabaseConfig } from "../../config.js";
 import { openConnection, type Connection } from "../../connection.js";
 import { createTemporaryDatabase, type TemporaryDatabase } from "../../testing.js";
 import {
+  chatPruneBatch,
   createChatPersistence,
   type ChatAdmissionInput,
+  type ChatRequestClaimInput,
   type ChatIdentityRecord,
   type ChatPersistence,
   type ChatResultRecord,
@@ -536,6 +538,127 @@ describe("chat persistence", () => {
         { question: "Question 1", answer: "Answer 1", language: "en", sources: answered().sources },
         { question: "Question 2", answer: "Answer 2", language: "en", sources: answered().sources },
       ]);
+    });
+  });
+
+  describe("request claims", () => {
+    const claimInput = (
+      caller: ChatIdentityRecord,
+      overrides: Partial<ChatRequestClaimInput> = {},
+    ) =>
+      ({
+        identityId: caller.identityId,
+        requestId: randomUUID(),
+        questionHash: "question-hash",
+        challengeTokenHash: unique("token"),
+        at,
+        expiresAt: later(15_000),
+        ...overrides,
+      }) satisfies ChatRequestClaimInput;
+
+    it("grants one of many concurrent equal claims; the others see it pending", async () => {
+      const input = claimInput(await identity());
+      const results = await Promise.all(Array.from({ length: 8 }, () => chat.claimRequest(input)));
+      expect(results.filter((result) => result.status === "claimed")).toHaveLength(1);
+      const held = results.filter((result) => result.status === "held");
+      expect(held).toHaveLength(7);
+      for (const result of held) {
+        expect(result).toEqual({
+          status: "held",
+          state: "pending",
+          sameQuestion: true,
+          sameToken: true,
+        });
+      }
+    });
+
+    it("tells another question and another token apart while the claim holds", async () => {
+      const input = claimInput(await identity());
+      await expect(chat.claimRequest(input)).resolves.toEqual({ status: "claimed" });
+      await expect(
+        chat.claimRequest({ ...input, questionHash: "other-question", at: later(1000) }),
+      ).resolves.toEqual({
+        status: "held",
+        state: "pending",
+        sameQuestion: false,
+        sameToken: true,
+      });
+      await expect(
+        chat.claimRequest({ ...input, challengeTokenHash: unique("token"), at: later(1000) }),
+      ).resolves.toEqual({
+        status: "held",
+        state: "pending",
+        sameQuestion: true,
+        sameToken: false,
+      });
+    });
+
+    it("records how the holder's verification ended, once", async () => {
+      const caller = await identity();
+      const failed = claimInput(caller);
+      await chat.claimRequest(failed);
+      await chat.settleRequestClaim(failed, "failed");
+      await chat.settleRequestClaim(failed, "verified");
+      await expect(chat.claimRequest({ ...failed, at: later(1000) })).resolves.toMatchObject({
+        status: "held",
+        state: "failed",
+      });
+      const verified = claimInput(caller);
+      await chat.claimRequest(verified);
+      await chat.settleRequestClaim(verified, "verified");
+      await expect(chat.claimRequest({ ...verified, at: later(1000) })).resolves.toMatchObject({
+        status: "held",
+        state: "verified",
+      });
+    });
+
+    it("lets an expired claim be taken over, by one claimant only", async () => {
+      const input = claimInput(await identity(), { expiresAt: later(1000) });
+      await chat.claimRequest(input);
+      const takeover = { ...input, at: later(2000), expiresAt: later(17_000) };
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () => chat.claimRequest(takeover)),
+      );
+      expect(results.filter((result) => result.status === "claimed")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "held")).toHaveLength(5);
+    });
+  });
+
+  describe("pruning on admission", () => {
+    const expiredRows = async (table: "admissions" | "request_claims", when: Date) => {
+      const result = await connection.db.execute<{ count: string } & Record<string, unknown>>(
+        sql`SELECT count(*)::text AS count FROM ${sql.identifier("chat")}.${sql.identifier(table)} WHERE expires_at < ${when.toISOString()}::timestamptz`,
+      );
+      return Number(result.rows[0]?.count);
+    };
+
+    it("deletes a bounded batch of expired admissions and request claims", async () => {
+      const when = new Date("2040-01-01T10:00:00.000Z");
+      const past = new Date("2039-12-01T10:00:00.000Z");
+      const owner = await identity();
+      await connection.db.execute(
+        sql`INSERT INTO chat.admissions (identity_id, fingerprint, admitted_at, expires_at)
+            SELECT ${owner.identityId}::uuid, 'fingerprint-old', ${past.toISOString()}::timestamptz, ${past.toISOString()}::timestamptz
+            FROM generate_series(1, ${chatPruneBatch + 10})`,
+      );
+      await connection.db.execute(
+        sql`INSERT INTO chat.request_claims (identity_id, request_id, question_hash, challenge_digest, state, claimed_at, expires_at)
+            SELECT ${owner.identityId}::uuid, gen_random_uuid(), 'question-hash', 'digest-' || n, 'pending', ${past.toISOString()}::timestamptz, ${past.toISOString()}::timestamptz
+            FROM generate_series(1, ${chatPruneBatch + 10}) AS n`,
+      );
+      const admissionsBefore = await expiredRows("admissions", when);
+      const claimsBefore = await expiredRows("request_claims", when);
+
+      await admitted(
+        admission(await identity(), {
+          at: when,
+          deadlineAt: later(60_000, when),
+          admissionExpiresAt: later(86_400_000, when),
+        }),
+      );
+
+      expect(await expiredRows("admissions", when)).toBe(admissionsBefore - chatPruneBatch);
+      expect(await expiredRows("request_claims", when)).toBe(claimsBefore - chatPruneBatch);
     });
   });
 
