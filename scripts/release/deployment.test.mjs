@@ -563,6 +563,59 @@ describe("changelog", () => {
       );
     });
 
+    it("accepts whitespace-only lines between the last section and the links", () => {
+      for (const blank of ["  ", "\t"]) {
+        const odd = wellFormed.replace("\n\n[v0.2.0]", `\n${blank}\n[v0.2.0]`);
+        assert.notEqual(odd, wellFormed);
+        const result = add(odd);
+        assert.ok(result.includes(sectionOf("v0.1.0")), JSON.stringify(blank));
+        assert.ok(result.startsWith(header));
+      }
+    });
+
+    it("assertSectionsUnchanged refuses text appended to or inserted after a section", () => {
+      const after = add(wellFormed);
+      assert.throws(
+        () =>
+          assertSectionsUnchanged(
+            wellFormed,
+            after.replace("- a fix in v0.1.0", "- a fix in v0.1.0 EXTRA"),
+          ),
+        /v0\.1\.0/,
+      );
+      assert.throws(
+        () =>
+          assertSectionsUnchanged(
+            wellFormed,
+            after.replace("- a fix in v0.2.0\n", "- a fix in v0.2.0\nINSERTED\n"),
+          ),
+        /v0\.2\.0/,
+      );
+    });
+
+    it("names the file given for a misplaced link", () => {
+      assert.throws(
+        () =>
+          addToChangelog(misplaced, {
+            version: "v0.8.0",
+            date: "2026-11-22",
+            notes: notesOf("v0.8.0"),
+            repository: REPOSITORY,
+            file: "docs/CHANGES.md",
+          }),
+        /docs\/CHANGES\.md line 10/,
+      );
+    });
+
+    it("guard messages carry no carriage return", () => {
+      const crlf = wellFormed.replaceAll("\n", "\r\n");
+      const after = add(wellFormed).replaceAll("\n", "\r\n").replace("a fix in v0.1.0", "x");
+      assert.throws(
+        () => assertSectionsUnchanged(crlf, after),
+        (error) => !error.message.includes("\r") && /v0\.1\.0/.test(error.message),
+      );
+    });
+
     it("assertSectionsUnchanged refuses a missing or altered section", () => {
       const before = wellFormed;
       assert.doesNotThrow(() => assertSectionsUnchanged(before, add(before)));
