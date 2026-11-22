@@ -561,8 +561,14 @@ test.describe("a reader who scrolls away while an answer is prepared", () => {
   test("is never pulled back, and Latest brings back the end", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 });
     await openAsk(page, stack().url);
-    const long = `${"A rather long fictional question about the engineering work of Ilsa Marrow ".repeat(8)}?`;
-    await send(page, long);
+    // Two answered turns first, so there is a conversation to scroll back through.
+    await stack().openGate();
+    for (const earlier of [question, "And what does she work on now?"]) {
+      await send(page, earlier);
+      await answered(page);
+    }
+    await stack().closeGate();
+    await send(page, "A third fictional question?");
     await expect(turns(page).last()).toContainText("Answering…");
     await expect.poll(() => questionOffTop(page)).toBeLessThan(1.5);
     await expect(latestButton(page)).toHaveCount(0);

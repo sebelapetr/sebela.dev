@@ -7,11 +7,14 @@ import type { Page } from "@playwright/test";
 /**
  * The script. Each `execute` takes the next queued token: one starting `fail` is refused by the
  * Siteverify stand-in (`e2e/chat-stack.ts`), `error` fails the check in the browser, and an empty
- * queue gives `pass-<n>`. It counts the executions in `__e2eTurnstile.executions`.
+ * queue gives `pass-<n>`. Every token handed out ends in `.<load>`, unique to the page load, as the
+ * API refuses a token it has redeemed before. It counts the executions in
+ * `__e2eTurnstile.executions`.
  */
 function script(tokens: readonly string[]): string {
   return `(() => {
   const state = { queue: ${JSON.stringify(tokens)}, executions: 0, widgets: new Map(), next: 0 };
+  const load = Date.now().toString(36) + Math.random().toString(36).slice(2);
   window.__e2eTurnstile = state;
   window.turnstile = {
     render(container, options) {
@@ -26,7 +29,7 @@ function script(tokens: readonly string[]): string {
       const token = state.queue.length > 0 ? state.queue.shift() : "pass-" + String(++state.next);
       setTimeout(() => {
         if (token === "error") options["error-callback"]();
-        else options.callback(token);
+        else options.callback(token + "." + load);
       }, 0);
     },
     reset() {},

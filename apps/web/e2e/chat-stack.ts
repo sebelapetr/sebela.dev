@@ -57,8 +57,10 @@ export interface ChatStack {
   calls(): Promise<readonly ModelCall[]>;
   /** The person-check tokens the API redeemed so far, in order. */
   redeemed(): readonly string[];
-  /** Lets a `slow` generation go on. */
+  /** Lets `slow` generations go on, the waiting ones and every later one. */
   openGate(): Promise<void>;
+  /** Makes later `slow` generations wait again, until the gate is opened. */
+  closeGate(): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -214,6 +216,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
       },
       redeemed: () => [...siteverify.tokens],
       openGate: () => writeFile(gateFile, "open"),
+      closeGate: () => rm(gateFile, { force: true }),
       stop,
     };
   } catch (error) {

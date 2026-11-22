@@ -99,8 +99,10 @@ test.describe("a question the person check does not confirm", () => {
     const answer = turns(page).last();
     await expect(answer.getByText("Not answered", { exact: true })).toBeVisible();
     await expect(answer.getByText(challengeNote, { exact: true })).toBeVisible();
-    await expect(contactLink(page)).toHaveAttribute("href", "/contact");
-    expect(stack().redeemed().slice(before.redeemed)).toEqual(["fail-1"]);
+    await expect(contactLink(page)).toHaveAttribute("href", "/#contact");
+    expect(stack().redeemed().slice(before.redeemed)).toEqual([
+      expect.stringMatching(/^fail-1\./u),
+    ]);
     expect((await stack().calls()).length).toBe(before.calls);
     // The composer is free again: the failure never blocks the next question.
     await composer(page).fill("Another question?");
@@ -343,7 +345,6 @@ test.describe("a page closed or reloaded while its answer is prepared", () => {
     page,
     context,
   }) => {
-    test.setTimeout(120_000);
     await ask(page, stack().url);
     await expect(turns(page).last()).toContainText("Answering…");
     await expect.poll(() => stack().calls()).toHaveLength(1);
@@ -356,15 +357,13 @@ test.describe("a page closed or reloaded while its answer is prepared", () => {
     await expect(turns(page).last()).toContainText("Answering…");
     expect(await executions(page)).toBe(0);
 
-    // Closed and opened again, it is still followed, and stays open past the page's quiet time
-    // because the stream sends signs of life.
+    // Closed and opened again, it is still followed. The fictional model waits inside the
+    // Security call, whose attempt the agent bounds at 8 s, so the gate opens well before that.
     await page.close();
     const again = await context.newPage();
     await fakeTurnstile(again);
     await again.goto(`${stack().url}/ask`);
     await hydrated(again);
-    await expect(turns(again).last()).toContainText("Answering…");
-    await again.waitForTimeout(22_000);
     await expect(turns(again).last()).toContainText("Answering…");
 
     await stack().openGate();
@@ -403,7 +402,11 @@ test.describe("the recovery controls' layout", () => {
         await page.screenshot({
           path: testInfo.outputPath(`ask-challenge-failed-${String(width)}-${scheme}.png`),
         });
-        await retryButton(page).focus();
+        // By keyboard, so the focus ring shows: the composer, then the contact link, then retry.
+        await expect(composer(page)).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Shift+Tab");
+        await expect(retryButton(page)).toBeFocused();
         await page.screenshot({
           path: testInfo.outputPath(`ask-retry-focus-${String(width)}-${scheme}.png`),
         });
