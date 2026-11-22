@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { every } from "hono/combine";
@@ -20,7 +21,7 @@ import type { ChatCaller, ChatDispatch, ChatService } from "@sebela/services";
 
 import type { ApiConfig, ChatHttpConfig } from "../../config.js";
 import { refuseCredentialsInUrl } from "../../middleware/authentication.js";
-import { clientAddress, type ApiEnv } from "../../middleware/context.js";
+import type { ApiEnv } from "../../middleware/context.js";
 import { ApiError } from "../../middleware/errors.js";
 import { jsonBody } from "../../middleware/json-body.js";
 import type { RateLimits } from "../../middleware/limits.js";
@@ -53,6 +54,14 @@ const StreamHeadersSchema = z.object({
     description: "The last chat event ID the client received; later events follow.",
   }),
 });
+/** The header that carries the website relay's token on every visitor route; never logged. */
+export const chatRelayHeader = "x-sebela-chat-relay";
+/** The visitor's address as the website relay derived it; believed only with the relay token. */
+export const chatClientHeader = "x-sebela-chat-client";
+
+const relayRefusal = "`forbidden`: the request does not come through the website's chat relay";
+const unavailableRefusal = "`unavailable`: the chat is off or its database cannot be reached.";
+
 const cookie = {
   name: chatCookieName,
   description:
@@ -73,7 +82,7 @@ const visitorRoutes = {
     cookie,
     response: { status: 200, description: "The conversation.", schema: ChatConversationSchema },
     errors: [],
-    refusals: { 503: "`unavailable`: the chat is off or its database cannot be reached." },
+    refusals: { 403: `${relayRefusal}.`, 503: unavailableRefusal },
   },
   ask: {
     operationId: "askChat",
@@ -84,7 +93,8 @@ const visitorRoutes = {
     description:
       "The one public write: the caller asks one question of their own conversation behind the " +
       "bot challenge, the per-visitor quotas and the global spend budget. The request is sent by " +
-      "the website's server from an allowed origin. Admission returns at once; the answer is " +
+      "the website's server from an allowed origin; the visitor's address for the quotas and the " +
+      "challenge is the one the website's relay names, if any. Admission returns at once; the answer is " +
       "generated detached from the request and read from the operation's events.",
     sameOrigin: true,
     cookie,
@@ -98,15 +108,13 @@ const visitorRoutes = {
     errors: [],
     refusals: {
       403:
-        "`forbidden`: the request has no allowed origin or is not JSON; " +
+        `${relayRefusal}, has no allowed origin or is not JSON; ` +
         "`chat_challenge_failed`: the bot challenge failed.",
       409:
         "`chat_request_conflict`: the request ID was used for another question; " +
         "`chat_busy`: the conversation already has a question in progress.",
       429: "`chat_quota_exceeded`: the visitor's question quota is spent.",
-      503:
-        "`chat_budget_exhausted`: the chat's spend budget is spent; " +
-        "`unavailable`: the chat is off or its database cannot be reached.",
+      503: `\`chat_budget_exhausted\`: the chat's spend budget is spent; ${unavailableRefusal}`,
     },
   },
   operation: {
@@ -120,7 +128,7 @@ const visitorRoutes = {
     cookie,
     response: { status: 200, description: "The operation.", schema: ChatOperationSchema },
     errors: ["not_found"],
-    refusals: { 503: "`unavailable`: the chat is off or its database cannot be reached." },
+    refusals: { 403: `${relayRefusal}.`, 503: unavailableRefusal },
   },
   events: {
     operationId: "streamChatOperation",
@@ -143,7 +151,7 @@ const visitorRoutes = {
       mediaType: "text/event-stream",
     },
     errors: ["not_found"],
-    refusals: { 503: "`unavailable`: the chat is off or its database cannot be reached." },
+    refusals: { 403: `${relayRefusal}.`, 503: unavailableRefusal },
   },
 } satisfies Record<string, RouteDocumentation>;
 
@@ -212,7 +220,8 @@ const validationFailed = (message: string, issues: readonly z.core.$ZodIssue[]) 
 
 /**
  * Registers the visitor and control routes on `app`. Visitor routes answer `unavailable` while the
- * chat is off; every visitor answer is `no-store`, and carries a new cookie when one was issued.
+ * chat is off and `forbidden` without the website relay's token, compared in constant time; every
+ * visitor answer is `no-store`, and carries a new cookie when one was issued.
  * Control routes accept only the control token, compared in constant time.
  */
 export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions): void {
@@ -224,11 +233,25 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     throw new Error("The chat is configured without a dispatcher.");
   }
   const controlDigest = http === null ? null : digest(http.controlToken);
+  const relayDigest = http === null ? null : digest(http.relayToken);
 
   const available: MiddlewareHandler<ApiEnv> = async (c, next) => {
     c.header("Cache-Control", "no-store");
     if (http === null) {
       throw new ApiError(503, "unavailable", "The chat is not available.");
+    }
+    await next();
+  };
+
+  /** Only the website's chat relay reaches the visitor routes; checked before any state change. */
+  const relayed: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    const presented = c.req.header(chatRelayHeader);
+    if (
+      relayDigest === null ||
+      presented === undefined ||
+      !timingSafeEqual(digest(presented), relayDigest)
+    ) {
+      throw new ApiError(403, "forbidden", "Ask through the website.");
     }
     await next();
   };
@@ -246,6 +269,7 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
       limits.perClient("public"),
       refuseCredentialsInUrl,
       available,
+      relayed,
       ...(route.sameOrigin ? [sameOrigin] : []),
       ...(route.body ? jsonBody(route.body, config.bodyLimitBytes) : []),
       ...(route.params ? [pathParams(route.params)] : []),
@@ -281,7 +305,9 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
   app.post(visitorRoutes.ask.path, visitor(visitorRoutes.ask), async (c) => {
     const caller = await callerOf(c);
     const submission = c.get("body") as ChatMessageSubmission;
-    const address = clientAddress(c.env, c.req.header("x-forwarded-for"), config.trustedProxies);
+    // Behind the relay token, so the website named it; anything but one IP literal is unknown.
+    const named = c.req.header(chatClientHeader) ?? "";
+    const address = isIP(named) === 0 ? null : named;
     const result = await chat.submit(caller, submission, { clientAddress: address });
     switch (result.status) {
       case "admitted":

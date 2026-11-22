@@ -1361,7 +1361,7 @@ export interface paths {
         put?: never;
         /**
          * Ask the chat a question
-         * @description The one public write: the caller asks one question of their own conversation behind the bot challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's server from an allowed origin. Admission returns at once; the answer is generated detached from the request and read from the operation's events.
+         * @description The one public write: the caller asks one question of their own conversation behind the bot challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's server from an allowed origin; the visitor's address for the quotas and the challenge is the one the website's relay names, if any. Admission returns at once; the answer is generated detached from the request and read from the operation's events.
          */
         post: operations["askChat"];
         delete?: never;
@@ -13040,6 +13040,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description `rate_limited`: a rate-limit budget is exhausted. */
             429: {
                 headers: {
@@ -13118,7 +13127,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `forbidden`: the request has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed. */
+            /** @description `forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13210,6 +13219,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description `not_found`: the record does not exist. */
             404: {
                 headers: {
@@ -13280,6 +13298,15 @@ export interface operations {
             };
             /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

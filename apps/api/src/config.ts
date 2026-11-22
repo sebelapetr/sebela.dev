@@ -114,9 +114,10 @@ const ApiEnvironmentSchema = z.object({
   API_AI_SERVICE_URL: z.string().optional(),
   API_AI_SERVICE_TOKEN: z.string().optional(),
   API_AI_CONTROL_TOKEN: z.string().optional(),
+  API_CHAT_RELAY_TOKEN: z.string().optional(),
 });
 
-/** The shortest accepted AI service and control token. */
+/** The shortest accepted AI service, control and relay token. */
 export const chatTokenMinLength = 32;
 
 /** A plain http or https address: no credentials, query or fragment that could carry a secret. */
@@ -157,6 +158,7 @@ type ChatEnvironment = Pick<
   | "API_AI_SERVICE_URL"
   | "API_AI_SERVICE_TOKEN"
   | "API_AI_CONTROL_TOKEN"
+  | "API_CHAT_RELAY_TOKEN"
 >;
 
 /**
@@ -169,7 +171,10 @@ function readChatSettings(settings: ChatEnvironment): ChatHttpConfig | null | st
   const url = settings.API_AI_SERVICE_URL ?? "";
   const token = settings.API_AI_SERVICE_TOKEN ?? "";
   const controlToken = settings.API_AI_CONTROL_TOKEN ?? "";
-  if (originsText === "" && url === "" && token === "" && controlToken === "") return null;
+  const relayToken = settings.API_CHAT_RELAY_TOKEN ?? "";
+  if ([originsText, url, token, controlToken, relayToken].every((value) => value === "")) {
+    return null;
+  }
   const origins = originsText
     .split(",")
     .map((origin) => origin.trim())
@@ -182,13 +187,20 @@ function readChatSettings(settings: ChatEnvironment): ChatHttpConfig | null | st
   if (controlToken.length < chatTokenMinLength || controlToken === token) {
     names.push("API_AI_CONTROL_TOKEN");
   }
+  if (
+    relayToken.length < chatTokenMinLength ||
+    relayToken === token ||
+    relayToken === controlToken
+  ) {
+    names.push("API_CHAT_RELAY_TOKEN");
+  }
   if (names.length > 0) return names;
   return {
     allowedOrigins: origins,
     cookieSecure: secureText === "true",
     aiService: { url, token },
     controlToken,
-    relayToken: "",
+    relayToken,
   };
 }
 

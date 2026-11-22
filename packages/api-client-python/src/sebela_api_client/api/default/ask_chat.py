@@ -111,7 +111,8 @@ def sync_detailed(
 
      The one public write: the caller asks one question of their own conversation behind the bot
     challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's
-    server from an allowed origin. Admission returns at once; the answer is generated detached from the
+    server from an allowed origin; the visitor's address for the quotas and the challenge is the one the
+    website's relay names, if any. Admission returns at once; the answer is generated detached from the
     request and read from the operation's events.
 
     Args:
@@ -149,7 +150,8 @@ def sync(
 
      The one public write: the caller asks one question of their own conversation behind the bot
     challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's
-    server from an allowed origin. Admission returns at once; the answer is generated detached from the
+    server from an allowed origin; the visitor's address for the quotas and the challenge is the one the
+    website's relay names, if any. Admission returns at once; the answer is generated detached from the
     request and read from the operation's events.
 
     Args:
@@ -182,7 +184,8 @@ async def asyncio_detailed(
 
      The one public write: the caller asks one question of their own conversation behind the bot
     challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's
-    server from an allowed origin. Admission returns at once; the answer is generated detached from the
+    server from an allowed origin; the visitor's address for the quotas and the challenge is the one the
+    website's relay names, if any. Admission returns at once; the answer is generated detached from the
     request and read from the operation's events.
 
     Args:
@@ -218,7 +221,8 @@ async def asyncio(
 
      The one public write: the caller asks one question of their own conversation behind the bot
     challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's
-    server from an allowed origin. Admission returns at once; the answer is generated detached from the
+    server from an allowed origin; the visitor's address for the quotas and the challenge is the one the
+    website's relay names, if any. Admission returns at once; the answer is generated detached from the
     request and read from the operation's events.
 
     Args:
