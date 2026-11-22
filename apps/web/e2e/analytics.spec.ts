@@ -2,7 +2,9 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 import { startAnalyticsStub, type AnalyticsStub } from "./analytics-stub";
+import { startChatStack, type ChatStack } from "./chat-stack";
 import { freePort, origin, required, startApi, startWebsite, type Started } from "./stack";
+import { fakeTurnstile } from "./turnstile-fake";
 
 // The optional analytics integration against a local stand-in for Umami (e2e/analytics-stub.ts),
 // never a live account, on the fictional person of e2e/fixtures/with-experience/ (Casey Morrow).
@@ -22,13 +24,17 @@ interface Served {
 /**
  * Serves the fixture's API and a website for one block, with analytics as `analytics` says: the
  * stand-in, the stand-in failing every send, an address nothing answers on, or nothing at all.
+ * The blocks that walk the site and ask on it get the real chat path (`e2e/chat-stack.ts`, the
+ * fictional model) and the Turnstile stand-in on each page; the others a website without the chat.
  */
 function serve(analytics: "stub" | "failing" | "unreachable" | "invalid" | "off"): () => Served {
+  const chat = analytics === "stub" || analytics === "failing" || analytics === "unreachable";
   let api: Started | undefined;
   let website: Started | undefined;
+  let stack: ChatStack | undefined;
   let stub: AnalyticsStub | undefined;
   test.beforeAll(async () => {
-    api = await startApi("with-experience");
+    test.setTimeout(120_000);
     let settings: { scriptUrl: string; websiteId: string } | undefined;
     if (analytics === "stub" || analytics === "failing") {
       stub = await startAnalyticsStub({ failSend: analytics === "failing" });
@@ -40,16 +46,31 @@ function serve(analytics: "stub" | "failing" | "unreachable" | "invalid" | "off"
       stub = await startAnalyticsStub();
       settings = { scriptUrl: stub.scriptUrl, websiteId: "not-a-website-id" };
     }
-    website = await startWebsite(api.url, settings === undefined ? {} : { analytics: settings });
+    if (chat) {
+      stack = await startChatStack({
+        fixture: "with-experience",
+        ...(settings === undefined ? {} : { analytics: settings }),
+      });
+    } else {
+      api = await startApi("with-experience");
+      website = await startWebsite(api.url, settings === undefined ? {} : { analytics: settings });
+    }
   });
   test.afterAll(async () => {
+    await stack?.stop();
     await website?.stop();
     await stub?.stop();
     await api?.stop();
   });
+  if (chat) {
+    test.beforeEach(async ({ page }) => {
+      await fakeTurnstile(page);
+    });
+  }
   return () => {
-    if (website === undefined) throw new Error("website not started");
-    return { url: website.url, stub };
+    const url = stack?.url ?? website?.url;
+    if (url === undefined) throw new Error("website not started");
+    return { url, stub };
   };
 }
 
@@ -94,6 +115,8 @@ async function walk(page: Page, url: string): Promise<string> {
     await header(page).getByRole("link", { name: label, exact: true }).click();
     await expect(page).toHaveURL(`${url}${path}`);
   }
+  // The question is taken once the visitor's conversation is read.
+  await expect(page.getByRole("region", { name: "Suggested questions" })).toBeVisible();
   await composer(page).fill(question);
   await composer(page).press("Enter");
   await expect(page.getByRole("list", { name: "Conversation" })).toContainText(question);

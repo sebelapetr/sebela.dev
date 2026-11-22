@@ -26,6 +26,7 @@ import {
   startWebsite,
   type Fixture,
   type Started,
+  type WebsiteOptions,
 } from "./stack";
 
 const run = promisify(execFile);
@@ -57,6 +58,8 @@ export interface ChatStackOptions {
    * its content; the fictional model still answers about the chat's person.
    */
   readonly fixture?: Fixture;
+  /** The website's analytics settings (`WEB_ANALYTICS_*`), such as a local stand-in's; none by default. */
+  readonly analytics?: WebsiteOptions["analytics"];
 }
 
 /** One call the fictional model received: its stage and how many earlier exchanges it was given. */
@@ -228,6 +231,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
         chatSiteKey,
         chatRelayToken: relayToken,
         trustedProxyHops: 1,
+        ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
       }),
     );
     return {

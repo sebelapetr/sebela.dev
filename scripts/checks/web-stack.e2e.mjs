@@ -20,7 +20,7 @@
 //   still shows its own content;
 // - isolation: A's key is refused by B's API, A's uploaded file is not on B's website, and a
 //   notification signed with A's secret is refused by B's website, which accepts its own;
-// - the hero's question to the mock Ask page in a browser, with screenshots at 360, 768 and
+// - the hero's question to the chat-off Ask page in a browser, with screenshots at 360, 768 and
 //   1280 px in light and dark mode, axe, keyboard and no horizontal scroll
 //   (apps/web/e2e/complete-stack/, apps/web/playwright.complete-stack.config.ts);
 // - no key, password or secret in the logs of either stack.
@@ -283,7 +283,7 @@ try {
     204,
   );
 
-  step("the hero's question to the mock Ask page in a browser, with screenshots");
+  step("the hero's question to the chat-off Ask page in a browser, with screenshots");
   const browser = spawnSync(
     process.execPath,
     [PLAYWRIGHT_CLI, "test", "--config", "playwright.complete-stack.config.ts"],

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { serveChatStack } from "./chat-stack";
 import { startProxy, type Proxy } from "./proxy";
 import {
   fixtureFolder,
@@ -262,8 +263,20 @@ test.describe("a profile without any optional content", () => {
     expect(download.headers()["location"]).toBe("/cv");
   });
 
-  test("the Ask page offers its suggestions with the name", async ({ page }) => {
+  test("the Ask page names the person and says that this website has no chat", async ({ page }) => {
     const response = await page.goto(`${website.url}/ask`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(sparse.name);
+    await expect(page.getByText("The chat is not available right now.")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Suggested questions" })).toHaveCount(0);
+  });
+});
+
+test.describe("a profile without any optional content, with the chat", () => {
+  const stack = serveChatStack({ fixture: "with-sparse-content" });
+
+  test("the Ask page offers its suggestions with the name", async ({ page }) => {
+    const response = await page.goto(`${stack().url}/ask`);
     expect(response?.status()).toBe(200);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(sparse.name);
     await expect(
