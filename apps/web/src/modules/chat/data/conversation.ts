@@ -3,6 +3,7 @@
 // page.
 import {
   advanceChatAttempt,
+  ChatProgressSchema,
   ChatStreamEventSchema,
   startChatAttempt,
   type ChatAttempt,
@@ -14,6 +15,15 @@ import {
 } from "@sebela/contracts";
 
 import type { ChatAdmissionCode } from "./admission";
+
+/** The admission codes a new attempt may pass. */
+const retryableAdmissions: ReadonlySet<ChatAdmissionCode> = new Set([
+  "challenge_failed",
+  "busy",
+  "quota_exceeded",
+  "rate_limited",
+  "unavailable",
+]);
 
 /**
  * Where one question's answer stands: waiting for its first event, streaming, complete (with its
@@ -67,12 +77,16 @@ export function isChatTurnOpen(turn: ChatTurn): boolean {
 }
 
 /**
- * Applies one raw event to the turn. An ended turn, a duplicate and an event for another request
- * (a late event of a cancelled one) change nothing and return the same turn. A malformed or
- * misplaced event fails the turn as an invalid stream, keeping what was received. Pure.
+ * Applies one raw event to the turn. An ended turn, a duplicate, an event for another request
+ * (a late event of a cancelled one) and a progress sign of life change nothing and return the same
+ * turn. A malformed or misplaced event fails the turn as an invalid stream, keeping what was
+ * received. Pure.
  */
 export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
   if (!isChatTurnOpen(turn)) return turn;
+  if (isProgressFrame(raw)) {
+    return ChatProgressSchema.safeParse(raw).success ? turn : fail(turn, "invalid_stream");
+  }
   const parsed = ChatStreamEventSchema.safeParse(raw);
   if (!parsed.success) return fail(turn, "invalid_stream");
   const event = parsed.data;
@@ -107,13 +121,23 @@ export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
  * limit, an unreachable assistant), never for a spent site budget, a request already used or an
  * invalid question. Pure.
  */
-export const rejectChatTurn: (
+export function rejectChatTurn(
   turn: ChatTurn,
   code: ChatAdmissionCode,
-  retryAfterSeconds?: number | null,
-) => ChatTurn = () => {
-  throw new Error("not implemented");
-};
+  retryAfterSeconds: number | null = null,
+): ChatTurn {
+  if (!isChatTurnOpen(turn)) return turn;
+  const error: ChatTurnError = {
+    code,
+    retryable: retryableAdmissions.has(code),
+    ...(retryAfterSeconds === null ? {} : { retryAfterSeconds }),
+  };
+  return { ...turn, status: "failed", error };
+}
+
+function isProgressFrame(raw: unknown): boolean {
+  return typeof raw === "object" && raw !== null && "type" in raw && raw.type === "progress";
+}
 
 /** The stream is over: a turn still waiting for its terminal event is interrupted. */
 export function endChatStream(turn: ChatTurn): ChatTurn {

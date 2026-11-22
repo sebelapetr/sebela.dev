@@ -10,15 +10,15 @@ import { cn } from "@sebela/ui/lib/utils";
 
 import { chatQuestionMaxLength } from "@sebela/contracts";
 
-import { conversationHref } from "../data/address";
-import { heroSuggestions } from "../data/prepared-answers";
+import { handOffHref } from "../data/address";
+import { heroSuggestions } from "../data/suggestions";
 import { handOff } from "../hooks/use-conversation";
 
 /**
  * The hero's way into the chat: one input line with its submit and a row of suggested questions
- * below it (two on mobile, three from `sm`). A question, typed or suggested, starts a conversation
- * with a random address and goes to it on the Ask page, carried there in this tab — never in the
- * address. Sends once however often it is pressed. A suggestion's short label is its accessible
+ * below it (two on mobile, three from `sm`). A question, typed or suggested, is handed off under a
+ * random address to the Ask page, which asks it once in the visitor's conversation; the question
+ * is carried there in this tab, never in the address. Sends once however often it is pressed. A suggestion's short label is its accessible
  * name; the full question it sends is its visually hidden description.
  */
 export function HeroChatEntry({ name }: { readonly name: string }) {
@@ -34,7 +34,7 @@ export function HeroChatEntry({ name }: { readonly name: string }) {
     if (id === null) return;
     sent.current = true;
     setSending(true);
-    router.push(conversationHref(id));
+    router.push(handOffHref(id));
   }
 
   function onSubmit(event: SubmitEvent<HTMLFormElement>): void {

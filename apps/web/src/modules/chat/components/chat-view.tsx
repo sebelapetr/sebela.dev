@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowRight, ArrowUp, Plus, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, RotateCcw } from "lucide-react";
 
 import { Button } from "@sebela/ui/components/button";
 import { Input } from "@sebela/ui/components/input";
@@ -11,10 +11,10 @@ import { cn } from "@sebela/ui/lib/utils";
 
 import { chatQuestionMaxLength } from "@sebela/contracts";
 
-import { conversationHref, conversationIdFromParam } from "../data/address";
-import type { AskEvidence } from "../data/evidence";
+import { routes } from "../../_shared";
+import { handOffIdFromParam } from "../data/address";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
-import { askSuggestions } from "../data/prepared-answers";
+import { askSuggestions } from "../data/suggestions";
 import { describeChatTurn } from "../data/turn-status";
 import { chatTurnParts, useChatScroll } from "../hooks/use-chat-scroll";
 import { useConversation } from "../hooks/use-conversation";
@@ -39,7 +39,7 @@ interface AnswerProps {
 
 function Answer({ turn, onRetry, ref }: AnswerProps) {
   const open = isChatTurnOpen(turn);
-  const { tag, note, retry, showsEvidence } = describeChatTurn(turn);
+  const { tag, note, retry, showsEvidence, contact } = describeChatTurn(turn);
   return (
     // Focus lands here after a retry, so the keyboard stays at the answer it asked again.
     <div
@@ -66,6 +66,12 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
           <RotateCcw aria-hidden="true" />
           Try again
         </Button>
+      ) : null}
+      {contact ? (
+        <Link href={routes.contact} prefetch={false} className={cn(textLinkClass, "self-start")}>
+          Contact
+          <ArrowRight aria-hidden="true" className="size-4" />
+        </Link>
       ) : null}
       {showsEvidence ? <AnswerEvidence turn={turn} /> : null}
     </div>
@@ -103,27 +109,41 @@ function AnswerEvidence({ turn }: { readonly turn: ChatTurn }) {
   );
 }
 
+/** How long the API keeps the conversation, said before anything is asked. */
+function storageNotice(retentionDays: number): string {
+  const days = retentionDays === 1 ? "1 day" : `${String(retentionDays)} days`;
+  return `This conversation is stored for ${days} after its last message, so you can come back to it in this browser.`;
+}
+
 /**
- * The chat on the Ask page: the conversation named by the address (`?c=`) or a new one, its
- * questions and streamed answers with their cards, sources and related pages, the four suggested questions of an empty chat, "New chat" and
- * the composer. It is an assistant answering about the person from the public profile and says
- * so; it never speaks as the person. Opening the address again — a rerender, back or forward —
- * never resends a question. A question the reader sends goes to just below the header and its
- * answer streams below it without moving the page; "Latest" brings back the end once it is out of
- * view (`useChatScroll`).
+ * The chat on the Ask page: the visitor's own conversation as the API stores it (the newest page,
+ * with "Show earlier messages" for the rest), its questions and streamed answers with their cards,
+ * sources and related pages, the four suggested questions of an empty chat, how long the
+ * conversation is kept, and the composer with the person check. It is an assistant answering
+ * about the person from the public profile and says so; it never speaks as the person. The address
+ * (`?c=`) only carries the hero's question here, once: it never names or opens a conversation, and
+ * the page drops it after use, so a reload, back or forward never resends. A question the reader
+ * sends goes to just below the header and its answer streams below it without moving the page;
+ * "Latest" brings back the end once it is out of view (`useChatScroll`).
  */
-export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
-  const { name } = evidence;
+export function ChatView({
+  name,
+  siteKey,
+}: {
+  readonly name: string;
+  /** The public key of the person check; null when the website has none. */
+  readonly siteKey: string | null;
+}) {
   const searchParams = useSearchParams();
-  const addressId = conversationIdFromParam(searchParams.get("c"));
-  const { snapshot, current, open, submit, retry, newChat } = useConversation(evidence);
+  const handOffId = handOffIdFromParam(searchParams.get("c"));
+  const { snapshot, current, open, submit, retry, loadEarlier, challengeRef } =
+    useConversation(siteKey);
   const [question, setQuestion] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const conversationRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const lastAnswerRef = useRef<HTMLDivElement>(null);
-  // The address this page gave its own conversation; reaching it is not opening anything.
-  const ownAddress = useRef<string | null>(null);
+  // Whether the page opened the conversation; dropping the hand-off address opens nothing again.
+  const opened = useRef(false);
   const turnCount = snapshot.turns.length;
   const latest = snapshot.turns.at(-1);
   const [watched, setWatched] = useState<string | null>(null);
@@ -134,13 +154,17 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
     current,
   });
 
-  // A conversation opened from the address shows its end once; the hero's question goes to the
-  // top like one asked here.
+  // The stored conversation shows its end once; the hero's question goes to the top like one
+  // asked here, or into the composer while an earlier answer is still being prepared.
   useEffect(() => {
-    if (addressId !== null && addressId === ownAddress.current) return;
-    ownAddress.current = null;
-    request(open(addressId));
-  }, [addressId, open, request]);
+    if (handOffId === null && opened.current) return;
+    opened.current = true;
+    void open(handOffId).then((result) => {
+      if (result.kind === "held") setQuestion(result.question);
+      request(result.kind === "sent" ? "sent" : "shown");
+      if (handOffId !== null) window.history.replaceState(null, "", routes.ask);
+    });
+  }, [handOffId, open, request]);
 
   // Announces an answer this page saw start, once as it starts and once as it ends; never every
   // streamed piece, and never an answer restored as it was.
@@ -159,14 +183,9 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
           : "";
 
   function ask(text: string): void {
-    const { result, conversationId } = submit(text);
-    if (result !== "sent") return;
+    if (submit(text) !== "sent") return;
     setQuestion("");
     request("sent");
-    if (conversationId !== addressId) {
-      ownAddress.current = conversationId;
-      window.history.replaceState(null, "", conversationHref(conversationId));
-    }
   }
 
   function onSubmit(event: SubmitEvent<HTMLFormElement>): void {
@@ -188,40 +207,29 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
     lastAnswerRef.current?.focus({ preventScroll: true });
   }
 
-  function startNewChat(): void {
-    newChat();
-    setQuestion("");
-    window.history.replaceState(null, "", conversationHref(null));
-    inputRef.current?.focus();
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 sm:gap-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-col gap-4">
-          <h1 className="flex flex-col gap-3">
-            <span className="type-label">{name}</span>
-            <span className="type-heading sm:type-title">Ask my AI</span>
-          </h1>
-          <p className="type-intro max-w-prose">
-            An AI assistant that answers questions about {name}&apos;s experience, projects,
-            services and learning from the public profile. It is not {name}.
+      <header className="flex flex-col gap-4">
+        <h1 className="flex flex-col gap-3">
+          <span className="type-label">{name}</span>
+          <span className="type-heading sm:type-title">Ask my AI</span>
+        </h1>
+        <p className="type-intro max-w-prose">
+          An AI assistant that answers questions about {name}&apos;s experience, projects, services
+          and learning from the public profile. It is not {name}.
+        </p>
+        {snapshot.retentionDays === null ? null : (
+          <p className="max-w-prose text-sm text-pretty text-muted-foreground">
+            {storageNotice(snapshot.retentionDays)}
           </p>
-        </div>
-        {turnCount === 0 ? null : (
-          <Button
-            type="button"
-            variant="ghost"
-            className="-ml-3 shrink-0 self-start px-3 text-muted-foreground hover:text-foreground sm:-mr-3 sm:ml-0"
-            onClick={startNewChat}
-          >
-            <Plus aria-hidden="true" />
-            New chat
-          </Button>
         )}
       </header>
 
-      {turnCount === 0 ? (
+      {snapshot.history === "loading" && turnCount === 0 ? (
+        <p aria-busy="true" className="text-muted-foreground">
+          Loading your conversation…
+        </p>
+      ) : turnCount === 0 ? (
         <section aria-labelledby="ask-suggestions-heading" className="flex flex-col gap-4">
           <h2 id="ask-suggestions-heading" className="type-label">
             Suggested questions
@@ -244,40 +252,63 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
           </ul>
         </section>
       ) : (
-        <ol ref={conversationRef} aria-label="Conversation" className="flex flex-col gap-10">
-          {snapshot.turns.map((turn, index) => (
-            <li
-              key={turn.requestId}
-              {...{ [chatTurnParts.requestId]: turn.requestId }}
-              className={cn(
-                "flex flex-col gap-6",
-                // From the question below the header down to the composer, so the question can
-                // reach the top however short the conversation is.
-                roomy && index === turnCount - 1 && roomyTurnClass,
-              )}
+        <div className="flex flex-col gap-10">
+          {snapshot.earlier === "none" ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              className="self-center text-muted-foreground hover:text-foreground"
+              disabled={snapshot.earlier === "loading"}
+              onClick={() => {
+                void loadEarlier();
+              }}
             >
-              <div
-                {...{ [chatTurnParts.question]: "" }}
-                className="ml-auto max-w-[85%] scroll-mt-[calc(var(--header-height)+1.25rem)] rounded-xl bg-muted px-4 py-3"
+              {snapshot.earlier === "loading"
+                ? "Loading earlier messages…"
+                : "Show earlier messages"}
+            </Button>
+          )}
+          <ol ref={conversationRef} aria-label="Conversation" className="flex flex-col gap-10">
+            {snapshot.turns.map((turn, index) => (
+              <li
+                key={turn.requestId}
+                {...{ [chatTurnParts.requestId]: turn.requestId }}
+                className={cn(
+                  "flex flex-col gap-6",
+                  // From the question below the header down to the composer, so the question can
+                  // reach the top however short the conversation is.
+                  roomy && index === turnCount - 1 && roomyTurnClass,
+                )}
               >
-                <p className="sr-only">You asked:</p>
-                <p className="text-pretty whitespace-pre-line">{turn.question}</p>
-              </div>
-              {index === turnCount - 1 ? (
-                <Answer
-                  ref={lastAnswerRef}
-                  turn={turn}
-                  onRetry={() => {
-                    retryLatest(turn.requestId);
-                  }}
-                />
-              ) : (
-                <Answer turn={turn} />
-              )}
-            </li>
-          ))}
-        </ol>
+                <div
+                  {...{ [chatTurnParts.question]: "" }}
+                  className="ml-auto max-w-[85%] scroll-mt-[calc(var(--header-height)+1.25rem)] rounded-xl bg-muted px-4 py-3"
+                >
+                  <p className="sr-only">You asked:</p>
+                  <p className="text-pretty whitespace-pre-line">{turn.question}</p>
+                </div>
+                {index === turnCount - 1 ? (
+                  <Answer
+                    ref={lastAnswerRef}
+                    turn={turn}
+                    onRetry={() => {
+                      retryLatest(turn.requestId);
+                    }}
+                  />
+                ) : (
+                  <Answer turn={turn} />
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
+
+      {snapshot.history === "failed" ? (
+        <p className="text-sm text-muted-foreground">
+          Your earlier conversation could not be loaded right now. You can still ask a question.
+        </p>
+      ) : null}
 
       <p role="status" aria-live="polite" className="sr-only">
         {live}
@@ -296,12 +327,13 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
             Latest
           </Button>
         ) : null}
+        {/* The person check shows here only when it needs the visitor. */}
+        <div ref={challengeRef} className="empty:hidden [&:has(iframe)]:pb-3" />
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question
           </label>
           <Input
-            ref={inputRef}
             id="ask-question"
             name="question"
             type="text"

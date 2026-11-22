@@ -33,8 +33,61 @@ export interface TurnstileChallengeOptions {
 }
 
 /** Gives one fresh token per call; rejects when the check fails, is aborted or cannot run. */
-export const createTurnstileChallenge: (
+export function createTurnstileChallenge(
   options: TurnstileChallengeOptions,
-) => (signal: AbortSignal) => Promise<string> = () => {
-  throw new Error("not implemented");
-};
+): (signal: AbortSignal) => Promise<string> {
+  let widget: { readonly id: string; readonly container: HTMLElement } | null = null;
+  let waiting: { resolve: (token: string) => void; reject: (error: Error) => void } | null = null;
+
+  function settle(outcome: string | Error): void {
+    const current = waiting;
+    waiting = null;
+    if (current === null) return;
+    if (typeof outcome === "string") current.resolve(outcome);
+    else current.reject(outcome);
+  }
+
+  return async (signal) => {
+    if (options.siteKey === null) throw new Error("The website has no person check configured.");
+    const siteKey = options.siteKey;
+    const api = await options.load();
+    signal.throwIfAborted();
+    const container = options.container();
+    if (container === null) throw new Error("The chat is not on the page.");
+    if (widget?.container !== container) {
+      const id = api.render(container, {
+        sitekey: siteKey,
+        action: "chat",
+        appearance: "interaction-only",
+        execution: "execute",
+        callback: (token) => {
+          settle(token);
+        },
+        "error-callback": () => {
+          settle(new Error("The person check failed."));
+        },
+        "expired-callback": () => {
+          settle(new Error("The person check expired."));
+        },
+      });
+      if (id === undefined) throw new Error("The person check could not be shown.");
+      widget = { id, container };
+    }
+    const id = widget.id;
+    // A check still waiting belongs to an abandoned question; it never gives this one its token.
+    settle(new Error("The person check was replaced."));
+
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        waiting = { resolve, reject };
+        const abort = () => {
+          settle(new Error("The question was abandoned."));
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        api.execute(id);
+      });
+    } finally {
+      api.reset(id);
+    }
+  };
+}

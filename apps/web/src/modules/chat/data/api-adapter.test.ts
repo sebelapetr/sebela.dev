@@ -42,11 +42,14 @@ function failure(status: number, code: string, headers: Record<string, string> =
 /** An event stream that sends its pieces, then ends (or fails when `fail` is set). */
 function stream(pieces: readonly string[], fail = false): Response {
   const encoder = new TextEncoder();
+  const queue = [...pieces];
   return new Response(
+    // One piece per read, so a failure comes after them (an error drops what is still queued).
     new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const piece of pieces) controller.enqueue(encoder.encode(piece));
-        if (fail) controller.error(new TypeError("network"));
+      pull(controller) {
+        const piece = queue.shift();
+        if (piece !== undefined) controller.enqueue(encoder.encode(piece));
+        else if (fail) controller.error(new TypeError("network"));
         else controller.close();
       },
     }),

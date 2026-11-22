@@ -268,8 +268,15 @@ export function readIndexingConfig(env: Readonly<Record<string, string | undefin
  * send a question. Throws an error naming the variable, never its value, for a key that is not up
  * to 100 letters, digits, `_` or `-`.
  */
-export const readTurnstileSiteKey: (
+export function readTurnstileSiteKey(
   env: Readonly<Record<string, string | undefined>>,
-) => string | null = () => {
-  throw new Error("not implemented");
-};
+): string | null {
+  const value = env["WEB_TURNSTILE_SITE_KEY"]?.trim() ?? "";
+  if (value === "") return null;
+  if (!/^[\w-]{1,100}$/.test(value)) {
+    throw new Error(
+      "Invalid website configuration (documented in .env.example): WEB_TURNSTILE_SITE_KEY must be up to 100 letters, digits, _ or -",
+    );
+  }
+  return value;
+}

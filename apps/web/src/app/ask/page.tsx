@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { AskTemplate } from "../../modules/chat";
+import { chatChallengeSiteKey } from "../../modules/chat-relay";
 import { getAsk } from "../../modules/profile";
 
 /** Content cannot be read now; `error.tsx` shows it, never a chat without the person's name. */
@@ -30,5 +31,6 @@ export default async function AskPage() {
   const result = await getAsk();
   if (result.status === "missing") notFound();
   if (result.status === "unavailable") throw new ContentUnavailableError();
-  return <AskTemplate content={result.content} />;
+  // The person check's public key, read per request so a deployment can change it.
+  return <AskTemplate content={result.content} siteKey={chatChallengeSiteKey()} />;
 }

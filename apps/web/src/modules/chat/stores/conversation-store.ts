@@ -1,10 +1,26 @@
 // The chat's state in this tab: the caller's one conversation as the API stores it, the question in
 // flight and the hand-off of a question from the hero. The API resolves the conversation from the
 // visitor's cookie; an address on the page never authorises anything.
-import { chatQuestionMaxLength } from "@sebela/contracts";
+import {
+  chatQuestionMaxLength,
+  type ChatAssistantMessage,
+  type ChatConversation,
+} from "@sebela/contracts";
 
-import type { ChatTurn } from "../data/conversation";
-import type { ChatAdapter } from "../types/adapter";
+import { ChatAdmissionError } from "../data/admission";
+import {
+  canRetryChatTurn,
+  endChatStream,
+  isChatTurnOpen,
+  receiveChatEvent,
+  rejectChatTurn,
+  restartChatTurn,
+  startChatTurn,
+  timeOutChatTurn,
+  type ChatTurn,
+} from "../data/conversation";
+import { historyTurns, parseChatConversation } from "../data/history";
+import type { ChatAdapter, ChatQuestion } from "../types/adapter";
 
 /** The part of `sessionStorage` the hand-off uses, so tests and a fallback can stand in for it. */
 export interface ChatStorage {
@@ -126,8 +142,204 @@ export function handOffQuestion(
   return id;
 }
 
-export const createConversationStore: (
-  options: ConversationStoreOptions,
-) => ConversationStore = () => {
-  throw new Error("not implemented");
-};
+interface Attempt {
+  readonly requestId: string;
+  readonly controller: AbortController;
+}
+
+/**
+ * Builds the tab's store. Every raw event goes through the turn's contract checks; an event of an
+ * attempt that was replaced, timed out or abandoned is ignored. An admission refusal fails the
+ * turn with its reason and no answer; a transport that throws or ends early interrupts it; an
+ * answer quiet for longer than the idle time (no event and no sign of life) fails as timed out and
+ * is no longer followed. A failure is never retried by the store.
+ */
+export function createConversationStore(options: ConversationStoreOptions): ConversationStore {
+  const { adapter, storage, createId } = options;
+  const idleTimeoutMs = options.idleTimeoutMs ?? 20_000;
+  const listeners = new Set<() => void>();
+  const taken = new Set<string>();
+
+  let history: ConversationSnapshot["history"] = "loading";
+  let turns: readonly ChatTurn[] = [];
+  let retentionDays: number | null = null;
+  let earlier: ConversationSnapshot["earlier"] = "none";
+  let cursor: string | null = null;
+  let carried: ChatAssistantMessage | null = null;
+  let attempt: Attempt | null = null;
+  let restoring: Promise<void> | null = null;
+  let snapshot: ConversationSnapshot | null = null;
+
+  const isBusy = () => history === "loading" || turns.some(isChatTurnOpen);
+
+  function changed(): void {
+    snapshot = null;
+    for (const listener of listeners) listener();
+  }
+
+  function update(requestId: string, change: (turn: ChatTurn) => ChatTurn): void {
+    const index = turns.findIndex((turn) => turn.requestId === requestId);
+    const turn = turns[index];
+    if (turn === undefined) return;
+    const next = change(turn);
+    if (next === turn) return;
+    turns = turns.with(index, next);
+    changed();
+  }
+
+  function stop(current: Attempt): void {
+    current.controller.abort();
+    if (attempt === current) attempt = null;
+  }
+
+  async function follow(question: ChatQuestion): Promise<void> {
+    if (attempt !== null) stop(attempt);
+    const current: Attempt = { requestId: question.requestId, controller: new AbortController() };
+    attempt = current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const quiet = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (attempt !== current) return;
+        stop(current);
+        update(question.requestId, timeOutChatTurn);
+      }, idleTimeoutMs);
+    };
+    quiet();
+    try {
+      for await (const raw of adapter.send(question, { signal: current.controller.signal })) {
+        if (attempt !== current) return;
+        quiet();
+        update(question.requestId, (turn) => receiveChatEvent(turn, raw));
+        if (!turns.some((turn) => turn.requestId === question.requestId && isChatTurnOpen(turn)))
+          return;
+      }
+      if (attempt === current) update(question.requestId, endChatStream);
+    } catch (error) {
+      if (attempt !== current) return;
+      update(question.requestId, (turn) =>
+        error instanceof ChatAdmissionError
+          ? rejectChatTurn(turn, error.code, error.retryAfterSeconds)
+          : endChatStream(turn),
+      );
+    } finally {
+      clearTimeout(timer);
+      if (attempt === current) stop(current);
+    }
+  }
+
+  function readHistory(page: ChatConversation): void {
+    const active = page.activeOperation;
+    const read = historyTurns(page.messages, {
+      carried: null,
+      activeRequestId: active?.requestId ?? null,
+    });
+    turns = read.turns;
+    carried = read.leading;
+    cursor = page.nextCursor;
+    earlier = cursor === null ? "none" : "available";
+    retentionDays = page.retentionDays;
+    history = "ready";
+    changed();
+    const running =
+      active === null ? undefined : turns.find((turn) => turn.requestId === active.requestId);
+    if (running !== undefined && isChatTurnOpen(running)) {
+      void follow({ requestId: running.requestId, question: running.question });
+    }
+  }
+
+  async function restore(): Promise<void> {
+    try {
+      const page = parseChatConversation(
+        await adapter.restore({ signal: new AbortController().signal }),
+      );
+      if (page === null) throw new Error("The conversation is not one the contract allows.");
+      readHistory(page);
+    } catch {
+      history = "failed";
+      changed();
+    }
+  }
+
+  function takeHandOff(id: string): string | null {
+    if (taken.has(id)) return null;
+    taken.add(id);
+    try {
+      const question = storage.getItem(handOffKey(id));
+      storage.removeItem(handOffKey(id));
+      return question;
+    } catch {
+      return null;
+    }
+  }
+
+  function submit(question: string): SubmitResult {
+    const trimmed = validQuestion(question);
+    if (trimmed === null) return "invalid";
+    if (isBusy()) return "busy";
+    const turn = startChatTurn(createId(), trimmed);
+    turns = [...turns, turn];
+    changed();
+    void follow({ requestId: turn.requestId, question: turn.question });
+    return "sent";
+  }
+
+  return {
+    getSnapshot() {
+      snapshot ??= { history, turns, busy: isBusy(), retentionDays, earlier };
+      return snapshot;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    async open(handOffId) {
+      restoring ??= restore();
+      await restoring;
+      if (handOffId === null) return { kind: "shown" };
+      const question = takeHandOff(handOffId);
+      if (question === null) return { kind: "shown" };
+      if (isBusy()) return { kind: "held", question };
+      return submit(question) === "sent" ? { kind: "sent" } : { kind: "shown" };
+    },
+    async loadEarlier() {
+      if (earlier !== "available" || cursor === null) return;
+      earlier = "loading";
+      changed();
+      try {
+        const page = parseChatConversation(
+          await adapter.restore({ before: cursor, signal: new AbortController().signal }),
+        );
+        if (page === null) throw new Error("The conversation is not one the contract allows.");
+        const read = historyTurns(page.messages, { carried, activeRequestId: null });
+        const shown = new Set(turns.map((turn) => turn.requestId));
+        turns = [...read.turns.filter((turn) => !shown.has(turn.requestId)), ...turns];
+        carried = read.leading;
+        cursor = page.nextCursor;
+        earlier = cursor === null ? "none" : "available";
+      } catch {
+        earlier = "available";
+      }
+      changed();
+    },
+    submit,
+    retry(requestId) {
+      const latest = turns.at(-1);
+      if (latest?.requestId !== requestId || !canRetryChatTurn(latest)) {
+        return isBusy() && latest?.requestId === requestId ? "busy" : "not_retryable";
+      }
+      if (isBusy()) return "busy";
+      // An attempt the API never ended may still be admitted: follow or ask it under its request.
+      const next =
+        latest.attempt.terminal === null
+          ? restartChatTurn(latest)
+          : startChatTurn(createId(), latest.question);
+      turns = [...turns.slice(0, -1), next];
+      changed();
+      void follow({ requestId: next.requestId, question: next.question });
+      return "sent";
+    },
+  };
+}
