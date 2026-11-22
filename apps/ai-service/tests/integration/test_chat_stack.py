@@ -41,6 +41,8 @@ SEED_FOLDER = ROOT / "packages" / "llm-agent" / "evals" / "datasets" / "fixtures
 ORIGIN = "https://chat.example.test"
 EXPECTED_HOSTNAME = "chat.example.test"
 COOKIE = "sebela_chat"
+# The website's relay token: the API answers visitor chat routes only to its holder.
+RELAY_TOKEN = secrets.token_urlsafe(32)
 #: The fields a `chat` event may carry (`ChatStreamEvent`); anything else is unapproved output.
 EVENT_FIELDS = {
     "start": set(),
@@ -251,6 +253,7 @@ def stack() -> Iterator[Stack]:
         "API_AI_SERVICE_URL": service_url,
         "API_AI_SERVICE_TOKEN": token,
         "API_AI_CONTROL_TOKEN": control_token,
+        "API_CHAT_RELAY_TOKEN": RELAY_TOKEN,
         "API_CHAT_FINGERPRINT_KEY": secrets.token_urlsafe(32),
         "API_CHAT_RETENTION_DAYS": "",
         # The versions this agent generates with; the service refuses any other.
@@ -332,7 +335,7 @@ class Visitor:
     client: httpx2.Client = field(default_factory=lambda: httpx2.Client(timeout=30))
 
     def _headers(self, **extra: str) -> dict[str, str]:
-        headers = dict(extra)
+        headers = {"x-sebela-chat-relay": RELAY_TOKEN, **extra}
         if self.cookie is not None:
             headers["Cookie"] = f"{COOKIE}={self.cookie}"
         return headers
