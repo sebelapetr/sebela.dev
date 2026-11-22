@@ -9,9 +9,13 @@
 //   node harness/phase-work.mjs blockers [--json]              open issues whose `## Blocked by`
 //                                                              text and native blockers disagree;
 //                                                              exits 1 when any does
+//   node harness/phase-work.mjs assignees [--json]             open issues where the `hitl` label
+//                                                              and an assignee disagree; a report
+//                                                              for the owner, exits 1 when any does
 //
 // The orchestrator, the phase loop, the steward and the phase report all ask here, so nothing
-// selects by `phase:` label, by issue number or by reading an issue's text. Read-only: three
+// selects by `phase:` label, by issue number or by reading an issue's text — nor by issue type,
+// issue field, assignee or project, which are for people reading GitHub. Read-only: three
 // GraphQL queries through `gh api graphql`, on what belongs to issues (body, labels, sub-issues,
 // blockers). The token needs the `repo` scope and nothing else; no project is read.
 // Rules: lib/selection.mjs, lib/blocked-by.mjs. Intent: docs/agents.md, "Work selection".
@@ -19,6 +23,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { assigneeDisagreements, assigneeLines } from "./lib/assignees.mjs";
 import { blockerDisagreements, disagreementLines, textOnlyBlockers } from "./lib/blocked-by.mjs";
 import {
   PhaseWorkError,
@@ -46,7 +51,10 @@ const OPEN_ISSUES = `query OpenIssues($owner: String!, $name: String!, $after: S
   repository(owner: $owner, name: $name) {
     issues(first: ${PAGE}, after: $after, states: OPEN, orderBy: { field: CREATED_AT, direction: ASC }) {
       pageInfo { hasNextPage endCursor }
-      nodes { number title body authorAssociation ${ISSUE_FACTS} }
+      nodes {
+        number title body authorAssociation
+        assignees(first: ${PAGE}) { totalCount nodes { login } } ${ISSUE_FACTS}
+      }
     }
   }
 }`;
@@ -120,6 +128,12 @@ function issueFacts(node) {
   };
 }
 
+// Who an open issue is assigned to; only the assignee report reads it.
+function assignees(node) {
+  assertComplete(node.assignees, `assignees of #${node.number}`);
+  return (node.assignees?.nodes ?? []).map((user) => user.login);
+}
+
 // Every page of a connection: `read(after)` gives { pageInfo, nodes }.
 function everyPage(read) {
   const nodes = [];
@@ -138,6 +152,7 @@ function openIssues(graphql) {
   const { nodes } = everyPage((after) => graphql(OPEN_ISSUES, { after }).repository.issues);
   return nodes.map((node) => ({
     ...issueFacts(node),
+    assignees: assignees(node),
     body: node.body ?? "",
     authorAssociation: node.authorAssociation ?? null,
   }));
@@ -228,11 +243,18 @@ export function blockerCheck({ graphql = ghGraphql } = {}) {
   return blockerDisagreements(issues, states);
 }
 
+// The open issues where the `hitl` label and an assignee disagree (assigneeDisagreements in
+// lib/assignees.mjs). A report for the owner; no selection reads an assignee.
+export function assigneeCheck({ graphql = ghGraphql } = {}) {
+  return assigneeDisagreements(openIssues(graphql));
+}
+
 // --- the command ----------------------------------------------------------------------------
 
 const USAGE = `usage: phase-work.mjs next <phase-folder> [--json]
        phase-work.mjs phases [--json]
-       phase-work.mjs blockers [--json]`;
+       phase-work.mjs blockers [--json]
+       phase-work.mjs assignees [--json]`;
 
 function main(argv) {
   const json = argv.includes("--json");
@@ -261,6 +283,16 @@ function main(argv) {
       found.length > 0
         ? disagreementLines(found)
         : ["every open issue's `## Blocked by` text and native blockers agree"],
+    );
+    return found.length > 0 ? 1 : 0;
+  }
+  if (command === "assignees") {
+    const found = assigneeCheck();
+    print(
+      found,
+      found.length > 0
+        ? assigneeLines(found)
+        : ["every open issue's `hitl` label and assignee agree"],
     );
     return found.length > 0 ? 1 : 0;
   }
