@@ -7,6 +7,8 @@ import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
 import {
+  ChatConversationClearedSchema,
+  ChatConversationClearSchema,
   ChatConversationQuerySchema,
   ChatConversationSchema,
   ChatGenerationResultSchema,
@@ -14,10 +16,13 @@ import {
   ChatGrantClaimSchema,
   ChatMessageSubmissionSchema,
   ChatOperationSchema,
+  ChatRetrySubmissionSchema,
+  type ChatConversationClear,
   type ChatGrantClaim,
   type ChatMessageSubmission,
+  type ChatRetrySubmission,
 } from "@sebela/contracts";
-import type { ChatCaller, ChatDispatch, ChatService } from "@sebela/services";
+import type { ChatCaller, ChatDispatch, ChatService, ChatSubmitResult } from "@sebela/services";
 
 import type { ApiConfig, ChatHttpConfig } from "../../config.js";
 import { refuseCredentialsInUrl } from "../../middleware/authentication.js";
@@ -35,6 +40,8 @@ export const chatCookieName = "sebela_chat";
 /** Hands an admitted question to the AI service; never waits for the generation. */
 export interface ChatDispatcher {
   dispatch(dispatch: ChatDispatch): void;
+  /** Tells the AI service to stop a claimed generation; never waits and never fails the caller. */
+  cancel(operationId: string): void;
 }
 
 export interface ChatRouteOptions {
@@ -152,6 +159,93 @@ const visitorRoutes = {
     },
     errors: ["not_found"],
     refusals: { 403: `${relayRefusal}.`, 503: unavailableRefusal },
+  },
+  stop: {
+    operationId: "stopChatOperation",
+    method: "POST",
+    path: "/v1/chat/operations/:operationId/stop",
+    access: "public",
+    summary: "Stop a chat operation",
+    description:
+      "Stops one of the caller's operations from any tab, without a new bot challenge: an active " +
+      "operation ends as a retryable `cancelled` error, and a generation that claimed its grant " +
+      "is told to stop. Its reserved cost stays until the generation reports what it spent. An " +
+      "operation that already ended is returned as it is.",
+    sameOrigin: true,
+    params: OperationParamsSchema,
+    cookie,
+    response: {
+      status: 200,
+      description: "The operation, cancelled or as it ended.",
+      schema: ChatOperationSchema,
+    },
+    errors: ["not_found"],
+    refusals: {
+      403: `${relayRefusal} or has no allowed origin.`,
+      503: unavailableRefusal,
+    },
+  },
+  retry: {
+    operationId: "retryChatOperation",
+    method: "POST",
+    path: "/v1/chat/operations/:operationId/retry",
+    access: "public",
+    summary: "Retry a failed chat answer",
+    description:
+      "Asks the question of one of the caller's failed attempts again as a new attempt of the " +
+      "same request, keyed by its own retry ID, and replaces only the failed answer. The same " +
+      "retry ID again, or an attempt of that request that is active or answered, is recovered " +
+      "before any challenge, quota or spend. Otherwise the bot challenge, the quotas and the " +
+      "spend budget apply as to a question.",
+    sameOrigin: true,
+    params: OperationParamsSchema,
+    cookie,
+    body: ChatRetrySubmissionSchema,
+    response: {
+      status: 202,
+      description: "The retry is admitted.",
+      also: { status: 200, description: "The retry or the attempt recovered: its operation." },
+      schema: ChatOperationSchema,
+    },
+    errors: ["not_found"],
+    refusals: {
+      403:
+        `${relayRefusal}, has no allowed origin or is not JSON; ` +
+        "`chat_challenge_failed`: the bot challenge failed.",
+      409:
+        "`chat_request_conflict`: the retry ID was used for another attempt; " +
+        "`chat_busy`: the conversation already has a question in progress; " +
+        "`chat_not_retryable`: the attempt did not end with a retryable failure of the latest " +
+        "question.",
+      429: "`chat_quota_exceeded`: the visitor's question quota is spent.",
+      503: `\`chat_budget_exhausted\`: the chat's spend budget is spent; ${unavailableRefusal}`,
+    },
+  },
+  clear: {
+    operationId: "clearChatConversation",
+    method: "DELETE",
+    path: "/v1/chat/conversation",
+    access: "public",
+    summary: "Clear the visitor's chat conversation",
+    description:
+      "Deletes the caller's conversation when the body names it, as the visitor confirmed: " +
+      "active work is cancelled, messages are deleted, late results are refused and a fresh empty " +
+      "conversation of the same identity starts. Quotas and spend stay. Any other conversation ID " +
+      "clears nothing and returns the caller's conversation unchanged; a URL is never a delete " +
+      "credential. `telemetryDeletion` is `pending` while exported telemetry still awaits deletion.",
+    sameOrigin: true,
+    cookie,
+    body: ChatConversationClearSchema,
+    response: {
+      status: 200,
+      description: "Whether the conversation was cleared, and the caller's conversation now.",
+      schema: ChatConversationClearedSchema,
+    },
+    errors: [],
+    refusals: {
+      403: `${relayRefusal}, has no allowed origin or is not JSON.`,
+      503: unavailableRefusal,
+    },
   },
 } satisfies Record<string, RouteDocumentation>;
 
@@ -274,13 +368,20 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     await next();
   };
 
-  const sameOrigin: MiddlewareHandler<ApiEnv> = async (c, next) => {
-    const origin = c.req.header("origin");
-    if (origin === undefined || !http?.allowedOrigins.includes(origin) || !isJson(c)) {
-      throw new ApiError(403, "forbidden", "Ask from the website.");
-    }
-    await next();
-  };
+  /** A browser write: from an allowed origin, and JSON when it carries a body. */
+  const sameOrigin =
+    (withBody: boolean): MiddlewareHandler<ApiEnv> =>
+    async (c, next) => {
+      const origin = c.req.header("origin");
+      if (
+        origin === undefined ||
+        !http?.allowedOrigins.includes(origin) ||
+        (withBody && !isJson(c))
+      ) {
+        throw new ApiError(403, "forbidden", "Ask from the website.");
+      }
+      await next();
+    };
 
   const visitor = (route: RouteDocumentation): MiddlewareHandler<ApiEnv> =>
     every(
@@ -288,7 +389,7 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
       refuseCredentialsInUrl,
       available,
       relayed,
-      ...(route.sameOrigin ? [sameOrigin] : []),
+      ...(route.sameOrigin ? [sameOrigin(route.body !== undefined)] : []),
       ...(route.body ? jsonBody(route.body, config.bodyLimitBytes) : []),
       ...(route.params ? [pathParams(route.params)] : []),
     );
@@ -320,11 +421,8 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     return c.json(await chat.conversation(caller, query.data), 200);
   });
 
-  app.post(visitorRoutes.ask.path, visitor(visitorRoutes.ask), async (c) => {
-    const caller = await callerOf(c);
-    const submission = c.get("body") as ChatMessageSubmission;
-    // Behind the relay token, so the website named it; anything but one IP literal is unknown.
-    const result = await chat.submit(caller, submission, { clientAddress: namedAddress(c) });
+  /** The answer to an admission of a question or a retry: dispatched, recovered or refused. */
+  const admission = (c: Context<ApiEnv>, result: ChatSubmitResult) => {
     switch (result.status) {
       case "admitted":
         dispatcher?.dispatch(result.dispatch);
@@ -354,6 +452,46 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
       case "budget_exhausted":
         throw new ApiError(503, "chat_budget_exhausted", "The chat cannot answer more today.");
     }
+  };
+
+  app.post(visitorRoutes.ask.path, visitor(visitorRoutes.ask), async (c) => {
+    const caller = await callerOf(c);
+    const submission = c.get("body") as ChatMessageSubmission;
+    // Behind the relay token, so the website named it; anything but one IP literal is unknown.
+    const result = await chat.submit(caller, submission, { clientAddress: namedAddress(c) });
+    return admission(c, result);
+  });
+
+  app.post(visitorRoutes.retry.path, visitor(visitorRoutes.retry), async (c) => {
+    const caller = await callerOf(c);
+    const submission = c.get("body") as ChatRetrySubmission;
+    const result = await chat.retry(caller, operationIdOf(c), submission, {
+      clientAddress: namedAddress(c),
+    });
+    switch (result.status) {
+      case "not_found":
+        throw new ApiError(404, "not_found", "There is no such operation.");
+      case "not_retryable":
+        throw new ApiError(409, "chat_not_retryable", "This answer cannot be retried.");
+      default:
+        return admission(c, result);
+    }
+  });
+
+  app.post(visitorRoutes.stop.path, visitor(visitorRoutes.stop), async (c) => {
+    const caller = await callerOf(c);
+    const outcome = await chat.stop(caller, operationIdOf(c));
+    if (outcome === null) throw new ApiError(404, "not_found", "There is no such operation.");
+    if (outcome.status === "stopped" && outcome.running)
+      dispatcher?.cancel(outcome.operation.operationId);
+    return c.json(outcome.operation, 200);
+  });
+
+  app.delete(visitorRoutes.clear.path, visitor(visitorRoutes.clear), async (c) => {
+    const caller = await callerOf(c);
+    const outcome = await chat.clear(caller, c.get("body") as ChatConversationClear);
+    for (const operationId of outcome.cancelled) dispatcher?.cancel(operationId);
+    return c.json(outcome.cleared, 200);
   });
 
   app.get(visitorRoutes.operation.path, visitor(visitorRoutes.operation), async (c) => {
@@ -427,6 +565,8 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
         throw new ApiError(403, "forbidden", "The grant is not the operation's.");
       case "not_claimed":
         throw new ApiError(409, "conflict", "The operation's grant has not been claimed.");
+      case "deleted":
+        throw new ApiError(409, "conflict", "The operation's conversation was cleared.");
       case "invalid":
         throw new ApiError(400, "validation_failed", "The result names no grant.");
     }

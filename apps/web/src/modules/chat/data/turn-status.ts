@@ -43,6 +43,7 @@ const ERROR_NOTES: Readonly<Record<ChatErrorCode, string>> = {
   invalid_stream: "The answer could not be read.",
   invalid_request: "This question could not be sent.",
   internal: "Something went wrong while answering.",
+  cancelled: "The answer was stopped.",
 };
 
 /**
@@ -57,6 +58,7 @@ const ADMISSION_NOTES = {
   busy: { note: "Another question is still being answered.", final: false },
   conflict: { note: "This question could not be sent.", final: false },
   budget_exhausted: { note: "The assistant cannot answer more questions today.", final: true },
+  not_retryable: { note: "This answer can no longer be asked again.", final: false },
 } as const;
 
 /** The admissions where the assistant cannot help, so the contact link is offered instead. */
@@ -134,6 +136,7 @@ function errorNote(error: ChatTurnError): { readonly reason: string; readonly fi
     case "busy":
     case "conflict":
     case "budget_exhausted":
+    case "not_retryable":
       return { reason: ADMISSION_NOTES[code].note, final: ADMISSION_NOTES[code].final };
     default:
       return { reason: ERROR_NOTES[code], final: false };

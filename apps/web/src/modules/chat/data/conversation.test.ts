@@ -7,6 +7,7 @@ import {
   rejectChatTurn,
   restartChatTurn,
   startChatTurn,
+  stopChatTurn,
   timeOutChatTurn,
   type ChatTurn,
 } from "./conversation";
@@ -216,6 +217,7 @@ describe("rejectChatTurn", () => {
     ["budget_exhausted", false],
     ["conflict", false],
     ["invalid_request", false],
+    ["not_retryable", false],
   ] as const)("fails an open turn not admitted for %s (retryable: %s)", (code, retryable) => {
     expect(rejectChatTurn(startChatTurn(REQUEST, "Q?"), code)).toMatchObject({
       status: "failed",
@@ -506,5 +508,24 @@ describe("receiveChatEvent with a stream delivered twice", () => {
     ]);
 
     expect(turn).toMatchObject({ status: "failed", text: "", error: { code: "invalid_stream" } });
+  });
+});
+
+describe("stopChatTurn", () => {
+  it("fails an open turn as stopped, keeping its partial answer, and lets it be asked again", () => {
+    const stopped = stopChatTurn({ ...startChatTurn(REQUEST, "Q?"), text: "Part" });
+
+    expect(stopped).toMatchObject({
+      status: "failed",
+      text: "Part",
+      error: { code: "cancelled", retryable: true },
+    });
+    expect(canRetryChatTurn(stopped)).toBe(true);
+  });
+
+  it("leaves an ended turn as it is", () => {
+    const interrupted = endChatStream(startChatTurn(REQUEST, "Q?"));
+
+    expect(stopChatTurn(interrupted)).toBe(interrupted);
   });
 });

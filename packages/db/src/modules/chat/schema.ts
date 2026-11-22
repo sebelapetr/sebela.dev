@@ -67,13 +67,15 @@ export const messages = chatSchema.table(
     sources: jsonb("sources").$type<unknown[]>().notNull().default([]),
     related: jsonb("related").$type<unknown[]>().notNull().default([]),
     createdAt: at("created_at").notNull(),
+    /** Set on a failed answer an explicit retry replaced; the conversation no longer shows it. */
+    supersededAt: at("superseded_at"),
   },
   (table) => [
     index("messages_conversation_position").on(table.conversationId, table.position),
     check("messages_role_known", sql`${table.role} IN ('user', 'assistant')`),
     check(
       "messages_status_known",
-      sql`${table.status} IN ('pending', 'completed', 'failed', 'interrupted')`,
+      sql`${table.status} IN ('pending', 'completed', 'failed', 'interrupted', 'cancelled')`,
     ),
     check(
       "messages_user_has_text",
@@ -83,9 +85,11 @@ export const messages = chatSchema.table(
 );
 
 /**
- * One admitted question: bound to its identity, conversation, request id and canonical question,
- * with its absolute deadline, the bound model, pricing and allowance, and — after reconciling —
- * the non-content usage accounting. At most one is active per identity.
+ * One admitted attempt at a question: bound to its identity, conversation, request id and
+ * canonical question, with its absolute deadline, the bound model, pricing and allowance, and —
+ * after reconciling — the non-content usage accounting. At most one is active per identity. The
+ * first attempt of a request has `attempt_key` = `request_id`; an explicit retry has its own retry
+ * id as `attempt_key` and names the attempt it retries in `retry_of`.
  */
 export const operations = chatSchema.table(
   "operations",
@@ -98,6 +102,8 @@ export const operations = chatSchema.table(
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
     requestId: uuid("request_id").notNull(),
+    attemptKey: uuid("attempt_key").notNull(),
+    retryOf: uuid("retry_of"),
     questionHash: text("question_hash").notNull(),
     userMessageId: uuid("user_message_id")
       .notNull()
@@ -124,7 +130,8 @@ export const operations = chatSchema.table(
     versions: jsonb("versions").$type<Record<string, string>>(),
   },
   (table) => [
-    unique("operations_identity_request").on(table.identityId, table.requestId),
+    unique("operations_identity_attempt").on(table.identityId, table.attemptKey),
+    index("operations_identity_request").on(table.identityId, table.requestId),
     uniqueIndex("operations_one_active_per_identity")
       .on(table.identityId)
       .where(sql`${table.status} IN ('accepted', 'running')`),
@@ -133,7 +140,7 @@ export const operations = chatSchema.table(
       .where(sql`${table.status} IN ('accepted', 'running')`),
     check(
       "operations_status_known",
-      sql`${table.status} IN ('accepted', 'running', 'completed', 'failed', 'interrupted')`,
+      sql`${table.status} IN ('accepted', 'running', 'completed', 'failed', 'interrupted', 'cancelled')`,
     ),
     check("operations_allowance_positive", sql`${table.allowanceMicroUsd} > 0`),
   ],
@@ -149,15 +156,74 @@ export const grants = chatSchema.table("grants", {
   claimedAt: at("claimed_at"),
 });
 
-/** A redeemed bot-challenge token (its SHA-256 hash), bound to the one operation it admitted. */
-export const challengeRedemptions = chatSchema.table("challenge_redemptions", {
-  /** The SHA-256 digest of the token; the token itself is never stored. */
-  digest: text("digest").primaryKey(),
-  operationId: uuid("operation_id")
-    .notNull()
-    .references(() => operations.id, { onDelete: "cascade" }),
-  redeemedAt: at("redeemed_at").notNull(),
-});
+/**
+ * A redeemed bot-challenge token (its SHA-256 hash), bound to the operation it admitted. It
+ * outlives a cleared conversation (the reference becomes `NULL`), so a token is never redeemed
+ * twice, and retention purges it after `expires_at`.
+ */
+export const challengeRedemptions = chatSchema.table(
+  "challenge_redemptions",
+  {
+    /** The SHA-256 digest of the token; the token itself is never stored. */
+    digest: text("digest").primaryKey(),
+    operationId: uuid("operation_id").references(() => operations.id, { onDelete: "set null" }),
+    redeemedAt: at("redeemed_at").notNull(),
+    expiresAt: at("expires_at").notNull(),
+  },
+  (table) => [index("challenge_redemptions_expiry").on(table.expiresAt)],
+);
+
+/**
+ * An operation of a cleared conversation that may still report: the grant's verifier only, so a
+ * late result recreates nothing yet settles its measured cost once. Retention purges it after
+ * `expires_at`. No reference to the deleted operation.
+ */
+export const operationTombstones = chatSchema.table(
+  "operation_tombstones",
+  {
+    operationId: uuid("operation_id").primaryKey(),
+    verifier: text("verifier").notNull(),
+    deletedAt: at("deleted_at").notNull(),
+    expiresAt: at("expires_at").notNull(),
+  },
+  (table) => [index("operation_tombstones_expiry").on(table.expiresAt)],
+);
+
+/**
+ * A telemetry trace exported for a conversation, so deleting the conversation can delete the
+ * remote copy too. Identifiers only; it moves to `telemetry_deletions` when the conversation goes.
+ */
+export const telemetryReferences = chatSchema.table(
+  "telemetry_references",
+  {
+    traceId: text("trace_id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull(),
+    operationId: uuid("operation_id"),
+    recordedAt: at("recorded_at").notNull(),
+  },
+  (table) => [index("telemetry_references_conversation").on(table.conversationId)],
+);
+
+/**
+ * A remote telemetry deletion the API owes: `pending` until the exporter confirms it, with the
+ * failed attempts counted; `completed` after. No content and no reference to the conversation.
+ */
+export const telemetryDeletions = chatSchema.table(
+  "telemetry_deletions",
+  {
+    traceId: text("trace_id").primaryKey(),
+    requestedAt: at("requested_at").notNull(),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    settledAt: at("settled_at"),
+  },
+  (table) => [
+    index("telemetry_deletions_pending")
+      .on(table.requestedAt)
+      .where(sql`${table.state} = 'pending'`),
+    check("telemetry_deletions_state_known", sql`${table.state} IN ('pending', 'completed')`),
+  ],
+);
 
 /**
  * A short-lived claim on one request of an identity, taken before its bot-challenge token is

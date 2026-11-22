@@ -8,7 +8,10 @@ export type ChatRelayRoute =
   | { readonly kind: "conversation" }
   | { readonly kind: "messages" }
   | { readonly kind: "operation"; readonly operationId: string }
-  | { readonly kind: "events"; readonly operationId: string };
+  | { readonly kind: "events"; readonly operationId: string }
+  | { readonly kind: "stop"; readonly operationId: string }
+  | { readonly kind: "retry"; readonly operationId: string }
+  | { readonly kind: "clear" };
 
 /** The relay's token and how many proxies in front of the website append to X-Forwarded-For. */
 export interface ChatRelaySettings {
@@ -96,6 +99,20 @@ async function readBounded(
   return body;
 }
 
+/** The method each route is relayed with. */
+const methods: Readonly<Record<ChatRelayRoute["kind"], string>> = {
+  conversation: "GET",
+  messages: "POST",
+  operation: "GET",
+  events: "GET",
+  stop: "POST",
+  retry: "POST",
+  clear: "DELETE",
+};
+
+/** The routes whose body is relayed, bounded; every other route's body stays on the website. */
+const withBody: ReadonlySet<ChatRelayRoute["kind"]> = new Set(["messages", "retry", "clear"]);
+
 function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
   switch (route.kind) {
     case "conversation": {
@@ -108,13 +125,17 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
       const search = query.toString();
       return `/v1/chat/conversation${search === "" ? "" : `?${search}`}`;
     }
+    case "clear":
+      return "/v1/chat/conversation";
     case "messages":
       return "/v1/chat/conversation/messages";
     case "operation":
-    case "events": {
+    case "events":
+    case "stop":
+    case "retry": {
       if (!operationIdPattern.test(route.operationId)) return null;
       const base = `/v1/chat/operations/${route.operationId}`;
-      return route.kind === "events" ? `${base}/events` : base;
+      return route.kind === "operation" ? base : `${base}/${route.kind}`;
     }
   }
 }
@@ -122,9 +143,9 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
 /**
  * Builds the relay. It forwards only the headers the visitor routes read (cookie, origin, content
  * type, accept, last event ID), adds its token and, with trusted proxy hops, the visitor's address
- * from X-Forwarded-For counted from the right, and never an API key or authorisation; a question
- * body over `chatRelayMaxBodyBytes` is refused with 413, an operation ID that is not a UUID with
- * 404, both without reaching the API. The answer keeps the API's status and body stream with its
+ * from X-Forwarded-For counted from the right, and never an API key or authorisation. Only a
+ * question, a retry and a clear carry a body (a stop never does); one over `chatRelayMaxBodyBytes`
+ * is refused with 413, an operation ID that is not a UUID with 404, both without reaching the API. The answer keeps the API's status and body stream with its
  * content type, every cookie and Retry-After, is never cached, and an event stream is marked
  * unbuffered. Without its settings, or with an API it cannot reach, it answers 503 `unavailable`.
  */
@@ -152,17 +173,17 @@ export function createChatRelay(
     if (address !== null) headers.set(clientHeader, address);
 
     let body: Uint8Array<ArrayBuffer> | undefined;
-    if (route.kind === "messages") {
+    if (withBody.has(route.kind)) {
       const read = await readBounded(request, chatRelayMaxBodyBytes);
       if (read === null)
-        return errorResponse(413, "payload_too_large", "The question is too long to send.");
+        return errorResponse(413, "payload_too_large", "The request is too large to send.");
       body = read;
     }
 
     let upstream: Response;
     try {
       upstream = await options.fetch(`${options.apiBaseUrl()}${path}`, {
-        method: route.kind === "messages" ? "POST" : "GET",
+        method: methods[route.kind],
         headers,
         ...(body === undefined ? {} : { body }),
         signal: request.signal,

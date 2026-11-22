@@ -37,12 +37,18 @@ const READ_ONLY = new Set(["POST /v1/retrieval/search"]);
 
 /**
  * The reviewed chat writes: they change a visitor's private conversation or an operation's state,
- * never content, so they are not audited as content changes. The visitor's own question is the one
- * public write; the control routes take the AI service's control token, not an API key.
+ * never content, so they are not audited as content changes. The visitor's question, retry, Stop and
+ * clear of their own conversation are the public writes; the control routes take the AI service's
+ * control token, not an API key.
  */
-const VISITOR_WRITE = "POST /v1/chat/conversation/messages";
+const VISITOR_WRITES = new Set([
+  "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/operations/:operationId/stop",
+  "POST /v1/chat/operations/:operationId/retry",
+  "DELETE /v1/chat/conversation",
+]);
 const CHAT_WRITES = new Set([
-  VISITOR_WRITE,
+  ...VISITOR_WRITES,
   "POST /v1/internal/chat/grants/claim",
   "POST /v1/internal/chat/operations/:operationId/result",
 ]);
@@ -431,9 +437,10 @@ describe("the content audit", () => {
     for (const route of writes) {
       const path = unknownRecordPath(route.path);
       const anonymous = await send(path, route.method, json({}), api);
-      if (`${route.method} ${route.path}` === VISITOR_WRITE) {
+      const name = `${route.method} ${route.path}`;
+      if (VISITOR_WRITES.has(name)) {
         // Public: refused for its origin, or unavailable while the chat is off; never a 2xx.
-        expect(anonymous.status, VISITOR_WRITE).toBeGreaterThanOrEqual(400);
+        expect(anonymous.status, name).toBeGreaterThanOrEqual(400);
         continue;
       }
       expect(anonymous.status, `${route.method} ${route.path}`).toBe(401);

@@ -3,8 +3,9 @@
 /**
  * Why a question was not admitted: the person check failed, another question is still answered,
  * the request was already used for another question, the visitor's or the site's allowance is
- * spent, too many requests came in a short time, the question was not accepted, or the assistant
- * could not be reached.
+ * spent, too many requests came in a short time, the question was not accepted, the assistant
+ * could not be reached, or the attempt asked again is no longer the latest or one that may be
+ * retried.
  */
 export const chatAdmissionCodes = [
   "challenge_failed",
@@ -15,6 +16,7 @@ export const chatAdmissionCodes = [
   "rate_limited",
   "invalid_request",
   "unavailable",
+  "not_retryable",
 ] as const;
 
 export type ChatAdmissionCode = (typeof chatAdmissionCodes)[number];

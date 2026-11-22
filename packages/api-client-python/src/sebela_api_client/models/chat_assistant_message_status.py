@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class ChatAssistantMessageStatus(StrEnum):
+    CANCELLED = "cancelled"
     COMPLETED = "completed"
     FAILED = "failed"
     INTERRUPTED = "interrupted"

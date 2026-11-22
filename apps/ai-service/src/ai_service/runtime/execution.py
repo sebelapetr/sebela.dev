@@ -16,6 +16,11 @@ Each operation:
 5. runs the agent, maps its result to the contract and reports it once, with bounded retries
    until a few seconds after the deadline.
 
+`cancel` is the API's Stop of one operation: a running one stops its graph, model and tool work
+and reports `cancelled (stopped)` (zero, certain usage when it stopped before a model call; the
+agent's measured usage otherwise, uncertain while a model call was in flight); one not yet
+dispatched is remembered so its dispatch neither claims nor reports; others run on untouched.
+
 `shutdown` closes admission, lets running operations finish within the grace, then cancels the
 rest and reports them `cancelled`/`interrupted` with uncertain usage.
 """
@@ -26,6 +31,7 @@ import asyncio
 import datetime
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Final
 
@@ -46,14 +52,18 @@ _MAX_DEADLINE_S: Final = 60.0
 _CLAIM_TIMEOUT_S: Final = 5.0
 #: How long interrupted operations may take to unwind and report after the grace.
 _INTERRUPT_BOUND_S: Final = RECONCILE_GRACE_S + 1.0
+#: How many Stops of operations not (yet) running here are remembered for a late dispatch.
+_REMEMBERED_STOPS: Final = 1024
 
 _log = logging.getLogger("ai_service.generations")
 
 
 @dataclass
 class _Running:
-    task: asyncio.Task[None]
+    operation: str
     cancel: asyncio.Event
+    #: Set by `cancel`: the API stopped this operation, as opposed to a shutdown interrupting it.
+    stopped: bool = False
 
 
 class Generations:
@@ -70,6 +80,7 @@ class Generations:
         self._admission = admission
         self._ceiling = ceiling
         self._running: dict[asyncio.Task[None], _Running] = {}
+        self._stopped: OrderedDict[str, None] = OrderedDict()
 
     @property
     def accepting(self) -> bool:
@@ -78,14 +89,33 @@ class Generations:
     async def submit(self, request: GenerationRequest) -> bool:
         """True once `request` is admitted and running; False (busy) when no slot freed in time."""
         received = time.monotonic()
+        operation = str(request.operation_id)
+        if operation in self._stopped:
+            _log.info("operation %s: stopped before its dispatch", operation)
+            return True
         slot = await self._admission.admit()
         if slot is None:
             return False
         cancel = asyncio.Event()
-        task = asyncio.create_task(self._operate(request, slot, received, cancel))
-        self._running[task] = _Running(task, cancel)
+        running = _Running(operation, cancel)
+        task = asyncio.create_task(self._operate(request, slot, received, running))
+        self._running[task] = running
         task.add_done_callback(self._forget)
+        if operation in self._stopped:
+            running.stopped = True
+            cancel.set()
         return True
+
+    def cancel(self, operation_id: str) -> None:
+        """Stops `operation_id` here, or remembers the Stop for its dispatch; idempotent."""
+        self._stopped[operation_id] = None
+        self._stopped.move_to_end(operation_id)
+        while len(self._stopped) > _REMEMBERED_STOPS:
+            self._stopped.popitem(last=False)
+        for running in self._running.values():
+            if running.operation == operation_id and not running.cancel.is_set():
+                running.stopped = True
+                running.cancel.set()
 
     async def shutdown(self, grace_s: float) -> None:
         """Stops admission, waits up to `grace_s`, then interrupts and reports what still runs."""
@@ -105,10 +135,13 @@ class Generations:
         self._running.pop(task, None)
 
     async def _operate(
-        self, request: GenerationRequest, slot: Slot, received: float, cancel: asyncio.Event
+        self, request: GenerationRequest, slot: Slot, received: float, running: _Running
     ) -> None:
         operation = str(request.operation_id)
+        cancel = running.cancel
         try:
+            if cancel.is_set():
+                return
             claim = await self._control.claim(
                 operation,
                 request.grant,
@@ -119,7 +152,7 @@ class Generations:
                 return
             deadline_at = min(request.deadline_at, claim.deadline_at)
             until = time.monotonic() + max(_seconds_until(deadline_at), 0.0) + RECONCILE_GRACE_S
-            report = await self._generate(request, claim, deadline_at, received, cancel)
+            report = await self._generate(request, claim, deadline_at, received, running)
             if cancel.is_set():
                 until = min(until, time.monotonic() + RECONCILE_GRACE_S)
             if not await self._control.report(operation, report, until=until):
@@ -135,11 +168,12 @@ class Generations:
         claim: ChatGrantClaimed,
         deadline_at: datetime.datetime,
         received: float,
-        cancel: asyncio.Event,
+        running: _Running,
     ) -> ResultReport:
         def latency() -> int:
             return round((time.monotonic() - received) * 1000)
 
+        cancel = running.cancel
         agent = versions()
         if (
             claim.model != request.model
@@ -152,6 +186,14 @@ class Generations:
             return stopped_report(
                 "cancelled",
                 "grant_mismatch",
+                grant=request.grant,
+                latency_ms=latency(),
+                versions=agent,
+            )
+        if cancel.is_set():
+            return stopped_report(
+                "cancelled",
+                "stopped" if running.stopped else "interrupted",
                 grant=request.grant,
                 latency_ms=latency(),
                 versions=agent,
@@ -194,11 +236,17 @@ class Generations:
                 ),
                 cancel=cancel,
             )
-            interrupted = result.outcome == "cancelled" and cancel.is_set()
+            ended_by_cancel = result.outcome == "cancelled" and cancel.is_set()
+            stopped = ended_by_cancel and running.stopped
+            interrupted = ended_by_cancel and not running.stopped
             if not (interrupted or result.usage.cost_uncertain):
                 cost = result.usage.cost_usd
             return report_for(
-                result, grant=request.grant, latency_ms=latency(), interrupted=interrupted
+                result,
+                grant=request.grant,
+                latency_ms=latency(),
+                interrupted=interrupted,
+                stopped=stopped,
             )
         finally:
             if self._ceiling is not None and reservation is not None:

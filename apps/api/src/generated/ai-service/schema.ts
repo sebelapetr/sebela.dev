@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/generations/{operation_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel
+         * @description Stops one generation; repeating it, or stopping one that ended, changes nothing.
+         */
+        post: operations["cancel_internal_v1_generations__operation_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/capabilities/profile": {
         parameters: {
             query?: never;
@@ -31,11 +51,246 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Profile
-         * @description The published profile, as the agent's `get_profile` tool projects it.
-         */
-        get: operations["profile_v1_capabilities_profile_get"];
+        /** Read the published professional profile: name, headline, biography, location, availability, career start, services introduction, collaboration steps and the services note. */
+        get: operations["get_profile_v1_capabilities_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/experiences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read every published experience (job, contract or other role): title, kind, organization, start and end dates (no end date means current), summary, responsibilities, technologies and the projects it contains. */
+        get: operations["list_experiences_v1_capabilities_experiences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read every published project: the experience it belongs to, summary, problem, work done, result, dates, technologies and whether it has a case study. */
+        get: operations["list_projects_v1_capabilities_projects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/project": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one published project by its slug, including its case study (role and body) when it has one. */
+        get: operations["get_project_v1_capabilities_project_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read every published service: summary, audience, deliverable and the projects and explorations it rests on, with each exploration's status. */
+        get: operations["list_services_v1_capabilities_services_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/explorations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read every published exploration with its stored status: built, tested (tried, not delivered) or designed (not implemented); also concepts, dates, technologies and topics. */
+        get: operations["list_explorations_v1_capabilities_explorations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/education": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read every published education record: school, course, certification or milestone, with its institution and dates where they are published. */
+        get: operations["list_education_v1_capabilities_education_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/current-focus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read what the person is focused on now: each focus entry's title, description, topics and the project it builds on, if any. A focus is current, not delivered work. */
+        get: operations["list_current_focus_v1_capabilities_current_focus_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/roadmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the AI Roadmap of what the person is learning: overall counts and progress, and every area with its stored progress (completed of total resources, status, estimated time) and its modules' progress. Estimated time is a plan, not logged time. */
+        get: operations["get_roadmap_v1_capabilities_roadmap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/roadmap-area": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one AI Roadmap area by its slug with every module and each module's learning resources: type, stored status, estimated time, linked book and topics. */
+        get: operations["get_roadmap_area_v1_capabilities_roadmap_area_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/learning-diary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the learning diary: each Europe/Prague calendar day with its notes, the logged study sessions (resource or attended event, and time) and the day's total logged time. Newest day first. */
+        get: operations["get_learning_diary_v1_capabilities_learning_diary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/learning-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the logged learning time as the website computes it: totals and active days, per Monday-start week, per calendar month, per area and module, per resource and per attended event, split into resource, book and event time. */
+        get: operations["get_learning_statistics_v1_capabilities_learning_statistics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/books": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the bookshelf: each book's author, year, pages, stored status (to-read, reading, completed), dates, summary, the roadmap resource it belongs to and the reading time logged on that resource. */
+        get: operations["list_books_v1_capabilities_books_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the conferences, meetups, workshops and lectures the person attended: organizer, dates, place, takeaways, topics and the attendance time logged on each. */
+        get: operations["list_events_v1_capabilities_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/capabilities/technologies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the published technology catalogue: each technology's name, its tier (primary or secondary) and, for a primary technology, its group (core or AI engineering focus). */
+        get: operations["list_technologies_v1_capabilities_technologies_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -96,6 +351,44 @@ export interface components {
              * @constant
              */
             accepted?: true;
+        };
+        /**
+         * CapabilityPage
+         * @description One page of a read capability; `page_count` pages hold every record, in order.
+         */
+        CapabilityPage: {
+            /**
+             * Capability
+             * @enum {string}
+             */
+            capability: "get_profile" | "list_experiences" | "list_projects" | "get_project" | "list_services" | "list_explorations" | "list_education" | "list_current_focus" | "get_roadmap" | "get_roadmap_area" | "get_learning_diary" | "get_learning_statistics" | "list_books" | "list_events" | "list_technologies";
+            /** Page */
+            page: number;
+            /** Pagecount */
+            pageCount: number;
+            /** Records */
+            records: components["schemas"]["CapabilityRecord"][];
+        };
+        /**
+         * CapabilityRecord
+         * @description One projected record, exactly as the in-process tool gives it to the model.
+         */
+        CapabilityRecord: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "profile" | "contact" | "experience" | "project" | "exploration" | "service" | "education" | "current_focus" | "roadmap" | "roadmap_area" | "roadmap_module" | "diary_day" | "statistics" | "book" | "event" | "technology";
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Href */
+            href: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
         };
         /**
          * GenerationRequest
@@ -179,7 +472,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "busy" | "unauthorized" | "version_mismatch" | "unavailable";
+            code: "busy" | "unauthorized" | "version_mismatch" | "unavailable" | "not_found" | "invalid_arguments" | "rate_limited";
         };
         /** Ready */
         Ready: {
@@ -250,25 +543,925 @@ export interface operations {
             };
         };
     };
-    profile_v1_capabilities_profile_get: {
+    cancel_internal_v1_generations__operation_id__cancel_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            /** @description No valid bearer */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The operation is not a UUID */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_profile_v1_capabilities_profile_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The public profile view (no identifier, e-mail or links) */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["CapabilityPage"];
                 };
             };
-            /** @description Busy or the content is unavailable */
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_experiences_v1_capabilities_experiences_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_projects_v1_capabilities_projects_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_project_v1_capabilities_project_get: {
+        parameters: {
+            query: {
+                /** @description The project slug that list_projects or an experience gives. */
+                slug: string;
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_services_v1_capabilities_services_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_explorations_v1_capabilities_explorations_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_education_v1_capabilities_education_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_current_focus_v1_capabilities_current_focus_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_roadmap_v1_capabilities_roadmap_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_roadmap_area_v1_capabilities_roadmap_area_get: {
+        parameters: {
+            query: {
+                /** @description The area slug that get_roadmap gives. */
+                area: string;
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_learning_diary_v1_capabilities_learning_diary_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_learning_statistics_v1_capabilities_learning_statistics_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_books_v1_capabilities_books_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_events_v1_capabilities_events_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_technologies_v1_capabilities_technologies_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

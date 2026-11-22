@@ -34,6 +34,7 @@ describe("ErrorResponseSchema", () => {
     "chat_challenge_failed",
     "chat_quota_exceeded",
     "chat_budget_exhausted",
+    "chat_not_retryable",
   ])("accepts the visitor chat refusal %s", (code) => {
     const body = { error: { code, message: "The question was not accepted." } };
     expect(ErrorResponseSchema.safeParse(body).success).toBe(true);

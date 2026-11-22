@@ -6,6 +6,7 @@ class ErrorResponseErrorCode(StrEnum):
     CHAT_BUDGET_EXHAUSTED = "chat_budget_exhausted"
     CHAT_BUSY = "chat_busy"
     CHAT_CHALLENGE_FAILED = "chat_challenge_failed"
+    CHAT_NOT_RETRYABLE = "chat_not_retryable"
     CHAT_QUOTA_EXCEEDED = "chat_quota_exceeded"
     CHAT_REQUEST_CONFLICT = "chat_request_conflict"
     CONFLICT = "conflict"

@@ -118,8 +118,8 @@ export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
 /**
  * The API did not admit the question: an open turn fails with the reason, retryable where a new
  * attempt may pass (a failed person check, a busy conversation, a spent visitor allowance, a burst
- * limit, an unreachable assistant), never for a spent site budget, a request already used or an
- * invalid question. Pure.
+ * limit, an unreachable assistant), never for a spent site budget, a request already used, an
+ * invalid question or an attempt the API no longer lets be asked again. Pure.
  */
 export function rejectChatTurn(
   turn: ChatTurn,
@@ -161,10 +161,21 @@ export function canRetryChatTurn(turn: ChatTurn): boolean {
 
 /**
  * A new attempt at the same logical request: the question and request stay, the failed answer
- * attempt is replaced and the new attempt's events are accepted from the beginning.
+ * attempt is replaced and the new attempt's events (a new answer message) are accepted from the
+ * beginning.
  */
 export function restartChatTurn(turn: ChatTurn): ChatTurn {
   return startChatTurn(turn.requestId, turn.question);
+}
+
+/**
+ * The visitor stopped the answer before the API admitted it, so no stream will end it: an open
+ * turn fails as cancelled, keeping its partial answer, and may be asked again. Pure.
+ */
+export function stopChatTurn(turn: ChatTurn): ChatTurn {
+  return isChatTurnOpen(turn)
+    ? { ...turn, status: "failed", error: { code: "cancelled", retryable: true } }
+    : turn;
 }
 
 /** No event came for too long: an open turn fails as timed out, keeping its partial answer. */

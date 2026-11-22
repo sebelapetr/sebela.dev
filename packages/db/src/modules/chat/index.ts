@@ -1,4 +1,19 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import { alias } from "drizzle-orm/pg-core";
 
@@ -12,17 +27,21 @@ import {
   identities,
   messages,
   operations,
+  operationTombstones,
   requestClaims,
   spendReservations,
   spendWindows,
+  telemetryDeletions,
+  telemetryReferences,
 } from "./schema.js";
 
 /** The UTC window a spend reservation counts in. */
 export type ChatSpendKind = "day" | "month";
 
-export type ChatOperationState = "accepted" | "running" | "completed" | "failed" | "interrupted";
+export type ChatOperationState =
+  "accepted" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
 
-export type ChatMessageState = "pending" | "completed" | "failed" | "interrupted";
+export type ChatMessageState = "pending" | "completed" | "failed" | "interrupted" | "cancelled";
 
 /** An identity's single conversation. */
 export interface ChatConversationRecord {
@@ -69,6 +88,8 @@ export interface ChatOperationRecord {
   pricingVersion: string;
   allowanceMicroUsd: number;
   contextRevision: number;
+  /** The attempt this one retries, or `null` for the first attempt of its request. */
+  retryOf: string | null;
 }
 
 /** One quota: at most `limit` admissions of the scope since `since`. */
@@ -192,8 +213,78 @@ export interface ChatResultRecord {
 export type ChatReconcileResult =
   | { status: "reconciled"; operation: ChatOperationRecord }
   | { status: "already"; operation: ChatOperationRecord }
+  /** The operation's conversation was cleared; at most its measured cost was settled. */
+  | { status: "deleted" }
   | { status: "not_claimed" }
   | { status: "wrong_grant" };
+
+/**
+ * An explicit retry of one failed attempt: the same gates as an admission, keyed by its own
+ * `retryId`, for the attempt `operationId` of the identity's conversation.
+ */
+export type ChatRetryInput = Omit<ChatAdmissionInput, "requestId" | "question" | "questionHash"> & {
+  operationId: string;
+  retryId: string;
+};
+
+export type ChatRetryResult =
+  /** The new attempt and the question it asks again. */
+  | { status: "admitted"; operation: ChatOperationRecord; question: string }
+  /** `retryId` was already used; `sameTarget` tells a recovery from a conflict. */
+  | { status: "duplicate"; operation: ChatOperationRecord; sameTarget: boolean }
+  /** The request's latest attempt is active or completed: recovered, never generated again. */
+  | { status: "recovered"; operation: ChatOperationRecord }
+  | { status: "not_found" }
+  /** Not a retryable failure of the conversation's latest question. */
+  | { status: "not_retryable" }
+  | { status: "busy"; operation: ChatOperationRecord }
+  | { status: "challenge_reused" }
+  | { status: "quota_exceeded"; scope: ChatQuotaRule["scope"]; retryAt: Date }
+  | { status: "budget_exhausted" };
+
+export type ChatStopResult =
+  /** `claimed` tells whether a generation may be running and so must be told to stop. */
+  | { status: "stopped"; operation: ChatOperationRecord; claimed: boolean }
+  /** It had already ended; returned as it is. */
+  | { status: "finished"; operation: ChatOperationRecord };
+
+export interface ChatClearInput {
+  identityId: string;
+  /** The conversation the visitor confirmed clearing; another one clears nothing. */
+  conversationId: string;
+  at: Date;
+  /** The error a cancelled active answer ends with. */
+  error: ChatStoredError;
+  /** How long a deleted operation's tombstone refuses and settles late results. */
+  tombstoneExpiresAt: Date;
+}
+
+export type ChatClearResult =
+  | {
+      status: "cleared";
+      /** The fresh empty conversation of the same identity. */
+      conversation: ChatConversationRecord;
+      /** The operations that were active and were cancelled. */
+      cancelled: string[];
+      /** How many telemetry references were handed over for remote deletion. */
+      telemetryPending: number;
+    }
+  | { status: "mismatch" };
+
+/** A telemetry trace recorded for a conversation, so deleting it can delete the export too. */
+export interface ChatTelemetryReferenceInput {
+  traceId: string;
+  conversationId: string;
+  operationId: string | null;
+  at: Date;
+}
+
+/** A remote telemetry deletion still to be done. */
+export interface ChatTelemetryDeletion {
+  traceId: string;
+  requestedAt: Date;
+  attempts: number;
+}
 
 /** A visitor's message error, as stored. */
 export interface ChatStoredError {
@@ -277,6 +368,50 @@ export interface ChatPersistence {
    * conversations it deleted.
    */
   deleteInactive(cutoff: Date, at: Date, limit: number): Promise<number>;
+  /** The identity's attempt with this request id or retry id; `null` when none. */
+  findOperationByAttempt(
+    identityId: string,
+    attemptKey: string,
+  ): Promise<ChatOperationRecord | null>;
+  /**
+   * Retries a failed attempt atomically, serialised per identity: recovers a used `retryId`, or
+   * the request's active or completed attempt; otherwise only a retryable failure of the latest
+   * question passes the admission gates. Then supersedes the failed answer with a pending one and
+   * creates the new `accepted` attempt of the same request. Any refusal changes nothing.
+   */
+  retry(input: ChatRetryInput): Promise<ChatRetryResult>;
+  /**
+   * Stops the identity's active operation: it and its answer end `cancelled`; a claimed one keeps
+   * its reservations as uncertain, an unclaimed one releases them. `null` for another identity's.
+   */
+  stop(
+    identityId: string,
+    operationId: string,
+    at: Date,
+    error: ChatStoredError,
+  ): Promise<ChatStopResult | null>;
+  /**
+   * Clears the identity's conversation atomically: cancels active work, tombstones operations that
+   * may still report, hands its telemetry references to pending deletion, deletes the
+   * conversation with its messages and starts a fresh one. Quotas, spend and redeemed challenge
+   * tokens stay.
+   */
+  clear(input: ChatClearInput): Promise<ChatClearResult>;
+  /**
+   * Records a telemetry trace of a conversation; one of a deleted conversation or operation goes
+   * straight to pending deletion.
+   */
+  recordTelemetryReference(
+    input: ChatTelemetryReferenceInput,
+  ): Promise<"recorded" | "deletion_pending">;
+  /** The oldest pending remote telemetry deletions, at most `limit`. */
+  pendingTelemetryDeletions(limit: number): Promise<ChatTelemetryDeletion[]>;
+  /** Records a remote deletion's outcome: `completed` ends it, `failed` keeps it pending. */
+  settleTelemetryDeletion(
+    traceId: string,
+    outcome: "completed" | "failed",
+    at: Date,
+  ): Promise<void>;
   /** The committed spend of one window in millionths of a US dollar; 0 when it has none. */
   committedSpend(kind: ChatSpendKind, startsOn: string): Promise<number>;
 }
@@ -286,13 +421,163 @@ type OperationRow = typeof operations.$inferSelect;
 type MessageRow = typeof messages.$inferSelect;
 
 const active = ["accepted", "running"] as const;
-const terminal = new Set<string>(["completed", "failed", "interrupted"]);
+const terminal = new Set<string>(["completed", "failed", "interrupted", "cancelled"]);
+/** Ended without a result, so a late result of a claimed one may still settle its cost. */
+const unreported = new Set<string>(["interrupted", "cancelled"]);
+const retryable = new Set<string>(["failed", "interrupted", "cancelled"]);
 
 /** Ends an admission transaction with a refusal, rolling back whatever it wrote. */
 class Refusal extends Error {
-  constructor(readonly result: ChatAdmissionResult) {
+  constructor(readonly result: GateRefusal) {
     super(result.status);
   }
+}
+
+/** A refusal an admission and a retry share. */
+type GateRefusal = Extract<
+  ChatAdmissionResult,
+  { status: "challenge_reused" | "quota_exceeded" | "budget_exhausted" }
+>;
+
+/** What an admission and a retry both decide and record. */
+type GateInput = Omit<ChatAdmissionInput, "requestId" | "question" | "questionHash">;
+
+/**
+ * Passes the gates an admission and a retry share, in the identity's locked transaction: the
+ * challenge token is unredeemed, every quota has room and the allowance fits every spend window,
+ * which it reserves. Throws a `Refusal` otherwise, rolling the transaction back. Returns the
+ * windows in their locking order.
+ */
+async function passGates(tx: Transaction, input: GateInput) {
+  const [redeemed] = await tx
+    .select({ digest: challengeRedemptions.digest })
+    .from(challengeRedemptions)
+    .where(eq(challengeRedemptions.digest, input.challengeTokenHash));
+  if (redeemed !== undefined) throw new Refusal({ status: "challenge_reused" });
+
+  // Serialise the admissions of one fingerprint across identities while its quota is counted.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.fingerprint}, 0))`);
+  for (const quota of input.quotas) {
+    const owner =
+      quota.scope === "identity"
+        ? eq(admissions.identityId, input.identityId)
+        : eq(admissions.fingerprint, input.fingerprint);
+    const window =
+      quota.resetsAt === null
+        ? gt(admissions.admittedAt, quota.since)
+        : gte(admissions.admittedAt, quota.since);
+    const counted = await tx
+      .select({ admittedAt: admissions.admittedAt })
+      .from(admissions)
+      .where(and(owner, window))
+      .orderBy(asc(admissions.admittedAt));
+    if (counted.length < quota.limit) continue;
+    // A rolling window has room again when enough of its oldest admissions age out.
+    const ageingOut = counted[counted.length - quota.limit]?.admittedAt ?? input.at;
+    const retryAt =
+      quota.resetsAt ??
+      new Date(ageingOut.getTime() + (input.at.getTime() - quota.since.getTime()));
+    throw new Refusal({ status: "quota_exceeded", scope: quota.scope, retryAt });
+  }
+
+  // Reserve in a fixed order, so concurrent admissions lock the windows without deadlocking.
+  const windows = [...input.spend].sort((a, b) =>
+    a.kind === b.kind ? a.startsOn.localeCompare(b.startsOn) : a.kind.localeCompare(b.kind),
+  );
+  for (const window of windows) {
+    await tx
+      .insert(spendWindows)
+      .values({ kind: window.kind, startsOn: window.startsOn })
+      .onConflictDoNothing();
+    const reserved = await tx
+      .update(spendWindows)
+      .set({
+        committedMicroUsd: sql`${spendWindows.committedMicroUsd} + ${input.allowanceMicroUsd}`,
+      })
+      .where(
+        and(
+          eq(spendWindows.kind, window.kind),
+          eq(spendWindows.startsOn, window.startsOn),
+          sql`${spendWindows.committedMicroUsd} + ${input.allowanceMicroUsd} <= ${window.limitMicroUsd}`,
+        ),
+      )
+      .returning({ kind: spendWindows.kind });
+    if (reserved.length === 0) throw new Refusal({ status: "budget_exhausted" });
+  }
+  return windows;
+}
+
+/**
+ * Records what an admitted attempt holds: binds the challenge token, issues the grant, stores the
+ * reservations and the quota admission, and marks the conversation and identity active.
+ */
+async function recordAdmission(
+  tx: Transaction,
+  input: GateInput,
+  operationId: string,
+  windows: readonly ChatSpendWindow[],
+) {
+  // A token redeemed concurrently elsewhere waits on its key, then conflicts and refuses here.
+  const bound = await tx
+    .insert(challengeRedemptions)
+    .values({
+      digest: input.challengeTokenHash,
+      operationId,
+      redeemedAt: input.at,
+      expiresAt: input.admissionExpiresAt,
+    })
+    .onConflictDoNothing()
+    .returning({ digest: challengeRedemptions.digest });
+  if (bound.length === 0) throw new Refusal({ status: "challenge_reused" });
+  await tx.insert(grants).values({
+    operationId,
+    verifier: input.grantVerifier,
+    expiresAt: input.deadlineAt,
+  });
+  if (windows.length > 0) {
+    await tx.insert(spendReservations).values(
+      windows.map((window) => ({
+        operationId,
+        kind: window.kind,
+        startsOn: window.startsOn,
+        amountMicroUsd: input.allowanceMicroUsd,
+        state: "reserved",
+        reservedAt: input.at,
+      })),
+    );
+  }
+  await tx.insert(admissions).values({
+    identityId: input.identityId,
+    fingerprint: input.fingerprint,
+    admittedAt: input.at,
+    expiresAt: input.admissionExpiresAt,
+  });
+  await tx
+    .update(conversations)
+    .set({ lastActivityAt: input.at })
+    .where(eq(conversations.id, input.conversationId));
+  await tx
+    .update(identities)
+    .set({ lastSeenAt: input.at })
+    .where(eq(identities.id, input.identityId));
+}
+
+/**
+ * The attempts of an identity's request or with this attempt key, latest first: a later attempt's
+ * answer always comes after an earlier one's.
+ */
+async function attemptsOf(
+  tx: Transaction | Database,
+  identityId: string,
+  where: SQL | undefined,
+): Promise<OperationRow[]> {
+  const rows = await tx
+    .select({ operation: operations })
+    .from(operations)
+    .innerJoin(messages, eq(messages.id, operations.assistantMessageId))
+    .where(and(eq(operations.identityId, identityId), where))
+    .orderBy(desc(messages.position));
+  return rows.map((row) => row.operation);
 }
 
 function operationOf(row: OperationRow): ChatOperationRecord {
@@ -310,6 +595,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     pricingVersion: row.pricingVersion,
     allowanceMicroUsd: row.allowanceMicroUsd,
     contextRevision: row.contextRevision,
+    retryOf: row.retryOf,
   };
 }
 
@@ -340,7 +626,7 @@ async function adjustWindow(tx: Transaction, kind: string, startsOn: string, del
     .where(and(eq(spendWindows.kind, kind), eq(spendWindows.startsOn, startsOn)));
 }
 
-/** Gives back every open reservation of an operation. */
+/** Gives back every reservation of an operation still held for its unknown cost. */
 async function releaseReservations(tx: Transaction, operationId: string) {
   const reserved = await tx
     .update(spendReservations)
@@ -365,15 +651,19 @@ async function retainReservations(tx: Transaction, operationId: string) {
 }
 
 /**
- * Replaces an operation's reservations with its known cost: the cost counts in the earliest window
- * of each kind (the admission's day and month), every other reservation is given back.
+ * Replaces an operation's open or uncertain reservations with its known cost: the cost counts in
+ * the earliest window of each kind (the admission's day and month), every other reservation is
+ * given back. Settled ones stay, so a repeated cost settles nothing.
  */
 async function settleReservations(tx: Transaction, operationId: string, costMicroUsd: number) {
   const reserved = await tx
     .select()
     .from(spendReservations)
     .where(
-      and(eq(spendReservations.operationId, operationId), eq(spendReservations.state, "reserved")),
+      and(
+        eq(spendReservations.operationId, operationId),
+        inArray(spendReservations.state, ["reserved", "uncertain"]),
+      ),
     )
     .orderBy(asc(spendReservations.startsOn));
   const settledKinds = new Set<string>();
@@ -399,7 +689,7 @@ async function settleReservations(tx: Transaction, operationId: string, costMicr
 async function endWithError(
   tx: Transaction,
   row: OperationRow,
-  status: "failed" | "interrupted",
+  status: "failed" | "interrupted" | "cancelled",
   at: Date,
   error: ChatStoredError,
   costUncertain: boolean,
@@ -412,6 +702,38 @@ async function endWithError(
     .update(messages)
     .set({ status, errorCode: error.code, errorRetryable: error.retryable })
     .where(eq(messages.id, row.assistantMessageId));
+}
+
+/** Ends an active operation as cancelled: a claimed one keeps its reservations as uncertain. */
+async function cancelActive(tx: Transaction, row: OperationRow, at: Date, error: ChatStoredError) {
+  const [grant] = await tx
+    .select({ claimedAt: grants.claimedAt })
+    .from(grants)
+    .where(eq(grants.operationId, row.id));
+  const claimed = grant !== undefined && grant.claimedAt !== null;
+  await endWithError(tx, row, "cancelled", at, error, claimed);
+  if (claimed) await retainReservations(tx, row.id);
+  else await releaseReservations(tx, row.id);
+  return claimed;
+}
+
+/**
+ * Moves every telemetry reference of these conversations to pending remote deletion; returns how
+ * many it moved.
+ */
+async function handOverTelemetry(tx: Transaction, conversationIds: readonly string[], at: Date) {
+  if (conversationIds.length === 0) return 0;
+  const moved = await tx
+    .delete(telemetryReferences)
+    .where(inArray(telemetryReferences.conversationId, [...conversationIds]))
+    .returning({ traceId: telemetryReferences.traceId });
+  if (moved.length > 0) {
+    await tx
+      .insert(telemetryDeletions)
+      .values(moved.map((row) => ({ traceId: row.traceId, requestedAt: at })))
+      .onConflictDoNothing();
+  }
+  return moved.length;
 }
 
 export function createChatPersistence(db: Database): ChatPersistence {
@@ -489,17 +811,18 @@ export function createChatPersistence(db: Database): ChatPersistence {
       throw new Error("The chat identity or its conversation does not exist.");
     }
 
-    const [previous] = await tx
-      .select()
-      .from(operations)
-      .where(
-        and(eq(operations.identityId, input.identityId), eq(operations.requestId, input.requestId)),
-      );
+    // A request id names its first attempt; a retry id of this identity cannot be reused as one.
+    const [previous] = await attemptsOf(
+      tx,
+      input.identityId,
+      or(eq(operations.requestId, input.requestId), eq(operations.attemptKey, input.requestId)),
+    );
     if (previous !== undefined) {
       return {
         status: "duplicate",
         operation: operationOf(previous),
-        sameQuestion: previous.questionHash === input.questionHash,
+        sameQuestion:
+          previous.requestId === input.requestId && previous.questionHash === input.questionHash,
       };
     }
     const [busy] = await tx
@@ -508,61 +831,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
       .where(and(eq(operations.identityId, input.identityId), inArray(operations.status, active)));
     if (busy !== undefined) return { status: "busy", operation: operationOf(busy) };
 
-    const [redeemed] = await tx
-      .select({ digest: challengeRedemptions.digest })
-      .from(challengeRedemptions)
-      .where(eq(challengeRedemptions.digest, input.challengeTokenHash));
-    if (redeemed !== undefined) return { status: "challenge_reused" };
-
-    // Serialise the admissions of one fingerprint across identities while its quota is counted.
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.fingerprint}, 0))`);
-    for (const quota of input.quotas) {
-      const owner =
-        quota.scope === "identity"
-          ? eq(admissions.identityId, input.identityId)
-          : eq(admissions.fingerprint, input.fingerprint);
-      const window =
-        quota.resetsAt === null
-          ? gt(admissions.admittedAt, quota.since)
-          : gte(admissions.admittedAt, quota.since);
-      const counted = await tx
-        .select({ admittedAt: admissions.admittedAt })
-        .from(admissions)
-        .where(and(owner, window))
-        .orderBy(asc(admissions.admittedAt));
-      if (counted.length < quota.limit) continue;
-      // A rolling window has room again when enough of its oldest admissions age out.
-      const ageingOut = counted[counted.length - quota.limit]?.admittedAt ?? input.at;
-      const retryAt =
-        quota.resetsAt ??
-        new Date(ageingOut.getTime() + (input.at.getTime() - quota.since.getTime()));
-      return { status: "quota_exceeded", scope: quota.scope, retryAt };
-    }
-
-    // Reserve in a fixed order, so concurrent admissions lock the windows without deadlocking.
-    const windows = [...input.spend].sort((a, b) =>
-      a.kind === b.kind ? a.startsOn.localeCompare(b.startsOn) : a.kind.localeCompare(b.kind),
-    );
-    for (const window of windows) {
-      await tx
-        .insert(spendWindows)
-        .values({ kind: window.kind, startsOn: window.startsOn })
-        .onConflictDoNothing();
-      const reserved = await tx
-        .update(spendWindows)
-        .set({
-          committedMicroUsd: sql`${spendWindows.committedMicroUsd} + ${input.allowanceMicroUsd}`,
-        })
-        .where(
-          and(
-            eq(spendWindows.kind, window.kind),
-            eq(spendWindows.startsOn, window.startsOn),
-            sql`${spendWindows.committedMicroUsd} + ${input.allowanceMicroUsd} <= ${window.limitMicroUsd}`,
-          ),
-        )
-        .returning({ kind: spendWindows.kind });
-      if (reserved.length === 0) throw new Refusal({ status: "budget_exhausted" });
-    }
+    const windows = await passGates(tx, input);
 
     const [question] = await tx
       .insert(messages)
@@ -592,6 +861,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
         identityId: input.identityId,
         conversationId: input.conversationId,
         requestId: input.requestId,
+        attemptKey: input.requestId,
         questionHash: input.questionHash,
         userMessageId: question.id,
         assistantMessageId: answer.id,
@@ -605,45 +875,140 @@ export function createChatPersistence(db: Database): ChatPersistence {
       })
       .returning();
     if (operation === undefined) throw new Error("No operation was stored.");
-    // A token redeemed concurrently elsewhere waits on its key, then conflicts and refuses here.
-    const bound = await tx
-      .insert(challengeRedemptions)
-      .values({ digest: input.challengeTokenHash, operationId: operation.id, redeemedAt: input.at })
-      .onConflictDoNothing()
-      .returning({ digest: challengeRedemptions.digest });
-    if (bound.length === 0) throw new Refusal({ status: "challenge_reused" });
-    await tx.insert(grants).values({
-      operationId: operation.id,
-      verifier: input.grantVerifier,
-      expiresAt: input.deadlineAt,
-    });
-    if (windows.length > 0) {
-      await tx.insert(spendReservations).values(
-        windows.map((window) => ({
-          operationId: operation.id,
-          kind: window.kind,
-          startsOn: window.startsOn,
-          amountMicroUsd: input.allowanceMicroUsd,
-          state: "reserved",
-          reservedAt: input.at,
-        })),
-      );
-    }
-    await tx.insert(admissions).values({
-      identityId: input.identityId,
-      fingerprint: input.fingerprint,
-      admittedAt: input.at,
-      expiresAt: input.admissionExpiresAt,
-    });
-    await tx
-      .update(conversations)
-      .set({ lastActivityAt: input.at })
-      .where(eq(conversations.id, input.conversationId));
-    await tx
-      .update(identities)
-      .set({ lastSeenAt: input.at })
-      .where(eq(identities.id, input.identityId));
+    await recordAdmission(tx, input, operation.id, windows);
     return { status: "admitted", operation: operationOf(operation) };
+  };
+
+  const retryWithin = async (tx: Transaction, input: ChatRetryInput): Promise<ChatRetryResult> => {
+    // Serialise with every admission of this identity on its row.
+    const [identity] = await tx
+      .select({ id: identities.id })
+      .from(identities)
+      .where(eq(identities.id, input.identityId))
+      .for("update");
+    const [conversation] = await tx
+      .select({ id: conversations.id, revision: conversations.revision })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, input.conversationId),
+          eq(conversations.identityId, input.identityId),
+        ),
+      );
+    if (identity === undefined || conversation === undefined) {
+      throw new Error("The chat identity or its conversation does not exist.");
+    }
+
+    const [used] = await attemptsOf(
+      tx,
+      input.identityId,
+      or(eq(operations.attemptKey, input.retryId), eq(operations.requestId, input.retryId)),
+    );
+    if (used !== undefined) {
+      return {
+        status: "duplicate",
+        operation: operationOf(used),
+        sameTarget: used.retryOf === input.operationId,
+      };
+    }
+    const [target] = await tx
+      .select()
+      .from(operations)
+      .where(
+        and(
+          eq(operations.id, input.operationId),
+          eq(operations.identityId, input.identityId),
+          eq(operations.conversationId, input.conversationId),
+        ),
+      );
+    if (target === undefined) return { status: "not_found" };
+    const [latest] = await attemptsOf(
+      tx,
+      input.identityId,
+      eq(operations.requestId, target.requestId),
+    );
+    if (latest !== undefined && (latest.status === "completed" || !terminal.has(latest.status))) {
+      return { status: "recovered", operation: operationOf(latest) };
+    }
+    const [answer] = await tx
+      .select({ errorRetryable: messages.errorRetryable })
+      .from(messages)
+      .where(eq(messages.id, target.assistantMessageId));
+    const [lastQuestion] = await tx
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, input.conversationId), eq(messages.role, "user")))
+      .orderBy(desc(messages.position))
+      .limit(1);
+    if (
+      latest?.id !== target.id ||
+      !retryable.has(target.status) ||
+      answer?.errorRetryable !== true ||
+      lastQuestion?.id !== target.userMessageId
+    ) {
+      return { status: "not_retryable" };
+    }
+    const [busy] = await tx
+      .select()
+      .from(operations)
+      .where(and(eq(operations.identityId, input.identityId), inArray(operations.status, active)));
+    if (busy !== undefined) return { status: "busy", operation: operationOf(busy) };
+
+    const windows = await passGates(tx, input);
+
+    const [question] = await tx
+      .select({ text: messages.text })
+      .from(messages)
+      .where(eq(messages.id, target.userMessageId));
+    if (question?.text == null) throw new Error("The retried question has no text.");
+    const [pending] = await tx
+      .insert(messages)
+      .values({
+        conversationId: input.conversationId,
+        role: "assistant",
+        requestId: target.requestId,
+        status: "pending",
+        createdAt: input.at,
+      })
+      .returning({ id: messages.id });
+    if (pending === undefined) throw new Error("No message was stored.");
+    await tx
+      .update(messages)
+      .set({ supersededAt: input.at })
+      .where(eq(messages.id, target.assistantMessageId));
+    const [operation] = await tx
+      .insert(operations)
+      .values({
+        identityId: input.identityId,
+        conversationId: input.conversationId,
+        requestId: target.requestId,
+        attemptKey: input.retryId,
+        retryOf: target.id,
+        questionHash: target.questionHash,
+        userMessageId: target.userMessageId,
+        assistantMessageId: pending.id,
+        status: "accepted",
+        admittedAt: input.at,
+        deadlineAt: input.deadlineAt,
+        model: input.model,
+        pricingVersion: input.pricingVersion,
+        allowanceMicroUsd: input.allowanceMicroUsd,
+        contextRevision: conversation.revision,
+      })
+      .returning();
+    if (operation === undefined) throw new Error("No operation was stored.");
+    await recordAdmission(tx, input, operation.id, windows);
+    return { status: "admitted", operation: operationOf(operation), question: question.text };
+  };
+
+  /** Runs a transaction that may end with a shared gate refusal. */
+  const refusable = async <T>(work: (tx: Transaction) => Promise<T>): Promise<T | GateRefusal> => {
+    try {
+      return await db.transaction(work);
+    } catch (error) {
+      if (error instanceof Refusal) return error.result;
+      throw error;
+    }
   };
 
   return {
@@ -690,7 +1055,9 @@ export function createChatPersistence(db: Database): ChatPersistence {
       const rows = await db
         .select()
         .from(messages)
-        .where(and(eq(messages.conversationId, conversationId), bound))
+        .where(
+          and(eq(messages.conversationId, conversationId), isNull(messages.supersededAt), bound),
+        )
         .orderBy(desc(messages.position))
         .limit(page.limit + 1);
       return {
@@ -718,10 +1085,16 @@ export function createChatPersistence(db: Database): ChatPersistence {
     },
 
     async findOperationByRequest(identityId, requestId) {
-      const [row] = await db
-        .select()
-        .from(operations)
-        .where(and(eq(operations.identityId, identityId), eq(operations.requestId, requestId)));
+      const [row] = await attemptsOf(db, identityId, eq(operations.requestId, requestId));
+      return row === undefined ? null : operationOf(row);
+    },
+
+    async findOperationByAttempt(identityId, attemptKey) {
+      const [row] = await attemptsOf(
+        db,
+        identityId,
+        or(eq(operations.attemptKey, attemptKey), eq(operations.requestId, attemptKey)),
+      );
       return row === undefined ? null : operationOf(row);
     },
 
@@ -756,12 +1129,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
 
     async admit(input) {
       await pruneExpired(input.at);
-      try {
-        return await db.transaction((tx) => admitWithin(tx, input));
-      } catch (error) {
-        if (error instanceof Refusal) return error.result;
-        throw error;
-      }
+      return refusable((tx) => admitWithin(tx, input));
     },
 
     async claimRequest(input) {
@@ -853,9 +1221,46 @@ export function createChatPersistence(db: Database): ChatPersistence {
     async reconcile(operationId, verifier, at, result) {
       return db.transaction(async (tx): Promise<ChatReconcileResult> => {
         const locked = await lockWithGrant(tx, operationId, verifier);
-        if (locked === null) return { status: "wrong_grant" };
+        if (locked === null) {
+          // A cleared conversation's operation: nothing is stored, only a measured cost settles.
+          const [tombstone] = await tx
+            .select()
+            .from(operationTombstones)
+            .where(eq(operationTombstones.operationId, operationId))
+            .for("update");
+          if (tombstone?.verifier !== verifier) return { status: "wrong_grant" };
+          if (result.costMicroUsd !== null) {
+            await settleReservations(tx, operationId, result.costMicroUsd);
+          }
+          return { status: "deleted" };
+        }
         const { row, grant } = locked;
-        if (terminal.has(row.status)) return { status: "already", operation: operationOf(row) };
+        if (terminal.has(row.status)) {
+          // A stopped or interrupted generation that reports late settles its measured cost once.
+          if (
+            unreported.has(row.status) &&
+            grant.claimedAt !== null &&
+            row.costMicroUsd === null &&
+            result.costMicroUsd !== null
+          ) {
+            await tx
+              .update(operations)
+              .set({
+                resultOutcome: result.resultOutcome,
+                resultReason: result.resultReason,
+                costMicroUsd: result.costMicroUsd,
+                costUncertain: false,
+                inputTokens: result.inputTokens,
+                outputTokens: result.outputTokens,
+                modelAttempts: result.modelAttempts,
+                latencyMs: result.latencyMs,
+                versions: result.versions,
+              })
+              .where(eq(operations.id, operationId));
+            await settleReservations(tx, operationId, result.costMicroUsd);
+          }
+          return { status: "already", operation: operationOf(row) };
+        }
         if (grant.claimedAt === null) return { status: "not_claimed" };
         await tx
           .update(messages)
@@ -944,22 +1349,206 @@ export function createChatPersistence(db: Database): ChatPersistence {
 
     async deleteInactive(cutoff, at, limit) {
       return db.transaction(async (tx) => {
-        const expired = tx
+        const expired = await tx
           .select({ id: identities.id })
           .from(identities)
           .where(lt(identities.lastSeenAt, cutoff))
           .orderBy(asc(identities.lastSeenAt))
           .limit(limit)
           .for("update", { skipLocked: true });
-        const deleted = await tx
-          .delete(identities)
-          .where(inArray(identities.id, expired))
-          .returning({ id: identities.id });
+        const expiredIds = expired.map((row) => row.id);
+        let deleted: { id: string }[] = [];
+        if (expiredIds.length > 0) {
+          // Lock the conversations so no telemetry reference is recorded after the hand-over.
+          const owned = await tx
+            .select({ id: conversations.id })
+            .from(conversations)
+            .where(inArray(conversations.identityId, expiredIds))
+            .for("update");
+          await handOverTelemetry(
+            tx,
+            owned.map((row) => row.id),
+            at,
+          );
+          deleted = await tx
+            .delete(identities)
+            .where(inArray(identities.id, expiredIds))
+            .returning({ id: identities.id });
+        }
         await tx.delete(admissions).where(lt(admissions.expiresAt, at));
         await tx.delete(requestClaims).where(lt(requestClaims.expiresAt, at));
+        await tx.delete(challengeRedemptions).where(lt(challengeRedemptions.expiresAt, at));
+        await tx.delete(operationTombstones).where(lt(operationTombstones.expiresAt, at));
         await tx.insert(deletions).values({ deletedAt: at, conversations: deleted.length });
         return deleted.length;
       });
+    },
+
+    async retry(input) {
+      await pruneExpired(input.at);
+      return refusable((tx) => retryWithin(tx, input));
+    },
+
+    async stop(identityId, operationId, at, error) {
+      return db.transaction(async (tx): Promise<ChatStopResult | null> => {
+        const [row] = await tx
+          .select()
+          .from(operations)
+          .where(and(eq(operations.id, operationId), eq(operations.identityId, identityId)))
+          .for("update");
+        if (row === undefined) return null;
+        if (terminal.has(row.status)) return { status: "finished", operation: operationOf(row) };
+        const claimed = await cancelActive(tx, row, at, error);
+        return {
+          status: "stopped",
+          operation: { ...operationOf(row), status: "cancelled" },
+          claimed,
+        };
+      });
+    },
+
+    async clear(input) {
+      return db.transaction(async (tx): Promise<ChatClearResult> => {
+        await tx
+          .select({ id: identities.id })
+          .from(identities)
+          .where(eq(identities.id, input.identityId))
+          .for("update");
+        const [conversation] = await tx
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(
+            and(
+              eq(conversations.id, input.conversationId),
+              eq(conversations.identityId, input.identityId),
+            ),
+          )
+          .for("update");
+        if (conversation === undefined) return { status: "mismatch" };
+
+        const running = await tx
+          .select()
+          .from(operations)
+          .where(
+            and(eq(operations.conversationId, conversation.id), inArray(operations.status, active)),
+          )
+          .for("update");
+        for (const row of running) await cancelActive(tx, row, input.at, input.error);
+
+        // A claimed generation that never reported may still do so; its tombstone answers it.
+        const reporting = await tx
+          .select({ operationId: operations.id, verifier: grants.verifier })
+          .from(operations)
+          .innerJoin(grants, eq(grants.operationId, operations.id))
+          .where(
+            and(
+              eq(operations.conversationId, conversation.id),
+              inArray(operations.status, [...unreported]),
+              isNotNull(grants.claimedAt),
+              isNull(operations.costMicroUsd),
+            ),
+          );
+        if (reporting.length > 0) {
+          await tx
+            .insert(operationTombstones)
+            .values(
+              reporting.map((row) => ({
+                operationId: row.operationId,
+                verifier: row.verifier,
+                deletedAt: input.at,
+                expiresAt: input.tombstoneExpiresAt,
+              })),
+            )
+            .onConflictDoNothing();
+        }
+        const telemetryPending = await handOverTelemetry(tx, [conversation.id], input.at);
+        await tx.delete(conversations).where(eq(conversations.id, conversation.id));
+        const [fresh] = await tx
+          .insert(conversations)
+          .values({ identityId: input.identityId, createdAt: input.at, lastActivityAt: input.at })
+          .returning({
+            id: conversations.id,
+            revision: conversations.revision,
+            lastActivityAt: conversations.lastActivityAt,
+          });
+        if (fresh === undefined) throw new Error("No chat conversation was stored.");
+        await tx
+          .update(identities)
+          .set({ lastSeenAt: input.at })
+          .where(eq(identities.id, input.identityId));
+        return {
+          status: "cleared",
+          conversation: fresh,
+          cancelled: running.map((row) => row.id),
+          telemetryPending,
+        };
+      });
+    },
+
+    async recordTelemetryReference(input) {
+      return db.transaction(async (tx) => {
+        // A share lock keeps the conversation from being cleared until the reference is stored.
+        const [conversation] = await tx
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(eq(conversations.id, input.conversationId))
+          .for("share");
+        const tombstoned =
+          input.operationId === null
+            ? []
+            : await tx
+                .select({ operationId: operationTombstones.operationId })
+                .from(operationTombstones)
+                .where(eq(operationTombstones.operationId, input.operationId));
+        if (conversation === undefined || tombstoned.length > 0) {
+          await tx
+            .insert(telemetryDeletions)
+            .values({ traceId: input.traceId, requestedAt: input.at })
+            .onConflictDoNothing();
+          return "deletion_pending";
+        }
+        await tx
+          .insert(telemetryReferences)
+          .values({
+            traceId: input.traceId,
+            conversationId: input.conversationId,
+            operationId: input.operationId,
+            recordedAt: input.at,
+          })
+          .onConflictDoNothing();
+        return "recorded";
+      });
+    },
+
+    async pendingTelemetryDeletions(limit) {
+      return db
+        .select({
+          traceId: telemetryDeletions.traceId,
+          requestedAt: telemetryDeletions.requestedAt,
+          attempts: telemetryDeletions.attempts,
+        })
+        .from(telemetryDeletions)
+        .where(eq(telemetryDeletions.state, "pending"))
+        .orderBy(asc(telemetryDeletions.requestedAt), asc(telemetryDeletions.traceId))
+        .limit(limit);
+    },
+
+    async settleTelemetryDeletion(traceId, outcome, at) {
+      const pending = and(
+        eq(telemetryDeletions.traceId, traceId),
+        eq(telemetryDeletions.state, "pending"),
+      );
+      if (outcome === "completed") {
+        await db
+          .update(telemetryDeletions)
+          .set({ state: "completed", settledAt: at })
+          .where(pending);
+      } else {
+        await db
+          .update(telemetryDeletions)
+          .set({ attempts: sql`${telemetryDeletions.attempts} + 1` })
+          .where(pending);
+      }
     },
 
     async committedSpend(kind, startsOn) {

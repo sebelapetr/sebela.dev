@@ -145,6 +145,9 @@ export type ChatAssistantMessage = Schemas["ChatAssistantMessage"];
 export type ChatMessageSubmission = Schemas["ChatMessageSubmission"];
 export type ChatOperation = Schemas["ChatOperation"];
 export type ChatOperationStatus = ChatOperation["status"];
+export type ChatRetrySubmission = Schemas["ChatRetrySubmission"];
+export type ChatConversationClear = Schemas["ChatConversationClear"];
+export type ChatConversationCleared = Schemas["ChatConversationCleared"];
 /** The read side of the answer's typed parts; the AI service's result is not a website DTO. */
 export type ChatBlock = Schemas["ChatBlockOutput"];
 export type ChatSource = Schemas["ChatSourceOutput"];

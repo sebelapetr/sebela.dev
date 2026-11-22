@@ -12,7 +12,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from ai_service.config import Settings
-from ai_service.runtime.capabilities import ProfileCapability
+from ai_service.runtime.capabilities import ReadCapabilities
 from ai_service.runtime.execution import Generations
 from ai_service.schemas import Problem
 
@@ -21,7 +21,7 @@ from ai_service.schemas import Problem
 class Services:
     settings: Settings
     generations: Generations
-    profile: ProfileCapability
+    capabilities: ReadCapabilities
 
 
 def services(request: Request) -> Services:

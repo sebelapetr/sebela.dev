@@ -24,7 +24,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, get_args
+from typing import Any, Final, Literal, get_args
 
 from pydantic import BaseModel, ValidationError
 
@@ -62,6 +62,7 @@ from llm_agent.tools.content import (
     PublicRoadmap,
     PublicRoadmapArea,
     PublicService,
+    PublicTechnology,
     valid_slug,
 )
 
@@ -556,6 +557,17 @@ class Tools:
         self._tracer.finish(f"tool.{tool}", outcome.status, started)
         return outcome.status == "ok"
 
+    async def close(self) -> None:
+        """Cancels the reads still in flight; a stopped execution leaves no read running.
+
+        A read is shared between requests through a shielded task, so cancelling the waiting
+        graph does not cancel the read itself; the execution calls this once it ends.
+        """
+        pending = [task for task in self._reads.values() if not task.done()]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+
     # --- Reads ------------------------------------------------------------------------------------
 
     async def _fetch(self, tool: ToolName, slug: str | None) -> Any:
@@ -575,27 +587,7 @@ class Tools:
     def _read(
         self, tool: ToolName, slug: str | None
     ) -> tuple[tuple[str, ...], Callable[[], Awaitable[Any]]]:
-        content = self._content
-        if tool in ("get_profile", "get_contact"):
-            return ("person",), content.read_person
-        if tool == "get_project" and slug is not None:
-            return ("project", slug), lambda: content.read_project(slug)
-        if tool == "get_roadmap_area" and slug is not None:
-            return ("roadmap_area", slug), lambda: content.read_roadmap_area(slug)
-        reads: dict[str, Callable[[], Awaitable[Any]]] = {
-            "list_experiences": content.read_experiences,
-            "list_projects": content.read_projects,
-            "list_services": content.read_services,
-            "list_explorations": content.read_explorations,
-            "list_education": content.read_education,
-            "list_current_focus": content.read_current_focus,
-            "get_roadmap": content.read_roadmap,
-            "get_learning_diary": content.read_diary,
-            "get_learning_statistics": content.read_statistics,
-            "list_books": content.read_books,
-            "list_events": content.read_events,
-        }
-        return (tool,), reads[tool]
+        return _reader(self._content, tool, slug)
 
     async def _bounded(self, read: Callable[[], Awaitable[Any]]) -> Any:
         async with self._slots:
@@ -691,6 +683,31 @@ class Tools:
         return evidence
 
 
+def _reader(
+    content: ContentReader, tool: ToolName, slug: str | None
+) -> tuple[tuple[str, ...], Callable[[], Awaitable[Any]]]:
+    if tool in ("get_profile", "get_contact"):
+        return ("person",), content.read_person
+    if tool == "get_project" and slug is not None:
+        return ("project", slug), lambda: content.read_project(slug)
+    if tool == "get_roadmap_area" and slug is not None:
+        return ("roadmap_area", slug), lambda: content.read_roadmap_area(slug)
+    reads: dict[str, Callable[[], Awaitable[Any]]] = {
+        "list_experiences": content.read_experiences,
+        "list_projects": content.read_projects,
+        "list_services": content.read_services,
+        "list_explorations": content.read_explorations,
+        "list_education": content.read_education,
+        "list_current_focus": content.read_current_focus,
+        "get_roadmap": content.read_roadmap,
+        "get_learning_diary": content.read_diary,
+        "get_learning_statistics": content.read_statistics,
+        "list_books": content.read_books,
+        "list_events": content.read_events,
+    }
+    return (tool,), reads[tool]
+
+
 def _tool(name: str) -> ToolName | None:
     for tool in TOOLS:
         if tool == name:
@@ -743,3 +760,153 @@ def _block(item: Evidence) -> Block | None:
 
 def _error(code: str, message: str) -> str:
     return json.dumps({"error": code, "message": message})
+
+
+# --- Read capabilities ----------------------------------------------------------------------------
+
+#: The read capabilities: every read tool but the contact read, whose e-mail and links reach a
+#: visitor only as the chat's trusted contact card, and the technology catalogue, which no model
+#: tool reads (the model sees technologies inside the career records).
+CapabilityName = Literal[
+    "get_profile",
+    "list_experiences",
+    "list_projects",
+    "get_project",
+    "list_services",
+    "list_explorations",
+    "list_education",
+    "list_current_focus",
+    "get_roadmap",
+    "get_roadmap_area",
+    "get_learning_diary",
+    "get_learning_statistics",
+    "list_books",
+    "list_events",
+    "list_technologies",
+]
+#: The kind of a capability record: a source kind, or a technology of the catalogue.
+RecordKind = Literal[SourceKind, "technology"]
+READ_CAPABILITIES: Final[tuple[CapabilityName, ...]] = get_args(CapabilityName)
+#: The canonical site section of the technology catalogue.
+TECHNOLOGY_HREF: Final = "/experience#technologies-heading"
+_TECHNOLOGY_SPEC: Final[dict[str, Any]] = {
+    "name": "list_technologies",
+    "description": (
+        "Read the published technology catalogue: each technology's name, its tier (primary or"
+        " secondary) and, for a primary technology, its group (core or AI engineering focus)."
+    ),
+    "input_schema": _NO_ARGUMENTS,
+}
+#: The name, description and input schema of each read capability, in `READ_CAPABILITIES` order;
+#: a capability that is a model tool keeps the tool's own spec.
+READ_CAPABILITY_SPECS: Final[tuple[dict[str, Any], ...]] = tuple(
+    next(spec for spec in (*TOOL_SPECS, _TECHNOLOGY_SPEC) if spec["name"] == name)
+    for name in READ_CAPABILITIES
+)
+#: Records one capability page carries by default.
+PAGE_RECORDS: Final = 10
+#: Records one capability read may list across all its pages; a longer list is refused.
+MAX_LISTED_RECORDS: Final = 300
+#: Tokens one capability page may carry (`ExecutionLimits.tool_result_tokens`).
+PAGE_TOKENS: Final = 5000
+
+
+class ToolNotAvailableError(LookupError):
+    """The name is not one of the read capabilities; nothing was read."""
+
+
+class InvalidToolArgumentsError(ValueError):
+    """The arguments or the page are not ones the capability takes; nothing was read."""
+
+
+class ToolResultTooLargeError(Exception):
+    """The result exceeds the record or token bounds; it is refused, never truncated."""
+
+
+@dataclass(frozen=True)
+class ToolRecord:
+    """One projected record: its kind, its own identifier, title and canonical site path."""
+
+    kind: RecordKind
+    record_id: str
+    title: str
+    href: str
+    data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolPage:
+    capability: CapabilityName
+    records: tuple[ToolRecord, ...]
+    page: int
+    page_count: int
+
+
+async def read_tool(
+    content: ContentReader,
+    name: str,
+    arguments: Mapping[str, Any],
+    *,
+    page: int = 1,
+    page_records: int = PAGE_RECORDS,
+    page_tokens: int = PAGE_TOKENS,
+) -> ToolPage:
+    """One page of a read capability: the in-process tool's projection of the same read.
+
+    The name and arguments are validated before any read, with the tools' own rules; the records
+    are the projections `Tools` gives the model, in the same order. `list_technologies`, which no
+    model tool reads, takes no arguments and lists the catalogue in its published order, each
+    record without its identifier or logo. Raises `ToolNotAvailableError`,
+    `InvalidToolArgumentsError` (also for a page outside the result), `ToolResultTooLargeError`,
+    `ContentNotFoundError` or `ContentUnavailableError`.
+    """
+    capability = next((item for item in READ_CAPABILITIES if item == name), None)
+    if capability is None:
+        raise ToolNotAvailableError(name)
+    if capability == "list_technologies":
+        if arguments:
+            raise InvalidToolArgumentsError("This capability takes no arguments.")
+        slug = None
+    else:
+        try:
+            slug = _arguments(capability, arguments)
+        except _Rejected as rejected:
+            raise InvalidToolArgumentsError(rejected.message) from None
+    if page < 1 or page_records < 1:
+        raise InvalidToolArgumentsError("The page must be a positive number.")
+    records = await _capability_records(content, capability, slug)
+    if len({(record.kind, record.record_id) for record in records}) != len(records):
+        raise ContentUnavailableError("the published data has duplicate records")
+    if len(records) > MAX_LISTED_RECORDS:
+        raise ToolResultTooLargeError("the result has too many records")
+    page_count = max(1, -(-len(records) // page_records))
+    if page > page_count:
+        raise InvalidToolArgumentsError("There is no such page.")
+    selected = tuple(records[(page - 1) * page_records : page * page_records])
+    if json_tokens([record.data for record in selected]) > page_tokens:
+        raise ToolResultTooLargeError("the page is too large")
+    return ToolPage(capability, selected, page, page_count)
+
+
+async def _capability_records(
+    content: ContentReader, capability: CapabilityName, slug: str | None
+) -> list[ToolRecord]:
+    if capability == "list_technologies":
+        technologies: list[PublicTechnology] = await content.read_technologies()
+        return [
+            ToolRecord("technology", t.slug, t.name, TECHNOLOGY_HREF, _dump(t))
+            for t in technologies
+        ]
+    _, read = _reader(content, capability, slug)
+    value = await read()
+    if capability == "get_profile":
+        # The profile view omits the person's identifier; the record is the one profile.
+        return [
+            ToolRecord(
+                "profile", "profile", value.name, CANONICAL_HREF["profile"], profile_view(value)
+            )
+        ]
+    return [
+        ToolRecord(record.kind, record.slug, record.title, record.href, record.data)
+        for record in _records(capability, value)
+    ]

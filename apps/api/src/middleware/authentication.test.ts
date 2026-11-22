@@ -15,8 +15,16 @@ import {
 } from "../test-support.js";
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-/** The one public write: a visitor asks their own chat conversation a question. */
-const VISITOR_WRITE = { method: "POST", path: "/v1/chat/conversation/messages" };
+/**
+ * The public writes: a visitor asks, retries, stops and clears only their own chat conversation,
+ * the one exception to private writes.
+ */
+const VISITOR_WRITES = new Set([
+  "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/operations/:operationId/stop",
+  "POST /v1/chat/operations/:operationId/retry",
+  "DELETE /v1/chat/conversation",
+]);
 
 // Bodies and content types a write might arrive with: none of them may reach validation first.
 const attempts: { name: string; init: RequestInit }[] = [
@@ -76,7 +84,7 @@ describe("authentication of the private routes", () => {
     expect(routes.some((route) => route.access === "private")).toBe(true);
     expect(writes.length).toBeGreaterThan(0);
     for (const write of writes) {
-      const visitor = write.method === VISITOR_WRITE.method && write.path === VISITOR_WRITE.path;
+      const visitor = VISITOR_WRITES.has(`${write.method} ${write.path}`);
       expect(routes).toContainEqual(
         expect.objectContaining({
           method: write.method,

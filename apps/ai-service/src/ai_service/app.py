@@ -9,7 +9,8 @@ published interface and needs no environment.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -24,7 +25,7 @@ from ai_service.config import Settings
 from ai_service.models.fake import FakeModels
 from ai_service.routes import Services, capabilities, generation, health
 from ai_service.runtime.admission import Admission
-from ai_service.runtime.capabilities import ProfileCapability
+from ai_service.runtime.capabilities import ReadCapabilities
 from ai_service.runtime.ceiling import DailyCeiling
 from ai_service.runtime.execution import Generations
 from ai_service.schemas import GenerationRequest
@@ -35,10 +36,14 @@ VERSION = "0.0.0"
 
 @dataclass(frozen=True)
 class CapabilityLimits:
-    """The bounds of the public read capabilities: parallel reads and the time of one read."""
+    """The bounds every read caller shares: parallel reads, one read's time and the read rate."""
 
     concurrency: int = 8
     timeout_s: float = 5.0
+    #: Reads per sliding `window_s`, across every read caller.
+    rate: int = 120
+    window_s: float = 60.0
+    clock: Callable[[], float] = time.monotonic
 
 
 def create_app(
@@ -67,8 +72,13 @@ def create_app(
             app.state.services = Services(
                 settings=settings,
                 generations=generations,
-                profile=ProfileCapability(
-                    content, concurrency=limits.concurrency, timeout_s=limits.timeout_s
+                capabilities=ReadCapabilities(
+                    content,
+                    concurrency=limits.concurrency,
+                    timeout_s=limits.timeout_s,
+                    rate=limits.rate,
+                    window_s=limits.window_s,
+                    clock=limits.clock,
                 ),
             )
             try:

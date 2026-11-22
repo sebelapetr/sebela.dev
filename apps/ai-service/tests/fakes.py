@@ -1,9 +1,9 @@
 """Fakes for the service's deterministic tests: a fictional API (public reads and control routes).
 
-No test calls a provider or a real API. The fake API answers the public person read and the two
-control routes over an httpx2 `MockTransport`; it records every claim and every reported result.
-It is shared between two service instances to simulate a restart. Its bodies have the API
-document's shapes (`ChatGrantClaimed`, `ChatOperation`, `ErrorResponse`).
+No test calls a provider or a real API. The fake API answers the public person and technology
+reads and the two control routes over an httpx2 `MockTransport`; it records every claim and every
+reported result. It is shared between two service instances to simulate a restart. Its bodies have
+the API document's shapes (`ChatGrantClaimed`, `ChatOperation`, `ErrorResponse`).
 """
 
 from __future__ import annotations
@@ -60,6 +60,32 @@ PERSON: dict[str, Any] = {
     "updatedAt": "2026-01-01T00:00:00.000Z",
 }
 
+#: The fictional technology catalogue the public API returns, in the API's JSON shape.
+TECHNOLOGIES: list[dict[str, Any]] = [
+    {
+        "id": "00000000-0000-4000-8000-000000000061",
+        "slug": "python",
+        "name": "Python",
+        "tier": "primary",
+        "group": "core",
+        "logoKey": "python",
+        "position": 0,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+    },
+    {
+        "id": "00000000-0000-4000-8000-000000000062",
+        "slug": "bash",
+        "name": "Bash",
+        "tier": "secondary",
+        "group": None,
+        "logoKey": None,
+        "position": 0,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+    },
+]
+
 
 def error(code: str) -> dict[str, Any]:
     """The API's common error body (`ErrorResponse`)."""
@@ -87,6 +113,9 @@ class FakeApi:
     #: The deadline the claim returns; None returns the request's own deadline.
     claim_deadline: str | None = None
     claim_allowance: float = 0.02
+    #: How long the claim takes; `claim_started` is set when one arrives.
+    claim_delay_s: float = 0.0
+    claim_started: asyncio.Event = field(default_factory=asyncio.Event)
     #: The bound terms the claim returns; the defaults are this agent's and the request's.
     claim_model: str = "claude-haiku-5-5"
     claim_pricing_version: str = "anthropic-2026-11-19"
@@ -94,6 +123,8 @@ class FakeApi:
     person_status: int = 200
     person_delay_s: float = 0.0
     person_reads: int = 0
+    #: Every public read the service made, by path.
+    public_reads: list[str] = field(default_factory=list)
     reported: asyncio.Event = field(default_factory=asyncio.Event)
     deadlines: dict[str, str] = field(default_factory=dict)
 
@@ -123,6 +154,8 @@ class FakeApi:
 
     async def _handle(self, request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
+        if request.method == "GET":
+            self.public_reads.append(path)
         if path == "/v1/person" and request.method == "GET":
             self.person_reads += 1
             if self.person_delay_s:
@@ -130,10 +163,15 @@ class FakeApi:
             if self.person_status != 200:
                 return httpx2.Response(self.person_status, json=error("unavailable"))
             return httpx2.Response(200, json=PERSON)
+        if path == "/v1/technologies" and request.method == "GET":
+            return httpx2.Response(200, json=TECHNOLOGIES)
         if request.headers.get("authorization") != f"Bearer {CONTROL_TOKEN}":
             return httpx2.Response(401, json=error("unauthorized"))
         body = json.loads(request.content)
         if path == "/v1/internal/chat/grants/claim" and request.method == "POST":
+            self.claim_started.set()
+            if self.claim_delay_s:
+                await asyncio.sleep(self.claim_delay_s)
             return self._claim(body)
         prefix, _, rest = path.partition("/v1/internal/chat/operations/")
         if not prefix and rest.endswith("/result") and request.method == "POST":

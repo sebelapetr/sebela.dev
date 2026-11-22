@@ -83,36 +83,10 @@ class ChatAgent:
             task = asyncio.ensure_future(
                 chat_graph().ainvoke({}, config={"configurable": {"execution": execution}})
             )
-        waiters: set[asyncio.Future[Any]] = {task}
-        cancelled: asyncio.Future[Any] | None = None
-        if cancel is not None:
-            cancelled = asyncio.ensure_future(cancel.wait())
-            waiters.add(cancelled)
         try:
-            done, _ = await asyncio.wait(
-                waiters,
-                timeout=execution.deadline.remaining() + DEADLINE_GRACE_S,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+            return await _outcome(execution, task, cancel)
         finally:
-            if cancelled is not None:
-                cancelled.cancel()
-        if task not in done:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
-            execution.budget.abandon()
-            stop: ExecutionStopped = Cancelled() if done else LimitReached("deadline")
-            return _stopped(execution, stop)
-        try:
-            state = task.result()
-        except Exception:
-            execution.budget.abandon()
-            return _stopped(execution, Unavailable("internal_error"))
-        result = state.get("result")
-        if not isinstance(result, ChatResult):
-            return _stopped(execution, Unavailable("internal_error"))
-        return result
+            await execution.tools.close()
 
     def _execution(self, request: ChatRequest, limits: ExecutionLimits) -> Execution:
         tracer = Tracer()
@@ -134,6 +108,44 @@ class ChatAgent:
             ),
             tracer=tracer,
         )
+
+
+async def _outcome(
+    execution: Execution,
+    task: asyncio.Future[Any],
+    cancel: asyncio.Event | None,
+) -> ChatResult:
+    """The graph's result, or the stopped result when `cancel` or the deadline comes first."""
+    waiters: set[asyncio.Future[Any]] = {task}
+    cancelled: asyncio.Future[Any] | None = None
+    if cancel is not None:
+        cancelled = asyncio.ensure_future(cancel.wait())
+        waiters.add(cancelled)
+    try:
+        done, _ = await asyncio.wait(
+            waiters,
+            timeout=execution.deadline.remaining() + DEADLINE_GRACE_S,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+    finally:
+        if cancelled is not None:
+            cancelled.cancel()
+    if task not in done:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+        execution.budget.abandon()
+        stop: ExecutionStopped = Cancelled() if done else LimitReached("deadline")
+        return _stopped(execution, stop)
+    try:
+        state = task.result()
+    except Exception:
+        execution.budget.abandon()
+        return _stopped(execution, Unavailable("internal_error"))
+    result = state.get("result")
+    if not isinstance(result, ChatResult):
+        return _stopped(execution, Unavailable("internal_error"))
+    return result
 
 
 def _stopped(execution: Execution, stop: ExecutionStopped) -> ChatResult:

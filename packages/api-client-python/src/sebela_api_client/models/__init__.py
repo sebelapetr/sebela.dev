@@ -32,6 +32,11 @@ from .chat_block_type_4 import ChatBlockType4
 from .chat_contact_link import ChatContactLink
 from .chat_contact_link_output import ChatContactLinkOutput
 from .chat_conversation import ChatConversation
+from .chat_conversation_clear import ChatConversationClear
+from .chat_conversation_cleared import ChatConversationCleared
+from .chat_conversation_cleared_telemetry_deletion import (
+    ChatConversationClearedTelemetryDeletion,
+)
 from .chat_generation_result import ChatGenerationResult
 from .chat_generation_result_language import ChatGenerationResultLanguage
 from .chat_generation_result_outcome import ChatGenerationResultOutcome
@@ -44,6 +49,7 @@ from .chat_operation import ChatOperation
 from .chat_operation_status import ChatOperationStatus
 from .chat_related_link import ChatRelatedLink
 from .chat_related_link_output import ChatRelatedLinkOutput
+from .chat_retry_submission import ChatRetrySubmission
 from .chat_source import ChatSource
 from .chat_source_output import ChatSourceOutput
 from .chat_source_output_record import ChatSourceOutputRecord
@@ -250,6 +256,9 @@ __all__ = (
     "ChatContactLink",
     "ChatContactLinkOutput",
     "ChatConversation",
+    "ChatConversationClear",
+    "ChatConversationCleared",
+    "ChatConversationClearedTelemetryDeletion",
     "ChatGenerationResult",
     "ChatGenerationResultLanguage",
     "ChatGenerationResultOutcome",
@@ -262,6 +271,7 @@ __all__ = (
     "ChatOperationStatus",
     "ChatRelatedLink",
     "ChatRelatedLinkOutput",
+    "ChatRetrySubmission",
     "ChatSource",
     "ChatSourceOutput",
     "ChatSourceOutputRecord",

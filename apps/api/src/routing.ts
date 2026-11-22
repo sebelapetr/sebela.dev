@@ -51,8 +51,9 @@ export interface RouteDocumentation {
    */
   readonly cookie?: { readonly name: string; readonly description: string };
   /**
-   * A visitor write a browser sends: it must come from an allowed origin with a JSON content type,
-   * else it is a 403 `forbidden` before the body is read, so it never answers 415.
+   * A visitor write a browser sends: it must come from an allowed origin, with a JSON content type
+   * when it has a body, else it is a 403 `forbidden` before the body is read, so it never answers
+   * 415.
    */
   readonly sameOrigin?: true;
   /** The JSON request body; validated before the handler runs. */

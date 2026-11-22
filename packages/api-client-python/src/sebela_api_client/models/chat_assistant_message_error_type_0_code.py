@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class ChatAssistantMessageErrorType0Code(StrEnum):
+    CANCELLED = "cancelled"
     INTERNAL = "internal"
     INVALID_REQUEST = "invalid_request"
     INVALID_STREAM = "invalid_stream"

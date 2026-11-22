@@ -18,8 +18,13 @@ const CONTROL_ROUTES = new Set([
   "POST /v1/internal/chat/grants/claim",
   "POST /v1/internal/chat/operations/:operationId/result",
 ]);
-/** The one public write, the visitor's question. */
-const VISITOR_WRITE = "POST /v1/chat/conversation/messages";
+/** The public writes: a visitor's question, retry, Stop and clear of their own conversation. */
+const VISITOR_WRITES = new Set([
+  "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/operations/:operationId/stop",
+  "POST /v1/chat/operations/:operationId/retry",
+  "DELETE /v1/chat/conversation",
+]);
 
 interface Operation {
   operationId?: string;
@@ -94,8 +99,8 @@ describe("the OpenAPI document and the reference", () => {
         expect(statuses).not.toContain("401");
       }
       if (route.hasBody) {
-        // The visitor's question refuses a body that is not JSON as 403 before reading it.
-        const media = name === VISITOR_WRITE ? "403" : "415";
+        // A visitor write refuses a body that is not JSON as 403 before reading it.
+        const media = VISITOR_WRITES.has(name) ? "403" : "415";
         expect(statuses, name).toEqual(expect.arrayContaining(["400", "413", media]));
       }
       expect(statuses).toEqual(expect.arrayContaining(["429", "500"]));
