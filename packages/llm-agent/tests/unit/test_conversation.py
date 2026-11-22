@@ -526,8 +526,10 @@ def test_choosing_the_language_grows_linearly_up_to_the_longest_question(prefix:
     def question_of(size: int) -> str:
         return (prefix + " x")[: size - 1] + "x"
 
-    quarter = question_of(MAX_QUESTION_CHARS // 4)
+    # A quarter of the question's own length: a prefix shorter than the longest question gives a
+    # shorter whole, and a quarter of the limit instead would be more than a quarter of it.
     whole = question_of(MAX_QUESTION_CHARS)
+    quarter = question_of(len(whole) // 4)
 
     def expire(_signum: int, _frame: object) -> None:
         raise TimeoutError("choosing the language hangs")
