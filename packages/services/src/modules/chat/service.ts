@@ -6,14 +6,18 @@ import {
   ChatGenerationResultSchema,
   ChatSourceSchema,
   chatGrantMaxLength,
+  chatConversationPageLimit,
   chatHistoryExchangeLimit,
   chatRetentionDaysDefault,
   chatReplayEvents,
   chatTerminalForGeneration,
   type ChatAssistantMessage,
+  type ChatConversation,
+  type ChatConversationQuery,
   type ChatGenerationResult,
   type ChatMessage,
   type ChatOperation,
+  type ChatOperationStatus,
   type ChatProgressStage,
 } from "@sebela/contracts";
 import type {
@@ -29,12 +33,22 @@ import type {
   ChatCaller,
   ChatHistoryExchange,
   ChatObservation,
+  ChatRetryOutcome,
   ChatService,
   ChatServiceOptions,
   ChatSubmitResult,
 } from "./types.js";
 
 const dayMs = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a deleted operation's tombstone outlives the clear: far beyond any generation deadline,
+ * so a late result or callback is refused and only its measured cost settled.
+ */
+const tombstoneMs = dayMs;
+
+/** An attempt a retry recovers instead of generating again: still active, or already answered. */
+const recoverable = new Set<ChatOperationStatus>(["accepted", "running", "completed"]);
 
 /** How long a running generation reports `checking` before `answering`. */
 const checkingMs = 5_000;
@@ -203,40 +217,68 @@ export function createChatService(
       .update(address ?? unknownAddressBucket, "utf8")
       .digest("hex");
 
-  const admit = async (
-    caller: ChatCaller,
-    question: string,
-    questionHash: string,
-    challengeTokenHash: string,
-    context: { clientAddress: string | null },
-    requestId: string,
-  ): Promise<ChatSubmitResult> => {
+  /** The gates' inputs for one admission at the current time, with a fresh grant. */
+  const gates = (challengeTokenHash: string, context: { clientAddress: string | null }) => {
     const at = now();
     const deadlineAt = new Date(at.getTime() + policy.deadlineMs);
     const grant = newToken();
-    const result = await persistence.admit({
-      identityId: caller.identityId,
-      conversationId: caller.conversationId,
-      requestId,
-      question,
-      questionHash,
-      challengeTokenHash,
-      fingerprint: fingerprint(context.clientAddress),
-      at,
-      deadlineAt,
-      grantVerifier: digest(grant),
-      model: config.model,
-      pricingVersion: config.pricingVersion,
-      allowanceMicroUsd: policy.allowanceMicroUsd,
-      quotas: quotaRules(at),
-      admissionExpiresAt: admissionExpiry(at),
-      spend: spendWindows(at, deadlineAt, policy),
-    });
+    return {
+      grant,
+      input: {
+        challengeTokenHash,
+        fingerprint: fingerprint(context.clientAddress),
+        at,
+        deadlineAt,
+        grantVerifier: digest(grant),
+        model: config.model,
+        pricingVersion: config.pricingVersion,
+        allowanceMicroUsd: policy.allowanceMicroUsd,
+        quotas: quotaRules(at),
+        admissionExpiresAt: admissionExpiry(at),
+        spend: spendWindows(at, deadlineAt, policy),
+      },
+    };
+  };
+
+  /** An admitted operation with everything the AI service needs to answer it. */
+  const admitted = async (
+    caller: ChatCaller,
+    operation: ChatOperationRecord,
+    question: string,
+    grant: string,
+    at: Date,
+  ): Promise<ChatSubmitResult> => {
+    const history = await persistence.recentExchanges(
+      caller.conversationId,
+      chatHistoryExchangeLimit,
+    );
+    return {
+      status: "admitted",
+      operation: toOperation(operation),
+      dispatch: {
+        operationId: operation.id,
+        grant,
+        question,
+        history: history.flatMap((record) => toExchange(record) ?? []),
+        today: pragueDate(at),
+        deadlineAt: operation.deadlineAt.toISOString(),
+        contextRevision: operation.contextRevision,
+        model: operation.model,
+        pricingVersion: operation.pricingVersion,
+        allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
+      },
+    };
+  };
+
+  /** A gate refusal as the caller sees it. */
+  const refused = (
+    result:
+      | { status: "busy"; operation: ChatOperationRecord }
+      | { status: "challenge_reused" }
+      | { status: "quota_exceeded"; retryAt: Date }
+      | { status: "budget_exhausted" },
+  ): ChatSubmitResult => {
     switch (result.status) {
-      case "duplicate":
-        return result.sameQuestion
-          ? { status: "existing", operation: toOperation(result.operation) }
-          : { status: "conflict" };
       case "busy":
         return { status: "busy", operation: toOperation(result.operation) };
       case "challenge_reused":
@@ -245,30 +287,137 @@ export function createChatService(
         return { status: "quota_exceeded", retryAt: result.retryAt };
       case "budget_exhausted":
         return { status: "budget_exhausted" };
-      case "admitted": {
-        const { operation } = result;
-        const history = await persistence.recentExchanges(
-          caller.conversationId,
-          chatHistoryExchangeLimit,
-        );
-        return {
-          status: "admitted",
-          operation: toOperation(operation),
-          dispatch: {
-            operationId: operation.id,
-            grant,
-            question,
-            history: history.flatMap((record) => toExchange(record) ?? []),
-            today: pragueDate(at),
-            deadlineAt: operation.deadlineAt.toISOString(),
-            contextRevision: operation.contextRevision,
-            model: operation.model,
-            pricingVersion: operation.pricingVersion,
-            allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
-          },
-        };
-      }
     }
+  };
+
+  const admit = async (
+    caller: ChatCaller,
+    question: string,
+    questionHash: string,
+    challengeTokenHash: string,
+    context: { clientAddress: string | null },
+    requestId: string,
+  ): Promise<ChatSubmitResult> => {
+    const { grant, input } = gates(challengeTokenHash, context);
+    const result = await persistence.admit({
+      ...input,
+      identityId: caller.identityId,
+      conversationId: caller.conversationId,
+      requestId,
+      question,
+      questionHash,
+    });
+    switch (result.status) {
+      case "duplicate":
+        return result.sameQuestion
+          ? { status: "existing", operation: toOperation(result.operation) }
+          : { status: "conflict" };
+      case "admitted":
+        return admitted(caller, result.operation, question, grant, input.at);
+      default:
+        return refused(result);
+    }
+  };
+
+  const admitRetry = async (
+    caller: ChatCaller,
+    operationId: string,
+    retryId: string,
+    challengeTokenHash: string,
+    context: { clientAddress: string | null },
+  ): Promise<ChatRetryOutcome> => {
+    const { grant, input } = gates(challengeTokenHash, context);
+    const result = await persistence.retry({
+      ...input,
+      identityId: caller.identityId,
+      conversationId: caller.conversationId,
+      operationId,
+      retryId,
+    });
+    switch (result.status) {
+      case "duplicate":
+        return result.sameTarget
+          ? { status: "existing", operation: toOperation(result.operation) }
+          : { status: "conflict" };
+      case "recovered":
+        return { status: "existing", operation: toOperation(result.operation) };
+      case "not_found":
+      case "not_retryable":
+        return { status: result.status };
+      case "admitted":
+        return admitted(caller, result.operation, result.question, grant, input.at);
+      default:
+        return refused(result);
+    }
+  };
+
+  /**
+   * Redeems a single-use challenge token once for the request `key` names: concurrent equal
+   * calls wait, bounded, while one claims the key and verifies; `recovered` reads what an earlier
+   * call already created, and `admitWith` runs the gates once the token passed.
+   */
+  const redeemOnce = async <T>(
+    claim: { identityId: string; requestId: string; questionHash: string; token: string },
+    context: { clientAddress: string | null },
+    recovered: () => Promise<T | null>,
+    admitWith: (challengeTokenHash: string) => Promise<T>,
+    refusal: { conflict: T; challengeFailed: T },
+  ): Promise<T> => {
+    const held = {
+      identityId: claim.identityId,
+      requestId: claim.requestId,
+      questionHash: claim.questionHash,
+      challengeTokenHash: digest(claim.token),
+    };
+    const verifyAndAdmit = async (): Promise<T> =>
+      (await verifier.verify(claim.token, context.clientAddress))
+        ? admitWith(held.challengeTokenHash)
+        : refusal.challengeFailed;
+    const polls = Math.ceil(policy.requestClaimMs / policy.requestClaimPollMs);
+    for (let poll = 0; ; poll += 1) {
+      const at = now();
+      const state = await persistence.claimRequest({
+        ...held,
+        at,
+        expiresAt: new Date(at.getTime() + policy.requestClaimMs),
+      });
+      if (state.status === "claimed") {
+        const passed = await verifier.verify(claim.token, context.clientAddress);
+        await persistence.settleRequestClaim(held, passed ? "verified" : "failed");
+        return passed ? admitWith(held.challengeTokenHash) : refusal.challengeFailed;
+      }
+      if (!state.sameQuestion) return refusal.conflict;
+      // Another token cannot be redeemed twice by this claim; it is verified on its own.
+      if (!state.sameToken) return verifyAndAdmit();
+      if (state.state === "failed") return refusal.challengeFailed;
+      // The token passed for this very request: admitting again recovers its operation.
+      if (state.state === "verified") return admitWith(held.challengeTokenHash);
+      if (poll >= polls) return refusal.challengeFailed;
+      await sleep(policy.requestClaimPollMs);
+      const settled = await recovered();
+      if (settled !== null) return settled;
+    }
+  };
+
+  const cancelled = { code: "cancelled" as const, retryable: true };
+
+  const readConversation = async (
+    caller: ChatCaller,
+    query: ChatConversationQuery,
+  ): Promise<ChatConversation> => {
+    const page = await persistence.listMessages(caller.conversationId, {
+      ...(query.before === undefined ? {} : { before: query.before }),
+      limit: query.limit,
+    });
+    const active = await persistence.findActiveOperation(caller.identityId);
+    const messages = page.messages.map(toMessage);
+    return {
+      conversationId: caller.conversationId,
+      messages,
+      nextCursor: page.hasMore ? (messages[0]?.id ?? null) : null,
+      activeOperation: active === null ? null : toOperation(active),
+      retentionDays: config.retentionDays,
+    };
   };
 
   return {
@@ -293,21 +442,7 @@ export function createChatService(
       };
     },
 
-    async conversation(caller, query) {
-      const page = await persistence.listMessages(caller.conversationId, {
-        ...(query.before === undefined ? {} : { before: query.before }),
-        limit: query.limit,
-      });
-      const active = await persistence.findActiveOperation(caller.identityId);
-      const messages = page.messages.map(toMessage);
-      return {
-        conversationId: caller.conversationId,
-        messages,
-        nextCursor: page.hasMore ? (messages[0]?.id ?? null) : null,
-        activeOperation: active === null ? null : toOperation(active),
-        retentionDays: config.retentionDays,
-      };
-    },
+    conversation: readConversation,
 
     async submit(caller, submission, context) {
       const question = submission.question.trim();
@@ -327,74 +462,113 @@ export function createChatService(
       const active = await persistence.findActiveOperation(caller.identityId);
       if (active !== null) return { status: "busy", operation: toOperation(active) };
 
-      const token = submission.challengeToken;
-      const claim = {
-        identityId: caller.identityId,
-        requestId: submission.requestId,
-        questionHash,
-        challengeTokenHash: digest(token),
-      };
-      const verifyAndAdmit = async (): Promise<ChatSubmitResult> => {
-        if (!(await verifier.verify(token, context.clientAddress))) {
-          return { status: "challenge_failed" };
-        }
-        return admit(
-          caller,
-          question,
+      // Concurrent equal submissions redeem the single-use token once.
+      return redeemOnce<ChatSubmitResult>(
+        {
+          identityId: caller.identityId,
+          requestId: submission.requestId,
           questionHash,
-          claim.challengeTokenHash,
-          context,
-          submission.requestId,
-        );
-      };
-      // Concurrent equal submissions redeem the single-use token once: one claims the request and
-      // verifies; the others wait, bounded, for its operation or the end of its verification.
-      const polls = Math.ceil(policy.requestClaimMs / policy.requestClaimPollMs);
-      for (let poll = 0; ; poll += 1) {
-        const at = now();
-        const held = await persistence.claimRequest({
-          ...claim,
-          at,
-          expiresAt: new Date(at.getTime() + policy.requestClaimMs),
-        });
-        if (held.status === "claimed") {
-          const passed = await verifier.verify(token, context.clientAddress);
-          await persistence.settleRequestClaim(claim, passed ? "verified" : "failed");
-          if (!passed) return { status: "challenge_failed" };
-          return admit(
-            caller,
-            question,
-            questionHash,
-            claim.challengeTokenHash,
-            context,
-            submission.requestId,
-          );
-        }
-        if (!held.sameQuestion) return { status: "conflict" };
-        // Another token cannot be redeemed twice by this claim; it is verified on its own.
-        if (!held.sameToken) return verifyAndAdmit();
-        if (held.state === "failed") return { status: "challenge_failed" };
-        // The token passed for this very request: admitting again recovers its operation.
-        if (held.state === "verified") {
-          return admit(
-            caller,
-            question,
-            questionHash,
-            claim.challengeTokenHash,
-            context,
-            submission.requestId,
-          );
-        }
-        if (poll >= polls) return { status: "challenge_failed" };
-        await sleep(policy.requestClaimPollMs);
-        const settled = await recovered();
-        if (settled !== null) return settled;
-      }
+          token: submission.challengeToken,
+        },
+        context,
+        recovered,
+        (challengeTokenHash) =>
+          admit(caller, question, questionHash, challengeTokenHash, context, submission.requestId),
+        { conflict: { status: "conflict" }, challengeFailed: { status: "challenge_failed" } },
+      );
     },
 
-    retry: notYet,
-    stop: notYet,
-    clear: notYet,
+    async retry(caller, operationId, submission, context) {
+      if (!uuidPattern.test(operationId)) return { status: "not_found" };
+      const { retryId } = submission;
+      // A used retry id, or an attempt that is active or completed, is recovered before any
+      // challenge, quota or spend: a retry never starts paid work twice.
+      const recovered = async (): Promise<ChatRetryOutcome | null> => {
+        const used = await persistence.findOperationByAttempt(caller.identityId, retryId);
+        if (used === null) return null;
+        return used.retryOf === operationId
+          ? { status: "existing", operation: toOperation(used) }
+          : { status: "conflict" };
+      };
+      const known = await recovered();
+      if (known !== null) return known;
+      const target = await persistence.findOperation(caller.identityId, operationId);
+      if (target?.operation.conversationId !== caller.conversationId)
+        return { status: "not_found" };
+      const latest = await persistence.findOperationByRequest(
+        caller.identityId,
+        target.operation.requestId,
+      );
+      if (latest !== null && recoverable.has(latest.status)) {
+        return { status: "existing", operation: toOperation(latest) };
+      }
+      if (latest?.id !== operationId || target.assistant.errorRetryable !== true) {
+        return { status: "not_retryable" };
+      }
+      const active = await persistence.findActiveOperation(caller.identityId);
+      if (active !== null) return { status: "busy", operation: toOperation(active) };
+
+      return redeemOnce<ChatRetryOutcome>(
+        {
+          identityId: caller.identityId,
+          requestId: retryId,
+          // The claim binds the retry id to its target, as a submission's to its question.
+          questionHash: digest(`retry:${operationId}`),
+          token: submission.challengeToken,
+        },
+        context,
+        recovered,
+        (challengeTokenHash) =>
+          admitRetry(caller, operationId, retryId, challengeTokenHash, context),
+        { conflict: { status: "conflict" }, challengeFailed: { status: "challenge_failed" } },
+      );
+    },
+
+    async stop(caller, operationId) {
+      if (!uuidPattern.test(operationId)) return null;
+      const result = await persistence.stop(caller.identityId, operationId, now(), cancelled);
+      if (result === null) return null;
+      return result.status === "stopped"
+        ? { status: "stopped", operation: toOperation(result.operation), running: result.claimed }
+        : { status: "finished", operation: toOperation(result.operation) };
+    },
+
+    async clear(caller, request) {
+      const at = now();
+      const result = uuidPattern.test(request.conversationId)
+        ? await persistence.clear({
+            identityId: caller.identityId,
+            conversationId: request.conversationId,
+            at,
+            error: cancelled,
+            tombstoneExpiresAt: new Date(at.getTime() + tombstoneMs),
+          })
+        : ({ status: "mismatch" } as const);
+      if (result.status === "mismatch") {
+        return {
+          cancelled: [],
+          cleared: {
+            cleared: false,
+            conversation: await readConversation(caller, { limit: chatConversationPageLimit }),
+            telemetryDeletion: "none",
+          },
+        };
+      }
+      return {
+        cancelled: result.cancelled,
+        cleared: {
+          cleared: true,
+          conversation: {
+            conversationId: result.conversation.id,
+            messages: [],
+            nextCursor: null,
+            activeOperation: null,
+            retentionDays: config.retentionDays,
+          },
+          telemetryDeletion: result.telemetryPending > 0 ? "pending" : "none",
+        },
+      };
+    },
 
     async operation(caller, operationId) {
       if (!uuidPattern.test(operationId)) return null;
@@ -478,10 +652,6 @@ export function createChatService(
     },
   };
 }
-
-const notYet = (): never => {
-  throw new Error("Not implemented yet.");
-};
 
 const chatOff = (): never => {
   throw new Error("Visitor chat is not configured.");
