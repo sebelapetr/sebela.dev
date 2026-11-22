@@ -21,7 +21,7 @@ from llm_agent import (
 )
 from llm_agent.schemas.responses import Outcome, SourceKind
 
-from ai_service.runtime.mapping import history_for, report_for
+from ai_service.runtime.mapping import history_for, report_for, stopped_report
 from ai_service.schemas import GenerationRequest
 from tests.fakes import FakeApi
 
@@ -37,6 +37,7 @@ KEYS = {
     "usage",
     "versions",
     "latencyMs",
+    "context",
 }
 
 
@@ -109,6 +110,64 @@ def test_the_usage_and_versions_are_reported() -> None:
     assert payload["versions"]["mainModel"] == versions().main_model
     assert payload["versions"]["pricing"] == versions().pricing
     assert payload["versions"]["runtime"] == versions().runtime
+
+
+def main_attempt(status: str = "ok", **attributes: Any) -> Span:
+    values: dict[str, Any] = {
+        "model": "claude-haiku-5-5",
+        "effort": "medium",
+        "attempt": 1,
+        "estimated_input_tokens": 6400,
+        "input_cap": 16000,
+        "input_tokens": 6512,
+        "output_tokens": 300,
+    }
+    values.update(attributes)
+    return Span(name="model.main", status=status, duration_ms=5, attributes=values)
+
+
+def test_the_last_main_call_is_reported_as_the_context_against_its_cap() -> None:
+    trace = [
+        Span(name="model.security", status="ok", duration_ms=5, attributes={"input_cap": 2000}),
+        main_attempt(estimated_input_tokens=5000, input_tokens=5100),
+        main_attempt(attempt=2),
+    ]
+    assert body(result(trace=trace))["context"] == {
+        "estimatedInputTokens": 6400,
+        "reportedInputTokens": 6512,
+        "capTokens": 16000,
+    }
+
+
+def test_a_main_call_without_reported_usage_keeps_only_the_estimate() -> None:
+    trace = [main_attempt("timeout", input_tokens=None, output_tokens=None)]
+    assert body(result(trace=trace))["context"] == {
+        "estimatedInputTokens": 6400,
+        "reportedInputTokens": None,
+        "capTokens": 16000,
+    }
+
+
+@pytest.mark.parametrize(
+    "trace",
+    [
+        [],
+        [Span(name="model.security", status="ok", duration_ms=5, attributes={"input_cap": 2000})],
+        [main_attempt(estimated_input_tokens=None)],
+        [main_attempt(input_cap=0)],
+        [main_attempt(estimated_input_tokens=True)],
+        [main_attempt(estimated_input_tokens=-1)],
+    ],
+)
+def test_no_measured_main_call_reports_no_context(trace: list[Span]) -> None:
+    assert body(result(trace=trace))["context"] is None
+
+
+def test_an_operation_stopped_before_a_model_call_reports_no_context() -> None:
+    report = stopped_report(
+        "cancelled", "grant_mismatch", grant="g", latency_ms=1, versions=versions()
+    )
+    assert report.model_dump(mode="json", by_alias=True)["context"] is None
 
 
 def test_no_evidence_data_trace_or_draft_leaves_the_service() -> None:

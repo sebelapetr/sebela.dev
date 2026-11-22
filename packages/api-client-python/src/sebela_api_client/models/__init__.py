@@ -38,6 +38,7 @@ from .chat_conversation_cleared_telemetry_deletion import (
     ChatConversationClearedTelemetryDeletion,
 )
 from .chat_generation_result import ChatGenerationResult
+from .chat_generation_result_context_type_0 import ChatGenerationResultContextType0
 from .chat_generation_result_language import ChatGenerationResultLanguage
 from .chat_generation_result_outcome import ChatGenerationResultOutcome
 from .chat_generation_result_usage import ChatGenerationResultUsage
@@ -56,6 +57,15 @@ from .chat_source_output_record import ChatSourceOutputRecord
 from .chat_source_output_record_kind import ChatSourceOutputRecordKind
 from .chat_source_record import ChatSourceRecord
 from .chat_source_record_kind import ChatSourceRecordKind
+from .chat_usage import ChatUsage
+from .chat_usage_context_type_0 import ChatUsageContextType0
+from .chat_usage_context_type_1 import ChatUsageContextType1
+from .chat_usage_model import ChatUsageModel
+from .chat_usage_next_request import ChatUsageNextRequest
+from .chat_usage_restriction_type_0 import ChatUsageRestrictionType0
+from .chat_usage_restriction_type_0_reason import ChatUsageRestrictionType0Reason
+from .chat_usage_rolling_two_hours import ChatUsageRollingTwoHours
+from .chat_usage_utc_day import ChatUsageUtcDay
 from .chat_user_message import ChatUserMessage
 from .collaboration_step import CollaborationStep
 from .current_focus import CurrentFocus
@@ -260,6 +270,7 @@ __all__ = (
     "ChatConversationCleared",
     "ChatConversationClearedTelemetryDeletion",
     "ChatGenerationResult",
+    "ChatGenerationResultContextType0",
     "ChatGenerationResultLanguage",
     "ChatGenerationResultOutcome",
     "ChatGenerationResultUsage",
@@ -278,6 +289,15 @@ __all__ = (
     "ChatSourceOutputRecordKind",
     "ChatSourceRecord",
     "ChatSourceRecordKind",
+    "ChatUsage",
+    "ChatUsageContextType0",
+    "ChatUsageContextType1",
+    "ChatUsageModel",
+    "ChatUsageNextRequest",
+    "ChatUsageRestrictionType0",
+    "ChatUsageRestrictionType0Reason",
+    "ChatUsageRollingTwoHours",
+    "ChatUsageUtcDay",
     "ChatUserMessage",
     "CollaborationStep",
     "CurrentFocus",

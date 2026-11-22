@@ -40,6 +40,8 @@ function answered(n: number, text: string): ChatAssistantMessage {
     blocks: [block],
     sources: [source],
     related: [],
+    model: "fictional-model",
+    effort: "medium",
     createdAt: CREATED,
   };
 }
@@ -113,6 +115,25 @@ describe("historyTurns", () => {
         sources: [source],
       },
       { requestId: request(2), status: "complete", text: "Through the contact form." },
+    ]);
+  });
+
+  it("keeps the model and effort each stored answer was produced with", () => {
+    const { turns } = historyTurns(
+      [
+        user(1, "Q?"),
+        { ...answered(1, "Old."), model: "older-fictional-model", effort: "low" },
+        user(2, "Q?"),
+        { ...answered(2, "Unrecorded."), model: null, effort: null },
+        user(3, "Q?"),
+      ],
+      none,
+    );
+
+    expect(turns.map((turn) => turn.model)).toEqual([
+      { name: "older-fictional-model", effort: "low" },
+      null,
+      null,
     ]);
   });
 

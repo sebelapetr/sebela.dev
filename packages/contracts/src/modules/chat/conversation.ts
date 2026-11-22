@@ -194,6 +194,14 @@ export const ChatAssistantMessageSchema = z
     blocks: z.array(ChatBlockSchema).max(blockLimit),
     sources: z.array(ChatSourceSchema).max(8),
     related: z.array(ChatRelatedLinkSchema).max(2),
+    model: z.string().min(1).max(100).nullable().meta({
+      description:
+        "The main model this answer was admitted for; kept after a configuration change. `null` when none was recorded.",
+    }),
+    effort: z.string().min(1).max(100).nullable().meta({
+      description:
+        "The reasoning effort this answer was admitted for; `null` when none was recorded.",
+    }),
     createdAt: Instant,
   })
   .meta({ id: "ChatAssistantMessage" });
@@ -251,6 +259,10 @@ export const ChatGrantClaimedSchema = z
     deadlineAt: Instant,
     allowanceUsd: z.number().positive(),
     model: z.string().min(1).max(100),
+    effort: z.string().min(1).max(100).nullable().meta({
+      description:
+        "The reasoning effort bound at admission; `null` for an operation admitted without one.",
+    }),
     pricingVersion: z.string().min(1).max(100),
     contextRevision: z.int().nonnegative(),
   })
@@ -278,6 +290,14 @@ export const ChatGenerationResultSchema = z
     }),
     versions: z.record(z.string().min(1).max(64), z.string().max(200)),
     latencyMs: z.int().nonnegative(),
+    context: z
+      .strictObject({
+        estimatedInputTokens: z.int().nonnegative(),
+        reportedInputTokens: z.int().nonnegative().nullable(),
+        capTokens: z.int().positive(),
+      })
+      .nullable()
+      .optional(),
   })
   .refine((result) => Object.keys(result.versions).length <= 20, {
     path: ["versions"],

@@ -11,7 +11,8 @@ export type ChatRelayRoute =
   | { readonly kind: "events"; readonly operationId: string }
   | { readonly kind: "stop"; readonly operationId: string }
   | { readonly kind: "retry"; readonly operationId: string }
-  | { readonly kind: "clear" };
+  | { readonly kind: "clear" }
+  | { readonly kind: "usage" };
 
 /** The relay's token and how many proxies in front of the website append to X-Forwarded-For. */
 export interface ChatRelaySettings {
@@ -108,6 +109,7 @@ const methods: Readonly<Record<ChatRelayRoute["kind"], string>> = {
   stop: "POST",
   retry: "POST",
   clear: "DELETE",
+  usage: "GET",
 };
 
 /** The routes whose body is relayed, bounded; every other route's body stays on the website. */
@@ -129,6 +131,8 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
       return "/v1/chat/conversation";
     case "messages":
       return "/v1/chat/conversation/messages";
+    case "usage":
+      return "/v1/chat/usage";
     case "operation":
     case "events":
     case "stop":

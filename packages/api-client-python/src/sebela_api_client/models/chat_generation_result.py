@@ -7,6 +7,7 @@ from attrs import define as _attrs_define
 
 from ..models.chat_generation_result_language import ChatGenerationResultLanguage
 from ..models.chat_generation_result_outcome import ChatGenerationResultOutcome
+from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.chat_block_type_0 import ChatBlockType0
@@ -14,6 +15,9 @@ if TYPE_CHECKING:
     from ..models.chat_block_type_2 import ChatBlockType2
     from ..models.chat_block_type_3 import ChatBlockType3
     from ..models.chat_block_type_4 import ChatBlockType4
+    from ..models.chat_generation_result_context_type_0 import (
+        ChatGenerationResultContextType0,
+    )
     from ..models.chat_generation_result_usage import ChatGenerationResultUsage
     from ..models.chat_generation_result_versions import ChatGenerationResultVersions
     from ..models.chat_related_link import ChatRelatedLink
@@ -38,6 +42,7 @@ class ChatGenerationResult:
         usage (ChatGenerationResultUsage):
         versions (ChatGenerationResultVersions):
         latency_ms (int):
+        context (ChatGenerationResultContextType0 | None | Unset):
     """
 
     grant: str
@@ -57,12 +62,16 @@ class ChatGenerationResult:
     usage: ChatGenerationResultUsage
     versions: ChatGenerationResultVersions
     latency_ms: int
+    context: ChatGenerationResultContextType0 | None | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.chat_block_type_0 import ChatBlockType0
         from ..models.chat_block_type_1 import ChatBlockType1
         from ..models.chat_block_type_2 import ChatBlockType2
         from ..models.chat_block_type_3 import ChatBlockType3
+        from ..models.chat_generation_result_context_type_0 import (
+            ChatGenerationResultContextType0,
+        )
 
         grant = self.grant
 
@@ -106,6 +115,14 @@ class ChatGenerationResult:
 
         latency_ms = self.latency_ms
 
+        context: dict[str, Any] | None | Unset
+        if isinstance(self.context, Unset):
+            context = UNSET
+        elif isinstance(self.context, ChatGenerationResultContextType0):
+            context = self.context.to_dict()
+        else:
+            context = self.context
+
         field_dict: dict[str, Any] = {}
 
         field_dict.update(
@@ -123,6 +140,8 @@ class ChatGenerationResult:
                 "latencyMs": latency_ms,
             }
         )
+        if context is not UNSET:
+            field_dict["context"] = context
 
         return field_dict
 
@@ -133,6 +152,9 @@ class ChatGenerationResult:
         from ..models.chat_block_type_2 import ChatBlockType2
         from ..models.chat_block_type_3 import ChatBlockType3
         from ..models.chat_block_type_4 import ChatBlockType4
+        from ..models.chat_generation_result_context_type_0 import (
+            ChatGenerationResultContextType0,
+        )
         from ..models.chat_generation_result_usage import ChatGenerationResultUsage
         from ..models.chat_generation_result_versions import (
             ChatGenerationResultVersions,
@@ -231,6 +253,25 @@ class ChatGenerationResult:
 
         latency_ms = d.pop("latencyMs")
 
+        def _parse_context(
+            data: object,
+        ) -> ChatGenerationResultContextType0 | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                context_type_0 = ChatGenerationResultContextType0.from_dict(data)
+
+                return context_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(ChatGenerationResultContextType0 | None | Unset, data)
+
+        context = _parse_context(d.pop("context", UNSET))
+
         chat_generation_result = cls(
             grant=grant,
             outcome=outcome,
@@ -243,6 +284,7 @@ class ChatGenerationResult:
             usage=usage,
             versions=versions,
             latency_ms=latency_ms,
+            context=context,
         )
 
         return chat_generation_result

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 
@@ -17,6 +17,7 @@ class ChatGrantClaimed:
         deadline_at (datetime.datetime):
         allowance_usd (float):
         model (str):
+        effort (None | str): The reasoning effort bound at admission; `null` for an operation admitted without one.
         pricing_version (str):
         context_revision (int):
     """
@@ -25,6 +26,7 @@ class ChatGrantClaimed:
     deadline_at: datetime.datetime
     allowance_usd: float
     model: str
+    effort: None | str
     pricing_version: str
     context_revision: int
 
@@ -36,6 +38,9 @@ class ChatGrantClaimed:
         allowance_usd = self.allowance_usd
 
         model = self.model
+
+        effort: None | str
+        effort = self.effort
 
         pricing_version = self.pricing_version
 
@@ -49,6 +54,7 @@ class ChatGrantClaimed:
                 "deadlineAt": deadline_at,
                 "allowanceUsd": allowance_usd,
                 "model": model,
+                "effort": effort,
                 "pricingVersion": pricing_version,
                 "contextRevision": context_revision,
             }
@@ -67,6 +73,13 @@ class ChatGrantClaimed:
 
         model = d.pop("model")
 
+        def _parse_effort(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        effort = _parse_effort(d.pop("effort"))
+
         pricing_version = d.pop("pricingVersion")
 
         context_revision = d.pop("contextRevision")
@@ -76,6 +89,7 @@ class ChatGrantClaimed:
             deadline_at=deadline_at,
             allowance_usd=allowance_usd,
             model=model,
+            effort=effort,
             pricing_version=pricing_version,
             context_revision=context_revision,
         )

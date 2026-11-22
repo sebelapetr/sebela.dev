@@ -19,6 +19,7 @@ import {
   type ChatOperation,
   type ChatOperationStatus,
   type ChatProgressStage,
+  type ChatRestrictionReason,
 } from "@sebela/contracts";
 import type {
   ChatExchangeRecord,
@@ -28,7 +29,16 @@ import type {
   ChatResultRecord,
 } from "@sebela/db";
 
-import { admissionExpiry, chatPolicy, pragueDate, quotaRules, spendWindows } from "./policy.js";
+import {
+  admissionExpiry,
+  chatPolicy,
+  namedQuotaRules,
+  nextUtcDay,
+  pragueDate,
+  quotaRules,
+  spendWindows,
+  windowEnd,
+} from "./policy.js";
 import type {
   ChatCaller,
   ChatHistoryExchange,
@@ -87,6 +97,8 @@ const toAssistant = (record: ChatMessageRecord): ChatAssistantMessage =>
     blocks: record.blocks,
     sources: record.sources,
     related: record.related,
+    model: record.model,
+    effort: record.effort,
     createdAt: record.createdAt.toISOString(),
   });
 
@@ -164,6 +176,7 @@ function resultRecord(result: ChatGenerationResult): ChatResultRecord {
     latencyMs: result.latencyMs,
     versions: result.versions,
     advancesRevision: terminal.type === "complete" && terminal.outcome === "answered",
+    context: result.context ?? null,
   };
 }
 
@@ -174,6 +187,7 @@ const invalidResult: ChatResultRecord = {
   errorCode: "internal",
   errorRetryable: false,
   ...nothing,
+  context: null,
   resultOutcome: "invalid_result",
   resultReason: null,
   costMicroUsd: null,
@@ -231,6 +245,7 @@ export function createChatService(
         deadlineAt,
         grantVerifier: digest(grant),
         model: config.model,
+        effort: config.effort,
         pricingVersion: config.pricingVersion,
         allowanceMicroUsd: policy.allowanceMicroUsd,
         quotas: quotaRules(at),
@@ -264,6 +279,8 @@ export function createChatService(
         deadlineAt: operation.deadlineAt.toISOString(),
         contextRevision: operation.contextRevision,
         model: operation.model,
+        // The effort this admission bound to the operation (`gates`): a fresh one always has it.
+        effort: config.effort,
         pricingVersion: operation.pricingVersion,
         allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
       },
@@ -604,6 +621,7 @@ export function createChatService(
           deadlineAt: operation.deadlineAt.toISOString(),
           allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
           model: operation.model,
+          effort: operation.effort,
           pricingVersion: operation.pricingVersion,
           contextRevision: operation.contextRevision,
         },
@@ -650,6 +668,82 @@ export function createChatService(
         limit,
       );
     },
+
+    async usage(caller, context) {
+      const at = now();
+      const rules = namedQuotaRules(at);
+      const windows = spendWindows(at, new Date(at.getTime() + policy.deadlineMs), policy);
+      const read = await persistence.usage({
+        identityId: caller.identityId,
+        conversationId: caller.conversationId,
+        fingerprint: fingerprint(context.clientAddress),
+        at,
+        quotas: rules.map((named) => named.rule),
+        spend: windows,
+        allowanceMicroUsd: policy.allowanceMicroUsd,
+      });
+      const counted = (reason: ChatRestrictionReason) => {
+        const index = rules.findIndex((named) => named.reason === reason);
+        const usage = read.quotas[index];
+        const rule = rules[index]?.rule;
+        if (usage === undefined || rule === undefined) throw new Error(`No ${reason} quota.`);
+        const used = Math.min(usage.used, rule.limit);
+        return { usage, used, limit: rule.limit, percent: (used * 100) / rule.limit };
+      };
+      // Every check that would refuse now; the one that holds longest decides when to retry.
+      const refusals: { reason: ChatRestrictionReason; retryAt: Date }[] = [
+        ...rules.flatMap((named, index) => {
+          const retryAt = read.quotas[index]?.retryAt ?? null;
+          return retryAt === null ? [] : [{ reason: named.reason, retryAt }];
+        }),
+        ...windows.flatMap((window, index) =>
+          read.spendRoom[index] === false
+            ? [{ reason: "service_budget" as const, retryAt: windowEnd(window) }]
+            : [],
+        ),
+      ];
+      const restriction = refusals.reduce<(typeof refusals)[number] | null>(
+        (latest, refusal) =>
+          latest === null || refusal.retryAt > latest.retryAt ? refusal : latest,
+        null,
+      );
+      const twoHours = counted("two_hours");
+      const day = counted("day");
+      return {
+        serverTime: at.toISOString(),
+        model: { name: config.model, effort: config.effort },
+        rollingTwoHours: {
+          used: twoHours.used,
+          limit: twoHours.limit,
+          percent: twoHours.percent,
+          nextReleaseAt: twoHours.usage.nextReleaseAt?.toISOString() ?? null,
+        },
+        utcDay: {
+          used: day.used,
+          limit: day.limit,
+          percent: day.percent,
+          resetsAt: nextUtcDay(at).toISOString(),
+        },
+        activeOperation: read.activeOperation === null ? null : toOperation(read.activeOperation),
+        restriction:
+          restriction === null
+            ? null
+            : { reason: restriction.reason, retryAt: restriction.retryAt.toISOString() },
+        context:
+          read.context === null
+            ? { status: "unavailable" }
+            : {
+                status: "measured",
+                operationId: read.context.operationId,
+                measuredAt: read.context.measuredAt.toISOString(),
+                estimatedInputTokens: read.context.estimatedInputTokens,
+                reportedInputTokens: read.context.reportedInputTokens,
+                capTokens: read.context.capTokens,
+              },
+        // No compaction exists yet, so the next request's input cannot be estimated truthfully.
+        nextRequest: { status: "unavailable" },
+      };
+    },
   };
 }
 
@@ -673,4 +767,5 @@ export const unconfiguredChat: ChatService = {
   dispatchRefused: chatOff,
   interruptOverdue: chatOff,
   deleteExpired: chatOff,
+  usage: chatOff,
 };

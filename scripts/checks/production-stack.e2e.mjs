@@ -149,6 +149,7 @@ const chatSettings = WITH_AI_SERVICE
       API_CHAT_COOKIE_SECURE: "true",
       API_CHAT_FINGERPRINT_KEY: randomBytes(32).toString("hex"),
       API_CHAT_MODEL: "smoke-model",
+      API_CHAT_EFFORT: "smoke-effort",
       API_CHAT_PRICING_VERSION: "smoke-pricing",
       API_CHAT_RELAY_TOKEN: relayToken,
       WEB_CHAT_RELAY_TOKEN: relayToken,

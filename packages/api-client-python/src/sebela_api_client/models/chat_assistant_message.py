@@ -50,6 +50,9 @@ class ChatAssistantMessage:
             ChatBlockOutputType4]):
         sources (list[ChatSourceOutput]):
         related (list[ChatRelatedLinkOutput]):
+        model (None | str): The main model this answer was admitted for; kept after a configuration change. `null` when
+            none was recorded.
+        effort (None | str): The reasoning effort this answer was admitted for; `null` when none was recorded.
         created_at (datetime.datetime):
     """
 
@@ -69,6 +72,8 @@ class ChatAssistantMessage:
     ]
     sources: list[ChatSourceOutput]
     related: list[ChatRelatedLinkOutput]
+    model: None | str
+    effort: None | str
     created_at: datetime.datetime
 
     def to_dict(self) -> dict[str, Any]:
@@ -128,6 +133,12 @@ class ChatAssistantMessage:
             related_item = related_item_data.to_dict()
             related.append(related_item)
 
+        model: None | str
+        model = self.model
+
+        effort: None | str
+        effort = self.effort
+
         created_at = self.created_at.isoformat()
 
         field_dict: dict[str, Any] = {}
@@ -144,6 +155,8 @@ class ChatAssistantMessage:
                 "blocks": blocks,
                 "sources": sources,
                 "related": related,
+                "model": model,
+                "effort": effort,
                 "createdAt": created_at,
             }
         )
@@ -290,6 +303,20 @@ class ChatAssistantMessage:
 
             related.append(related_item)
 
+        def _parse_model(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        model = _parse_model(d.pop("model"))
+
+        def _parse_effort(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        effort = _parse_effort(d.pop("effort"))
+
         created_at = datetime.datetime.fromisoformat(d.pop("createdAt"))
 
         chat_assistant_message = cls(
@@ -303,6 +330,8 @@ class ChatAssistantMessage:
             blocks=blocks,
             sources=sources,
             related=related,
+            model=model,
+            effort=effort,
             created_at=created_at,
         )
 

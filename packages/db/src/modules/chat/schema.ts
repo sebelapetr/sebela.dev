@@ -116,6 +116,8 @@ export const operations = chatSchema.table(
     deadlineAt: at("deadline_at").notNull(),
     finishedAt: at("finished_at"),
     model: text("model").notNull(),
+    /** The main call's reasoning effort; `NULL` for an operation admitted before it was bound. */
+    effort: text("effort"),
     pricingVersion: text("pricing_version").notNull(),
     allowanceMicroUsd: bigint("allowance_micro_usd", { mode: "number" }).notNull(),
     contextRevision: integer("context_revision").notNull(),
@@ -128,6 +130,13 @@ export const operations = chatSchema.table(
     modelAttempts: integer("model_attempts"),
     latencyMs: integer("latency_ms"),
     versions: jsonb("versions").$type<Record<string, string>>(),
+    /**
+     * The last main call's serialized input: the tokenizer estimate, the provider-reported count
+     * when known, and the input cap it was measured against. `NULL` when nothing was measured.
+     */
+    contextEstimatedInputTokens: integer("context_estimated_input_tokens"),
+    contextReportedInputTokens: integer("context_reported_input_tokens"),
+    contextCapTokens: integer("context_cap_tokens"),
   },
   (table) => [
     unique("operations_identity_attempt").on(table.identityId, table.attemptKey),
@@ -251,7 +260,11 @@ export const requestClaims = chatSchema.table(
   ],
 );
 
-/** One admitted question for the quotas: the identity and the keyed address fingerprint. */
+/**
+ * One admitted question for the quotas: the identity and the keyed address fingerprint. It names
+ * its operation without a reference, so it outlives a cleared conversation and keeps counting;
+ * only work that never started gives it back.
+ */
 export const admissions = chatSchema.table(
   "admissions",
   {
@@ -260,11 +273,14 @@ export const admissions = chatSchema.table(
       .notNull()
       .references(() => identities.id, { onDelete: "cascade" }),
     fingerprint: text("fingerprint").notNull(),
+    /** `NULL` for an admission recorded before operations were named. */
+    operationId: uuid("operation_id"),
     admittedAt: at("admitted_at").notNull(),
     expiresAt: at("expires_at").notNull(),
   },
   (table) => [
     index("admissions_identity").on(table.identityId, table.admittedAt),
+    index("admissions_operation").on(table.operationId),
     index("admissions_fingerprint").on(table.fingerprint, table.admittedAt),
     index("admissions_expiry").on(table.expiresAt),
   ],

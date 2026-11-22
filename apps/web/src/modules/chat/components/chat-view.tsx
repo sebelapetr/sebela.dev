@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type Ref, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowRight, ArrowUp, RotateCcw, Square } from "lucide-react";
@@ -16,29 +16,37 @@ import { handOffIdFromParam } from "../data/address";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
 import { askSuggestions } from "../data/suggestions";
 import { describeChatTurn } from "../data/turn-status";
+import { answeredWith, chatUsageRefreshAt, describeChatUsage } from "../data/usage";
 import { chatTurnParts, useChatScroll } from "../hooks/use-chat-scroll";
-import { useConversation } from "../hooks/use-conversation";
+import { useChatUsage, useConversation } from "../hooks/use-conversation";
 import { AnswerBlock, AnswerSources } from "./answer-blocks";
 import { ClearConversation } from "./clear-conversation";
+import { UsagePanel, UsageRestriction } from "./usage-panel";
 
 /**
  * The latest turn asked on this page reaches from just below the header (the question's scroll
- * margin) to the composer (76 px) with the column's gap (20 px, 40 px from `sm`) between them.
+ * margin) to the composer (120 px with its collapsed usage line) with the column's gap (20 px,
+ * 40 px from `sm`) between them.
  */
 const roomyTurnClass =
-  "min-h-[calc(100dvh-var(--header-height)-7.25rem)] sm:min-h-[calc(100dvh-var(--header-height)-8.5rem)]";
+  "min-h-[calc(100dvh-var(--header-height)-10rem)] sm:min-h-[calc(100dvh-var(--header-height)-11.25rem)]";
+
+/** How often the usage panel's relative times ("in 25 min") are said again. */
+const usageTickMs = 30_000;
 
 const textLinkClass =
   "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline";
 
 interface AnswerProps {
   readonly turn: ChatTurn;
+  /** "Answered with …" when the answer's model differs from the one the site uses now. */
+  readonly modelNote: string | null;
   /** Asks again; given only for the latest turn, shown only where a retry can help. */
   readonly onRetry?: () => void;
   readonly ref?: Ref<HTMLDivElement>;
 }
 
-function Answer({ turn, onRetry, ref }: AnswerProps) {
+function Answer({ turn, modelNote, onRetry, ref }: AnswerProps) {
   const open = isChatTurnOpen(turn);
   const { tag, note, retry, showsEvidence, contact } = describeChatTurn(turn);
   return (
@@ -54,6 +62,9 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
         <span className="type-label">Assistant</span>
         {tag === null ? null : (
           <span className="type-tag rounded-sm border border-border px-1.5">{tag}</span>
+        )}
+        {modelNote === null ? null : (
+          <span className="type-label text-muted-foreground">{modelNote}</span>
         )}
       </p>
       {turn.text.length === 0 && open ? (
@@ -177,6 +188,65 @@ export function ChatView({
     snapshot,
     current,
   });
+  const { usage, refresh: refreshUsage } = useChatUsage();
+  const [usageOpen, setUsageOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const usageView = useMemo(() => describeChatUsage(usage, now), [usage, now]);
+  const currentModel = usage.status === "ready" ? usage.usage.model : null;
+  const showsUsage = available && snapshot.history !== "unavailable";
+  // Read only after the conversation's first read settled: a first visit's identity cookie comes
+  // with that answer, and a read sent beside it would be given an identity of its own.
+  const readsUsage = available && (snapshot.history === "ready" || snapshot.history === "failed");
+
+  // The usage is read again whenever the conversation could have changed it: when the page opens
+  // or reads the conversation, a question is added, and an answer starts or ends (in any tab).
+  const usageKey = `${snapshot.history}|${String(turnCount)}|${latest?.requestId ?? ""}|${String(latest !== undefined && isChatTurnOpen(latest))}`;
+  useEffect(() => {
+    if (readsUsage) void refreshUsage();
+  }, [usageKey, readsUsage, refreshUsage]);
+
+  // ...when the tab is shown again, and the relative times move on every half minute.
+  useEffect(() => {
+    if (!readsUsage) return;
+    const tick = window.setInterval(() => {
+      setNow(Date.now());
+    }, usageTickMs);
+    function onVisible(): void {
+      if (document.visibilityState !== "visible") return;
+      setNow(Date.now());
+      void refreshUsage();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [readsUsage, refreshUsage]);
+
+  // ...and when capacity comes back by itself: a question frees up, the day resets or a pause ends.
+  useEffect(() => {
+    if (!readsUsage) return;
+    const at = chatUsageRefreshAt(usage, Date.now());
+    if (at === null) return;
+    const timer = window.setTimeout(
+      () => {
+        setNow(Date.now());
+        void refreshUsage();
+      },
+      Math.max(0, at - Date.now()) + 1_000,
+    );
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [usage, readsUsage, refreshUsage]);
+
+  function toggleUsage(next: boolean): void {
+    setUsageOpen(next);
+    if (next && readsUsage) {
+      setNow(Date.now());
+      void refreshUsage();
+    }
+  }
 
   // The stored conversation shows its end once; the hero's question goes to the top like one
   // asked here, or into the composer while an earlier answer is still being prepared.
@@ -360,12 +430,13 @@ export function ChatView({
                   <Answer
                     ref={lastAnswerRef}
                     turn={turn}
+                    modelNote={answeredWith(turn.model, currentModel)}
                     onRetry={() => {
                       retryLatest(turn.requestId);
                     }}
                   />
                 ) : (
-                  <Answer turn={turn} />
+                  <Answer turn={turn} modelNote={answeredWith(turn.model, currentModel)} />
                 )}
               </li>
             ))}
@@ -401,6 +472,12 @@ export function ChatView({
         <p role="status" className="pb-3 text-sm text-muted-foreground empty:hidden">
           {stopFailed ? "The answer could not be stopped. It is still being prepared." : null}
         </p>
+        {showsUsage ? (
+          <>
+            <UsageRestriction restriction={usageView.restriction} />
+            <UsagePanel view={usageView} open={usageOpen} onOpenChange={toggleUsage} />
+          </>
+        ) : null}
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question

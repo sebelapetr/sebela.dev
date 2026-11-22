@@ -93,6 +93,7 @@ const chatSettings = [
   "API_CHAT_FINGERPRINT_KEY",
   "API_CHAT_RETENTION_DAYS",
   "API_CHAT_MODEL",
+  "API_CHAT_EFFORT",
   "API_CHAT_PRICING_VERSION",
   "API_TURNSTILE_SECRET_KEY",
   "API_TURNSTILE_EXPECTED_HOSTNAME",
@@ -136,6 +137,8 @@ export function readChatOptions(
   }
   const model = value("API_CHAT_MODEL");
   if (!labelPattern.test(model)) invalid.push("API_CHAT_MODEL");
+  const effort = value("API_CHAT_EFFORT");
+  if (!labelPattern.test(effort)) invalid.push("API_CHAT_EFFORT");
   const pricingVersion = value("API_CHAT_PRICING_VERSION");
   if (!labelPattern.test(pricingVersion)) invalid.push("API_CHAT_PRICING_VERSION");
   const secret = value("API_TURNSTILE_SECRET_KEY");
@@ -154,7 +157,7 @@ export function readChatOptions(
     );
   }
   return {
-    config: { fingerprintKey, retentionDays, model, pricingVersion },
+    config: { fingerprintKey, retentionDays, model, effort, pricingVersion },
     verifier: createSiteverifyVerifier({ secret, expectedHostname, url, production }),
   };
 }

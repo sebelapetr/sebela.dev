@@ -204,6 +204,13 @@
       "when": 1795346554566,
       "tag": "0028_chat_conversation_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795360560816,
+      "tag": "0029_usage_limits_snapshot",
+      "breakpoints": true
     }
   ]
 }

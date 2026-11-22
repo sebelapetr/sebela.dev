@@ -1,3 +1,4 @@
+import type { ChatRestrictionReason } from "@sebela/contracts";
 import type { ChatQuotaRule, ChatSpendWindow } from "@sebela/db";
 
 import { siteverifyTimeoutMs } from "./siteverify.js";
@@ -33,7 +34,8 @@ const hour = 60 * minute;
 
 const utcDay = (at: Date) =>
   new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
-const nextUtcDay = (at: Date) =>
+/** The UTC midnight after `at`. */
+export const nextUtcDay = (at: Date) =>
   new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate() + 1));
 const isoDay = (at: Date) => at.toISOString().slice(0, 10);
 
@@ -42,15 +44,42 @@ const isoDay = (at: Date) => at.toISOString().slice(0, 10);
  * hours and 30 per UTC day; a client-address fingerprint 20 per rolling minute and 100 per UTC day.
  */
 export function quotaRules(at: Date): ChatQuotaRule[] {
+  return namedQuotaRules(at).map((named) => named.rule);
+}
+
+/**
+ * The same quotas, each with the restriction it names when full: the identity's own minute, two
+ * hours and day, and the shared network for both fingerprint quotas.
+ */
+export function namedQuotaRules(
+  at: Date,
+): { reason: ChatRestrictionReason; rule: ChatQuotaRule }[] {
   const since = (ms: number) => new Date(at.getTime() - ms);
   const day = { since: utcDay(at), resetsAt: nextUtcDay(at) };
   return [
-    { scope: "identity", since: since(minute), limit: 5, resetsAt: null },
-    { scope: "identity", since: since(2 * hour), limit: 10, resetsAt: null },
-    { scope: "identity", ...day, limit: 30 },
-    { scope: "fingerprint", since: since(minute), limit: 20, resetsAt: null },
-    { scope: "fingerprint", ...day, limit: 100 },
+    {
+      reason: "minute",
+      rule: { scope: "identity", since: since(minute), limit: 5, resetsAt: null },
+    },
+    {
+      reason: "two_hours",
+      rule: { scope: "identity", since: since(2 * hour), limit: 10, resetsAt: null },
+    },
+    { reason: "day", rule: { scope: "identity", ...day, limit: 30 } },
+    {
+      reason: "shared_network",
+      rule: { scope: "fingerprint", since: since(minute), limit: 20, resetsAt: null },
+    },
+    { reason: "shared_network", rule: { scope: "fingerprint", ...day, limit: 100 } },
   ];
+}
+
+/** When a spend window ends: the next UTC midnight after a day, the first of the next month. */
+export function windowEnd(window: ChatSpendWindow): Date {
+  const [year = 0, month = 1, date = 1] = window.startsOn.split("-").map(Number);
+  return window.kind === "day"
+    ? new Date(Date.UTC(year, month - 1, date + 1))
+    : new Date(Date.UTC(year, month, 1));
 }
 
 /** Every UTC day and then every UTC month the attempt from `at` to `deadline` touches. */

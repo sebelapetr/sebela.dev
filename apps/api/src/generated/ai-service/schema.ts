@@ -420,6 +420,8 @@ export interface components {
             contextRevision: number;
             /** Model */
             model: string;
+            /** Effort */
+            effort: string;
             /** Pricingversion */
             pricingVersion: string;
             /** Allowanceusd */

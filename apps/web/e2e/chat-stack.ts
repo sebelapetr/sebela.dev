@@ -126,8 +126,12 @@ async function startSiteverify(
   };
 }
 
-/** The agent's model and pricing version, which the API records with each answer's spend. */
-async function agentVersions(): Promise<{ readonly model: string; readonly pricing: string }> {
+/** The agent's model, effort and pricing version, which the API binds to each admission. */
+async function agentVersions(): Promise<{
+  readonly model: string;
+  readonly effort: string;
+  readonly pricing: string;
+}> {
   const { stdout } = await run(
     "uv",
     [
@@ -136,11 +140,11 @@ async function agentVersions(): Promise<{ readonly model: string; readonly prici
       "python",
       "-c",
       "import json; from llm_agent import versions; v = versions(); " +
-        "print(json.dumps({'model': v.main_model, 'pricing': v.pricing}))",
+        "print(json.dumps({'model': v.main_model, 'effort': v.main_effort, 'pricing': v.pricing}))",
     ],
     { cwd: serviceFolder },
   );
-  return JSON.parse(stdout) as { model: string; pricing: string };
+  return JSON.parse(stdout) as { model: string; effort: string; pricing: string };
 }
 
 const token = () => randomBytes(32).toString("base64url");
@@ -184,6 +188,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
           API_CHAT_FINGERPRINT_KEY: token(),
           API_CHAT_RETENTION_DAYS: "",
           API_CHAT_MODEL: versions.model,
+          API_CHAT_EFFORT: versions.effort,
           API_CHAT_PRICING_VERSION: versions.pricing,
           API_CHAT_RELAY_TOKEN: relayToken,
           // Not a Turnstile test secret, so the host name and action checks run as in production.

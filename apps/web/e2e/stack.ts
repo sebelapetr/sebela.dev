@@ -166,6 +166,7 @@ export const chatOff: Readonly<Record<string, string>> = {
   API_CHAT_FINGERPRINT_KEY: "",
   API_CHAT_RETENTION_DAYS: "",
   API_CHAT_MODEL: "",
+  API_CHAT_EFFORT: "",
   API_CHAT_PRICING_VERSION: "",
   API_CHAT_RELAY_TOKEN: "",
   API_TURNSTILE_SECRET_KEY: "",

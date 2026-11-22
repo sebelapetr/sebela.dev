@@ -25,6 +25,7 @@ const chatSettings = {
   fingerprintKey: "fictional-fingerprint-key-of-at-least-32-chars",
   retentionDays: 730,
   model: "fictional-model",
+  effort: "medium",
   pricingVersion: "fictional-pricing-1",
 };
 const ORIGIN = "https://www.example.test";
@@ -48,6 +49,7 @@ const timing = { pollMs: 10, progressMs: 30, graceMs: GRACE_MS };
 
 const CONVERSATION = "/v1/chat/conversation";
 const MESSAGES = "/v1/chat/conversation/messages";
+const USAGE = "/v1/chat/usage";
 const CLAIM = "/v1/internal/chat/grants/claim";
 const operationPath = (id: string) => `/v1/chat/operations/${id}`;
 const eventsPath = (id: string) => `/v1/chat/operations/${id}/events`;
@@ -363,6 +365,8 @@ describe("the visitor chat over HTTP", () => {
         ],
         [operationPath(asked.operationId), { headers: { cookie } }],
         [eventsPath(asked.operationId), { headers: { cookie } }],
+        [USAGE, { headers: { cookie } }],
+        [USAGE, {}],
       ];
       verifier.addresses.length = 0;
 
@@ -1412,6 +1416,83 @@ describe("the visitor chat over HTTP", () => {
     });
   });
 
+  describe("the usage snapshot", () => {
+    const usage = (cookie?: string, address = "203.0.113.40") =>
+      request(USAGE, {
+        headers: { ...(cookie === undefined ? {} : { cookie }), [CLIENT_HEADER]: address },
+      });
+
+    it("shows a new visitor's empty meters, the effective model and no measured context", async () => {
+      const response = await usage();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      cookieOf(response);
+      expect(await response.json()).toEqual({
+        serverTime: clock.toISOString(),
+        model: { name: "fictional-model", effort: "medium" },
+        rollingTwoHours: { used: 0, limit: 10, percent: 0, nextReleaseAt: null },
+        utcDay: {
+          used: 0,
+          limit: 30,
+          percent: 0,
+          resetsAt: new Date(Date.UTC(2031, 2, day + 1)).toISOString(),
+        },
+        activeOperation: null,
+        restriction: null,
+        context: { status: "unavailable" },
+        nextRequest: { status: "unavailable" },
+      });
+    });
+
+    it("counts only the caller's own operations, and two tabs see the same snapshot", async () => {
+      const owner = await visitor();
+      const asked = (await (await ask(owner.cookie)).json()) as { operationId: string };
+      const other = await visitor();
+
+      const [first, second] = await Promise.all([usage(owner.cookie), usage(owner.cookie)]);
+      const one = (await first.json()) as Record<string, unknown>;
+      expect(await second.json()).toEqual(one);
+      expect(one).toMatchObject({
+        rollingTwoHours: { used: 1, limit: 10, percent: 10 },
+        utcDay: { used: 1, limit: 30 },
+        activeOperation: { operationId: asked.operationId, status: "accepted" },
+      });
+      expect(first.headers.get("set-cookie")).toBeNull();
+
+      const theirs = (await (await usage(other.cookie)).json()) as Record<string, unknown>;
+      expect(theirs).toMatchObject({
+        rollingTwoHours: { used: 0 },
+        utcDay: { used: 0 },
+        activeOperation: null,
+      });
+      // Reading the snapshot is not an operation.
+      expect(await (await usage(owner.cookie)).json()).toMatchObject({
+        rollingTwoHours: { used: 1 },
+      });
+      expect(dispatcher.dispatched).toHaveLength(1);
+    });
+
+    it("names the minute restriction and its retry time, without any spend amount", async () => {
+      const { cookie } = await visitor();
+      for (let asked = 0; asked < 5; asked += 1) {
+        expect((await ask(cookie)).status).toBe(202);
+        await settleLast();
+      }
+
+      const response = await usage(cookie);
+      const text = await response.text();
+      expect(JSON.parse(text)).toMatchObject({
+        rollingTwoHours: { used: 5, percent: 50 },
+        restriction: {
+          reason: "minute",
+          retryAt: new Date(clock.getTime() + 60_000).toISOString(),
+        },
+      });
+      expect(text).not.toMatch(/usd|spend|budget|micro/i);
+    });
+  });
+
   describe("without chat settings", () => {
     it("answers unavailable on every visitor route, and refuses the control routes", async () => {
       const off = backend.api();
@@ -1420,6 +1501,7 @@ describe("the visitor chat over HTTP", () => {
         [MESSAGES, { method: "POST", ...json({}, { origin: ORIGIN }) }],
         [operationPath(randomUUID()), {}],
         [eventsPath(randomUUID()), {}],
+        [USAGE, {}],
       ] as const) {
         const response = await off.app.request(path, init, connection());
         expect(response.status, path).toBe(503);
@@ -1505,6 +1587,7 @@ describe("the chat supervisor", () => {
     deadlineAt: "2031-03-10T12:01:00.000Z",
     contextRevision: 0,
     model: "fictional-model",
+    effort: "medium",
     pricingVersion: "fictional-pricing-1",
     allowanceUsd: 0.02,
   };

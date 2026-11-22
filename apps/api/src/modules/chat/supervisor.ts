@@ -52,6 +52,7 @@ function generationRequest(dispatch: ChatDispatch): GenerationRequest {
     deadlineAt: dispatch.deadlineAt,
     contextRevision: dispatch.contextRevision,
     model: dispatch.model,
+    effort: dispatch.effort,
     pricingVersion: dispatch.pricingVersion,
     allowanceUsd: dispatch.allowanceUsd,
   };

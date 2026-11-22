@@ -82,6 +82,8 @@ class GenerationRequest(_Body):
     deadline_at: AwareDatetime
     context_revision: int = Field(ge=0)
     model: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    #: The main reasoning effort bound at admission; it must be this agent's.
+    effort: Annotated[str, StringConstraints(min_length=1, max_length=100)]
     pricing_version: Annotated[str, StringConstraints(min_length=1, max_length=100)]
     allowance_usd: float = Field(gt=0, le=MAX_ALLOWANCE_USD)
 
@@ -146,6 +148,14 @@ class ReportUsage(_Body):
     model_attempts: int = Field(ge=0)
 
 
+class ReportContext(_Body):
+    """The last main model call's serialized input: the estimate, the provider's count, the cap."""
+
+    estimated_input_tokens: int = Field(ge=0)
+    reported_input_tokens: int | None = Field(ge=0)
+    cap_tokens: int = Field(gt=0)
+
+
 class ResultReport(_Body):
     """The one result of a generation, already approved by the agent's Output Guard."""
 
@@ -161,3 +171,5 @@ class ResultReport(_Body):
     usage: ReportUsage
     versions: dict[str, str] = Field(max_length=MAX_VERSIONS)
     latency_ms: int = Field(ge=0)
+    #: `None` when no main model call was measured.
+    context: ReportContext | None = None

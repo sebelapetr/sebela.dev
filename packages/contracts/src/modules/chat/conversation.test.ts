@@ -54,6 +54,8 @@ const answered = {
   blocks: [],
   sources: [source],
   related: [{ label: "Experience", href: "/experience" }],
+  model: "fictional-model",
+  effort: "medium",
   createdAt,
 } as const;
 
@@ -131,6 +133,15 @@ describe("ChatMessageSchema", () => {
     expect(ChatMessageSchema.parse(answered)).toEqual(answered);
   });
 
+  it("names the model and effort an answer was generated with, or none before admission", () => {
+    expect(
+      ChatAssistantMessageSchema.parse({ ...answered, model: null, effort: null }),
+    ).toMatchObject({ model: null, effort: null });
+    const withoutModel: Record<string, unknown> = { ...answered };
+    delete withoutModel["model"];
+    expect(ChatAssistantMessageSchema.safeParse(withoutModel).success).toBe(false);
+  });
+
   it("refuses an unsafe source address in a stored answer", () => {
     const unsafe = { ...answered, sources: [{ ...source, href: "javascript:alert(1)" }] };
     expect(ChatAssistantMessageSchema.safeParse(unsafe).success).toBe(false);
@@ -194,16 +205,20 @@ describe("internal generation control", () => {
     );
   });
 
-  it("answers a claim with the bound deadline, allowance, model and pricing", () => {
+  it("answers a claim with the bound deadline, allowance, model, effort and pricing", () => {
     const claimed = {
       claimed: true,
       deadlineAt: createdAt,
       allowanceUsd: 0.02,
       model: "fake",
+      effort: "medium",
       pricingVersion: "2026-11",
       contextRevision: 3,
     };
     expect(ChatGrantClaimedSchema.parse(claimed)).toEqual(claimed);
+    const withoutEffort: Record<string, unknown> = { ...claimed };
+    delete withoutEffort["effort"];
+    expect(ChatGrantClaimedSchema.safeParse(withoutEffort).success).toBe(false);
   });
 
   const result = {
@@ -230,8 +245,37 @@ describe("internal generation control", () => {
     expect(ChatGenerationResultSchema.parse(result)).toEqual(result);
   });
 
+  it("accepts the last main call's context measurement against its input cap", () => {
+    const measured = {
+      ...result,
+      context: { estimatedInputTokens: 6400, reportedInputTokens: 6512, capTokens: 16000 },
+    };
+    expect(ChatGenerationResultSchema.parse(measured)).toEqual(measured);
+    const unreported = { ...result, context: { ...measured.context, reportedInputTokens: null } };
+    expect(ChatGenerationResultSchema.parse(unreported)).toEqual(unreported);
+    expect(ChatGenerationResultSchema.parse({ ...result, context: null })).toMatchObject({
+      context: null,
+    });
+  });
+
   it.each([
     ["an unknown outcome", { ...result, outcome: "draft" }],
+    [
+      "a context without a cap",
+      { ...result, context: { estimatedInputTokens: 1, reportedInputTokens: null, capTokens: 0 } },
+    ],
+    [
+      "a context with lifetime totals",
+      {
+        ...result,
+        context: {
+          estimatedInputTokens: 1,
+          reportedInputTokens: null,
+          capTokens: 16000,
+          lifetimeTokens: 90000,
+        },
+      },
+    ],
     ["an unsafe related link", { ...result, related: [{ label: "x", href: "ftp://x.example" }] }],
     ["more than eight sources", { ...result, sources: Array.from({ length: 9 }, () => source) }],
     ["a negative cost", { ...result, usage: { ...result.usage, costUsd: -1 } }],

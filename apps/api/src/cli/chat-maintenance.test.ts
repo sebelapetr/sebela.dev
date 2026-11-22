@@ -30,6 +30,7 @@ describe("chat-maintenance command", () => {
           fingerprintKey: "fictional-fingerprint-key-of-at-least-32-chars",
           retentionDays: 730,
           model: "fictional-model",
+          effort: "medium",
           pricingVersion: "fictional-pricing-1",
         },
         verifier,

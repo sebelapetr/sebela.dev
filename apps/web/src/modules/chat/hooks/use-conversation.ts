@@ -5,10 +5,11 @@
 // chat routes, so a conversation keeps streaming across client navigation and opening it again
 // never resends. The server renders an empty chat. The visitor's tabs tell each other that the
 // conversation changed over a broadcast channel; the message carries nothing of the conversation,
-// and a tab told reads it again from the API.
+// and a tab told reads it again from the API. The visitor's usage snapshot has a store of its own,
+// read with a plain GET that never consumes a question.
 import { useCallback, useSyncExternalStore } from "react";
 
-import { createApiChatAdapter } from "../data/api-adapter";
+import { createApiChatAdapter, createApiUsageReader } from "../data/api-adapter";
 import { createTurnstileChallenge, turnstileScriptUrl, type TurnstileApi } from "../data/challenge";
 import {
   createConversationStore,
@@ -18,6 +19,7 @@ import {
   type ConversationSnapshot,
   type ConversationStore,
 } from "../stores/conversation-store";
+import { createUsageStore, type UsageStore } from "../stores/usage-store";
 
 /** Where the website relays the visitor chat routes to the API. */
 const chatBasePath = "/api/chat";
@@ -150,6 +152,34 @@ export function useConversation(siteKey: string | null, available: boolean) {
     challengeContainer = element;
   }, []);
   return { snapshot, current: now, open, submit, retry, stop, clear, loadEarlier, challengeRef };
+}
+
+const loadingUsage = { status: "loading" } as const;
+let usageStore: UsageStore | undefined;
+
+/** The tab's usage store, created on first use in the browser. */
+function chatUsageStore(): UsageStore {
+  usageStore ??= createUsageStore({
+    read: createApiUsageReader({
+      fetch: (input, init) => window.fetch(input, init),
+      basePath: chatBasePath,
+    }),
+  });
+  return usageStore;
+}
+
+const subscribeUsage = (listener: () => void) => chatUsageStore().subscribe(listener);
+const usageSnapshot = () => chatUsageStore().getSnapshot();
+const usageServerSnapshot = () => loadingUsage;
+const refreshUsage = () => chatUsageStore().refresh();
+
+/**
+ * The visitor's usage snapshot as the API last gave it, and `refresh` to read it again. It is
+ * loading until the first read; the caller decides when to read (nothing is read on its own).
+ */
+export function useChatUsage() {
+  const usage = useSyncExternalStore(subscribeUsage, usageSnapshot, usageServerSnapshot);
+  return { usage, refresh: refreshUsage };
 }
 
 /**

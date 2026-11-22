@@ -280,6 +280,7 @@ class _Pair:
             "API_CHAT_RETENTION_DAYS": "",
             # The versions this agent generates with; the service refuses any other.
             "API_CHAT_MODEL": versions().main_model,
+            "API_CHAT_EFFORT": versions().main_effort,
             "API_CHAT_PRICING_VERSION": versions().pricing,
             # Not a Turnstile test secret, so the hostname and action checks run as in production.
             "API_TURNSTILE_SECRET_KEY": secrets.token_urlsafe(24),

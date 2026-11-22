@@ -13388,6 +13388,103 @@
         }
       }
     },
+    "/v1/chat/usage": {
+      "get": {
+        "operationId": "getChatUsage",
+        "summary": "Read the visitor's chat usage and limits",
+        "description": "The caller's own meters (questions in the rolling two hours and the UTC day), the restriction a new question would meet now and when it may pass again, the effective main model and effort, the active operation and the conversation's last measured main-call input against its cap. Reading consumes nothing and admits nothing; the meters are informative, admission decides alone. Never another visitor's counts or the site's spend. Never cached.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The usage snapshot.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatUsage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/chat/operations/{operationId}/stop": {
       "post": {
         "operationId": "stopChatOperation",
@@ -17664,6 +17761,46 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "estimatedInputTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reportedInputTokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "capTokens": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "estimatedInputTokens",
+                  "reportedInputTokens",
+                  "capTokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -22936,6 +23073,32 @@
               "$ref": "#/components/schemas/ChatRelatedLinkOutput"
             }
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The main model this answer was admitted for; kept after a configuration change. `null` when none was recorded."
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reasoning effort this answer was admitted for; `null` when none was recorded."
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -22953,6 +23116,8 @@
           "blocks",
           "sources",
           "related",
+          "model",
+          "effort",
           "createdAt"
         ],
         "additionalProperties": false
@@ -23026,6 +23191,251 @@
         ],
         "additionalProperties": false
       },
+      "ChatUsage": {
+        "type": "object",
+        "properties": {
+          "serverTime": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "description": "The server's time the snapshot was read at."
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "required": [
+              "name",
+              "effort"
+            ],
+            "additionalProperties": false,
+            "description": "The server-configured main model and effort; read-only."
+          },
+          "rollingTwoHours": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "percent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "nextReleaseAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "When the oldest counted operation leaves the rolling window; `null` when none counts."
+              }
+            },
+            "required": [
+              "used",
+              "limit",
+              "percent",
+              "nextReleaseAt"
+            ],
+            "additionalProperties": false
+          },
+          "utcDay": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "percent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "resetsAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "description": "The next UTC midnight, when the day resets."
+              }
+            },
+            "required": [
+              "used",
+              "limit",
+              "percent",
+              "resetsAt"
+            ],
+            "additionalProperties": false
+          },
+          "activeOperation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restriction": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "minute",
+                      "two_hours",
+                      "day",
+                      "shared_network",
+                      "service_budget"
+                    ]
+                  },
+                  "retryAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "retryAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why a new question would be refused now and when it may pass again; `null` when it would pass these limits."
+          },
+          "context": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "measured"
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "measuredAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "estimatedInputTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "The tokenizer estimate of the last main call's serialized input."
+                  },
+                  "reportedInputTokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The input tokens the provider reported for that call; `null` if none."
+                  },
+                  "capTokens": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "The input-token cap that call was sent under."
+                  }
+                },
+                "required": [
+                  "status",
+                  "operationId",
+                  "measuredAt",
+                  "estimatedInputTokens",
+                  "reportedInputTokens",
+                  "capTokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "unavailable"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "The conversation's last main model call: its serialized input against the effective cap.",
+            "type": "object"
+          },
+          "nextRequest": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false,
+            "description": "An estimate for the next request's input; not measured yet."
+          }
+        },
+        "required": [
+          "serverTime",
+          "model",
+          "rollingTwoHours",
+          "utcDay",
+          "activeOperation",
+          "restriction",
+          "context",
+          "nextRequest"
+        ],
+        "additionalProperties": false
+      },
       "ChatGrantClaimed": {
         "type": "object",
         "properties": {
@@ -23047,6 +23457,19 @@
             "minLength": 1,
             "maxLength": 100
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reasoning effort bound at admission; `null` for an operation admitted without one."
+          },
           "pricingVersion": {
             "type": "string",
             "minLength": 1,
@@ -23063,6 +23486,7 @@
           "deadlineAt",
           "allowanceUsd",
           "model",
+          "effort",
           "pricingVersion",
           "contextRevision"
         ],

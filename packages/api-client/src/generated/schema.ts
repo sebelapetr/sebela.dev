@@ -1414,6 +1414,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the visitor's chat usage and limits
+         * @description The caller's own meters (questions in the rolling two hours and the UTC day), the restriction a new question would meet now and when it may pass again, the effective main model and effort, the active operation and the conversation's last measured main-call input against its cap. Reading consumes nothing and admits nothing; the meters are informative, admission decides alone. Never another visitor's counts or the site's spend. Never cached.
+         */
+        get: operations["getChatUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/operations/{operationId}/stop": {
         parameters: {
             query?: never;
@@ -2581,6 +2601,11 @@ export interface components {
                 [key: string]: string;
             };
             latencyMs: number;
+            context?: {
+                estimatedInputTokens: number;
+                reportedInputTokens: number | null;
+                capTokens: number;
+            } | null;
         };
         ChatBlock: {
             /** @constant */
@@ -3855,6 +3880,10 @@ export interface components {
             blocks: components["schemas"]["ChatBlockOutput"][];
             sources: components["schemas"]["ChatSourceOutput"][];
             related: components["schemas"]["ChatRelatedLinkOutput"][];
+            /** @description The main model this answer was admitted for; kept after a configuration change. `null` when none was recorded. */
+            model: string | null;
+            /** @description The reasoning effort this answer was admitted for; `null` when none was recorded. */
+            effort: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -3879,6 +3908,66 @@ export interface components {
             /** @enum {string} */
             telemetryDeletion: "none" | "pending";
         };
+        ChatUsage: {
+            /**
+             * Format: date-time
+             * @description The server's time the snapshot was read at.
+             */
+            serverTime: string;
+            /** @description The server-configured main model and effort; read-only. */
+            model: {
+                name: string;
+                effort: string;
+            };
+            rollingTwoHours: {
+                used: number;
+                limit: number;
+                percent: number;
+                /** @description When the oldest counted operation leaves the rolling window; `null` when none counts. */
+                nextReleaseAt: string | null;
+            };
+            utcDay: {
+                used: number;
+                limit: number;
+                percent: number;
+                /**
+                 * Format: date-time
+                 * @description The next UTC midnight, when the day resets.
+                 */
+                resetsAt: string;
+            };
+            activeOperation: components["schemas"]["ChatOperation"] | null;
+            /** @description Why a new question would be refused now and when it may pass again; `null` when it would pass these limits. */
+            restriction: {
+                /** @enum {string} */
+                reason: "minute" | "two_hours" | "day" | "shared_network" | "service_budget";
+                /** Format: date-time */
+                retryAt: string;
+            } | null;
+            /** @description The conversation's last main model call: its serialized input against the effective cap. */
+            context: {
+                /** @constant */
+                status: "measured";
+                /** Format: uuid */
+                operationId: string;
+                /** Format: date-time */
+                measuredAt: string;
+                /** @description The tokenizer estimate of the last main call's serialized input. */
+                estimatedInputTokens: number;
+                /** @description The input tokens the provider reported for that call; `null` if none. */
+                reportedInputTokens: number | null;
+                /** @description The input-token cap that call was sent under. */
+                capTokens: number;
+            } | {
+                /** @constant */
+                status: "unavailable";
+            };
+            /** @description An estimate for the next request's input; not measured yet. */
+            nextRequest: {
+                /** @constant */
+                status: "unavailable";
+            };
+        };
         ChatGrantClaimed: {
             /** @constant */
             claimed: true;
@@ -3886,6 +3975,8 @@ export interface components {
             deadlineAt: string;
             allowanceUsd: number;
             model: string;
+            /** @description The reasoning effort bound at admission; `null` for an operation admitted without one. */
+            effort: string | null;
             pricingVersion: string;
             contextRevision: number;
         };
@@ -13467,6 +13558,78 @@ export interface operations {
             };
             /** @description `not_found`: the record does not exist. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getChatUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The usage snapshot. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatUsage"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

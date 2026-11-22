@@ -134,8 +134,9 @@ class Gateway:
             attempt += 1
             if self._deadline.expired:
                 raise LimitReached("deadline")
+            estimated = request_tokens(messages, tools, schema)
             admission = self._budget.admit(
-                input_tokens=request_tokens(messages, tools, schema),
+                input_tokens=estimated,
                 input_cap=input_cap,
                 output_cap=output_cap,
                 prices=config.prices,
@@ -159,6 +160,8 @@ class Gateway:
                 "model": config.model,
                 "effort": config.effort,
                 "attempt": attempt,
+                "estimated_input_tokens": estimated,
+                "input_cap": input_cap,
             }
             try:
                 async with asyncio.timeout(timeout):
