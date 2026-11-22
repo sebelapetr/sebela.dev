@@ -11,6 +11,7 @@ import { describe, it } from "node:test";
 
 import {
   addToChangelog,
+  assertSectionsUnchanged,
   changelogDocument,
   deployInput,
   nextVersion,
@@ -495,6 +496,154 @@ describe("changelog", () => {
         }),
       /already/,
     );
+  });
+
+  describe("layout of the existing file", () => {
+    const link = (version) => `[${version}]: ${GITHUB}/releases/tag/${version}`;
+    const header = "# Changelog\n\nIntro.\n";
+    const sectionOf = (version) => `## [${version}] - 2026-11-21\n\n${notesOf(version)}`;
+    const add = (changelog) =>
+      addToChangelog(changelog, {
+        version: "v0.8.0",
+        date: "2026-11-22",
+        notes: notesOf("v0.8.0"),
+        repository: REPOSITORY,
+      });
+
+    // Shaped like master before #412: three links stand after their own sections.
+    const misplaced = [
+      header,
+      `${sectionOf("v0.7.1")}${link("v0.7.1")}\n`,
+      `${sectionOf("v0.7.0")}${link("v0.7.0")}\n`,
+      `${sectionOf("v0.6.0")}${link("v0.6.0")}\n`,
+      `${sectionOf("v0.5.0")}`,
+      `${link("v0.5.0")}\n`,
+    ].join("\n");
+
+    const wellFormed = [
+      header,
+      sectionOf("v0.2.0"),
+      sectionOf("v0.1.0"),
+      `${link("v0.2.0")}\n${link("v0.1.0")}\n`,
+    ].join("\n");
+
+    it("refuses a link that stands before the last run of links, naming its line", () => {
+      assert.throws(
+        () => add(misplaced),
+        (error) => {
+          assert.match(error.message, /line 10\b/);
+          assert.ok(error.message.includes(link("v0.7.1")), error.message);
+          assert.match(error.message, /end of the file/);
+          return true;
+        },
+      );
+    });
+
+    it("does not call version links misplaced because another reference link follows them", () => {
+      const result = add(`${wellFormed}[unreleased]: https://example.com/unreleased\n`);
+      assert.ok(result.includes(sectionOf("v0.2.0")));
+      assert.ok(
+        result.endsWith(
+          `${link("v0.8.0")}\n${link("v0.2.0")}\n${link("v0.1.0")}\n` +
+            "[unreleased]: https://example.com/unreleased\n",
+        ),
+        result,
+      );
+    });
+
+    it("keeps the trailing spaces of the oldest section's last line", () => {
+      const spaced = wellFormed.replace("- a fix in v0.1.0\n", "- a fix in v0.1.0  \n");
+      assert.ok(add(spaced).includes("- a fix in v0.1.0  \n"));
+    });
+
+    it("leaves no carriage return in the message for a misplaced link", () => {
+      assert.throws(
+        () => add(misplaced.replaceAll("\n", "\r\n")),
+        (error) => !error.message.includes("\r") && /line \d+/.test(error.message),
+      );
+    });
+
+    it("accepts whitespace-only lines between the last section and the links", () => {
+      for (const blank of ["  ", "\t"]) {
+        const odd = wellFormed.replace("\n\n[v0.2.0]", `\n${blank}\n[v0.2.0]`);
+        assert.notEqual(odd, wellFormed);
+        const result = add(odd);
+        assert.ok(result.includes(sectionOf("v0.1.0")), JSON.stringify(blank));
+        assert.ok(result.startsWith(header));
+      }
+    });
+
+    it("assertSectionsUnchanged refuses text appended to or inserted after a section", () => {
+      const after = add(wellFormed);
+      assert.throws(
+        () =>
+          assertSectionsUnchanged(
+            wellFormed,
+            after.replace("- a fix in v0.1.0", "- a fix in v0.1.0 EXTRA"),
+          ),
+        /v0\.1\.0/,
+      );
+      assert.throws(
+        () =>
+          assertSectionsUnchanged(
+            wellFormed,
+            after.replace("- a fix in v0.2.0\n", "- a fix in v0.2.0\nINSERTED\n"),
+          ),
+        /v0\.2\.0/,
+      );
+    });
+
+    it("names the file given for a misplaced link", () => {
+      assert.throws(
+        () =>
+          addToChangelog(misplaced, {
+            version: "v0.8.0",
+            date: "2026-11-22",
+            notes: notesOf("v0.8.0"),
+            repository: REPOSITORY,
+            file: "docs/CHANGES.md",
+          }),
+        /docs\/CHANGES\.md line 10/,
+      );
+    });
+
+    it("guard messages carry no carriage return", () => {
+      const crlf = wellFormed.replaceAll("\n", "\r\n");
+      const after = add(wellFormed).replaceAll("\n", "\r\n").replace("a fix in v0.1.0", "x");
+      assert.throws(
+        () => assertSectionsUnchanged(crlf, after),
+        (error) => !error.message.includes("\r") && /v0\.1\.0/.test(error.message),
+      );
+    });
+
+    it("assertSectionsUnchanged refuses a missing or altered section", () => {
+      const before = wellFormed;
+      assert.doesNotThrow(() => assertSectionsUnchanged(before, add(before)));
+      assert.throws(
+        () => assertSectionsUnchanged(before, add(before).replace("a fix in v0.1.0", "changed")),
+        /v0\.1\.0/,
+      );
+      assert.throws(
+        () => assertSectionsUnchanged(before, add(before).replace("## [v0.2.0]", "## v0.2.0")),
+        /v0\.2\.0/,
+      );
+    });
+
+    it("keeps every existing section byte for byte and adds the new one first", () => {
+      const result = add(wellFormed);
+      assert.ok(result.includes(sectionOf("v0.2.0")));
+      assert.ok(result.includes(sectionOf("v0.1.0")));
+      assert.equal(
+        result,
+        [
+          header,
+          sectionOf("v0.8.0").replace("2026-11-21", "2026-11-22"),
+          sectionOf("v0.2.0"),
+          sectionOf("v0.1.0"),
+          `${link("v0.8.0")}\n${link("v0.2.0")}\n${link("v0.1.0")}\n`,
+        ].join("\n"),
+      );
+    });
   });
 
   it("is the same document whether built at once or one release at a time", () => {
