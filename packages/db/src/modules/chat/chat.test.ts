@@ -16,6 +16,8 @@ import {
   type ChatIdentityRecord,
   type ChatPersistence,
   type ChatResultRecord,
+  type ChatUsageInput,
+  type ChatUsageRecord,
 } from "./index.js";
 
 // Fictional values only; verifiers and hashes stand in for the services' one-way digests.
@@ -64,6 +66,7 @@ describe("chat persistence", () => {
       deadlineAt: later(60_000, when),
       grantVerifier: "grant-verifier",
       model: "fake",
+      effort: "medium",
       pricingVersion: "2026-11",
       allowanceMicroUsd: allowance,
       quotas: [],
@@ -104,6 +107,7 @@ describe("chat persistence", () => {
     modelAttempts: 3,
     latencyMs: 4_000,
     versions: { prompt: "chat-v1" },
+    context: null,
     advancesRevision: true,
     ...overrides,
   });
@@ -701,6 +705,276 @@ describe("chat persistence", () => {
         sql`SELECT count(*)::text AS count FROM chat.deletions`,
       );
       expect(Number(runs.rows[0]?.count)).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("usage and limits", () => {
+    const minute = 60_000;
+    const rolling = (scope: "identity" | "fingerprint", when: Date, ms: number, limit: number) => ({
+      scope,
+      since: later(-ms, when),
+      limit,
+      resetsAt: null,
+    });
+    const usageOf = (
+      caller: ChatIdentityRecord,
+      overrides: Partial<ChatUsageInput> = {},
+    ): Promise<ChatUsageRecord> =>
+      chat.usage({
+        identityId: caller.identityId,
+        conversationId: caller.conversation.id,
+        fingerprint: unique("fingerprint"),
+        at,
+        quotas: [],
+        spend: [],
+        allowanceMicroUsd: allowance,
+        ...overrides,
+      });
+    const paidFailure = answered({
+      status: "failed",
+      outcome: null,
+      errorCode: "unavailable",
+      errorRetryable: true,
+      text: null,
+      sources: [],
+      resultOutcome: "provider_error",
+      resultReason: null,
+      costMicroUsd: 1_000,
+      modelAttempts: 1,
+      advancesRevision: false,
+    });
+    const noWork = answered({ ...paidFailure, costMicroUsd: 0, modelAttempts: 0 });
+
+    it("counts a rolling window after its start and a fixed one from its start, exactly", async () => {
+      const caller = await identity();
+      for (const offset of [0, 10_000, 20_000]) {
+        const operation = await admitted(admission(caller, { at: later(offset) }));
+        await finish(operation.id);
+      }
+      // A minute after the first admission it has aged out: `since` itself is outside the window.
+      const aged = await usageOf(caller, {
+        at: later(minute),
+        quotas: [rolling("identity", later(minute), minute, 3)],
+      });
+      expect(aged.quotas).toEqual([
+        { used: 2, retryAt: null, nextReleaseAt: later(minute + 10_000) },
+      ]);
+      // A millisecond earlier all three count, the quota is full and has room again at the minute.
+      const full = await usageOf(caller, {
+        at: later(minute - 1),
+        quotas: [rolling("identity", later(minute - 1), minute, 3)],
+      });
+      expect(full.quotas).toEqual([
+        { used: 3, retryAt: later(minute), nextReleaseAt: later(minute) },
+      ]);
+      // A fixed window counts an admission at its very start and frees everything at its reset.
+      const resetsAt = later(3_600_000);
+      const fixed = await usageOf(caller, {
+        at: later(30_000),
+        quotas: [{ scope: "identity", since: at, limit: 3, resetsAt }],
+      });
+      expect(fixed.quotas).toEqual([{ used: 3, retryAt: resetsAt, nextReleaseAt: resetsAt }]);
+      const empty = await usageOf(await identity(), {
+        quotas: [{ scope: "identity", since: at, limit: 3, resetsAt }],
+      });
+      expect(empty.quotas).toEqual([{ used: 0, retryAt: null, nextReleaseAt: null }]);
+    });
+
+    it("counts a shared fingerprint across identities without counting them as the caller's", async () => {
+      const fingerprint = unique("fingerprint");
+      const neighbour = await identity();
+      const first = await admitted(admission(neighbour, { fingerprint }));
+      await finish(first.id);
+      const caller = await identity();
+      const own = await admitted(admission(caller, { fingerprint, at: later(1000) }));
+      await finish(own.id);
+      const usage = await usageOf(caller, {
+        fingerprint,
+        at: later(2000),
+        quotas: [
+          rolling("identity", later(2000), minute, 5),
+          rolling("fingerprint", later(2000), minute, 2),
+        ],
+      });
+      expect(usage.quotas).toEqual([
+        { used: 1, retryAt: null, nextReleaseAt: later(minute + 1000) },
+        { used: 2, retryAt: later(minute), nextReleaseAt: later(minute) },
+      ]);
+    });
+
+    it("tells whether another allowance fits each spend window without exposing its balance", async () => {
+      const spend = [
+        { kind: "day" as const, startsOn: "2036-02-28", limitMicroUsd: 2 * allowance },
+        { kind: "month" as const, startsOn: "2036-02-01", limitMicroUsd: roomy },
+      ];
+      const caller = await identity();
+      await admitted(admission(caller, { spend }));
+      const other = await identity();
+      await expect(usageOf(other, { spend })).resolves.toMatchObject({ spendRoom: [true, true] });
+      await admitted(admission(other, { spend }));
+      await expect(usageOf(await identity(), { spend })).resolves.toMatchObject({
+        spendRoom: [false, true],
+      });
+    });
+
+    it("reports the active operation and the conversation's last measured main call", async () => {
+      const caller = await identity();
+      await expect(usageOf(caller)).resolves.toEqual({
+        quotas: [],
+        spendRoom: [],
+        activeOperation: null,
+        context: null,
+      });
+      const measured = await admitted(admission(caller));
+      const context = {
+        estimatedInputTokens: 6_400,
+        reportedInputTokens: 6_512,
+        capTokens: 16_000,
+      };
+      await chat.claimGrant(measured.id, "grant-verifier", at);
+      await chat.reconcile(measured.id, "grant-verifier", later(5000), answered({ context }));
+      const unmeasured = await admitted(admission(caller, { at: later(6000) }));
+      await finish(unmeasured.id, answered({ context: null }));
+      const active = await admitted(admission(caller, { at: later(7000) }));
+
+      const usage = await usageOf(caller, { at: later(8000) });
+      expect(usage.activeOperation).toEqual(active);
+      expect(usage.context).toEqual({
+        operationId: measured.id,
+        measuredAt: later(5000),
+        ...context,
+      });
+
+      // Another identity sees nothing of it; a cleared conversation has no measurement.
+      await expect(usageOf(await identity())).resolves.toMatchObject({
+        activeOperation: null,
+        context: null,
+      });
+      const cleared = await chat.clear({
+        identityId: caller.identityId,
+        conversationId: caller.conversation.id,
+        at: later(9000),
+        error: { code: "cancelled", retryable: true },
+        tombstoneExpiresAt: later(86_400_000),
+      });
+      if (cleared.status !== "cleared") throw new Error("Expected the conversation to clear.");
+      await expect(
+        usageOf({ ...caller, conversation: cleared.conversation }, { at: later(10_000) }),
+      ).resolves.toMatchObject({ activeOperation: null, context: null });
+    });
+
+    it("reads without consuming anything", async () => {
+      const caller = await identity();
+      const quotas = [rolling("identity", later(1000), minute, 1)];
+      const before = await usageOf(caller, { at: later(1000), quotas });
+      await usageOf(caller, { at: later(1000), quotas });
+      expect(before.quotas).toEqual([{ used: 0, retryAt: null, nextReleaseAt: null }]);
+      await admitted(admission(caller, { at: later(1000), quotas }));
+    });
+
+    it("gives back the admission of work that never started and counts paid or refused work", async () => {
+      const quotas = (when: Date) => [rolling("identity", when, 2 * 3_600_000, 10)];
+      const used = async (caller: ChatIdentityRecord) =>
+        (await usageOf(caller, { at: later(3000), quotas: quotas(later(3000)) })).quotas[0]?.used;
+
+      const refusedDispatch = await identity();
+      const dispatched = await admitted(admission(refusedDispatch));
+      await chat.failUnclaimed(dispatched.id, at, { code: "unavailable", retryable: true });
+      expect(await used(refusedDispatch)).toBe(0);
+
+      const notStarted = await identity();
+      const failedEarly = await admitted(admission(notStarted));
+      await finish(failedEarly.id, noWork);
+      expect(await used(notStarted)).toBe(0);
+
+      const paid = await identity();
+      const paidOperation = await admitted(admission(paid));
+      await finish(paidOperation.id, paidFailure);
+      expect(await used(paid)).toBe(1);
+
+      const refused = await identity();
+      const refusal = await admitted(admission(refused));
+      await finish(
+        refusal.id,
+        answered({ outcome: "refused", text: "No.", modelAttempts: 0, costMicroUsd: 0 }),
+      );
+      expect(await used(refused)).toBe(1);
+
+      const stopped = await identity();
+      const stoppedOperation = await admitted(admission(stopped));
+      await chat.stop(stopped.identityId, stoppedOperation.id, at, {
+        code: "cancelled",
+        retryable: true,
+      });
+      expect(await used(stopped)).toBe(1);
+    });
+
+    it("gives back an unclaimed overdue admission and keeps a claimed one counted", async () => {
+      const when = new Date("2037-06-01T08:00:00.000Z");
+      const quotas = [rolling("identity", later(70_000, when), 2 * 3_600_000, 10)];
+      const claimedCaller = await identity();
+      const claimed = await admitted(admission(claimedCaller, { at: when }));
+      await chat.claimGrant(claimed.id, "grant-verifier", when);
+      const unclaimedCaller = await identity();
+      await admitted(admission(unclaimedCaller, { at: when }));
+      await chat.interruptOverdue(later(70_000, when), later(70_000, when), timeout);
+      const read = async (caller: ChatIdentityRecord) =>
+        (await usageOf(caller, { at: later(70_000, when), quotas })).quotas[0]?.used;
+      expect(await read(claimedCaller)).toBe(1);
+      expect(await read(unclaimedCaller)).toBe(0);
+    });
+
+    it("keeps the effort and the model of every answer after the configuration changes", async () => {
+      const caller = await identity();
+      const first = await admitted(admission(caller, { model: "model-a", effort: "low" }));
+      expect(first).toMatchObject({ model: "model-a", effort: "low" });
+      await finish(first.id);
+      const second = await admitted(
+        admission(caller, { model: "model-b", effort: "high", at: later(1000) }),
+      );
+      const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+      expect(page.messages.map((message) => [message.role, message.model, message.effort])).toEqual(
+        [
+          ["user", null, null],
+          ["assistant", "model-a", "low"],
+          ["user", null, null],
+          ["assistant", "model-b", "high"],
+        ],
+      );
+      const found = await chat.findOperation(caller.identityId, second.id);
+      expect(found?.assistant).toMatchObject({ model: "model-b", effort: "high" });
+    });
+
+    it("reserves conservatively across adjacent UTC windows and settles in the admission's once", async () => {
+      const when = new Date("2038-03-31T23:59:30.000Z");
+      const spend = [
+        { kind: "day" as const, startsOn: "2038-03-31", limitMicroUsd: roomy },
+        { kind: "day" as const, startsOn: "2038-04-01", limitMicroUsd: roomy },
+        { kind: "month" as const, startsOn: "2038-03-01", limitMicroUsd: roomy },
+        { kind: "month" as const, startsOn: "2038-04-01", limitMicroUsd: roomy },
+      ];
+      const committed = async () => [
+        await chat.committedSpend("day", "2038-03-31"),
+        await chat.committedSpend("day", "2038-04-01"),
+        await chat.committedSpend("month", "2038-03-01"),
+        await chat.committedSpend("month", "2038-04-01"),
+      ];
+      const caller = await identity();
+      const operation = await admitted(admission(caller, { at: when, spend }));
+      expect(await committed()).toEqual([allowance, allowance, allowance, allowance]);
+      await chat.claimGrant(operation.id, "grant-verifier", when);
+      // Interrupted without a result: the attribution is unknown, so every window keeps it.
+      await chat.interruptOverdue(later(70_000, when), later(70_000, when), timeout);
+      expect(await committed()).toEqual([allowance, allowance, allowance, allowance]);
+      // A late result settles in the admission's day and month, once.
+      await chat.reconcile(operation.id, "grant-verifier", later(80_000, when), answered());
+      await chat.reconcile(
+        operation.id,
+        "grant-verifier",
+        later(90_000, when),
+        answered({ costMicroUsd: 9_000 }),
+      );
+      expect(await committed()).toEqual([4_000, 0, 4_000, 0]);
     });
   });
 

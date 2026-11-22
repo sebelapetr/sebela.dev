@@ -72,6 +72,9 @@ export interface ChatMessageRecord {
   sources: unknown[];
   related: unknown[];
   createdAt: Date;
+  /** The model and effort the answer's operation was admitted with; `null` on a question. */
+  model: string | null;
+  effort: string | null;
 }
 
 export interface ChatOperationRecord {
@@ -85,6 +88,8 @@ export interface ChatOperationRecord {
   admittedAt: Date;
   deadlineAt: Date;
   model: string;
+  /** The main-call effort it was admitted with; `null` for an operation stored before effort was. */
+  effort: string | null;
   pricingVersion: string;
   allowanceMicroUsd: number;
   contextRevision: number;
@@ -122,6 +127,7 @@ export interface ChatAdmissionInput {
   deadlineAt: Date;
   grantVerifier: string;
   model: string;
+  effort: string;
   pricingVersion: string;
   allowanceMicroUsd: number;
   quotas: readonly ChatQuotaRule[];
@@ -206,8 +212,54 @@ export interface ChatResultRecord {
   modelAttempts: number;
   latencyMs: number;
   versions: Record<string, string>;
+  /** The last main call's measured input against its cap; `null` when none was measured. */
+  context: ChatContextMeasurement | null;
   /** Whether the exchange becomes context for later questions. */
   advancesRevision: boolean;
+}
+
+/** The serialized input of one main model call, measured against the cap it was sent under. */
+export interface ChatContextMeasurement {
+  /** The tokenizer estimate made before the call. */
+  estimatedInputTokens: number;
+  /** The input tokens the provider reported for the call; `null` when it reported none. */
+  reportedInputTokens: number | null;
+  capTokens: number;
+}
+
+/** What one usage read counts, all decided by the services. */
+export interface ChatUsageInput {
+  identityId: string;
+  conversationId: string;
+  fingerprint: string;
+  at: Date;
+  quotas: readonly ChatQuotaRule[];
+  /** The windows an admission at `at` would reserve in. */
+  spend: readonly ChatSpendWindow[];
+  allowanceMicroUsd: number;
+}
+
+/** One quota as an admission at the read's time would count it. */
+export interface ChatQuotaUsage {
+  used: number;
+  /** When it has room again; `null` while it has room. */
+  retryAt: Date | null;
+  /**
+   * When the oldest counted admission ages out of a rolling window, or a fixed window resets;
+   * `null` when nothing is counted.
+   */
+  nextReleaseAt: Date | null;
+}
+
+/** One consistent snapshot of an identity's limits; no spend amount leaves it. */
+export interface ChatUsageRecord {
+  /** In the order of the input's quotas. */
+  quotas: ChatQuotaUsage[];
+  /** Whether another allowance fits each spend window, in the input's order. */
+  spendRoom: boolean[];
+  activeOperation: ChatOperationRecord | null;
+  /** The conversation's latest measured main call, with its operation and when it finished. */
+  context: (ChatContextMeasurement & { operationId: string; measuredAt: Date }) | null;
 }
 
 export type ChatReconcileResult =
@@ -412,6 +464,11 @@ export interface ChatPersistence {
     outcome: "completed" | "failed",
     at: Date,
   ): Promise<void>;
+  /**
+   * Reads an identity's quotas, the room of the spend windows, its active operation and its
+   * conversation's last context measurement in one read-only snapshot; changes nothing.
+   */
+  usage(input: ChatUsageInput): Promise<ChatUsageRecord>;
   /** The committed spend of one window in millionths of a US dollar; 0 when it has none. */
   committedSpend(kind: ChatSpendKind, startsOn: string): Promise<number>;
 }
@@ -592,6 +649,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     admittedAt: row.admittedAt,
     deadlineAt: row.deadlineAt,
     model: row.model,
+    effort: null,
     pricingVersion: row.pricingVersion,
     allowanceMicroUsd: row.allowanceMicroUsd,
     contextRevision: row.contextRevision,
@@ -614,6 +672,8 @@ function messageOf(row: MessageRow): ChatMessageRecord {
     sources: row.sources,
     related: row.related,
     createdAt: row.createdAt,
+    model: null,
+    effort: null,
   };
 }
 
@@ -1549,6 +1609,10 @@ export function createChatPersistence(db: Database): ChatPersistence {
           .set({ attempts: sql`${telemetryDeletions.attempts} + 1` })
           .where(pending);
       }
+    },
+
+    usage() {
+      return Promise.reject(new Error("Not implemented."));
     },
 
     async committedSpend(kind, startsOn) {

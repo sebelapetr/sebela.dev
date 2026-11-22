@@ -164,6 +164,7 @@ function resultRecord(result: ChatGenerationResult): ChatResultRecord {
     latencyMs: result.latencyMs,
     versions: result.versions,
     advancesRevision: terminal.type === "complete" && terminal.outcome === "answered",
+    context: null,
   };
 }
 
@@ -174,6 +175,7 @@ const invalidResult: ChatResultRecord = {
   errorCode: "internal",
   errorRetryable: false,
   ...nothing,
+  context: null,
   resultOutcome: "invalid_result",
   resultReason: null,
   costMicroUsd: null,
@@ -231,6 +233,7 @@ export function createChatService(
         deadlineAt,
         grantVerifier: digest(grant),
         model: config.model,
+        effort: config.effort,
         pricingVersion: config.pricingVersion,
         allowanceMicroUsd: policy.allowanceMicroUsd,
         quotas: quotaRules(at),
@@ -650,6 +653,8 @@ export function createChatService(
         limit,
       );
     },
+
+    usage: () => Promise.reject(new Error("Not implemented.")),
   };
 }
 
@@ -673,4 +678,5 @@ export const unconfiguredChat: ChatService = {
   dispatchRefused: chatOff,
   interruptOverdue: chatOff,
   deleteExpired: chatOff,
+  usage: chatOff,
 };

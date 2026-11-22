@@ -40,6 +40,7 @@ export type {
   ChatClaimResult,
   ChatClearInput,
   ChatClearResult,
+  ChatContextMeasurement,
   ChatConversationRecord,
   ChatExchangeRecord,
   ChatIdentityRecord,
@@ -49,6 +50,7 @@ export type {
   ChatOperationState,
   ChatPersistence,
   ChatQuotaRule,
+  ChatQuotaUsage,
   ChatReconcileResult,
   ChatResultRecord,
   ChatRetryInput,
@@ -59,6 +61,8 @@ export type {
   ChatStoredError,
   ChatTelemetryDeletion,
   ChatTelemetryReferenceInput,
+  ChatUsageInput,
+  ChatUsageRecord,
 } from "./modules/chat/index.js";
 export type { MaintenancePersistence } from "./modules/maintenance/index.js";
 export type {

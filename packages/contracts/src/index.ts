@@ -335,6 +335,9 @@ export {
   ChatProgressSchema,
   ChatRetrySubmissionSchema,
   ChatUserMessageSchema,
+  ChatUsageSchema,
+  chatRestrictionReasons,
+  chatUsageLevel,
   chatAnswerMaxLength,
   chatAssistantStatuses,
   chatChallengeTokenMaxLength,
@@ -382,6 +385,9 @@ export type {
   ChatProgressStage,
   ChatRetrySubmission,
   ChatUserMessage,
+  ChatRestrictionReason,
+  ChatUsage,
+  ChatUsageLevel,
 } from "./modules/chat/index.js";
 export {
   PassageSchema,

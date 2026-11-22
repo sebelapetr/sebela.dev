@@ -125,6 +125,7 @@ describe("chat configuration", () => {
   const complete = {
     API_CHAT_FINGERPRINT_KEY: "fictional-fingerprint-key-of-at-least-32-chars",
     API_CHAT_MODEL: "fictional-model",
+    API_CHAT_EFFORT: "medium",
     API_CHAT_PRICING_VERSION: "fictional-pricing-1",
     API_TURNSTILE_SECRET_KEY: secret,
     API_TURNSTILE_EXPECTED_HOSTNAME: "www.example.test",
@@ -141,6 +142,7 @@ describe("chat configuration", () => {
       fingerprintKey: complete.API_CHAT_FINGERPRINT_KEY,
       retentionDays: 730,
       model: "fictional-model",
+      effort: "medium",
       pricingVersion: "fictional-pricing-1",
     });
     expect(
@@ -153,6 +155,8 @@ describe("chat configuration", () => {
     ["API_CHAT_FINGERPRINT_KEY", { API_CHAT_FINGERPRINT_KEY: "too-short" }],
     ["API_CHAT_RETENTION_DAYS", { API_CHAT_RETENTION_DAYS: "0" }],
     ["API_CHAT_RETENTION_DAYS", { API_CHAT_RETENTION_DAYS: "two years" }],
+    ["API_CHAT_EFFORT", { API_CHAT_EFFORT: "" }],
+    ["API_CHAT_EFFORT", { API_CHAT_EFFORT: "very much" }],
     ["API_TURNSTILE_EXPECTED_HOSTNAME", { API_TURNSTILE_EXPECTED_HOSTNAME: "https://x.test/" }],
     ["API_TURNSTILE_VERIFY_URL", { API_TURNSTILE_VERIFY_URL: "not a url" }],
   ])("names %s when it is missing or invalid", (name, change) => {

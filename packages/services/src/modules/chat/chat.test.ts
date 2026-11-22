@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { ChatGenerationResult } from "@sebela/contracts";
+import { ChatUsageSchema, type ChatGenerationResult } from "@sebela/contracts";
 import { createPersistence, readDatabaseConfig, type Persistence } from "@sebela/db";
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
 
@@ -21,6 +21,7 @@ const config = {
   fingerprintKey: "fictional-fingerprint-key-of-at-least-32-chars",
   retentionDays: 730,
   model: "fictional-model",
+  effort: "medium",
   pricingVersion: "fictional-pricing-1",
 };
 
@@ -163,6 +164,7 @@ describe("visitor chat service", () => {
         deadlineAt: "2031-03-10T12:01:00.000Z",
         contextRevision: 0,
         model: "fictional-model",
+        effort: "medium",
         pricingVersion: "fictional-pricing-1",
         allowanceUsd: 0.02,
       });
@@ -477,6 +479,7 @@ describe("visitor chat service", () => {
           deadlineAt: dispatch.deadlineAt,
           allowanceUsd: 0.02,
           model: "fictional-model",
+          effort: "medium",
           pricingVersion: "fictional-pricing-1",
           contextRevision: 0,
         },
@@ -705,6 +708,403 @@ describe("visitor chat service", () => {
       expect(after.caller.conversationId).not.toBe(opened.caller.conversationId);
     });
   });
+  describe("usage and limits", () => {
+    const minuteMs = 60_000;
+    const at = (iso: string) => {
+      now = new Date(iso);
+    };
+    const later = (ms: number) => {
+      now = new Date(now.getTime() + ms);
+    };
+    const ask = (
+      caller: ChatCaller,
+      clientAddress: string | null,
+      question = "What do you build?",
+    ) =>
+      chat.submit(
+        caller,
+        { requestId: randomUUID(), question, challengeToken: `fictional-token-${randomUUID()}` },
+        { clientAddress },
+      );
+    const admittedFrom = async (caller: ChatCaller, clientAddress: string, question?: string) => {
+      const result = await ask(caller, clientAddress, question);
+      if (result.status !== "admitted")
+        throw new Error(`Expected admission, got ${result.status}.`);
+      return result.dispatch;
+    };
+    const answeredFrom = async (caller: ChatCaller, clientAddress: string, question?: string) => {
+      const dispatch = await admittedFrom(caller, clientAddress, question);
+      await answer(dispatch);
+      return dispatch;
+    };
+    const settle = async (dispatch: ChatDispatch, change: Partial<ChatGenerationResult>) => {
+      await chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+      const result = await chat.reconcile(dispatch.operationId, {
+        ...answerFor(dispatch.grant, ""),
+        blocks: [],
+        sources: [],
+        ...change,
+      });
+      expect(result.status).toBe("reconciled");
+    };
+
+    it("reports the caller's meters and the effective model, and labels a missing measurement unavailable", async () => {
+      at("2032-01-05T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.1" };
+
+      expect(await chat.usage(caller, context)).toEqual({
+        serverTime: "2032-01-05T10:00:00.000Z",
+        model: { name: "fictional-model", effort: "medium" },
+        rollingTwoHours: { used: 0, limit: 10, percent: 0, nextReleaseAt: null },
+        utcDay: { used: 0, limit: 30, percent: 0, resetsAt: "2032-01-06T00:00:00.000Z" },
+        activeOperation: null,
+        restriction: null,
+        context: { status: "unavailable" },
+        nextRequest: { status: "unavailable" },
+      });
+
+      const result = await ask(caller, context.clientAddress);
+      if (result.status !== "admitted") throw new Error("Expected admission.");
+      later(30_000);
+      const active = await chat.usage(caller, context);
+
+      expect(active).toMatchObject({
+        serverTime: "2032-01-05T10:00:30.000Z",
+        rollingTwoHours: {
+          used: 1,
+          limit: 10,
+          percent: 10,
+          nextReleaseAt: "2032-01-05T12:00:00.000Z",
+        },
+        utcDay: { used: 1, limit: 30, percent: 100 / 30 },
+        activeOperation: result.operation,
+        restriction: null,
+        context: { status: "unavailable" },
+      });
+      expect(ChatUsageSchema.parse(active)).toEqual(active);
+    });
+
+    it("shows the last measured main call and keeps each answer's model and effort after a change", async () => {
+      at("2032-01-06T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.2" };
+      const first = await admittedFrom(caller, context.clientAddress);
+      later(2000);
+      await settle(first, {
+        ...answerFor(first.grant),
+        context: { estimatedInputTokens: 6400, reportedInputTokens: 6512, capTokens: 16000 },
+      });
+
+      expect((await chat.usage(caller, context)).context).toEqual({
+        status: "measured",
+        operationId: first.operationId,
+        measuredAt: "2032-01-06T10:00:02.000Z",
+        estimatedInputTokens: 6400,
+        reportedInputTokens: 6512,
+        capTokens: 16000,
+      });
+
+      chat = createChatService(persistence.chat, {
+        config: { ...config, model: "fictional-model-2", effort: "high" },
+        verifier,
+        now: () => now,
+      });
+      later(minuteMs);
+      const second = await admittedFrom(caller, context.clientAddress, "And then?");
+      expect(second).toMatchObject({ model: "fictional-model-2", effort: "high" });
+      await settle(second, answerFor(second.grant));
+
+      const usage = await chat.usage(caller, context);
+      expect(usage.model).toEqual({ name: "fictional-model-2", effort: "high" });
+      expect(usage.context).toMatchObject({ status: "measured", operationId: first.operationId });
+      const answers = (await chat.conversation(caller, { limit: 20 })).messages.filter(
+        (message) => message.role === "assistant",
+      );
+      expect(answers).toMatchObject([
+        { model: "fictional-model", effort: "medium" },
+        { model: "fictional-model-2", effort: "high" },
+      ]);
+    });
+
+    it("gives two tabs the same snapshot and consumes nothing by reading, reattaching or recovering", async () => {
+      at("2032-01-07T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.3" };
+      const first = await ask(caller, context.clientAddress);
+      if (first.status !== "admitted") throw new Error("Expected admission.");
+
+      const [one, other] = await Promise.all([
+        chat.usage(caller, context),
+        chat.usage(caller, context),
+      ]);
+      expect(other).toEqual(one);
+      for (let index = 0; index < 5; index += 1) {
+        await chat.usage(caller, context);
+        await chat.conversation(caller, { limit: 20 });
+        await chat.observe(caller, first.operation.operationId);
+        await chat.operation(caller, first.operation.operationId);
+      }
+      await expect(
+        chat.submit(
+          caller,
+          {
+            requestId: first.operation.requestId,
+            question: "What do you build?",
+            challengeToken: `fictional-token-${randomUUID()}`,
+          },
+          context,
+        ),
+      ).resolves.toMatchObject({ status: "existing" });
+
+      expect(await chat.usage(caller, context)).toEqual(one);
+      expect(one.rollingTwoHours.used).toBe(1);
+    });
+
+    it("restricts an identity at five per rolling minute and frees it exactly a minute after the oldest", async () => {
+      at("2032-01-08T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.4" };
+      for (let index = 0; index < 5; index += 1) {
+        await answeredFrom(caller, context.clientAddress, `Question ${String(index)}?`);
+        later(1000);
+      }
+
+      const usage = await chat.usage(caller, context);
+      expect(usage.restriction).toEqual({ reason: "minute", retryAt: "2032-01-08T10:01:00.000Z" });
+      expect(usage.rollingTwoHours).toMatchObject({ used: 5, percent: 50 });
+      await expect(ask(caller, context.clientAddress)).resolves.toEqual({
+        status: "quota_exceeded",
+        retryAt: new Date("2032-01-08T10:01:00.000Z"),
+      });
+
+      at("2032-01-08T10:00:59.999Z");
+      expect((await chat.usage(caller, context)).restriction).toMatchObject({ reason: "minute" });
+      at("2032-01-08T10:01:00.000Z");
+      expect((await chat.usage(caller, context)).restriction).toBeNull();
+      expect((await ask(caller, context.clientAddress)).status).toBe("admitted");
+    });
+
+    it("restricts an identity at ten per rolling two hours and releases the oldest exactly", async () => {
+      at("2032-01-09T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.5" };
+      for (let index = 0; index < 10; index += 1) {
+        await answeredFrom(caller, context.clientAddress, `Question ${String(index)}?`);
+        later(11 * minuteMs);
+      }
+
+      const usage = await chat.usage(caller, context);
+      expect(usage.rollingTwoHours).toEqual({
+        used: 10,
+        limit: 10,
+        percent: 100,
+        nextReleaseAt: "2032-01-09T12:00:00.000Z",
+      });
+      expect(usage.utcDay).toMatchObject({ used: 10, limit: 30 });
+      expect(usage.restriction).toEqual({
+        reason: "two_hours",
+        retryAt: "2032-01-09T12:00:00.000Z",
+      });
+      await expect(ask(caller, context.clientAddress)).resolves.toEqual({
+        status: "quota_exceeded",
+        retryAt: new Date("2032-01-09T12:00:00.000Z"),
+      });
+
+      at("2032-01-09T12:00:00.000Z");
+      const released = await chat.usage(caller, context);
+      expect(released.rollingTwoHours).toMatchObject({
+        used: 9,
+        nextReleaseAt: "2032-01-09T12:11:00.000Z",
+      });
+      expect(released.restriction).toBeNull();
+      expect((await ask(caller, context.clientAddress)).status).toBe("admitted");
+    });
+
+    it("restricts an identity at thirty per UTC day until the next UTC midnight", async () => {
+      at("2032-01-10T00:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.6" };
+      for (let index = 0; index < 30; index += 1) {
+        await answeredFrom(caller, context.clientAddress, `Question ${String(index)}?`);
+        later(13 * minuteMs);
+      }
+
+      const usage = await chat.usage(caller, context);
+      expect(usage.utcDay).toEqual({
+        used: 30,
+        limit: 30,
+        percent: 100,
+        resetsAt: "2032-01-11T00:00:00.000Z",
+      });
+      expect(usage.rollingTwoHours.used).toBe(9);
+      expect(usage.restriction).toEqual({ reason: "day", retryAt: "2032-01-11T00:00:00.000Z" });
+      await expect(ask(caller, context.clientAddress)).resolves.toEqual({
+        status: "quota_exceeded",
+        retryAt: new Date("2032-01-11T00:00:00.000Z"),
+      });
+
+      at("2032-01-10T23:59:59.999Z");
+      expect((await chat.usage(caller, context)).restriction).toMatchObject({ reason: "day" });
+      at("2032-01-11T00:00:00.000Z");
+      const reset = await chat.usage(caller, context);
+      expect(reset.utcDay).toMatchObject({ used: 0, resetsAt: "2032-01-12T00:00:00.000Z" });
+      expect(reset.restriction).toBeNull();
+      expect((await ask(caller, context.clientAddress)).status).toBe("admitted");
+    });
+
+    it("restricts a shared network at twenty per minute however many cookies it cycles", async () => {
+      at("2032-01-11T10:00:00.000Z");
+      const shared = "203.0.113.7";
+      for (let index = 0; index < 20; index += 1) {
+        await answeredFrom(await newCaller(), shared);
+        later(1000);
+      }
+      const fresh = await newCaller();
+
+      const usage = await chat.usage(fresh, { clientAddress: shared });
+      expect(usage.rollingTwoHours.used).toBe(0);
+      expect(usage.utcDay.used).toBe(0);
+      expect(usage.restriction).toEqual({
+        reason: "shared_network",
+        retryAt: "2032-01-11T10:01:00.000Z",
+      });
+      await expect(ask(fresh, shared)).resolves.toEqual({
+        status: "quota_exceeded",
+        retryAt: new Date("2032-01-11T10:01:00.000Z"),
+      });
+      expect((await chat.usage(fresh, { clientAddress: "203.0.113.8" })).restriction).toBeNull();
+      expect((await ask(fresh, "203.0.113.8")).status).toBe("admitted");
+    });
+
+    it("restricts a shared network at a hundred per UTC day", async () => {
+      at("2032-01-12T00:00:00.000Z");
+      const shared = "203.0.113.9";
+      for (let index = 0; index < 100; index += 1) {
+        await answeredFrom(await newCaller(), shared);
+        later(4000);
+      }
+      const fresh = await newCaller();
+
+      expect((await chat.usage(fresh, { clientAddress: shared })).restriction).toEqual({
+        reason: "shared_network",
+        retryAt: "2032-01-13T00:00:00.000Z",
+      });
+      await expect(ask(fresh, shared)).resolves.toEqual({
+        status: "quota_exceeded",
+        retryAt: new Date("2032-01-13T00:00:00.000Z"),
+      });
+    });
+
+    it("keeps counting through a cleared conversation and a restarted service", async () => {
+      at("2032-01-13T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.10" };
+      for (let index = 0; index < 5; index += 1) {
+        await answeredFrom(caller, context.clientAddress, `Question ${String(index)}?`);
+        later(1000);
+      }
+      const cleared = await chat.clear(caller, { conversationId: caller.conversationId });
+      const after = {
+        identityId: caller.identityId,
+        conversationId: cleared.cleared.conversation.conversationId,
+      };
+      chat = createChatService(persistence.chat, { config, verifier, now: () => now });
+
+      const usage = await chat.usage(after, context);
+      expect(usage.rollingTwoHours.used).toBe(5);
+      expect(usage.restriction).toMatchObject({ reason: "minute" });
+      await expect(ask(after, context.clientAddress)).resolves.toMatchObject({
+        status: "quota_exceeded",
+      });
+    });
+
+    it("gives back work that never started and counts paid failures, refusals and explicit retries", async () => {
+      at("2032-01-14T10:00:00.000Z");
+      const caller = await newCaller();
+      const context = { clientAddress: "203.0.113.11" };
+      const used = async () => (await chat.usage(caller, context)).rollingTwoHours.used;
+
+      const refusedDispatch = await admittedFrom(caller, context.clientAddress, "One?");
+      await chat.dispatchRefused(refusedDispatch.operationId);
+      expect(await used()).toBe(0);
+      later(1000);
+
+      const noWork = await admittedFrom(caller, context.clientAddress, "Two?");
+      await settle(noWork, {
+        outcome: "cancelled",
+        usage: {
+          costUsd: 0,
+          costUncertain: false,
+          inputTokens: 0,
+          outputTokens: 0,
+          modelAttempts: 0,
+        },
+      });
+      expect(await used()).toBe(0);
+      later(1000);
+
+      const paid = await admittedFrom(caller, context.clientAddress, "Three?");
+      await settle(paid, { outcome: "cancelled" });
+      expect(await used()).toBe(1);
+      later(1000);
+
+      const retried = await chat.retry(
+        caller,
+        paid.operationId,
+        { retryId: randomUUID(), challengeToken: `fictional-token-${randomUUID()}` },
+        context,
+      );
+      if (retried.status !== "admitted")
+        throw new Error(`Expected a retry, got ${retried.status}.`);
+      expect(await used()).toBe(2);
+      await answer(retried.dispatch);
+      later(1000);
+
+      const refusal = await admittedFrom(caller, context.clientAddress, "Four?");
+      await settle(refusal, {
+        ...answerFor(refusal.grant, "I can only talk about the portfolio."),
+        outcome: "refused",
+        blocks: [],
+        sources: [],
+      });
+      expect(await used()).toBe(3);
+    });
+
+    it("names the service budget, without an amount, until the full window ends", async () => {
+      at("2032-01-15T10:00:00.000Z");
+      const context = { clientAddress: "203.0.113.12" };
+      chat = createChatService(persistence.chat, {
+        config,
+        verifier,
+        now: () => now,
+        policy: { ...chatPolicy, dailySpendLimitMicroUsd: 1 },
+      });
+      const caller = await newCaller();
+
+      const daily = await chat.usage(caller, context);
+      expect(daily.restriction).toEqual({
+        reason: "service_budget",
+        retryAt: "2032-01-16T00:00:00.000Z",
+      });
+      expect(daily.rollingTwoHours.used).toBe(0);
+      await expect(ask(caller, context.clientAddress)).resolves.toEqual({
+        status: "budget_exhausted",
+      });
+
+      chat = createChatService(persistence.chat, {
+        config,
+        verifier,
+        now: () => now,
+        policy: { ...chatPolicy, monthlySpendLimitMicroUsd: 1 },
+      });
+      expect((await chat.usage(caller, context)).restriction).toEqual({
+        reason: "service_budget",
+        retryAt: "2032-02-01T00:00:00.000Z",
+      });
+    });
+  });
+
   describe("the conversation lifecycle", () => {
     const token = () => `fictional-token-${randomUUID()}`;
     const retrySubmission = (retryId = randomUUID()) => ({ retryId, challengeToken: token() });

@@ -154,7 +154,7 @@ export function readChatOptions(
     );
   }
   return {
-    config: { fingerprintKey, retentionDays, model, pricingVersion },
+    config: { fingerprintKey, retentionDays, model, effort: "", pricingVersion },
     verifier: createSiteverifyVerifier({ secret, expectedHostname, url, production }),
   };
 }

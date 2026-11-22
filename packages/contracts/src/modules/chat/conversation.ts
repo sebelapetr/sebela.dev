@@ -278,6 +278,14 @@ export const ChatGenerationResultSchema = z
     }),
     versions: z.record(z.string().min(1).max(64), z.string().max(200)),
     latencyMs: z.int().nonnegative(),
+    context: z
+      .strictObject({
+        estimatedInputTokens: z.int().nonnegative(),
+        reportedInputTokens: z.int().nonnegative().nullable(),
+        capTokens: z.int().positive(),
+      })
+      .nullable()
+      .optional(),
   })
   .refine((result) => Object.keys(result.versions).length <= 20, {
     path: ["versions"],

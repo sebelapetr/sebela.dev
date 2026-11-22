@@ -12,6 +12,7 @@ import type {
   ChatRetrySubmission,
   ChatSourceKind,
   ChatStreamEvent,
+  ChatUsage,
 } from "@sebela/contracts";
 
 import type { ChatPolicy } from "./policy.js";
@@ -28,6 +29,8 @@ export interface ChatConfig {
   readonly fingerprintKey: string;
   readonly retentionDays: number;
   readonly model: string;
+  /** The main model's reasoning effort, bound to each admitted operation. */
+  readonly effort: string;
   readonly pricingVersion: string;
 }
 
@@ -164,4 +167,6 @@ export interface ChatService {
   dispatchRefused(operationId: string): Promise<boolean>;
   interruptOverdue(graceMs: number): Promise<string[]>;
   deleteExpired(limit: number): Promise<number>;
+  /** The caller's own usage and policy snapshot; never another visitor's or the global spend. */
+  usage(caller: ChatCaller, context: { clientAddress: string | null }): Promise<ChatUsage>;
 }
