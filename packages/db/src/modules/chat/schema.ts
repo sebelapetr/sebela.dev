@@ -159,6 +159,32 @@ export const challengeRedemptions = chatSchema.table("challenge_redemptions", {
   redeemedAt: at("redeemed_at").notNull(),
 });
 
+/**
+ * A short-lived claim on one request of an identity, taken before its bot-challenge token is
+ * verified, so concurrent equal submissions call the verifier once. Digests only; it lapses at
+ * `expires_at` and admissions prune it.
+ */
+export const requestClaims = chatSchema.table(
+  "request_claims",
+  {
+    identityId: uuid("identity_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    questionHash: text("question_hash").notNull(),
+    /** The SHA-256 digest of the challenge token the holder verifies. */
+    challengeDigest: text("challenge_digest").notNull(),
+    state: text("state").notNull(),
+    claimedAt: at("claimed_at").notNull(),
+    expiresAt: at("expires_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.identityId, table.requestId] }),
+    index("request_claims_expiry").on(table.expiresAt),
+    check("request_claims_state_known", sql`${table.state} IN ('pending', 'verified', 'failed')`),
+  ],
+);
+
 /** One admitted question for the quotas: the identity and the keyed address fingerprint. */
 export const admissions = chatSchema.table(
   "admissions",

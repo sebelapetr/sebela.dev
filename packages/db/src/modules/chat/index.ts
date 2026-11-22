@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
 
 import { alias } from "drizzle-orm/pg-core";
 
@@ -12,6 +12,7 @@ import {
   identities,
   messages,
   operations,
+  requestClaims,
   spendReservations,
   spendWindows,
 } from "./schema.js";
@@ -272,7 +273,7 @@ export interface ChatPersistence {
   interruptOverdue(cutoff: Date, at: Date, error: ChatStoredError): Promise<string[]>;
   /**
    * Deletes at most `limit` identities last seen before `cutoff` with their conversations, and
-   * purges expired admissions; records the run. Spend accounting stays. Returns how many
+   * purges expired admissions and request claims; records the run. Spend accounting stays. Returns how many
    * conversations it deleted.
    */
   deleteInactive(cutoff: Date, at: Date, limit: number): Promise<number>;
@@ -438,6 +439,31 @@ export function createChatPersistence(db: Database): ChatPersistence {
     const [grant] = await tx.select().from(grants).where(eq(grants.operationId, operationId));
     if (grant?.verifier !== verifier) return null;
     return { row, grant };
+  };
+
+  /**
+   * Deletes up to `chatPruneBatch` expired admissions and as many expired request claims, rows a
+   * concurrent admission holds skipped, so fingerprints do not outlive their quota windows.
+   */
+  const pruneExpired = async (at: Date) => {
+    const now = at.toISOString();
+    await db.execute(sql`
+      DELETE FROM ${admissions} WHERE ${admissions.id} IN (
+        SELECT ${admissions.id} FROM ${admissions}
+        WHERE ${admissions.expiresAt} < ${now}::timestamptz
+        ORDER BY ${admissions.expiresAt}
+        LIMIT ${chatPruneBatch}
+        FOR UPDATE SKIP LOCKED
+      )`);
+    await db.execute(sql`
+      DELETE FROM ${requestClaims}
+      WHERE (${requestClaims.identityId}, ${requestClaims.requestId}) IN (
+        SELECT ${requestClaims.identityId}, ${requestClaims.requestId} FROM ${requestClaims}
+        WHERE ${requestClaims.expiresAt} < ${now}::timestamptz
+        ORDER BY ${requestClaims.expiresAt}
+        LIMIT ${chatPruneBatch}
+        FOR UPDATE SKIP LOCKED
+      )`);
   };
 
   const admitWithin = async (
@@ -729,6 +755,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
     },
 
     async admit(input) {
+      await pruneExpired(input.at);
       try {
         return await db.transaction((tx) => admitWithin(tx, input));
       } catch (error) {
@@ -737,9 +764,69 @@ export function createChatPersistence(db: Database): ChatPersistence {
       }
     },
 
-    claimRequest: () => Promise.reject(new Error("not implemented")),
+    async claimRequest(input) {
+      // A claim pruned between the insert and the read is simply claimed again.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const taken = await db
+          .insert(requestClaims)
+          .values({
+            identityId: input.identityId,
+            requestId: input.requestId,
+            questionHash: input.questionHash,
+            challengeDigest: input.challengeTokenHash,
+            state: "pending",
+            claimedAt: input.at,
+            expiresAt: input.expiresAt,
+          })
+          .onConflictDoUpdate({
+            target: [requestClaims.identityId, requestClaims.requestId],
+            set: {
+              questionHash: input.questionHash,
+              challengeDigest: input.challengeTokenHash,
+              state: "pending",
+              claimedAt: input.at,
+              expiresAt: input.expiresAt,
+            },
+            // Only a lapsed claim is taken over; the row lock makes one claimant win.
+            setWhere: lte(requestClaims.expiresAt, input.at),
+          })
+          .returning({ state: requestClaims.state });
+        if (taken.length > 0) return { status: "claimed" };
+        const [held] = await db
+          .select()
+          .from(requestClaims)
+          .where(
+            and(
+              eq(requestClaims.identityId, input.identityId),
+              eq(requestClaims.requestId, input.requestId),
+              gt(requestClaims.expiresAt, input.at),
+            ),
+          );
+        if (held !== undefined) {
+          return {
+            status: "held",
+            state: held.state as ChatRequestClaimState,
+            sameQuestion: held.questionHash === input.questionHash,
+            sameToken: held.challengeDigest === input.challengeTokenHash,
+          };
+        }
+      }
+      throw new Error("A chat request claim could not be taken or read.");
+    },
 
-    settleRequestClaim: () => Promise.reject(new Error("not implemented")),
+    async settleRequestClaim(claim, state) {
+      await db
+        .update(requestClaims)
+        .set({ state })
+        .where(
+          and(
+            eq(requestClaims.identityId, claim.identityId),
+            eq(requestClaims.requestId, claim.requestId),
+            eq(requestClaims.challengeDigest, claim.challengeTokenHash),
+            eq(requestClaims.state, "pending"),
+          ),
+        );
+    },
 
     async claimGrant(operationId, verifier, at) {
       return db.transaction(async (tx): Promise<ChatClaimResult> => {
@@ -869,6 +956,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
           .where(inArray(identities.id, expired))
           .returning({ id: identities.id });
         await tx.delete(admissions).where(lt(admissions.expiresAt, at));
+        await tx.delete(requestClaims).where(lt(requestClaims.expiresAt, at));
         await tx.insert(deletions).values({ deletedAt: at, conversations: deleted.length });
         return deleted.length;
       });
