@@ -9,8 +9,11 @@ import {
   type AuditChange,
   type AuthenticationCheck,
   type ChatConversation,
+  type ChatConversationClear,
+  type ChatConversationCleared,
   type ChatMessageSubmission,
   type ChatOperation,
+  type ChatRetrySubmission,
   type Cv,
   type Diary,
   type DiaryDay,
@@ -166,6 +169,31 @@ describe("the generated API client", () => {
     const operation: ChatOperation | undefined = asked.data;
     expect(operation).toBeUndefined();
 
+    const operationId = "00000000-0000-4000-8000-000000000003";
+    const stopped = await client.POST("/v1/chat/operations/{operationId}/stop", {
+      params: { path: { operationId } },
+    });
+    expect(stopped.response.status).toBeGreaterThanOrEqual(400);
+    const stoppedOperation: ChatOperation | undefined = stopped.data;
+    expect(stoppedOperation).toBeUndefined();
+
+    const retry: ChatRetrySubmission = {
+      retryId: "00000000-0000-4000-8000-000000000004",
+      challengeToken: "fictional-token",
+    };
+    const retried = await client.POST("/v1/chat/operations/{operationId}/retry", {
+      params: { path: { operationId } },
+      body: retry,
+    });
+    expect(retried.response.status).toBeGreaterThanOrEqual(400);
+
+    const clear: ChatConversationClear = { conversationId: operationId };
+    const cleared = await client.DELETE("/v1/chat/conversation", { body: clear });
+    expect(cleared.response.status).toBeGreaterThanOrEqual(400);
+    const result: ChatConversationCleared | undefined = cleared.data;
+    expect(result).toBeUndefined();
+    expect(cleared.error?.error.code).toMatch(/^(forbidden|unavailable)$/);
+
     const claimed = await client.POST("/v1/internal/chat/grants/claim", {
       body: { operationId: "00000000-0000-4000-8000-000000000002", grant: "fictional-grant" },
     });
@@ -173,7 +201,7 @@ describe("the generated API client", () => {
     expect(claimed.error?.error.code).toBe("unauthorized");
 
     // The control routes take the AI service's control token; the owner's key never goes there.
-    expect(authorizations).toEqual([null, null, null]);
+    expect(authorizations).toEqual([null, null, null, null, null, null]);
   });
 
   it("checks a key: authenticated with it, refused without it or once revoked", async () => {

@@ -43,6 +43,7 @@ const ERROR_NOTES: Readonly<Record<ChatErrorCode, string>> = {
   invalid_stream: "The answer could not be read.",
   invalid_request: "This question could not be sent.",
   internal: "Something went wrong while answering.",
+  cancelled: "The answer was stopped.",
 };
 
 /**

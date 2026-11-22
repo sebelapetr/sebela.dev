@@ -12887,6 +12887,121 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "clearChatConversation",
+        "summary": "Clear the visitor's chat conversation",
+        "description": "Deletes the caller's conversation when the body names it, as the visitor confirmed: active work is cancelled, messages are deleted, late results are refused and a fresh empty conversation of the same identity starts. Quotas and spend stay. Any other conversation ID clears nothing and returns the caller's conversation unchanged; a URL is never a delete credential. `telemetryDeletion` is `pending` while exported telemetry still awaits deletion.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatConversationClear"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the conversation was cleared, and the caller's conversation now.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversationCleared"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/chat/conversation/messages": {
@@ -13262,6 +13377,288 @@
           },
           "503": {
             "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/operations/{operationId}/stop": {
+      "post": {
+        "operationId": "stopChatOperation",
+        "summary": "Stop a chat operation",
+        "description": "Stops one of the caller's operations from any tab, without a new bot challenge: an active operation ends as a retryable `cancelled` error, and a generation that claimed its grant is told to stop. Its reserved cost stays until the generation reports what it spent. An operation that already ended is returned as it is.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation, cancelled or as it ended.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay or has no allowed origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/operations/{operationId}/retry": {
+      "post": {
+        "operationId": "retryChatOperation",
+        "summary": "Retry a failed chat answer",
+        "description": "Asks the question of one of the caller's failed attempts again as a new attempt of the same request, keyed by its own retry ID, and replaces only the failed answer. The same retry ID again, or an attempt of that request that is active or answered, is recovered before any challenge, quota or spend. Otherwise the bot challenge, the quotas and the spend budget apply as to a question.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRetrySubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The retry or the attempt recovered: its operation.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The retry is admitted.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`chat_request_conflict`: the retry ID was used for another attempt; `chat_busy`: the conversation already has a question in progress; `chat_not_retryable`: the attempt did not end with a retryable failure of the latest question.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached.",
             "content": {
               "application/json": {
                 "schema": {
@@ -17068,6 +17465,21 @@
           "document"
         ]
       },
+      "ChatConversationClear": {
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The conversation the visitor confirmed clearing; must be the current one."
+          }
+        },
+        "required": [
+          "conversationId"
+        ],
+        "additionalProperties": false
+      },
       "ChatMessageSubmission": {
         "type": "object",
         "properties": {
@@ -17092,6 +17504,28 @@
         "required": [
           "requestId",
           "question",
+          "challengeToken"
+        ],
+        "additionalProperties": false
+      },
+      "ChatRetrySubmission": {
+        "type": "object",
+        "properties": {
+          "retryId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "This retry's own idempotency key, generated by the client; repeating it recovers the retry."
+          },
+          "challengeToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The bot-challenge token of this retry; redeemed once, never stored."
+          }
+        },
+        "required": [
+          "retryId",
           "challengeToken"
         ],
         "additionalProperties": false
@@ -17617,7 +18051,8 @@
                   "chat_busy",
                   "chat_challenge_failed",
                   "chat_quota_exceeded",
-                  "chat_budget_exhausted"
+                  "chat_budget_exhausted",
+                  "chat_not_retryable"
                 ]
               },
               "message": {
@@ -22417,7 +22852,8 @@
               "pending",
               "completed",
               "failed",
-              "interrupted"
+              "interrupted",
+              "cancelled"
             ]
           },
           "outcome": {
@@ -22449,7 +22885,8 @@
                       "unavailable",
                       "timeout",
                       "invalid_stream",
-                      "internal"
+                      "internal",
+                      "cancelled"
                     ]
                   },
                   "retryable": {
@@ -22540,7 +22977,8 @@
               "running",
               "completed",
               "failed",
-              "interrupted"
+              "interrupted",
+              "cancelled"
             ]
           },
           "deadlineAt": {
@@ -22561,6 +22999,30 @@
           "status",
           "deadlineAt",
           "assistantMessageId"
+        ],
+        "additionalProperties": false
+      },
+      "ChatConversationCleared": {
+        "type": "object",
+        "properties": {
+          "cleared": {
+            "type": "boolean"
+          },
+          "conversation": {
+            "$ref": "#/components/schemas/ChatConversation"
+          },
+          "telemetryDeletion": {
+            "type": "string",
+            "enum": [
+              "none",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "cleared",
+          "conversation",
+          "telemetryDeletion"
         ],
         "additionalProperties": false
       },
