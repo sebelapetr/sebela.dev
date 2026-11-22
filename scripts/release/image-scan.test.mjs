@@ -465,6 +465,71 @@ describe("report command", () => {
       assert.match(call, /--platform linux\/arm64/);
     }
   });
+
+  const reportCalls = (env) => {
+    const box = sandbox();
+    const result = run(
+      "report",
+      { OUT_DIR: path.join(box.dir, "sarif"), FAKE_REPORT: "{}", ...env },
+      box,
+    );
+    return { result, calls: fs.existsSync(box.args) ? fs.readFileSync(box.args, "utf8") : "" };
+  };
+
+  it("passes --ignore-unfixed to Trivy by default, so only findings with a fix are reported", () => {
+    for (const env of [{}, { INCLUDE_UNFIXED: "" }, { INCLUDE_UNFIXED: "false" }]) {
+      const { result, calls } = reportCalls(env);
+      assert.equal(result.status, 0, result.stderr);
+      const lines = calls.trim().split("\n");
+      assert.equal(lines.length, 3);
+      for (const line of lines) assert.match(line, / --ignore-unfixed /);
+    }
+  });
+
+  it("reports the findings without a fix too when INCLUDE_UNFIXED is true", () => {
+    const { result, calls } = reportCalls({ INCLUDE_UNFIXED: "true" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(calls.trim().split("\n").length, 3);
+    assert.doesNotMatch(calls, /--ignore-unfixed/);
+  });
+
+  it("refuses an INCLUDE_UNFIXED that is neither true nor false, before scanning", () => {
+    const { result, calls } = reportCalls({ INCLUDE_UNFIXED: "yes" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /INCLUDE_UNFIXED/);
+    assert.equal(calls, "");
+  });
+
+  it("still fails when the scan cannot run, with or without the flag", () => {
+    for (const include of ["false", "true"]) {
+      const box = sandbox();
+      fs.writeFileSync(box.fake, "#!/bin/sh\nexit 3\n", { mode: 0o755 });
+      const result = run(
+        "report",
+        { OUT_DIR: path.join(box.dir, "s"), INCLUDE_UNFIXED: include },
+        box,
+      );
+      assert.equal(result.status, 1);
+    }
+  });
+});
+
+describe("gate command and unfixed findings", () => {
+  it("never passes --ignore-unfixed: it decides on fixed versions itself and is not affected", () => {
+    const box = sandbox();
+    const result = run(
+      "gate",
+      {
+        SHA: "a".repeat(40),
+        BUILD: '["web"]',
+        INCLUDE_UNFIXED: "false",
+        FAKE_REPORT: JSON.stringify(report([UNFIXED_CRITICAL])),
+      },
+      box,
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(fs.readFileSync(box.args, "utf8"), /--ignore-unfixed/);
+  });
 });
 
 describe("workflows", () => {
@@ -486,6 +551,15 @@ describe("workflows", () => {
     assert.match(weekly, /node scripts\/release\/image-scan\.mjs install/);
     assert.match(weekly, /node scripts\/release\/image-scan\.mjs report/);
     assert.match(weekly, /security-events: write/);
+  });
+
+  it("the weekly scan reports only fixable findings unless a manual run asks for all of them", () => {
+    assert.match(
+      weekly,
+      /workflow_dispatch:\s+inputs:\s+include-unfixed:\s+description:[^\n]+\s+type: boolean\s+default: false/,
+    );
+    assert.match(weekly, /INCLUDE_UNFIXED: \$\{\{ inputs\.include-unfixed \}\}/);
+    assert.doesNotMatch(release, /INCLUDE_UNFIXED/);
   });
 
   it("no workflow uses the Trivy or setup-trivy action", () => {
