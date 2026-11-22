@@ -98,25 +98,35 @@ interface Frame {
   readonly data: Record<string, unknown>;
 }
 
-/** Reads server-sent event frames until `until` accepts one or the stream ends. */
+/** The reader of a stream and what it read past the last frame, kept across `readFrames` calls. */
+const streams = new WeakMap<
+  Response,
+  { reader: ReadableStreamDefaultReader<string>; buffer: string }
+>();
+
+/**
+ * Reads server-sent event frames until `until` accepts one or the stream ends. A later call on the
+ * same response continues where the previous one stopped.
+ */
 async function readFrames(
   response: Response,
   until: (frame: Frame) => boolean = () => false,
 ): Promise<{ frames: Frame[]; ended: boolean; cancel: () => Promise<void> }> {
-  const body = response.body;
-  if (body === null) throw new Error("The response has no body.");
-  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
+  let state = streams.get(response);
+  if (state === undefined) {
+    const body = response.body;
+    if (body === null) throw new Error("The response has no body.");
+    state = { reader: body.pipeThrough(new TextDecoderStream()).getReader(), buffer: "" };
+    streams.set(response, state);
+  }
+  const { reader } = state;
   const frames: Frame[] = [];
-  let buffer = "";
   for (;;) {
-    const read = await reader.read();
-    if (read.done) return { frames, ended: true, cancel: () => reader.cancel() };
-    buffer += read.value;
-    let boundary = buffer.indexOf("\n\n");
+    let boundary = state.buffer.indexOf("\n\n");
     while (boundary >= 0) {
-      const raw = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      boundary = buffer.indexOf("\n\n");
+      const raw = state.buffer.slice(0, boundary);
+      state.buffer = state.buffer.slice(boundary + 2);
+      boundary = state.buffer.indexOf("\n\n");
       const fields = new Map<string, string>();
       for (const line of raw.split("\n")) {
         const colon = line.indexOf(":");
@@ -132,6 +142,9 @@ async function readFrames(
       frames.push(frame);
       if (until(frame)) return { frames, ended: false, cancel: () => reader.cancel() };
     }
+    const read = await reader.read();
+    if (read.done) return { frames, ended: true, cancel: () => reader.cancel() };
+    state.buffer += read.value;
   }
 }
 

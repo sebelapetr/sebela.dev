@@ -29,7 +29,12 @@ import { pathParams } from "./middleware/path-params.js";
 import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
 import { auditRoutes } from "./modules/audit/index.js";
-import { type ChatDispatcher, type ChatTiming } from "./modules/chat/index.js";
+import {
+  chatRouteDocumentation,
+  registerChatRoutes,
+  type ChatDispatcher,
+  type ChatTiming,
+} from "./modules/chat/index.js";
 import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { retrievalRoutes } from "./modules/retrieval/index.js";
@@ -271,6 +276,7 @@ const documentedRoutes = (modules: readonly RouteDefinition[]): RouteDocumentati
   systemRoutes.readiness,
   systemRoutes.authentication,
   ...modules,
+  ...chatRouteDocumentation(),
   systemRoutes.openapi,
   systemRoutes.reference,
 ];
@@ -594,6 +600,14 @@ export function createApp(dependencies: AppDependencies): Api {
   );
 
   modules.forEach(register);
+  registerChatRoutes(app, {
+    chat: services.chat,
+    config,
+    limits,
+    dispatcher: dependencies.chatDispatcher ?? null,
+    now: dependencies.now ?? Date.now,
+    ...(dependencies.chatTiming ? { timing: dependencies.chatTiming } : {}),
+  });
 
   // Built on the first request and kept: building it costs more than the rest of the app.
   let document: OpenApiDocument | undefined;

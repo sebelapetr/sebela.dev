@@ -103,7 +103,16 @@ const ApiEnvironmentSchema = z.object({
   // Present and empty switches notifications off; set, both are validated below.
   API_WEB_INVALIDATION_URL: z.string(),
   API_WEB_INVALIDATION_SECRET: z.string(),
+  // Absent or all empty switch the visitor chat off; any one set requires all, validated below.
+  API_CHAT_ALLOWED_ORIGINS: z.string().optional(),
+  API_CHAT_COOKIE_SECURE: z.string().optional(),
+  API_AI_SERVICE_URL: z.string().optional(),
+  API_AI_SERVICE_TOKEN: z.string().optional(),
+  API_AI_CONTROL_TOKEN: z.string().optional(),
 });
+
+/** The shortest accepted AI service and control token. */
+export const chatTokenMinLength = 32;
 
 /** A plain http or https address: no credentials, query or fragment that could carry a secret. */
 function isPlainWebAddress(value: string): boolean {
@@ -129,6 +138,54 @@ function invalidInvalidationSettings(url: string, secret: string): string[] {
   return names;
 }
 
+/** An exact web origin: http or https, a host and maybe a port, nothing else. */
+function isWebOrigin(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (url.protocol === "http:" || url.protocol === "https:") && url.origin === value;
+}
+
+type ChatEnvironment = Pick<
+  z.infer<typeof ApiEnvironmentSchema>,
+  | "API_CHAT_ALLOWED_ORIGINS"
+  | "API_CHAT_COOKIE_SECURE"
+  | "API_AI_SERVICE_URL"
+  | "API_AI_SERVICE_TOKEN"
+  | "API_AI_CONTROL_TOKEN"
+>;
+
+/**
+ * The chat settings, `null` when none of the origins, AI service or tokens is given, or the names of
+ * the variables that are missing or invalid. The cookie flag alone does not switch the chat on.
+ */
+function readChatSettings(settings: ChatEnvironment): ChatHttpConfig | null | string[] {
+  const originsText = settings.API_CHAT_ALLOWED_ORIGINS ?? "";
+  const secureText = settings.API_CHAT_COOKIE_SECURE ?? "";
+  const url = settings.API_AI_SERVICE_URL ?? "";
+  const token = settings.API_AI_SERVICE_TOKEN ?? "";
+  const controlToken = settings.API_AI_CONTROL_TOKEN ?? "";
+  if (originsText === "" && url === "" && token === "" && controlToken === "") return null;
+  const origins = originsText
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const names: string[] = [];
+  if (origins.length === 0 || !origins.every(isWebOrigin)) names.push("API_CHAT_ALLOWED_ORIGINS");
+  if (secureText !== "true" && secureText !== "false") names.push("API_CHAT_COOKIE_SECURE");
+  if (!isPlainWebAddress(url)) names.push("API_AI_SERVICE_URL");
+  if (token.length < chatTokenMinLength) names.push("API_AI_SERVICE_TOKEN");
+  if (controlToken.length < chatTokenMinLength || controlToken === token) {
+    names.push("API_AI_CONTROL_TOKEN");
+  }
+  if (names.length > 0) return names;
+  return {
+    allowedOrigins: origins,
+    cookieSecure: secureText === "true",
+    aiService: { url, token },
+    controlToken,
+  };
+}
+
 /** Names the variables to fix; their values are never included. */
 const configurationError = (names: readonly string[]) =>
   new Error(`Invalid API configuration: set ${names.join(", ")} (documented in .env.example)`);
@@ -148,7 +205,9 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
   const url = settings.API_WEB_INVALIDATION_URL;
   const secret = settings.API_WEB_INVALIDATION_SECRET;
   const invalid = invalidInvalidationSettings(url, secret);
-  if (invalid.length > 0) throw configurationError(invalid);
+  const chat = readChatSettings(settings);
+  const problems = [...invalid, ...(Array.isArray(chat) ? chat : [])];
+  if (problems.length > 0) throw configurationError(problems);
   return {
     host: settings.API_HOST,
     port: settings.API_PORT,
@@ -164,6 +223,6 @@ export function readApiConfig(env: Readonly<Record<string, string | undefined>>)
       maxTrackedCallers: settings.API_RATE_LIMIT_MAX_TRACKED,
     },
     websiteInvalidation: url === "" ? null : { url, secret },
-    chat: null,
+    chat: Array.isArray(chat) ? null : chat,
   };
 }

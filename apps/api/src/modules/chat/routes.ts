@@ -1,0 +1,392 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
+import type { Context, Hono, MiddlewareHandler } from "hono";
+import { every } from "hono/combine";
+import { getCookie } from "hono/cookie";
+import { z } from "zod";
+
+import {
+  ChatConversationQuerySchema,
+  ChatConversationSchema,
+  ChatGenerationResultSchema,
+  ChatGrantClaimedSchema,
+  ChatGrantClaimSchema,
+  ChatMessageSubmissionSchema,
+  ChatOperationSchema,
+  type ChatGrantClaim,
+  type ChatMessageSubmission,
+} from "@sebela/contracts";
+import type { ChatCaller, ChatDispatch, ChatService } from "@sebela/services";
+
+import type { ApiConfig, ChatHttpConfig } from "../../config.js";
+import { refuseCredentialsInUrl } from "../../middleware/authentication.js";
+import { clientAddress, type ApiEnv } from "../../middleware/context.js";
+import { ApiError } from "../../middleware/errors.js";
+import { jsonBody } from "../../middleware/json-body.js";
+import type { RateLimits } from "../../middleware/limits.js";
+import { pathParams } from "../../middleware/path-params.js";
+import type { RouteDocumentation } from "../../routing.js";
+import { chatEventStream, defaultChatTiming, lastEventIdOf, type ChatTiming } from "./stream.js";
+
+/** The first-party cookie that carries the visitor's opaque chat identity. */
+export const chatCookieName = "sebela_chat";
+
+/** Hands an admitted question to the AI service; never waits for the generation. */
+export interface ChatDispatcher {
+  dispatch(dispatch: ChatDispatch): void;
+}
+
+export interface ChatRouteOptions {
+  readonly chat: ChatService;
+  readonly config: ApiConfig;
+  readonly limits: RateLimits;
+  /** `null` only when the chat is off. */
+  readonly dispatcher: ChatDispatcher | null;
+  /** Milliseconds since the epoch, for the stream's deadline and `Retry-After`. */
+  readonly now: () => number;
+  readonly timing?: Partial<ChatTiming>;
+}
+
+const OperationParamsSchema = z.object({ operationId: z.uuid() });
+const StreamHeadersSchema = z.object({
+  "last-event-id": z.string().optional().meta({
+    description: "The last chat event ID the client received; later events follow.",
+  }),
+});
+const cookie = {
+  name: chatCookieName,
+  description:
+    "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+};
+
+const visitorRoutes = {
+  conversation: {
+    operationId: "getChatConversation",
+    method: "GET",
+    path: "/v1/chat/conversation",
+    access: "public",
+    summary: "Read the visitor's chat conversation",
+    description:
+      "The caller's one conversation, newest messages first in pages, with its active operation. " +
+      "The caller is the chat cookie; a request without one gets a new identity. Never cached.",
+    query: ChatConversationQuerySchema,
+    cookie,
+    response: { status: 200, description: "The conversation.", schema: ChatConversationSchema },
+    errors: [],
+    refusals: { 503: "`unavailable`: the chat is off or its database cannot be reached." },
+  },
+  ask: {
+    operationId: "askChat",
+    method: "POST",
+    path: "/v1/chat/conversation/messages",
+    access: "public",
+    summary: "Ask the chat a question",
+    description:
+      "The one public write: the caller asks one question of their own conversation behind the " +
+      "bot challenge, the per-visitor quotas and the global spend budget. The request is sent by " +
+      "the website's server from an allowed origin. Admission returns at once; the answer is " +
+      "generated detached from the request and read from the operation's events.",
+    sameOrigin: true,
+    cookie,
+    body: ChatMessageSubmissionSchema,
+    response: {
+      status: 202,
+      description: "The question is admitted.",
+      also: { status: 200, description: "The same request again: its existing operation." },
+      schema: ChatOperationSchema,
+    },
+    errors: [],
+    refusals: {
+      403:
+        "`forbidden`: the request has no allowed origin or is not JSON; " +
+        "`chat_challenge_failed`: the bot challenge failed.",
+      409:
+        "`chat_request_conflict`: the request ID was used for another question; " +
+        "`chat_busy`: the conversation already has a question in progress.",
+      429: "`chat_quota_exceeded`: the visitor's question quota is spent.",
+      503:
+        "`chat_budget_exhausted`: the chat's spend budget is spent; " +
+        "`unavailable`: the chat is off or its database cannot be reached.",
+    },
+  },
+  operation: {
+    operationId: "getChatOperation",
+    method: "GET",
+    path: "/v1/chat/operations/:operationId",
+    access: "public",
+    summary: "Read a chat operation",
+    description: "One of the caller's operations and its status. Never cached.",
+    params: OperationParamsSchema,
+    cookie,
+    response: { status: 200, description: "The operation.", schema: ChatOperationSchema },
+    errors: ["not_found"],
+    refusals: { 503: "`unavailable`: the chat is off or its database cannot be reached." },
+  },
+  events: {
+    operationId: "streamChatOperation",
+    method: "GET",
+    path: "/v1/chat/operations/:operationId/events",
+    access: "public",
+    summary: "Stream a chat operation's events",
+    description:
+      "Server-sent events of one of the caller's operations. Each `chat` event carries a " +
+      "`ChatStreamEvent` with its event ID; a reconnect with `Last-Event-ID` continues after it " +
+      "with the same IDs. While the operation runs, a `progress` event without an ID carries a " +
+      "`ChatProgress` at least every five seconds. The stream ends at the terminal event, or after " +
+      "the deadline and a short grace with a retryable `timeout` error.",
+    params: OperationParamsSchema,
+    headers: StreamHeadersSchema,
+    cookie,
+    response: {
+      status: 200,
+      description: "The event stream.",
+      mediaType: "text/event-stream",
+    },
+    errors: ["not_found"],
+    refusals: { 503: "`unavailable`: the chat is off or its database cannot be reached." },
+  },
+} satisfies Record<string, RouteDocumentation>;
+
+const controlRoutes = {
+  claim: {
+    operationId: "claimChatGrant",
+    method: "POST",
+    path: "/v1/internal/chat/grants/claim",
+    access: "private",
+    authorization: "control",
+    summary: "Claim a chat generation grant",
+    description:
+      "Internal: the AI service claims an operation's one-use grant before it spends anything, " +
+      "and learns what the generation is bound to.",
+    body: ChatGrantClaimSchema,
+    response: { status: 200, description: "The grant is claimed.", schema: ChatGrantClaimedSchema },
+    errors: [],
+    refusals: {
+      403: "`forbidden`: the grant is not the operation's.",
+      409: "`conflict`: the grant was claimed already, or the operation is over.",
+    },
+  },
+  result: {
+    operationId: "reportChatResult",
+    method: "POST",
+    path: "/v1/internal/chat/operations/:operationId/result",
+    access: "private",
+    authorization: "control",
+    summary: "Report a chat generation result",
+    description:
+      "Internal: the AI service reports the one result of a claimed operation. A result that " +
+      "fails the contract is stored as an internal failure, never as an answer; a repeat changes " +
+      "nothing and answers the stored operation.",
+    params: OperationParamsSchema,
+    body: ChatGenerationResultSchema,
+    response: {
+      status: 200,
+      description: "The operation as reconciled.",
+      schema: ChatOperationSchema,
+    },
+    errors: [],
+    refusals: {
+      403: "`forbidden`: the grant is not the operation's.",
+      409: "`conflict`: the operation's grant has not been claimed.",
+    },
+  },
+} satisfies Record<string, RouteDocumentation>;
+
+/** The documentation of every chat route, in registration order. */
+export function chatRouteDocumentation(): RouteDocumentation[] {
+  return [...Object.values(visitorRoutes), ...Object.values(controlRoutes)];
+}
+
+const digest = (value: string) => createHash("sha256").update(value).digest();
+const BEARER = /^Bearer +(\S+)$/i;
+const isJson = (c: Context) =>
+  c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() === "application/json";
+
+const validationFailed = (message: string, issues: readonly z.core.$ZodIssue[]) =>
+  new ApiError(
+    400,
+    "validation_failed",
+    message,
+    issues.map((issue) => ({ path: issue.path.map(String).join("."), message: issue.message })),
+  );
+
+/**
+ * Registers the visitor and control routes on `app`. Visitor routes answer `unavailable` while the
+ * chat is off; every visitor answer is `no-store`, and carries a new cookie when one was issued.
+ * Control routes accept only the control token, compared in constant time.
+ */
+export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions): void {
+  const { chat, config, limits, now } = options;
+  const http: ChatHttpConfig | null = config.chat;
+  const timing: ChatTiming = { ...defaultChatTiming, ...options.timing };
+  const dispatcher = options.dispatcher;
+  if (http !== null && dispatcher === null) {
+    throw new Error("The chat is configured without a dispatcher.");
+  }
+  const controlDigest = http === null ? null : digest(http.controlToken);
+
+  const available: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    c.header("Cache-Control", "no-store");
+    if (http === null) {
+      throw new ApiError(503, "unavailable", "The chat is not available.");
+    }
+    await next();
+  };
+
+  const sameOrigin: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    const origin = c.req.header("origin");
+    if (origin === undefined || !http?.allowedOrigins.includes(origin) || !isJson(c)) {
+      throw new ApiError(403, "forbidden", "Ask from the website.");
+    }
+    await next();
+  };
+
+  const visitor = (route: RouteDocumentation): MiddlewareHandler<ApiEnv> =>
+    every(
+      limits.perClient("public"),
+      refuseCredentialsInUrl,
+      available,
+      ...(route.sameOrigin ? [sameOrigin] : []),
+      ...(route.body ? jsonBody(route.body, config.bodyLimitBytes) : []),
+      ...(route.params ? [pathParams(route.params)] : []),
+    );
+
+  /** Resolves the caller from the cookie; a new identity's cookie is set on every answer. */
+  const open = async (
+    c: Context<ApiEnv>,
+  ): Promise<{ caller: ChatCaller; setCookie: string | null }> => {
+    const opened = await chat.open(getCookie(c, chatCookieName) ?? null);
+    if (opened.cookie === null) return { caller: opened.caller, setCookie: null };
+    // Built by hand: Hono refuses a Max-Age over 400 days, and the retention may be longer.
+    const maxAge = String(chat.retentionDays * 86_400);
+    const secure = http?.cookieSecure === true ? "; Secure" : "";
+    const setCookie = `${chatCookieName}=${opened.cookie}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`;
+    c.header("Set-Cookie", setCookie);
+    return { caller: opened.caller, setCookie };
+  };
+  const callerOf = async (c: Context<ApiEnv>) => (await open(c)).caller;
+
+  const operationIdOf = (c: Context<ApiEnv>) =>
+    (c.get("params") as z.infer<typeof OperationParamsSchema>).operationId;
+
+  app.get(visitorRoutes.conversation.path, visitor(visitorRoutes.conversation), async (c) => {
+    const query = ChatConversationQuerySchema.safeParse(c.req.query());
+    if (!query.success) {
+      throw validationFailed("Some query parameters are invalid.", query.error.issues);
+    }
+    const caller = await callerOf(c);
+    return c.json(await chat.conversation(caller, query.data), 200);
+  });
+
+  app.post(visitorRoutes.ask.path, visitor(visitorRoutes.ask), async (c) => {
+    const caller = await callerOf(c);
+    const submission = c.get("body") as ChatMessageSubmission;
+    const address = clientAddress(c.env, c.req.header("x-forwarded-for"), config.trustedProxies);
+    const result = await chat.submit(caller, submission, { clientAddress: address });
+    switch (result.status) {
+      case "admitted":
+        dispatcher?.dispatch(result.dispatch);
+        return c.json(result.operation, 202);
+      case "existing":
+        return c.json(result.operation, 200);
+      case "conflict":
+        throw new ApiError(
+          409,
+          "chat_request_conflict",
+          "This request ID was used for another question.",
+        );
+      case "busy":
+        throw new ApiError(409, "chat_busy", "A question is already in progress.");
+      case "challenge_failed":
+        throw new ApiError(403, "chat_challenge_failed", "The bot challenge failed.");
+      case "quota_exceeded": {
+        const seconds = Math.max(1, Math.ceil((result.retryAt.getTime() - now()) / 1000));
+        throw new ApiError(
+          429,
+          "chat_quota_exceeded",
+          "Too many questions; retry later.",
+          undefined,
+          { "Retry-After": String(seconds) },
+        );
+      }
+      case "budget_exhausted":
+        throw new ApiError(503, "chat_budget_exhausted", "The chat cannot answer more today.");
+    }
+  });
+
+  app.get(visitorRoutes.operation.path, visitor(visitorRoutes.operation), async (c) => {
+    const caller = await callerOf(c);
+    const operation = await chat.operation(caller, operationIdOf(c));
+    if (operation === null) throw new ApiError(404, "not_found", "There is no such operation.");
+    return c.json(operation, 200);
+  });
+
+  app.get(visitorRoutes.events.path, visitor(visitorRoutes.events), async (c) => {
+    const { caller, setCookie } = await open(c);
+    const first = await chat.observe(caller, operationIdOf(c));
+    if (first === null) throw new ApiError(404, "not_found", "There is no such operation.");
+    return chatEventStream({
+      chat,
+      caller,
+      first,
+      lastEventId: lastEventIdOf(c.req.header("last-event-id")),
+      now,
+      timing,
+      headers: setCookie === null ? {} : { "set-cookie": setCookie },
+    });
+  });
+
+  const controlToken: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    const presented = BEARER.exec(c.req.header("authorization") ?? "")?.[1];
+    if (
+      controlDigest === null ||
+      presented === undefined ||
+      !timingSafeEqual(digest(presented), controlDigest)
+    ) {
+      throw new ApiError(401, "unauthorized", "A valid control token is required.", undefined, {
+        "WWW-Authenticate": "Bearer",
+      });
+    }
+    await next();
+  };
+
+  const control = (route: RouteDocumentation, body: z.ZodType): MiddlewareHandler<ApiEnv> =>
+    every(
+      limits.perClient("private"),
+      refuseCredentialsInUrl,
+      controlToken,
+      ...(route.params ? [pathParams(route.params)] : []),
+      ...jsonBody(body, config.bodyLimitBytes),
+    );
+
+  app.post(
+    controlRoutes.claim.path,
+    control(controlRoutes.claim, ChatGrantClaimSchema),
+    async (c) => {
+      const outcome = await chat.claim(c.get("body") as ChatGrantClaim);
+      switch (outcome.status) {
+        case "claimed":
+          return c.json(outcome.claimed, 200);
+        case "refused":
+          throw new ApiError(409, "conflict", "The grant cannot be claimed.");
+        case "wrong_grant":
+          throw new ApiError(403, "forbidden", "The grant is not the operation's.");
+      }
+    },
+  );
+
+  app.post(controlRoutes.result.path, control(controlRoutes.result, z.unknown()), async (c) => {
+    const outcome = await chat.reconcile(operationIdOf(c), c.get("body"));
+    switch (outcome.status) {
+      case "reconciled":
+      case "already":
+        return c.json(outcome.operation, 200);
+      case "wrong_grant":
+        throw new ApiError(403, "forbidden", "The grant is not the operation's.");
+      case "not_claimed":
+        throw new ApiError(409, "conflict", "The operation's grant has not been claimed.");
+      case "invalid":
+        throw new ApiError(400, "validation_failed", "The result names no grant.");
+    }
+  });
+}

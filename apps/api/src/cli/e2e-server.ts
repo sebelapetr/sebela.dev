@@ -20,6 +20,7 @@ import { serve } from "@hono/node-server";
 
 import {
   openServices,
+  readChatOptions,
   readDatabaseConfig,
   readMediaConfig,
   readRetrievalOptions,
@@ -28,6 +29,7 @@ import { createTemporaryDatabase } from "@sebela/services/testing";
 
 import { createApp, type Logger } from "../app.js";
 import { readApiConfig } from "../config.js";
+import { createChatSupervisor } from "../modules/chat/index.js";
 import { createIndexingQueue } from "../modules/indexing/index.js";
 import { createWebsiteInvalidation } from "../modules/invalidation/index.js";
 import { logCleanupFailure } from "../modules/media/index.js";
@@ -62,6 +64,11 @@ async function main() {
   };
 
   const retrieval = readRetrievalOptions(process.env);
+  // The visitor chat runs only with both its HTTP and its service settings; half of them is an error.
+  const chatOptions = readChatOptions(process.env);
+  if ((config.chat === null) !== (chatOptions === null)) {
+    throw new Error("Set every visitor chat setting, or none of them.");
+  }
   let services: ReturnType<typeof openServices>;
   try {
     services = openServices(database.config, {
@@ -77,6 +84,7 @@ async function main() {
         onCleanupFailure: logCleanupFailure(log),
       },
       retrieval,
+      ...(chatOptions === null ? {} : { chat: chatOptions }),
     });
     await services.seed.loadSeed(seedFolder);
     const keyFile = process.env["API_E2E_KEY_FILE"];
@@ -115,23 +123,29 @@ async function main() {
   const invalidation = config.websiteInvalidation
     ? createWebsiteInvalidation({ ...config.websiteInvalidation, log })
     : null;
+  // Dispatches admitted chat questions to the AI service and interrupts overdue ones.
+  const chat = config.chat
+    ? createChatSupervisor({ chat: services.chat, aiService: config.chat.aiService, log })
+    : null;
   const { app } = createApp({
     services,
     config,
     log,
+    ...(chat === null ? {} : { chatDispatcher: chat }),
     onWrite: [indexing?.notify, invalidation?.notify].filter((notify) => notify !== undefined),
   });
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
     log(`e2e API listening on http://${host}:${String(info.port)}`);
   });
   indexing?.start();
+  chat?.start();
 
   let stopping = false;
   const stop = () => {
     if (stopping) return;
     stopping = true;
     server.close(() => {
-      Promise.all([indexing?.close(), invalidation?.close()])
+      Promise.all([indexing?.close(), invalidation?.close(), chat?.close()])
         .then(() => services.close())
         .then(cleanUp)
         .then(
