@@ -211,6 +211,13 @@
       "when": 1795360560816,
       "tag": "0029_usage_limits_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795389210969,
+      "tag": "0030_chat_compaction",
+      "breakpoints": true
     }
   ]
 }

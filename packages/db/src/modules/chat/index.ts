@@ -15,6 +15,8 @@ import {
   type SQL,
 } from "drizzle-orm";
 
+import { alias } from "drizzle-orm/pg-core";
+
 import type { Database } from "../../database.js";
 import {
   admissions,
@@ -728,7 +730,7 @@ async function recordAdmission(
 
 /**
  * The attempts of an identity's request or with this attempt key, latest first: a later attempt's
- * answer always comes after an earlier one's.
+ * answer always comes after an earlier one's. A compaction is the only attempt of its request.
  */
 async function attemptsOf(
   tx: Transaction | Database,
@@ -738,9 +740,10 @@ async function attemptsOf(
   const rows = await tx
     .select({ operation: operations })
     .from(operations)
-    .innerJoin(messages, eq(messages.id, operations.assistantMessageId))
+    .leftJoin(messages, eq(messages.id, operations.assistantMessageId))
     .where(and(eq(operations.identityId, identityId), where))
-    .orderBy(desc(messages.position));
+    // A compaction has no answer and no other attempt; it comes after any answer.
+    .orderBy(sql`${messages.position} DESC NULLS LAST`, desc(operations.admittedAt));
   return rows.map((row) => row.operation);
 }
 
@@ -750,7 +753,7 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     conversationId: row.conversationId,
     requestId: row.requestId,
     questionHash: row.questionHash,
-    kind: "answer",
+    kind: row.kind as ChatOperationKind,
     userMessageId: row.userMessageId,
     assistantMessageId: row.assistantMessageId,
     status: row.status as ChatOperationState,
@@ -762,7 +765,70 @@ function operationOf(row: OperationRow): ChatOperationRecord {
     allowanceMicroUsd: row.allowanceMicroUsd,
     contextRevision: row.contextRevision,
     retryOf: row.retryOf,
-    compaction: null,
+    compaction:
+      row.kind === "compaction" && row.resultOutcome !== null
+        ? { outcome: row.resultOutcome as ChatCompactionOutcome, reason: row.resultReason }
+        : null,
+  };
+}
+
+/**
+ * The working context of a conversation within a transaction: the installed summary and at most
+ * `limit` of the latest completed answered exchanges after it that the AI service accepts (a
+ * language it speaks, a question and an answer), oldest first, each with its answer's position.
+ */
+async function contextWithin(
+  tx: Transaction | Database,
+  conversationId: string,
+  limit: number,
+): Promise<ChatWorkingContextRecord & { positions: number[] }> {
+  const [conversation] = await tx
+    .select({
+      revision: conversations.revision,
+      summary: conversations.summary,
+      through: conversations.summaryThroughPosition,
+    })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId));
+  if (conversation === undefined)
+    return { revision: 0, summary: null, exchanges: [], positions: [] };
+  const asked = alias(messages, "asked");
+  const rows = await tx
+    .select({
+      position: messages.position,
+      question: asked.text,
+      answer: messages.text,
+      language: messages.language,
+      sources: messages.sources,
+    })
+    .from(operations)
+    .innerJoin(messages, eq(messages.id, operations.assistantMessageId))
+    .innerJoin(asked, eq(asked.id, operations.userMessageId))
+    .where(
+      and(
+        eq(operations.conversationId, conversationId),
+        eq(operations.kind, "answer"),
+        eq(messages.status, "completed"),
+        eq(messages.outcome, "answered"),
+        inArray(messages.language, ["en", "cs"]),
+        sql`${asked.text} <> ''`,
+        sql`${messages.text} <> ''`,
+        conversation.through === null ? undefined : gt(messages.position, conversation.through),
+      ),
+    )
+    .orderBy(desc(messages.position))
+    .limit(limit);
+  const exchanges = rows.reverse();
+  return {
+    revision: conversation.revision,
+    summary: conversation.summary ?? null,
+    exchanges: exchanges.map((row) => ({
+      question: row.question ?? "",
+      answer: row.answer ?? "",
+      language: row.language,
+      sources: row.sources,
+    })),
+    positions: exchanges.map((row) => row.position),
   };
 }
 
@@ -881,7 +947,7 @@ async function settleReservations(tx: Transaction, operationId: string, costMicr
   }
 }
 
-/** Ends an active operation and its pending answer with an error and no text. */
+/** Ends an active operation and its pending answer, if any, with an error and no text. */
 async function endWithError(
   tx: Transaction,
   row: OperationRow,
@@ -894,6 +960,8 @@ async function endWithError(
     .update(operations)
     .set({ status, finishedAt: at, costUncertain })
     .where(eq(operations.id, row.id));
+  // A compaction has no answer to end.
+  if (row.assistantMessageId === null) return;
   await tx
     .update(messages)
     .set({ status, errorCode: error.code, errorRetryable: error.retryable })
@@ -1119,6 +1187,15 @@ export function createChatPersistence(db: Database): ChatPersistence {
         ),
       );
     if (target === undefined) return { status: "not_found" };
+    // A compaction is never retried; a new one is a new request.
+    if (
+      target.kind !== "answer" ||
+      target.assistantMessageId === null ||
+      target.userMessageId === null
+    ) {
+      return { status: "not_retryable" };
+    }
+    const { assistantMessageId, userMessageId } = target;
     const [latest] = await attemptsOf(
       tx,
       input.identityId,
@@ -1130,7 +1207,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
     const [answer] = await tx
       .select({ errorRetryable: messages.errorRetryable })
       .from(messages)
-      .where(eq(messages.id, target.assistantMessageId));
+      .where(eq(messages.id, assistantMessageId));
     const [lastQuestion] = await tx
       .select({ id: messages.id })
       .from(messages)
@@ -1141,7 +1218,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
       latest?.id !== target.id ||
       !retryable.has(target.status) ||
       answer?.errorRetryable !== true ||
-      lastQuestion?.id !== target.userMessageId
+      lastQuestion?.id !== userMessageId
     ) {
       return { status: "not_retryable" };
     }
@@ -1156,7 +1233,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
     const [question] = await tx
       .select({ text: messages.text })
       .from(messages)
-      .where(eq(messages.id, target.userMessageId));
+      .where(eq(messages.id, userMessageId));
     if (question?.text == null) throw new Error("The retried question has no text.");
     const [pending] = await tx
       .insert(messages)
@@ -1172,7 +1249,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
     await tx
       .update(messages)
       .set({ supersededAt: input.at })
-      .where(eq(messages.id, target.assistantMessageId));
+      .where(eq(messages.id, assistantMessageId));
     const [operation] = await tx
       .insert(operations)
       .values({
@@ -1182,7 +1259,7 @@ export function createChatPersistence(db: Database): ChatPersistence {
         attemptKey: input.retryId,
         retryOf: target.id,
         questionHash: target.questionHash,
-        userMessageId: target.userMessageId,
+        userMessageId,
         assistantMessageId: pending.id,
         status: "accepted",
         admittedAt: input.at,
@@ -1197,6 +1274,84 @@ export function createChatPersistence(db: Database): ChatPersistence {
     if (operation === undefined) throw new Error("No operation was stored.");
     await recordAdmission(tx, input, operation.id, windows);
     return { status: "admitted", operation: operationOf(operation), question: question.text };
+  };
+
+  const admitCompactionWithin = async (
+    tx: Transaction,
+    input: ChatCompactionAdmissionInput,
+  ): Promise<ChatCompactionAdmissionResult> => {
+    // Serialise with every admission of this identity on its row.
+    const [identity] = await tx
+      .select({ id: identities.id })
+      .from(identities)
+      .where(eq(identities.id, input.identityId))
+      .for("update");
+    const [conversation] = await tx
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, input.conversationId),
+          eq(conversations.identityId, input.identityId),
+        ),
+      );
+    if (identity === undefined || conversation === undefined) {
+      throw new Error("The chat identity or its conversation does not exist.");
+    }
+
+    const [previous] = await attemptsOf(
+      tx,
+      input.identityId,
+      or(eq(operations.requestId, input.requestId), eq(operations.attemptKey, input.requestId)),
+    );
+    if (previous !== undefined) {
+      return {
+        status: "duplicate",
+        operation: operationOf(previous),
+        sameQuestion:
+          previous.requestId === input.requestId && previous.questionHash === input.questionHash,
+      };
+    }
+    const [busy] = await tx
+      .select()
+      .from(operations)
+      .where(and(eq(operations.identityId, input.identityId), inArray(operations.status, active)));
+    if (busy !== undefined) return { status: "busy", operation: operationOf(busy) };
+
+    // Read under the identity lock, so no answer can change the context before it is bound.
+    const { revision, summary, exchanges } = await contextWithin(
+      tx,
+      input.conversationId,
+      input.exchangeLimit,
+    );
+    const context = { revision, summary, exchanges };
+    if (context.exchanges.length < input.minimumExchanges) return { status: "nothing_to_compact" };
+
+    const windows = await passGates(tx, input);
+    const [operation] = await tx
+      .insert(operations)
+      .values({
+        identityId: input.identityId,
+        conversationId: input.conversationId,
+        requestId: input.requestId,
+        attemptKey: input.requestId,
+        questionHash: input.questionHash,
+        kind: "compaction",
+        userMessageId: null,
+        assistantMessageId: null,
+        status: "accepted",
+        admittedAt: input.at,
+        deadlineAt: input.deadlineAt,
+        model: input.model,
+        effort: input.effort,
+        pricingVersion: input.pricingVersion,
+        allowanceMicroUsd: input.allowanceMicroUsd,
+        contextRevision: context.revision,
+      })
+      .returning();
+    if (operation === undefined) throw new Error("No operation was stored.");
+    await recordAdmission(tx, input, operation.id, windows);
+    return { status: "admitted", operation: operationOf(operation), context };
   };
 
   /** Runs a transaction that may end with a shared gate refusal. */
@@ -1277,12 +1432,12 @@ export function createChatPersistence(db: Database): ChatPersistence {
       const [row] = await db
         .select({ operation: operations, assistant: messages })
         .from(operations)
-        .innerJoin(messages, eq(messages.id, operations.assistantMessageId))
+        .leftJoin(messages, eq(messages.id, operations.assistantMessageId))
         .where(and(eq(operations.id, operationId), eq(operations.identityId, identityId)));
       if (row === undefined) return null;
       return {
         operation: operationOf(row.operation),
-        assistant: messageOf(row.assistant, row.operation),
+        assistant: row.assistant === null ? null : messageOf(row.assistant, row.operation),
       };
     },
 
@@ -1308,16 +1463,124 @@ export function createChatPersistence(db: Database): ChatPersistence {
       return row === undefined ? null : operationOf(row);
     },
 
-    workingContext() {
-      return Promise.reject(new Error("Not implemented."));
+    async workingContext(conversationId, limit) {
+      return db.transaction(
+        async (tx) => {
+          const { revision, summary, exchanges } = await contextWithin(tx, conversationId, limit);
+          return { revision, summary, exchanges };
+        },
+        { isolationLevel: "repeatable read", accessMode: "read only" },
+      );
     },
 
-    admitCompaction() {
-      return Promise.reject(new Error("Not implemented."));
+    async admitCompaction(input) {
+      await pruneExpired(input.at);
+      return refusable((tx) => admitCompactionWithin(tx, input));
     },
 
-    reconcileCompaction() {
-      return Promise.reject(new Error("Not implemented."));
+    async reconcileCompaction(operationId, verifier, at, result) {
+      return db.transaction(async (tx): Promise<ChatReconcileResult> => {
+        const locked = await lockWithGrant(tx, operationId, verifier);
+        if (locked === null) {
+          // A cleared conversation's compaction: nothing is installed, only a measured cost settles.
+          const [tombstone] = await tx
+            .select()
+            .from(operationTombstones)
+            .where(eq(operationTombstones.operationId, operationId))
+            .for("update");
+          if (tombstone?.verifier !== verifier) return { status: "wrong_grant" };
+          if (result.costMicroUsd !== null) {
+            await settleReservations(tx, operationId, result.costMicroUsd);
+          }
+          return { status: "deleted" };
+        }
+        const { row, grant } = locked;
+        if (row.kind !== "compaction") return { status: "wrong_grant" };
+        const usage = {
+          costMicroUsd: result.costMicroUsd,
+          costUncertain: result.costMicroUsd === null,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          modelAttempts: result.modelAttempts,
+          latencyMs: result.latencyMs,
+          versions: result.versions,
+        };
+        if (terminal.has(row.status)) {
+          // A stopped or interrupted compaction that reports late settles its measured cost once
+          // and installs nothing.
+          if (
+            unreported.has(row.status) &&
+            grant.claimedAt !== null &&
+            row.costMicroUsd === null &&
+            result.costMicroUsd !== null
+          ) {
+            await tx
+              .update(operations)
+              .set({ ...usage, costUncertain: false })
+              .where(eq(operations.id, operationId));
+            await settleReservations(tx, operationId, result.costMicroUsd);
+          }
+          return { status: "already", operation: operationOf(row) };
+        }
+        if (grant.claimedAt === null) return { status: "not_claimed" };
+
+        const [conversation] = await tx
+          .select({ revision: conversations.revision })
+          .from(conversations)
+          .where(eq(conversations.id, row.conversationId))
+          .for("update");
+        const installs =
+          result.outcome === "compacted" && conversation?.revision === row.contextRevision;
+        if (installs) {
+          // The summary replaces every compacted exchange but the `kept` newest.
+          const context = await contextWithin(tx, row.conversationId, result.exchangeLimit);
+          const folded = context.positions.length - Math.min(result.kept, context.positions.length);
+          const through = folded > 0 ? context.positions[folded - 1] : undefined;
+          await tx
+            .update(conversations)
+            .set({
+              summary: result.summary,
+              ...(through === undefined ? {} : { summaryThroughPosition: through }),
+              revision: sql`${conversations.revision} + 1`,
+              lastActivityAt: at,
+            })
+            .where(eq(conversations.id, row.conversationId));
+        } else {
+          await tx
+            .update(conversations)
+            .set({ lastActivityAt: at })
+            .where(eq(conversations.id, row.conversationId));
+        }
+        // A compacted result that came too late for its revision changed nothing.
+        const stored = installs
+          ? { outcome: "compacted", reason: null }
+          : result.outcome === "compacted"
+            ? { outcome: "unchanged", reason: "stale" }
+            : { outcome: result.outcome, reason: result.reason };
+        const status = result.outcome === "failed" ? "failed" : "completed";
+        const [finished] = await tx
+          .update(operations)
+          .set({
+            status,
+            finishedAt: at,
+            resultOutcome: stored.outcome,
+            resultReason: stored.reason,
+            ...usage,
+            compactionKept: installs ? result.kept : null,
+            compactionSummaryTokens: installs ? result.summaryTokens : null,
+            compactionNextInputTokens: installs ? result.nextInputTokens : null,
+          })
+          .where(eq(operations.id, operationId))
+          .returning();
+        if (finished === undefined) throw new Error("The reconciled compaction disappeared.");
+        if (result.costMicroUsd === null) await retainReservations(tx, operationId);
+        else await settleReservations(tx, operationId, result.costMicroUsd);
+        // A failure before any model call did no work, so it does not count against the quotas.
+        if (status === "failed" && result.modelAttempts === 0 && result.costMicroUsd === 0) {
+          await releaseAdmission(tx, operationId);
+        }
+        return { status: "reconciled", operation: operationOf(finished) };
+      });
     },
 
     async admit(input) {
@@ -1428,6 +1691,10 @@ export function createChatPersistence(db: Database): ChatPersistence {
           return { status: "deleted" };
         }
         const { row, grant } = locked;
+        // An answer's result never completes a compaction.
+        if (row.kind !== "answer" || row.assistantMessageId === null) {
+          return { status: "wrong_grant" };
+        }
         if (terminal.has(row.status)) {
           // A stopped or interrupted generation that reports late settles its measured cost once.
           if (
@@ -1785,18 +2052,48 @@ export function createChatPersistence(db: Database): ChatPersistence {
               and(
                 eq(operations.identityId, input.identityId),
                 eq(operations.conversationId, input.conversationId),
+                eq(operations.kind, "answer"),
                 isNotNull(operations.contextEstimatedInputTokens),
                 isNotNull(operations.finishedAt),
               ),
             )
             .orderBy(desc(operations.finishedAt))
             .limit(1);
+          // An installed compaction's estimate stands until a later answer measures its context.
+          const [compacted] = await tx
+            .select({
+              id: operations.id,
+              finishedAt: operations.finishedAt,
+              historyTokens: operations.compactionNextInputTokens,
+            })
+            .from(operations)
+            .where(
+              and(
+                eq(operations.identityId, input.identityId),
+                eq(operations.conversationId, input.conversationId),
+                eq(operations.kind, "compaction"),
+                isNotNull(operations.compactionNextInputTokens),
+                isNotNull(operations.finishedAt),
+              ),
+            )
+            .orderBy(desc(operations.finishedAt))
+            .limit(1);
+          const estimate =
+            compacted?.finishedAt != null &&
+            compacted.historyTokens !== null &&
+            (measured?.finishedAt == null || compacted.finishedAt > measured.finishedAt)
+              ? {
+                  operationId: compacted.id,
+                  measuredAt: compacted.finishedAt,
+                  historyTokens: compacted.historyTokens,
+                }
+              : null;
           return {
             quotas,
             spendRoom,
             activeOperation: running === undefined ? null : operationOf(running),
             context: contextOf(measured),
-            nextRequest: null,
+            nextRequest: estimate,
           };
         },
         { isolationLevel: "repeatable read", accessMode: "read only" },
