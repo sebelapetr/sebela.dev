@@ -360,6 +360,19 @@ class Visitor:
         self._remember(response)
         return response
 
+    def send(self, method: str, path: str, body: object | None = None) -> httpx2.Response:
+        """A same-origin write of the visitor's own (Stop, retry, clear)."""
+        self.client.cookies.clear()
+        response = self.client.request(
+            method, f"{self.api_url}{path}", headers=self._headers(Origin=ORIGIN), json=body
+        )
+        self._remember(response)
+        return response
+
+    def tab(self) -> Visitor:
+        """Another tab of the same browser: the same cookie, its own connection."""
+        return Visitor(self.api_url, cookie=self.cookie)
+
     def get(self, path: str) -> httpx2.Response:
         self.client.cookies.clear()
         response = self.client.get(f"{self.api_url}{path}", headers=self._headers())
@@ -515,6 +528,128 @@ def test_an_answer_survives_a_disconnect_and_is_generated_once(stack: Stack) -> 
     assert stranger.get(f"/v1/chat/operations/{operation_id}").status_code == 404
     assert stranger.get(f"/v1/chat/operations/{operation_id}/events").status_code == 404
     assert stranger.conversation()["messages"] == []
+
+
+def stages(stack: Stack, before: int) -> list[str]:
+    return [call["stage"] for call in stack.calls()[before:]]
+
+
+def test_two_tabs_share_one_generation_and_no_one_else_sees_it(stack: Stack) -> None:
+    """C02: two tabs observe one active operation; neither queues another; a stranger sees none."""
+    stack.gate_file.unlink(missing_ok=True)
+    before = len(stack.calls())
+    first = Visitor(stack.api_url)
+    admitted = first.ask("Which projects has Ilsa Marrow built?")
+    assert admitted.status_code == 202, admitted.text
+    operation_id = admitted.json()["operationId"]
+    second = first.tab()
+    assert len(wait_for_calls(stack, before + 1)) == before + 1
+
+    seen = [tab.conversation() for tab in (first, second)]
+    assert seen[0]["conversationId"] == seen[1]["conversationId"]
+    assert [view["activeOperation"]["operationId"] for view in seen] == [operation_id] * 2
+
+    # Neither tab can queue another generation behind the active one.
+    for tab in (second, first):
+        busy = tab.ask("And which services does she offer?")
+        assert busy.status_code == 409, busy.text
+        assert busy.json()["error"]["code"] == "chat_busy"
+
+    # A stranger can neither read, stop, retry nor clear any of it.
+    stranger = Visitor(stack.api_url)
+    for path in (
+        f"/v1/chat/operations/{operation_id}",
+        f"/v1/chat/operations/{operation_id}/events",
+    ):
+        assert stranger.get(path).status_code == 404
+    assert stranger.send("POST", f"/v1/chat/operations/{operation_id}/stop").status_code == 404
+    retry = {"retryId": str(uuid.uuid4()), "challengeToken": f"pass-{secrets.token_hex(8)}"}
+    retried = stranger.send("POST", f"/v1/chat/operations/{operation_id}/retry", retry)
+    assert retried.status_code == 404
+    cleared = stranger.send(
+        "DELETE", "/v1/chat/conversation", {"conversationId": seen[0]["conversationId"]}
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["cleared"] is False
+    assert cleared.json()["conversation"]["messages"] == []
+    assert cleared.json()["conversation"]["conversationId"] != seen[0]["conversationId"]
+
+    # Both tabs observe the same canonical events of the one generation.
+    stack.gate_file.touch()
+    events = [chat_events(tab.events(operation_id)) for tab in (first, second)]
+    assert events[0] == events[1]
+    assert events[0][-1] == {**events[0][-1], "type": "complete", "outcome": "answered"}
+    assert_only_approved_output(events[0])
+    settle()
+    assert stages(stack, before) == ["security", "main", "main"]
+    assert first.conversation()["messages"] == second.conversation()["messages"]
+    assert first.conversation()["activeOperation"] is None
+
+
+def test_a_stop_from_another_tab_ends_the_generation_and_a_retry_answers(stack: Stack) -> None:
+    stack.gate_file.unlink(missing_ok=True)
+    before = len(stack.calls())
+    first = Visitor(stack.api_url)
+    admitted = first.ask("What does Ilsa Marrow work on now?")
+    assert admitted.status_code == 202, admitted.text
+    operation_id = admitted.json()["operationId"]
+    assert len(wait_for_calls(stack, before + 1)) == before + 1
+
+    stopped = first.tab().send("POST", f"/v1/chat/operations/{operation_id}/stop")
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["status"] == "cancelled"
+    events = chat_events(first.events(operation_id))
+    assert events[-1] == {**events[-1], "type": "error", "code": "cancelled", "retryable": True}
+
+    # The AI service stopped too: opening the gate starts no Main call for the stopped question.
+    stack.gate_file.touch()
+    settle()
+    assert stages(stack, before) == ["security"]
+    again = first.send("POST", f"/v1/chat/operations/{operation_id}/stop")
+    assert again.status_code == 200
+    assert again.json()["status"] == "cancelled"
+
+    retry = {"retryId": str(uuid.uuid4()), "challengeToken": f"pass-{secrets.token_hex(8)}"}
+    retried = first.send("POST", f"/v1/chat/operations/{operation_id}/retry", retry)
+    assert retried.status_code == 202, retried.text
+    retry_id = retried.json()["operationId"]
+    assert retry_id != operation_id
+    answer = chat_events(first.events(retry_id))
+    assert answer[-1] == {**answer[-1], "type": "complete", "outcome": "answered"}
+    settle()
+    assert stages(stack, before) == ["security", "security", "main", "main"]
+    finished = first.send("POST", f"/v1/chat/operations/{retry_id}/stop")
+    assert finished.status_code == 200
+    assert finished.json()["status"] == "completed"
+    settle()
+    assert len(stack.calls()) == before + 4
+
+
+def test_clearing_stops_the_active_generation_and_starts_empty(stack: Stack) -> None:
+    stack.gate_file.unlink(missing_ok=True)
+    before = len(stack.calls())
+    first = Visitor(stack.api_url)
+    admitted = first.ask("Which services does Ilsa Marrow offer?")
+    assert admitted.status_code == 202, admitted.text
+    operation_id = admitted.json()["operationId"]
+    assert len(wait_for_calls(stack, before + 1)) == before + 1
+    conversation_id = first.conversation()["conversationId"]
+
+    cleared = first.tab().send(
+        "DELETE", "/v1/chat/conversation", {"conversationId": conversation_id}
+    )
+    assert cleared.status_code == 200, cleared.text
+    body = cleared.json()
+    assert body["cleared"] is True
+    assert body["conversation"]["messages"] == []
+    assert body["conversation"]["activeOperation"] is None
+    assert body["conversation"]["conversationId"] != conversation_id
+
+    stack.gate_file.touch()
+    settle()
+    assert stages(stack, before) == ["security"]
+    assert first.get(f"/v1/chat/operations/{operation_id}").status_code == 404
+    assert first.conversation()["messages"] == []
 
 
 def test_a_failed_challenge_dispatches_nothing(stack: Stack) -> None:
