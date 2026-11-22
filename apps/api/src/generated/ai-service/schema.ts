@@ -282,6 +282,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/capabilities/technologies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the published technology catalogue: each technology's name, its tier (primary or secondary) and, for a primary technology, its group (core or AI engineering focus). */
+        get: operations["list_technologies_v1_capabilities_technologies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -344,7 +361,7 @@ export interface components {
              * Capability
              * @enum {string}
              */
-            capability: "get_profile" | "get_contact" | "list_experiences" | "list_projects" | "get_project" | "list_services" | "list_explorations" | "list_education" | "list_current_focus" | "get_roadmap" | "get_roadmap_area" | "get_learning_diary" | "get_learning_statistics" | "list_books" | "list_events";
+            capability: "get_profile" | "list_experiences" | "list_projects" | "get_project" | "list_services" | "list_explorations" | "list_education" | "list_current_focus" | "get_roadmap" | "get_roadmap_area" | "get_learning_diary" | "get_learning_statistics" | "list_books" | "list_events" | "list_technologies";
             /** Page */
             page: number;
             /** Pagecount */
@@ -361,7 +378,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "profile" | "contact" | "experience" | "project" | "exploration" | "service" | "education" | "current_focus" | "roadmap" | "roadmap_area" | "roadmap_module" | "diary_day" | "statistics" | "book" | "event";
+            kind: "profile" | "contact" | "experience" | "project" | "exploration" | "service" | "education" | "current_focus" | "roadmap" | "roadmap_area" | "roadmap_module" | "diary_day" | "statistics" | "book" | "event" | "technology";
             /** Id */
             id: string;
             /** Title */
@@ -1338,6 +1355,65 @@ export interface operations {
         };
     };
     list_events_v1_capabilities_events_get: {
+        parameters: {
+            query?: {
+                /** @description The page to read; `pageCount` in the answer says how many there are. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description The named record is not published */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown or invalid arguments or page */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many reads; retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy, or the content is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_technologies_v1_capabilities_technologies_get: {
         parameters: {
             query?: {
                 /** @description The page to read; `pageCount` in the answer says how many there are. */

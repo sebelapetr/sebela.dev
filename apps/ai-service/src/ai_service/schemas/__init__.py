@@ -13,7 +13,7 @@ import datetime
 import uuid
 from typing import Annotated, Any, Literal
 
-from llm_agent import SourceKind, ToolName
+from llm_agent import CapabilityName, RecordKind
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 from pydantic.alias_generators import to_camel
 
@@ -111,7 +111,7 @@ MAX_CAPABILITY_PAGE = 30
 class CapabilityRecord(_Body):
     """One projected record, exactly as the in-process tool gives it to the model."""
 
-    kind: SourceKind
+    kind: RecordKind
     id: Annotated[str, StringConstraints(min_length=1, max_length=200)]
     title: Annotated[str, StringConstraints(max_length=500)]
     href: Annotated[str, StringConstraints(pattern=SITE_PATH_PATTERN, max_length=500)]
@@ -121,7 +121,7 @@ class CapabilityRecord(_Body):
 class CapabilityPage(_Body):
     """One page of a read capability; `page_count` pages hold every record, in order."""
 
-    capability: ToolName
+    capability: CapabilityName
     page: Annotated[int, Field(ge=1, le=MAX_CAPABILITY_PAGE)]
     page_count: Annotated[int, Field(ge=1, le=MAX_CAPABILITY_PAGE)]
     records: list[CapabilityRecord]

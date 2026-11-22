@@ -35,6 +35,7 @@ def test_the_document_describes_the_routes_and_the_bearer() -> None:
         "/v1/capabilities/learning-statistics",
         "/v1/capabilities/books",
         "/v1/capabilities/events",
+        "/v1/capabilities/technologies",
         "/health",
         "/ready",
     }

@@ -1,12 +1,13 @@
 """The bounded read capabilities: one page of a read tool, as the in-process agent projects it.
 
 `ReadCapabilities.read(name, arguments, page)` returns the `llm_agent.read_tool` page for one of
-`READ_CAPABILITIES` (every read tool but the contact read). It hides the bounds every read caller
-shares: at most `rate` reads per sliding `window_s` (`RateLimited`, with the seconds until the
-next slot), at most `concurrency` parallel reads (`Busy`; it never queues) and `timeout_s` for one
-read (`Unavailable`). The name and the arguments are validated before any API read
-(`NotAvailable`, `InvalidArguments`); a missing record is `NotFound`; an unreadable or oversized
-result is `Unavailable`, never truncated. It reads public content only and holds no bearer.
+`READ_CAPABILITIES` (every read tool but the contact read, and the technology catalogue). It
+hides the bounds every read caller shares: at most `rate` reads per sliding `window_s`
+(`RateLimited`, with the seconds until the next slot), at most `concurrency` parallel reads
+(`Busy`; it never queues) and `timeout_s` for one read (`Unavailable`). The name and the arguments
+are validated before any API read (`NotAvailable`, `InvalidArguments`); a missing record is
+`NotFound`; an unreadable or oversized result is `Unavailable`, never truncated. It reads
+public content only and holds no bearer.
 """
 
 from __future__ import annotations

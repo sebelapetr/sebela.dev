@@ -1,8 +1,10 @@
-"""The fixed read capabilities: one literal `GET /v1/capabilities/<route>` per read tool.
+"""The fixed read capabilities: one literal `GET /v1/capabilities/<route>` per read capability.
 
-No bearer; public content only. The table below is the whole surface: a path outside it is 404 and
-no route takes a body, a URL, a file or a path to forward. Each route's query parameters are the
-tool's own arguments (its generated input schema) and `page`; an unknown or repeated parameter is
+The capabilities are every read tool but the contact read, plus the technology catalogue, which no
+model tool reads. No bearer; public content only. The table below is the whole surface: a path
+outside it is 404 and no route takes a body, a URL, a file or a path to forward. Each route's query
+parameters are the capability's own arguments (its generated input schema; none for the
+technologies) and `page`; an unknown or repeated parameter is
 refused before any read. Errors are `Problem` codes: 404 `not_found`, 422 `invalid_arguments`,
 429 `rate_limited` (with `Retry-After`), 503 `busy` or `unavailable`.
 """
@@ -15,7 +17,7 @@ from typing import Any, Final
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from llm_agent import READ_CAPABILITIES, TOOL_SPECS, ToolName, ToolPage
+from llm_agent import READ_CAPABILITIES, READ_CAPABILITY_SPECS, CapabilityName, ToolPage
 
 from ai_service.routes import problem, services
 from ai_service.runtime.capabilities import (
@@ -28,8 +30,8 @@ from ai_service.runtime.capabilities import (
 )
 from ai_service.schemas import MAX_CAPABILITY_PAGE, CapabilityPage, CapabilityRecord, Problem
 
-#: Every capability route, by the read tool it serves.
-ROUTES: Final[dict[ToolName, str]] = {
+#: Every capability route, by the read capability it serves.
+ROUTES: Final[dict[CapabilityName, str]] = {
     "get_profile": "profile",
     "list_experiences": "experiences",
     "list_projects": "projects",
@@ -44,17 +46,18 @@ ROUTES: Final[dict[ToolName, str]] = {
     "get_learning_statistics": "learning-statistics",
     "list_books": "books",
     "list_events": "events",
+    "list_technologies": "technologies",
 }
-if set(ROUTES) != set(READ_CAPABILITIES):
+if len(ROUTES) != len(READ_CAPABILITIES) or set(ROUTES) != set(READ_CAPABILITIES):
     raise RuntimeError("every read capability needs exactly one route")
 
 _PAGE: Final = re.compile(r"^[1-9][0-9]{0,2}$")
-_SPECS: Final[dict[str, dict[str, Any]]] = {spec["name"]: spec for spec in TOOL_SPECS}
+_SPECS: Final[dict[str, dict[str, Any]]] = {spec["name"]: spec for spec in READ_CAPABILITY_SPECS}
 
 router = APIRouter()
 
 
-def _parameters(name: ToolName) -> list[dict[str, Any]]:
+def _parameters(name: CapabilityName) -> list[dict[str, Any]]:
     schema = _SPECS[name]["input_schema"]
     required = set(schema.get("required", []))
     page = {
@@ -94,7 +97,7 @@ def _body(page: ToolPage) -> CapabilityPage:
     )
 
 
-def _route(name: ToolName) -> Callable[[Request], Awaitable[CapabilityPage | JSONResponse]]:
+def _route(name: CapabilityName) -> Callable[[Request], Awaitable[CapabilityPage | JSONResponse]]:
     async def capability(request: Request) -> CapabilityPage | JSONResponse:
         items = request.query_params.multi_items()
         query = dict(items)

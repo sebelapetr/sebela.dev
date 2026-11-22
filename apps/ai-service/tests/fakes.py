@@ -2,8 +2,8 @@
 
 No test calls a provider or a real API. The fake API answers the public person and technology
 reads and the two control routes over an httpx2 `MockTransport`; it records every claim and every
-reported result. It is shared between two service instances to simulate a restart. Its bodies have the API
-document's shapes (`ChatGrantClaimed`, `ChatOperation`, `ErrorResponse`).
+reported result. It is shared between two service instances to simulate a restart. Its bodies have
+the API document's shapes (`ChatGrantClaimed`, `ChatOperation`, `ErrorResponse`).
 """
 
 from __future__ import annotations

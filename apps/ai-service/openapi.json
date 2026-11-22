@@ -1154,6 +1154,78 @@
         ]
       }
     },
+    "/v1/capabilities/technologies": {
+      "get": {
+        "summary": "Read the published technology catalogue: each technology's name, its tier (primary or secondary) and, for a primary technology, its group (core or AI engineering focus).",
+        "operationId": "list_technologies_v1_capabilities_technologies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The named record is not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown or invalid arguments or page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reads; retry after `Retry-After`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy, or the content is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 1
+            },
+            "description": "The page to read; `pageCount` in the answer says how many there are."
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -1224,7 +1296,6 @@
             "type": "string",
             "enum": [
               "get_profile",
-              "get_contact",
               "list_experiences",
               "list_projects",
               "get_project",
@@ -1237,7 +1308,8 @@
               "get_learning_diary",
               "get_learning_statistics",
               "list_books",
-              "list_events"
+              "list_events",
+              "list_technologies"
             ],
             "title": "Capability"
           },
@@ -1291,7 +1363,8 @@
               "diary_day",
               "statistics",
               "book",
-              "event"
+              "event",
+              "technology"
             ],
             "title": "Kind"
           },
