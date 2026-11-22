@@ -9,7 +9,8 @@ import { freePort, origin, required, startApi, startWebsite, type Started } from
 
 const websiteId = "0b6e1d6c-4f3a-4c8e-9d2b-7a5f3e1c2b4a";
 const question = "Which fictional planet has the calmest weather?";
-const conversationAddress = /\/ask\?c=([0-9a-f-]{36})$/u;
+/** A hand-off address as the hero gives it; the Ask page resolves the visitor's own conversation. */
+const handOffId = "3f2c9a4e-8b1d-4e6f-a7c5-2d9b0e1f4a6c";
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
 
@@ -76,9 +77,8 @@ function urls(stub: AnalyticsStub): string[] {
 
 /**
  * Walks the site as a visitor does: client navigation across the normal pages and to Ask, a
- * question there (which gives the address a conversation identifier), the theme toggle, then full
- * page loads of a conversation's address and of an address with a query and a fragment. Returns
- * the conversation's identifier.
+ * question there, the theme toggle, then full page loads of a hand-off address and of an address
+ * with a query and a fragment. Returns the hand-off's identifier.
  */
 async function walk(page: Page, url: string): Promise<string> {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -96,9 +96,8 @@ async function walk(page: Page, url: string): Promise<string> {
   }
   await composer(page).fill(question);
   await composer(page).press("Enter");
-  await expect(page).toHaveURL(conversationAddress);
   await expect(page.getByRole("list", { name: "Conversation" })).toContainText(question);
-  const conversation = conversationAddress.exec(page.url())?.[1] ?? "";
+  await expect(page).toHaveURL(`${url}/ask`);
 
   const before = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
   await themeToggle(page).click();
@@ -108,11 +107,11 @@ async function walk(page: Page, url: string): Promise<string> {
 
   await header(page).getByRole("link", { name: "Contact", exact: true }).click();
   await expect(page).toHaveURL(`${url}/#contact`);
-  await page.goto(`${url}/ask?c=${conversation}`);
+  await page.goto(`${url}/ask?c=${handOffId}`);
   await hydrated(page);
   await page.goto(`${url}/services?utm_source=newsletter#consulting`);
   await hydrated(page);
-  return conversation;
+  return handOffId;
 }
 
 test.describe("analytics through the stand-in", () => {

@@ -18,8 +18,9 @@ import { handOff } from "../hooks/use-conversation";
  * The hero's way into the chat: one input line with its submit and a row of suggested questions
  * below it (two on mobile, three from `sm`). A question, typed or suggested, is handed off under a
  * random address to the Ask page, which asks it once in the visitor's conversation; the question
- * is carried there in this tab, never in the address. Sends once however often it is pressed. A suggestion's short label is its accessible
- * name; the full question it sends is its visually hidden description.
+ * is carried there in this tab, never in the address. Sends once however often it is pressed. A
+ * suggestion's short label is its accessible name; the full question it sends is its visually
+ * hidden description.
  */
 export function HeroChatEntry({ name }: { readonly name: string }) {
   const router = useRouter();

@@ -3,15 +3,17 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { required } from "../stack";
 
-// The hero's question to the mock Ask page, against the website container of the complete stack
-// with the fictional demo seed (playwright.complete-stack.config.ts). Answers are the prepared ones
-// of the chat module; nothing here calls a model.
+// The hero's question to the Ask page, against the website container of the complete stack with
+// the fictional demo seed (playwright.complete-stack.config.ts). The stack runs without the AI
+// service and without a person check, as production does until the chat goes live: the question is
+// handed off and shown, and its turn ends with a note instead of an answer. Nothing here calls a
+// model or Cloudflare; the real chat path is tested in e2e/chat.spec.ts.
 
 const name = required("WEB_STACK_PERSON_NAME");
 const question = "Which fictional planet has the calmest weather?";
-const notConnected = "The assistant is not connected yet, so I can't answer that question.";
-const conversationAddress =
-  /\/ask\?c=[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+/** The notes a turn may end with while the chat is not live: no person check, or no chat. */
+const notAnswered =
+  /We could not confirm that a person sent this question\.|The assistant is unavailable right now\./u;
 
 const widths = [360, 768, 1280] as const;
 const schemes = ["light", "dark"] as const;
@@ -42,7 +44,7 @@ const heroInput = (page: Page) =>
 
 for (const scheme of schemes) {
   for (const width of widths) {
-    test(`asks from the hero and reads the mock answer at ${String(width)} px in ${scheme} mode`, async ({
+    test(`asks from the hero and is told it is not answered at ${String(width)} px in ${scheme} mode`, async ({
       page,
     }, testInfo) => {
       await page.emulateMedia({ colorScheme: scheme });
@@ -62,12 +64,13 @@ for (const scheme of schemes) {
       await page.keyboard.type(question);
       await page.keyboard.press("Enter");
 
-      await expect(page).toHaveURL(conversationAddress);
-      expect(page.url()).not.toContain("planet");
+      // The hand-off address is replaced by the Ask page's own once the question is taken.
+      await expect(page).toHaveURL(/\/ask$/u);
       await expect(turns(page)).toHaveCount(1);
       await expect(turns(page).first()).toContainText(question);
       await expect(turns(page).last().locator("[aria-busy='false']")).toHaveCount(1);
-      await expect(turns(page).first()).toContainText(notConnected);
+      await expect(turns(page).first().getByText("Not answered", { exact: true })).toBeVisible();
+      await expect(turns(page).first()).toContainText(notAnswered);
       await expectUsable(page);
       // The Ask page keeps its composer in view: a viewport screenshot, not a full page.
       await page.screenshot({ path: testInfo.outputPath(`ask-${String(width)}-${scheme}.png`) });

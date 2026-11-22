@@ -1,7 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { serveChatStack } from "./chat-stack";
 import { startApi, startWebsite, type Fixture, type Started } from "./stack";
+import { queueTokens } from "./turnstile-fake";
 
 // The phase's handoff checks (issue #61): every page with the longest fictional content of
 // e2e/fixtures/with-long-content/ at every width and in both themes, and the visitors' journeys
@@ -13,6 +15,10 @@ const schemes = ["light", "dark"] as const;
 
 const longName = "Maximiliana Featherstonehaugh-Cholmondeley von Wolkenstein-Trostburg";
 const name = "Casey Morrow";
+
+/** The chat stack's fictional person and the fictional model's answer about them. */
+const chatName = "Ilsa Marrow";
+const chatAnswer = "Ilsa Marrow is a fictional engineer who builds evaluated assistants.";
 
 /** Serves the fixture to the tests of one block, so the public rate limit counts only theirs. */
 function serveFixture(fixture: Fixture): { readonly url: () => string } {
@@ -296,32 +302,31 @@ test.describe("an evaluator", () => {
 });
 
 test.describe("a visitor asking", () => {
-  const site = serveFixture("with-experience");
+  // The real chat path with the fictional model and the chat's own fictional profile.
+  const stack = serveChatStack();
 
-  test("asks from the hero, follows a source and recovers from a failed answer", async ({
+  test("asks from the hero, recovers from a failed person check and follows a source", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto(site.url());
+    await page.goto(stack().url);
     await hydrated(page);
     await page
       .getByRole("list", { name: "Suggested questions" })
       .getByRole("button", { name: "AI role fit?" })
       .click();
-    await expect(page).toHaveURL(/\/ask\?c=/u);
+    await expect(page).toHaveURL(/\/ask$/u);
     await answered(page);
-    const sources = turns(page).last().getByRole("list", { name: "Sources", exact: true });
-    await expect(sources.getByRole("link")).toHaveCount(5);
+    await expect(turns(page).last()).toContainText(chatAnswer);
 
-    // A failed answer is labelled and offered again; the retry answers in place.
-    await page.evaluate(() => {
-      window.__sebelaMockChatScenarios = ["error-after-start"];
-    });
+    // A question the person check does not confirm is labelled and offered again; the retry
+    // answers in place.
+    await queueTokens(page, ["fail-1"]);
     const composer = page.getByRole("textbox", { name: "Your question" });
-    await composer.fill(`What could ${name} automate for my company?`);
+    await composer.fill(`What could ${chatName} automate for my company?`);
     await composer.press("Enter");
     await answered(page);
-    await expect(turns(page).last().getByText("Incomplete", { exact: true })).toBeVisible();
+    await expect(turns(page).last().getByText("Not answered", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Try again" }).click();
     await answered(page);
     await expect(turns(page)).toHaveCount(2);
@@ -330,10 +335,9 @@ test.describe("a visitor asking", () => {
     await turns(page)
       .last()
       .getByRole("list", { name: "Sources", exact: true })
-      .getByRole("link", { name: "AI integration", exact: true })
+      .getByRole("link", { name: chatName, exact: true })
       .click();
-    await expect(page).toHaveURL(/\/services#service-ai-integration$/u);
-    await expect(item(page, "service-ai-integration")).toBeInViewport();
+    await expect(page).toHaveURL(new RegExp(`^${stack().url}/?$`, "u"));
   });
 });
 
