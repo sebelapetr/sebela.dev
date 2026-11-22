@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +24,7 @@ import {
   TRIVY,
   blockingFindings,
   evaluateGate,
+  installTrivy,
   parseExceptions,
   verifyArchive,
 } from "./image-scan.mjs";
@@ -189,15 +190,24 @@ describe("exceptions file", () => {
     assert.match(twice.problems.join("\n"), /twice/);
   });
 
-  it("the committed file is a valid list", () => {
-    const text = fs.readFileSync(
-      path.join(import.meta.dirname, "image-scan-exceptions.json"),
-      "utf8",
-    );
-    // Dates are checked by the gate when it runs, not here, so an expiring entry cannot turn
-    // unrelated pull requests red.
+  it("the committed file is valid: well formed and within 90 days of the commit that last changed it", () => {
+    const file = path.join(import.meta.dirname, "image-scan-exceptions.json");
+    const text = fs.readFileSync(file, "utf8");
+    // The reference day is the date of the file's last commit (today for an uncommitted file), not
+    // today's date, so a malformed entry or one too far ahead fails here, in CI, when it is added,
+    // and an entry that merely expires later does not turn unrelated pull requests red.
+    let reference = "";
+    try {
+      reference = execFileSync("git", ["log", "-1", "--format=%cs", "--", file], {
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      // not a Git checkout
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(reference)) reference = new Date().toISOString().slice(0, 10);
+    const { problems } = parseExceptions(text, { today: reference });
     assert.deepEqual(
-      parseExceptions(text, { today: "2000-01-01", horizonDays: 100000 }).problems,
+      problems.filter((problem) => !/has expired/.test(problem)),
       [],
     );
   });
@@ -327,6 +337,7 @@ function sandbox() {
       'const fs = require("node:fs");',
       "const args = process.argv.slice(2);",
       'fs.appendFileSync(process.env.FAKE_ARGS, args.join(" ") + "\\n");',
+      "if (process.env.FAKE_ENV) fs.writeFileSync(process.env.FAKE_ENV, JSON.stringify(process.env));",
       'fs.writeFileSync(args[args.indexOf("--output") + 1], process.env.FAKE_REPORT);',
     ].join("\n"),
     { mode: 0o755 },
@@ -512,5 +523,214 @@ describe("committed exceptions against the published images (2026-11-22)", () =>
     const verdict = evaluateGate({ reports, exceptionsText: text, today: "2027-01-22" });
     assert.equal(verdict.ok, false);
     assert.match(verdict.problems.join("\n"), /expired/);
+  });
+});
+
+describe("exceptions limited to a path", () => {
+  const NPM = "usr/local/lib/node_modules/npm/";
+  const finding = (path_) =>
+    vulnerability({
+      id: "CVE-2030-0001",
+      pkg: "undici",
+      severity: "HIGH",
+      fixed: "2",
+      path: path_,
+    });
+  const gate = (reports, ...entries) =>
+    evaluateGate({ reports, exceptionsText: exceptionsText(...entries), today: TODAY });
+
+  it("excuses a copy under the path and still blocks the same finding in an app copy", () => {
+    const bundled = report([finding(`${NPM}node_modules/undici/package.json`)]);
+    const shipped = report([finding("app/node_modules/undici/package.json")]);
+    const scoped = entry({ package: "undici", path: NPM });
+    assert.equal(gate({ api: bundled }, scoped).ok, true);
+    const verdict = gate({ api: shipped }, scoped);
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.blocking.length, 1);
+  });
+
+  it("does not match a sibling folder that merely starts with the same letters", () => {
+    const sibling = report([finding("usr/local/lib/node_modules/npm-evil/undici/package.json")]);
+    assert.equal(gate({ api: sibling }, entry({ path: NPM })).ok, false);
+  });
+
+  it("does not excuse a finding that has no path", () => {
+    const none = report([finding(undefined)]);
+    assert.equal(gate({ api: none }, entry({ path: NPM })).ok, false);
+  });
+
+  it("refuses a path that is empty, absolute or not a folder prefix", () => {
+    for (const bad of ["", "/usr/local/", "usr/local/lib/node_modules/npm", 7]) {
+      const { problems } = parseExceptions(exceptionsText(entry({ path: bad })), { today: TODAY });
+      assert.ok(problems.length >= 1, String(bad));
+    }
+  });
+
+  it("keeps entries that differ only in path apart", () => {
+    const { problems } = parseExceptions(
+      exceptionsText(entry({ path: NPM }), entry({ path: "opt/pnpm/" })),
+      { today: TODAY },
+    );
+    assert.deepEqual(problems, []);
+  });
+
+  it("the committed entries limit undici and brace-expansion to the bundled npm", () => {
+    const text = fs.readFileSync(
+      path.join(import.meta.dirname, "image-scan-exceptions.json"),
+      "utf8",
+    );
+    const { exceptions } = parseExceptions(text, { today: "2026-11-22" });
+    for (const item of exceptions.filter(({ package: name }) => name !== "zlib1g")) {
+      assert.equal(item.path, NPM, item.id);
+    }
+    const real = JSON.parse(
+      fs.readFileSync(
+        path.join(import.meta.dirname, "fixtures", "image-scan", "published-api.json"),
+      ),
+    );
+    const moved = structuredClone(real);
+    for (const result of moved.Results) {
+      for (const item of result.Vulnerabilities) {
+        if (item.PkgPath) item.PkgPath = item.PkgPath.replace(NPM, "app/");
+      }
+    }
+    const verdict = evaluateGate({
+      reports: { api: moved },
+      exceptionsText: text,
+      today: "2026-11-22",
+    });
+    assert.equal(verdict.blocking.length, 6, "the six npm findings block outside the bundled npm");
+  });
+});
+
+describe("unmatched exceptions", () => {
+  it("lists an exception that matched no finding, without failing the gate", () => {
+    const verdict = evaluateGate({
+      reports: { api: report([FIXABLE_HIGH]) },
+      exceptionsText: exceptionsText(entry(), entry({ id: "CVE-2030-4242" })),
+      today: TODAY,
+    });
+    assert.equal(verdict.ok, true);
+    assert.deepEqual(
+      verdict.unused.map(({ id }) => id),
+      ["CVE-2030-4242"],
+    );
+  });
+
+  it("the gate command logs it and still passes", () => {
+    const box = sandbox();
+    const file = path.join(box.dir, "exceptions.json");
+    const expires = new Date(Date.now() + 10 * 86400_000).toISOString().slice(0, 10);
+    fs.writeFileSync(file, exceptionsText(entry({ id: "CVE-2030-4242", expires })));
+    const result = run(
+      "gate",
+      {
+        SHA: "a".repeat(40),
+        BUILD: '["web"]',
+        EXCEPTIONS: file,
+        FAKE_REPORT: JSON.stringify(report(null)),
+      },
+      box,
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /unused exception.*CVE-2030-4242/i);
+  });
+});
+
+describe("Trivy's environment", () => {
+  it("has no GitHub OIDC token variables, so a scan cannot ask for a token", () => {
+    const box = sandbox();
+    const envLog = path.join(box.dir, "env.log");
+    const result = run(
+      "gate",
+      {
+        SHA: "a".repeat(40),
+        BUILD: '["web"]',
+        FAKE_REPORT: JSON.stringify(report(null)),
+        FAKE_ENV: envLog,
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: "secret-token",
+        ACTIONS_ID_TOKEN_REQUEST_URL: "https://example.invalid/token",
+        UNRELATED_SETTING: "kept",
+      },
+      box,
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const seen = JSON.parse(fs.readFileSync(envLog, "utf8"));
+    assert.equal(seen.ACTIONS_ID_TOKEN_REQUEST_TOKEN, undefined);
+    assert.equal(seen.ACTIONS_ID_TOKEN_REQUEST_URL, undefined);
+    assert.equal(seen.UNRELATED_SETTING, "kept");
+  });
+
+  it("is the same for the weekly report", () => {
+    const box = sandbox();
+    const envLog = path.join(box.dir, "env.log");
+    const result = run(
+      "report",
+      {
+        OUT_DIR: path.join(box.dir, "sarif"),
+        FAKE_REPORT: "{}",
+        FAKE_ENV: envLog,
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: "secret-token",
+      },
+      box,
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      JSON.parse(fs.readFileSync(envLog, "utf8")).ACTIONS_ID_TOKEN_REQUEST_TOKEN,
+      undefined,
+    );
+  });
+});
+
+describe("install", () => {
+  // A real, tiny archive holding an executable `trivy`, and the checksum a pin would hold.
+  function archive() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "image-scan-archive-"));
+    fs.writeFileSync(path.join(dir, "trivy"), "#!/bin/sh\n", { mode: 0o755 });
+    execFileSync("tar", ["-czf", path.join(dir, "a.tar.gz"), "-C", dir, "trivy"]);
+    const bytes = fs.readFileSync(path.join(dir, "a.tar.gz"));
+    return { bytes, sha256: createHash("sha256").update(bytes).digest("hex") };
+  }
+  const serving = (bytes) => async () => new Response(bytes, { status: 200 });
+
+  it("unpacks an archive whose checksum is the pinned one", async () => {
+    const { bytes, sha256 } = archive();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "image-scan-install-"));
+    const binary = await installTrivy({
+      dir,
+      pin: { url: "https://example.invalid/t.tgz", sha256 },
+      fetchFn: serving(bytes),
+    });
+    assert.equal(binary, path.join(dir, "trivy"));
+    assert.ok(fs.existsSync(binary));
+  });
+
+  it("refuses an archive that is not the pinned one and unpacks nothing", async () => {
+    const { bytes } = archive();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "image-scan-install-"));
+    await assert.rejects(
+      installTrivy({
+        dir,
+        pin: { url: "https://example.invalid/t.tgz", sha256: "0".repeat(64) },
+        fetchFn: serving(bytes),
+      }),
+      /checksum/i,
+    );
+    assert.deepEqual(fs.readdirSync(dir), []);
+  });
+
+  it("the command downloads the pinned URL", async () => {
+    let asked;
+    const { bytes, sha256 } = archive();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "image-scan-install-"));
+    await installTrivy({
+      dir,
+      pin: { ...TRIVY, sha256 },
+      fetchFn: async (url) => {
+        asked = url;
+        return new Response(bytes);
+      },
+    });
+    assert.equal(asked, TRIVY.url);
   });
 });
