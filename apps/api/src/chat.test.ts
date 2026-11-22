@@ -901,6 +901,85 @@ describe("the visitor chat over HTTP", () => {
         data: { type: "error", code: "timeout", retryable: true },
       });
     });
+
+    it("recovers from the API's loss at every stage after a restart, never redispatching", async () => {
+      const start = clock.getTime();
+      // Lost before dispatch: admitted, never handed to the AI service.
+      const lostBeforeDispatch = await visitor();
+      await ask(lostBeforeDispatch.cookie, "Lost before dispatch?");
+      const undispatched = lastDispatch();
+      // Lost after the claim, while the provider answers.
+      const lostAfterClaim = await visitor();
+      await ask(lostAfterClaim.cookie, "Lost after the claim?");
+      const claimed = lastDispatch();
+      const claim = { operationId: claimed.operationId, grant: claimed.grant };
+      expect((await control(CLAIM, claim)).status).toBe(200);
+      // Lost before the result was stored: admitted later, so still within its deadline.
+      clock = new Date(start + 50_000);
+      const lostBeforeResult = await visitor();
+      await ask(lostBeforeResult.cookie, "Lost before the result?");
+      const answering = lastDispatch();
+      const answeringClaim = { operationId: answering.operationId, grant: answering.grant };
+      expect((await control(CLAIM, answeringClaim)).status).toBe(200);
+
+      // The restart: a new process sweeps the durable deadlines once at start.
+      clock = new Date(start + 60_000 + GRACE_MS + 1);
+      api = chatApi();
+      const calls: string[] = [];
+      const supervisor = createChatSupervisor({
+        chat: backend.services.chat,
+        aiService: chatHttp.aiService,
+        log: () => undefined,
+        graceMs: GRACE_MS,
+        watchIntervalMs: 60_000,
+        fetch: (input) => {
+          calls.push(input instanceof Request ? input.url : input.toString());
+          return Promise.resolve(new Response(null, { status: 202 }));
+        },
+      });
+      supervisor.start();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await supervisor.close();
+      expect(calls).toEqual([]);
+
+      for (const [{ cookie }, operationId] of [
+        [lostBeforeDispatch, undispatched.operationId],
+        [lostAfterClaim, claimed.operationId],
+      ] as const) {
+        const operation = await request(operationPath(operationId), { headers: { cookie } });
+        expect(await operation.json()).toMatchObject({ status: "interrupted" });
+        const conversation = (await (
+          await request(CONVERSATION, { headers: { cookie } })
+        ).json()) as { activeOperation: unknown; messages: { error?: unknown }[] };
+        expect(conversation.activeOperation).toBeNull();
+        expect(conversation.messages.at(-1)?.error).toEqual({ code: "timeout", retryable: true });
+      }
+      // One-use grants stay used after the restart, and an interrupted grant cannot start work.
+      const undispatchedClaim = {
+        operationId: undispatched.operationId,
+        grant: undispatched.grant,
+      };
+      expect((await control(CLAIM, undispatchedClaim)).status).toBe(409);
+      expect((await control(CLAIM, claim)).status).toBe(409);
+      expect((await control(CLAIM, answeringClaim)).status).toBe(409);
+      // A late result of the interrupted generation changes nothing.
+      const late = await control(resultPath(claimed.operationId), answerFor(claimed.grant));
+      expect(late.status).toBe(200);
+      expect(await late.json()).toMatchObject({ status: "interrupted" });
+
+      // The AI service repeats the result the lost API never stored: stored once, then replayed.
+      const stored = await control(resultPath(answering.operationId), answerFor(answering.grant));
+      expect(stored.status).toBe(200);
+      const storedBody: unknown = await stored.json();
+      expect(storedBody).toMatchObject({ status: "completed" });
+      const repeated = await control(resultPath(answering.operationId), answerFor(answering.grant));
+      expect(await repeated.json()).toEqual(storedBody);
+      expect(dispatcher.dispatched.map((dispatch) => dispatch.operationId)).toEqual([
+        undispatched.operationId,
+        claimed.operationId,
+        answering.operationId,
+      ]);
+    });
   });
 
   describe("the conversation lifecycle", () => {
@@ -1270,6 +1349,66 @@ describe("the visitor chat over HTTP", () => {
       expect(
         await (await request(operationPath(asked.operationId), { headers: { cookie } })).json(),
       ).toMatchObject({ status: "accepted" });
+    });
+
+    it("gives the AI service's credentials no private route and no visitor conversation", async () => {
+      const { cookie, conversationId } = await visitor();
+      const asked = (await (await ask(cookie)).json()) as { operationId: string };
+      const control = new Set([CLAIM, "/v1/internal/chat/operations/:operationId/result"]);
+      const credentials = [CONTROL_TOKEN, AI_TOKEN, RELAY_TOKEN];
+      const privateRoutes = api.routes.filter(
+        (route) => route.access === "private" && !control.has(route.path),
+      );
+      // Content writes, keys, the audit, originals and every other private route.
+      expect(privateRoutes.length).toBeGreaterThan(60);
+      for (const route of privateRoutes) {
+        const path = route.path
+          .replace(":id", randomUUID())
+          .replace(":date", "2001-01-01")
+          .replace(/:([A-Za-z]+)(\{[^}]*\})?/g, "missing-record");
+        for (const token of credentials) {
+          const init =
+            route.method === "GET" ? { headers: bearer(token) } : json({}, bearer(token));
+          const refused = await request(path, { method: route.method, ...init }, api, CLIENT, null);
+          expect(refused.status, `${route.method} ${route.path}`).toBe(401);
+        }
+      }
+      // A service credential without the relay token reads and changes no conversation.
+      for (const token of credentials.slice(0, 2)) {
+        const headers = { cookie, origin: ORIGIN, ...bearer(token) };
+        for (const path of [
+          CONVERSATION,
+          operationPath(asked.operationId),
+          eventsPath(asked.operationId),
+        ]) {
+          expect((await request(path, { headers }, api, CLIENT, null)).status).toBe(403);
+        }
+        const asking = await request(
+          MESSAGES,
+          {
+            method: "POST",
+            ...json({ requestId: randomUUID(), question: "Hi?", challengeToken: "t" }, headers),
+          },
+          api,
+          CLIENT,
+          null,
+        );
+        expect(asking.status).toBe(403);
+        const retrying = await request(
+          retryPath(asked.operationId),
+          { method: "POST", ...json({ retryId: randomUUID(), challengeToken: "t" }, headers) },
+          api,
+          CLIENT,
+          null,
+        );
+        expect(retrying.status).toBe(403);
+      }
+      expect(dispatcher.dispatched).toHaveLength(1);
+      const conversation = (await (
+        await request(CONVERSATION, { headers: { cookie } })
+      ).json()) as { conversationId: string; messages: unknown[] };
+      expect(conversation).toMatchObject({ conversationId });
+      expect(conversation.messages).toHaveLength(2);
     });
   });
 
