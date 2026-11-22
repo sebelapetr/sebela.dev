@@ -1,6 +1,7 @@
 // Starts the real chat path for the browser tests: the built website, the API's end-to-end server
 // with the visitor chat on, the AI service with its fictional model (no provider, no cost), and a
-// local stand-in for Cloudflare's Siteverify. The browser loads a stand-in of Turnstile's script
+// local stand-in for Cloudflare's Siteverify. The website relays with its token and trusts one
+// proxy hop, as in production, so a test names a visitor's address in `X-Forwarded-For`. The browser loads a stand-in of Turnstile's script
 // (`e2e/turnstile-fake.ts`). The same pattern as the AI service's C01 stack test
 // (`apps/ai-service/tests/integration/test_chat_stack.py`); nothing here carries a port or host.
 import { execFile } from "node:child_process";
@@ -57,6 +58,8 @@ export interface ChatStack {
   calls(): Promise<readonly ModelCall[]>;
   /** The person-check tokens the API redeemed so far, in order. */
   redeemed(): readonly string[];
+  /** The visitor address (`remoteip`) sent with each redeemed token, null for none, in order. */
+  remoteAddresses(): readonly (string | null)[];
   /** Lets `slow` generations go on, the waiting ones and every later one. */
   openGate(): Promise<void>;
   /** Makes later `slow` generations wait again, until the gate is opened. */
@@ -66,19 +69,22 @@ export interface ChatStack {
 
 /**
  * Siteverify for the website's host: a token starting `fail` is refused, any other passes for the
- * `chat` action. Records every token it is asked about.
+ * `chat` action. Records every token it is asked about and the visitor address sent with it.
  */
 async function startSiteverify(
   host: string,
   hostname: string,
-): Promise<Started & { readonly tokens: string[] }> {
+): Promise<Started & { readonly tokens: string[]; readonly addresses: (string | null)[] }> {
   const tokens: string[] = [];
+  const addresses: (string | null)[] = [];
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
-      const token = new URLSearchParams(Buffer.concat(chunks).toString()).get("response") ?? "";
+      const form = new URLSearchParams(Buffer.concat(chunks).toString());
+      const token = form.get("response") ?? "";
       tokens.push(token);
+      addresses.push(form.get("remoteip"));
       const answer = token.startsWith("fail")
         ? { success: false, "error-codes": ["invalid-input-response"] }
         : { success: true, hostname, action: "chat", challenge_ts: new Date().toISOString() };
@@ -93,6 +99,7 @@ async function startSiteverify(
   return {
     url: origin(host, address.port),
     tokens,
+    addresses,
     stop: async () => {
       server.closeAllConnections();
       server.close();
@@ -138,6 +145,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
   const gateFile = join(folder, "gate");
   const serviceToken = token();
   const controlToken = token();
+  const relayToken = token();
 
   const started: Started[] = [];
   const stop = async () => {
@@ -159,6 +167,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
           API_CHAT_RETENTION_DAYS: "",
           API_CHAT_MODEL: versions.model,
           API_CHAT_PRICING_VERSION: versions.pricing,
+          API_CHAT_RELAY_TOKEN: relayToken,
           // Not a Turnstile test secret, so the host name and action checks run as in production.
           API_TURNSTILE_SECRET_KEY: token(),
           API_TURNSTILE_EXPECTED_HOSTNAME: webHost,
@@ -198,7 +207,14 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
         "/health",
       ),
     );
-    started.push(await startWebsite(apiUrl, { port: webPort, chatSiteKey }));
+    started.push(
+      await startWebsite(apiUrl, {
+        port: webPort,
+        chatSiteKey,
+        chatRelayToken: relayToken,
+        trustedProxyHops: 1,
+      }),
+    );
     return {
       url: webUrl,
       apiUrl,
@@ -215,6 +231,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
           .map((line) => JSON.parse(line) as ModelCall);
       },
       redeemed: () => [...siteverify.tokens],
+      remoteAddresses: () => [...siteverify.addresses],
       openGate: () => writeFile(gateFile, "open"),
       closeGate: () => rm(gateFile, { force: true }),
       stop,
@@ -227,8 +244,8 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
 
 /**
  * Serves one chat stack to the tests of the enclosing block and the Turnstile stand-in to each
- * test's page. Every page of a test is one visitor; the block's tests share one address, whose
- * allowance (20 questions a minute) the block stays below.
+ * test's page. Every page of a test is one visitor; the block's tests name no address, so they
+ * share the unknown one, whose allowance (20 questions a minute) the block stays below.
  */
 export function serveChatStack(options: ChatStackOptions = {}): () => ChatStack {
   let stack: ChatStack | undefined;

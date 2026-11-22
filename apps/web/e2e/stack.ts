@@ -167,6 +167,7 @@ export const chatOff: Readonly<Record<string, string>> = {
   API_CHAT_RETENTION_DAYS: "",
   API_CHAT_MODEL: "",
   API_CHAT_PRICING_VERSION: "",
+  API_CHAT_RELAY_TOKEN: "",
   API_TURNSTILE_SECRET_KEY: "",
   API_TURNSTILE_EXPECTED_HOSTNAME: "",
   API_TURNSTILE_VERIFY_URL: "",
@@ -223,6 +224,13 @@ export interface WebsiteOptions {
   readonly indexing?: boolean;
   /** The public site key of the chat's person check (`WEB_TURNSTILE_SITE_KEY`); none by default. */
   readonly chatSiteKey?: string;
+  /** The chat relay's token (`WEB_CHAT_RELAY_TOKEN`), the API's `API_CHAT_RELAY_TOKEN`; none by default. */
+  readonly chatRelayToken?: string;
+  /**
+   * How many proxies in front of the website append to `X-Forwarded-For`
+   * (`WEB_TRUSTED_PROXY_HOPS`); none by default, so the relay names no visitor address.
+   */
+  readonly trustedProxyHops?: number;
 }
 
 /** Serves the built website, reading the API at `apiBaseUrl`. */
@@ -236,6 +244,8 @@ export async function startWebsite(
     analytics,
     indexing = true,
     chatSiteKey,
+    chatRelayToken,
+    trustedProxyHops,
   }: WebsiteOptions = {},
 ): Promise<Started> {
   const host = required("WEB_HOST");
@@ -256,6 +266,8 @@ export async function startWebsite(
       WEB_ANALYTICS_WEBSITE_ID: analytics?.websiteId ?? "",
       WEB_INDEXING: indexing ? "on" : "",
       WEB_TURNSTILE_SITE_KEY: chatSiteKey ?? "",
+      WEB_CHAT_RELAY_TOKEN: chatRelayToken ?? "",
+      WEB_TRUSTED_PROXY_HOPS: trustedProxyHops === undefined ? "" : String(trustedProxyHops),
     },
     url,
     "/favicon.ico",

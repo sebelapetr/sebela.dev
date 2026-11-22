@@ -1,5 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+import { expect, request as requests, test, type Page } from "@playwright/test";
 
 import { serveChatStack } from "./chat-stack";
 import { fakeTurnstile } from "./turnstile-fake";
@@ -736,4 +738,67 @@ test.describe("the chat's layout", () => {
       });
     }
   }
+});
+
+test.describe("visitors behind the trusted proxy", () => {
+  const stack = serveChatStack();
+
+  /**
+   * Asks `times` questions through the website's relay as a visitor whom the proxy saw at
+   * `address`, behind a spoofed left `X-Forwarded-For` entry; a new visitor every five questions,
+   * below the per-visitor allowance. Waits for each admitted answer to end; returns the statuses.
+   */
+  async function askFrom(address: string, times: number): Promise<number[]> {
+    const statuses: number[] = [];
+    const url = stack().url;
+    const headers = { origin: url, "x-forwarded-for": `203.0.113.250, ${address}` };
+    let visitor = await requests.newContext({ baseURL: url, extraHTTPHeaders: headers });
+    try {
+      for (let index = 0; index < times; index += 1) {
+        if (index > 0 && index % 5 === 0) {
+          await visitor.dispose();
+          visitor = await requests.newContext({ baseURL: url, extraHTTPHeaders: headers });
+        }
+        if (index % 5 === 0)
+          expect((await visitor.get("/api/chat/conversation")).status()).toBe(200);
+        const asked = await visitor.post("/api/chat/conversation/messages", {
+          data: {
+            requestId: randomUUID(),
+            question: `${question} (${String(index)})`,
+            challengeToken: `pass-${randomUUID()}`,
+          },
+        });
+        statuses.push(asked.status());
+        if (asked.status() !== 202) continue;
+        const { operationId } = (await asked.json()) as { operationId: string };
+        await expect
+          .poll(
+            async () => {
+              const read = await visitor.get(`/api/chat/operations/${operationId}`);
+              return ((await read.json()) as { status: string }).status;
+            },
+            { timeout: 30_000 },
+          )
+          .toMatch(/^(completed|failed|interrupted)$/u);
+      }
+    } finally {
+      await visitor.dispose();
+    }
+    return statuses;
+  }
+
+  test("two visitor addresses are counted apart and a spoofed entry is never believed", async () => {
+    test.setTimeout(180_000);
+    const first = "198.51.100.31";
+    const second = "198.51.100.32";
+
+    expect(await askFrom(first, 20)).toEqual(Array<number>(20).fill(202));
+    expect(await askFrom(first, 1)).toEqual([429]);
+    expect(await askFrom(second, 1)).toEqual([202]);
+
+    // Every challenge is redeemed before the quota is counted, the refused question's too.
+    const sent = stack().remoteAddresses();
+    expect(sent).toHaveLength(20 + 1 + 1);
+    expect(new Set(sent)).toEqual(new Set([first, second]));
+  });
 });
