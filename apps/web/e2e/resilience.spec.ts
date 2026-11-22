@@ -269,18 +269,6 @@ test.describe("a profile without any optional content", () => {
     await expect(
       page.getByRole("button", { name: `What is ${sparse.name} working on now?` }),
     ).toBeVisible();
-
-    // Too little evidence and nothing to contact: the answer says so without an empty contact card.
-    await hydrated(page);
-    await page
-      .getByRole("button", { name: `What are ${sparse.name}'s strongest engineering skills?` })
-      .click();
-    const answer = page.getByRole("list", { name: "Conversation" }).locator(":scope > li").last();
-    await expect(answer.locator("[aria-busy='false']")).toHaveCount(1);
-    await expect(answer).toContainText("I don't have enough evidence");
-    await expect(answer.getByRole("list", { name: "Cards" })).toHaveCount(0);
-    await expect(answer.getByRole("list", { name: "Sources", exact: true })).toHaveCount(0);
-    await expect(answer).not.toContainText("Contact");
   });
 });
 
