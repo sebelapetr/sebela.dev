@@ -10,7 +10,7 @@
     "prepare": "node harness/git-hooks/install.mjs",
     "lint": "turbo run lint lint:root check:config check:format",
     "lint:root": "eslint .",
-    "check:config": "node scripts/checks/hardcoded-config.mjs",
+    "check:config": "node scripts/checks/hardcoded-config.mjs && node scripts/checks/tracked-node-modules.mjs",
     "check:format": "node scripts/checks/formatting.mjs",
     "check:private-terms": "node harness/with-secrets.mjs -- node scripts/checks/private-terms.mjs",
     "generate:api-client": "pnpm --silent --filter @sebela/api openapi:export ../../packages/api-client/src/generated/openapi.json && pnpm --silent --filter @sebela/api-client generate && pnpm --silent --filter @sebela/llm-agent generate",
