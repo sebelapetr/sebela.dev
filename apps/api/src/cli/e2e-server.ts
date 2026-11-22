@@ -11,7 +11,9 @@
 // it creates one key per name in the comma-separated API_E2E_KEY_NAMES and writes
 // `{ database, keys: [{ name, id, key }] }` there (mode 0600). When API_E2E_STORAGE_ROOT names a
 // folder, it stores its files there instead of a new temporary folder below the checkout's `.tmp/`,
-// so the caller knows which folder is this server's. On SIGTERM or SIGINT it stops, drops the
+// so the caller knows which folder is this server's. When API_E2E_CHAT_DAILY_SPEND_LIMIT_MICRO_USD
+// is a whole number, the chat's daily spend limit is that many millionths of a US dollar instead of
+// the policy's, so a test can exhaust the budget (apps/ai-service, C01). On SIGTERM or SIGINT it stops, drops the
 // database and removes the folder.
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -19,6 +21,7 @@ import { join, resolve } from "node:path";
 import { serve } from "@hono/node-server";
 
 import {
+  chatPolicy,
   openServices,
   readChatOptions,
   readDatabaseConfig,
@@ -69,6 +72,14 @@ async function main() {
   if ((config.chat === null) !== (chatOptions === null)) {
     throw new Error("Set every visitor chat setting, or none of them.");
   }
+  const dailyLimit = process.env["API_E2E_CHAT_DAILY_SPEND_LIMIT_MICRO_USD"] ?? "";
+  if (dailyLimit !== "" && !/^\d+$/.test(dailyLimit)) {
+    throw new Error("API_E2E_CHAT_DAILY_SPEND_LIMIT_MICRO_USD must be a whole number.");
+  }
+  const chat =
+    chatOptions === null || dailyLimit === ""
+      ? chatOptions
+      : { ...chatOptions, policy: { ...chatPolicy, dailySpendLimitMicroUsd: Number(dailyLimit) } };
   let services: ReturnType<typeof openServices>;
   try {
     services = openServices(database.config, {
@@ -84,7 +95,7 @@ async function main() {
         onCleanupFailure: logCleanupFailure(log),
       },
       retrieval,
-      ...(chatOptions === null ? {} : { chat: chatOptions }),
+      ...(chat === null ? {} : { chat }),
     });
     await services.seed.loadSeed(seedFolder);
     const keyFile = process.env["API_E2E_KEY_FILE"];
@@ -124,28 +135,28 @@ async function main() {
     ? createWebsiteInvalidation({ ...config.websiteInvalidation, log })
     : null;
   // Dispatches admitted chat questions to the AI service and interrupts overdue ones.
-  const chat = config.chat
+  const supervisor = config.chat
     ? createChatSupervisor({ chat: services.chat, aiService: config.chat.aiService, log })
     : null;
   const { app } = createApp({
     services,
     config,
     log,
-    ...(chat === null ? {} : { chatDispatcher: chat }),
+    ...(supervisor === null ? {} : { chatDispatcher: supervisor }),
     onWrite: [indexing?.notify, invalidation?.notify].filter((notify) => notify !== undefined),
   });
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
     log(`e2e API listening on http://${host}:${String(info.port)}`);
   });
   indexing?.start();
-  chat?.start();
+  supervisor?.start();
 
   let stopping = false;
   const stop = () => {
     if (stopping) return;
     stopping = true;
     server.close(() => {
-      Promise.all([indexing?.close(), invalidation?.close(), chat?.close()])
+      Promise.all([indexing?.close(), invalidation?.close(), supervisor?.close()])
         .then(() => services.close())
         .then(cleanUp)
         .then(

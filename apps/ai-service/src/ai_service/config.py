@@ -40,7 +40,9 @@ class Settings(BaseModel):
     control_token: SecretStr
     model: ModelMode = "fake"
     fake_scenario: FakeScenario = "answer"
-    #: Test-only channels of the fictional model (`fake` mode only, absolute paths).
+    #: Test-only channels of the fictional model, absolute paths refused in paid mode: the file
+    #: that receives one JSON line per model call, and the file whose existence opens the `slow`
+    #: scenario's gate.
     fake_calls_file: Path | None = None
     fake_gate_file: Path | None = None
     #: The explicit opt-in to paid provider calls (`anthropic` mode only).
@@ -67,6 +69,16 @@ class Settings(BaseModel):
                 raise ValueError(f"{name} must have at least {MIN_TOKEN_CHARS} characters")
         if self.token.get_secret_value() == self.control_token.get_secret_value():
             raise ValueError("AI_SERVICE_TOKEN and AI_SERVICE_CONTROL_TOKEN must differ")
+        for name, path in (
+            ("AI_SERVICE_FAKE_CALLS_FILE", self.fake_calls_file),
+            ("AI_SERVICE_FAKE_GATE_FILE", self.fake_gate_file),
+        ):
+            if path is None:
+                continue
+            if not path.is_absolute():
+                raise ValueError(f"{name} must be an absolute path")
+            if self.model != "fake":
+                raise ValueError(f"{name} is for the fictional model only")
         if self.model == "anthropic":
             if not self.allow_paid:
                 raise ValueError("AI_SERVICE_MODEL=anthropic needs AI_SERVICE_ALLOW_PAID=true")
@@ -90,6 +102,8 @@ class Settings(BaseModel):
             "control_token": "AI_SERVICE_CONTROL_TOKEN",
             "model": "AI_SERVICE_MODEL",
             "fake_scenario": "AI_SERVICE_FAKE_SCENARIO",
+            "fake_calls_file": "AI_SERVICE_FAKE_CALLS_FILE",
+            "fake_gate_file": "AI_SERVICE_FAKE_GATE_FILE",
             "allow_paid": "AI_SERVICE_ALLOW_PAID",
             "daily_ceiling_usd": "AI_SERVICE_DAILY_CEILING_USD",
             "max_operations": "AI_SERVICE_MAX_OPERATIONS",

@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "@sebela/llm-agent": "workspace:*"
+  },
+  "devDependencies": {
+    "@sebela/api": "workspace:*"
   }
 }

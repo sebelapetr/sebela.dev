@@ -118,7 +118,11 @@ def _app(lifespan: Any) -> FastAPI:
 def _models(settings: Settings) -> ModelFactory:
     if settings.model == "anthropic":
         return anthropic_model_factory()
-    return FakeModels(settings.fake_scenario)
+    return FakeModels(
+        settings.fake_scenario,
+        calls_file=settings.fake_calls_file,
+        gate_file=settings.fake_gate_file,
+    )
 
 
 def _ceiling(settings: Settings) -> DailyCeiling | None:

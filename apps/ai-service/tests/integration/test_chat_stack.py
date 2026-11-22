@@ -31,6 +31,7 @@ from urllib.parse import parse_qs
 
 import httpx2
 import pytest
+from llm_agent import versions
 
 ROOT = Path(__file__).resolve().parents[4]
 API_FOLDER = ROOT / "apps" / "api"
@@ -239,8 +240,9 @@ def stack() -> Iterator[Stack]:
         "API_AI_CONTROL_TOKEN": control_token,
         "API_CHAT_FINGERPRINT_KEY": secrets.token_urlsafe(32),
         "API_CHAT_RETENTION_DAYS": "",
-        "API_CHAT_MODEL": "fake",
-        "API_CHAT_PRICING_VERSION": "fake-1",
+        # The versions this agent generates with; the service refuses any other.
+        "API_CHAT_MODEL": versions().main_model,
+        "API_CHAT_PRICING_VERSION": versions().pricing,
         # Not a Turnstile test secret, so the hostname and action checks run as in production.
         "API_TURNSTILE_SECRET_KEY": secrets.token_urlsafe(24),
         "API_TURNSTILE_EXPECTED_HOSTNAME": EXPECTED_HOSTNAME,
@@ -472,7 +474,7 @@ def test_an_answer_survives_a_disconnect_and_is_generated_once(stack: Stack) -> 
         if message["role"] == "assistant" and message["requestId"] == request_id
     ]
     assert len(assistants) == 1
-    assert assistants[0]["status"] == "complete"
+    assert assistants[0]["status"] == "completed"
     assert visitor.conversation()["activeOperation"] is None
 
     # The same request after its answer is still its one operation.
