@@ -121,6 +121,10 @@ class FakeApi:
     claim_effort: str | None = "medium"
     claim_pricing_version: str = "anthropic-2026-11-19"
     claim_context_revision: int = 1
+    #: The operation kind the claim returns; None returns the kind the operation was issued as.
+    claim_kind: str | None = None
+    #: The kind each issued operation was dispatched as (`answer` or `compaction`).
+    kinds: dict[str, str] = field(default_factory=dict)
     person_status: int = 200
     person_delay_s: float = 0.0
     person_reads: int = 0
@@ -137,6 +141,7 @@ class FakeApi:
         deadline = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=deadline_s)
         deadline_at = deadline.isoformat().replace("+00:00", "Z")
         self.deadlines[operation] = deadline_at
+        self.kinds[operation] = "answer"
         return {
             "operationId": operation,
             "grant": grant,
@@ -150,6 +155,21 @@ class FakeApi:
             "pricingVersion": "anthropic-2026-11-19",
             "allowanceUsd": 0.02,
         }
+
+    def issue_compaction(
+        self,
+        exchanges: int = 4,
+        *,
+        summary: dict[str, Any] | None = None,
+        deadline_s: float = 30.0,
+    ) -> dict[str, Any]:
+        """A fresh compaction request body over `exchanges` fictional exchanges, oldest first."""
+        body = self.issue(deadline_s)
+        operation = body["operationId"]
+        self.kinds[operation] = "compaction"
+        for key in ("question", "history", "today"):
+            del body[key]
+        return {**body, "summary": summary, "exchanges": exchange_bodies(exchanges)}
 
     def transport(self) -> httpx2.MockTransport:
         return httpx2.MockTransport(self._handle)
@@ -178,6 +198,8 @@ class FakeApi:
         prefix, _, rest = path.partition("/v1/internal/chat/operations/")
         if not prefix and rest.endswith("/result") and request.method == "POST":
             return self._result(rest.removesuffix("/result"), body)
+        if not prefix and rest.endswith("/compaction") and request.method == "POST":
+            return self._result(rest.removesuffix("/compaction"), body)
         return httpx2.Response(404, json=error("not_found"))
 
     def _claim(self, body: dict[str, Any]) -> httpx2.Response:
@@ -198,6 +220,7 @@ class FakeApi:
                 "effort": self.claim_effort,
                 "pricingVersion": self.claim_pricing_version,
                 "contextRevision": self.claim_context_revision,
+                "kind": self.claim_kind or self.kinds.get(operation, "answer"),
             },
         )
 
@@ -228,6 +251,19 @@ class FakeApi:
                 if len(self.stored) >= count:
                     return
                 await self.reported.wait()
+
+
+def exchange_bodies(count: int) -> list[dict[str, Any]]:
+    """`count` fictional answered exchanges in the API's history shape, oldest first."""
+    return [
+        {
+            "question": f"What did Ilsa Marrow build in fictional year {index}?",
+            "answer": f"In fictional year {index} Ilsa Marrow built an evaluated assistant.",
+            "language": "en",
+            "sources": [{"kind": "person", "recordId": PERSON_ID, "title": "Ilsa Marrow"}],
+        }
+        for index in range(count)
+    ]
 
 
 @asynccontextmanager
