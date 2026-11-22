@@ -211,6 +211,8 @@ services:
       WEB_ANALYTICS_WEBSITE_ID: ${WEB_ANALYTICS_WEBSITE_ID:-}
       # Search engines may index the site only with `on`; empty means `noindex` everywhere.
       WEB_INDEXING: ${WEB_INDEXING:-}
+      # The public Turnstile site key of the chat's person check; empty while the chat is off.
+      WEB_TURNSTILE_SITE_KEY: ${WEB_TURNSTILE_SITE_KEY:-}
     ports:
       - "${WEB_HOST:-}:${WEB_PORT:-}:8080"
     networks: [content]
