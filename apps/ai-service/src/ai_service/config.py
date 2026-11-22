@@ -8,6 +8,7 @@ explicit opt-in, a daily ceiling and a provider key the secret wrapper provides.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
@@ -39,6 +40,9 @@ class Settings(BaseModel):
     control_token: SecretStr
     model: ModelMode = "fake"
     fake_scenario: FakeScenario = "answer"
+    #: Test-only channels of the fictional model (`fake` mode only, absolute paths).
+    fake_calls_file: Path | None = None
+    fake_gate_file: Path | None = None
     #: The explicit opt-in to paid provider calls (`anthropic` mode only).
     allow_paid: bool = False
     #: The service's own daily spending ceiling in paid mode (USD per UTC day, this process;

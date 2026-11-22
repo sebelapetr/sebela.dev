@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal
 
 import anthropic
@@ -79,7 +80,14 @@ class FakeModels:
     transient provider error on every call, so the agent ends `unavailable`.
     """
 
-    def __init__(self, scenario: Scenario = "answer", *, gate: asyncio.Event | None = None) -> None:
+    def __init__(
+        self,
+        scenario: Scenario = "answer",
+        *,
+        gate: asyncio.Event | None = None,
+        calls_file: Path | None = None,
+        gate_file: Path | None = None,
+    ) -> None:
         self.scenario: Scenario = scenario
         self.gate = gate
         #: The stage of every model call, in order.

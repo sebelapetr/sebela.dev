@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ai_service.config import ConfigError, Settings
@@ -120,3 +122,39 @@ def test_anthropic_with_the_flag_the_ceiling_and_the_key_is_accepted() -> None:
 def test_the_paid_flag_accepts_only_true_or_false() -> None:
     with pytest.raises(ConfigError, match="AI_SERVICE_ALLOW_PAID"):
         Settings.from_env(env(AI_SERVICE_ALLOW_PAID="yes"))
+
+
+def test_the_fake_test_channels_are_read_as_absolute_paths(tmp_path: Path) -> None:
+    calls = tmp_path / "calls.jsonl"
+    gate = tmp_path / "gate"
+    settings = Settings.from_env(
+        env(AI_SERVICE_FAKE_CALLS_FILE=str(calls), AI_SERVICE_FAKE_GATE_FILE=str(gate))
+    )
+    assert settings.fake_calls_file == calls
+    assert settings.fake_gate_file == gate
+
+
+def test_the_fake_test_channels_are_off_by_default() -> None:
+    settings = Settings.from_env(env())
+    assert settings.fake_calls_file is None
+    assert settings.fake_gate_file is None
+
+
+@pytest.mark.parametrize("name", ["AI_SERVICE_FAKE_CALLS_FILE", "AI_SERVICE_FAKE_GATE_FILE"])
+def test_a_fake_test_channel_must_be_an_absolute_path(name: str) -> None:
+    with pytest.raises(ConfigError, match=name):
+        Settings.from_env(env(**{name: "relative/calls.jsonl"}))
+
+
+@pytest.mark.parametrize("name", ["AI_SERVICE_FAKE_CALLS_FILE", "AI_SERVICE_FAKE_GATE_FILE"])
+def test_a_fake_test_channel_is_refused_with_the_paid_model(name: str, tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=name):
+        Settings.from_env(
+            env(
+                AI_SERVICE_MODEL="anthropic",
+                AI_SERVICE_ALLOW_PAID="true",
+                AI_SERVICE_DAILY_CEILING_USD="0.25",
+                ANTHROPIC_API_KEY="fictional-key",
+                **{name: str(tmp_path / "channel")},
+            )
+        )
