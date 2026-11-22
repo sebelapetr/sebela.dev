@@ -16,7 +16,17 @@ import { promisify } from "node:util";
 import { test } from "@playwright/test";
 
 import { fakeTurnstile } from "./turnstile-fake";
-import { freePort, origin, required, start, startApi, startWebsite, type Started } from "./stack";
+import {
+  fixtureFolder,
+  freePort,
+  origin,
+  required,
+  start,
+  startApi,
+  startWebsite,
+  type Fixture,
+  type Started,
+} from "./stack";
 
 const run = promisify(execFile);
 
@@ -42,6 +52,11 @@ export interface ChatStackOptions {
   readonly scenario?: ChatScenario;
   /** A daily spend limit below one question's allowance exhausts the budget. */
   readonly dailySpendLimitMicroUsd?: number;
+  /**
+   * The website's fixture instead of the chat's own fictional profile, for a page that must fit
+   * its content; the fictional model still answers about the chat's person.
+   */
+  readonly fixture?: Fixture;
 }
 
 /** One call the fictional model received: its stage and how many earlier exchanges it was given. */
@@ -159,7 +174,7 @@ export async function startChatStack(options: ChatStackOptions = {}): Promise<Ch
     started.push(
       await startApi("with-photo", {
         port: apiPort,
-        seedFolder: chatSeed,
+        seedFolder: options.fixture === undefined ? chatSeed : fixtureFolder(options.fixture),
         env: {
           API_CHAT_ALLOWED_ORIGINS: webUrl,
           API_CHAT_COOKIE_SECURE: "false",

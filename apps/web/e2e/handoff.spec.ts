@@ -182,7 +182,7 @@ test.describe("long content", () => {
           await shot("cv-unavailable");
 
           // The sticky composer covers content in a full-page shot, so the viewport is taken. This
-          // website has no chat, so the page says so; long answers are fitted in `chat.spec.ts`.
+          // website has no chat, so the page says so; the chat itself is fitted below.
           await page.goto(`${site.url()}/ask`);
           await hydrated(page);
           await expect(page.getByText("The chat is not available right now.")).toBeVisible();
@@ -204,6 +204,39 @@ test.describe("long content", () => {
         await page.pdf({ path: testInfo.outputPath(`long-cv-print-${scheme}.pdf`), format: "A4" });
       });
     });
+  }
+});
+
+test.describe("the long name in the chat", () => {
+  // The real chat path on the long content: the suggested questions and the question asked carry
+  // the longest fictional name.
+  const stack = serveChatStack({ fixture: "with-long-content" });
+
+  for (const scheme of schemes) {
+    for (const width of widths) {
+      test(`fits the asked suggestion and its answer at ${String(width)} px in ${scheme} mode`, async ({
+        page,
+      }, testInfo) => {
+        await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${stack().url}/ask`);
+        await hydrated(page);
+        await expect(page.getByRole("heading", { level: 1 })).toContainText(longName);
+        const question = `What could ${longName} automate for my company?`;
+        await page.getByRole("button", { name: question }).click();
+        await answered(page);
+        await expect(turns(page).last()).toContainText(question);
+        await expectLoaded(page);
+        await expectNoHorizontalScroll(page);
+        await expectAccessible(page);
+        await expectWordsWhole(page);
+        await expectNavigationOnOneLine(page);
+        // The sticky composer covers content in a full-page shot, so the viewport is taken.
+        await page.screenshot({
+          path: testInfo.outputPath(`long-ask-chat-${String(width)}-${scheme}.png`),
+        });
+      });
+    }
   }
 });
 
