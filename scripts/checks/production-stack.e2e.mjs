@@ -33,7 +33,7 @@
 //   rule: a page answered 200 gets the public rule; a client navigation (also Next's header-less 307
 //   to its `_rsc` URL), a 404, Ask, a POST, the closed internal route and the proxy's own 502 while
 //   the website is unreachable get `no-store`; the website's own header stays on the health route
-//   and robots.txt;
+//   and robots.txt; with the AI service, the visitor chat answers through the website's relay;
 // - with --browser, the hero's question to the mock Ask page in a browser (no model is called);
 // - checks that the website's /health reports the database failing when Postgres is stopped and the
 //   API failing when the API is stopped;
@@ -130,6 +130,7 @@ const adminPort = String(await freePort(example.MCP_ADMIN_HOST));
 const web = `http://${example.WEB_HOST}:${webPort}`;
 const chatToken = randomBytes(32).toString("hex");
 const controlToken = randomBytes(32).toString("hex");
+const relayToken = randomBytes(32).toString("hex");
 
 /**
  * The visitor chat switched on as production would run it, with random values: secure cookies, the
@@ -146,6 +147,8 @@ const chatSettings = WITH_AI_SERVICE
       API_CHAT_FINGERPRINT_KEY: randomBytes(32).toString("hex"),
       API_CHAT_MODEL: "smoke-model",
       API_CHAT_PRICING_VERSION: "smoke-pricing",
+      API_CHAT_RELAY_TOKEN: relayToken,
+      WEB_CHAT_RELAY_TOKEN: relayToken,
       API_TURNSTILE_SECRET_KEY: randomBytes(32).toString("hex"),
       API_TURNSTILE_EXPECTED_HOSTNAME: example.WEB_HOST,
       API_TURNSTILE_VERIFY_URL: "",
@@ -505,6 +508,12 @@ try {
       ["Ask", "/ask", [], 200, "no-store"],
       ["a POST", "/", ["--request", "POST"], null, "no-store"],
       ["the closed internal route", "/internal/invalidation", [], 404, "no-store"],
+      // The website relays the visitor chat with its token: the API opens a conversation instead
+      // of refusing the request (403). Which address the relay names is checked by the website's
+      // browser tests; here Siteverify is Cloudflare's own, so no question can be asked.
+      ...(WITH_AI_SERVICE
+        ? [["the visitor chat through the relay", "/api/chat/conversation", [], 200, "no-store"]]
+        : []),
     ];
     for (const [what, pathname, options, status, rule] of expectations) {
       const answer = proxy.request(pathname, options);
@@ -610,6 +619,7 @@ try {
     secret,
     chatToken,
     controlToken,
+    relayToken,
     chatSettings.API_CHAT_FINGERPRINT_KEY,
     chatSettings.API_TURNSTILE_SECRET_KEY,
   ]) {

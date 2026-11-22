@@ -358,23 +358,26 @@ function agentVersions(file = AGENT_CONFIG_FILE) {
 
 // The visitor chat's development settings for one worktree. The API's sender and the AI service's
 // receiver share one generated token, the reverse direction a second; the quota fingerprint key is a
-// third. Every address is derived from the worktree's own ports; the Turnstile keys are the test
+// third, and the website's chat relay and the API share a fourth. Every address is derived from the worktree's own ports; the Turnstile keys are the test
 // keys, issued for the worktree's website host; the model is the fictional one.
 function chatSettings({ settings, ports, agent }) {
   const serviceToken = randomPassword();
   const controlToken = randomPassword();
+  const relayToken = randomPassword();
   return {
     API_CHAT_ALLOWED_ORIGINS: `http://${settings.WEB_HOST}:${ports.WEB_PORT}`,
     API_CHAT_COOKIE_SECURE: "false",
     API_CHAT_FINGERPRINT_KEY: randomPassword(),
     API_CHAT_MODEL: agent.model,
     API_CHAT_PRICING_VERSION: agent.pricingVersion,
+    API_CHAT_RELAY_TOKEN: relayToken,
     API_TURNSTILE_SECRET_KEY: TURNSTILE_TEST_SECRET_KEY,
     API_TURNSTILE_EXPECTED_HOSTNAME: settings.WEB_HOST,
     API_AI_SERVICE_URL: `http://${settings.AI_SERVICE_HOST}:${ports.LLM_AGENT_PORT}`,
     API_AI_SERVICE_TOKEN: serviceToken,
     API_AI_CONTROL_TOKEN: controlToken,
     WEB_TURNSTILE_SITE_KEY: TURNSTILE_TEST_SITE_KEY,
+    WEB_CHAT_RELAY_TOKEN: relayToken,
     AI_SERVICE_HOST: settings.AI_SERVICE_HOST,
     AI_SERVICE_API_URL: `http://${settings.API_HOST}:${ports.API_PORT}`,
     AI_SERVICE_TOKEN: serviceToken,

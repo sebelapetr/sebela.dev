@@ -115,13 +115,15 @@ services:
       # The visitor chat (apps/api/AGENTS.md, "Configuration"): all empty leaves it off. In the
       # stack the API calls the AI service's container by its service name, never the host's
       # API_AI_SERVICE_URL: with the generation token, the service below (profile `ai-service`);
-      # without one, no AI service. The AI service is given the same two tokens.
+      # without one, no AI service. The AI service is given the same two tokens, and the website
+      # the same relay token.
       API_CHAT_ALLOWED_ORIGINS: ${API_CHAT_ALLOWED_ORIGINS:-}
       API_CHAT_COOKIE_SECURE: ${API_CHAT_COOKIE_SECURE:-}
       API_CHAT_FINGERPRINT_KEY: ${API_CHAT_FINGERPRINT_KEY:-}
       API_CHAT_RETENTION_DAYS: ${API_CHAT_RETENTION_DAYS:-}
       API_CHAT_MODEL: ${API_CHAT_MODEL:-}
       API_CHAT_PRICING_VERSION: ${API_CHAT_PRICING_VERSION:-}
+      API_CHAT_RELAY_TOKEN: ${API_CHAT_RELAY_TOKEN:-}
       API_TURNSTILE_SECRET_KEY: ${API_TURNSTILE_SECRET_KEY:-}
       API_TURNSTILE_EXPECTED_HOSTNAME: ${API_TURNSTILE_EXPECTED_HOSTNAME:-}
       API_TURNSTILE_VERIFY_URL: ${API_TURNSTILE_VERIFY_URL:-}
@@ -213,6 +215,10 @@ services:
       WEB_INDEXING: ${WEB_INDEXING:-}
       # The public Turnstile site key of the chat's person check; empty while the chat is off.
       WEB_TURNSTILE_SITE_KEY: ${WEB_TURNSTILE_SITE_KEY:-}
+      # The chat relay's token (the API's API_CHAT_RELAY_TOKEN) and how many proxies in front of
+      # the website append to X-Forwarded-For; the relay names the visitor's address from it.
+      WEB_CHAT_RELAY_TOKEN: ${WEB_CHAT_RELAY_TOKEN:-}
+      WEB_TRUSTED_PROXY_HOPS: ${WEB_TRUSTED_PROXY_HOPS:-}
     ports:
       - "${WEB_HOST:-}:${WEB_PORT:-}:8080"
     networks: [content]

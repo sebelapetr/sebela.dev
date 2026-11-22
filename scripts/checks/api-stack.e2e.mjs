@@ -43,6 +43,7 @@ const apiPort = await freePort(host);
 // The visitor chat on, with tokens and keys of this run only, so the AI service starts with the API.
 const chatToken = randomBytes(24).toString("hex");
 const controlToken = randomBytes(24).toString("hex");
+const relayToken = randomBytes(24).toString("hex");
 
 // Compose reads `.env.example` (`--env-file`); these process variables take precedence over it.
 const env = {
@@ -60,6 +61,7 @@ const env = {
   API_CHAT_FINGERPRINT_KEY: randomBytes(24).toString("hex"),
   API_CHAT_MODEL: "smoke-model",
   API_CHAT_PRICING_VERSION: "smoke-pricing",
+  API_CHAT_RELAY_TOKEN: relayToken,
   API_TURNSTILE_SECRET_KEY: randomBytes(24).toString("hex"),
   API_TURNSTILE_EXPECTED_HOSTNAME: example.WEB_HOST,
   API_AI_SERVICE_TOKEN: chatToken,
@@ -281,12 +283,18 @@ try {
     body: "{}",
   });
   assert.equal(unsigned.status, 401, "the chat control routes refuse a caller without the token");
+  const unrelayed = await fetch(`${base}/v1/chat/conversation`);
+  assert.equal(unrelayed.status, 403, "the visitor chat routes refuse a caller but the website");
+  const relayed = await fetch(`${base}/v1/chat/conversation`, {
+    headers: { "x-sebela-chat-relay": relayToken },
+  });
+  assert.equal(relayed.status, 200, "the visitor chat routes answer the website's relay");
 
   step("no key, token or password in the logs");
   const logs = compose(["logs", "--no-color"]);
   assert.ok(!logs.includes(key), "the logs do not contain the key");
   assert.ok(!logs.includes(password), "the logs do not contain the password");
-  for (const token of [chatToken, controlToken]) {
+  for (const token of [chatToken, controlToken, relayToken]) {
     assert.ok(!logs.includes(token), "the logs do not contain a chat token");
   }
 
