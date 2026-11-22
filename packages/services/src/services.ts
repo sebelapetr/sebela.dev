@@ -6,6 +6,12 @@ import {
   type ApiKeyServiceOptions,
 } from "./modules/api-keys/index.js";
 import { createAuditService, type AuditService } from "./modules/audit/index.js";
+import {
+  createChatService,
+  type ChatOptions,
+  type ChatService,
+  unconfiguredChat,
+} from "./modules/chat/index.js";
 import { createHealthService, type HealthService } from "./modules/health/index.js";
 import {
   createMediaService,
@@ -35,6 +41,8 @@ export interface Services {
   readonly audit: AuditService;
   /** Indexing and searching the public portfolio; private, server-side only. */
   readonly knowledge: KnowledgeService;
+  /** The visitor chat: cookie identities, admission, grants, results and retention. */
+  readonly chat: ChatService;
   /** Loads a seed folder through the services above; needs media to be configured. */
   readonly seed: SeedService;
   /** Whether the database answers now, for readiness checks; never throws. */
@@ -59,6 +67,10 @@ export interface ServicesOptions {
    * needs the provider fails as unavailable.
    */
   readonly retrieval?: KnowledgeServiceOptions;
+  /**
+   * The chat settings and the bot-challenge verifier. Without them every chat operation throws.
+   */
+  readonly chat?: ChatOptions;
 }
 
 const unconfigured = (): never => {
@@ -101,6 +113,10 @@ export function openServices(config: DatabaseConfig, options: ServicesOptions = 
       { store: persistence.retrieval, profile, roadmap },
       options.retrieval ?? { config: null },
     ),
+    chat:
+      options.chat === undefined
+        ? unconfiguredChat
+        : createChatService(persistence.chat, options.chat),
     apiKeys: createApiKeyService(persistence.apiKeys, options.apiKeys),
     media:
       mediaOptions === undefined
