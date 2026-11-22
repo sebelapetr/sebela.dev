@@ -115,11 +115,13 @@ describe("createChatRelay", () => {
         new Request(`${SITE}/api/chat/operations/${OPERATION}/events`),
         { kind: "events", operationId: OPERATION },
       ],
+      [new Request(`${SITE}/api/chat/usage`), { kind: "usage" }],
     ] as const;
 
     for (const [request, route] of routes) await relay(api)(request, route);
 
     expect(api.calls.map((call) => call.headers.get("x-sebela-chat-relay"))).toEqual([
+      TOKEN,
       TOKEN,
       TOKEN,
       TOKEN,
@@ -211,6 +213,23 @@ describe("createChatRelay", () => {
     expect(response.headers.get("x-accel-buffering")).toBe("no");
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.text()).resolves.toBe("event: chat\nid: 0\ndata: {}\n\n");
+  });
+
+  it("relays the visitor's usage read as a GET without a body, with the visitor's cookie", async () => {
+    const api = fakeApi();
+    const request = new Request(`${SITE}/api/chat/usage?ignored=1`, {
+      method: "GET",
+      headers: { cookie: "sebela_chat=visitor" },
+    });
+
+    await relay(api)(request, { kind: "usage" });
+
+    const call = api.calls[0];
+    expect(call?.url).toBe(`${API}/v1/chat/usage`);
+    expect(call?.method).toBe("GET");
+    expect(call?.body).toBeNull();
+    expect(call?.headers.get("cookie")).toBe("sebela_chat=visitor");
+    expect(call?.headers.get("x-sebela-chat-relay")).toBe(TOKEN);
   });
 
   it("relays an operation's state", async () => {
