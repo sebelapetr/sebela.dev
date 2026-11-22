@@ -13,9 +13,12 @@ import type {
 
 import type { ChatPolicy } from "./policy.js";
 
-/** Checks one bot-challenge token server-side; `false` for any failure, never throws. */
+/**
+ * Checks one bot-challenge token server-side; `false` for any failure, never throws. The visitor's
+ * address is `null` when the API could not establish it.
+ */
 export interface ChallengeVerifier {
-  verify(token: string, remoteAddress: string): Promise<boolean>;
+  verify(token: string, remoteAddress: string | null): Promise<boolean>;
 }
 
 export interface ChatConfig {
@@ -110,7 +113,7 @@ export interface ChatService {
   submit(
     caller: ChatCaller,
     submission: ChatMessageSubmission,
-    context: { clientAddress: string },
+    context: { clientAddress: string | null },
   ): Promise<ChatSubmitResult>;
   operation(caller: ChatCaller, operationId: string): Promise<ChatOperation | null>;
   observe(caller: ChatCaller, operationId: string): Promise<ChatObservation | null>;

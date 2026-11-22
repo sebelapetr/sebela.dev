@@ -67,7 +67,7 @@ export function createSiteverifyVerifier(options: SiteverifyOptions): ChallengeV
           body: new URLSearchParams({
             secret: options.secret,
             response: token,
-            remoteip: remoteAddress,
+            remoteip: remoteAddress ?? "",
           }),
           signal: AbortSignal.timeout(timeoutMs),
         });

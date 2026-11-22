@@ -246,6 +246,7 @@ export function createChatService(
       }
       const active = await persistence.findActiveOperation(caller.identityId);
       if (active !== null) return { status: "busy", operation: toOperation(active) };
+      if (context.clientAddress === null) throw new Error("not implemented");
       if (!(await verifier.verify(submission.challengeToken, context.clientAddress))) {
         return { status: "challenge_failed" };
       }

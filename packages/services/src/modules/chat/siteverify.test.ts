@@ -68,6 +68,15 @@ describe("Siteverify bot-challenge verifier", () => {
     expect(calls[0]?.body.get("remoteip")).toBe("192.0.2.7");
   });
 
+  it("sends no client address when the visitor's is unknown", async () => {
+    const calls: Call[] = [];
+
+    await expect(verifierWith(passing, {}, calls).verify("token-1", null)).resolves.toBe(true);
+
+    expect(calls[0]?.body.get("response")).toBe("token-1");
+    expect(calls[0]?.body.has("remoteip")).toBe(false);
+  });
+
   it.each([
     ["an unsuccessful check", { ...passing, success: false }],
     ["another hostname", { ...passing, hostname: "elsewhere.example.test" }],

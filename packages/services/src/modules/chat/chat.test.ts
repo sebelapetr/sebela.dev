@@ -253,6 +253,130 @@ describe("visitor chat service", () => {
       });
     });
 
+    /** Like Siteverify: slow, and a token passes once; a second redemption fails. */
+    const singleUseVerifier = (passes = true) => {
+      const redeemed = new Set<string>();
+      const calls: (string | null)[] = [];
+      const single: ChallengeVerifier & { calls: (string | null)[] } = {
+        calls,
+        verify: async (token, remoteAddress) => {
+          calls.push(remoteAddress);
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          if (redeemed.has(token)) return false;
+          redeemed.add(token);
+          return passes;
+        },
+      };
+      return single;
+    };
+
+    it("redeems the challenge once for concurrent equal submissions and admits them as one", async () => {
+      const single = singleUseVerifier();
+      chat = createChatService(persistence.chat, { config, verifier: single, now: () => now });
+      const caller = await newCaller();
+      const submission = {
+        requestId: randomUUID(),
+        question: "What do you build?",
+        challengeToken: `fictional-token-${randomUUID()}`,
+      };
+
+      const results = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          chat.submit(caller, submission, { clientAddress: nextAddress() }),
+        ),
+      );
+
+      expect(single.calls).toHaveLength(1);
+      const admittedResults = results.filter((result) => result.status === "admitted");
+      expect(admittedResults).toHaveLength(1);
+      expect(results.filter((result) => result.status === "existing")).toHaveLength(2);
+      const operations = results.map((result) => ("operation" in result ? result.operation : null));
+      for (const operation of operations) expect(operation).toEqual(operations[0]);
+      expect((await chat.conversation(caller, { limit: 20 })).messages).toHaveLength(2);
+    });
+
+    it("gives every concurrent equal submission the challenge failure of the one that verified", async () => {
+      const single = singleUseVerifier(false);
+      chat = createChatService(persistence.chat, { config, verifier: single, now: () => now });
+      const caller = await newCaller();
+      const submission = {
+        requestId: randomUUID(),
+        question: "What do you build?",
+        challengeToken: `fictional-token-${randomUUID()}`,
+      };
+
+      const results = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          chat.submit(caller, submission, { clientAddress: nextAddress() }),
+        ),
+      );
+
+      expect(single.calls).toHaveLength(1);
+      expect(results).toEqual(Array.from({ length: 3 }, () => ({ status: "challenge_failed" })));
+      expect((await chat.conversation(caller, { limit: 20 })).messages).toEqual([]);
+    });
+
+    it("refuses a concurrent submission of another question under the same request id", async () => {
+      const single = singleUseVerifier();
+      chat = createChatService(persistence.chat, { config, verifier: single, now: () => now });
+      const caller = await newCaller();
+      const requestId = randomUUID();
+      const challengeToken = `fictional-token-${randomUUID()}`;
+
+      const [first, second] = await Promise.all([
+        chat.submit(
+          caller,
+          { requestId, question: "What do you build?", challengeToken },
+          { clientAddress: nextAddress() },
+        ),
+        new Promise((resolve) => setTimeout(resolve, 20)).then(() =>
+          chat.submit(
+            caller,
+            { requestId, question: "Something else?", challengeToken },
+            { clientAddress: nextAddress() },
+          ),
+        ),
+      ]);
+
+      expect(first.status).toBe("admitted");
+      expect(second).toEqual({ status: "conflict" });
+      expect(single.calls).toHaveLength(1);
+    });
+
+    it("verifies without a client address and counts every unknown address in one bucket", async () => {
+      const seen: (string | null)[] = [];
+      chat = createChatService(persistence.chat, {
+        config,
+        verifier: {
+          verify: (_token, remoteAddress) => {
+            seen.push(remoteAddress);
+            return Promise.resolve(true);
+          },
+        },
+        now: () => now,
+      });
+      now = new Date("2031-04-10T12:00:00.000Z");
+      const ask = async (clientAddress: string | null) =>
+        chat.submit(
+          await newCaller(),
+          {
+            requestId: randomUUID(),
+            question: "What do you build?",
+            challengeToken: `fictional-token-${randomUUID()}`,
+          },
+          { clientAddress },
+        );
+
+      for (let index = 0; index < 20; index += 1) {
+        expect((await ask(null)).status).toBe("admitted");
+      }
+
+      expect(await ask(null)).toMatchObject({ status: "quota_exceeded" });
+      expect((await ask("198.51.100.7")).status).toBe("admitted");
+      expect(seen.slice(0, 21)).toEqual(Array.from({ length: 21 }, () => null));
+      expect(seen[21]).toBe("198.51.100.7");
+    });
+
     it("refuses when the global spend window cannot hold another allowance", async () => {
       chat = createChatService(persistence.chat, {
         config,
