@@ -174,21 +174,25 @@ export interface ApiClientOptions {
 /** What the client reads from the committed document: each operation's security requirement. */
 interface DocumentedSecurity {
   readonly paths: Readonly<
-    Record<string, Readonly<Record<string, { readonly security?: readonly object[] } | undefined>>>
+    Record<
+      string,
+      Readonly<Record<string, { readonly security?: readonly Readonly<object>[] } | undefined>>
+    >
   >;
 }
 
 const documented: DocumentedSecurity = document;
 
 /**
- * Whether the contract requires credentials for the operation at `schemaPath` and `method`.
+ * Whether the contract requires the API key (`bearerAuth`) for the operation at `schemaPath` and
+ * `method`. Another scheme, such as the AI service's `controlToken`, never receives the key.
  * The API declares security per operation and none at the document level (`apps/api/src/openapi.ts`),
  * so a document-level `security` is not consulted; if the API ever adds one, extend this lookup
  * and the consumer contract tests together.
  */
 function requiresKey(schemaPath: string, method: string): boolean {
   const security = documented.paths[schemaPath]?.[method.toLowerCase()]?.security;
-  return security !== undefined && security.length > 0;
+  return security?.some((requirement) => "bearerAuth" in requirement) ?? false;
 }
 
 /**
