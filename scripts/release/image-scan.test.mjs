@@ -576,7 +576,7 @@ describe("exceptions limited to a path", () => {
     assert.equal(verdict.blocking.length, 2);
   });
 
-  it("refuses an entry whose path has a `..` segment", () => {
+  it("refuses an entry whose path has an empty, `.` or `..` segment", () => {
     for (const bad of ["usr/local/../../app/", "../etc/", "usr/./local/", "usr//local/"]) {
       const { problems } = parseExceptions(exceptionsText(entry({ path: bad })), { today: TODAY });
       assert.ok(problems.length >= 1, bad);
@@ -766,5 +766,51 @@ describe("install", () => {
       },
     });
     assert.equal(asked, TRIVY.url);
+  });
+});
+
+describe("default exceptions file", () => {
+  // The workflows never set EXCEPTIONS, so the gate reads the file beside the script. A copy of
+  // the script in a scratch layout, with a known file beside it, proves that without depending on
+  // the committed entries or on the clock (the planted entry expired long ago).
+  function layout() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "image-scan-layout-"));
+    const repo = path.join(import.meta.dirname, "..", "..");
+    for (const file of [
+      "scripts/release/image-scan.mjs",
+      "scripts/release/images.mjs",
+      "scripts/checks/without-documentation.mjs",
+      "harness/lib/documentation.mjs",
+    ]) {
+      fs.mkdirSync(path.join(root, path.dirname(file)), { recursive: true });
+      fs.copyFileSync(path.join(repo, file), path.join(root, file));
+    }
+    return root;
+  }
+
+  it("is image-scan-exceptions.json beside the script", () => {
+    const root = layout();
+    const box = sandbox();
+    fs.writeFileSync(
+      path.join(root, "scripts", "release", "image-scan-exceptions.json"),
+      exceptionsText(entry({ id: "CVE-2030-7777", expires: "2020-01-01" })),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [path.join(root, "scripts", "release", "image-scan.mjs"), "gate"],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH,
+          TRIVY: box.fake,
+          FAKE_ARGS: box.args,
+          SHA: "a".repeat(40),
+          BUILD: '["web"]',
+          FAKE_REPORT: JSON.stringify(report(null)),
+        },
+      },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CVE-2030-7777.*expired/);
   });
 });
