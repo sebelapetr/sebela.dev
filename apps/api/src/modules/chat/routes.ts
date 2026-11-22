@@ -7,6 +7,9 @@ import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
 import {
+  ChatCompactionResponseSchema,
+  ChatCompactionResultSchema,
+  ChatCompactionSubmissionSchema,
   ChatConversationClearedSchema,
   ChatConversationClearSchema,
   ChatConversationQuerySchema,
@@ -18,6 +21,7 @@ import {
   ChatOperationSchema,
   ChatRetrySubmissionSchema,
   ChatUsageSchema,
+  type ChatCompactionSubmission,
   type ChatConversationClear,
   type ChatGrantClaim,
   type ChatMessageSubmission,
@@ -27,6 +31,7 @@ import type {
   ChatCaller,
   ChatCompactionDispatch,
   ChatDispatch,
+  ChatReconcileOutcome,
   ChatService,
   ChatSubmitResult,
 } from "@sebela/services";
@@ -127,6 +132,44 @@ const visitorRoutes = {
       409:
         "`chat_request_conflict`: the request ID was used for another question; " +
         "`chat_busy`: the conversation already has a question in progress.",
+      429: "`chat_quota_exceeded`: the visitor's question quota is spent.",
+      503: `\`chat_budget_exhausted\`: the chat's spend budget is spent; ${unavailableRefusal}`,
+    },
+  },
+  compact: {
+    operationId: "compactChatConversation",
+    method: "POST",
+    path: "/v1/chat/conversation/compact",
+    access: "public",
+    summary: "Compact the visitor's working context",
+    description:
+      "The visitor's `/compact`: summarizes the caller's current working context (the previous " +
+      "summary and the exchanges since it) so later questions carry less history. It is no " +
+      "message, appends nothing and changes no visible history. A context of fewer than three " +
+      "exchanges is a local no-op before any challenge, quota or spend. Otherwise the bot " +
+      "challenge, the quotas and the spend budget apply as to a question, and it holds the " +
+      "conversation as a question does; its progress is read from the operation, from any tab. " +
+      "The same request ID again is recovered before any challenge. Never retried automatically.",
+    sameOrigin: true,
+    cookie,
+    body: ChatCompactionSubmissionSchema,
+    response: {
+      status: 202,
+      description: "The compaction is admitted: its operation.",
+      also: {
+        status: 200,
+        description: "The same request again (its operation), or a local no-op.",
+      },
+      schema: ChatCompactionResponseSchema,
+    },
+    errors: [],
+    refusals: {
+      403:
+        `${relayRefusal}, has no allowed origin or is not JSON; ` +
+        "`chat_challenge_failed`: the bot challenge failed.",
+      409:
+        "`chat_request_conflict`: the request ID was used for a question; " +
+        "`chat_busy`: the conversation already has a question or compaction in progress.",
       429: "`chat_quota_exceeded`: the visitor's question quota is spent.",
       503: `\`chat_budget_exhausted\`: the chat's spend budget is spent; ${unavailableRefusal}`,
     },
@@ -313,8 +356,33 @@ const controlRoutes = {
     },
     errors: [],
     refusals: {
-      403: "`forbidden`: the grant is not the operation's.",
-      409: "`conflict`: the operation's grant has not been claimed.",
+      403: "`forbidden`: the grant is not the operation's, or the operation is a compaction.",
+      409: "`conflict`: the operation's grant has not been claimed, or its conversation was cleared.",
+    },
+  },
+  compaction: {
+    operationId: "reportChatCompaction",
+    method: "POST",
+    path: "/v1/internal/chat/operations/:operationId/compaction",
+    access: "private",
+    authorization: "control",
+    summary: "Report a chat compaction result",
+    description:
+      "Internal: the AI service reports the one result of a claimed compaction. A valid summary " +
+      "is installed only at the operation's context revision; a stale, failed or invalid result " +
+      "keeps the working context unchanged. A result that fails the contract is stored as a " +
+      "failure; a repeat changes nothing and answers the stored operation.",
+    params: OperationParamsSchema,
+    body: ChatCompactionResultSchema,
+    response: {
+      status: 200,
+      description: "The operation as reconciled.",
+      schema: ChatOperationSchema,
+    },
+    errors: [],
+    refusals: {
+      403: "`forbidden`: the grant is not the operation's, or the operation is an answer.",
+      409: "`conflict`: the operation's grant has not been claimed, or its conversation was cleared.",
     },
   },
 } satisfies Record<string, RouteDocumentation>;
@@ -487,6 +555,23 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     return admission(c, result);
   });
 
+  app.post(visitorRoutes.compact.path, visitor(visitorRoutes.compact), async (c) => {
+    const caller = await callerOf(c);
+    const submission = c.get("body") as ChatCompactionSubmission;
+    const result = await chat.compact(caller, submission, { clientAddress: namedAddress(c) });
+    switch (result.status) {
+      case "started":
+        dispatcher?.dispatch(result.dispatch);
+        return c.json({ status: "started" as const, operation: result.operation }, 202);
+      case "existing":
+        return c.json({ status: "started" as const, operation: result.operation }, 200);
+      case "noop":
+        return c.json(result, 200);
+      default:
+        return admission(c, result);
+    }
+  });
+
   app.post(visitorRoutes.retry.path, visitor(visitorRoutes.retry), async (c) => {
     const caller = await callerOf(c);
     const submission = c.get("body") as ChatRetrySubmission;
@@ -585,8 +670,8 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     },
   );
 
-  app.post(controlRoutes.result.path, control(controlRoutes.result, z.unknown()), async (c) => {
-    const outcome = await chat.reconcile(operationIdOf(c), c.get("body"));
+  /** The answer to a reported result of either kind. */
+  const reconciled = (c: Context<ApiEnv>, outcome: ChatReconcileOutcome) => {
     switch (outcome.status) {
       case "reconciled":
       case "already":
@@ -600,5 +685,15 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
       case "invalid":
         throw new ApiError(400, "validation_failed", "The result names no grant.");
     }
-  });
+  };
+
+  app.post(controlRoutes.result.path, control(controlRoutes.result, z.unknown()), async (c) =>
+    reconciled(c, await chat.reconcile(operationIdOf(c), c.get("body"))),
+  );
+
+  app.post(
+    controlRoutes.compaction.path,
+    control(controlRoutes.compaction, z.unknown()),
+    async (c) => reconciled(c, await chat.reconcileCompaction(operationIdOf(c), c.get("body"))),
+  );
 }

@@ -1644,7 +1644,7 @@ describe("the visitor chat over HTTP", () => {
       expect(lastDispatch().history.map((exchange) => exchange.question)).toEqual(["Question 2?"]);
     });
 
-    it("keeps the context after a failed or stopped compaction, and tells the AI service to stop", async () => {
+    it("keeps the context after a failed compaction", async () => {
       const { cookie } = await withExchanges(3);
       await compact(cookie);
       const failed = lastCompaction();
@@ -1658,7 +1658,14 @@ describe("the visitor chat over HTTP", () => {
         status: "failed",
         compaction: { outcome: "failed", reason: "invalid_result" },
       });
+      expect((await ask(cookie, "Where were we?")).status).toBe(202);
+      expect(lastDispatch()).toMatchObject({ summary: null, contextRevision: 3 });
+      expect(lastDispatch().history).toHaveLength(3);
+    });
 
+    it("stops a compaction from any tab, tells the AI service and keeps the context", async () => {
+      // Each compaction counts as a question: three asks and one compaction leave one more.
+      const { cookie } = await withExchanges(3);
       await compact(cookie);
       const stopped = lastCompaction();
       await control(CLAIM, { operationId: stopped.operationId, grant: stopped.grant });

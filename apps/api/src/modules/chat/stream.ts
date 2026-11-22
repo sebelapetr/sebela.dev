@@ -66,7 +66,7 @@ export function chatEventStream(options: ChatStreamOptions): Response {
       if (now() > closesAt) {
         send({
           requestId: observation.operation.requestId,
-          messageId: observation.operation.assistantMessageId,
+          messageId: observation.assistant.id,
           eventId: Math.max(observation.events.length, sent + 1),
           type: "error",
           code: "timeout",

@@ -1,4 +1,10 @@
-import type { ChatDispatch, ChatService } from "@sebela/services";
+import type { ChatContextSummary } from "@sebela/contracts";
+import type {
+  ChatCompactionDispatch,
+  ChatDispatch,
+  ChatHistoryExchange,
+  ChatService,
+} from "@sebela/services";
 
 import type { components } from "../../generated/ai-service/schema.js";
 import { redact, type Logger } from "../../middleware/logging.js";
@@ -25,12 +31,47 @@ export interface ChatSupervisor extends ChatDispatcher {
 
 /** The body of the AI service's `POST /internal/v1/generations`, generated from its document. */
 type GenerationRequest = components["schemas"]["GenerationRequest"];
+/** The body of the AI service's `POST /internal/v1/compactions`, generated from its document. */
+type CompactionRequest = components["schemas"]["CompactionRequest"];
+type WireExchange = components["schemas"]["HistoryExchange"];
+type WireSummary = components["schemas"]["WireSummary"];
 
-/** The generation route, relative to the AI service's base address. */
+/** The generation route, relative to the AI service's base address; it also cancels compactions. */
 const generationsPath = "internal/v1/generations";
+/** The compaction route, relative to the AI service's base address. */
+const compactionsPath = "internal/v1/compactions";
 
 /** The only status that means the AI service accepted the generation. */
 const generationAcceptedStatus = 202;
+
+function wireExchange(exchange: ChatHistoryExchange): WireExchange {
+  return {
+    question: exchange.question,
+    answer: exchange.answer,
+    language: exchange.language,
+    sources: exchange.sources.map((source) => ({
+      kind: source.kind,
+      recordId: source.recordId,
+      title: source.title,
+    })),
+  };
+}
+
+function wireSummary(summary: ChatContextSummary | null): WireSummary | null {
+  if (summary === null) return null;
+  return {
+    language: summary.language,
+    goals: [...summary.goals],
+    openQuestions: [...summary.openQuestions],
+    covered: [...summary.covered],
+    visitorClaims: [...summary.visitorClaims],
+    references: summary.references.map((reference) => ({
+      kind: reference.kind,
+      recordId: reference.recordId,
+      title: reference.title,
+    })),
+  };
+}
 
 /** The dispatch in the AI service's generated request shape; the compiler checks every field. */
 function generationRequest(dispatch: ChatDispatch): GenerationRequest {
@@ -38,17 +79,25 @@ function generationRequest(dispatch: ChatDispatch): GenerationRequest {
     operationId: dispatch.operationId,
     grant: dispatch.grant,
     question: dispatch.question,
-    history: dispatch.history.map((exchange) => ({
-      question: exchange.question,
-      answer: exchange.answer,
-      language: exchange.language,
-      sources: exchange.sources.map((source) => ({
-        kind: source.kind,
-        recordId: source.recordId,
-        title: source.title,
-      })),
-    })),
+    summary: wireSummary(dispatch.summary),
+    history: dispatch.history.map(wireExchange),
     today: dispatch.today,
+    deadlineAt: dispatch.deadlineAt,
+    contextRevision: dispatch.contextRevision,
+    model: dispatch.model,
+    effort: dispatch.effort,
+    pricingVersion: dispatch.pricingVersion,
+    allowanceUsd: dispatch.allowanceUsd,
+  };
+}
+
+/** The compaction in the AI service's generated request shape. */
+function compactionRequest(dispatch: ChatCompactionDispatch): CompactionRequest {
+  return {
+    operationId: dispatch.operationId,
+    grant: dispatch.grant,
+    summary: wireSummary(dispatch.summary),
+    exchanges: dispatch.exchanges.map(wireExchange),
     deadlineAt: dispatch.deadlineAt,
     contextRevision: dispatch.contextRevision,
     model: dispatch.model,
@@ -64,7 +113,8 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
  * The in-process dispatcher and deadline watcher of the API. A dispatch is posted to the AI
- * service with its service token, detached from the visitor's request; anything but `202`, a
+ * service with its service token, detached from the visitor's request: a question to the generation
+ * route, a compaction to the compaction route. Anything but `202`, a
  * network failure or a timeout fails the operation through `dispatchRefused`. The watcher
  * interrupts operations still unreconciled after their deadline and the grace, once at start and
  * then on its interval; it never redispatches. A Stop or a clear is passed on as a best-effort
@@ -80,7 +130,8 @@ export function createChatSupervisor(options: ChatSupervisorOptions): ChatSuperv
   const base = options.aiService.url.endsWith("/")
     ? options.aiService.url
     : `${options.aiService.url}/`;
-  const endpoint = new URL(generationsPath, base).href;
+  const generations = new URL(generationsPath, base).href;
+  const compactions = new URL(compactionsPath, base).href;
   const pending = new Set<Promise<void>>();
   let watcher: ReturnType<typeof setInterval> | null = null;
   let watching: Promise<void> | null = null;
@@ -90,8 +141,11 @@ export function createChatSupervisor(options: ChatSupervisorOptions): ChatSuperv
     await chat.dispatchRefused(operationId);
   };
 
-  const send = async (dispatch: ChatDispatch) => {
-    const body = generationRequest(dispatch);
+  const send = async (dispatch: ChatDispatch | ChatCompactionDispatch) => {
+    const [endpoint, body] =
+      "question" in dispatch
+        ? [generations, generationRequest(dispatch)]
+        : [compactions, compactionRequest(dispatch)];
     let response: Response;
     try {
       response = await fetch(endpoint, {
