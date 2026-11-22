@@ -18,10 +18,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "coverage==7.17.3",
   "mypy==2.4.1",
   "openapi-python-client==0.30.0",
   "pytest==9.2.0",
   "pytest-asyncio==1.5.0",
+  "pytest-cov==7.1.0",
   "ruff==0.17.6",
 ]
 
@@ -74,3 +76,12 @@ addopts = ["--strict-markers", "--strict-config"]
 markers = [
   "integration: needs the built test API and the running Postgres of this worktree",
 ]
+
+# Test coverage (docs/testing.md, Coverage): measured only when the `test` task passes `--cov`,
+# which it does when TEST_COVERAGE is `true`; it informs and fails nothing (no `fail_under`).
+# Handwritten package code only: the generated content client is omitted, like in Ruff and mypy.
+# The evals and tests are not measured. The report is written to `coverage/`, ignored by Git.
+[tool.coverage.run]
+source_pkgs = ["llm_agent"]
+omit = ["*/llm_agent/generated/*"]
+data_file = "coverage/.coverage"
