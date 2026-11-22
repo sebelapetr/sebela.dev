@@ -368,6 +368,13 @@ export function chatReplayEvents(
   return events;
 }
 
+// Red stubs of the compaction contract; replaced by the implementation.
+export const chatOperationKinds = [] as const;
+export const chatCompactionOutcomes = [] as const;
+export const ChatCompactionSubmissionSchema = z.never();
+export const ChatCompactionResponseSchema = z.never();
+export const ChatCompactionResultSchema = z.never();
+
 /** Whether trace exports of a cleared conversation still wait for their remote deletion. */
 export const chatTelemetryDeletionStates = ["none", "pending"] as const;
 

@@ -37,6 +37,9 @@ export type {
 } from "./stream.js";
 export {
   ChatAssistantMessageSchema,
+  ChatCompactionResponseSchema,
+  ChatCompactionResultSchema,
+  ChatCompactionSubmissionSchema,
   ChatConversationClearSchema,
   ChatConversationClearedSchema,
   ChatConversationQuerySchema,
@@ -53,10 +56,12 @@ export {
   chatAnswerMaxLength,
   chatAssistantStatuses,
   chatChallengeTokenMaxLength,
+  chatCompactionOutcomes,
   chatConversationPageLimit,
   chatGenerationOutcomes,
   chatGrantMaxLength,
   chatHistoryExchangeLimit,
+  chatOperationKinds,
   chatOperationStatuses,
   chatTelemetryDeletionStates,
   chatProgressStages,

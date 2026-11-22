@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   ChatAssistantMessageSchema,
+  ChatCompactionResponseSchema,
+  ChatCompactionResultSchema,
+  ChatCompactionSubmissionSchema,
   ChatConversationClearSchema,
   ChatConversationClearedSchema,
   ChatConversationQuerySchema,
@@ -15,8 +18,10 @@ import {
   ChatProgressSchema,
   ChatRetrySubmissionSchema,
   chatAssistantStatuses,
+  chatCompactionOutcomes,
   chatConversationPageLimit,
   chatErrorCodes,
+  chatOperationKinds,
   chatOperationStatuses,
   chatReplayEvents,
   chatTerminalForGeneration,
@@ -113,16 +118,58 @@ describe("ChatConversationQuerySchema", () => {
 });
 
 describe("ChatOperationSchema", () => {
+  const operation = {
+    operationId,
+    requestId,
+    kind: "answer",
+    status: "accepted",
+    deadlineAt: createdAt,
+    assistantMessageId: messageId,
+    compaction: null,
+  };
+
   it("describes an operation without any credential or visitor identifier", () => {
-    const operation = {
-      operationId,
-      requestId,
-      status: "accepted",
-      deadlineAt: createdAt,
-      assistantMessageId: messageId,
-    };
     expect(ChatOperationSchema.parse(operation)).toEqual(operation);
     expect(ChatOperationSchema.safeParse({ ...operation, status: "paused" }).success).toBe(false);
+  });
+
+  it("knows an answer and a compaction of the working context", () => {
+    expect(chatOperationKinds).toEqual(["answer", "compaction"]);
+    expect(chatCompactionOutcomes).toEqual(["compacted", "unchanged", "failed"]);
+  });
+
+  it("describes a compaction without an answer message, with its outcome once reported", () => {
+    const compaction = {
+      ...operation,
+      kind: "compaction",
+      status: "completed",
+      assistantMessageId: null,
+      compaction: { outcome: "compacted", reason: null },
+    };
+    expect(ChatOperationSchema.parse(compaction)).toEqual(compaction);
+    const running = { ...compaction, status: "running", compaction: null };
+    expect(ChatOperationSchema.parse(running)).toEqual(running);
+  });
+
+  it.each([
+    ["an operation without a kind", { ...operation, kind: undefined }],
+    ["an answer without its answer message", { ...operation, assistantMessageId: null }],
+    [
+      "an answer with a compaction outcome",
+      { ...operation, compaction: { outcome: "compacted", reason: null } },
+    ],
+    ["a compaction with an answer message", { ...operation, kind: "compaction" }],
+    [
+      "an unknown compaction outcome",
+      {
+        ...operation,
+        kind: "compaction",
+        assistantMessageId: null,
+        compaction: { outcome: "partial", reason: null },
+      },
+    ],
+  ])("refuses %s", (_name, body) => {
+    expect(ChatOperationSchema.safeParse(body).success).toBe(false);
   });
 });
 
@@ -166,9 +213,11 @@ describe("ChatConversationSchema", () => {
       activeOperation: {
         operationId,
         requestId,
+        kind: "answer",
         status: "running",
         deadlineAt: createdAt,
         assistantMessageId: messageId,
+        compaction: null,
       },
       retentionDays: 730,
     };
@@ -205,9 +254,10 @@ describe("internal generation control", () => {
     );
   });
 
-  it("answers a claim with the bound deadline, allowance, model, effort and pricing", () => {
+  it("answers a claim with the kind, the bound deadline, allowance, model, effort and pricing", () => {
     const claimed = {
       claimed: true,
+      kind: "answer",
       deadlineAt: createdAt,
       allowanceUsd: 0.02,
       model: "fake",
@@ -219,6 +269,13 @@ describe("internal generation control", () => {
     const withoutEffort: Record<string, unknown> = { ...claimed };
     delete withoutEffort["effort"];
     expect(ChatGrantClaimedSchema.safeParse(withoutEffort).success).toBe(false);
+    expect(ChatGrantClaimedSchema.parse({ ...claimed, kind: "compaction" })).toMatchObject({
+      kind: "compaction",
+    });
+    const withoutKind: Record<string, unknown> = { ...claimed };
+    delete withoutKind["kind"];
+    expect(ChatGrantClaimedSchema.safeParse(withoutKind).success).toBe(false);
+    expect(ChatGrantClaimedSchema.safeParse({ ...claimed, kind: "summary" }).success).toBe(false);
   });
 
   const result = {
@@ -283,6 +340,163 @@ describe("internal generation control", () => {
     ["an extra field", { ...result, draft: "unapproved" }],
   ])("refuses %s", (_name, body) => {
     expect(ChatGenerationResultSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe("compacting the working context", () => {
+  it("submits a compaction with its own request id and a challenge token, never text", () => {
+    const submission = { requestId, challengeToken: "token" };
+    expect(ChatCompactionSubmissionSchema.parse(submission)).toEqual(submission);
+    for (const body of [
+      { requestId },
+      { ...submission, challengeToken: "" },
+      { ...submission, challengeToken: "x".repeat(2049) },
+      { ...submission, requestId: "r1" },
+      { ...submission, question: "/compact" },
+      { ...submission, conversationId },
+    ]) {
+      expect(ChatCompactionSubmissionSchema.safeParse(body).success).toBe(false);
+    }
+  });
+
+  it("answers a started compaction with its operation, or a local no-op", () => {
+    const started = {
+      status: "started",
+      operation: {
+        operationId,
+        requestId,
+        kind: "compaction",
+        status: "accepted",
+        deadlineAt: createdAt,
+        assistantMessageId: null,
+        compaction: null,
+      },
+    };
+    expect(ChatCompactionResponseSchema.parse(started)).toEqual(started);
+    const noop = { status: "noop", reason: "nothing_to_compact" };
+    expect(ChatCompactionResponseSchema.parse(noop)).toEqual(noop);
+    expect(ChatCompactionResponseSchema.safeParse({ status: "noop" }).success).toBe(false);
+    expect(ChatCompactionResponseSchema.safeParse({ status: "compacted" }).success).toBe(false);
+  });
+
+  const usage = {
+    costUsd: 0.003,
+    costUncertain: false,
+    inputTokens: 4200,
+    outputTokens: 600,
+    modelAttempts: 1,
+  };
+  const summary = {
+    language: "cs",
+    goals: ["Find out whether Alex fits a platform role."],
+    openQuestions: ["Which cloud providers has Alex used?"],
+    covered: ["Harbor Logistics platform work."],
+    visitorClaims: ["The visitor said they hire for a fintech team."],
+    references: [{ kind: "experience", recordId: "harbor-logistics", title: "Harbor Logistics" }],
+  };
+  const compacted = {
+    grant: "g".repeat(43),
+    outcome: "compacted",
+    reason: null,
+    summary,
+    kept: 2,
+    summaryTokens: 240,
+    nextInputTokens: 1800,
+    usage,
+    versions: { compaction: "compaction-v1" },
+    latencyMs: 5200,
+  };
+  const failed = {
+    ...compacted,
+    outcome: "failed",
+    reason: "invalid_summary",
+    summary: null,
+    kept: 0,
+    summaryTokens: 0,
+    nextInputTokens: null,
+  };
+
+  it("accepts a compacted result with its summary and a result that installs nothing", () => {
+    expect(ChatCompactionResultSchema.parse(compacted)).toEqual(compacted);
+    expect(ChatCompactionResultSchema.parse(failed)).toEqual(failed);
+    const unchanged = {
+      ...failed,
+      outcome: "unchanged",
+      reason: "too_small",
+      nextInputTokens: 900,
+    };
+    expect(ChatCompactionResultSchema.parse(unchanged)).toEqual(unchanged);
+  });
+
+  it("defaults a summary's empty lists and a reference's title", () => {
+    const sparse = {
+      ...compacted,
+      summary: { language: "en", references: [{ kind: "project", recordId: "tidewater" }] },
+    };
+    expect(ChatCompactionResultSchema.parse(sparse)).toEqual({
+      ...sparse,
+      summary: {
+        language: "en",
+        goals: [],
+        openQuestions: [],
+        covered: [],
+        visitorClaims: [],
+        references: [{ kind: "project", recordId: "tidewater", title: "" }],
+      },
+    });
+  });
+
+  it.each([
+    ["a compacted result without a summary", { ...compacted, summary: null }],
+    ["a compacted result with a reason", { ...compacted, reason: "partial" }],
+    ["a compacted result without an estimate", { ...compacted, nextInputTokens: null }],
+    ["a failed result carrying a summary", { ...failed, summary }],
+    ["a failed result counting summary tokens", { ...failed, summaryTokens: 10 }],
+    ["a failed result without a reason", { ...failed, reason: null }],
+    ["more kept exchanges than the history holds", { ...compacted, kept: 7 }],
+    ["a summary over the hard token cap", { ...compacted, summaryTokens: 1501 }],
+    ["a negative estimate", { ...compacted, nextInputTokens: -1 }],
+    ["an unknown outcome", { ...compacted, outcome: "partial" }],
+    ["an extra field", { ...compacted, text: "unapproved" }],
+    ["a summary with an extra field", { ...compacted, summary: { ...summary, policy: "x" } }],
+    ["a summary in another language", { ...compacted, summary: { ...summary, language: "de" } }],
+    [
+      "a summary line over 300 characters",
+      { ...compacted, summary: { ...summary, goals: ["x".repeat(301)] } },
+    ],
+    ["an empty summary line", { ...compacted, summary: { ...summary, covered: [""] } }],
+    [
+      "more than five goals",
+      { ...compacted, summary: { ...summary, goals: Array.from({ length: 6 }, () => "x") } },
+    ],
+    [
+      "more than twelve references",
+      {
+        ...compacted,
+        summary: {
+          ...summary,
+          references: Array.from({ length: 13 }, () => summary.references[0]),
+        },
+      },
+    ],
+    [
+      "a reference of an unknown kind",
+      {
+        ...compacted,
+        summary: { ...summary, references: [{ kind: "person", recordId: "alex", title: "" }] },
+      },
+    ],
+    [
+      "more than 20 versions",
+      {
+        ...compacted,
+        versions: Object.fromEntries(
+          Array.from({ length: 21 }, (_, at) => ["v" + String(at), "1"]),
+        ),
+      },
+    ],
+  ])("refuses %s", (_name, body) => {
+    expect(ChatCompactionResultSchema.safeParse(body).success).toBe(false);
   });
 });
 
