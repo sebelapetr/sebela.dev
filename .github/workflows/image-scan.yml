@@ -1,0 +1,63 @@
+# Weekly vulnerability scan of the images currently published (the `current` tags of the api, web
+# and mcp-admin images), reported to code scanning. New vulnerabilities appear without any change in
+# the repository, and the release workflow scans only the images it builds. This workflow reports
+# and never gates anything: findings never fail it (a scan that cannot run does, so a gap is
+# noticed). The release gate and the exceptions file are described in docs/release-workflow.md,
+# "Image scan"; the exceptions do not apply here, so code scanning shows every finding of medium
+# severity and above, with the exceptions' reasons kept in the repository.
+name: Image scan
+
+on:
+  schedule:
+    - cron: "40 5 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan the published images
+    # Natively on arm64, as the images are built for.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    # Only the schedule and a manual run on the default branch: code scanning accepts the results
+    # for the default branch's commit.
+    if: ${{ github.ref_name == github.event.repository.default_branch }}
+    permissions:
+      contents: read
+      security-events: write # upload the SARIF results to code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # The images are public, so no sign-in to GHCR and no secret. Trivy is the command line
+      # pinned by version and checksum, not a third-party action.
+      - name: Install the pinned Trivy
+        run: node scripts/release/image-scan.mjs install >> "$GITHUB_ENV"
+      - name: Scan the current images
+        env:
+          OUT_DIR: ${{ runner.temp }}/image-scan-sarif
+        run: node scripts/release/image-scan.mjs report
+      - name: Upload the api image to code scanning
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: ${{ runner.temp }}/image-scan-sarif/api.sarif
+          category: image-scan-api
+      - name: Upload the web image to code scanning
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: ${{ runner.temp }}/image-scan-sarif/web.sarif
+          category: image-scan-web
+      - name: Upload the mcp-admin image to code scanning
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: ${{ runner.temp }}/image-scan-sarif/mcp-admin.sarif
+          category: image-scan-mcp-admin

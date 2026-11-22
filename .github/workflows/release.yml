@@ -73,10 +73,11 @@ jobs:
   # Natively on arm64, as the server runs: pulls the reused images, builds the planned ones tagged
   # with the commit SHA, starts them all as the production composition with the demo seed and runs
   # the production stack smoke check with the complete-stack browser tests (the mock Ask page; no
-  # model is called). Only when that passes are the built images pushed, the very images that were
-  # verified. Each pushed image then gets a signed SLSA build provenance attestation and an SPDX
-  # SBOM attestation for its pushed digest, stored beside it in GHCR; the job's OIDC token
-  # (`id-token: write`) signs them and `attestations: write` records them.
+  # model is called), then scans the built images for known vulnerabilities. Only when both pass are
+  # the built images pushed, the very images that were verified. Each pushed image then gets a
+  # signed SLSA build provenance attestation and an SPDX SBOM attestation for its pushed digest,
+  # stored beside it in GHCR; the job's OIDC token (`id-token: write`) signs them and
+  # `attestations: write` records them.
   images:
     name: Build, verify and publish the images
     needs: plan
@@ -139,6 +140,16 @@ jobs:
           path: apps/web/test-results/complete-stack/
           if-no-files-found: ignore
           retention-days: 14
+      # The gate: no image is published while it holds a critical or high finding that a newer
+      # package fixes, unless an unexpired exception of scripts/release/image-scan-exceptions.json
+      # excuses it (docs/release-workflow.md, "Image scan"). It needs no sign-in and no secret: it
+      # scans the local images with the Trivy command line, pinned by version and checksum in
+      # scripts/release/image-scan.mjs, and the vulnerability database is public. BUILD (the job's
+      # env) lists the images this run built; reused images were gated by the run that built them.
+      - name: Install the pinned Trivy
+        run: node scripts/release/image-scan.mjs install >> "$GITHUB_ENV"
+      - name: Scan the built images for known vulnerabilities
+        run: node scripts/release/image-scan.mjs gate
       - name: Sign in to GHCR to publish
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
