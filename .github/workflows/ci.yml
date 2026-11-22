@@ -96,7 +96,7 @@ jobs:
       # .python-version and exactly what uv.lock records. Their pnpm task wrappers run through
       # Turborepo like every other package; the drift check below regenerates the Python content
       # client too.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version-file: pyproject.toml
           resolution-strategy: lowest
@@ -221,7 +221,7 @@ jobs:
       # (packages/llm-agent, `uv build`) included, so the job needs uv: the lower bound of
       # `required-version` in the root pyproject.toml, as in the quality job.
       - if: steps.website.outputs.affected == 'true'
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version-file: pyproject.toml
           resolution-strategy: lowest
