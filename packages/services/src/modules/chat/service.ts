@@ -3,6 +3,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import {
   ChatAssistantMessageSchema,
+  ChatCompactionResultSchema,
+  ChatContextSummarySchema,
   ChatGenerationResultSchema,
   ChatSourceSchema,
   chatGrantMaxLength,
@@ -12,6 +14,8 @@ import {
   chatReplayEvents,
   chatTerminalForGeneration,
   type ChatAssistantMessage,
+  type ChatCompactionResult,
+  type ChatContextSummary,
   type ChatConversation,
   type ChatConversationQuery,
   type ChatGenerationResult,
@@ -22,11 +26,13 @@ import {
   type ChatRestrictionReason,
 } from "@sebela/contracts";
 import type {
+  ChatCompactionRecord,
   ChatExchangeRecord,
   ChatMessageRecord,
   ChatOperationRecord,
   ChatPersistence,
   ChatResultRecord,
+  ChatWorkingContextRecord,
 } from "@sebela/db";
 
 import {
@@ -41,8 +47,10 @@ import {
 } from "./policy.js";
 import type {
   ChatCaller,
+  ChatCompactResult,
   ChatHistoryExchange,
   ChatObservation,
+  ChatReconcileOutcome,
   ChatRetryOutcome,
   ChatService,
   ChatServiceOptions,
@@ -73,12 +81,23 @@ const unknownAddressBucket = "unknown";
 const newToken = () => randomBytes(32).toString("base64url");
 const digest = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 
+/**
+ * Fewer working-context exchanges than this is nothing to compact: a local no-op that verifies,
+ * counts and reserves nothing.
+ */
+const compactionMinimumExchanges = 3;
+
+/** The request digest of a compaction; it has no question, so every compaction shares it. */
+const compactionHash = createHash("sha256").update("compact", "utf8").digest("hex");
+
 const toOperation = (record: ChatOperationRecord): ChatOperation => ({
   operationId: record.id,
   requestId: record.requestId,
+  kind: record.kind,
   status: record.status,
   deadlineAt: record.deadlineAt.toISOString(),
   assistantMessageId: record.assistantMessageId,
+  compaction: record.kind === "compaction" ? record.compaction : null,
 });
 
 /** A stored answer in the contract's shape; the schema guards that nothing else leaves. */
@@ -138,6 +157,58 @@ function toExchange(record: ChatExchangeRecord): ChatHistoryExchange | null {
     }),
   };
 }
+
+/**
+ * A stored working context as the AI service accepts it: the summary when it still validates
+ * (otherwise none) and the exchanges it can take, oldest first.
+ */
+function toContext(record: ChatWorkingContextRecord): {
+  summary: ChatContextSummary | null;
+  exchanges: ChatHistoryExchange[];
+} {
+  const summary = ChatContextSummarySchema.safeParse(record.summary);
+  return {
+    summary: summary.success ? summary.data : null,
+    exchanges: record.exchanges.flatMap((exchange) => toExchange(exchange) ?? []),
+  };
+}
+
+/** A compaction's validated result as stored; only `compacted` carries a summary. */
+function compactionRecord(result: ChatCompactionResult): ChatCompactionRecord {
+  const { usage } = result;
+  return {
+    outcome: result.outcome,
+    reason: result.reason,
+    summary: result.summary,
+    kept: result.kept,
+    summaryTokens: result.summaryTokens,
+    nextInputTokens: result.nextInputTokens,
+    costMicroUsd: usage.costUncertain ? null : Math.round(usage.costUsd * 1_000_000),
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    modelAttempts: usage.modelAttempts,
+    latencyMs: result.latencyMs,
+    versions: result.versions,
+    exchangeLimit: chatHistoryExchangeLimit,
+  };
+}
+
+/** A compaction result outside the contract: a failure that installs nothing, its cost unknown. */
+const invalidCompaction: ChatCompactionRecord = {
+  outcome: "failed",
+  reason: "invalid_result",
+  summary: null,
+  kept: 0,
+  summaryTokens: 0,
+  nextInputTokens: null,
+  costMicroUsd: null,
+  inputTokens: 0,
+  outputTokens: 0,
+  modelAttempts: 0,
+  latencyMs: 0,
+  versions: {},
+  exchangeLimit: chatHistoryExchangeLimit,
+};
 
 const nothing = { text: null, language: null, blocks: [], sources: [], related: [] };
 
@@ -263,9 +334,8 @@ export function createChatService(
     grant: string,
     at: Date,
   ): Promise<ChatSubmitResult> => {
-    const history = await persistence.recentExchanges(
-      caller.conversationId,
-      chatHistoryExchangeLimit,
+    const context = toContext(
+      await persistence.workingContext(caller.conversationId, chatHistoryExchangeLimit),
     );
     return {
       status: "admitted",
@@ -274,7 +344,8 @@ export function createChatService(
         operationId: operation.id,
         grant,
         question,
-        history: history.flatMap((record) => toExchange(record) ?? []),
+        summary: context.summary,
+        history: context.exchanges,
         today: pragueDate(at),
         deadlineAt: operation.deadlineAt.toISOString(),
         contextRevision: operation.contextRevision,
@@ -294,7 +365,7 @@ export function createChatService(
       | { status: "challenge_reused" }
       | { status: "quota_exceeded"; retryAt: Date }
       | { status: "budget_exhausted" },
-  ): ChatSubmitResult => {
+  ): Exclude<ChatSubmitResult, { status: "admitted" | "existing" | "conflict" }> => {
     switch (result.status) {
       case "busy":
         return { status: "busy", operation: toOperation(result.operation) };
@@ -416,6 +487,55 @@ export function createChatService(
     }
   };
 
+  const admitCompaction = async (
+    caller: ChatCaller,
+    requestId: string,
+    challengeTokenHash: string,
+    context: { clientAddress: string | null },
+  ): Promise<ChatCompactResult> => {
+    const { grant, input } = gates(challengeTokenHash, context);
+    const result = await persistence.admitCompaction({
+      ...input,
+      identityId: caller.identityId,
+      conversationId: caller.conversationId,
+      requestId,
+      questionHash: compactionHash,
+      minimumExchanges: compactionMinimumExchanges,
+      exchangeLimit: chatHistoryExchangeLimit,
+    });
+    switch (result.status) {
+      case "nothing_to_compact":
+        return { status: "noop", reason: "nothing_to_compact" };
+      case "duplicate":
+        return result.sameQuestion
+          ? { status: "existing", operation: toOperation(result.operation) }
+          : { status: "conflict" };
+      case "admitted": {
+        const { operation } = result;
+        const working = toContext(result.context);
+        return {
+          status: "started",
+          operation: toOperation(operation),
+          dispatch: {
+            operationId: operation.id,
+            grant,
+            summary: working.summary,
+            exchanges: working.exchanges,
+            deadlineAt: operation.deadlineAt.toISOString(),
+            contextRevision: operation.contextRevision,
+            model: operation.model,
+            // The effort this admission bound to the operation (`gates`).
+            effort: config.effort,
+            pricingVersion: operation.pricingVersion,
+            allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
+          },
+        };
+      }
+      default:
+        return refused(result);
+    }
+  };
+
   const cancelled = { code: "cancelled" as const, retryable: true };
 
   const readConversation = async (
@@ -519,7 +639,8 @@ export function createChatService(
       if (latest !== null && recoverable.has(latest.status)) {
         return { status: "existing", operation: toOperation(latest) };
       }
-      if (latest?.id !== operationId || target.assistant.errorRetryable !== true) {
+      // A compaction has no answer to retry: it is never asked again as a question.
+      if (latest?.id !== operationId || target.assistant?.errorRetryable !== true) {
         return { status: "not_retryable" };
       }
       const active = await persistence.findActiveOperation(caller.identityId);
@@ -596,7 +717,8 @@ export function createChatService(
     async observe(caller, operationId): Promise<ChatObservation | null> {
       if (!uuidPattern.test(operationId)) return null;
       const found = await persistence.findOperation(caller.identityId, operationId);
-      if (found === null) return null;
+      // A compaction has no answer to observe; its progress is the operation itself.
+      if (found?.assistant == null) return null;
       const assistant = toAssistant(found.assistant);
       const elapsedMs = Math.max(0, now().getTime() - found.operation.admittedAt.getTime());
       return {
@@ -618,6 +740,7 @@ export function createChatService(
         status: "claimed",
         claimed: {
           claimed: true,
+          kind: operation.kind,
           deadlineAt: operation.deadlineAt.toISOString(),
           allowanceUsd: operation.allowanceMicroUsd / 1_000_000,
           model: operation.model,
@@ -638,6 +761,62 @@ export function createChatService(
         digest(grant),
         now(),
         parsed.success ? resultRecord(parsed.data) : invalidResult,
+      );
+      if (result.status === "reconciled" || result.status === "already") {
+        return { status: result.status, operation: toOperation(result.operation) };
+      }
+      return { status: result.status };
+    },
+
+    async compact(caller, submission, context) {
+      const recovered = async (): Promise<ChatCompactResult | null> => {
+        const earlier = await persistence.findOperationByRequest(
+          caller.identityId,
+          submission.requestId,
+        );
+        if (earlier === null) return null;
+        return earlier.kind === "compaction" && earlier.questionHash === compactionHash
+          ? { status: "existing", operation: toOperation(earlier) }
+          : { status: "conflict" };
+      };
+      const known = await recovered();
+      if (known !== null) return known;
+      const active = await persistence.findActiveOperation(caller.identityId);
+      if (active !== null) return { status: "busy", operation: toOperation(active) };
+      // A small context is answered locally, before any challenge, quota or spend; the admission
+      // checks it again under the identity lock.
+      const working = toContext(
+        await persistence.workingContext(caller.conversationId, chatHistoryExchangeLimit),
+      );
+      if (working.exchanges.length < compactionMinimumExchanges) {
+        return { status: "noop", reason: "nothing_to_compact" };
+      }
+
+      return redeemOnce<ChatCompactResult>(
+        {
+          identityId: caller.identityId,
+          requestId: submission.requestId,
+          questionHash: compactionHash,
+          token: submission.challengeToken,
+        },
+        context,
+        recovered,
+        (challengeTokenHash) =>
+          admitCompaction(caller, submission.requestId, challengeTokenHash, context),
+        { conflict: { status: "conflict" }, challengeFailed: { status: "challenge_failed" } },
+      );
+    },
+
+    async reconcileCompaction(operationId, body): Promise<ChatReconcileOutcome> {
+      const parsed = ChatCompactionResultSchema.safeParse(body);
+      const grant = parsed.success ? parsed.data.grant : grantOf(body);
+      if (grant === null) return { status: "invalid" };
+      if (!uuidPattern.test(operationId)) return { status: "wrong_grant" };
+      const result = await persistence.reconcileCompaction(
+        operationId,
+        digest(grant),
+        now(),
+        parsed.success ? compactionRecord(parsed.data) : invalidCompaction,
       );
       if (result.status === "reconciled" || result.status === "already") {
         return { status: result.status, operation: toOperation(result.operation) };
@@ -740,8 +919,16 @@ export function createChatService(
                 reportedInputTokens: read.context.reportedInputTokens,
                 capTokens: read.context.capTokens,
               },
-        // No compaction exists yet, so the next request's input cannot be estimated truthfully.
-        nextRequest: { status: "unavailable" },
+        // Only an installed compaction measured the working context the next question carries.
+        nextRequest:
+          read.nextRequest === null
+            ? { status: "unavailable" }
+            : {
+                status: "estimated",
+                historyTokens: read.nextRequest.historyTokens,
+                operationId: read.nextRequest.operationId,
+                measuredAt: read.nextRequest.measuredAt.toISOString(),
+              },
       };
     },
   };
@@ -764,6 +951,8 @@ export const unconfiguredChat: ChatService = {
   observe: chatOff,
   claim: chatOff,
   reconcile: chatOff,
+  compact: chatOff,
+  reconcileCompaction: chatOff,
   dispatchRefused: chatOff,
   interruptOverdue: chatOff,
   deleteExpired: chatOff,

@@ -1353,7 +1353,7 @@ describe("visitor chat service", () => {
 
     const compact = (
       caller: ChatCaller,
-      requestId = randomUUID(),
+      requestId: string = randomUUID(),
       challengeToken = `fictional-token-${randomUUID()}`,
     ) => chat.compact(caller, { requestId, challengeToken }, { clientAddress: nextAddress() });
 
@@ -1571,7 +1571,7 @@ describe("visitor chat service", () => {
         }),
       ).resolves.toMatchObject({
         status: "reconciled",
-        operation: { status: "completed", compaction: { outcome: "failed", reason: "provider" } },
+        operation: { status: "failed", compaction: { outcome: "failed", reason: "provider" } },
       });
       now = new Date(now.getTime() + 61_000);
 

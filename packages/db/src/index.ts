@@ -40,6 +40,10 @@ export type {
   ChatClaimResult,
   ChatClearInput,
   ChatClearResult,
+  ChatCompactionAdmissionInput,
+  ChatCompactionAdmissionResult,
+  ChatCompactionOutcome,
+  ChatCompactionRecord,
   ChatContextMeasurement,
   ChatConversationRecord,
   ChatExchangeRecord,
@@ -63,6 +67,7 @@ export type {
   ChatTelemetryReferenceInput,
   ChatUsageInput,
   ChatUsageRecord,
+  ChatWorkingContextRecord,
 } from "./modules/chat/index.js";
 export type { MaintenancePersistence } from "./modules/maintenance/index.js";
 export type {
