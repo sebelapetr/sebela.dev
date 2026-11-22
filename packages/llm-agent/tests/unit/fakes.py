@@ -524,6 +524,8 @@ class FakeContent:
         self.calls: list[str] = []
         #: The most reads that were in flight at once.
         self.peak = 0
+        #: Reads that were cancelled before they finished.
+        self.cancelled = 0
         self._active = 0
 
     async def _read(self, name: str) -> None:
@@ -533,6 +535,9 @@ class FakeContent:
         self.peak = max(self.peak, self._active)
         try:
             await asyncio.sleep(self.delays.get(name.split(":")[0], 0))
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
         finally:
             self._active -= 1
         if self.fail:

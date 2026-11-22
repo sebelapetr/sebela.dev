@@ -272,6 +272,25 @@ async def test_cancelling_during_tool_reads_stops_them_and_schedules_no_more() -
     assert result.evidence == []
 
 
+async def test_a_stop_cancels_the_reads_still_in_flight() -> None:
+    content = SlowContent()
+    models = ScriptedModels(
+        security=[verdict()],
+        main=[calls(("get_profile", {}), ("list_projects", {}), ("list_services", {})), draft()],
+    )
+    cancel = asyncio.Event()
+    task = asyncio.create_task(run(models, content=content, cancel=cancel))
+    await content.full.wait()
+    await asyncio.sleep(0.01)
+    cancel.set()
+    result = await task
+    assert result.outcome == "cancelled"
+    # No model attempt was in flight, so the stopped cost stays measured.
+    assert result.usage.cost_uncertain is False
+    # Nothing the stopped execution scheduled keeps running after it returns.
+    assert content.cancelled == 3
+
+
 # --- Telemetry export -------------------------------------------------------------------------
 
 
