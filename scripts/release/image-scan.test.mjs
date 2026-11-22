@@ -193,9 +193,11 @@ describe("exceptions file", () => {
   it("the committed file is valid: well formed and within 90 days of the commit that last changed it", () => {
     const file = path.join(import.meta.dirname, "image-scan-exceptions.json");
     const text = fs.readFileSync(file, "utf8");
-    // The reference day is the date of the file's last commit (today for an uncommitted file), not
-    // today's date, so a malformed entry or one too far ahead fails here, in CI, when it is added,
-    // and an entry that merely expires later does not turn unrelated pull requests red.
+    // The reference day is the date of the latest commit Git reports for the file (in a shallow
+    // clone that is the head commit, which may not have touched it); only when Git gives no date,
+    // for an untracked file or outside a checkout, it is today. It is not today's date otherwise,
+    // so a malformed entry or one too far ahead fails here, in CI, when it is added, and an entry
+    // that merely expires later does not turn unrelated pull requests red.
     let reference = "";
     try {
       reference = execFileSync("git", ["log", "-1", "--format=%cs", "--", file], {
@@ -345,10 +347,20 @@ function sandbox() {
   return { dir, fake, args: path.join(dir, "args.log") };
 }
 
+// The gate reads the exceptions file named by EXCEPTIONS. Unless a test names its own, it gets an
+// empty one, so no test depends on the committed file or on the clock.
 function run(command, env, box) {
+  const neutral = path.join(box.dir, "neutral-exceptions.json");
+  fs.writeFileSync(neutral, exceptionsText());
   return spawnSync(process.execPath, [script, command], {
     encoding: "utf8",
-    env: { PATH: process.env.PATH, TRIVY: box.fake, FAKE_ARGS: box.args, ...env },
+    env: {
+      PATH: process.env.PATH,
+      TRIVY: box.fake,
+      FAKE_ARGS: box.args,
+      EXCEPTIONS: neutral,
+      ...env,
+    },
   });
 }
 
@@ -547,6 +559,23 @@ describe("exceptions limited to a path", () => {
     const verdict = gate({ api: shipped }, scoped);
     assert.equal(verdict.ok, false);
     assert.equal(verdict.blocking.length, 1);
+  });
+
+  it("does not follow `..` out of the path: a finding that climbs out of the folder is not excused", () => {
+    const climbing = report([
+      finding(`${NPM}../../../../app/node_modules/undici/package.json`),
+      finding(`${NPM}node_modules/../../../../../app/node_modules/undici/package.json`),
+    ]);
+    const verdict = gate({ api: climbing }, entry({ path: NPM }));
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.blocking.length, 2);
+  });
+
+  it("refuses an entry whose path has a `..` segment", () => {
+    for (const bad of ["usr/local/../../app/", "../etc/", "usr/./local/", "usr//local/"]) {
+      const { problems } = parseExceptions(exceptionsText(entry({ path: bad })), { today: TODAY });
+      assert.ok(problems.length >= 1, bad);
+    }
   });
 
   it("does not match a sibling folder that merely starts with the same letters", () => {
