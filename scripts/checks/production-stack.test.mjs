@@ -28,8 +28,11 @@ const NOT_PRODUCTION_SETTINGS = new Set(["API_HOST", "API_PORT"]);
 const exampleText = readFileSync(path.join(root, EXAMPLE_FILE), "utf8");
 const example = parseEnv(exampleText);
 
-/** The composition as Compose renders it from the example settings and the given overrides. */
-function render(overrides = {}) {
+/**
+ * The composition as Compose renders it from the example settings and the given overrides, with the
+ * given profiles active.
+ */
+function render(overrides = {}, profiles = []) {
   const output = execFileSync(
     "docker",
     [
@@ -42,6 +45,7 @@ function render(overrides = {}) {
       PRODUCTION_FILE,
       "--env-file",
       EXAMPLE_FILE,
+      ...profiles.flatMap((profile) => ["--profile", profile]),
       "config",
       "--format",
       "json",
@@ -153,6 +157,50 @@ describe("the production composition", () => {
   });
 });
 
+/** A Compose duration such as `1m15s` in seconds. */
+function seconds(duration) {
+  const units = { h: 3600, m: 60, s: 1 };
+  const parts = [...String(duration ?? "").matchAll(/(\d+)([hms])/g)];
+  return parts.reduce((total, [, amount, unit]) => total + Number(amount) * units[unit], 0);
+}
+
+describe("the production AI service (issue #210)", () => {
+  // Behind its profile until the release pipeline publishes and deploys its image, so a deploy that
+  // knows only the API, website and MCP Admin images neither pulls nor starts it.
+  const withAi = render({ AI_SERVICE_IMAGE_TAG: "tag-ai" }, ["ai-service"]);
+  /** @type {Record<string, any>} */
+  const ai = withAi.services["ai-service"] ?? {};
+
+  it("is not part of a start without its profile", () => {
+    assert.equal(rendered.services["ai-service"], undefined);
+    assert.deepEqual(ai.profiles, ["ai-service"]);
+  });
+
+  it("runs its published image by its own tag and builds nothing", () => {
+    assert.equal(ai.image, `${REGISTRY}/sebela-ai-service:tag-ai`);
+    assert.equal(ai.build, undefined);
+  });
+
+  it("publishes no port and shares only the chat network with the API", () => {
+    assert.deepEqual(ai.ports ?? [], []);
+    assert.deepEqual(Object.keys(ai.networks ?? {}), ["chat"]);
+    assert.ok("chat" in (service("api", withAi).networks ?? {}));
+  });
+
+  it("restarts unless stopped, rotates its logs, checks its health and stops gracefully", () => {
+    assert.equal(ai.restart, "unless-stopped");
+    assert.equal(ai.logging?.driver, "json-file");
+    assert.match(ai.logging?.options?.["max-size"] ?? "", /^\d+[km]$/);
+    assert.ok(ai.healthcheck?.test);
+    assert.ok(seconds(ai.stop_grace_period) >= 75);
+  });
+
+  it("runs the fictional model with the example settings", () => {
+    assert.equal(ai.environment?.AI_SERVICE_MODEL ?? "", "");
+    assert.equal(ai.environment?.AI_SERVICE_ALLOW_PAID ?? "", "");
+  });
+});
+
 describe("the production example settings", () => {
   it("document every setting the composition reads", () => {
     const names = new Set([...interpolated(BASE_FILE), ...interpolated(PRODUCTION_FILE)]);
@@ -200,6 +248,10 @@ describe("the production images", () => {
       const healthcheck = /^HEALTHCHECK [^\n]*\\\n\s+CMD \[([^\n]*)\]$/m.exec(text)?.[1] ?? "";
       assert.ok(healthcheck.includes(`\\"${route}\\"`), `${app} checks ${route}`);
     }
+    const ai = dockerfile("ai-service");
+    assert.match(ai, /^USER app$/m);
+    const healthcheck = /^HEALTHCHECK [^\n]*\\\n\s+CMD \[([^\n]*)\]$/m.exec(ai)?.[1] ?? "";
+    assert.ok(healthcheck.includes('\\"/health\\"'), "ai-service checks /health");
   });
 
   it("take only the fictional demo seed from the build context", () => {
