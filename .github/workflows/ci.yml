@@ -138,6 +138,11 @@ jobs:
       # committed files.
       - name: Generated API client matches the API
         run: pnpm check:api-client
+      # On every run too: exports the AI service's OpenAPI document from its source (no model, no
+      # secrets) and regenerates the API's types of it, failing on any difference from the
+      # committed document or types.
+      - name: Generated AI service types match the AI service
+        run: pnpm check:ai-service-types
       # The published coverage figure covers every package: on a push to master that changes more
       # than documentation the tests of the packages the push did not affect run too. Those tested
       # above are cache hits, their coverage reports already on disk. A push of documentation alone

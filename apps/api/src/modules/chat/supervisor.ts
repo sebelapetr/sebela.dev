@@ -1,10 +1,6 @@
 import type { ChatDispatch, ChatService } from "@sebela/services";
 
-import {
-  generationAcceptedStatus,
-  generationsPath,
-  type GenerationRequest,
-} from "../../generated/ai-service/index.js";
+import type { components } from "../../generated/ai-service/schema.js";
 import { redact, type Logger } from "../../middleware/logging.js";
 import type { ChatDispatcher } from "./routes.js";
 
@@ -25,6 +21,40 @@ export interface ChatSupervisor extends ChatDispatcher {
   start(): void;
   /** Stops the watcher and waits for the dispatches in flight. */
   close(): Promise<void>;
+}
+
+/** The body of the AI service's `POST /internal/v1/generations`, generated from its document. */
+type GenerationRequest = components["schemas"]["GenerationRequest"];
+
+/** The generation route, relative to the AI service's base address. */
+const generationsPath = "internal/v1/generations";
+
+/** The only status that means the AI service accepted the generation. */
+const generationAcceptedStatus = 202;
+
+/** The dispatch in the AI service's generated request shape; the compiler checks every field. */
+function generationRequest(dispatch: ChatDispatch): GenerationRequest {
+  return {
+    operationId: dispatch.operationId,
+    grant: dispatch.grant,
+    question: dispatch.question,
+    history: dispatch.history.map((exchange) => ({
+      question: exchange.question,
+      answer: exchange.answer,
+      language: exchange.language,
+      sources: exchange.sources.map((source) => ({
+        kind: source.kind,
+        recordId: source.recordId,
+        title: source.title,
+      })),
+    })),
+    today: dispatch.today,
+    deadlineAt: dispatch.deadlineAt,
+    contextRevision: dispatch.contextRevision,
+    model: dispatch.model,
+    pricingVersion: dispatch.pricingVersion,
+    allowanceUsd: dispatch.allowanceUsd,
+  };
 }
 
 const DEFAULT_GRACE_MS = 15_000;
@@ -58,7 +88,7 @@ export function createChatSupervisor(options: ChatSupervisorOptions): ChatSuperv
   };
 
   const send = async (dispatch: ChatDispatch) => {
-    const body: GenerationRequest = dispatch;
+    const body = generationRequest(dispatch);
     let response: Response;
     try {
       response = await fetch(endpoint, {

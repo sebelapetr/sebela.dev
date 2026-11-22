@@ -47,11 +47,14 @@ export interface ChatOpened {
   readonly cookie: string | null;
 }
 
-/** A completed answered exchange as the AI service receives it for context. */
+/**
+ * A completed answered exchange as the AI service receives it for context: one with a language, a
+ * question and an answer; any other stored exchange is left out.
+ */
 export interface ChatHistoryExchange {
   readonly question: string;
   readonly answer: string;
-  readonly language: "en" | "cs" | null;
+  readonly language: "en" | "cs";
   readonly sources: readonly { kind: ChatSourceKind; recordId: string; title: string }[];
 }
 

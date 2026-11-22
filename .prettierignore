@@ -6,6 +6,11 @@ packages/db/migrations/
 # Generated from the API's OpenAPI document and committed as generated; the drift check compares it.
 packages/api-client/src/generated/
 
+# Generated from the AI service's OpenAPI document, which its export writes, and committed as
+# generated; the AI service's drift test and the API's drift check compare them.
+apps/ai-service/openapi.json
+apps/api/src/generated/
+
 # Archived phase plans are frozen as they were merged; moving them must not reformat them.
 .plan/done/
 

@@ -15,6 +15,8 @@
     "check:private-terms": "node harness/with-secrets.mjs -- node scripts/checks/private-terms.mjs",
     "generate:api-client": "pnpm --silent --filter @sebela/api openapi:export ../../packages/api-client/src/generated/openapi.json && pnpm --silent --filter @sebela/api-client generate && pnpm --silent --filter @sebela/api-client-python generate",
     "check:api-client": "node scripts/checks/generated-drift.mjs packages/api-client/src/generated packages/api-client-python/src/sebela_api_client -- pnpm --silent generate:api-client",
+    "generate:ai-service-types": "pnpm --silent --filter @sebela/ai-service export:openapi && pnpm --silent --filter @sebela/api generate:ai-service",
+    "check:ai-service-types": "node scripts/checks/generated-drift.mjs apps/ai-service/openapi.json apps/api/src/generated/ai-service -- pnpm --silent generate:ai-service-types",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test test:harness test:checks",
     "test:harness": "node --test harness/",

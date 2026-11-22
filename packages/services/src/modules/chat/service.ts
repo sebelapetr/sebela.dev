@@ -81,23 +81,31 @@ const toMessage = (record: ChatMessageRecord): ChatMessage =>
       }
     : toAssistant(record);
 
-const toExchange = (record: ChatExchangeRecord): ChatHistoryExchange => ({
-  question: record.question,
-  answer: record.answer,
-  language: record.language === "en" || record.language === "cs" ? record.language : null,
-  sources: record.sources.flatMap((source) => {
-    const parsed = ChatSourceSchema.safeParse(source);
-    return parsed.success
-      ? [
-          {
-            kind: parsed.data.record.kind,
-            recordId: parsed.data.record.id,
-            title: parsed.data.title,
-          },
-        ]
-      : [];
-  }),
-});
+/**
+ * A stored answered exchange as the AI service accepts it for context, or `null` when it lacks a
+ * language, a question or an answer the AI service's schema requires; those are left out.
+ */
+function toExchange(record: ChatExchangeRecord): ChatHistoryExchange | null {
+  const { language, question, answer } = record;
+  if ((language !== "en" && language !== "cs") || question === "" || answer === "") return null;
+  return {
+    question,
+    answer,
+    language,
+    sources: record.sources.flatMap((source) => {
+      const parsed = ChatSourceSchema.safeParse(source);
+      return parsed.success
+        ? [
+            {
+              kind: parsed.data.record.kind,
+              recordId: parsed.data.record.id,
+              title: parsed.data.title,
+            },
+          ]
+        : [];
+    }),
+  };
+}
 
 const nothing = { text: null, language: null, blocks: [], sources: [], related: [] };
 
@@ -289,7 +297,7 @@ export function createChatService(
               operationId: operation.id,
               grant,
               question,
-              history: history.map(toExchange),
+              history: history.flatMap((record) => toExchange(record) ?? []),
               today: pragueDate(at),
               deadlineAt: operation.deadlineAt.toISOString(),
               contextRevision: operation.contextRevision,
