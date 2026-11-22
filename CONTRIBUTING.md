@@ -8,7 +8,7 @@ The code is written by the owner together with coding agents. The owner decides 
 
 ### Phases and issues
 
-Work is planned in **phases**. Each phase has a product specification (PRD) in [`.plan/`](.plan/00-overview/prd.md); finished phases are archived in `.plan/done/`. A phase is broken into GitHub issues, each a thin vertical slice with acceptance criteria and a `phase:<phase-folder>` label. Issues marked `hitl` need the owner (a decision or a design review); the rest can be finished by agents alone.
+Work is planned in **phases**. Each phase has a product specification (PRD) in [`.plan/`](.plan/00-overview/prd.md); finished phases are archived in `.plan/done/`. A phase is broken into GitHub issues, each a thin vertical slice with acceptance criteria. On GitHub a release is a **milestone**, and work in it comes in three kinds. A **phase** has a PRD and one **tracking issue** (issue type `Phase`, with the line `Plan: .plan/<phase-folder>`); the phase's issues are that issue's **sub-issues**, in the order they are worked on, with native blocked-by links for what must come first. An **epic** is a group of related issues under a tracking issue of type `Epic`, without a PRD or a phase branch; each of its issues gets its own pull request into `master`. An **issue without an epic** stands on its own. Issues are typed `Feature`, `Bug` or `Task`. Labels only say who may take an issue: `ready-for-agent` (approved for agents), `hitl` (needs the owner: a decision or a design review; such an issue is assigned to the owner) and `afk` (agents can finish it alone). The owner's `Priority`, `Start date` and `Target date` fields are planning aids. Types, fields and assignees are for readers; the agent tooling decides from the tracking issue, the order, the blockers and the labels `ready-for-agent`, `hitl` and `agent-failed` only.
 
 ### One issue, one branch, one worktree, one pull request
 
@@ -23,7 +23,7 @@ all issues of the phase → phase pull request → owner review → merge into m
 - A reviewer agent checks the branch against the issue and the repository rules before a pull request is opened. The orchestrator agent squash-merges reviewed issue pull requests into the phase branch.
 - The phase pull request into `master` is reviewed and **merged only by the owner**. Nobody pushes to `master`.
 
-The owner can run a whole phase unattended with `harness/run-phase.sh <phase-folder>`: a loop that takes one ready issue at a time, each with a fresh agent, and skips issues that need a human. Hooks keep the agents inside the rules: a guard refuses forbidden actions, edited files are formatted, and a handoff is refused while lint or typecheck fail.
+The owner can run a whole phase unattended with `harness/run-phase.sh <phase-folder>`: a loop that takes one issue at a time — the first sub-issue of the phase's tracking issue that is ready and not blocked — each with a fresh agent, and skips issues that need a human. Hooks keep the agents inside the rules: a guard refuses forbidden actions, edited files are formatted, and a handoff is refused while lint or typecheck fail.
 
 Details: [git workflow](docs/git-workflow.md), [agents](docs/agents.md), [permissions](docs/permissions.md), [harness](harness/README.md).
 

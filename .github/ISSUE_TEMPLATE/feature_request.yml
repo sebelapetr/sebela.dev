@@ -1,11 +1,11 @@
 name: Idea or feature
 description: Suggest an improvement to the website, the AI features, the tooling or the docs.
-labels: ["enhancement"]
+type: Feature
 body:
   - type: markdown
     attributes:
       value: |
-        Ideas are welcome. Larger work is planned in phases (`.plan/`), so an accepted idea may land in a later phase rather than straight away. For an open-ended question, [Discussions](https://github.com/sebelapetr/sebela.dev/discussions) may suit better.
+        Ideas are welcome. Larger work is planned in phases (`.plan/`), so an accepted idea may land in a later phase rather than straight away: the owner then adds it to a release milestone, on its own or as a sub-issue of the phase's tracking issue (`docs/git-workflow.md`, Issues). For an open-ended question, [Discussions](https://github.com/sebelapetr/sebela.dev/discussions) may suit better.
   - type: textarea
     id: what
     attributes:

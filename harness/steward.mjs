@@ -26,9 +26,10 @@ import {
   usageOf,
 } from "./lib/steward.mjs";
 import { countDispatches } from "./lib/phase-report.mjs";
-import { currentWork, describeWork, phaseProgress } from "./lib/progress.mjs";
+import { currentWork, describeWork } from "./lib/progress.mjs";
 import { worktreeDirName } from "./lib/slots.mjs";
 import { ledgerRuns, mergeRuns, parseCampaigns, summarizeSpend } from "./lib/spend.mjs";
+import { phaseWork } from "./phase-work.mjs";
 import { askAgent, quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import { listWorktrees } from "./worktree.mjs";
 
@@ -86,37 +87,24 @@ function failingPullRequests(phase) {
     .map((pr) => pr.number);
 }
 
-// Closed of all the phase's issues, or null when GitHub cannot be asked.
-export function phaseProgressNow(phase) {
-  const out = quiet("gh", [
-    "issue",
-    "list",
-    "--label",
-    `phase:${phase}`,
-    "--state",
-    "all",
-    "--limit",
-    "200",
-    "--json",
-    "state",
-  ]);
-  return out === null ? null : phaseProgress(JSON.parse(out));
+// The phase's work selection (harness/phase-work.mjs), or null when GitHub cannot be asked or
+// the phase has no single tracking issue: the steward and the loop's progress go on without it.
+export function phaseWorkNow(phase) {
+  try {
+    return phaseWork(phase);
+  } catch {
+    return null;
+  }
 }
 
-export function failedIssues(phase) {
-  const out = quiet("gh", [
-    "issue",
-    "list",
-    "--label",
-    `phase:${phase}`,
-    "--label",
-    "agent-failed",
-    "--state",
-    "open",
-    "--json",
-    "number",
-  ]);
-  return out === null ? [] : JSON.parse(out).map((issue) => issue.number);
+// Closed of all the phase's issues — the sub-issues of its tracking issue — or null.
+export function phaseProgressNow(phase, work = phaseWorkNow(phase)) {
+  return work ? work.progress : null;
+}
+
+// The phase's open issues labelled `agent-failed`.
+export function failedIssues(phase, work = phaseWorkNow(phase)) {
+  return (work?.open ?? []).filter((issue) => issue.kind === "failed").map((issue) => issue.number);
 }
 
 // Worktrees whose branch belongs to a merged pull request; the caller reports only those seen twice,
@@ -474,6 +462,8 @@ export async function checkOnce({
   state.seenMerged = new Set(merged);
 
   const work = currentWork(main ?? []);
+  // One read of the phase's tracking issue for both the progress and the failed issues.
+  const phaseWorkFacts = phaseWorkNow(phase);
   const machine = { ...machineFacts(mainRoot), freeDiskGbBefore: state.freeDiskGb ?? null };
   state.freeDiskGb = machine.freeDiskGb;
   const facts = {
@@ -490,12 +480,12 @@ export async function checkOnce({
     failingPullRequests: failingPullRequests(phase),
     postgres: postgresHealth(mainRoot),
     leftoverWorktrees: leftover,
-    newFailedIssues: failedIssues(phase).filter((n) => !failedAtStart.includes(n)),
+    newFailedIssues: failedIssues(phase, phaseWorkFacts).filter((n) => !failedAtStart.includes(n)),
     work,
     // The folder of the worktree the loop's issue is worked on in, when the orchestrator has
     // created it: a paid run of another campaign there is this loop's doing.
     worktree: work.branch ? worktreeDirName(work.branch) : null,
-    progress: phaseProgressNow(phase),
+    progress: phaseProgressNow(phase, phaseWorkFacts),
     // Spend and efficiency. The runs listed as recent are those written since the last check.
     spend: phaseSpend({
       mainRoot,

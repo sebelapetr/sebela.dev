@@ -1,12 +1,13 @@
 name: Bug report
 description: Something on the website, in the API, an MCP server or the tooling does not work as documented.
-labels: ["bug"]
+type: Bug
 body:
   - type: markdown
     attributes:
       value: |
         Thank you for the report. **Security vulnerabilities go to private reporting, not here** (see `SECURITY.md`).
         Please do not paste API keys, tokens or personal data.
+        The milestone and links to other issues are set by the owner when the report is triaged (`docs/git-workflow.md`, Issues).
   - type: dropdown
     id: area
     attributes:

@@ -1,6 +1,6 @@
 // Who works on what in a running iteration, read from the orchestrator's transcript, and how far
-// the phase is. Pure — the loop and the steward gather the lines and the issues. Intent:
-// docs/agents.md, "The phase loop".
+// the phase is. Pure — the loop and the steward gather the lines; the phase's progress comes from
+// the work selection (lib/selection.mjs). Intent: docs/agents.md, "The phase loop".
 
 const CREATE = /worktree\.mjs create (\S+)/;
 const BRANCH_ISSUE = /^[a-z]+\/(\d+)-/;
@@ -50,14 +50,6 @@ export function currentWork(lines) {
     }
   }
   return work;
-}
-
-// The phase's issues ({ state }) → closed of total.
-export function phaseProgress(issues) {
-  return {
-    closed: issues.filter((issue) => issue.state === "CLOSED").length,
-    total: issues.length,
-  };
 }
 
 // One line: who works on what, for how long, and how far the phase is.
