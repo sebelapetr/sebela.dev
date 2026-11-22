@@ -712,14 +712,23 @@ test("a generated environment file pairs the API with its worktree's own AI serv
   assert.ok(settings.AI_SERVICE_CONTROL_TOKEN.length >= 32, "a control token of 32 characters");
   assert.equal(settings.API_AI_CONTROL_TOKEN, settings.AI_SERVICE_CONTROL_TOKEN);
   assert.ok(settings.API_CHAT_FINGERPRINT_KEY.length >= 32, "a fingerprint key of 32 characters");
+  // The website's chat relay and the API share a third token.
+  assert.ok(settings.WEB_CHAT_RELAY_TOKEN.length >= 32, "a relay token of at least 32 characters");
+  assert.equal(settings.API_CHAT_RELAY_TOKEN, settings.WEB_CHAT_RELAY_TOKEN);
   const secrets = [
     settings.AI_SERVICE_TOKEN,
     settings.AI_SERVICE_CONTROL_TOKEN,
     settings.API_CHAT_FINGERPRINT_KEY,
+    settings.WEB_CHAT_RELAY_TOKEN,
     settings.WEB_INVALIDATION_SECRET,
   ];
   assert.equal(new Set(secrets).size, secrets.length, "every secret is a value of its own");
-  for (const name of ["AI_SERVICE_TOKEN", "AI_SERVICE_CONTROL_TOKEN", "API_CHAT_FINGERPRINT_KEY"]) {
+  for (const name of [
+    "AI_SERVICE_TOKEN",
+    "AI_SERVICE_CONTROL_TOKEN",
+    "API_CHAT_FINGERPRINT_KEY",
+    "WEB_CHAT_RELAY_TOKEN",
+  ]) {
     assert.notEqual(otherSettings[name], settings[name], `${name} differs between worktrees`);
   }
 
