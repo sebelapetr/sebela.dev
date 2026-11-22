@@ -19,7 +19,7 @@ from typing import Any, Final
 from langsmith.run_helpers import tracing_context
 
 from llm_agent.context.compact import split, summarize, summary_tokens
-from llm_agent.context.history import history_block
+from llm_agent.context.history import history_block, select_context
 from llm_agent.context.tokens import text_tokens
 from llm_agent.guardrails.input import select_language
 from llm_agent.models.gateway import Gateway, ModelFactory, ModelUnavailable
@@ -90,6 +90,9 @@ class ChatAgent:
     ) -> CompactionResult:
         """Folds the prior summary and all but the newest exchanges into one validated summary.
 
+        Only the current working context is folded: the summary and the newest exchanges the
+        chat history envelope (`history_exchanges`, `history_tokens`) selects for the next
+        answer; exchanges it already excludes, and a summary hidden behind them, stay out.
         A context of no more than the kept exchanges is `unchanged` without a model call or cost.
         Otherwise one logical Main-model call with no tools runs within `limits` (the chat
         defaults: deadline, Main input/output caps, the one shared retry and the cost allowance).
@@ -101,7 +104,22 @@ class ChatAgent:
         tracer = Tracer()
         budget = Budget(limits)
         exchanges = request.exchanges
-        folded, kept = split(exchanges)
+        selected_summary, selected = select_context(
+            exchanges,
+            request.summary,
+            max_exchanges=limits.history_exchanges,
+            max_tokens=limits.history_tokens,
+        )
+        folded, kept = split(selected)
+
+        def next_input(summary: ContextSummary | None, remaining: tuple[ChatExchange, ...]) -> int:
+            shown_summary, shown = select_context(
+                remaining,
+                summary,
+                max_exchanges=limits.history_exchanges,
+                max_tokens=limits.history_tokens,
+            )
+            return text_tokens(history_block(shown, summary=shown_summary))
 
         def result(
             outcome: CompactionOutcome,
@@ -116,7 +134,7 @@ class ChatAgent:
                 summary=summary,
                 kept=kept,
                 summary_tokens=summary_tokens(summary),
-                next_input_tokens=text_tokens(history_block(remaining, summary=summary)),
+                next_input_tokens=next_input(summary, remaining),
                 usage=budget.usage(),
                 trace=list(tracer.spans),
                 versions=versions(),
@@ -127,7 +145,9 @@ class ChatAgent:
         if not folded:
             return result("unchanged", "nothing_to_compact", request.summary, len(exchanges))
         started = tracer.start()
-        installed = await self._summary(request, folded, limits, budget, tracer, cancel)
+        installed = await self._summary(
+            request, selected_summary, folded, limits, budget, tracer, cancel
+        )
         labels: dict[str, int] = {"folded_exchanges": len(folded), "kept_exchanges": kept}
         if isinstance(installed, str):
             tracer.finish("compaction", installed, started, **labels)
@@ -138,6 +158,7 @@ class ChatAgent:
     async def _summary(
         self,
         request: CompactionRequest,
+        summary: ContextSummary | None,
         folded: tuple[ChatExchange, ...],
         limits: ExecutionLimits,
         budget: Budget,
@@ -157,7 +178,7 @@ class ChatAgent:
                 summarize(
                     gateway,
                     limits,
-                    summary=request.summary,
+                    summary=summary,
                     folded=folded,
                     language=request.exchanges[-1].language,
                 )

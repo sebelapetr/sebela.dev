@@ -218,7 +218,8 @@ async def test_only_the_current_working_context_is_folded_never_excluded_history
         exchanges, PRIOR, max_exchanges=limits.history_exchanges, max_tokens=limits.history_tokens
     )
     assert len(shown) == 3
-    models = ScriptedModels(main=[summary_reply()])
+    # The excluded first exchange's reference is no longer an input; the reply cites none.
+    models = ScriptedModels(main=[summary_reply(references=[])])
     result = await compact(models, exchanges, summary=PRIOR)
     assert result.outcome == "compacted"
     assert result.kept == KEPT_EXCHANGES
