@@ -11,6 +11,7 @@ import { describe, it } from "node:test";
 
 import {
   addToChangelog,
+  assertSectionsUnchanged,
   changelogDocument,
   deployInput,
   nextVersion,
@@ -535,6 +536,43 @@ describe("changelog", () => {
           assert.match(error.message, /end of the file/);
           return true;
         },
+      );
+    });
+
+    it("does not call version links misplaced because another reference link follows them", () => {
+      const result = add(`${wellFormed}[unreleased]: https://example.com/unreleased\n`);
+      assert.ok(result.includes(sectionOf("v0.2.0")));
+      assert.ok(
+        result.endsWith(
+          `${link("v0.8.0")}\n${link("v0.2.0")}\n${link("v0.1.0")}\n` +
+            "[unreleased]: https://example.com/unreleased\n",
+        ),
+        result,
+      );
+    });
+
+    it("keeps the trailing spaces of the oldest section's last line", () => {
+      const spaced = wellFormed.replace("- a fix in v0.1.0\n", "- a fix in v0.1.0  \n");
+      assert.ok(add(spaced).includes("- a fix in v0.1.0  \n"));
+    });
+
+    it("leaves no carriage return in the message for a misplaced link", () => {
+      assert.throws(
+        () => add(misplaced.replaceAll("\n", "\r\n")),
+        (error) => !error.message.includes("\r") && /line \d+/.test(error.message),
+      );
+    });
+
+    it("assertSectionsUnchanged refuses a missing or altered section", () => {
+      const before = wellFormed;
+      assert.doesNotThrow(() => assertSectionsUnchanged(before, add(before)));
+      assert.throws(
+        () => assertSectionsUnchanged(before, add(before).replace("a fix in v0.1.0", "changed")),
+        /v0\.1\.0/,
+      );
+      assert.throws(
+        () => assertSectionsUnchanged(before, add(before).replace("## [v0.2.0]", "## v0.2.0")),
+        /v0\.2\.0/,
       );
     });
 
