@@ -327,6 +327,7 @@ const openIssues = (...issues) => ({
       issues.map((issue) => ({
         labels: names(),
         blockedBy: list([]),
+        assignees: list([]),
         authorAssociation: "OWNER",
         ...issue,
       })),
@@ -427,6 +428,7 @@ test("a phase that waits for another phase stops the loop before an orchestrator
         body: "Plan: .plan/06-llm-agent",
         labels: names(),
         blockedBy: list([]),
+        assignees: list([]),
         authorAssociation: "OWNER",
       });
     }),

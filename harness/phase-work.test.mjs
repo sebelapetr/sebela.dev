@@ -9,7 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PhaseWorkError } from "./lib/selection.mjs";
-import { blockerCheck, phaseWork, phaseWorkOrNull, phases } from "./phase-work.mjs";
+import { assigneeCheck, blockerCheck, phaseWork, phaseWorkOrNull, phases } from "./phase-work.mjs";
 
 const COMMAND = path.join(import.meta.dirname, "phase-work.mjs");
 const READY = "ready-for-agent";
@@ -32,7 +32,12 @@ const subIssue = (
   blockedBy: connection(blockedBy),
   repository: { nameWithOwner: REPOSITORY },
 });
-const openIssue = (number, body, { blockedBy = [], names = [], author = "OWNER" } = {}) => ({
+const openIssue = (
+  number,
+  body,
+  { blockedBy = [], names = [], author = "OWNER", assignees = [] } = {},
+) => ({
+  assignees: connection(assignees.map((login) => ({ login }))),
   number,
   title: `Issue ${number}`,
   body,
@@ -524,4 +529,53 @@ test("`phases` names a cycle and the issues it ignored", () => {
   );
   assert.match(run.stdout, /^ignored: #900 /m);
   assert.doesNotMatch(run.stdout, /99-outsider ·/);
+});
+
+// --- assignees against the hitl label (the owner's decision of 2026-11-22) -------------------
+
+const ASSIGNED = {
+  OpenIssues: {
+    repository: {
+      issues: page([
+        openIssue(216, "x", { names: [READY, "hitl"], assignees: ["owner"] }),
+        openIssue(189, "x", { names: ["hitl"] }),
+        openIssue(210, "x", { names: [READY, "afk"], assignees: ["owner"] }),
+        openIssue(211, "x", { names: [READY, "afk"] }),
+      ]),
+    },
+  },
+};
+
+test("the assignee check reports open issues where `hitl` and an assignee disagree", () => {
+  const { graphql } = github({ open: [ASSIGNED.OpenIssues.repository.issues.nodes] });
+  assert.deepEqual(
+    assigneeCheck({ graphql }).map((entry) => [entry.number, entry.hitl, entry.assignees]),
+    [
+      [189, true, []],
+      [210, false, ["owner"]],
+    ],
+  );
+});
+
+test("`assignees` prints the report and fails while there is a disagreement", () => {
+  const run = command(ASSIGNED, ["assignees"]);
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /#189 .*labelled `hitl` but has no assignee/);
+  assert.match(run.stdout, /#210 .*assigned to owner but not labelled `hitl`/);
+  const agreed = structuredClone(ASSIGNED);
+  agreed.OpenIssues.repository.issues.nodes.splice(1, 2);
+  const clean = command(agreed, ["assignees"]);
+  assert.equal(clean.status, 0, clean.stdout + clean.stderr);
+  assert.match(clean.stdout, /agree/);
+});
+
+test("the selection is the same whoever an issue is assigned to", () => {
+  const withAssignee = structuredClone(ANSWERS);
+  for (const issue of withAssignee.OpenIssues.repository.issues.nodes) {
+    issue.assignees = connection([{ login: "someone" }]);
+  }
+  assert.equal(
+    command(withAssignee, ["next", "07-ai-service"]).stdout,
+    command(ANSWERS, ["next", "07-ai-service"]).stdout,
+  );
 });
