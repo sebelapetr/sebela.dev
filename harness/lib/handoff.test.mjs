@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GENERAL_AGENT_AREAS, selectChecks, turboArguments, worktreesNamedIn } from "./handoff.mjs";
+import {
+  GENERAL_AGENT_AREAS,
+  actedIn,
+  selectChecks,
+  turboArguments,
+  worktreesNamedIn,
+} from "./handoff.mjs";
 
 const MAIN = "/work/sebela";
 const MEMBERS = [
@@ -183,4 +189,77 @@ test("a general agent that changed none of those areas has nothing to check", ()
   assert.equal(selectChecks([], MEMBERS, { areas }), null);
   // Without a change base nothing says the areas are untouched: everything is checked.
   assert.deepEqual(selectChecks(null, MEMBERS, { areas }), { all: true });
+});
+
+// --- only edits and commits (issue #384, item 11) --------------------------------------
+
+test("with edits only, a worktree counts for an edit or a commit, not for a command", () => {
+  const text = transcript(
+    ["Bash", { command: `cd ${MAIN}/.worktrees/read-only && pnpm test` }],
+    ["Bash", { command: `git -C ${MAIN}/.worktrees/logged log -3` }],
+    ["Bash", { command: `echo "git commit" > ${MAIN}/.worktrees/echoed/x` }],
+    ["Write", { file_path: `${MAIN}/.worktrees/written/harness/x.mjs` }],
+    ["Bash", { command: `cd ${MAIN}/.worktrees/committed && git add -A && git commit -m x` }],
+    ["Bash", { command: `git -C ${MAIN}/.worktrees/committed-too commit -am x` }],
+  );
+  assert.deepEqual(worktreesNamedIn(text, MAIN, { editsOnly: true }), [
+    `${MAIN}/.worktrees/written`,
+    `${MAIN}/.worktrees/committed`,
+    `${MAIN}/.worktrees/committed-too`,
+  ]);
+  assert.equal(worktreesNamedIn(text, MAIN).length, 6);
+});
+
+test("whether an agent edited or committed anything at all", () => {
+  const only = (...uses) => actedIn(transcript(...uses));
+  assert.equal(only(["Bash", { command: "pnpm test" }], ["Read", { file_path: "x" }]), false);
+  assert.equal(only(["Edit", { file_path: "harness/x.mjs" }]), true);
+  assert.equal(only(["Bash", { command: "git add -A && git commit -m x" }]), true);
+  assert.equal(only(["Bash", { command: "git log --grep commit" }]), false);
+});
+
+test("reading a hostile command for a commit takes no time to speak of", () => {
+  // Inputs on which a pattern with nested optional groups backtracks exponentially.
+  const hostile = [
+    `git -${"-- -".repeat(12_500)}`,
+    `git${" -C --=!".repeat(6_250)}`,
+    `git ${"-c a=b ".repeat(7_000)}status`,
+    `${"git -C x ".repeat(5_500)}`,
+  ];
+  for (const command of hostile) {
+    assert.ok(command.length >= 49_000, String(command.length));
+    const started = performance.now();
+    assert.equal(actedIn(transcript(["Bash", { command }])), false);
+    const took = performance.now() - started;
+    assert.ok(took < 1_000, `${command.slice(0, 20)}… took ${Math.round(took)} ms`);
+  }
+  const committed = `git ${"-c a=b ".repeat(7_000)}commit -m x`;
+  assert.equal(actedIn(transcript(["Bash", { command: committed }])), true);
+});
+
+test("a commit is recognised behind git's options and other commands, a mention is not", () => {
+  const acts = (command) => actedIn(transcript(["Bash", { command }]));
+  for (const command of [
+    "git commit -m x",
+    "git -C /work/x commit -am x",
+    "git -c user.name=x -c user.email=y commit -m x",
+    "git --no-pager -C /work/x commit --amend --no-edit",
+    "cd /work/x && git add -A && git commit -F .tmp/m.txt",
+    "GIT_AUTHOR_NAME=x git commit -m x",
+    "pnpm test; /usr/bin/git commit -m x",
+    "(cd x\ngit commit -m x)",
+  ]) {
+    assert.equal(acts(command), true, command);
+  }
+  for (const command of [
+    "git log --grep commit",
+    "git -C /work/x show commit",
+    'echo "git commit"',
+    "git status",
+    "gitk commit",
+    "git -C commit",
+    "legit commit",
+  ]) {
+    assert.equal(acts(command), false, command);
+  }
 });

@@ -10,8 +10,10 @@
 //
 // A general agent (`general-purpose`) does the work no developer agent owns: `.github/`,
 // `scripts/`, `infra/` and `harness/` (docs/agents.md, Roles). It gets the same gate when a
-// worktree it worked in has changes under one of those folders, and none otherwise: a general
-// agent that researched, or changed only documentation, hands back unchecked.
+// worktree it edited or committed in has changes under one of those folders, and none otherwise:
+// a general agent that researched, reviewed, ran tests or changed only documentation hands back
+// unchecked. Commands that only read or test, and the folder its session runs in, do not make a
+// worktree its work.
 //
 // Other agents and the main session are not checked. Checks that cannot run count as failing.
 
@@ -51,6 +53,7 @@ function failureReport(input) {
     cwd: input.cwd,
     transcriptText,
     areas: input.agent_type === GENERAL ? GENERAL_AGENT_AREAS : null,
+    editsOnly: input.agent_type === GENERAL,
   });
   const failed = results.filter((result) => !result.ok);
   if (!failed.length) return null;

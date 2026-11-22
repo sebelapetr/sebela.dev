@@ -288,6 +288,41 @@ export function hardStops(facts, limits = LIMITS) {
       });
     }
   }
+  // The cumulative stop for issue runs holds across every worktree here: a checkout's own
+  // ledger knows only its own runs, and the runner sees the others only through the record the
+  // loop keeps between checks.
+  if (spend && spend.issueStopUsd !== null && spend.issueSpentUsd !== null) {
+    const issueStop = `${spend.issueStopUsd.toFixed(2)} USD stop for issue runs of the ${spend.campaign} eval campaign`;
+    const projected = spend.issueProjectedUsd ?? spend.issueSpentUsd;
+    if (spend.issueSpentUsd >= spend.issueStopUsd - EPSILON) {
+      stops.push({
+        code: "issue-stop",
+        reason: `the cumulative ${issueStop} is reached (${money(spend.issueSpentUsd)} spent by issue runs in all worktrees); the rest of the ceiling is kept for the phase pull request's run`,
+      });
+    } else if (projected > spend.issueStopUsd + EPSILON) {
+      stops.push({
+        code: "issue-stop",
+        reason: `the issue eval run under way is projected to ${money(projected)} of issue spend, past the cumulative ${issueStop} (${money(spend.issueSpentUsd)} spent)`,
+      });
+    }
+  }
+  for (const run of spend?.recent ?? []) {
+    // The phase pull request's run belongs to CI, after the owner makes the pull request ready.
+    if (run.stage === "phase-pr") {
+      stops.push({
+        code: "phase-pr-run",
+        reason: `a local paid eval run declared --stage phase-pr during the loop (run ${run.run} in ${run.source}), which lifts the stops for issue runs; the phase pull request's run is CI's`,
+      });
+    }
+  }
+  for (const run of spend?.foreign ?? []) {
+    if (facts.worktree && run.source === facts.worktree) {
+      stops.push({
+        code: "foreign-campaign",
+        reason: `a paid eval run in the loop's worktree spent from another phase's campaign, ${run.campaign} (run ${run.run} in ${run.source}, ${money(run.spentUsd)})`,
+      });
+    }
+  }
   if (spend && spend.runStopUsd !== null) {
     for (const run of spend.recent ?? []) {
       if (run.stage === "issue" && run.spentUsd > spend.runStopUsd + EPSILON) {
@@ -306,8 +341,14 @@ export function hardStops(facts, limits = LIMITS) {
       });
     }
   }
+  // During an iteration one low reading is not enough to cut an agent off: a build or an image
+  // pull dips and recovers. The reading of the check before (`freeDiskGbBefore`) must be low
+  // too; between iterations, where nothing is cut off, there is none and one reading stops.
   const free = facts.machine?.freeDiskGb;
-  if (typeof free === "number" && free < limits.diskStopGb) {
+  const before = facts.machine?.freeDiskGbBefore;
+  const confirmed =
+    before === undefined || (typeof before === "number" && before < limits.diskStopGb);
+  if (typeof free === "number" && free < limits.diskStopGb && confirmed) {
     stops.push({
       code: "disk",
       reason: `only ${free.toFixed(1)} GB of disk space are free, below the ${limits.diskStopGb} GB the loop needs`,
@@ -325,6 +366,12 @@ export function modelTriggers(facts) {
     const expected = run.expectedUsd == null ? "unknown" : money(run.expectedUsd);
     triggers.push(
       `paid eval run ${run.run} in ${run.source} (${run.stage ?? "unknown stage"}, ${run.scope ?? "unknown scope"}): expected ${expected}, spent ${money(run.spentUsd)}`,
+    );
+  }
+  for (const run of facts.spend?.foreign ?? []) {
+    if (facts.worktree && run.source === facts.worktree) continue;
+    triggers.push(
+      `paid eval run ${run.run} in ${run.source} of another campaign, ${run.campaign} (${run.stage ?? "unknown stage"}): spent ${money(run.spentUsd)}`,
     );
   }
   for (const run of facts.paidCi?.runs ?? []) {
@@ -374,18 +421,8 @@ function assessEfficiency(facts, limits) {
       );
     }
     if (spend.ceilingUsd !== null && spend.spentUsd !== null && !stopped.has("ceiling")) {
-      if (
-        spend.issueStopUsd !== null &&
-        spend.issueSpentUsd !== null &&
-        spend.issueSpentUsd >= spend.issueStopUsd - EPSILON
-      ) {
-        findings.push(
-          finding(
-            "warn",
-            "issue-stop",
-            `issue eval runs reached their ${spend.issueStopUsd.toFixed(2)} USD stop; the runner refuses further issue runs`,
-          ),
-        );
+      if (stopped.has("issue-stop")) {
+        // Already shown as the problem it is.
       } else if (spend.spentUsd >= spend.ceilingUsd * limits.spendWarnShare) {
         findings.push(
           finding(

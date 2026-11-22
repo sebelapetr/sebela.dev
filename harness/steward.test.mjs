@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { machineFacts, phaseSpend } from "./steward.mjs";
+import { hardStops } from "./lib/steward.mjs";
+import { keptRunsFile, machineFacts, phaseSpend } from "./steward.mjs";
 
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "sebela-steward-"));
 after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -73,18 +74,48 @@ test("no ledger anywhere is unknown spend", () => {
   assert.ok(!fs.existsSync(path.join(logDir, "eval-spend.json")), "nothing is kept for nothing");
 });
 
-test("an unreadable ledger or kept record is named and never overwritten", () => {
+test("an unreadable ledger is named and left as it is", () => {
   const { mainRoot, logDir, worktree } = checkout("unreadable");
   write(ledgerOf(mainRoot), JSON.stringify({ runs: [run("m1", 0.5)] }));
   write(ledgerOf(worktree("feat-3-z")), "{ broken");
   const spend = phaseSpend({ mainRoot, phase: PHASE, logDir });
   assert.equal(spend.spentUsd, 0.5);
   assert.match(spend.unknown[0].message, /feat-3-z/);
+  assert.equal(fs.readFileSync(ledgerOf(worktree("feat-3-z")), "utf8"), "{ broken");
+});
 
-  write(path.join(logDir, "eval-spend.json"), "not json");
-  const again = phaseSpend({ mainRoot, phase: PHASE, logDir });
-  assert.ok(again.unknown.some((item) => /kept runs/.test(item.message)));
-  assert.equal(fs.readFileSync(path.join(logDir, "eval-spend.json"), "utf8"), "not json");
+test("a kept record cut off by a killed check is said once and written again", () => {
+  const { mainRoot, logDir } = checkout("kept-broken");
+  write(ledgerOf(mainRoot), JSON.stringify({ runs: [run("m1", 0.5)] }));
+  write(keptRunsFile(logDir), '{ "runs": [ { "key": "main/m');
+  const first = phaseSpend({ mainRoot, phase: PHASE, logDir });
+  assert.equal(first.spentUsd, 0.5);
+  assert.ok(first.unknown.some((item) => /kept runs/.test(item.message)));
+  // The record is whole again, so the eval runner is not blocked for good.
+  const kept = JSON.parse(fs.readFileSync(keptRunsFile(logDir), "utf8")).runs;
+  assert.deepEqual(
+    kept.map((item) => item.run),
+    ["m1"],
+  );
+  assert.deepEqual(phaseSpend({ mainRoot, phase: PHASE, logDir }).unknown, []);
+});
+
+test("the kept record is replaced in one step and leaves no scratch file", () => {
+  const { mainRoot, logDir } = checkout("kept-atomic");
+  write(ledgerOf(mainRoot), JSON.stringify({ runs: [run("m1", 0.5)] }));
+  phaseSpend({ mainRoot, phase: PHASE, logDir });
+  write(ledgerOf(mainRoot), JSON.stringify({ runs: [run("m1", 0.5), run("m2", 0.25)] }));
+  phaseSpend({ mainRoot, phase: PHASE, logDir });
+  assert.deepEqual(
+    fs.readdirSync(logDir).filter((name) => name.startsWith("eval-spend")),
+    ["eval-spend.json"],
+  );
+  assert.equal(JSON.parse(fs.readFileSync(keptRunsFile(logDir), "utf8")).runs.length, 2);
+  // A record with no run yet is written too once a ledger was read, so it is never left broken.
+  const empty = checkout("kept-empty");
+  write(keptRunsFile(empty.logDir), "not json");
+  phaseSpend({ mainRoot: empty.mainRoot, phase: PHASE, logDir: empty.logDir });
+  assert.deepEqual(JSON.parse(fs.readFileSync(keptRunsFile(empty.logDir), "utf8")), { runs: [] });
 });
 
 test("missing campaigns leave the ceiling unknown", () => {
@@ -120,4 +151,40 @@ test("the machine's load, cores and free disk space are read", () => {
   assert.ok(facts.freeDiskGb === null || facts.freeDiskGb >= 0);
   assert.ok(facts.load1 === null || facts.load1 >= 0);
   assert.equal(machineFacts(path.join(fixture, "missing")).cores, facts.cores);
+});
+
+// --- the gaps of the first guards (issue #384) -------------------------------------
+
+test("three issue worktrees of USD 1.00 each stop the loop at the issue stop", () => {
+  const { mainRoot, logDir, worktree } = checkout("issue-stop");
+  for (const name of ["feat-1-x", "feat-2-y", "feat-3-z"]) {
+    write(ledgerOf(worktree(name)), JSON.stringify({ runs: [run("r1", 1)] }));
+  }
+  const spend = phaseSpend({ mainRoot, phase: PHASE, logDir });
+  assert.equal(spend.issueSpentUsd, 3);
+  const stops = hardStops({ spend });
+  assert.deepEqual(
+    stops.map((stop) => stop.code),
+    ["issue-stop"],
+  );
+  // The record the eval runner reads names every worktree's run.
+  const kept = JSON.parse(fs.readFileSync(keptRunsFile(logDir), "utf8")).runs;
+  assert.deepEqual(
+    kept.map((item) => [item.source, item.run, item.campaign, item.stage, item.spentUsd]),
+    ["feat-1-x", "feat-2-y", "feat-3-z"].map((name) => [name, "r1", PHASE, "issue", 1]),
+  );
+});
+
+test("a run interrupted long ago is no longer projected", () => {
+  const { mainRoot, logDir } = checkout("stale");
+  const stale = run("m1", 3.5, {
+    stage: "phase-pr",
+    scope: "running",
+    expected_usd: 4.4,
+    at: "2026-01-01T10:00:00+00:00",
+  });
+  write(ledgerOf(mainRoot), JSON.stringify({ runs: [stale] }));
+  const spend = phaseSpend({ mainRoot, phase: PHASE, logDir });
+  assert.equal(spend.projectedUsd, 3.5);
+  assert.deepEqual(hardStops({ spend }), []);
 });

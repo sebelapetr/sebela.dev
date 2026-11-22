@@ -5,10 +5,12 @@ import {
   RETRY_LABEL,
   RUN_REPORT_SCHEMA,
   classifyRun,
+  descendantsOf,
   decideNext,
   noteAfter,
   ownerNoteSection,
   phaseEnd,
+  scrubPrivate,
   spendComment,
   stewardStop,
 } from "./loop.mjs";
@@ -528,4 +530,113 @@ test("a paid run of an iteration is noted on its issue with the spend line", () 
     `Loop note: paid eval spend of iteration 4.\n\n${line}`,
   );
   assert.equal(spendComment({ line, paid: false, iteration: 4 }), null);
+});
+
+// --- private paths in public text (issue #384, item 5) -------------------------------
+
+const PRIVATE = {
+  mainRoot: "/srv/volume-17/sites/checkout",
+  home: "/home/someone",
+  host: "box-17",
+};
+
+test("checkout and home paths are replaced before text becomes public", () => {
+  const scrubbed = scrubPrivate(
+    "the agent ran /srv/volume-17/sites/checkout/.worktrees/feat-1-x/packages/a/run.py twice, " +
+      "read /home/someone/.claude/projects/-srv-volume-17-sites-checkout/abc.jsonl, " +
+      "wrote /srv/volume-17/other/place.txt and ~/notes.txt on box-17 (cd /srv/volume-17/sites/checkout && pnpm test)",
+    PRIVATE,
+  );
+  assert.equal(
+    scrubbed,
+    "the agent ran <checkout>/.worktrees/feat-1-x/packages/a/run.py twice, " +
+      "read <home path>, " +
+      "wrote <private path> and <home path> on <host> (cd <checkout> && pnpm test)",
+  );
+  for (const secret of ["/srv", "volume-17", "someone", "box-17", "sites"]) {
+    assert.ok(!scrubbed.includes(secret), secret);
+  }
+});
+
+test("home folders of other users and the encoded checkout path are replaced too", () => {
+  const text =
+    "see /home/other/x.log, /Users/pat/Library/a b, /root/.ssh/id and -srv-volume-17-sites-checkout";
+  assert.equal(
+    scrubPrivate(text, PRIVATE),
+    "see <home path>, <home path> b, <home path> and <checkout>",
+  );
+});
+
+test("text without private paths is left as it is", () => {
+  const line =
+    "spend: expected 0.3000 USD, actual 0.2200 USD (uncertain 0.0200) in 1 paid run; 3.7800 USD of the 07-ai-service ceiling (4.00 USD) remain";
+  assert.equal(scrubPrivate(line, PRIVATE), line);
+  assert.equal(
+    scrubPrivate("run r9 in feat-1-x repeated packages/llm-agent/evals/run.py", PRIVATE),
+    "run r9 in feat-1-x repeated packages/llm-agent/evals/run.py",
+  );
+  assert.equal(scrubPrivate("", PRIVATE), "");
+});
+
+test("a stop by the steward model carries no private path into the issue, the alert or the log", () => {
+  const message = stewardStop({
+    stop: {
+      by: "model",
+      code: "efficiency",
+      reason:
+        "the agent repeated /srv/volume-17/sites/checkout/.worktrees/feat-1-x/run.sh from /home/someone/tmp on box-17",
+    },
+    issue: 301,
+    spend: "spend: unknown (the eval ledger of /srv/volume-17/sites/checkout cannot be read)",
+    private: PRIVATE,
+  });
+  for (const text of [message.log, message.comment, ...message.alert]) {
+    for (const secret of ["/srv", "volume-17", "someone", "box-17"]) {
+      assert.ok(!text.includes(secret), `${secret} in: ${text}`);
+    }
+  }
+  assert.match(message.comment, /<checkout>\/\.worktrees\/feat-1-x\/run\.sh/);
+  assert.match(message.comment, /spend: unknown \(the eval ledger of <checkout> cannot be read\)/);
+});
+
+test("the spend comment carries no private path", () => {
+  const comment = spendComment({
+    line: "spend: unknown (the eval ledger of /srv/volume-17/sites/checkout/.worktrees/x cannot be read)",
+    paid: true,
+    iteration: 2,
+    private: PRIVATE,
+  });
+  assert.ok(!comment.includes("volume-17"));
+  assert.match(comment, /<checkout>\/\.worktrees\/x/);
+});
+
+// --- everything a run started (review round 1 of #392, item 4) -----------------------
+
+test("the descendants of a run are found through the parent of each process", () => {
+  const processes = [
+    { pid: 1, ppid: 0, pgid: 1 },
+    { pid: 100, ppid: 1, pgid: 100 }, // the loop
+    { pid: 200, ppid: 100, pgid: 200 }, // the orchestrator
+    { pid: 210, ppid: 200, pgid: 200 }, // a helper in its group
+    { pid: 300, ppid: 200, pgid: 300 }, // a command in its own session
+    { pid: 310, ppid: 300, pgid: 300 }, // what that command started
+    { pid: 320, ppid: 310, pgid: 320 }, // and a session of its own below that
+    { pid: 400, ppid: 100, pgid: 100 }, // the loop's own helper
+    { pid: 500, ppid: 1, pgid: 500 }, // someone else's
+  ];
+  assert.deepEqual(
+    descendantsOf(processes, 200).map((process) => process.pid),
+    [210, 300, 310, 320],
+  );
+  assert.deepEqual(descendantsOf(processes, 320), []);
+  assert.deepEqual(descendantsOf(processes, 999), []);
+  // A process list that names a process as its own ancestor does not hang the walk.
+  const looped = [
+    { pid: 2, ppid: 3, pgid: 2 },
+    { pid: 3, ppid: 2, pgid: 3 },
+  ];
+  assert.deepEqual(
+    descendantsOf(looped, 2).map((process) => process.pid),
+    [3],
+  );
 });

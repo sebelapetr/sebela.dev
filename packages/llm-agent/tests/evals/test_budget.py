@@ -246,3 +246,176 @@ def test_a_provisional_charge_counts_as_spent_and_uncertain_until_it_is_replaced
     assert "provisional_usd" not in entry
     assert entry["spent_usd"] == pytest.approx(0.5)
     assert entry["uncertain_usd"] == 0
+
+
+# --- The loop's kept runs: issue spend across worktrees (issue #384, item 1) -------------------
+
+
+def _kept(path: Path, *runs: tuple[str, str, str, float]) -> Path:
+    """The phase loop's kept spend record, as `harness/steward.mjs` writes it."""
+    path.write_text(
+        json.dumps(
+            {
+                "runs": [
+                    {
+                        "key": f"{source}/{run}",
+                        "source": source,
+                        "run": run,
+                        "campaign": "07-ai-service",
+                        "stage": stage,
+                        "spentUsd": spent,
+                        "uncertainUsd": 0,
+                    }
+                    for source, run, stage, spent in runs
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_every_issue_worktree_does_not_start_with_a_fresh_issue_stop(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.json"
+    kept = budget.KeptRuns(
+        _kept(
+            tmp_path / "eval-spend.json",
+            ("feat-1-x", "r1", "issue", 0.5),
+            ("feat-2-y", "r1", "issue", 0.5),
+        ),
+        source="feat-3-z",
+    )
+    # Without the loop's record this worktree would get a whole per-run stop of USD 1.00.
+    assert budget.open_allowance(4.0, ledger, P7, "issue").available_usd == pytest.approx(1.0)
+    third = budget.open_allowance(4.0, ledger, P7, "issue", kept=kept)
+    assert third.available_usd == pytest.approx(0.5)
+    assert third.campaign_remaining_usd == pytest.approx(3.0)
+    third.charge(0.5, "the rest of the issue work")
+    budget.record_run(ledger, "r1", third, "partial")
+    with pytest.raises(budget.BudgetBlockedError, match=r"issue runs.*1\.50 USD"):
+        budget.open_allowance(4.0, ledger, P7, "issue", kept=kept)
+
+
+def test_three_issue_worktrees_of_one_dollar_each_are_past_the_issue_stop(tmp_path: Path) -> None:
+    kept = budget.KeptRuns(
+        _kept(
+            tmp_path / "eval-spend.json",
+            ("feat-1-x", "r1", "issue", 1.0),
+            ("feat-2-y", "r1", "issue", 1.0),
+        ),
+        source="feat-3-z",
+    )
+    with pytest.raises(budget.BudgetBlockedError, match="issue runs"):
+        budget.open_allowance(4.0, tmp_path / "ledger.json", P7, "issue", kept=kept)
+    assert budget.ledger_spent(
+        tmp_path / "ledger.json", "07-ai-service", stage="issue", kept=kept
+    ) == pytest.approx(2.0)
+
+
+def test_the_kept_runs_of_this_checkout_are_counted_once_from_its_own_ledger(
+    tmp_path: Path,
+) -> None:
+    ledger = tmp_path / "ledger.json"
+    own = budget.open_allowance(4.0, ledger, P7, "issue")
+    own.charge(0.4, "this worktree's run")
+    budget.record_run(ledger, "r1", own, "partial")
+    kept = budget.KeptRuns(
+        _kept(
+            tmp_path / "eval-spend.json",
+            ("feat-3-z", "r1", "issue", 0.3),  # an older reading of the same run
+            ("feat-1-x", "r1", "issue", 0.25),
+            ("feat-1-x", "r2", "phase-pr", 2.0),
+        ),
+        source="feat-3-z",
+    )
+    assert budget.ledger_spent(ledger, "07-ai-service", stage="issue", kept=kept) == pytest.approx(
+        0.65
+    )
+    assert budget.ledger_spent(ledger, "07-ai-service", kept=kept) == pytest.approx(2.65)
+    assert budget.ledger_spent(ledger, "06-llm-agent", kept=kept) == 0.0
+
+
+def test_a_kept_record_that_is_not_there_yet_adds_nothing(tmp_path: Path) -> None:
+    kept = budget.KeptRuns(tmp_path / "eval-spend.json", source="feat-3-z")
+    assert budget.ledger_spent(tmp_path / "ledger.json", "07-ai-service", kept=kept) == 0.0
+
+
+@pytest.mark.parametrize("text", ["{ broken", "[]", '{"runs": "none"}', '{"runs": [{"run": 1}]}'])
+def test_a_kept_record_that_cannot_be_read_is_a_block_never_zero(tmp_path: Path, text: str) -> None:
+    path = tmp_path / "eval-spend.json"
+    path.write_text(text, encoding="utf-8")
+    kept = budget.KeptRuns(path, source="feat-3-z")
+    with pytest.raises(budget.BudgetBlockedError, match="kept"):
+        budget.open_allowance(4.0, tmp_path / "ledger.json", P7, "issue", kept=kept)
+
+
+def test_the_loop_names_its_kept_record_in_the_environment(tmp_path: Path) -> None:
+    path = tmp_path / "eval-spend.json"
+    main = tmp_path / "repo"
+    worktree = main / ".worktrees" / "feat-3-z"
+    env = {budget.KEPT_RUNS_ENVIRONMENT: str(path)}
+    assert budget.kept_runs(env, worktree) == budget.KeptRuns(path, source="feat-3-z")
+    assert budget.kept_runs(env, main) == budget.KeptRuns(path, source="the main checkout")
+    assert budget.kept_runs({}, worktree) is None
+    assert budget.kept_runs({budget.KEPT_RUNS_ENVIRONMENT: " "}, worktree) is None
+
+
+# --- Concurrent runs in one checkout (issue #384, item 12) --------------------------------------
+
+
+def test_runs_recording_at_the_same_time_do_not_lose_each_other_s_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+    import time
+
+    ledger = tmp_path / "ledger.json"
+    real_loads = json.loads
+
+    def slow_loads(text: str) -> object:
+        # Widens the window between reading the ledger and writing it back.
+        data = real_loads(text)
+        time.sleep(0.002)
+        return data
+
+    monkeypatch.setattr(json, "loads", slow_loads)
+
+    def record(worker: int) -> None:
+        for number in range(15):
+            allowance = budget.Allowance(available_usd=1.0, campaign=P7, stage="issue")
+            allowance.charge(0.01, "work")
+            budget.record_run(ledger, f"run-{worker}-{number}", allowance, "partial")
+
+    workers = [threading.Thread(target=record, args=(worker,)) for worker in range(4)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    monkeypatch.setattr(json, "loads", real_loads)
+    runs = json.loads(ledger.read_text(encoding="utf-8"))["runs"]
+    assert len(runs) == 60
+    assert budget.ledger_spent(ledger, "07-ai-service") == pytest.approx(0.6)
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_the_earlier_runs_of_a_worktree_created_again_under_the_same_folder_still_count(
+    tmp_path: Path,
+) -> None:
+    # The worktree feat-1-a was removed and created again: its ledger is empty, but the loop
+    # kept what the first one spent.
+    kept = budget.KeptRuns(
+        _kept(
+            tmp_path / "eval-spend.json",
+            ("feat-1-a", "r1", "issue", 0.9),
+            ("feat-2-b", "r1", "issue", 0.5),
+        ),
+        source="feat-1-a",
+    )
+    ledger = tmp_path / "ledger.json"
+    again = budget.open_allowance(4.0, ledger, P7, "issue", kept=kept)
+    assert again.available_usd == pytest.approx(0.1)
+    again.charge(0.05, "a little more")
+    budget.record_run(ledger, "r2", again, "partial")
+    assert budget.ledger_spent(ledger, "07-ai-service", stage="issue", kept=kept) == pytest.approx(
+        1.45
+    )

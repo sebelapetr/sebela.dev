@@ -23,9 +23,12 @@ its whole reservation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
-from collections.abc import Mapping
+import os
+import threading
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +42,11 @@ CAMPAIGN_ENVIRONMENT: Final = "SEBELA_EVAL_CAMPAIGN"
 #: What a paid run is for: `issue` (work on an issue, bound by the campaign's stops for issue
 #: runs) or `phase-pr` (the full run at the phase pull request and its affected rerun).
 STAGES: Final = ("issue", "phase-pr")
+#: The environment variable with which the phase loop names the record of the paid runs it has
+#: seen in every checkout (`harness/steward.mjs`, `.worktrees/logs/<phase>/eval-spend.json`).
+KEPT_RUNS_ENVIRONMENT: Final = "SEBELA_EVAL_KEPT_RUNS"
+#: What the loop calls the main checkout in that record; a worktree is called by its folder.
+MAIN_CHECKOUT: Final = "the main checkout"
 #: The campaign of ledger entries written before campaigns were named.
 LEGACY_CAMPAIGN: Final = "06-llm-agent"
 
@@ -162,32 +170,102 @@ def parse_allowance(value: str, of: Campaign) -> float:
     return usd
 
 
+@dataclass(frozen=True)
+class KeptRuns:
+    """The phase loop's record of the paid runs of every checkout, and what the loop calls this
+    checkout in it (`source`). A worktree has its own ledger, so without this record every issue
+    worktree would start with a fresh cumulative stop for issue runs."""
+
+    path: Path
+    source: str
+
+
+def kept_runs(env: Mapping[str, str], checkout: Path) -> KeptRuns | None:
+    """The loop's kept record when the environment names one (`SEBELA_EVAL_KEPT_RUNS`, set by
+    `harness/run-phase.mjs`), for the checkout at `checkout`; None outside the loop."""
+    path = env.get(KEPT_RUNS_ENVIRONMENT, "").strip()
+    if not path:
+        return None
+    source = checkout.name if checkout.parent.name == ".worktrees" else MAIN_CHECKOUT
+    return KeptRuns(Path(path), source=source)
+
+
+def _kept_spent(kept: KeptRuns, name: str, stage: str | None, local: frozenset[str]) -> float:
+    """What the loop's record counts for the campaign beyond this checkout's own ledger: the
+    runs of the other checkouts, and the runs of an earlier worktree in this folder that the
+    ledger no longer holds. A run whose id is in the ledger (`local`) is read from there, which
+    is newer. A record that does not exist yet adds nothing; one that cannot be read is a block,
+    never zero."""
+    if not kept.path.exists():
+        return 0.0
+    try:
+        data = json.loads(kept.path.read_text(encoding="utf-8"))
+        runs = data["runs"]
+        total = 0.0
+        for entry in runs:
+            source, run, spent = entry["source"], entry["run"], float(entry["spentUsd"])
+            if entry.get("campaign") != name:
+                continue
+            if source == kept.source and run in local:
+                continue
+            if stage is not None and entry.get("stage") != stage:
+                continue
+            total += spent
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        raise BudgetBlockedError(
+            f"the phase loop's kept record of paid runs ({kept.path.name}) cannot be read;"
+            " spend in other worktrees is unknown, so no paid run starts"
+        ) from error
+    if not math.isfinite(total):
+        raise BudgetBlockedError(
+            f"the phase loop's kept record of paid runs ({kept.path.name}) holds no valid amounts"
+        )
+    return total
+
+
 def _campaign_of(entry: Mapping[str, Any]) -> str:
     return str(entry.get("campaign") or LEGACY_CAMPAIGN)
 
 
-def ledger_spent(ledger: Path, name: str, *, stage: str | None = None) -> float:
-    """What the ledger counts as spent in the campaign `name` (of one stage when given). Entries
-    written before campaigns were named belong to phase 6."""
-    if not ledger.exists():
-        return 0.0
-    data = json.loads(ledger.read_text(encoding="utf-8"))
-    return float(
+def ledger_spent(
+    ledger: Path, name: str, *, stage: str | None = None, kept: KeptRuns | None = None
+) -> float:
+    """What the ledger counts as spent in the campaign `name` (of one stage when given), plus,
+    in the phase loop, what the loop's kept record counts beyond this ledger (`kept`).
+    Entries written before campaigns were named belong to phase 6."""
+    runs: list[dict[str, Any]] = []
+    if ledger.exists():
+        runs = json.loads(ledger.read_text(encoding="utf-8")).get("runs", [])
+    local = frozenset(str(entry.get("run")) for entry in runs)
+    elsewhere = _kept_spent(kept, name, stage, local) if kept is not None else 0.0
+    return elsewhere + float(
         sum(
             float(entry.get("spent_usd", 0))
-            for entry in data.get("runs", [])
+            for entry in runs
             if _campaign_of(entry) == name and (stage is None or entry.get("stage") == stage)
         )
     )
 
 
-def open_allowance(declared_usd: float, ledger: Path, of: Campaign, stage: str) -> Allowance:
+def open_allowance(
+    declared_usd: float,
+    ledger: Path,
+    of: Campaign,
+    stage: str,
+    *,
+    kept: KeptRuns | None = None,
+) -> Allowance:
     """The allowance of one run in the campaign `of`: the declared remainder, capped by what this
     checkout's ledger leaves of the campaign's ceiling and, for an issue run, of the cumulative
-    stop for issue runs, and by the per-run stop. Each exhausted bound is a block that names it."""
+    stop for issue runs, and by the per-run stop. Each exhausted bound is a block that names it.
+
+    This checkout's ledger knows only its own runs. In the phase loop `kept` adds the runs the
+    loop has seen in every other checkout, so the ceiling and the cumulative stop for issue runs
+    hold across the issue worktrees; outside the loop they hold per checkout, and the declared
+    allowance carries the remainder."""
     if stage not in STAGES:
         raise BudgetBlockedError(f"the stage of a paid run is {' or '.join(STAGES)}, not {stage!r}")
-    campaign_remaining = of.ceiling_usd - ledger_spent(ledger, of.name)
+    campaign_remaining = of.ceiling_usd - ledger_spent(ledger, of.name, kept=kept)
     if campaign_remaining <= 0:
         raise BudgetBlockedError(
             f"the {of.name} campaign's {of.ceiling_usd:.2f} USD ceiling is exhausted; its coverage"
@@ -196,7 +274,9 @@ def open_allowance(declared_usd: float, ledger: Path, of: Campaign, stage: str) 
     available = min(declared_usd, campaign_remaining)
     if stage == "issue":
         if of.issue_stop_usd is not None:
-            issue_remaining = of.issue_stop_usd - ledger_spent(ledger, of.name, stage="issue")
+            issue_remaining = of.issue_stop_usd - ledger_spent(
+                ledger, of.name, stage="issue", kept=kept
+            )
             if issue_remaining <= 0:
                 raise BudgetBlockedError(
                     f"the issue runs of the {of.name} campaign reached their cumulative"
@@ -261,9 +341,6 @@ def record_run(
         raise BudgetBlockedError(
             "a run without a named campaign and stage cannot be recorded in the ledger"
         )
-    data: dict[str, Any] = {"runs": []}
-    if ledger.exists():
-        data = json.loads(ledger.read_text(encoding="utf-8"))
     entry: dict[str, Any] = {
         "run": run_id,
         "at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -279,6 +356,33 @@ def record_run(
         entry["expected_usd"] = round(expected_usd, 6)
     if chunks is not None:
         entry["chunks"] = chunks
-    data["runs"] = [run for run in data["runs"] if run.get("run") != run_id] + [entry]
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    ledger.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    # Two runs in one checkout write the same ledger. Reading it, replacing this run's entry and
+    # writing it back happens under a lock and lands in one step, so neither loses the other's
+    # entry. (They can still both open their allowance from the same remainder: run paid evals
+    # one at a time per checkout.)
+    with _locked(ledger):
+        data: dict[str, Any] = {"runs": []}
+        if ledger.exists():
+            data = json.loads(ledger.read_text(encoding="utf-8"))
+        data["runs"] = [run for run in data["runs"] if run.get("run") != run_id] + [entry]
+        scratch = ledger.with_name(f"{ledger.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        scratch.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        os.replace(scratch, ledger)
+
+
+@contextlib.contextmanager
+def _locked(ledger: Path) -> Iterator[None]:
+    """Holds the ledger's lock file for one read-modify-write. Where the platform has no
+    advisory file locks the write goes unlocked, as before."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - not on the platforms the evals run on
+        yield
+        return
+    with ledger.with_name(f"{ledger.name}.lock").open("w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)

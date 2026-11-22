@@ -230,7 +230,7 @@ test("a general agent that changed harness, script, CI or infrastructure files i
     agent_id: "gen1",
     agent_type: "general-purpose",
     agent_transcript_path: transcript("gen1", [
-      ["Bash", { command: `cd ${infra} && node --test harness/` }],
+      ["Bash", { command: `cd ${infra} && git add -A && git commit -m "feat(harness): thing"` }],
     ]),
     stop_hook_active: false,
   });
@@ -269,4 +269,64 @@ test("the settings run the handoff hook when a general agent stops", () => {
     "ai-developer",
     "general-purpose",
   ]);
+});
+
+// --- only a general agent's own edits and commits count (issue #384, item 11) ---------
+
+test("a general agent that only ran read-only commands where harness files changed is not checked", () => {
+  const infra = path.join(main, ".worktrees", "ci-3-fixture");
+  fs.writeFileSync(path.join(infra, "turbo-fails"), "");
+  fs.rmSync(path.join(infra, "tool-calls.jsonl"), { force: true });
+  transcript("gen3", [
+    ["Bash", { command: `cd ${infra} && node --test harness/` }],
+    ["Bash", { command: `git -C ${infra} log --oneline -5` }],
+    ["Bash", { command: `grep -rn "git commit" ${infra}/docs` }],
+    ["Read", { file_path: path.join(infra, "harness/lib/thing.mjs") }],
+  ]);
+  assert.equal(handback("general-purpose", "gen3"), null);
+  // The folder the session runs in is not its work either.
+  assert.equal(
+    runHook({
+      hook_event_name: "PreToolUse",
+      tool_name: "SubagentHandback",
+      tool_input: { message: "x" },
+      agent_id: "gen3",
+      agent_type: "general-purpose",
+      cwd: infra,
+    }),
+    null,
+  );
+  assert.equal(toolCalls(infra).filter((call) => call.tool === "turbo").length, 0);
+});
+
+test("a general agent's edits and commits make a worktree its work", () => {
+  const infra = path.join(main, ".worktrees", "ci-3-fixture");
+  fs.writeFileSync(path.join(infra, "turbo-fails"), "");
+  for (const [id, toolUse] of [
+    ["gen4", ["Edit", { file_path: path.join(infra, "harness/lib/thing.mjs") }]],
+    ["gen5", ["Bash", { command: `git -C ${infra} commit -am "fix(harness): thing"` }]],
+    ["gen6", ["Bash", { command: `cd ${infra} && git add -A && git commit -F .tmp/message.txt` }]],
+  ]) {
+    transcript(id, [toolUse]);
+    const output = handback("general-purpose", id);
+    assert.equal(output?.hookSpecificOutput.permissionDecision, "deny", id);
+  }
+  // A commit made from the session's own folder names no path: the folder then counts.
+  transcript("gen7", [["Bash", { command: 'git commit -am "fix(harness): thing"' }]]);
+  const inside = runHook({
+    hook_event_name: "PreToolUse",
+    tool_name: "SubagentHandback",
+    tool_input: { message: "x" },
+    agent_id: "gen7",
+    agent_type: "general-purpose",
+    cwd: infra,
+  });
+  assert.equal(inside.hookSpecificOutput.permissionDecision, "deny");
+  fs.rmSync(path.join(infra, "turbo-fails"));
+});
+
+test("a developer's commands still make a worktree its work", () => {
+  failing(true);
+  transcript("dev9", [["Bash", { command: `cd ${worktree} && pnpm test` }]]);
+  assert.equal(handback("backend-developer", "dev9").hookSpecificOutput.permissionDecision, "deny");
 });
