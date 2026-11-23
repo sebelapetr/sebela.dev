@@ -207,7 +207,10 @@ test.describe("the Ask page", () => {
     ]);
     await expect(page.getByRole("button", { name: "New chat" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Show earlier messages" })).toHaveCount(0);
-    await expect(page.getByRole("combobox")).toHaveCount(0);
+    // No model selector: the only combobox is the composer with its command list.
+    await expect(page.getByRole("combobox")).toHaveCount(1);
+    await expect(composer(page)).toHaveCount(1);
+    await expect(page.getByRole("listbox")).toHaveCount(0);
   });
 
   test("a question streams its answer while another cannot be sent", async ({ page }) => {
