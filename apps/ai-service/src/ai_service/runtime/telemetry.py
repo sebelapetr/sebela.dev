@@ -10,7 +10,8 @@ serves one record. The exporter then, on its own worker task:
 2. registers a fresh random trace identifier with the API (`register`); only `allowed` lets the
    trace go, so a conversation deleted meanwhile (a tombstone) is never exported late;
 3. posts it to `{base}/api/public/otel/v1/traces` within the API's export window, once, under
-   Basic authentication with the project keys, redirects never followed.
+   Basic authentication with the project keys, redirects never followed, the whole request
+   bounded by `send_timeout_s`.
 
 Every degraded path drops the trace and counts it under a fixed name (`counts`), never retries and
 never raises into the agent: a record without a bound grant (`unbound`) or spans (`empty`), a full
@@ -217,8 +218,9 @@ class TraceExporter:
             self._drop("expired")
             return
         try:
-            response = await self._http.post(_INGESTION_PATH, json=body)
-        except httpx2.HTTPError:
+            async with asyncio.timeout(self._send_timeout_s):
+                response = await self._http.post(_INGESTION_PATH, json=body)
+        except (httpx2.HTTPError, TimeoutError):
             self._drop("send_failed")
             return
         if response.status_code == 429:
