@@ -592,6 +592,8 @@ FALSE_ONLY_CURRENT = [
     ("C03-cs", "Probíhá jen Evaluation harness."),
     ("C03-en", "The only project still running is the Evaluation harness."),
     ("C03-cs", "Je aktivní jen jeden projekt, Evaluation harness."),
+    ("C03-en", "She has only one active project, the Evaluation harness."),
+    ("C03-cs", "Jen Evaluation harness stále probíhá."),
 ]
 
 #: C03 answers that name current projects without claiming exclusivity; each passes.

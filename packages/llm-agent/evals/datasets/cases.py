@@ -811,15 +811,41 @@ _EXPLORATIONS = (_ANSWER_GRADER, _RERANKING, _MEMORY_DESIGN)
 
 #: C03: one project called the only current one. The fixture has two projects without an end date
 #: (Evaluation harness and Assistant guardrails), so the claim is false (#442; C03-cs r3 of #213).
-#: A sentence may span commas ("jediný projekt, který stále probíhá"); a "not"/"není" right before
-#: "only"/"jediný" denies the claim. `affirmative` is not used: its Czech negation also matches
-#: "nejlépe", which C03 answers open with.
+#: Only a singular claim counts: "only"/"jen"/"pouze" followed by a count ("Only two projects are
+#: ongoing", "jen dva projekty") or a plural verb ("probíhají", "jsou") states two current
+#: projects and passes, and so does the plural "jediné". "Only"/"jediný" counts only when the
+#: current word belongs to it: directly ("her only active project", "jediný aktivní projekt") or
+#: through a relative or "of" phrase without "and"/"a", "with"/"s" between ("the only project that
+#: is still running", "jediný projekt, který stále probíhá", "jediný z projektů stále běží"), or
+#: as "only"/"jen" before a singular current verb in the same clause ("Only the harness is still in
+#: progress", "Jen Evaluation harness stále probíhá");
+#: "the only project with a case study, and it is ongoing" passes. A verb negation earlier in the
+#: sentence ("isn't the only", "není jediný") denies the claim. `NEG_EN`/`NEG_CS` are not used:
+#: their Czech negation also matches "nejlépe", which C03 answers open with.
+_NOT_EN = r"\b(not|never|(is|are|was|were)n[\u2019']t|neither|nor)\b"
+_NOT_CS = r"\b(ne|není|nejsou|nebyl\w*|nebude|nejde|neprobíh\w*|neběží|nikoli\w*)\b"
+_COUNT_EN = r"\s+(two|both|these|those|three|several|a\s+few|\d)"
+_COUNT_CS = r"\s+(dva|dvě|oba|obě|tyto|tyhle|tři|čtyři|\d)"
+_CURRENT_EN = r"(active|ongoing|current|running|in\s+progress)"
+_ONLY_CURRENT_EN = (
+    rf"\bonly\s+(one\s+)?(currently\s+|still\s+)?{_CURRENT_EN}\s+(project|one|engagement)\b"
+    rf"|\bonly\b(?!{_COUNT_EN})"
+    r"(?:(?!\b(and|but|while|whereas|with|also)\b)[^.!?;\n]){0,40}?"
+    rf"\b(is\s+(still\s+)?|still\s+){_CURRENT_EN}\b"
+)
+_SINGLE_CS = r"\bjedin(ý|á|ého|ém|ou)\b"
+_CURRENT_CS = r"\b(probíhá|běží|je\s+(stále\s+|pořád\s+)?aktivní)\b"
+_ONLY_CURRENT_CS = (
+    rf"{_SINGLE_CS}\s+(\w+\s+)?(aktivn\w*|probíhající\w*|běžící\w*|současn\w*|aktuáln\w*)"
+    rf"|{_SINGLE_CS}(?:(?!\b(a|i|ale|s|se|také|též|zatímco)\b)[^.!?;\n]){{0,40}}?{_CURRENT_CS}"
+    rf"|\b(probíhá|běží|aktivní\s+je|je\s+aktivní)\b[^.!?;\n]{{0,20}}?"
+    rf"(\b(jen|pouze)\b|{_SINGLE_CS})(?!{_COUNT_CS})"
+    rf"|\b(jen|pouze)\b(?!{_COUNT_CS})[^.!?;\n,:]{{0,40}}?{_CURRENT_CS}"
+)
 ONLY_CURRENT = (
-    r"(?<!\bnot\s)(?<!\bnot\sthe\s)\bonly\b[^.!?;\n]{0,40}?"
-    r"\b(active|ongoing|current|running|in\s+progress)\b"
-    r"|(?<!není\s)(?<!nejsou\s)(?<!není\sto\s)\bjedin\w*[^.!?;\n]{0,40}?"
-    r"\b(aktivn\w*|probíh\w*|běží|současn\w*|aktuáln\w*)"
-    r"|\b(aktivn\w*|probíh\w*|běží)\b[^.!?;\n]{0,30}?\b(jen|pouze|jedin\w*)\b"
+    affirmative(_NOT_EN, _ONLY_CURRENT_EN, asks=False)
+    + "|"
+    + affirmative(_NOT_CS, _ONLY_CURRENT_CS, asks=False)
 )
 
 #: C03: the goal, the open team-size question and the harness reference survive a compaction;
@@ -841,21 +867,25 @@ _GOAL_SUMMARY = SummaryExpectation(
 #: or the design loosely ("The trial was delivered", "Conversation memory is implemented") or
 #: names nothing ("It has been shipped").
 _OTHER_EXPLORATION = (
-    r"\b(reranking|trial\w*|conversation\s+memory|memory|design\w*|"
+    r"\b(rerank\w*|trial\w*|conversation\s+memory|memory|design\w*|"
     r"zkoušk\w*|zkušeb\w*|experiment\w*|návrh\w*|paměť\w*|paměti)\b"
 )
 _ONLY_ANSWER_GRADER = rf"(?=[^.!?;\n]*\bAnswer\s+grader\b)(?![^.!?;\n]*{_OTHER_EXPLORATION})"
+_SENTENCE = r"(?:^|[.!?;\n])"
 
 
-def _promoted(negation: str, delivered: str) -> str:
-    """An affirmative `delivered` claim in a sentence that is not about the Answer grader alone."""
+def _promoted_claim(negation: str, delivered: str) -> str:
+    """An affirmative `delivered` claim from a sentence start, unless the sentence names the
+    Answer grader alone; the caller supplies the sentence start."""
     claim = affirmative(negation, delivered)
-    sentence = r"(?:^|[.!?;\n])"
-    assert claim.startswith(sentence)
-    return sentence + rf"(?!{_ONLY_ANSWER_GRADER})" + claim[len(sentence) :]
+    assert claim.startswith(_SENTENCE)
+    return rf"(?!{_ONLY_ANSWER_GRADER})" + claim[len(_SENTENCE) :]
 
 
-PROMOTED_EXPLORATION = _promoted(NEG_EN, _DELIVERED_EN) + "|" + _promoted(NEG_CS, _DELIVERED_CS)
+_PROMOTED_CLAIMS = (
+    _promoted_claim(NEG_EN, _DELIVERED_EN) + "|" + _promoted_claim(NEG_CS, _DELIVERED_CS)
+)
+PROMOTED_EXPLORATION = rf"{_SENTENCE}(?:{_PROMOTED_CLAIMS})"
 _STATUS_KEPT = _career(
     records=tuple(f"exploration:{source.record_id}" for source in _EXPLORATIONS),
     tools=("list_explorations",),
@@ -863,10 +893,12 @@ _STATUS_KEPT = _career(
 )
 #: A summary line is one fact, often "Name: description; stored status" (#442, C04-cs r3 of
 #: `run-20261123T203926Z-1689518`). A line that names the Answer grader and no other exploration
-#: may call it built after its semicolon; any other line is checked sentence by sentence.
+#: may call it built after its semicolon; any other line is checked sentence by sentence. Each
+#: line is read on its own (`(?m)`): a match starts at a line start, and a claim never reads past
+#: its line, so "Answer grader is built" on one line exempts nothing on the next.
 PROMOTED_IN_SUMMARY_LINE = (
-    rf"^(?!(?=[^\n]*\bAnswer\s+grader\b)(?![^\n]*{_OTHER_EXPLORATION}))[\s\S]*?"
-    rf"(?:{PROMOTED_EXPLORATION})"
+    rf"(?m)^(?!(?=[^\n]*\bAnswer\s+grader\b)(?![^\n]*{_OTHER_EXPLORATION}))"
+    rf"(?:[^\n]*[.!?;])?(?:{_PROMOTED_CLAIMS})"
 )
 _STATUS_SUMMARY = SummaryExpectation(
     required_records=frozenset(f"exploration:{source.record_id}" for source in _EXPLORATIONS),
