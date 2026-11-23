@@ -22,6 +22,7 @@ import {
   timeOutChatTurn,
   type ChatTurn,
 } from "../data/conversation";
+import type { ChatCompactionState } from "../data/compaction";
 import { historyTurns, parseChatConversation } from "../data/history";
 import type { ChatAdapter, ChatQuestion } from "../types/adapter";
 
@@ -58,6 +59,11 @@ export interface ConversationSnapshot {
    * last question.
    */
   readonly telemetryDeletion: "none" | "pending" | null;
+  /**
+   * The compaction of the working context this tab asked for or follows from another tab, until
+   * the next question or clear; null when there is none.
+   */
+  readonly compaction: ChatCompactionState | null;
 }
 
 /** What became of a question: sent, refused while another is answering, or not a valid question. */
@@ -124,7 +130,16 @@ export interface ConversationStore {
    * the end, to be asked again.
    */
   refresh(): Promise<void>;
+  /**
+   * Asks the API to compact the working context under a new random request, then follows the
+   * compaction until it ends. It adds no turn and changes no visible message. Refused while the
+   * history loads, a question is answering or another compaction runs, in any tab.
+   */
+  compact(): CompactResult;
 }
+
+/** What became of a compaction request: asked for, or refused while something else runs. */
+export type CompactResult = "started" | "busy";
 
 /** What became of a stop: the answer was stopped, the API could not be asked, or nothing is open. */
 export type StopResult = "stopped" | "failed" | "none";

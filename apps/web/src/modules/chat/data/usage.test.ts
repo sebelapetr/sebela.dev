@@ -221,6 +221,27 @@ describe("describeChatUsage", () => {
     expect(describeChatUsage(ready(), LOCAL).active).toBeNull();
   });
 
+  it("says a compaction in progress already counts as a question", () => {
+    const view = describeChatUsage(
+      ready({
+        activeOperation: {
+          operationId: OPERATION,
+          requestId: "11111111-0000-4000-8000-000000000001",
+          status: "running",
+          deadlineAt: "2026-11-22T14:02:00.000Z",
+          assistantMessageId: null,
+          kind: "compaction",
+          compaction: null,
+        },
+      }),
+      LOCAL,
+    );
+
+    expect(view.active).toBe(
+      "The working context is being compacted. It already counts as a question.",
+    );
+  });
+
   it("shows the read-only model and effort the server is configured with", () => {
     expect(describeChatUsage(ready(), LOCAL).model).toBe("fictional-model, medium effort");
   });
@@ -295,7 +316,33 @@ describe("describeChatUsage", () => {
       level: null,
       details: [],
     });
-    expect(view.nextRequest).toBe("Unavailable");
+    expect(view.nextRequest).toEqual({
+      status: "unavailable",
+      value: "Unavailable",
+      note: "Shown after /compact has summarized the working context.",
+      measured: null,
+    });
+  });
+
+  it("labels the post-compaction estimate as history only, never claiming future tool tokens", () => {
+    const view = describeChatUsage(
+      ready({
+        nextRequest: {
+          status: "estimated",
+          historyTokens: 1234,
+          operationId: OPERATION,
+          measuredAt: "2026-11-22T13:58:00.000Z",
+        },
+      }),
+      LOCAL,
+    );
+
+    expect(view.nextRequest).toEqual({
+      status: "estimated",
+      value: "About 1,234 tokens of history",
+      note: "The summary and the exchanges kept word for word. Your next question, the instructions, tool results and evidence come on top; they are not known yet.",
+      measured: "Measured at 13:58 UTC",
+    });
   });
 
   it("labels a snapshot that could not be read again as not up to date, keeping its numbers", () => {
