@@ -7,6 +7,7 @@ explicit opt-in, a daily ceiling and a provider key the secret wrapper provides.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, Self
@@ -21,8 +22,37 @@ FakeScenario = Literal["answer", "slow", "refuse", "fail"]
 MIN_TOKEN_CHARS = 32
 
 
+_LANGFUSE_ENVIRONMENT = re.compile(r"(?!langfuse)[a-z0-9_-]{1,40}")
+
+
 class ConfigError(Exception):
     """The environment does not describe a valid service; the message names the setting."""
+
+
+class Langfuse(BaseModel):
+    """Where the metadata-only traces go (`AI_SERVICE_LANGFUSE_*`); the secret key never prints."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    base_url: str = Field(min_length=1)
+    public_key: str = Field(min_length=1)
+    secret_key: SecretStr
+    #: Langfuse's environment of every trace: lowercase, at most 40 characters.
+    environment: str = "development"
+
+    @model_validator(mode="after")
+    def _valid(self) -> Self:
+        if urlsplit(self.base_url).scheme not in ("http", "https"):
+            raise ValueError("AI_SERVICE_LANGFUSE_BASE_URL must be an http or https URL")
+        if not _LANGFUSE_ENVIRONMENT.fullmatch(self.environment):
+            raise ValueError(
+                "AI_SERVICE_LANGFUSE_ENVIRONMENT must be at most 40 lowercase letters, digits, "
+                "`-` or `_` and not start with `langfuse`"
+            )
+        if not self.secret_key.get_secret_value():
+            raise ValueError("AI_SERVICE_LANGFUSE_SECRET_KEY is empty")
+        object.__setattr__(self, "base_url", self.base_url.rstrip("/"))
+        return self
 
 
 class Settings(BaseModel):
@@ -56,6 +86,8 @@ class Settings(BaseModel):
     admission_wait_s: float = Field(default=2.0, gt=0, le=2.0)
     #: How long a shutdown waits for running generations before it interrupts them.
     shutdown_grace_s: float = Field(default=25.0, gt=0, le=65.0)
+    #: The trace export; None (any `AI_SERVICE_LANGFUSE_*` key unset) exports nothing.
+    langfuse: Langfuse | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
@@ -121,9 +153,24 @@ class Settings(BaseModel):
             raise ConfigError("AI_SERVICE_ALLOW_PAID must be true or false")
         raw["provider_key_present"] = bool(env.get("ANTHROPIC_API_KEY", "").strip())
         try:
+            raw["langfuse"] = _langfuse(env)
             return cls.model_validate(raw)
         except ValidationError as error:
             first = error.errors()[0]
             location = ".".join(str(part) for part in first["loc"])
             setting = names.get(location, location or "the configuration")
             raise ConfigError(f"{setting}: {first['msg']}") from None
+
+
+def _langfuse(env: Mapping[str, str]) -> Langfuse | None:
+    """The trace export `env` describes, or None unless its URL and both keys are all set."""
+    base_url = env.get("AI_SERVICE_LANGFUSE_BASE_URL", "").strip()
+    public_key = env.get("AI_SERVICE_LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = env.get("AI_SERVICE_LANGFUSE_SECRET_KEY", "").strip()
+    if not (base_url and public_key and secret_key):
+        return None
+    values = {"base_url": base_url, "public_key": public_key, "secret_key": secret_key}
+    environment = env.get("AI_SERVICE_LANGFUSE_ENVIRONMENT", "").strip()
+    if environment:
+        values["environment"] = environment
+    return Langfuse.model_validate(values)

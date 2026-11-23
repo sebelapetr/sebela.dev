@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import importlib.util
 import json
 import sys
 import threading
@@ -152,8 +154,16 @@ async def test_no_tracing_sdk_is_loaded_so_no_alternate_export_path_exists() -> 
     item.export(record())
     await settle(item)
     assert len(store.requests) == 1
-    loaded = [name for name in sys.modules if name.split(".")[0] in ("langfuse", "opentelemetry")]
-    assert loaded == []
+    # The anthropic SDK and FastAPI bring the no-op `opentelemetry-api`; it cannot export
+    # without an SDK, so no SDK, exporter or Langfuse package may be installed or loaded, and the
+    # global tracer provider stays the API's no-op proxy.
+    for name in ("langfuse", "opentelemetry.sdk", "opentelemetry.exporter"):
+        assert not any(module == name or module.startswith(f"{name}.") for module in sys.modules)
+        with contextlib.suppress(ModuleNotFoundError):
+            assert importlib.util.find_spec(name) is None, name
+    from opentelemetry import trace
+
+    assert type(trace.get_tracer_provider()).__name__ == "ProxyTracerProvider"
 
 
 async def test_a_refused_registration_exports_nothing() -> None:

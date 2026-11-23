@@ -53,7 +53,8 @@ async def _answered(
         response = await client.post(GENERATIONS, json=body, headers=bearer())
         assert response.status_code == 202, response.text
         await api.wait_reported()
-        if store is not None and api.telemetry_export == "allowed" and not store.failures:
+        exporting = store is not None and bool(env) and api.telemetry_export == "allowed"
+        if exporting and store is not None and not store.failures:
             await store.wait()
     return api.stored[body["operationId"]]
 
