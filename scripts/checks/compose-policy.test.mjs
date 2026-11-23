@@ -172,6 +172,10 @@ describe("the AI service container (issue #210)", () => {
     }
   });
 
+  it("passes no trace detector folder while none is accepted and none is mounted", () => {
+    assert.ok(!("AI_SERVICE_TRACE_DETECTOR_DIR" in (service("ai-service").environment ?? {})));
+  });
+
   it("runs the fictional model unless the paid one is chosen explicitly", () => {
     const environment = service("ai-service").environment ?? {};
     assert.equal(environment.AI_SERVICE_MODEL ?? "", "");
