@@ -6,7 +6,10 @@ in their ASCII (`xn--`) form. The special-use and reserved names (RFC 2606, 6761
 and `internal`) are added: the demo seed and the fixtures use them, and a draft may name them. The
 loopback name of RFC 6761 is left out: it only ever names the reader's own machine, and the
 repository's configuration check forbids it here. The list lives in a `.py` module so that it is
-part of the runtime fingerprint; refreshing it changes the Output Guard's version.
+part of the runtime fingerprint: refreshing it changes `versions().runtime` (the `output_guard`
+suffix hashes the policy texts, not this list). To refresh it, download the IANA list, keep the
+lines that do not start with `#`, lower-case them, put them in `DELEGATED` and run `uv run --locked
+ruff format`; then update the version above and the tests' expectations.
 """
 
 from __future__ import annotations

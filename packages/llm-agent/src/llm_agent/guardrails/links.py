@@ -27,13 +27,20 @@ trailing slash aside). An address is trusted only as the contact e-mail address,
 
 Ordinary text with dots is not a link: versions and numbers end in a number, abbreviations
 (`e.g.`, `Ph.D.`, `s.r.o.`) have one-letter labels, and a name whose last label is a common file
-extension that is also a top-level domain (`README.md`, `main.py`) is a file name unless a scheme,
-`//`, `www`, a port or a path marks it as a link. The scan is linear in the length of the text.
+extension that is also a top-level domain (`README.md`, `main.py`) is a file name, and a
+technology name (`ASP.NET`, `Socket.IO`) a name, unless a scheme, `//`, `www`, a port or a path
+marks it as a link. An opaque scheme name followed by a plain word (`about:it`, `tel:fine`) is a
+word; `javascript:` and `vbscript:` are links whatever follows. A host the URL parser rejects (an
+unclosed IPv6 bracket) is untrusted, and such a contact link trusts nothing. The scan, the address
+check included, is linear in the length of the folded text.
 
 Not recognised, and recorded in `docs/threat-model.md`: a host whose top-level domain is one of
-those file extensions (`evil.zip`), a host spelled out with spaces (`evil dot com`, `evil . com`),
-a bare IPv4 address, and a top-level domain written with look-alike letters of another script,
-which no registry delegates.
+those file extensions (`evil.zip`), a host spelled out with spaces (`evil dot com`, `evil . com`)
+or with a middle dot, a bare IPv4 address, a hexadecimal or decimal IPv4 address, a word after an
+opaque scheme name (`skype:evilname`), and a top-level domain written with look-alike letters of
+another script, which no registry delegates. Replaced although not meant as a link, also recorded
+there: a dotted word whose last label is a top-level domain (`Booking.com`, `user.name`,
+`2.0.app`) and a missing space after a full stop before such a word (`team.It`).
 """
 
 from __future__ import annotations
@@ -83,12 +90,18 @@ _FILE_EXTENSIONS: Final = frozenset(
         "zip",
     }
 )
+#: Technology names written like a host name; read as names unless a scheme, `//`, `www`, a port
+#: or a path marks them as a link.
+_TECHNOLOGY_NAMES: Final = frozenset({"ado.net", "asp.net", "ml.net", "socket.io", "vb.net"})
 #: Schemes a browser follows without `//`, and schemes that never need it.
 _SPECIAL_SCHEMES: Final = frozenset({"http", "https", "ftp", "ws", "wss", "hxxp", "hxxps"})
 _OPAQUE_SCHEMES: Final = (
     "javascript|vbscript|data|file|mailto|tel|sms|callto|skype|facetime|intent|blob|magnet"
     "|about|jar|view-source|geo|market|itms|whatsapp|tg|viber|xmpp|irc|sip|sips"
 )
+#: Opaque schemes that run code whatever follows them; any other opaque scheme followed by a plain
+#: word ("about:it", "tel:fine") is a word with a colon, not a link.
+_SCRIPT_SCHEMES: Final = frozenset({"javascript", "vbscript"})
 
 _BRACKETED: Final = re.compile(
     r"\s{0,3}[\[({<]\s{0,3}(\.|dot|tecka|tečka|@|at|zavinac|zavináč|:)\s{0,3}[\])}>]\s{0,3}"
@@ -125,14 +138,15 @@ _START: Final = re.compile(
     rf"(?P<opaque>{_OPAQUE_SCHEMES}):(?=[^\s/])"
     r"|(?P<scheme>[a-z][a-z0-9+.\-]{0,31}):(?P<slashes>/*)"
     r"|(?P<relative>(?<![:/])//)(?=[^\s/])"
-    r"|(?P<host>[^\W_])"
+    r"|(?P<host>\w)"
     r")"
 )
 #: The rest of a link after its start: up to whitespace, a quote or a closing bracket.
 _REST: Final = re.compile(r"[^\s<>\"'`)\]}]*")
 #: A run of host characters.
 _RUN: Final = re.compile(r"[\w.\-]+")
-_EMAIL: Final = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+#: An address; it starts only where a run of address characters starts, so the scan is linear.
+_EMAIL: Final = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _PORT: Final = re.compile(r":(\d{1,5})(?!\w)")
 _TRAILING: Final = "/.,;:!?"
 
@@ -190,12 +204,13 @@ def _trusted(contact: ContactCard | None) -> _Trusted:
     for link in contact.links:
         url = link.url.strip()
         exact.add(url.rstrip("/").casefold())
-        parts = urlsplit(url)
+        try:
+            parts = urlsplit(url)
+            port = parts.port
+        except ValueError:
+            # A contact link the URL parser rejects (an unclosed IPv6 bracket) trusts no host.
+            continue
         if parts.scheme.casefold() in {"http", "https"} and parts.hostname:
-            try:
-                port = parts.port
-            except ValueError:
-                continue
             hosts.append((parts.hostname.casefold(), port, _resolved(parts.path)))
     return _Trusted(tuple(hosts), frozenset(exact), (contact.email or "").casefold())
 
@@ -209,10 +224,15 @@ def _links(folded: str) -> list[_Link]:
         match = _START.search(folded, index)
         if match is None:
             break
-        if match.group("opaque"):
+        opaque = match.group("opaque")
+        if opaque:
             rest = _REST.match(folded, match.end())
             end = rest.end() if rest else match.end()
-            links.append(_Link(match.group("opaque"), folded[match.end() : end]))
+            payload = folded[match.end() : end]
+            if opaque not in _SCRIPT_SCHEMES and payload.rstrip(_TRAILING).isalpha():
+                index = _bare_host(folded, match.start(), links)
+                continue
+            links.append(_Link(opaque, payload))
             index = end
             continue
         scheme = match.group("scheme")
@@ -259,7 +279,8 @@ def _bare_host(folded: str, start: int, links: list[_Link]) -> int:
     port = _PORT.match(folded, after)
     tail_start = port.end() if port else after
     has_path = tail_start < len(folded) and folded[tail_start] in "/?#"
-    if not _is_host(labels, marked=bool(port) or has_path):
+    marked = bool(port) or has_path
+    if (name in _TECHNOLOGY_NAMES and not marked) or not _is_host(labels, marked=marked):
         return max(end, start + 1)
     rest = _REST.match(folded, tail_start) if has_path else None
     stop = rest.end() if rest else tail_start
@@ -292,10 +313,11 @@ def _is_trusted(link: _Link, trusted: _Trusted) -> bool:
     if scheme is not None and scheme not in {"http", "https"}:
         return f"{scheme}:{link.rest}".rstrip(_TRAILING) in trusted.exact
     rest = link.rest.lstrip("/")
-    parts = urlsplit("//" + rest.rstrip(_TRAILING))
     try:
+        parts = urlsplit("//" + rest.rstrip(_TRAILING))
         port = parts.port
     except ValueError:
+        # The URL parser rejects the host (an unclosed or malformed IPv6 bracket): untrusted.
         return False
     host = (parts.hostname or "").rstrip(".")
     if not host or "@" in parts.netloc:

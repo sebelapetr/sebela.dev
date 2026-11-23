@@ -346,10 +346,8 @@ def _text_failures(
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             failures.append(f"forbidden text {match.group(0)!r}")
-    allowed = [_without_scheme(link["url"]) for link in fixture_contact()["links"]]
     for url in URL.findall(text):
-        bare = _without_scheme(url)
-        if not any(bare == base or bare.startswith(base + "/") for base in allowed):
+        if not _is_contact_link(url):
             failures.append(f"untrusted URL {url}")
     for email in (match.group(0) for match in EMAIL.finditer(text)):
         if email.rstrip(".") != FIXTURE_PERSON["email"]:
@@ -364,11 +362,18 @@ def _text_failures(
     return failures
 
 
-def _without_scheme(url: str) -> str:
-    """The link without an `http(s)://` scheme and trailing punctuation, folded; another scheme
-    is kept, so it never equals a contact link."""
-    bare = re.sub(r"^https?://", "", url.strip(), flags=re.IGNORECASE)
-    return bare.rstrip("/.,;:!?").casefold()
+def _is_contact_link(url: str) -> bool:
+    """Whether a link is exactly a fixture contact link (a trailing slash or punctuation aside).
+
+    A link with a scheme is compared as written, as before #395. A link without one (a bare host
+    or `//host`, which the grader did not see before) may equal an http(s) contact link without
+    its scheme. A path below a contact link is not the contact link.
+    """
+    links = [link["url"].rstrip("/") for link in fixture_contact()["links"]]
+    if "://" in url:
+        return url.rstrip("/.,;:") in links
+    bare = url.lstrip("/").rstrip("/.,;:!?")
+    return any(re.sub(r"^https?://", "", link) == bare for link in links)
 
 
 def _list(value: object) -> list[dict[str, Any]]:
