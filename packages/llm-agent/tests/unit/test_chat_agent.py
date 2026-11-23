@@ -293,6 +293,31 @@ def test_the_main_agent_answers_a_question_whose_other_part_is_not_published() -
     assert "the outcome is answered" in flat
 
 
+def test_the_outcome_is_chosen_from_the_whole_question_before_the_unknown_case() -> None:
+    """#442: C03-cs r1 of the second run answered both parts of a two-part question (the best
+    project, and that the team size is still open) and chose insufficient_evidence. Rule 6 led
+    with "a missing fact means insufficient_evidence"; it now decides on the whole question first:
+    insufficient_evidence only when no part is answered."""
+    rule = CHAT_PROMPT.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
+    flat = " ".join(rule.split())
+    assert flat.startswith("Choose the outcome from the whole question")
+    assert "insufficient_evidence only when the records answer no part of it" in flat
+    assert (
+        "Saying that something asked earlier is still not published, or what the conversation"
+        " left open, is part of an answered outcome" in flat
+    )
+
+
+def test_the_outcome_field_repeats_when_an_answer_is_insufficient_evidence() -> None:
+    """#442: the field description sits next to the JSON the model writes, so it states the same
+    decision as rule 6 instead of only listing the three values."""
+    field = CHAT_PROMPT.split("- outcome:", 1)[1].split("\n- ", 1)[0]
+    flat = " ".join(field.split())
+    assert "answered when your text answers the question or any part of it" in flat
+    assert "insufficient_evidence only when it answers no part of it" in flat
+    assert "refused" in flat
+
+
 def test_the_main_agent_names_a_gap_only_after_reading_the_tools_that_could_fill_it() -> None:
     """#442: C03-cs r1 said the records show no rerankers without reading list_explorations."""
     rule = CHAT_PROMPT.split("\n5. ", 1)[1].split("\n6. ", 1)[0]
