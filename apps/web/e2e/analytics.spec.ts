@@ -89,7 +89,7 @@ function pageErrors(page: Page): string[] {
 
 const header = (page: Page) => page.getByRole("banner");
 const themeToggle = (page: Page) => header(page).getByRole("button", { name: "Dark theme" });
-const composer = (page: Page) => page.getByRole("textbox", { name: "Your question" });
+const composer = (page: Page) => page.getByRole("combobox", { name: "Your question" });
 const tracker = (page: Page) => page.locator("script[data-website-id]");
 
 function urls(stub: AnalyticsStub): string[] {

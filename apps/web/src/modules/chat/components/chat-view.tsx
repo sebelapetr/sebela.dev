@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Ref, type SubmitEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type Ref,
+  type SubmitEvent,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowRight, ArrowUp, RotateCcw, Square } from "lucide-react";
@@ -13,6 +21,8 @@ import { chatQuestionMaxLength } from "@sebela/contracts";
 
 import { routes } from "../../_shared";
 import { handOffIdFromParam } from "../data/address";
+import { commandSuggestions, readComposerInput, type ChatCommand } from "../data/commands";
+import { describeCompaction } from "../data/compaction";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
 import { askSuggestions } from "../data/suggestions";
 import { describeChatTurn } from "../data/turn-status";
@@ -21,6 +31,7 @@ import { chatTurnParts, useChatScroll } from "../hooks/use-chat-scroll";
 import { useChatUsage, useConversation } from "../hooks/use-conversation";
 import { AnswerBlock, AnswerSources } from "./answer-blocks";
 import { ClearConversation } from "./clear-conversation";
+import { CommandMenu, commandMenuId, commandOptionId } from "./command-menu";
 import { UsagePanel, UsageRestriction } from "./usage-panel";
 
 /**
@@ -152,7 +163,11 @@ const clearNotices = {
  * "Latest" brings back the end once it is out of view (`useChatScroll`). While the latest answer
  * is open, in this tab or another of the visitor's, "Stop answering" takes the send button's place
  * and no other question can be sent. "Clear conversation" deletes the conversation after a
- * confirmation; the page says when copies are still to be deleted, never that they were.
+ * confirmation; the page says when copies are still to be deleted, never that they were. A leading
+ * slash in the composer opens the command suggestions (only `/compact`); `/compact` compacts the
+ * assistant's working context without adding a question, with its progress and end in a status
+ * line and "Stop compacting" in the send button's place while it runs, in any tab. Any other
+ * command is explained on the page and never sent.
  */
 export function ChatView({
   name,
@@ -167,13 +182,32 @@ export function ChatView({
 }) {
   const searchParams = useSearchParams();
   const handOffId = handOffIdFromParam(searchParams.get("c"));
-  const { snapshot, current, open, submit, retry, stop, clear, loadEarlier, challengeRef } =
-    useConversation(siteKey, available);
+  const {
+    snapshot,
+    current,
+    open,
+    submit,
+    retry,
+    stop,
+    clear,
+    compact,
+    loadEarlier,
+    challengeRef,
+  } = useConversation(siteKey, available);
   /** Why the last clear did nothing, until the next one or the next question. */
   const [clearNotice, setClearNotice] = useState<keyof typeof clearNotices | null>(null);
   /** Whether the last stop could not reach the API, until the next stop or question. */
   const [stopFailed, setStopFailed] = useState(false);
   const [question, setQuestion] = useState("");
+  /** Why the composer's command was not run, until the text changes or something is sent. */
+  const [commandNotice, setCommandNotice] = useState<string | null>(null);
+  /** Whether the composer has focus, which the command suggestions need. */
+  const [composing, setComposing] = useState(false);
+  /** The text the command suggestions were dismissed at (Escape or a choice), until it changes. */
+  const [dismissedAt, setDismissedAt] = useState<string | null>(null);
+  /** The suggestion the arrow keys are on. */
+  const [activeCommand, setActiveCommand] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const conversationRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const lastAnswerRef = useRef<HTMLDivElement>(null);
@@ -200,7 +234,8 @@ export function ChatView({
 
   // The usage is read again whenever the conversation could have changed it: when the page opens
   // or reads the conversation, a question is added, and an answer starts or ends (in any tab).
-  const usageKey = `${snapshot.history}|${String(turnCount)}|${latest?.requestId ?? ""}|${String(latest !== undefined && isChatTurnOpen(latest))}`;
+  // A compaction is read again as it starts and ends, which also shows the estimate after it.
+  const usageKey = `${snapshot.history}|${String(turnCount)}|${latest?.requestId ?? ""}|${String(latest !== undefined && isChatTurnOpen(latest))}|${snapshot.compaction?.requestId ?? ""}|${snapshot.compaction?.status ?? ""}`;
   useEffect(() => {
     if (readsUsage) void refreshUsage();
   }, [usageKey, readsUsage, refreshUsage]);
@@ -280,13 +315,76 @@ export function ChatView({
     if (submit(text) !== "sent") return;
     setClearNotice(null);
     setStopFailed(false);
+    setCommandNotice(null);
     setQuestion("");
     request("sent");
   }
 
   function onSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
-    ask(question);
+    const input = readComposerInput(question);
+    if (input.kind === "question") {
+      ask(question);
+      return;
+    }
+    if (input.kind === "invalid") {
+      setCommandNotice(input.message);
+      return;
+    }
+    if (compact() !== "started") return;
+    setClearNotice(null);
+    setStopFailed(false);
+    setCommandNotice(null);
+    setQuestion("");
+  }
+
+  function changeQuestion(text: string): void {
+    setQuestion(text);
+    setCommandNotice(null);
+    setActiveCommand(0);
+    if (dismissedAt !== text) setDismissedAt(null);
+  }
+
+  const suggestions = commandSuggestions(question);
+  const menuOpen =
+    composing &&
+    snapshot.history !== "unavailable" &&
+    suggestions.length > 0 &&
+    dismissedAt !== question;
+  const activeIndex = Math.min(activeCommand, suggestions.length - 1);
+
+  /** Puts the chosen command in the input; Enter or send then runs it. */
+  function chooseCommand(command: ChatCommand): void {
+    setQuestion(command.name);
+    setCommandNotice(null);
+    setDismissedAt(command.name);
+    inputRef.current?.focus();
+  }
+
+  function onComposerKey(event: KeyboardEvent<HTMLInputElement>): void {
+    if (!menuOpen) {
+      if (event.key === "ArrowDown" && suggestions.length > 0) {
+        event.preventDefault();
+        setDismissedAt(null);
+        setActiveCommand(0);
+      }
+      return;
+    }
+    const count = suggestions.length;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActiveCommand((activeIndex + step + count) % count);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setDismissedAt(question);
+    } else if (event.key === "Enter") {
+      const chosen = suggestions[activeIndex];
+      // A command typed in full runs at once; a part of one is completed first.
+      if (chosen === undefined || chosen.name === question.trim().toLowerCase()) return;
+      event.preventDefault();
+      chooseCommand(chosen);
+    }
   }
 
   function retryLatest(requestId: string): void {
@@ -313,6 +411,12 @@ export function ChatView({
   }
 
   const answering = latest !== undefined && isChatTurnOpen(latest) ? latest : null;
+  const compaction = snapshot.compaction;
+  const compacting = compaction !== null && compaction.status !== "ended" ? compaction : null;
+  const compactionNotice = compaction === null ? null : describeCompaction(compaction);
+  const composerNotice = stopFailed
+    ? "The answer could not be stopped. It is still being prepared."
+    : (commandNotice ?? compactionNotice?.text ?? null);
   const notice =
     clearNotice !== null
       ? clearNotices[clearNotice]
@@ -344,7 +448,7 @@ export function ChatView({
         )}
         {snapshot.history === "ready" && turnCount > 0 ? (
           <ClearConversation
-            disabled={snapshot.busy && answering === null}
+            disabled={snapshot.busy && answering === null && compacting === null}
             onConfirm={clearConversation}
           />
         ) : null}
@@ -469,8 +573,8 @@ export function ChatView({
         ) : null}
         {/* The person check shows here only when it needs the visitor. */}
         <div ref={challengeRef} className="empty:hidden [&:has(iframe)]:pb-3" />
-        <p role="status" className="pb-3 text-sm text-muted-foreground empty:hidden">
-          {stopFailed ? "The answer could not be stopped. It is still being prepared." : null}
+        <p role="status" className="pb-3 text-sm text-pretty text-muted-foreground empty:hidden">
+          {composerNotice}
         </p>
         {showsUsage ? (
           <>
@@ -478,25 +582,55 @@ export function ChatView({
             <UsagePanel view={usageView} open={usageOpen} onOpenChange={toggleUsage} />
           </>
         ) : null}
+        {menuOpen ? (
+          <CommandMenu commands={suggestions} active={activeIndex} onChoose={chooseCommand} />
+        ) : null}
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question
           </label>
           <Input
+            ref={inputRef}
             id="ask-question"
             name="question"
             type="text"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={menuOpen}
+            aria-controls={commandMenuId}
+            aria-activedescendant={menuOpen ? commandOptionId(activeIndex) : undefined}
             autoComplete="off"
             enterKeyHint="send"
             maxLength={chatQuestionMaxLength}
-            placeholder="Ask a question"
+            placeholder="Ask a question, or type /"
             disabled={snapshot.history === "unavailable"}
             value={question}
             onChange={(event) => {
-              setQuestion(event.target.value);
+              changeQuestion(event.target.value);
+            }}
+            onKeyDown={onComposerKey}
+            onFocus={() => {
+              setComposing(true);
+            }}
+            onBlur={() => {
+              setComposing(false);
             }}
           />
-          {answering === null ? (
+          {compacting !== null ? (
+            // In place of the send button while the working context is being compacted, in
+            // whichever tab it was asked; its operation says when it stopped.
+            <Button
+              type="button"
+              className="size-12"
+              aria-label="Stop compacting"
+              disabled={compacting.status === "running" && compacting.stopping}
+              onClick={() => {
+                void stop(compacting.requestId);
+              }}
+            >
+              <Square aria-hidden="true" className="fill-current" />
+            </Button>
+          ) : answering === null ? (
             <Button
               type="submit"
               className="size-12"

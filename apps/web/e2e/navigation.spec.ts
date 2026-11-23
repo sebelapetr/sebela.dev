@@ -240,7 +240,7 @@ test.describe("navigation and theme", () => {
         "/#contact",
       );
       await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
-      await expect(page.getByRole("textbox", { name: "Your question" })).toBeDisabled();
+      await expect(page.getByRole("combobox", { name: "Your question" })).toBeDisabled();
       expect(chatRequests).toEqual([]);
     });
 
