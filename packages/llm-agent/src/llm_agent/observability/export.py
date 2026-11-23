@@ -8,8 +8,9 @@ callback, exporter default or resource detector can add a value this module did 
   language, versions, usage and cost, the export mode and, when the content is withheld for a
   reason, that reason (`degraded`);
 - a nested span per stage, model attempt, tool call and guard decision. A stage (`stage.*`) or
-  the compaction is a child of the root; every other span is a child of the shortest stage that
-  contains it in time, else of the root;
+  the compaction is a child of the root; every other span is a child of the first stage recorded
+  after it that holds it in time (the tracer records a span when it finishes, and whole-ms
+  rounding blurs the boundaries), else of the shortest stage that holds it, else of the root;
 - names and statuses only from a fixed vocabulary (anything else becomes `<kind>.unnamed` or
   `unknown`), and span attributes only from `ATTRIBUTES`, filtered and rule-masked recursively
   through `filter_fields`;
@@ -106,9 +107,9 @@ def otlp_trace(
     for index, span in enumerate(record.spans):
         parent = root_id
         if index not in containers:
-            holder = _holder(span, [record.spans[i] for i in containers])
+            holder = _holder(index, record.spans, containers)
             if holder is not None:
-                parent = ids[containers[holder]]
+                parent = ids[holder]
         start = origin + span.start_ms * _NS_PER_MS
         end = min(start + span.duration_ms * _NS_PER_MS, ended_at_ns)
         status = span.status if _WORD.fullmatch(span.status) else "unknown"
@@ -158,16 +159,30 @@ def _container(span: Span) -> bool:
     return name.startswith("stage.") or name == "compaction"
 
 
-def _holder(span: Span, containers: list[Span]) -> int | None:
-    """The index of the shortest container whose time holds `span` (1 ms rounding allowed)."""
+def _holder(index: int, spans: list[Span], containers: list[int]) -> int | None:
+    """The index of the container that holds `spans[index]`, or `None`.
+
+    The tracer records a span when it finishes, so a stage follows its own spans: the first
+    container recorded after the span whose time holds it wins, with 2 ms for the separate
+    rounding of start and duration on both sides. Otherwise, for records not in that order, the
+    shortest container whose time holds it (1 ms rounding allowed).
+    """
+    span = spans[index]
+    for position in containers:
+        if position > index and _holds(spans[position], span, 2):
+            return position
     best: int | None = None
-    end = span.start_ms + span.duration_ms
-    for index, container in enumerate(containers):
-        holds = container.start_ms <= span.start_ms
-        holds = holds and end <= container.start_ms + container.duration_ms + 1
-        if holds and (best is None or container.duration_ms < containers[best].duration_ms):
-            best = index
+    for position in containers:
+        if _holds(spans[position], span, 1) and (
+            best is None or spans[position].duration_ms < spans[best].duration_ms
+        ):
+            best = position
     return best
+
+
+def _holds(container: Span, span: Span, slack_ms: int) -> bool:
+    end = container.start_ms + container.duration_ms + slack_ms
+    return container.start_ms <= span.start_ms and span.start_ms + span.duration_ms <= end
 
 
 def _type(name: str) -> str:
