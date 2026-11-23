@@ -100,7 +100,16 @@ class ChatAgent:
         prior summary and every exchange; nothing is replayed. The caller installs the summary
         only on `compacted`, together with the `kept` newest exchanges.
         """
-        limits = limits or ExecutionLimits()
+        result = await self._compact(request, limits or ExecutionLimits(), cancel)
+        export(self._telemetry, result)
+        return result
+
+    async def _compact(
+        self,
+        request: CompactionRequest,
+        limits: ExecutionLimits,
+        cancel: asyncio.Event | None,
+    ) -> CompactionResult:
         tracer = Tracer()
         budget = Budget(limits)
         exchanges = request.exchanges

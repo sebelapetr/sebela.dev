@@ -264,7 +264,7 @@ def test_a_compaction_payload_has_its_own_root_and_a_chain_span() -> None:
 # --- Filtering by construction -------------------------------------------------------------------
 
 
-SEEDED = {
+SEEDED: dict[str, str | int | float | bool | None] = {
     "authorization": "Bearer sk-ant-api03-FAKEfakeFAKEfakeFAKE00",
     "cookie": "session=fictional",
     "client_ip": "203.0.113.42",

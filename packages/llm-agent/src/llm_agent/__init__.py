@@ -8,6 +8,7 @@ fakes in tests).
 """
 
 from llm_agent.models.gateway import ChatModel, ModelCall, ModelFactory, anthropic_model_factory
+from llm_agent.observability.export import otlp_trace
 from llm_agent.observability.telemetry import ExecutionRecord, TelemetrySink
 from llm_agent.pipelines.chat import ChatAgent
 from llm_agent.pipelines.chat.versions import versions
@@ -180,6 +181,7 @@ __all__ = [
     "Usage",
     "Versions",
     "anthropic_model_factory",
+    "otlp_trace",
     "profile_view",
     "read_tool",
     "versions",

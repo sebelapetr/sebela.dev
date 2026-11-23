@@ -1,19 +1,32 @@
 """Optional export of a finished execution to the caller's telemetry.
 
-The caller passes a `TelemetrySink`; after the result is final the agent hands it one redacted
-`ExecutionRecord`: outcome, reason, language, usage, versions and the spans, never visitor text,
-model text or tool data. Export is best effort: a sink that raises is ignored, so a telemetry
-failure can never change a safety decision, a limit or the result.
+The caller passes a `TelemetrySink`; after the result of an answer (`run`) or a compaction
+(`compact`) is final the agent hands it one redacted `ExecutionRecord`: the operation, outcome,
+reason, language, usage, versions and the spans, never visitor text, model text, summary text or
+tool data. `otlp_trace` (`export.py`) turns a record into the metadata-only payload of an
+export. Export is best effort: a sink that raises is ignored, so a telemetry failure can never
+change a safety decision, a limit or the result.
 """
 
 from __future__ import annotations
 
 import contextlib
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from llm_agent.schemas import ChatResult, Language, Outcome, Span, Usage, Versions
+from llm_agent.schemas import (
+    ChatResult,
+    CompactionOutcome,
+    CompactionResult,
+    Language,
+    Outcome,
+    Span,
+    Usage,
+    Versions,
+)
+
+Operation = Literal["answer", "compact"]
 
 
 class ExecutionRecord(BaseModel):
@@ -23,9 +36,11 @@ class ExecutionRecord(BaseModel):
 
     execution_id: str | None
     trace_id: str | None
-    outcome: Outcome
+    operation: Operation
+    outcome: Outcome | CompactionOutcome
     reason: str | None
-    language: Language
+    #: The answer's language, or the summary's for a compaction (None when it installed none).
+    language: Language | None
     usage: Usage
     versions: Versions
     spans: list[Span]
@@ -42,16 +57,23 @@ class TelemetrySink(Protocol):
     def export(self, record: ExecutionRecord) -> None: ...
 
 
-def export(sink: TelemetrySink | None, result: ChatResult) -> None:
+def export(sink: TelemetrySink | None, result: ChatResult | CompactionResult) -> None:
     """Hands the sink the record of a final result; any sink failure is swallowed."""
     if sink is None:
         return
+    if isinstance(result, CompactionResult):
+        operation: Operation = "compact"
+        language = result.summary.language if result.summary else None
+    else:
+        operation = "answer"
+        language = result.language
     record = ExecutionRecord(
         execution_id=result.execution_id,
         trace_id=result.trace_id,
+        operation=operation,
         outcome=result.outcome,
         reason=result.reason,
-        language=result.language,
+        language=language,
         usage=result.usage,
         versions=result.versions,
         spans=list(result.trace),
