@@ -1,4 +1,4 @@
-"""The catalogue keeps all 90 planned cases visible and implemented cases executable."""
+"""The catalogue keeps all 96 planned cases visible and implemented cases executable."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from evals.catalogue import BY_ID, CATALOGUE, implemented, pending
 from evals.datasets.cases import CASES, DATASET_VERSION, FIXTURE, dataset_version
 
 
-def test_all_90_planned_cases_are_visible_in_both_languages() -> None:
-    assert len(CATALOGUE) == 90
-    assert len({case.id for case in CATALOGUE}) == 90
-    assert sum(case.language == "en" for case in CATALOGUE) == 45
-    assert sum(case.language == "cs" for case in CATALOGUE) == 45
-    assert sum(case.critical for case in CATALOGUE) == 46
+def test_all_96_planned_cases_are_visible_in_both_languages() -> None:
+    assert len(CATALOGUE) == 96
+    assert len({case.id for case in CATALOGUE}) == 96
+    assert sum(case.language == "en" for case in CATALOGUE) == 48
+    assert sum(case.language == "cs" for case in CATALOGUE) == 48
+    assert sum(case.critical for case in CATALOGUE) == 52
 
 
 SLICE_01 = ("Q01", "Q14", "S01", "S08", "S11", "S19")
@@ -28,19 +28,20 @@ SLICE_04 = ("Q17", "Q18", "S17")
 SLICE_05 = ("Q19", "Q20", "S09", "S12", "S13", "S14", "S15", "S16", "S18")
 COMPACTION = ("C03", "C04", "C05", "C06")
 TRACE_EXPORT = ("C07",)
+ABUSE = ("C09", "C10", "C11")
 
 
-def test_the_slices_implement_all_90_cases_and_none_is_pending() -> None:
+def test_the_slices_implement_all_96_cases_and_none_is_pending() -> None:
     expected = {
         f"{family}-{language}"
         for family in (
             *(*SLICE_01, *SLICE_02, *SLICE_03, *SLICE_04, *SLICE_05),
-            *(*COMPACTION, *TRACE_EXPORT),
+            *(*COMPACTION, *TRACE_EXPORT, *ABUSE),
         )
         for language in ("en", "cs")
     }
     assert {case.id for case in implemented()} == expected
-    assert len(expected) == 90
+    assert len(expected) == 96
     assert pending() == ()
     assert {BY_ID[f"{family}-en"].slice for family in SLICE_02} == {"S02"}
     assert {BY_ID[f"{family}-cs"].slice for family in SLICE_03} == {"S03"}
@@ -56,6 +57,10 @@ def test_the_slices_implement_all_90_cases_and_none_is_pending() -> None:
     assert [BY_ID[f"{family}-en"].critical for family in COMPACTION] == [False, False, True, True]
     assert {BY_ID[f"C07-{lang}"].slice for lang in ("en", "cs")} == {"#214"}
     assert BY_ID["C07-en"].critical
+    assert {BY_ID[f"{family}-{lang}"].slice for family in ABUSE for lang in ("en", "cs")} == {
+        "#393"
+    }
+    assert all(BY_ID[f"{family}-{lang}"].critical for family in ABUSE for lang in ("en", "cs"))
 
 
 def test_every_implemented_case_is_executable_and_nothing_else_is() -> None:

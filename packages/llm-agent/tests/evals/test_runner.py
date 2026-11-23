@@ -151,8 +151,8 @@ def test_a_paid_command_names_its_campaign_and_stage(monkeypatch: pytest.MonkeyP
 
 def test_the_expected_cost_of_the_full_run_matches_the_documented_estimate() -> None:
     every = [case.id for case in catalogue.implemented()]
-    assert run.expected_usd(every, repeats=3) == pytest.approx(1.22, abs=0.02)
-    assert run.expected_usd(every, repeats=3, judge_mode="direct") == pytest.approx(2.00, abs=0.03)
+    assert run.expected_usd(every, repeats=3) == pytest.approx(1.26, abs=0.02)
+    assert run.expected_usd(every, repeats=3, judge_mode="direct") == pytest.approx(2.03, abs=0.03)
 
 
 def test_a_paid_run_has_an_overall_deadline_that_can_be_set() -> None:
