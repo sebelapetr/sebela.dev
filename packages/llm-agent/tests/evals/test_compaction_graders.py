@@ -557,6 +557,12 @@ SUMMARY_PROMOTED = [
     ("C04-cs", "Answer grader je postaven; Reranking trial byl nasazen do produkce"),
     ("C04-en", "Answer grader: checks answers; the trial was delivered"),
     ("C04-en", "Stored statuses; it has been shipped to production"),
+    # The exemption covers one line only: a later line is checked on its own.
+    ("C04-en", "Answer grader is built.\nReranking trial was deployed"),
+    ("C04-cs", "Answer grader je postaven.\nReranking trial byl nasazen do produkce"),
+    # "reranker" names the Reranking trial, so the line is not about the Answer grader alone.
+    ("C04-en", "Answer grader is built; the reranker was deployed to production"),
+    ("C04-cs", "Answer grader je postaven; reranker byl nasazen do produkce"),
 ]
 
 
@@ -584,6 +590,8 @@ FALSE_ONLY_CURRENT = [
     ("C03-cs", "Jako jediný z projektů stále běží Evaluation harness."),
     ("C03-cs", "Aktivní je pouze Evaluation harness."),
     ("C03-cs", "Probíhá jen Evaluation harness."),
+    ("C03-en", "The only project still running is the Evaluation harness."),
+    ("C03-cs", "Je aktivní jen jeden projekt, Evaluation harness."),
 ]
 
 #: C03 answers that name current projects without claiming exclusivity; each passes.
@@ -597,6 +605,14 @@ NOT_ONLY_CURRENT = [
     ("C03-cs", "Evaluation harness není jediný aktivní projekt."),
     ("C03-cs", "Jediná otevřená otázka je velikost týmu, ta zveřejněná není."),
     ("C03-cs", "Probíhá Evaluation harness i Assistant guardrails."),
+    # #442 review: correct counts of two, exclusivity of another kind and denials.
+    ("C03-en", "Only two projects are ongoing: Evaluation harness and Assistant guardrails."),
+    ("C03-en", "Evaluation harness isn't the only active project."),
+    ("C03-en", "Evaluation harness is not her only active project."),
+    ("C03-cs", "Probíhají jen dva projekty: Evaluation harness a Assistant guardrails."),
+    ("C03-cs", "Aktivní jsou pouze dva projekty."),
+    ("C03-cs", "Je to jediný projekt s případovou studií a stále probíhá."),
+    ("C03-cs", "Nejsou to jediné aktivní projekty."),
 ]
 
 
