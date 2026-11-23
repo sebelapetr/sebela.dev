@@ -15,10 +15,32 @@ export type ComposerInput =
   | { readonly kind: "invalid"; readonly message: string };
 
 /** The commands the composer offers. */
-export const chatCommands: readonly ChatCommand[] = [];
+export const chatCommands: readonly ChatCommand[] = [
+  {
+    name: "/compact",
+    description:
+      "Summarize the assistant's current working context. History it already leaves out is not summarized again, and your visible conversation stays as it is.",
+  },
+];
 
 /** The commands matching a command being typed: a leading slash and no space yet. */
-export declare function commandSuggestions(text: string): readonly ChatCommand[];
+export function commandSuggestions(text: string): readonly ChatCommand[] {
+  if (!text.startsWith("/") || /\s/.test(text)) return [];
+  const typed = text.toLowerCase();
+  return chatCommands.filter((command) => command.name.startsWith(typed));
+}
 
 /** Reads the composer's text as a question, a command, or an invalid command explained locally. */
-export declare function readComposerInput(text: string): ComposerInput;
+export function readComposerInput(text: string): ComposerInput {
+  if (!text.startsWith("/")) return { kind: "question" };
+  const [word = "/", ...rest] = text.trim().split(/\s+/);
+  if (word.toLowerCase() === "/compact") {
+    return rest.length === 0
+      ? { kind: "command", name: "compact" }
+      : { kind: "invalid", message: "/compact takes no text after it. Nothing was sent." };
+  }
+  return {
+    kind: "invalid",
+    message: `${word} is not a command. The only command is /compact. Nothing was sent; to ask this as a question, do not start it with a slash.`,
+  };
+}

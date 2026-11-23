@@ -36,6 +36,7 @@ const emptySnapshot: ConversationSnapshot = {
   earlier: "none",
   conversationId: null,
   telemetryDeletion: null,
+  compaction: null,
 };
 
 const createId = () => crypto.randomUUID();
@@ -147,11 +148,23 @@ export function useConversation(siteKey: string | null, available: boolean) {
   const retry = useCallback((requestId: string) => store().retry(requestId), [store]);
   const stop = useCallback((requestId: string) => store().stop(requestId), [store]);
   const clear = useCallback(() => store().clear(), [store]);
+  const compact = useCallback(() => store().compact(), [store]);
   const loadEarlier = useCallback(() => store().loadEarlier(), [store]);
   const challengeRef = useCallback((element: HTMLElement | null) => {
     challengeContainer = element;
   }, []);
-  return { snapshot, current: now, open, submit, retry, stop, clear, loadEarlier, challengeRef };
+  return {
+    snapshot,
+    current: now,
+    open,
+    submit,
+    retry,
+    stop,
+    clear,
+    compact,
+    loadEarlier,
+    challengeRef,
+  };
 }
 
 const loadingUsage = { status: "loading" } as const;
