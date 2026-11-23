@@ -1,4 +1,4 @@
-"""Compacting the working context (#213, C08 and the deterministic C01/C02 rules) with fakes.
+"""Compacting the working context (#213: C08 and the deterministic compaction rules) with fakes.
 
 `ChatAgent.compact` folds the prior summary and the older complete exchanges into one bounded,
 validated `ContextSummary` and keeps the newest exchanges verbatim. It never raises: a provider,
