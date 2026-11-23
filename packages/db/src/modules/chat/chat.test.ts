@@ -11,6 +11,8 @@ import {
   createChatPersistence,
   type ChatAdmissionInput,
   type ChatClearInput,
+  type ChatCompactionAdmissionInput,
+  type ChatCompactionRecord,
   type ChatRequestClaimInput,
   type ChatRetryInput,
   type ChatIdentityRecord,
@@ -526,7 +528,7 @@ describe("chat persistence", () => {
       ).resolves.toBeNull();
     });
 
-    it("projects at most the latest completed answered exchanges, oldest first", async () => {
+    it("gives at most the latest completed answered exchanges, oldest first, as the working context", async () => {
       const caller = await identity();
       for (let index = 0; index < 3; index += 1) {
         const operation = await admitted(
@@ -539,11 +541,24 @@ describe("chat persistence", () => {
         refused.id,
         answered({ outcome: "refused", text: "No.", advancesRevision: false }),
       );
-      const exchanges = await chat.recentExchanges(caller.conversation.id, 2);
-      expect(exchanges).toEqual([
-        { question: "Question 1", answer: "Answer 1", language: "en", sources: answered().sources },
-        { question: "Question 2", answer: "Answer 2", language: "en", sources: answered().sources },
-      ]);
+      await expect(chat.workingContext(caller.conversation.id, 2)).resolves.toEqual({
+        revision: 3,
+        summary: null,
+        exchanges: [
+          {
+            question: "Question 1",
+            answer: "Answer 1",
+            language: "en",
+            sources: answered().sources,
+          },
+          {
+            question: "Question 2",
+            answer: "Answer 2",
+            language: "en",
+            sources: answered().sources,
+          },
+        ],
+      });
     });
   });
 
@@ -872,6 +887,7 @@ describe("chat persistence", () => {
         spendRoom: [],
         activeOperation: null,
         context: null,
+        nextRequest: null,
       });
       const measured = await admitted(admission(caller));
       const context = {
@@ -1276,6 +1292,463 @@ describe("chat persistence", () => {
           }
           expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
         }
+      });
+    });
+
+    describe("compaction", () => {
+      const summary = {
+        language: "en",
+        goals: ["Find a data engineer for a fictional pipeline"],
+        openQuestions: ["Is Alex available in spring?"],
+        covered: ["Alex builds data platforms."],
+        visitorClaims: [],
+        references: [{ kind: "person", recordId: "alex", title: "Alex" }],
+      };
+      const compactionOf = (
+        caller: ChatIdentityRecord,
+        overrides: Partial<ChatCompactionAdmissionInput> = {},
+      ): ChatCompactionAdmissionInput => {
+        const gates: Partial<ChatAdmissionInput> = { ...admission(caller) };
+        delete gates.question;
+        return {
+          ...(gates as Omit<ChatAdmissionInput, "question">),
+          questionHash: "compact-hash",
+          minimumExchanges: 3,
+          exchangeLimit: 6,
+          ...overrides,
+        };
+      };
+      const compacted = (overrides: Partial<ChatCompactionRecord> = {}): ChatCompactionRecord => ({
+        outcome: "compacted",
+        reason: null,
+        summary,
+        kept: 2,
+        summaryTokens: 120,
+        nextInputTokens: 900,
+        costMicroUsd: 3_000,
+        inputTokens: 2_000,
+        outputTokens: 150,
+        modelAttempts: 1,
+        latencyMs: 3_000,
+        versions: { prompt: "compaction-v1" },
+        exchangeLimit: 6,
+        ...overrides,
+      });
+      const failedCompaction = compacted({
+        outcome: "failed",
+        reason: "provider_error",
+        summary: null,
+        kept: 0,
+        summaryTokens: 0,
+        nextInputTokens: null,
+        costMicroUsd: 1_000,
+      });
+      /** `count` answered exchanges, `Question i` and `Answer i`. */
+      const exchangesOf = async (caller: ChatIdentityRecord, count: number, from = 0) => {
+        for (let index = from; index < from + count; index += 1) {
+          const operation = await admitted(
+            admission(caller, { question: `Question ${String(index)}` }),
+          );
+          await finish(operation.id, answered({ text: `Answer ${String(index)}` }));
+        }
+      };
+      const compactionAdmitted = async (input: ChatCompactionAdmissionInput) => {
+        const result = await chat.admitCompaction(input);
+        if (result.status !== "admitted") throw new Error(`Expected admission: ${result.status}`);
+        return result;
+      };
+      const questionsOf = (context: { exchanges: { question: string }[] }) =>
+        context.exchanges.map((exchange) => exchange.question);
+
+      it("admits a compaction of the working context without appending a message", async () => {
+        const startsOn = "2043-01-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const { operation, context } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        expect(operation).toMatchObject({
+          kind: "compaction",
+          status: "accepted",
+          userMessageId: null,
+          assistantMessageId: null,
+          contextRevision: 3,
+          compaction: null,
+        });
+        expect(context.revision).toBe(3);
+        expect(context.summary).toBeNull();
+        expect(questionsOf(context)).toEqual(["Question 0", "Question 1", "Question 2"]);
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+        const history = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(history.messages).toHaveLength(6);
+
+        await expect(chat.findOperation(caller.identityId, operation.id)).resolves.toEqual({
+          operation,
+          assistant: null,
+        });
+        const claim = await chat.claimGrant(operation.id, "grant-verifier", at);
+        expect(claim).toEqual({
+          status: "claimed",
+          operation: { ...operation, status: "running" },
+        });
+      });
+
+      it("has nothing to compact below the minimum and consumes nothing", async () => {
+        const startsOn = "2043-02-01";
+        const caller = await identity();
+        await exchangesOf(caller, 2);
+        const input = compactionOf(caller, { spend: onDay(startsOn) });
+        await expect(chat.admitCompaction(input)).resolves.toEqual({
+          status: "nothing_to_compact",
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(0);
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toBeNull();
+        // The challenge token stays unredeemed.
+        await admitted(admission(caller, { challengeTokenHash: input.challengeTokenHash }));
+      });
+
+      it("recovers a repeated compaction request and holds the conversation lock", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const input = compactionOf(caller);
+        const { operation } = await compactionAdmitted(input);
+        await expect(
+          chat.admitCompaction({ ...input, challengeTokenHash: unique("token") }),
+        ).resolves.toEqual({ status: "duplicate", operation, sameQuestion: true });
+        await expect(chat.admitCompaction(compactionOf(caller))).resolves.toEqual({
+          status: "busy",
+          operation,
+        });
+        await expect(chat.admit(admission(caller))).resolves.toEqual({ status: "busy", operation });
+
+        const asking = await identity();
+        await exchangesOf(asking, 3);
+        const question = await admitted(admission(asking));
+        await expect(chat.admitCompaction(compactionOf(asking))).resolves.toEqual({
+          status: "busy",
+          operation: question,
+        });
+        // A question's request id cannot name a compaction.
+        await expect(
+          chat.admitCompaction(compactionOf(asking, { requestId: question.requestId })),
+        ).resolves.toMatchObject({ status: "duplicate", sameQuestion: false });
+      });
+
+      it("rechecks the challenge and budget gates and stores nothing on refusal", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const used = unique("token");
+        await finish((await admitted(admission(caller, { challengeTokenHash: used }))).id);
+        await expect(
+          chat.admitCompaction(compactionOf(caller, { challengeTokenHash: used })),
+        ).resolves.toEqual({ status: "challenge_reused" });
+        await expect(
+          chat.admitCompaction(compactionOf(caller, { spend: onDay("2043-03-01", allowance - 1) })),
+        ).resolves.toEqual({ status: "budget_exhausted" });
+        expect(
+          await tableCount(
+            sql`SELECT count(*)::text AS count FROM chat.operations WHERE conversation_id = ${caller.conversation.id} AND kind = 'compaction'`,
+          ),
+        ).toBe(0);
+      });
+
+      it("installs a valid summary only at its revision and keeps every message", async () => {
+        const startsOn = "2043-04-01";
+        const caller = await identity();
+        await exchangesOf(caller, 4);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await expect(
+          chat.reconcile(operation.id, "grant-verifier", at, answered()),
+        ).resolves.toEqual({ status: "wrong_grant" });
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await expect(
+          chat.reconcile(operation.id, "grant-verifier", at, answered()),
+        ).resolves.toEqual({ status: "wrong_grant" });
+        const result = await chat.reconcileCompaction(
+          operation.id,
+          "grant-verifier",
+          later(5000),
+          compacted(),
+        );
+        expect(result).toEqual({
+          status: "reconciled",
+          operation: {
+            ...operation,
+            status: "completed",
+            compaction: { outcome: "compacted", reason: null },
+          },
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+
+        const context = await chat.workingContext(caller.conversation.id, 6);
+        expect(context.revision).toBe(5);
+        expect(context.summary).toEqual(summary);
+        expect(questionsOf(context)).toEqual(["Question 2", "Question 3"]);
+        const history = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(history.messages).toHaveLength(8);
+        const page = await chat.listMessages(caller.conversation.id, { limit: 3 });
+        expect(page.hasMore).toBe(true);
+
+        await expect(
+          chat.reconcileCompaction(operation.id, "grant-verifier", later(6000), compacted()),
+        ).resolves.toMatchObject({ status: "already" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+
+        await exchangesOf(caller, 1, 4);
+        const after = await chat.workingContext(caller.conversation.id, 6);
+        expect(after.summary).toEqual(summary);
+        expect(questionsOf(after)).toEqual(["Question 2", "Question 3", "Question 4"]);
+
+        // A later compaction folds the installed summary and the exchanges after it.
+        const again = await compactionAdmitted(compactionOf(caller));
+        expect(again.context.summary).toEqual(summary);
+        expect(questionsOf(again.context)).toEqual(["Question 2", "Question 3", "Question 4"]);
+        await chat.claimGrant(again.operation.id, "grant-verifier", at);
+        await chat.reconcileCompaction(
+          again.operation.id,
+          "grant-verifier",
+          later(7000),
+          compacted({ kept: 0, summary: { ...summary, goals: [] } }),
+        );
+        const folded = await chat.workingContext(caller.conversation.id, 6);
+        expect(folded.summary).toEqual({ ...summary, goals: [] });
+        expect(folded.exchanges).toEqual([]);
+      });
+
+      it("refuses to store an answer's result as a compaction", async () => {
+        const caller = await identity();
+        const question = await admitted(admission(caller));
+        await chat.claimGrant(question.id, "grant-verifier", at);
+        await expect(
+          chat.reconcileCompaction(question.id, "grant-verifier", at, compacted()),
+        ).resolves.toEqual({ status: "wrong_grant" });
+      });
+
+      it("keeps the prior working context for a failed, unchanged or stale result", async () => {
+        const startsOn = "2043-05-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const contextBefore = await chat.workingContext(caller.conversation.id, 6);
+
+        const failing = await compactionAdmitted(compactionOf(caller, { spend: onDay(startsOn) }));
+        await chat.claimGrant(failing.operation.id, "grant-verifier", at);
+        await expect(
+          chat.reconcileCompaction(failing.operation.id, "grant-verifier", at, failedCompaction),
+        ).resolves.toEqual({
+          status: "reconciled",
+          operation: {
+            ...failing.operation,
+            status: "failed",
+            compaction: { outcome: "failed", reason: "provider_error" },
+          },
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(1_000);
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual(
+          contextBefore,
+        );
+
+        const unchanged = await compactionAdmitted(compactionOf(caller));
+        await chat.claimGrant(unchanged.operation.id, "grant-verifier", at);
+        await expect(
+          chat.reconcileCompaction(
+            unchanged.operation.id,
+            "grant-verifier",
+            at,
+            compacted({
+              outcome: "unchanged",
+              reason: "already_small",
+              summary: null,
+              kept: 0,
+              summaryTokens: 0,
+              nextInputTokens: null,
+            }),
+          ),
+        ).resolves.toMatchObject({
+          status: "reconciled",
+          operation: {
+            status: "completed",
+            compaction: { outcome: "unchanged", reason: "already_small" },
+          },
+        });
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual(
+          contextBefore,
+        );
+
+        const stale = await compactionAdmitted(compactionOf(caller));
+        await chat.claimGrant(stale.operation.id, "grant-verifier", at);
+        await connection.db.execute(
+          sql`UPDATE chat.conversations SET revision = revision + 1 WHERE id = ${caller.conversation.id}`,
+        );
+        await expect(
+          chat.reconcileCompaction(stale.operation.id, "grant-verifier", at, compacted()),
+        ).resolves.toMatchObject({
+          status: "reconciled",
+          operation: { status: "completed", compaction: { outcome: "unchanged", reason: "stale" } },
+        });
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual({
+          ...contextBefore,
+          revision: contextBefore.revision + 1,
+        });
+      });
+
+      it("keeps the full reservation when a compaction's cost is uncertain", async () => {
+        const startsOn = "2043-06-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await chat.reconcileCompaction(
+          operation.id,
+          "grant-verifier",
+          at,
+          compacted({ costMicroUsd: null }),
+        );
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+      });
+
+      it("installs nothing from a stopped compaction and settles its late cost once", async () => {
+        const startsOn = "2043-07-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const contextBefore = await chat.workingContext(caller.conversation.id, 6);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await expect(
+          chat.stop(caller.identityId, operation.id, later(1000), cancelled),
+        ).resolves.toEqual({
+          status: "stopped",
+          operation: { ...operation, status: "cancelled" },
+          claimed: true,
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+        await expect(
+          chat.reconcileCompaction(operation.id, "grant-verifier", later(2000), compacted()),
+        ).resolves.toMatchObject({ status: "already" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+        await expect(
+          chat.reconcileCompaction(
+            operation.id,
+            "grant-verifier",
+            later(3000),
+            compacted({ costMicroUsd: 9_000 }),
+          ),
+        ).resolves.toMatchObject({ status: "already" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual(
+          contextBefore,
+        );
+      });
+
+      it("interrupts an overdue compaction and never retries one", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const when = later(3_600_000);
+        const { operation } = await compactionAdmitted(compactionOf(caller, { at: when }));
+        const interrupted = await chat.interruptOverdue(
+          later(70_000, when),
+          later(70_000, when),
+          timeout,
+        );
+        expect(interrupted).toContain(operation.id);
+        await expect(chat.findOperation(caller.identityId, operation.id)).resolves.toMatchObject({
+          operation: { status: "interrupted" },
+          assistant: null,
+        });
+        await expect(chat.retry(retryInput(caller, operation.id))).resolves.toEqual({
+          status: "not_retryable",
+        });
+        await expect(
+          chat.findOperationByRequest(caller.identityId, operation.requestId),
+        ).resolves.toMatchObject({ id: operation.id, kind: "compaction" });
+      });
+
+      it("settles only the measured cost of a cleared conversation's compaction", async () => {
+        const startsOn = "2043-08-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        const cleared = await chat.clear({
+          identityId: caller.identityId,
+          conversationId: caller.conversation.id,
+          at: later(1000),
+          error: cancelled,
+          tombstoneExpiresAt: later(86_400_000),
+        });
+        if (cleared.status !== "cleared") throw new Error(cleared.status);
+        await expect(
+          chat.reconcileCompaction(operation.id, "grant-verifier", later(2000), compacted()),
+        ).resolves.toEqual({ status: "deleted" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+        await expect(chat.workingContext(cleared.conversation.id, 6)).resolves.toEqual({
+          revision: 0,
+          summary: null,
+          exchanges: [],
+        });
+      });
+
+      it("estimates the next request after an installed compaction until an answer measures", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const usageOf = (when: Date) =>
+          chat.usage({
+            identityId: caller.identityId,
+            conversationId: caller.conversation.id,
+            fingerprint: unique("fingerprint"),
+            at: when,
+            quotas: [],
+            spend: [],
+            allowanceMicroUsd: allowance,
+          });
+        const { operation } = await compactionAdmitted(compactionOf(caller));
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await chat.reconcileCompaction(operation.id, "grant-verifier", later(5000), compacted());
+        await expect(usageOf(later(6000))).resolves.toMatchObject({
+          context: null,
+          nextRequest: { operationId: operation.id, measuredAt: later(5000), historyTokens: 900 },
+        });
+
+        const context = {
+          estimatedInputTokens: 3_000,
+          reportedInputTokens: 3_100,
+          capTokens: 16_000,
+        };
+        const question = await admitted(admission(caller, { at: later(7000) }));
+        await chat.claimGrant(question.id, "grant-verifier", later(7000));
+        await chat.reconcile(question.id, "grant-verifier", later(8000), answered({ context }));
+        await expect(usageOf(later(9000))).resolves.toMatchObject({
+          context: { operationId: question.id, measuredAt: later(8000), ...context },
+          nextRequest: null,
+        });
+      });
+
+      it("enforces each kind's message ids in the database", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const question = await admitted(admission(caller));
+        await expect(
+          connection.db.execute(
+            sql`UPDATE chat.operations SET assistant_message_id = NULL WHERE id = ${question.id}`,
+          ),
+        ).rejects.toThrow();
+        await expect(
+          connection.db.execute(
+            sql`UPDATE chat.operations SET kind = 'compaction' WHERE id = ${question.id}`,
+          ),
+        ).rejects.toThrow();
+        await expect(
+          connection.db.execute(
+            sql`UPDATE chat.operations SET kind = 'other' WHERE id = ${question.id}`,
+          ),
+        ).rejects.toThrow();
       });
     });
 

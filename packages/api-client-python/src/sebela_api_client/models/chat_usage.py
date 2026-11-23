@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from ..models.chat_usage_context_type_0 import ChatUsageContextType0
     from ..models.chat_usage_context_type_1 import ChatUsageContextType1
     from ..models.chat_usage_model import ChatUsageModel
-    from ..models.chat_usage_next_request import ChatUsageNextRequest
+    from ..models.chat_usage_next_request_type_0 import ChatUsageNextRequestType0
+    from ..models.chat_usage_next_request_type_1 import ChatUsageNextRequestType1
     from ..models.chat_usage_restriction_type_0 import ChatUsageRestrictionType0
     from ..models.chat_usage_rolling_two_hours import ChatUsageRollingTwoHours
     from ..models.chat_usage_utc_day import ChatUsageUtcDay
@@ -33,7 +34,9 @@ class ChatUsage:
             again; `null` when it would pass these limits.
         context (ChatUsageContextType0 | ChatUsageContextType1): The conversation's last main model call: its serialized
             input against the effective cap.
-        next_request (ChatUsageNextRequest): An estimate for the next request's input; not measured yet.
+        next_request (ChatUsageNextRequestType0 | ChatUsageNextRequestType1): A post-compaction estimate of the history
+            the next request carries; future tool tokens are unknown and never claimed. `unavailable` unless the latest
+            measured operation was a compaction.
     """
 
     server_time: datetime.datetime
@@ -43,11 +46,12 @@ class ChatUsage:
     active_operation: ChatOperation | None
     restriction: ChatUsageRestrictionType0 | None
     context: ChatUsageContextType0 | ChatUsageContextType1
-    next_request: ChatUsageNextRequest
+    next_request: ChatUsageNextRequestType0 | ChatUsageNextRequestType1
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.chat_operation import ChatOperation
         from ..models.chat_usage_context_type_0 import ChatUsageContextType0
+        from ..models.chat_usage_next_request_type_0 import ChatUsageNextRequestType0
         from ..models.chat_usage_restriction_type_0 import ChatUsageRestrictionType0
 
         server_time = self.server_time.isoformat()
@@ -76,7 +80,11 @@ class ChatUsage:
         else:
             context = self.context.to_dict()
 
-        next_request = self.next_request.to_dict()
+        next_request: dict[str, Any]
+        if isinstance(self.next_request, ChatUsageNextRequestType0):
+            next_request = self.next_request.to_dict()
+        else:
+            next_request = self.next_request.to_dict()
 
         field_dict: dict[str, Any] = {}
 
@@ -101,7 +109,8 @@ class ChatUsage:
         from ..models.chat_usage_context_type_0 import ChatUsageContextType0
         from ..models.chat_usage_context_type_1 import ChatUsageContextType1
         from ..models.chat_usage_model import ChatUsageModel
-        from ..models.chat_usage_next_request import ChatUsageNextRequest
+        from ..models.chat_usage_next_request_type_0 import ChatUsageNextRequestType0
+        from ..models.chat_usage_next_request_type_1 import ChatUsageNextRequestType1
         from ..models.chat_usage_restriction_type_0 import ChatUsageRestrictionType0
         from ..models.chat_usage_rolling_two_hours import ChatUsageRollingTwoHours
         from ..models.chat_usage_utc_day import ChatUsageUtcDay
@@ -164,7 +173,24 @@ class ChatUsage:
 
         context = _parse_context(d.pop("context"))
 
-        next_request = ChatUsageNextRequest.from_dict(d.pop("nextRequest"))
+        def _parse_next_request(
+            data: object,
+        ) -> ChatUsageNextRequestType0 | ChatUsageNextRequestType1:
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                next_request_type_0 = ChatUsageNextRequestType0.from_dict(data)
+
+                return next_request_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            if not isinstance(data, dict):
+                raise TypeError()
+            next_request_type_1 = ChatUsageNextRequestType1.from_dict(data)
+
+            return next_request_type_1
+
+        next_request = _parse_next_request(d.pop("nextRequest"))
 
         chat_usage = cls(
             server_time=server_time,

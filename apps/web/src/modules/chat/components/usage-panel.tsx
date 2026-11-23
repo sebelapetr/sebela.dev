@@ -213,7 +213,15 @@ function UsageDetails({ view }: { readonly view: ChatUsageView }) {
         </div>
         <div className={rowClass}>
           <dt className={termClass}>Next question after compacting (estimate)</dt>
-          <dd className="text-sm">{view.nextRequest}</dd>
+          <dd className="flex flex-col gap-1">
+            <span className={valueClass}>
+              <span>{view.nextRequest.value}</span>
+              {view.nextRequest.measured === null ? null : (
+                <span className="text-muted-foreground">{view.nextRequest.measured}</span>
+              )}
+            </span>
+            <span className={mutedClass}>{view.nextRequest.note}</span>
+          </dd>
         </div>
         {view.model === null ? null : (
           <div className={rowClass}>

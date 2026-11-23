@@ -16,11 +16,12 @@ import {
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /**
- * The public writes: a visitor asks, retries, stops and clears only their own chat conversation,
+ * The public writes: a visitor asks, compacts, retries, stops and clears only their own chat conversation,
  * the one exception to private writes.
  */
 const VISITOR_WRITES = new Set([
   "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/conversation/compact",
   "POST /v1/chat/operations/:operationId/stop",
   "POST /v1/chat/operations/:operationId/retry",
   "DELETE /v1/chat/conversation",

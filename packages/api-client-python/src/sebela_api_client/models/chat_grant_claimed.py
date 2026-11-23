@@ -6,6 +6,8 @@ from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 
+from ..models.chat_grant_claimed_kind import ChatGrantClaimedKind
+
 T = TypeVar("T", bound="ChatGrantClaimed")
 
 
@@ -14,6 +16,7 @@ class ChatGrantClaimed:
     """
     Attributes:
         claimed (bool):
+        kind (ChatGrantClaimedKind): Whether the grant is for an answer or a compaction; the other is refused.
         deadline_at (datetime.datetime):
         allowance_usd (float):
         model (str):
@@ -23,6 +26,7 @@ class ChatGrantClaimed:
     """
 
     claimed: bool
+    kind: ChatGrantClaimedKind
     deadline_at: datetime.datetime
     allowance_usd: float
     model: str
@@ -32,6 +36,8 @@ class ChatGrantClaimed:
 
     def to_dict(self) -> dict[str, Any]:
         claimed = self.claimed
+
+        kind = self.kind.value
 
         deadline_at = self.deadline_at.isoformat()
 
@@ -51,6 +57,7 @@ class ChatGrantClaimed:
         field_dict.update(
             {
                 "claimed": claimed,
+                "kind": kind,
                 "deadlineAt": deadline_at,
                 "allowanceUsd": allowance_usd,
                 "model": model,
@@ -66,6 +73,8 @@ class ChatGrantClaimed:
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
         claimed = d.pop("claimed")
+
+        kind = ChatGrantClaimedKind(d.pop("kind"))
 
         deadline_at = datetime.datetime.fromisoformat(d.pop("deadlineAt"))
 
@@ -86,6 +95,7 @@ class ChatGrantClaimed:
 
         chat_grant_claimed = cls(
             claimed=claimed,
+            kind=kind,
             deadline_at=deadline_at,
             allowance_usd=allowance_usd,
             model=model,

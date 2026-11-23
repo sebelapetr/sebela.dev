@@ -11,13 +11,12 @@ from typing import (
 
 from attrs import define as _attrs_define
 
-T = TypeVar("T", bound="ChatUsageNextRequest")
+T = TypeVar("T", bound="ChatUsageNextRequestType1")
 
 
 @_attrs_define
-class ChatUsageNextRequest:
-    """An estimate for the next request's input; not measured yet.
-
+class ChatUsageNextRequestType1:
+    """
     Attributes:
         status (Literal['unavailable']):
     """
@@ -44,8 +43,8 @@ class ChatUsageNextRequest:
         if status != "unavailable":
             raise ValueError(f"status must match const 'unavailable', got '{status}'")
 
-        chat_usage_next_request = cls(
+        chat_usage_next_request_type_1 = cls(
             status=status,
         )
 
-        return chat_usage_next_request
+        return chat_usage_next_request_type_1

@@ -6,8 +6,9 @@ invalid reply (or one when no retry is left) stops the execution as `classifier_
 model failure after the retry allowance as `classifier_unavailable`: a failed or invalid
 classifier never allows a question through.
 
-The classifier sees the newest earlier exchanges as untrusted context for the current question,
-within the history caps and its own input cap; the current question is always sent complete.
+The classifier sees the newest earlier exchanges, after the installed summary when it fits too, as
+untrusted context for the current question, within the history caps and its own input cap; the
+current question is always sent complete.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Any, Final
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import ValidationError
 
-from llm_agent.context.history import history_block, select_history
+from llm_agent.context.history import history_block, select_context
 from llm_agent.context.tokens import request_tokens
 from llm_agent.guardrails.input import visitor_block
 from llm_agent.models.gateway import ModelUnavailable
@@ -85,14 +86,16 @@ def _messages(execution: Execution) -> list[BaseMessage]:
     question = visitor_block(execution.request.question)
     bare: list[BaseMessage] = [SystemMessage(SECURITY_PROMPT), HumanMessage(question)]
     room = limits.security_input_tokens - request_tokens(bare, (), VERDICT_SCHEMA)
-    history = select_history(
+    summary, history = select_context(
         execution.request.history,
+        execution.request.summary,
         max_exchanges=limits.history_exchanges,
         max_tokens=max(min(limits.history_tokens, room - 1), 0),
     )
-    if not history:
+    block = history_block(history, summary=summary)
+    if not block:
         return bare
-    return [SystemMessage(SECURITY_PROMPT), HumanMessage(f"{history_block(history)}\n{question}")]
+    return [SystemMessage(SECURITY_PROMPT), HumanMessage(f"{block}\n{question}")]
 
 
 def _readable(reply: BaseMessage) -> bool:

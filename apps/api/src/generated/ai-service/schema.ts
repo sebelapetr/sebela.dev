@@ -44,6 +44,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/compactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact
+         * @description Admits one compaction and answers before it runs.
+         */
+        post: operations["compact_internal_v1_compactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/capabilities/profile": {
         parameters: {
             query?: never;
@@ -391,6 +411,41 @@ export interface components {
             };
         };
         /**
+         * CompactionRequest
+         * @description One admitted compaction the API dispatches: the working context and the bound terms.
+         *
+         *     `summary` and `exchanges` are the conversation's current working context at
+         *     `context_revision`, oldest exchange first; the API installs a result only at that revision.
+         */
+        CompactionRequest: {
+            /**
+             * Operationid
+             * Format: uuid
+             */
+            operationId: string;
+            /** Grant */
+            grant: string;
+            /** @default null */
+            summary?: components["schemas"]["WireSummary"] | null;
+            /** Exchanges */
+            exchanges?: components["schemas"]["HistoryExchange"][];
+            /**
+             * Deadlineat
+             * Format: date-time
+             */
+            deadlineAt: string;
+            /** Contextrevision */
+            contextRevision: number;
+            /** Model */
+            model: string;
+            /** Effort */
+            effort: string;
+            /** Pricingversion */
+            pricingVersion: string;
+            /** Allowanceusd */
+            allowanceUsd: number;
+        };
+        /**
          * GenerationRequest
          * @description One admitted question the API dispatches with its one-use grant and its deadline.
          */
@@ -406,6 +461,8 @@ export interface components {
             question: string;
             /** History */
             history?: components["schemas"]["HistoryExchange"][];
+            /** @default null */
+            summary?: components["schemas"]["WireSummary"] | null;
             /**
              * Today
              * Format: date
@@ -484,6 +541,45 @@ export interface components {
              * @enum {string}
              */
             status?: "ready" | "stopping";
+        };
+        /**
+         * WireReference
+         * @description A record an earlier answer cited, with the agent's source kind: a pointer, never evidence.
+         */
+        WireReference: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "profile" | "contact" | "experience" | "project" | "exploration" | "service" | "education" | "current_focus" | "roadmap" | "roadmap_area" | "roadmap_module" | "diary_day" | "statistics" | "book" | "event";
+            /** Recordid */
+            recordId: string;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /**
+         * WireSummary
+         * @description The installed summary of a working context (`llm_agent.ContextSummary`); untrusted.
+         */
+        WireSummary: {
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "cs";
+            /** Goals */
+            goals?: string[];
+            /** Openquestions */
+            openQuestions?: string[];
+            /** Covered */
+            covered?: string[];
+            /** Visitorclaims */
+            visitorClaims?: string[];
+            /** References */
+            references?: components["schemas"]["WireReference"][];
         };
     };
     responses: never;
@@ -576,6 +672,57 @@ export interface operations {
             };
             /** @description The operation is not a UUID */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    compact_internal_v1_compactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            /** @description No valid bearer */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An invalid body or another model version */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Busy: no slot freed in time, or shutting down */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

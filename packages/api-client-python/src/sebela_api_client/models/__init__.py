@@ -29,8 +29,17 @@ from .chat_block_type_2 import ChatBlockType2
 from .chat_block_type_3 import ChatBlockType3
 from .chat_block_type_3_status import ChatBlockType3Status
 from .chat_block_type_4 import ChatBlockType4
+from .chat_compaction_noop import ChatCompactionNoop
+from .chat_compaction_result import ChatCompactionResult
+from .chat_compaction_result_outcome import ChatCompactionResultOutcome
+from .chat_compaction_result_usage import ChatCompactionResultUsage
+from .chat_compaction_result_versions import ChatCompactionResultVersions
+from .chat_compaction_started import ChatCompactionStarted
+from .chat_compaction_submission import ChatCompactionSubmission
 from .chat_contact_link import ChatContactLink
 from .chat_contact_link_output import ChatContactLinkOutput
+from .chat_context_summary import ChatContextSummary
+from .chat_context_summary_language import ChatContextSummaryLanguage
 from .chat_conversation import ChatConversation
 from .chat_conversation_clear import ChatConversationClear
 from .chat_conversation_cleared import ChatConversationCleared
@@ -45,8 +54,12 @@ from .chat_generation_result_usage import ChatGenerationResultUsage
 from .chat_generation_result_versions import ChatGenerationResultVersions
 from .chat_grant_claim import ChatGrantClaim
 from .chat_grant_claimed import ChatGrantClaimed
+from .chat_grant_claimed_kind import ChatGrantClaimedKind
 from .chat_message_submission import ChatMessageSubmission
 from .chat_operation import ChatOperation
+from .chat_operation_compaction import ChatOperationCompaction
+from .chat_operation_compaction_outcome import ChatOperationCompactionOutcome
+from .chat_operation_kind import ChatOperationKind
 from .chat_operation_status import ChatOperationStatus
 from .chat_related_link import ChatRelatedLink
 from .chat_related_link_output import ChatRelatedLinkOutput
@@ -57,11 +70,14 @@ from .chat_source_output_record import ChatSourceOutputRecord
 from .chat_source_output_record_kind import ChatSourceOutputRecordKind
 from .chat_source_record import ChatSourceRecord
 from .chat_source_record_kind import ChatSourceRecordKind
+from .chat_summary_reference import ChatSummaryReference
+from .chat_summary_reference_kind import ChatSummaryReferenceKind
 from .chat_usage import ChatUsage
 from .chat_usage_context_type_0 import ChatUsageContextType0
 from .chat_usage_context_type_1 import ChatUsageContextType1
 from .chat_usage_model import ChatUsageModel
-from .chat_usage_next_request import ChatUsageNextRequest
+from .chat_usage_next_request_type_0 import ChatUsageNextRequestType0
+from .chat_usage_next_request_type_1 import ChatUsageNextRequestType1
 from .chat_usage_restriction_type_0 import ChatUsageRestrictionType0
 from .chat_usage_restriction_type_0_reason import ChatUsageRestrictionType0Reason
 from .chat_usage_rolling_two_hours import ChatUsageRollingTwoHours
@@ -263,8 +279,17 @@ __all__ = (
     "ChatBlockType3",
     "ChatBlockType3Status",
     "ChatBlockType4",
+    "ChatCompactionNoop",
+    "ChatCompactionResult",
+    "ChatCompactionResultOutcome",
+    "ChatCompactionResultUsage",
+    "ChatCompactionResultVersions",
+    "ChatCompactionStarted",
+    "ChatCompactionSubmission",
     "ChatContactLink",
     "ChatContactLinkOutput",
+    "ChatContextSummary",
+    "ChatContextSummaryLanguage",
     "ChatConversation",
     "ChatConversationClear",
     "ChatConversationCleared",
@@ -277,8 +302,12 @@ __all__ = (
     "ChatGenerationResultVersions",
     "ChatGrantClaim",
     "ChatGrantClaimed",
+    "ChatGrantClaimedKind",
     "ChatMessageSubmission",
     "ChatOperation",
+    "ChatOperationCompaction",
+    "ChatOperationCompactionOutcome",
+    "ChatOperationKind",
     "ChatOperationStatus",
     "ChatRelatedLink",
     "ChatRelatedLinkOutput",
@@ -289,11 +318,14 @@ __all__ = (
     "ChatSourceOutputRecordKind",
     "ChatSourceRecord",
     "ChatSourceRecordKind",
+    "ChatSummaryReference",
+    "ChatSummaryReferenceKind",
     "ChatUsage",
     "ChatUsageContextType0",
     "ChatUsageContextType1",
     "ChatUsageModel",
-    "ChatUsageNextRequest",
+    "ChatUsageNextRequestType0",
+    "ChatUsageNextRequestType1",
     "ChatUsageRestrictionType0",
     "ChatUsageRestrictionType0Reason",
     "ChatUsageRollingTwoHours",

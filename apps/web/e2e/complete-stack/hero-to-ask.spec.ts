@@ -50,7 +50,7 @@ async function expectUsable(page: Page) {
 
 const turns = (page: Page) =>
   page.getByRole("list", { name: "Conversation" }).locator(":scope > li");
-const composer = (page: Page) => page.getByRole("textbox", { name: "Your question" });
+const composer = (page: Page) => page.getByRole("combobox", { name: "Your question" });
 const heroInput = (page: Page) =>
   page.getByRole("textbox", { name: "Ask anything about my work, experience or skills" });
 

@@ -1,4 +1,7 @@
-"""What a caller passes in: the question, execution identifiers and the limits it grants.
+"""What a caller passes in: the question, execution identifiers, the working context and limits.
+
+The working context is the caller's: the earlier exchanges it keeps for the conversation and, after
+a compaction, the one `ContextSummary` installed for them. Both are untrusted conversation data.
 
 The defaults of `ExecutionLimits` are the owner-agreed initial limits
 (`.plan/done/06-llm-agent/prd.md`, Initial execution limits).
@@ -57,6 +60,55 @@ class ChatExchange(BaseModel):
     sources: tuple[ExchangeSource, ...] = Field(default=(), max_length=MAX_EXCHANGE_SOURCES)
 
 
+#: Bounds of one summary line and of each summary field; the token cap is checked separately.
+MAX_SUMMARY_LINE_CHARS = 300
+SummaryLine = Annotated[str, Field(min_length=1, max_length=MAX_SUMMARY_LINE_CHARS)]
+
+
+class SummaryReference(BaseModel):
+    """A record an earlier answer cited or an earlier summary kept: a pointer, never evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: SourceKind
+    record_id: str = Field(min_length=1, max_length=128)
+    title: str = Field(default="", max_length=200)
+
+
+class ContextSummary(BaseModel):
+    """The compacted part of a working context, as `ChatAgent.compact` produced and validated it.
+
+    It is untrusted conversation history like the exchanges it replaces: it carries no role, no
+    instruction and no authority, and states no verified fact. `covered` names what the earlier
+    answers addressed; anything the visitor asserted stays in `visitor_claims`; `references` are
+    records the earlier answers cited, which the agent re-reads before relying on them.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    #: The language of the conversation when it was compacted.
+    language: Language
+    goals: tuple[SummaryLine, ...] = Field(default=(), max_length=5)
+    open_questions: tuple[SummaryLine, ...] = Field(default=(), max_length=5)
+    covered: tuple[SummaryLine, ...] = Field(default=(), max_length=8)
+    visitor_claims: tuple[SummaryLine, ...] = Field(default=(), max_length=5)
+    references: tuple[SummaryReference, ...] = Field(default=(), max_length=12)
+
+
+class CompactionRequest(BaseModel):
+    """One compaction of a working context: its installed summary and its exchanges, oldest
+    first. Identifiers are opaque and only label the trace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    summary: ContextSummary | None = None
+    exchanges: tuple[ChatExchange, ...] = Field(default=(), max_length=MAX_HISTORY_EXCHANGES)
+    execution_id: str | None = Field(default=None, max_length=128)
+    trace_id: str | None = Field(default=None, max_length=128)
+    #: Seconds the caller already spent admitting this compaction; they count against its deadline.
+    admission_elapsed_s: float = Field(default=0.0, ge=0)
+
+
 class ChatRequest(BaseModel):
     """One visitor turn. Identifiers are opaque and only label the trace."""
 
@@ -71,6 +123,9 @@ class ChatRequest(BaseModel):
     #: The earlier exchanges of this conversation, oldest first. The caller stores the conversation;
     #: the agent selects the newest complete exchanges within the history caps.
     history: tuple[ChatExchange, ...] = Field(default=(), max_length=MAX_HISTORY_EXCHANGES)
+    #: The summary installed for the exchanges before `history`, if the working context was
+    #: compacted. It precedes them as untrusted history and is dropped before any exchange.
+    summary: ContextSummary | None = None
     #: Seconds the caller already spent admitting this turn (queueing, rate checks). They count
     #: against the execution deadline, so admission can never extend it.
     admission_elapsed_s: float = Field(default=0.0, ge=0)

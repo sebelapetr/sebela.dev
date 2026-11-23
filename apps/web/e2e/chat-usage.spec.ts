@@ -36,7 +36,7 @@ async function expectAccessible(page: Page) {
 
 const conversation = (page: Page) => page.getByRole("list", { name: "Conversation" });
 const turns = (page: Page) => conversation(page).locator(":scope > li");
-const composer = (page: Page) => page.getByRole("textbox", { name: "Your question" });
+const composer = (page: Page) => page.getByRole("combobox", { name: "Your question" });
 const usagePanel = (page: Page) => page.getByRole("region", { name: "Your usage" });
 const usageToggle = (page: Page) => usagePanel(page).getByRole("button", { name: /^Usage/ });
 
@@ -132,6 +132,8 @@ function snapshot(fields: {
             status: "running",
             deadlineAt: new Date(now + 2 * minute).toISOString(),
             assistantMessageId: "00000000-0000-4000-8000-000000000003",
+            kind: "answer",
+            compaction: null,
           }
         : null,
     restriction: fields.restriction ?? null,

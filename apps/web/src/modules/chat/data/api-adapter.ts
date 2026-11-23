@@ -1,8 +1,14 @@
 // The chat's transport over the website's same-origin chat routes (`/api/chat/*`), which relay to
 // the API: it reads the caller's conversation, admits a new question or a retry with a person
 // check, follows an attempt's event stream, reconnecting where it left off, stops an answer and
-// clears the conversation the visitor confirmed.
-import { ChatOperationSchema, type ChatOperation } from "@sebela/contracts";
+// clears the conversation the visitor confirmed. It also asks for a compaction of the working
+// context and watches it, since a compaction has no event stream.
+import {
+  ChatCompactionResponseSchema,
+  ChatOperationSchema,
+  type ChatCompactionResponse,
+  type ChatOperation,
+} from "@sebela/contracts";
 
 import type { ChatAdapter } from "../types/adapter";
 import { ChatAdmissionError, type ChatAdmissionCode } from "./admission";
@@ -20,8 +26,10 @@ export interface ApiChatAdapterOptions {
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** The pause before following a stream again after it dropped; 1 s by default. */
   readonly reconnectDelayMs?: number;
-  /** How long after the operation's deadline the stream is still followed; 20 s by default. */
+  /** How long after the operation's deadline it is still followed or watched; 20 s by default. */
   readonly deadlineGraceMs?: number;
+  /** The pause between two reads of a watched operation; 1 s by default. */
+  readonly pollMs?: number;
 }
 
 /** The API's error codes of a refused submission, as the chat names them. */
@@ -71,7 +79,10 @@ const failedStatuses: ReadonlySet<ChatOperation["status"]> = new Set([
  * stored messages name no operation) is found first by repeating the request with the same token,
  * which the API answers with the request's latest attempt before it redeems any token. A stop
  * needs no token: a question still at its person check is abandoned and never sent, one being
- * submitted is stopped once it is admitted. A clear deletes the conversation the visitor
+ * submitted is stopped once it is admitted. A compaction takes one fresh token and is asked once; its
+ * operation is remembered like a question's, so a stop finds it, and it is watched by reading the
+ * operation every `pollMs` until it has ended, the API no longer shows it (404), an abort, or the
+ * deadline and its grace. A clear deletes the conversation the visitor
  * confirmed and forgets every operation.
  */
 export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapter {
@@ -80,6 +91,7 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
   const sleep = options.sleep ?? wait;
   const reconnectDelayMs = options.reconnectDelayMs ?? 1_000;
   const graceMs = options.deadlineGraceMs ?? 20_000;
+  const pollMs = options.pollMs ?? 1_000;
   /** The latest operation of each request, by request ID. */
   const operations = new Map<string, ChatOperation>();
   /** The operations whose end this tab saw: a terminal event, or a stop that found them ended. */
@@ -120,6 +132,25 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
     body: unknown,
     signal: AbortSignal,
   ): Promise<ChatOperation> {
+    return submit(requestId, path, body, signal, remember);
+  }
+
+  /** The compaction's answer; a started one's operation is remembered. */
+  function compaction(raw: unknown): ChatCompactionResponse | null {
+    const parsed = ChatCompactionResponseSchema.safeParse(raw);
+    if (!parsed.success) return null;
+    if (parsed.data.status === "started") remember(parsed.data.operation);
+    return parsed.data;
+  }
+
+  /** Sends one submission and reads the API's answer with `read`; a refusal or null throws. */
+  function submit<T>(
+    requestId: string,
+    path: string,
+    body: unknown,
+    signal: AbortSignal,
+    read: (raw: unknown) => T | null,
+  ): Promise<T> {
     const sent = (async () => {
       let response: Response;
       let answer: unknown;
@@ -141,9 +172,9 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
           code === "quota_exceeded" ? retryAfter(response.headers.get("retry-after")) : null,
         );
       }
-      const operation = remember(answer);
-      if (operation === null) throw new ChatAdmissionError("unavailable");
-      return operation;
+      const admitted = read(answer);
+      if (admitted === null) throw new ChatAdmissionError("unavailable");
+      return admitted;
     })();
     submitting.set(requestId, sent);
     const settled = () => {
@@ -201,6 +232,33 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
       } finally {
         reader.cancel().catch(() => undefined);
       }
+    }
+  }
+
+  async function* watch(
+    operation: Pick<ChatOperation, "operationId" | "deadlineAt">,
+    signal: AbortSignal,
+  ): AsyncGenerator {
+    const closesAt = Date.parse(operation.deadlineAt) + graceMs;
+    const url = `${options.basePath}/operations/${encodeURIComponent(operation.operationId)}`;
+    for (let read = 0; ; read += 1) {
+      if (read > 0) {
+        await sleep(pollMs, signal);
+        if (signal.aborted || now() > closesAt) return;
+      }
+      let body: unknown;
+      try {
+        const response = await fetch(url, { headers: { accept: "application/json" }, signal });
+        if (response.status === 404) return;
+        if (!response.ok) continue;
+        body = await response.json();
+      } catch {
+        if (signal.aborted) return;
+        continue;
+      }
+      yield body;
+      const known = remember(body);
+      if (known !== null && !activeStatuses.has(known.status)) return;
     }
   }
 
@@ -279,6 +337,20 @@ export function createApiChatAdapter(options: ApiChatAdapterOptions): ChatAdapte
         throw new Error(`The answer could not be stopped: ${String(response.status)}.`);
       remember(await response.json().catch(() => null));
       return "stopped";
+    },
+    async compact(requestId, { signal }) {
+      abandoned.delete(requestId);
+      const challengeToken = await token(requestId, signal);
+      return submit(
+        requestId,
+        "/conversation/compact",
+        { requestId, challengeToken },
+        signal,
+        compaction,
+      );
+    },
+    watch(operation, { signal }) {
+      return watch(operation, signal);
     },
     async clear(conversationId, { signal }) {
       const response = await fetch(`${options.basePath}/conversation`, {

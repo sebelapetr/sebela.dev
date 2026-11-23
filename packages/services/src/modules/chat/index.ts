@@ -14,6 +14,8 @@ export type {
   ChatCaller,
   ChatClaimOutcome,
   ChatClearOutcome,
+  ChatCompactionDispatch,
+  ChatCompactResult,
   ChatConfig,
   ChatDispatch,
   ChatHistoryExchange,

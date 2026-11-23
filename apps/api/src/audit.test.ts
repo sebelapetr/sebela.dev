@@ -43,6 +43,7 @@ const READ_ONLY = new Set(["POST /v1/retrieval/search"]);
  */
 const VISITOR_WRITES = new Set([
   "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/conversation/compact",
   "POST /v1/chat/operations/:operationId/stop",
   "POST /v1/chat/operations/:operationId/retry",
   "DELETE /v1/chat/conversation",
@@ -51,6 +52,7 @@ const CHAT_WRITES = new Set([
   ...VISITOR_WRITES,
   "POST /v1/internal/chat/grants/claim",
   "POST /v1/internal/chat/operations/:operationId/result",
+  "POST /v1/internal/chat/operations/:operationId/compaction",
 ]);
 
 /**

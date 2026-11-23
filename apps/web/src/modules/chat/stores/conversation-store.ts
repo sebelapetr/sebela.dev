@@ -4,9 +4,11 @@
 // shows the same conversation: a tab told that another changed it reads it again.
 import {
   ChatConversationClearedSchema,
+  ChatOperationSchema,
   chatQuestionMaxLength,
   type ChatAssistantMessage,
   type ChatConversation,
+  type ChatOperation,
 } from "@sebela/contracts";
 
 import { ChatAdmissionError } from "../data/admission";
@@ -22,6 +24,11 @@ import {
   timeOutChatTurn,
   type ChatTurn,
 } from "../data/conversation";
+import {
+  compactionEnd,
+  type ChatCompactionEnd,
+  type ChatCompactionState,
+} from "../data/compaction";
 import { historyTurns, parseChatConversation } from "../data/history";
 import type { ChatAdapter, ChatQuestion } from "../types/adapter";
 
@@ -42,8 +49,8 @@ export interface ConversationSnapshot {
   /** The conversation's questions and answers, oldest first. */
   readonly turns: readonly ChatTurn[];
   /**
-   * The history is loading, a question is answering (in this tab or another) or the conversation
-   * is being cleared; another question cannot be sent.
+   * The history is loading, a question is answering or the working context is being compacted (in
+   * this tab or another) or the conversation is being cleared; another question cannot be sent.
    */
   readonly busy: boolean;
   /** How many days the conversation is kept after its last activity; null until it is read. */
@@ -58,6 +65,11 @@ export interface ConversationSnapshot {
    * last question.
    */
   readonly telemetryDeletion: "none" | "pending" | null;
+  /**
+   * The compaction of the working context this tab asked for or follows from another tab, until
+   * the next question or clear; null when there is none.
+   */
+  readonly compaction: ChatCompactionState | null;
 }
 
 /** What became of a question: sent, refused while another is answering, or not a valid question. */
@@ -105,9 +117,10 @@ export interface ConversationStore {
    */
   retry(requestId: string): RetryResult;
   /**
-   * Stops the latest question's answer while it is open, in whichever tab it was asked. The API
-   * ends it and its stream says so; a question the API has not admitted yet is stopped on the page
-   * and never sent. "failed" when the API could not be asked, and the answer is still followed.
+   * Stops the latest question's answer, or the compaction, while it is open, in whichever tab it
+   * was asked. The API ends it and its stream (or the compaction's operation) says so; one the API
+   * has not admitted yet is stopped on the page and never sent. "failed" when the API could not be
+   * asked, and it is still followed.
    */
   stop(requestId: string): Promise<StopResult>;
   /**
@@ -124,7 +137,16 @@ export interface ConversationStore {
    * the end, to be asked again.
    */
   refresh(): Promise<void>;
+  /**
+   * Asks the API to compact the working context under a new random request, then follows the
+   * compaction until it ends. It adds no turn and changes no visible message. Refused while the
+   * history loads, a question is answering or another compaction runs, in any tab.
+   */
+  compact(): CompactResult;
 }
+
+/** What became of a compaction request: asked for, or refused while something else runs. */
+export type CompactResult = "started" | "busy";
 
 /** What became of a stop: the answer was stopped, the API could not be asked, or nothing is open. */
 export type StopResult = "stopped" | "failed" | "none";
@@ -149,8 +171,8 @@ export interface ConversationStoreOptions {
    */
   readonly available?: boolean;
   /**
-   * Called when this tab changed the conversation for the other tabs: a question or retry was
-   * admitted (its first event), an answer was stopped or the conversation was cleared.
+   * Called when this tab changed the conversation for the other tabs: a question, retry or
+   * compaction was admitted, an answer or compaction was stopped or the conversation was cleared.
    */
   readonly onChange?: () => void;
 }
@@ -201,6 +223,8 @@ interface Attempt {
   readonly controller: AbortController;
 }
 
+type RunningCompaction = Extract<ChatCompactionState, { status: "running" }>;
+
 /**
  * Builds the tab's store. Every raw event goes through the turn's contract checks; an event of an
  * attempt that was replaced, timed out or abandoned is ignored. An admission refusal fails the
@@ -208,7 +232,8 @@ interface Attempt {
  * answer quiet for longer than the idle time (no event and no sign of life) fails as timed out and
  * is no longer followed. A failure is never retried by the store. A refusal because another
  * answer is being prepared, or because the attempt is no longer the latest, reads the conversation
- * again, so the other tab's answer is shown and followed instead.
+ * again, so the other tab's answer is shown and followed instead. A compaction adds no turn: it is
+ * watched by its operation until it ends, and a watch that ends without an end interrupts it.
  */
 export function createConversationStore(options: ConversationStoreOptions): ConversationStore {
   const { adapter, storage, createId } = options;
@@ -236,9 +261,18 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
   /** A read of the newest page waits for the attempt followed, or for the read in flight. */
   let refreshWanted = false;
   let snapshot: ConversationSnapshot | null = null;
+  let compaction: ChatCompactionState | null = null;
+  /** The compaction asked for or watched; aborting it stops asking and watching. */
+  let compacting: Attempt | null = null;
+
+  const compactionOpen = () => compaction !== null && compaction.status !== "ended";
 
   const isBusy = () =>
-    history === "loading" || history === "unavailable" || clearing || turns.some(isChatTurnOpen);
+    history === "loading" ||
+    history === "unavailable" ||
+    clearing ||
+    compactionOpen() ||
+    turns.some(isChatTurnOpen);
 
   function changed(): void {
     snapshot = null;
@@ -258,6 +292,123 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
   function abandon(current: Attempt): void {
     current.controller.abort();
     if (attempt === current) attempt = null;
+  }
+
+  function setCompaction(next: ChatCompactionState | null): void {
+    compaction = next;
+    changed();
+  }
+
+  /** Whether `current` is still the compaction asked for or watched. */
+  const isCompacting = (current: Attempt) => compacting === current && compactionOpen();
+
+  /** Ends the compaction `current` with `end`, and stops asking for and watching it. */
+  function endCompaction(current: Attempt, end: ChatCompactionEnd): void {
+    current.controller.abort();
+    if (compacting !== current) return;
+    compacting = null;
+    setCompaction({ status: "ended", requestId: current.requestId, end });
+  }
+
+  /** Forgets the compaction shown and stops watching it. */
+  function forgetCompaction(): void {
+    compacting?.controller.abort();
+    compacting = null;
+    compaction = null;
+  }
+
+  /** Watches an admitted compaction until its operation ends. */
+  async function watchCompaction(
+    current: Attempt,
+    operation: Pick<ChatOperation, "operationId" | "deadlineAt">,
+  ): Promise<void> {
+    setCompaction({
+      status: "running",
+      requestId: current.requestId,
+      operationId: operation.operationId,
+      deadlineAt: operation.deadlineAt,
+      stopping: false,
+      stopFailed: false,
+    });
+    try {
+      for await (const raw of adapter.watch(operation, { signal: current.controller.signal })) {
+        if (!isCompacting(current)) return;
+        const parsed = ChatOperationSchema.safeParse(raw);
+        if (!parsed.success || parsed.data.operationId !== operation.operationId) continue;
+        const end = compactionEnd(parsed.data);
+        if (end !== null) {
+          endCompaction(current, end);
+          return;
+        }
+      }
+    } catch {
+      // A watch that failed ends it as interrupted, below.
+    }
+    if (isCompacting(current)) endCompaction(current, { kind: "interrupted" });
+  }
+
+  /** Asks the API for the compaction `current`, then watches it when it was admitted. */
+  async function askCompaction(current: Attempt): Promise<void> {
+    let response;
+    try {
+      response = await adapter.compact(current.requestId, { signal: current.controller.signal });
+    } catch (error) {
+      if (!isCompacting(current)) return;
+      if (error instanceof ChatAdmissionError) {
+        endCompaction(current, {
+          kind: "refused",
+          code: error.code,
+          retryAfterSeconds: error.retryAfterSeconds,
+        });
+        // Another tab is answering or compacting: read the conversation to follow it.
+        if (error.code === "busy") void refresh();
+      } else {
+        endCompaction(current, { kind: "interrupted" });
+      }
+      return;
+    }
+    if (!isCompacting(current)) return;
+    if (response.status === "noop") {
+      endCompaction(current, { kind: "nothing" });
+      return;
+    }
+    onChange();
+    await watchCompaction(current, response.operation);
+  }
+
+  function compact(): CompactResult {
+    if (isBusy()) return "busy";
+    forgetCompaction();
+    const current: Attempt = { requestId: createId(), controller: new AbortController() };
+    compacting = current;
+    telemetryDeletion = null;
+    setCompaction({ status: "preparing", requestId: current.requestId });
+    void askCompaction(current);
+    return "started";
+  }
+
+  async function stopCompaction(requestId: string): Promise<StopResult> {
+    const current = compacting;
+    if (current?.requestId !== requestId) return "none";
+    const running = (): RunningCompaction | null =>
+      isCompacting(current) && compaction?.status === "running" ? compaction : null;
+    const before = running();
+    if (before !== null) setCompaction({ ...before, stopping: true, stopFailed: false });
+    let stopped: "stopped" | "none";
+    try {
+      stopped = await adapter.stop(requestId, { signal: new AbortController().signal });
+    } catch {
+      const now = running();
+      if (now !== null) setCompaction({ ...now, stopping: false, stopFailed: true });
+      return "failed";
+    }
+    if (stopped === "none") {
+      // Never admitted, so no operation will say it stopped.
+      if (isCompacting(current)) endCompaction(current, { kind: "cancelled" });
+      return "stopped";
+    }
+    onChange();
+    return "stopped";
   }
 
   type Source = (signal: AbortSignal) => AsyncIterable<unknown>;
@@ -314,9 +465,17 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     }
   }
 
-  /** Follows the answer the API is still preparing, which the page shows open. */
+  /** Follows the answer or compaction the API is still preparing, which the page shows open. */
   function followActive(page: ChatConversation): void {
     const active = page.activeOperation;
+    if (active?.kind === "compaction") {
+      if (compacting?.requestId === active.requestId && compactionOpen()) return;
+      forgetCompaction();
+      const current: Attempt = { requestId: active.requestId, controller: new AbortController() };
+      compacting = current;
+      void watchCompaction(current, active);
+      return;
+    }
     const running =
       active === null ? undefined : turns.find((turn) => turn.requestId === active.requestId);
     if (running !== undefined && isChatTurnOpen(running)) {
@@ -325,11 +484,15 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     }
   }
 
+  /** The request of the answer the API is preparing; a compaction has no turn. */
+  const activeAnswer = (page: ChatConversation) =>
+    page.activeOperation?.kind === "answer" ? page.activeOperation.requestId : null;
+
   /** Shows the newest page as the whole conversation. */
   function readHistory(page: ChatConversation): void {
     const read = historyTurns(page.messages, {
       carried: null,
-      activeRequestId: page.activeOperation?.requestId ?? null,
+      activeRequestId: activeAnswer(page),
     });
     unadmitted.clear();
     conversationId = page.conversationId;
@@ -354,7 +517,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     }
     const read = historyTurns(page.messages, {
       carried: null,
-      activeRequestId: page.activeOperation?.requestId ?? null,
+      activeRequestId: activeAnswer(page),
     });
     const stored = new Set(read.turns.map((turn) => turn.requestId));
     const local = turns.filter(
@@ -443,6 +606,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     const turn = startChatTurn(createId(), trimmed);
     turns = [...turns, turn];
     telemetryDeletion = null;
+    forgetCompaction();
     changed();
     const asked = { requestId: turn.requestId, question: turn.question };
     void follow(asked, (signal) => adapter.send(asked, { signal }), true);
@@ -459,6 +623,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         earlier,
         conversationId,
         telemetryDeletion,
+        compaction,
       };
       return snapshot;
     },
@@ -509,6 +674,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       const next = restartChatTurn(latest);
       turns = [...turns.slice(0, -1), next];
       telemetryDeletion = null;
+      forgetCompaction();
       changed();
       const asked = { requestId: next.requestId, question: next.question };
       const retryId = createId();
@@ -516,6 +682,9 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       return "sent";
     },
     async stop(requestId) {
+      if (compaction !== null && compaction.requestId === requestId && compactionOpen()) {
+        return stopCompaction(requestId);
+      }
       const latest = turns.at(-1);
       if (latest?.requestId !== requestId || !isChatTurnOpen(latest)) return "none";
       let stopped: "stopped" | "none";
@@ -544,6 +713,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         );
         if (!parsed.success) return "failed";
         if (attempt !== null) abandon(attempt);
+        forgetCompaction();
         clearing = false;
         readHistory(parsed.data.conversation);
         if (!parsed.data.cleared) {
@@ -561,5 +731,6 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       }
     },
     refresh,
+    compact,
   };
 }

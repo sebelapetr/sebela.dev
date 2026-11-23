@@ -50,7 +50,7 @@ async function expectLoaded(page: Page) {
 
 const conversation = (page: Page) => page.getByRole("list", { name: "Conversation" });
 const turns = (page: Page) => conversation(page).locator(":scope > li");
-const composer = (page: Page) => page.getByRole("textbox", { name: "Your question" });
+const composer = (page: Page) => page.getByRole("combobox", { name: "Your question" });
 const heroInput = (page: Page) =>
   page.getByRole("textbox", { name: "Ask anything about my work, experience or skills" });
 const suggestionsRegion = (page: Page) => page.getByRole("region", { name: "Suggested questions" });
@@ -207,7 +207,10 @@ test.describe("the Ask page", () => {
     ]);
     await expect(page.getByRole("button", { name: "New chat" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Show earlier messages" })).toHaveCount(0);
-    await expect(page.getByRole("combobox")).toHaveCount(0);
+    // No model selector: the only combobox is the composer with its command list.
+    await expect(page.getByRole("combobox")).toHaveCount(1);
+    await expect(composer(page)).toHaveCount(1);
+    await expect(page.getByRole("listbox")).toHaveCount(0);
   });
 
   test("a question streams its answer while another cannot be sent", async ({ page }) => {

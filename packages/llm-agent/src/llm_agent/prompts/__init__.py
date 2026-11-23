@@ -1,16 +1,17 @@
-"""The versioned system prompts of the two model stages."""
+"""The versioned system prompts of the two model stages and of the compaction call."""
 
 from __future__ import annotations
 
 import hashlib
 
 from llm_agent.prompts.chat import CHAT_PROMPT, UNCERTAIN_RESTRICTION
+from llm_agent.prompts.compact import COMPACT_PROMPT
 from llm_agent.prompts.security import SECURITY_PROMPT
 
 
 def system_prompt_texts() -> tuple[str, ...]:
     """Every system text a model may receive; no line of them may reach a visitor."""
-    return (SECURITY_PROMPT, CHAT_PROMPT, UNCERTAIN_RESTRICTION)
+    return (SECURITY_PROMPT, CHAT_PROMPT, UNCERTAIN_RESTRICTION, COMPACT_PROMPT)
 
 
 def fingerprint(*texts: str) -> str:
@@ -19,6 +20,7 @@ def fingerprint(*texts: str) -> str:
 
 __all__ = [
     "CHAT_PROMPT",
+    "COMPACT_PROMPT",
     "SECURITY_PROMPT",
     "UNCERTAIN_RESTRICTION",
     "fingerprint",

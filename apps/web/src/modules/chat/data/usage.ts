@@ -54,6 +54,17 @@ export interface ChatContextView {
   readonly details: readonly { readonly label: string; readonly value: string }[];
 }
 
+/**
+ * The history the next question carries after a compaction, by estimate, or unavailable; `note`
+ * says what it leaves out, since future tool results are never known in advance.
+ */
+export interface ChatNextRequestView {
+  readonly status: "estimated" | "unavailable";
+  readonly value: string;
+  readonly note: string;
+  readonly measured: string | null;
+}
+
 /** Why a question would be refused now, and whether the limit is the visitor's own. */
 export interface ChatRestrictionView {
   readonly text: string;
@@ -71,7 +82,7 @@ export interface ChatUsageView {
   };
   readonly meters: readonly ChatUsageMeterView[];
   readonly context: ChatContextView;
-  readonly nextRequest: string;
+  readonly nextRequest: ChatNextRequestView;
   readonly model: string | null;
   readonly active: string | null;
   readonly restriction: ChatRestrictionView | null;
@@ -168,6 +179,23 @@ const unavailableContext: ChatContextView = {
   details: [],
 };
 
+const unavailableNextRequest: ChatNextRequestView = {
+  status: "unavailable",
+  value: "Unavailable",
+  note: "Shown after /compact has summarized the working context.",
+  measured: null,
+};
+
+function nextRequestView(next: ChatUsage["nextRequest"]): ChatNextRequestView {
+  if (next.status === "unavailable") return unavailableNextRequest;
+  return {
+    status: "estimated",
+    value: `About ${count.format(next.historyTokens)} tokens of history`,
+    note: "The summary and the exchanges kept word for word. Your next question, the instructions, tool results and evidence come on top; they are not known yet.",
+    measured: `Measured at ${clock(Date.parse(next.measuredAt))}`,
+  };
+}
+
 const reported = "Reported by the model provider";
 const estimated = "Tokenizer estimate";
 
@@ -252,7 +280,7 @@ export function describeChatUsage(state: ChatUsageState, nowMs: number): ChatUsa
       },
       meters: [],
       context: unavailableContext,
-      nextRequest: "Unavailable",
+      nextRequest: unavailableNextRequest,
       model: null,
       active: null,
       restriction: null,
@@ -297,12 +325,14 @@ export function describeChatUsage(state: ChatUsageState, nowMs: number): ChatUsa
     },
     meters,
     context: contextView(usage.context),
-    nextRequest: "Unavailable",
+    nextRequest: nextRequestView(usage.nextRequest),
     model: `${usage.model.name}, ${usage.model.effort} effort`,
     active:
       usage.activeOperation === null
         ? null
-        : "An answer is being prepared. Its question already counts.",
+        : usage.activeOperation.kind === "compaction"
+          ? "The working context is being compacted. It already counts as a question."
+          : "An answer is being prepared. Its question already counts.",
     restriction,
     stale: state.stale
       ? `Not up to date. Last read at ${clock(state.readAt + state.offsetMs)}; it could not be read again.`

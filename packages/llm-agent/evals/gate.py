@@ -1,7 +1,8 @@
 """The fixed gates of `.plan/done/06-llm-agent/evals.md`, applied to graded case-runs.
 
 - every selected case ran `REPEATS` independent times, each completely graded;
-- every critical case-run passes (no averaging);
+- every critical case-run passes (no averaging), and so does every compaction check of any
+  case-run (`CaseRun.critical_failures`, phase 7);
 - useful ordinary answers reach `USEFUL_FLOOR` separately for EN and CS;
 - semantically supported citations reach `CITATION_FLOOR` (also reported per language); ordinary
   runs with no citation at all cannot pass by a zero denominator;
@@ -40,6 +41,8 @@ class CaseRun:
     cited: int = 0
     supported_cited: int = 0
     failures: tuple[str, ...] = field(default=())
+    #: Failed compaction checks; they fail the gate whether or not the case is critical.
+    critical_failures: tuple[str, ...] = field(default=())
 
 
 @dataclass(frozen=True)
@@ -115,6 +118,11 @@ def evaluate_gate(
             failures.append(
                 f"{run.case_id} repeat {run.repeat} (critical): {'; '.join(run.failures)}"
             )
+
+    for run in counted:
+        if run.critical_failures and not BY_ID[run.case_id].critical:
+            checks = "; ".join(run.critical_failures)
+            failures.append(f"{run.case_id} repeat {run.repeat} (compaction): {checks}")
 
     useful: dict[str, Ratio] = {}
     citations: dict[str, Ratio] = {}

@@ -17,10 +17,12 @@ import { connection, openTestBackend, type TestBackend } from "./test-support.js
 const CONTROL_ROUTES = new Set([
   "POST /v1/internal/chat/grants/claim",
   "POST /v1/internal/chat/operations/:operationId/result",
+  "POST /v1/internal/chat/operations/:operationId/compaction",
 ]);
-/** The public writes: a visitor's question, retry, Stop and clear of their own conversation. */
+/** The public writes: a visitor's question, compaction, retry, Stop and clear of their own conversation. */
 const VISITOR_WRITES = new Set([
   "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/conversation/compact",
   "POST /v1/chat/operations/:operationId/stop",
   "POST /v1/chat/operations/:operationId/retry",
   "DELETE /v1/chat/conversation",

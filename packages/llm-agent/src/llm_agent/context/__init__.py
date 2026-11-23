@@ -1,1 +1,1 @@
-"""Context sizing: conservative token estimates of what a model attempt sends."""
+"""The working context: conservative token estimates, history selection and compaction."""

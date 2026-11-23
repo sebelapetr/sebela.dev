@@ -21,6 +21,7 @@ def test_the_document_describes_the_routes_and_the_bearer() -> None:
     assert set(paths) == {
         "/internal/v1/generations",
         "/internal/v1/generations/{operation_id}/cancel",
+        "/internal/v1/compactions",
         "/v1/capabilities/profile",
         "/v1/capabilities/experiences",
         "/v1/capabilities/projects",
@@ -43,6 +44,11 @@ def test_the_document_describes_the_routes_and_the_bearer() -> None:
     assert generation["security"] == [{"bearer": []}]
     assert {"202", "401", "422", "503"} <= set(generation["responses"])
     assert "GenerationRequest" in document["components"]["schemas"]
+    compaction = paths["/internal/v1/compactions"]["post"]
+    assert compaction["security"] == [{"bearer": []}]
+    assert {"202", "401", "422", "503"} <= set(compaction["responses"])
+    assert "CompactionRequest" in document["components"]["schemas"]
+    assert "WireSummary" in document["components"]["schemas"]
     cancel = paths["/internal/v1/generations/{operation_id}/cancel"]["post"]
     assert cancel["security"] == [{"bearer": []}]
     assert {"202", "401", "422"} <= set(cancel["responses"])

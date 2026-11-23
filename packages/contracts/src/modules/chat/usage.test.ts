@@ -20,9 +20,11 @@ const usage = {
   activeOperation: {
     operationId,
     requestId,
+    kind: "answer",
     status: "running",
     deadlineAt: "2031-03-10T12:01:00.000Z",
     assistantMessageId: messageId,
+    compaction: null,
   },
   restriction: null,
   context: {
@@ -50,6 +52,19 @@ describe("ChatUsageSchema", () => {
         context: { status: "unavailable", estimatedInputTokens: 0 },
       }).success,
     ).toBe(false);
+  });
+
+  it("labels the next request's history after a compaction as an estimate", () => {
+    const estimated = {
+      ...usage,
+      nextRequest: {
+        status: "estimated",
+        historyTokens: 1800,
+        operationId,
+        measuredAt: "2031-03-10T11:59:00.000Z",
+      },
+    };
+    expect(ChatUsageSchema.parse(estimated)).toEqual(estimated);
   });
 
   it("names the limiting reason and when an admission may pass again", () => {
@@ -88,7 +103,36 @@ describe("ChatUsageSchema", () => {
       { ...usage, rollingTwoHours: { ...usage.rollingTwoHours, used: 11, percent: 110 } },
     ],
     ["a measured context without a cap", { ...usage, context: { ...usage.context, capTokens: 0 } }],
-    ["a next-request estimate in tokens", { ...usage, nextRequest: { status: "estimated" } }],
+    [
+      "a next-request estimate without its history tokens",
+      { ...usage, nextRequest: { status: "estimated" } },
+    ],
+    [
+      "a next-request estimate claiming future tool tokens",
+      {
+        ...usage,
+        nextRequest: {
+          status: "estimated",
+          historyTokens: 1800,
+          toolTokens: 900,
+          operationId,
+          measuredAt: "2031-03-10T11:59:00.000Z",
+        },
+      },
+    ],
+    [
+      "a next-request estimate of the whole input",
+      {
+        ...usage,
+        nextRequest: {
+          status: "estimated",
+          historyTokens: 1800,
+          inputTokens: 6000,
+          operationId,
+          measuredAt: "2031-03-10T11:59:00.000Z",
+        },
+      },
+    ],
   ])("refuses %s", (_name, body) => {
     expect(ChatUsageSchema.safeParse(body).success).toBe(false);
   });

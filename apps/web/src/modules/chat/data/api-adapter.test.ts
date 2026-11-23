@@ -18,6 +18,8 @@ const operation = {
   status: "accepted",
   deadlineAt: "2026-11-20T10:01:00.000Z",
   assistantMessageId: MESSAGE,
+  kind: "answer",
+  compaction: null,
 };
 
 const ids = { requestId: REQUEST, messageId: MESSAGE };
@@ -626,6 +628,194 @@ describe("createApiChatAdapter clear", () => {
     const { fetch } = fakeFetch([failure(503, "unavailable")]);
 
     await expect(adapter(fetch).clear("c", { signal: signal() })).rejects.toThrow();
+  });
+});
+
+describe("createApiChatAdapter compact", () => {
+  const compaction = {
+    ...operation,
+    kind: "compaction",
+    assistantMessageId: null,
+    compaction: null,
+  };
+
+  it("asks for a compaction once with a fresh person check and no text, then knows its operation to stop", async () => {
+    const challenge = vi.fn(() => Promise.resolve("token-1"));
+    const { fetch, calls } = fakeFetch([
+      json(202, { status: "started", operation: compaction }),
+      json(200, { ...compaction, status: "cancelled" }),
+    ]);
+    const chat = adapter(fetch, { challenge });
+
+    await expect(chat.compact(REQUEST, { signal: signal() })).resolves.toEqual({
+      status: "started",
+      operation: compaction,
+    });
+    await expect(chat.stop(REQUEST, { signal: signal() })).resolves.toBe("stopped");
+
+    expect(challenge).toHaveBeenCalledTimes(1);
+    expect(calls).toMatchObject([
+      {
+        url: "/api/chat/conversation/compact",
+        method: "POST",
+        body: { requestId: REQUEST, challengeToken: "token-1" },
+      },
+      { url: `/api/chat/operations/${OPERATION}/stop`, method: "POST" },
+    ]);
+  });
+
+  it("returns a no-op the API answered, which leaves nothing to stop", async () => {
+    const noop = { status: "noop", reason: "nothing_to_compact" };
+    const { fetch, calls } = fakeFetch([json(200, noop)]);
+    const chat = adapter(fetch);
+
+    await expect(chat.compact(REQUEST, { signal: signal() })).resolves.toEqual(noop);
+    await expect(chat.stop(REQUEST, { signal: signal() })).resolves.toBe("none");
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    [403, "chat_challenge_failed", "challenge_failed"],
+    [409, "chat_busy", "busy"],
+    [409, "chat_request_conflict", "conflict"],
+    [503, "chat_budget_exhausted", "budget_exhausted"],
+  ] as const)("reports a %i %s refusal as %s", async (status, apiCode, code) => {
+    const { fetch } = fakeFetch([failure(status, apiCode)]);
+
+    await expect(adapter(fetch).compact(REQUEST, { signal: signal() })).rejects.toMatchObject({
+      code,
+      retryAfterSeconds: null,
+    });
+  });
+
+  it("keeps the API's Retry-After of a compaction refused for a spent allowance", async () => {
+    const { fetch } = fakeFetch([failure(429, "chat_quota_exceeded", { "retry-after": "90" })]);
+
+    await expect(adapter(fetch).compact(REQUEST, { signal: signal() })).rejects.toMatchObject({
+      code: "quota_exceeded",
+      retryAfterSeconds: 90,
+    });
+  });
+
+  it("reports a failed person check without asking the API", async () => {
+    const { fetch, calls } = fakeFetch([]);
+    const challenge = () => Promise.reject(new Error("challenge error"));
+
+    await expect(
+      adapter(fetch, { challenge }).compact(REQUEST, { signal: signal() }),
+    ).rejects.toMatchObject({ code: "challenge_failed" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("reports an answer the contract does not allow as unavailable", async () => {
+    const { fetch } = fakeFetch([
+      json(202, { status: "started", operation: { operationId: "x" } }),
+    ]);
+
+    await expect(adapter(fetch).compact(REQUEST, { signal: signal() })).rejects.toMatchObject({
+      code: "unavailable",
+    });
+  });
+
+  it("abandons a compaction still waiting for its person check, so it is never sent", async () => {
+    const check = deferred<string>();
+    const { fetch, calls } = fakeFetch([]);
+    const chat = adapter(fetch, { challenge: () => check.promise });
+
+    const compacting = chat
+      .compact(REQUEST, { signal: signal() })
+      .catch((thrown: unknown) => thrown);
+    await Promise.resolve();
+    await expect(chat.stop(REQUEST, { signal: signal() })).resolves.toBe("none");
+    check.resolve("token-1");
+
+    await expect(compacting).resolves.toBeInstanceOf(ChatAdmissionError);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("createApiChatAdapter watch", () => {
+  const compaction = {
+    ...operation,
+    kind: "compaction",
+    status: "running",
+    assistantMessageId: null,
+    compaction: null,
+  };
+  const compacted = {
+    ...compaction,
+    status: "completed",
+    compaction: { outcome: "compacted", reason: null },
+  };
+
+  it("reads the operation every poll interval until it has ended", async () => {
+    const sleep = vi.fn(() => Promise.resolve());
+    const { fetch, calls } = fakeFetch([json(200, compaction), json(200, compacted)]);
+
+    await expect(
+      collect(adapter(fetch, { sleep, pollMs: 750 }).watch(compaction, { signal: signal() })),
+    ).resolves.toEqual([compaction, compacted]);
+    expect(calls).toMatchObject([
+      { url: `/api/chat/operations/${OPERATION}`, method: "GET" },
+      { url: `/api/chat/operations/${OPERATION}`, method: "GET" },
+    ]);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(750, expect.anything());
+  });
+
+  it("keeps reading after a read that failed", async () => {
+    const { fetch } = fakeFetch([
+      new TypeError("network"),
+      failure(503, "unavailable"),
+      json(200, compacted),
+    ]);
+
+    await expect(collect(adapter(fetch).watch(compaction, { signal: signal() }))).resolves.toEqual([
+      compacted,
+    ]);
+  });
+
+  it("stops at an operation the API does not know for the caller", async () => {
+    const { fetch, calls } = fakeFetch([failure(404, "not_found")]);
+
+    await expect(collect(adapter(fetch).watch(compaction, { signal: signal() }))).resolves.toEqual(
+      [],
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it("stops once the deadline and its grace have passed", async () => {
+    let clock = NOW;
+    const { fetch, calls } = fakeFetch([json(200, compaction), json(200, compaction)]);
+    const chat = adapter(fetch, {
+      now: () => clock,
+      deadlineGraceMs: 1_000,
+      sleep: () => {
+        clock = Date.parse(compaction.deadlineAt) + 1_001;
+        return Promise.resolve();
+      },
+    });
+
+    await expect(collect(chat.watch(compaction, { signal: signal() }))).resolves.toEqual([
+      compaction,
+    ]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("stops quietly when the signal aborts", async () => {
+    const controller = new AbortController();
+    const { fetch, calls } = fakeFetch([json(200, compaction)]);
+    const chat = adapter(fetch, {
+      sleep: () => {
+        controller.abort();
+        return Promise.resolve();
+      },
+    });
+
+    await expect(collect(chat.watch(compaction, { signal: controller.signal }))).resolves.toEqual([
+      compaction,
+    ]);
+    expect(calls).toHaveLength(1);
   });
 });
 

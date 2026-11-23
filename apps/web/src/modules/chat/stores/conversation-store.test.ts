@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ChatAssistantMessage, ChatMessage, ChatUserMessage } from "@sebela/contracts";
+import type {
+  ChatAssistantMessage,
+  ChatCompactionResponse,
+  ChatMessage,
+  ChatOperation,
+  ChatUserMessage,
+} from "@sebela/contracts";
 
 import { ChatAdmissionError } from "../data/admission";
 import type { ChatAdapter, ChatQuestion } from "../types/adapter";
@@ -89,11 +95,23 @@ interface Clear extends Pending<unknown> {
   readonly conversationId: string;
 }
 
+interface Compact extends Pending<ChatCompactionResponse> {
+  readonly requestId: string;
+}
+
+interface Watch {
+  readonly operationId: string;
+  readonly signal: AbortSignal;
+  readonly stream: Channel;
+}
+
 function manualAdapter() {
   const sent: Sent[] = [];
   const restores: Restore[] = [];
   const stops: Stop[] = [];
   const clears: Clear[] = [];
+  const compacts: Compact[] = [];
+  const watches: Watch[] = [];
   const adapter: ChatAdapter = {
     restore({ before }) {
       return new Promise((resolve, reject) => {
@@ -120,8 +138,18 @@ function manualAdapter() {
         clears.push({ conversationId, resolve, reject });
       });
     },
+    compact(requestId) {
+      return new Promise((resolve, reject) => {
+        compacts.push({ requestId, resolve, reject });
+      });
+    },
+    watch(operation, { signal }) {
+      const stream = channel();
+      watches.push({ operationId: operation.operationId, signal, stream });
+      return stream.iterable;
+    },
   };
-  return { adapter, sent, restores, stops, clears };
+  return { adapter, sent, restores, stops, clears, compacts, watches };
 }
 
 function setup(
@@ -129,7 +157,7 @@ function setup(
   idleTimeoutMs?: number,
   available?: boolean,
 ) {
-  const { adapter, sent, restores, stops, clears } = manualAdapter();
+  const { adapter, sent, restores, stops, clears, compacts, watches } = manualAdapter();
   const onChange = vi.fn();
   const store = createConversationStore({
     adapter,
@@ -139,7 +167,7 @@ function setup(
     ...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
     ...(available === undefined ? {} : { available }),
   });
-  return { store, sent, restores, stops, clears, storage, onChange };
+  return { store, sent, restores, stops, clears, compacts, watches, storage, onChange };
 }
 
 /** The item at the index, which the test expects to exist. */
@@ -302,6 +330,8 @@ describe("opening the conversation", () => {
           status: "running",
           deadlineAt: "2026-11-20T10:01:00.000Z",
           assistantMessageId: storedId(3),
+          kind: "answer",
+          compaction: null,
         },
       }),
     );
@@ -597,6 +627,8 @@ describe("the hero's hand-off", () => {
           status: "running",
           deadlineAt: "2026-11-20T10:01:00.000Z",
           assistantMessageId: storedId(3),
+          kind: "answer",
+          compaction: null,
         },
       }),
     );
@@ -833,6 +865,8 @@ function activeOperation(n: number) {
     status: "running",
     deadlineAt: "2026-11-20T10:01:00.000Z",
     assistantMessageId: storedId(n * 2 + 1),
+    kind: "answer",
+    compaction: null,
   };
 }
 
@@ -1143,5 +1177,282 @@ describe("another tab of the same conversation", () => {
     await flush();
 
     expect(context.onChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("compacting the working context", () => {
+  const COMPACTION = "44444444-0000-4000-8000-000000000001";
+  const three = page([
+    user(1, "Q1?"),
+    answered(1, "A1."),
+    user(2, "Q2?"),
+    answered(2, "A2."),
+    user(3, "Q3?"),
+    answered(3, "A3."),
+  ]);
+
+  function compaction(requestId: string, fields: Partial<ChatOperation> = {}): ChatOperation {
+    return {
+      operationId: COMPACTION,
+      requestId,
+      kind: "compaction",
+      status: "running",
+      deadlineAt: "2026-11-20T10:01:00.000Z",
+      assistantMessageId: null,
+      compaction: null,
+      ...fields,
+    };
+  }
+
+  const compacted = {
+    status: "completed",
+    compaction: { outcome: "compacted", reason: null },
+  } as const;
+
+  /** Opens three exchanges and starts a compaction the API admits. */
+  async function started(context: ReturnType<typeof setup>) {
+    await openWith(context, three);
+    expect(context.store.compact()).toBe("started");
+    const asked = at(context.compacts, 0);
+    asked.resolve({ status: "started", operation: compaction(asked.requestId) });
+    await flush();
+    return asked.requestId;
+  }
+
+  it("asks once under a new request, busy meanwhile, never adding a message to the conversation", async () => {
+    const context = setup();
+    await openWith(context, three);
+    const before = context.store.getSnapshot().turns;
+
+    expect(context.store.compact()).toBe("started");
+
+    expect(context.compacts).toHaveLength(1);
+    const { requestId } = at(context.compacts, 0);
+    expect(requestId).toMatch(UUID);
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "preparing", requestId },
+    });
+    expect(context.store.getSnapshot().turns).toBe(before);
+    expect(context.store.submit("Meanwhile?")).toBe("busy");
+    expect(context.store.compact()).toBe("busy");
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it("watches the admitted compaction, tells the other tabs, and shows its end with the history unchanged", async () => {
+    const context = setup();
+    const requestId = await started(context);
+    const before = context.store.getSnapshot().turns;
+
+    expect(context.onChange).toHaveBeenCalledTimes(1);
+    expect(context.watches).toMatchObject([{ operationId: COMPACTION }]);
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", requestId, operationId: COMPACTION, stopping: false },
+    });
+
+    at(context.watches, 0).stream.push(compaction(requestId));
+    at(context.watches, 0).stream.push(compaction(requestId, compacted));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", requestId, end: { kind: "compacted" } },
+    });
+    expect(context.store.getSnapshot().turns).toBe(before);
+  });
+
+  it("ignores a watched body the contract does not allow", async () => {
+    const context = setup();
+    const requestId = await started(context);
+
+    at(context.watches, 0).stream.push({ operationId: "x" });
+    await flush();
+    expect(context.store.getSnapshot().compaction).toMatchObject({ status: "running" });
+
+    at(context.watches, 0).stream.push(
+      compaction(requestId, {
+        status: "completed",
+        compaction: { outcome: "unchanged", reason: "stale" },
+      }),
+    );
+    await flush();
+    expect(context.store.getSnapshot().compaction).toMatchObject({ end: { kind: "stale" } });
+  });
+
+  it("shows a watch that ended without an end as interrupted", async () => {
+    const context = setup();
+    await started(context);
+
+    at(context.watches, 0).stream.end();
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "interrupted" } },
+    });
+  });
+
+  it("shows nothing to compact for the API's no-op, watching nothing and telling no tab", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+
+    at(context.compacts, 0).resolve({ status: "noop", reason: "nothing_to_compact" });
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "nothing" } },
+    });
+    expect(context.watches).toHaveLength(0);
+    expect(context.onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows a refusal with its reason and the API's Retry-After", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+
+    at(context.compacts, 0).reject(new ChatAdmissionError("quota_exceeded", 90));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: {
+        status: "ended",
+        end: { kind: "refused", code: "quota_exceeded", retryAfterSeconds: 90 },
+      },
+    });
+  });
+
+  it("after a busy refusal, reads the conversation again and watches the other tab's compaction", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+
+    at(context.compacts, 0).reject(new ChatAdmissionError("busy"));
+    await flush();
+    expect(context.restores).toHaveLength(2);
+    at(context.restores, 1).resolve({
+      ...three,
+      activeOperation: compaction(storedRequest(9)),
+    });
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", requestId: storedRequest(9) },
+    });
+    expect(context.watches).toMatchObject([{ operationId: COMPACTION }]);
+  });
+
+  it("watches a compaction another tab started, or one still running after a reload, as busy", async () => {
+    const context = setup();
+    await openWith(context, { ...three, activeOperation: compaction(storedRequest(9)) });
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", requestId: storedRequest(9) },
+    });
+    expect(context.sent).toHaveLength(0);
+    expect(context.store.submit("Meanwhile?")).toBe("busy");
+
+    void context.store.refresh();
+    at(context.restores, 1).resolve({ ...three, activeOperation: compaction(storedRequest(9)) });
+    await flush();
+    expect(context.watches).toHaveLength(1);
+
+    at(context.watches, 0).stream.push(
+      compaction(storedRequest(9), {
+        status: "failed",
+        compaction: { outcome: "failed", reason: "provider" },
+      }),
+    );
+    await flush();
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "failed" } },
+    });
+    expect(context.store.submit("Now?")).toBe("sent");
+  });
+
+  it("stops a running compaction through the API, from whichever tab, and shows it stopped", async () => {
+    const context = setup();
+    const requestId = await started(context);
+
+    const stopping = context.store.stop(requestId);
+    expect(context.store.getSnapshot().compaction).toMatchObject({ stopping: true });
+    expect(context.stops).toMatchObject([{ requestId }]);
+    at(context.stops, 0).resolve("stopped");
+
+    await expect(stopping).resolves.toBe("stopped");
+    expect(context.onChange).toHaveBeenCalledTimes(2);
+    at(context.watches, 0).stream.push(compaction(requestId, { status: "cancelled" }));
+    await flush();
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "cancelled" } },
+    });
+  });
+
+  it("stops a compaction still at its person check, so it is never sent", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+    const { requestId } = at(context.compacts, 0);
+
+    const stopping = context.store.stop(requestId);
+    at(context.stops, 0).resolve("none");
+    await expect(stopping).resolves.toBe("stopped");
+    at(context.compacts, 0).reject(new ChatAdmissionError("unavailable"));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "cancelled" } },
+    });
+    expect(context.watches).toHaveLength(0);
+  });
+
+  it("keeps watching when the API could not be asked to stop, and says so", async () => {
+    const context = setup();
+    const requestId = await started(context);
+
+    const stopping = context.store.stop(requestId);
+    at(context.stops, 0).reject(new Error("network"));
+
+    await expect(stopping).resolves.toBe("failed");
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", stopping: false, stopFailed: true },
+    });
+    expect(at(context.watches, 0).signal.aborted).toBe(false);
+  });
+
+  it("forgets a compaction's end once a new question is asked", async () => {
+    const context = setup();
+    const requestId = await started(context);
+    at(context.watches, 0).stream.push(compaction(requestId, compacted));
+    await flush();
+
+    expect(context.store.submit("Next?")).toBe("sent");
+    expect(context.store.getSnapshot().compaction).toBeNull();
+  });
+
+  it("stops watching a compaction the clear cancelled", async () => {
+    const context = setup();
+    await started(context);
+
+    const clearing = context.store.clear();
+    at(context.clears, 0).resolve({
+      cleared: true,
+      conversation: { ...emptyPage, conversationId: OTHER_CONVERSATION },
+      telemetryDeletion: "none",
+    });
+    await clearing;
+
+    expect(at(context.watches, 0).signal.aborted).toBe(true);
+    expect(context.store.getSnapshot()).toMatchObject({ busy: false, compaction: null });
   });
 });

@@ -90,9 +90,23 @@ export const ChatUsageSchema = z
         description:
           "The conversation's last main model call: its serialized input against the effective cap.",
       }),
-    nextRequest: z.strictObject({ status: z.literal("unavailable") }).meta({
-      description: "An estimate for the next request's input; not measured yet.",
-    }),
+    nextRequest: z
+      .discriminatedUnion("status", [
+        z.strictObject({
+          status: z.literal("estimated"),
+          historyTokens: z.int().nonnegative().meta({
+            description:
+              "The estimated tokens of the working context after the compaction: the summary and the kept exchanges, never the question, the instructions or tool results.",
+          }),
+          operationId: z.uuid().meta({ description: "The compaction that measured it." }),
+          measuredAt: Instant,
+        }),
+        z.strictObject({ status: z.literal("unavailable") }),
+      ])
+      .meta({
+        description:
+          "A post-compaction estimate of the history the next request carries; future tool tokens are unknown and never claimed. `unavailable` unless the latest measured operation was a compaction.",
+      }),
   })
   .meta({ id: "ChatUsage" });
 

@@ -124,6 +124,70 @@
         ]
       }
     },
+    "/internal/v1/compactions": {
+      "post": {
+        "summary": "Compact",
+        "description": "Admits one compaction and answers before it runs.",
+        "operationId": "compact_internal_v1_compactions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An invalid body or another model version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy: no slot freed in time, or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/capabilities/profile": {
       "get": {
         "summary": "Read the published professional profile: name, headline, biography, location, availability, career start, services introduction, collaboration steps and the services note.",
@@ -1403,6 +1467,88 @@
         "title": "CapabilityRecord",
         "description": "One projected record, exactly as the in-process tool gives it to the model."
       },
+      "CompactionRequest": {
+        "additionalProperties": false,
+        "description": "One admitted compaction the API dispatches: the working context and the bound terms.\n\n`summary` and `exchanges` are the conversation's current working context at\n`context_revision`, oldest exchange first; the API installs a result only at that revision.",
+        "properties": {
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "grant": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Grant",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WireSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "exchanges": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryExchange"
+            },
+            "maxItems": 6,
+            "title": "Exchanges",
+            "type": "array"
+          },
+          "deadlineAt": {
+            "format": "date-time",
+            "title": "Deadlineat",
+            "type": "string"
+          },
+          "contextRevision": {
+            "minimum": 0,
+            "title": "Contextrevision",
+            "type": "integer"
+          },
+          "model": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "effort": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Effort",
+            "type": "string"
+          },
+          "pricingVersion": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Pricingversion",
+            "type": "string"
+          },
+          "allowanceUsd": {
+            "exclusiveMinimum": 0,
+            "maximum": 0.02,
+            "title": "Allowanceusd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "operationId",
+          "grant",
+          "deadlineAt",
+          "contextRevision",
+          "model",
+          "effort",
+          "pricingVersion",
+          "allowanceUsd"
+        ],
+        "title": "CompactionRequest",
+        "type": "object"
+      },
       "GenerationRequest": {
         "additionalProperties": false,
         "description": "One admitted question the API dispatches with its one-use grant and its deadline.",
@@ -1431,6 +1577,17 @@
             "maxItems": 6,
             "title": "History",
             "type": "array"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WireSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "today": {
             "format": "date",
@@ -1614,6 +1771,118 @@
         },
         "type": "object",
         "title": "Ready"
+      },
+      "WireReference": {
+        "additionalProperties": false,
+        "description": "A record an earlier answer cited, with the agent's source kind: a pointer, never evidence.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "profile",
+              "contact",
+              "experience",
+              "project",
+              "exploration",
+              "service",
+              "education",
+              "current_focus",
+              "roadmap",
+              "roadmap_area",
+              "roadmap_module",
+              "diary_day",
+              "statistics",
+              "book",
+              "event"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recordId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Recordid",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "recordId"
+        ],
+        "title": "WireReference",
+        "type": "object"
+      },
+      "WireSummary": {
+        "additionalProperties": false,
+        "description": "The installed summary of a working context (`llm_agent.ContextSummary`); untrusted.",
+        "properties": {
+          "language": {
+            "enum": [
+              "en",
+              "cs"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "goals": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Goals",
+            "type": "array"
+          },
+          "openQuestions": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Openquestions",
+            "type": "array"
+          },
+          "covered": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Covered",
+            "type": "array"
+          },
+          "visitorClaims": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Visitorclaims",
+            "type": "array"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/WireReference"
+            },
+            "maxItems": 12,
+            "title": "References",
+            "type": "array"
+          }
+        },
+        "required": [
+          "language"
+        ],
+        "title": "WireSummary",
+        "type": "object"
       }
     },
     "securitySchemes": {

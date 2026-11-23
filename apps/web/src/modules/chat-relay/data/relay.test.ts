@@ -314,6 +314,52 @@ describe("createChatRelay", () => {
     });
   });
 
+  it("relays a compaction as a POST with its body, cookie, origin and token, never an API key", async () => {
+    const api = fakeApi();
+    const compact = JSON.stringify({
+      requestId: "66666666-0000-4000-8000-000000000001",
+      challengeToken: "token",
+    });
+    const request = new Request(`${SITE}/api/chat/conversation/compact`, {
+      method: "POST",
+      body: compact,
+      headers: {
+        "content-type": "application/json",
+        origin: SITE,
+        cookie: "sebela_chat=visitor",
+        authorization: "Bearer not-forwarded",
+      },
+    });
+
+    await relay(api)(request, { kind: "compact" });
+
+    expect(api.calls[0]).toMatchObject({
+      url: `${API}/v1/chat/conversation/compact`,
+      method: "POST",
+      body: compact,
+    });
+    expect(api.calls[0]?.headers.get("cookie")).toBe("sebela_chat=visitor");
+    expect(api.calls[0]?.headers.get("origin")).toBe(SITE);
+    expect(api.calls[0]?.headers.get("x-sebela-chat-relay")).toBe(TOKEN);
+    expect(api.calls[0]?.headers.get("authorization")).toBeNull();
+    expect(api.calls[0]?.headers.get("x-api-key")).toBeNull();
+  });
+
+  it("refuses an oversized compaction body without reaching the API", async () => {
+    const api = fakeApi();
+    const response = await relay(api)(
+      new Request(`${SITE}/api/chat/conversation/compact`, {
+        method: "POST",
+        body: "x".repeat(chatRelayMaxBodyBytes + 1),
+        headers: { "content-type": "application/json" },
+      }),
+      { kind: "compact" },
+    );
+
+    expect(response.status).toBe(413);
+    expect(api.calls).toHaveLength(0);
+  });
+
   it("refuses an oversized retry or clear body without reaching the API", async () => {
     const api = fakeApi();
     const oversized = (url: string, method: string) =>

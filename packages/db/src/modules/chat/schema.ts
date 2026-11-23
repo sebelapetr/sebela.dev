@@ -34,7 +34,12 @@ export const identities = chatSchema.table("identities", {
   lastSeenAt: at("last_seen_at").notNull(),
 });
 
-/** The one conversation of an identity; `revision` grows with each completed exchange. */
+/**
+ * The one conversation of an identity; `revision` grows with each completed exchange and each
+ * installed compaction. `summary` is the installed compaction summary of the working context
+ * (untrusted history, validated on every read) and `summary_through_position` the last message it
+ * folds: the working context is the summary and the answered exchanges after that position.
+ */
 export const conversations = chatSchema.table("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
   identityId: uuid("identity_id")
@@ -44,6 +49,8 @@ export const conversations = chatSchema.table("conversations", {
   revision: integer("revision").notNull().default(0),
   createdAt: at("created_at").notNull(),
   lastActivityAt: at("last_activity_at").notNull(),
+  summary: jsonb("summary"),
+  summaryThroughPosition: bigint("summary_through_position", { mode: "number" }),
 });
 
 /** The questions and approved answers of a conversation, in `position` order. */
@@ -105,12 +112,12 @@ export const operations = chatSchema.table(
     attemptKey: uuid("attempt_key").notNull(),
     retryOf: uuid("retry_of"),
     questionHash: text("question_hash").notNull(),
-    userMessageId: uuid("user_message_id")
-      .notNull()
-      .references(() => messages.id, { onDelete: "cascade" }),
-    assistantMessageId: uuid("assistant_message_id")
-      .notNull()
-      .references(() => messages.id, { onDelete: "cascade" }),
+    /** `answer` asks one question; `compaction` summarizes the working context, with no message. */
+    kind: text("kind").notNull().default("answer"),
+    userMessageId: uuid("user_message_id").references(() => messages.id, { onDelete: "cascade" }),
+    assistantMessageId: uuid("assistant_message_id").references(() => messages.id, {
+      onDelete: "cascade",
+    }),
     status: text("status").notNull(),
     admittedAt: at("admitted_at").notNull(),
     deadlineAt: at("deadline_at").notNull(),
@@ -137,6 +144,14 @@ export const operations = chatSchema.table(
     contextEstimatedInputTokens: integer("context_estimated_input_tokens"),
     contextReportedInputTokens: integer("context_reported_input_tokens"),
     contextCapTokens: integer("context_cap_tokens"),
+    /**
+     * A compaction's result: how many compacted exchanges stay verbatim, the summary's tokens, and
+     * the estimate of the next working context (only when the summary was installed). Its outcome
+     * and reason are `result_outcome` and `result_reason`.
+     */
+    compactionKept: integer("compaction_kept"),
+    compactionSummaryTokens: integer("compaction_summary_tokens"),
+    compactionNextInputTokens: integer("compaction_next_input_tokens"),
   },
   (table) => [
     unique("operations_identity_attempt").on(table.identityId, table.attemptKey),
@@ -152,6 +167,10 @@ export const operations = chatSchema.table(
       sql`${table.status} IN ('accepted', 'running', 'completed', 'failed', 'interrupted', 'cancelled')`,
     ),
     check("operations_allowance_positive", sql`${table.allowanceMicroUsd} > 0`),
+    check(
+      "operations_kind_messages",
+      sql`(${table.kind} = 'answer' AND ${table.userMessageId} IS NOT NULL AND ${table.assistantMessageId} IS NOT NULL) OR (${table.kind} = 'compaction' AND ${table.userMessageId} IS NULL AND ${table.assistantMessageId} IS NULL)`,
+    ),
   ],
 );
 

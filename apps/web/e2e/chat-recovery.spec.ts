@@ -41,7 +41,7 @@ async function expectAccessible(page: Page) {
 
 const conversation = (page: Page) => page.getByRole("list", { name: "Conversation" });
 const turns = (page: Page) => conversation(page).locator(":scope > li");
-const composer = (page: Page) => page.getByRole("textbox", { name: "Your question" });
+const composer = (page: Page) => page.getByRole("combobox", { name: "Your question" });
 const retryButton = (page: Page) => page.getByRole("button", { name: "Try again" });
 const contactLink = (page: Page) =>
   turns(page).last().getByRole("link", { name: "Contact", exact: true });

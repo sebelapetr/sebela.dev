@@ -1,9 +1,11 @@
-"""The agent's result as the API's result body, and the API's history as the agent's.
+"""The agent's results as the API's result bodies, and the API's working context as the agent's.
 
 Only what the contract carries leaves the service: the approved text, the typed blocks, the
 sources, the usage and the last main call's context size. Evidence data, the trace, the execution
 identifiers and any draft stay inside. Agent source kinds become the contract's record kinds; the
 contact card becomes a `ContactCard` block without the name, with only `http`/`https` links.
+A compaction's result carries its summary only when it is `compacted`; the summary keeps the
+agent's own source kinds, since only this service and the agent read it back.
 """
 
 from __future__ import annotations
@@ -13,7 +15,17 @@ from collections.abc import Sequence
 from typing import Final
 from urllib.parse import urlsplit
 
-from llm_agent import ChatExchange, ChatResult, ContactCard, ExchangeSource, Span, Versions
+from llm_agent import (
+    ChatExchange,
+    ChatResult,
+    CompactionResult,
+    ContactCard,
+    ContextSummary,
+    ExchangeSource,
+    Span,
+    SummaryReference,
+    Versions,
+)
 from llm_agent.schemas.responses import SourceKind
 from pydantic.alias_generators import to_camel
 
@@ -21,6 +33,7 @@ from ai_service.schemas import (
     MAX_BLOCKS,
     MAX_SOURCES,
     SITE_PATH_PATTERN,
+    CompactionReport,
     ContractKind,
     HistoryExchange,
     Language,
@@ -30,6 +43,8 @@ from ai_service.schemas import (
     ReportSource,
     ReportUsage,
     ResultReport,
+    WireReference,
+    WireSummary,
 )
 
 _CONTRACT_KIND: Final[dict[str, ContractKind]] = {
@@ -127,6 +142,97 @@ def stopped_report(
         ),
         versions=_versions(versions),
         latency_ms=max(0, latency_ms),
+    )
+
+
+def compaction_report(
+    result: CompactionResult,
+    *,
+    grant: str,
+    latency_ms: int,
+    interrupted: bool = False,
+    stopped: bool = False,
+) -> CompactionReport:
+    """The result body for a compaction; anything not `compacted` carries no summary.
+
+    `interrupted` and `stopped` report it `failed` with their reason, like a generation's Stop.
+    """
+    usage = result.usage
+    compacted = result.outcome == "compacted" and not (interrupted or stopped)
+    reason = "interrupted" if interrupted else "stopped" if stopped else result.reason
+    return CompactionReport(
+        grant=grant,
+        outcome="compacted"
+        if compacted
+        else "failed"
+        if interrupted or stopped
+        else result.outcome,
+        reason=None if compacted else reason or "invalid_summary",
+        summary=wire_summary(result.summary) if compacted and result.summary else None,
+        kept=result.kept,
+        summary_tokens=result.summary_tokens if compacted else 0,
+        next_input_tokens=result.next_input_tokens,
+        usage=ReportUsage(
+            cost_usd=usage.cost_usd,
+            cost_uncertain=usage.cost_uncertain or interrupted,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            model_attempts=usage.model_attempts,
+        ),
+        versions=_versions(result.versions),
+        latency_ms=max(0, latency_ms),
+    )
+
+
+def stopped_compaction(
+    reason: str, *, grant: str, kept: int, latency_ms: int, versions: Versions
+) -> CompactionReport:
+    """A compaction that stopped before any model call: nothing installed, no cost."""
+    return CompactionReport(
+        grant=grant,
+        outcome="failed",
+        reason=reason,
+        summary=None,
+        kept=kept,
+        summary_tokens=0,
+        next_input_tokens=None,
+        usage=ReportUsage(
+            cost_usd=0.0, cost_uncertain=False, input_tokens=0, output_tokens=0, model_attempts=0
+        ),
+        versions=_versions(versions),
+        latency_ms=max(0, latency_ms),
+    )
+
+
+def wire_summary(summary: ContextSummary) -> WireSummary:
+    """The agent's validated summary in the API's camelCase shape."""
+    return WireSummary(
+        language=summary.language,
+        goals=list(summary.goals),
+        open_questions=list(summary.open_questions),
+        covered=list(summary.covered),
+        visitor_claims=list(summary.visitor_claims),
+        references=[
+            WireReference(kind=ref.kind, record_id=ref.record_id, title=ref.title)
+            for ref in summary.references
+        ],
+    )
+
+
+def summary_for(summary: WireSummary | None) -> ContextSummary | None:
+    """The API's stored summary as the agent's, validated again; untrusted history."""
+    if summary is None:
+        return None
+    return ContextSummary(
+        language=summary.language,
+        goals=tuple(summary.goals),
+        open_questions=tuple(summary.open_questions),
+        covered=tuple(summary.covered),
+        visitor_claims=tuple(summary.visitor_claims),
+        references=tuple(
+            SummaryReference(kind=ref.kind, record_id=ref.record_id, title=ref.title)
+            for ref in summary.references
+        ),
     )
 
 

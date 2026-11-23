@@ -425,6 +425,12 @@ def execution_usd_for(candidate: str | None) -> float:
     return comparison.execution_limits(candidate).max_cost_usd
 
 
+def executions(case_id: str) -> int:
+    """The agent executions of one case-run: the answer plus each compaction before it."""
+    case = CASES.get(case_id)
+    return 1 + (len(case.compaction.points) if case and case.compaction else 0)
+
+
 def reservation(
     cases: Sequence[str],
     *,
@@ -433,7 +439,7 @@ def reservation(
     judge_mode: str = "batch",
 ) -> float:
     """What a run of `cases` may cost at most: subject executions plus judge calls."""
-    runs = len(cases) * repeats
+    runs = sum(executions(case_id) for case_id in cases) * repeats
     judged = sum(repeats for case_id in cases if CASES[case_id].expectation.judged)
     return runs * execution_usd + judged * judge_call_reservation_usd(judge_mode)
 
@@ -461,7 +467,7 @@ def expected_usd(
         1.0 if judge_mode == "direct" else rubric.JUDGE_BATCH_DISCOUNT
     )
     judged = sum(repeats for case_id in cases if CASES[case_id].expectation.judged)
-    runs = len(cases) * repeats if subject else 0
+    runs = sum(executions(case_id) for case_id in cases) * repeats if subject else 0
     return runs * EXPECTED_SUBJECT_RUN_USD + judged * judge
 
 
@@ -812,6 +818,7 @@ async def grade_record(
         cited=cited,
         supported_cited=supported,
         failures=tuple(failures),
+        critical_failures=code.critical_failures,
     )
     passed = code.passed and (not case.expectation.judged or useful is True)
     report = {
@@ -988,8 +995,22 @@ async def grade_records(
 def subject_cost(
     record: Mapping[str, Any], *, execution_usd: float = budget.SUBJECT_EXECUTION_USD
 ) -> tuple[float, bool]:
-    """The measured cost of one execution, or its whole reservation when unknown/uncertain."""
-    result = record.get("result")
+    """The measured cost of one case-run's executions (the answer and each compaction), each one's
+    whole reservation when unknown or uncertain."""
+    results = [record.get("result")]
+    compactions = record.get("compactions")
+    recorded = compactions if isinstance(compactions, list) else []
+    results.extend(recorded)
+    missing = max(executions(str(record.get("case_id"))) - len(results), 0)
+    total, uncertain = missing * execution_usd, missing > 0
+    for result in results:
+        cost, unsure = _execution_cost(result, execution_usd)
+        total += cost
+        uncertain = uncertain or unsure
+    return total, uncertain
+
+
+def _execution_cost(result: object, execution_usd: float) -> tuple[float, bool]:
     usage = result.get("usage") if isinstance(result, dict) else None
     if not isinstance(usage, dict):
         return execution_usd, True
@@ -1022,7 +1043,11 @@ def charge_subject(
     for case_id in selected:
         for repeat in range(1, repeats + 1):
             if (case_id, repeat) not in ran:
-                allowance.charge(execution_usd, f"subject {case_id}#{repeat}", uncertain=True)
+                allowance.charge(
+                    execution_usd * executions(case_id),
+                    f"subject {case_id}#{repeat}",
+                    uncertain=True,
+                )
 
 
 def write_summary(

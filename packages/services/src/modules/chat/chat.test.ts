@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { ChatUsageSchema, type ChatGenerationResult } from "@sebela/contracts";
+import {
+  ChatOperationSchema,
+  ChatUsageSchema,
+  type ChatCompactionResult,
+  type ChatContextSummary,
+  type ChatGenerationResult,
+} from "@sebela/contracts";
 import { createPersistence, readDatabaseConfig, type Persistence } from "@sebela/db";
 import { createTemporaryDatabase, type TemporaryDatabase } from "@sebela/db/testing";
 
@@ -427,7 +433,10 @@ describe("visitor chat service", () => {
         { question: "", answer: "Empty question.", language: "en", sources: [] },
       ];
       const projecting = createChatService(
-        { ...persistence.chat, recentExchanges: () => Promise.resolve(stored) },
+        {
+          ...persistence.chat,
+          workingContext: () => Promise.resolve({ revision: 0, summary: null, exchanges: stored }),
+        },
         { config, verifier, now: () => now },
       );
       const caller = (await projecting.open(null)).caller;
@@ -476,6 +485,7 @@ describe("visitor chat service", () => {
         status: "claimed",
         claimed: {
           claimed: true,
+          kind: "answer",
           deadlineAt: dispatch.deadlineAt,
           allowanceUsd: 0.02,
           model: "fictional-model",
@@ -1309,6 +1319,355 @@ describe("visitor chat service", () => {
         expect(result.cleared.conversation.conversationId).toBe(caller.conversationId);
         expect(result.cleared.conversation.messages).toHaveLength(2);
       });
+    });
+  });
+
+  describe("compaction", () => {
+    const summary: ChatContextSummary = {
+      language: "en",
+      goals: ["Choose a fictional service."],
+      openQuestions: ["Which plan fits a small team?"],
+      covered: ["The fictional services were listed."],
+      visitorClaims: ["The visitor says they run a small team."],
+      references: [{ kind: "service", recordId: "svc-1", title: "Fictional service" }],
+    };
+
+    const compactedFor = (grant: string, kept = 1): ChatCompactionResult => ({
+      grant,
+      outcome: "compacted",
+      reason: null,
+      summary,
+      kept,
+      summaryTokens: 120,
+      nextInputTokens: 900,
+      usage: {
+        costUsd: 0.003,
+        costUncertain: false,
+        inputTokens: 2000,
+        outputTokens: 150,
+        modelAttempts: 1,
+      },
+      versions: { prompt: "compaction-v1" },
+      latencyMs: 900,
+    });
+
+    const compact = (
+      caller: ChatCaller,
+      requestId: string = randomUUID(),
+      challengeToken = `fictional-token-${randomUUID()}`,
+    ) => chat.compact(caller, { requestId, challengeToken }, { clientAddress: nextAddress() });
+
+    /** A caller whose working context holds `count` answered exchanges. */
+    const withExchanges = async (count: number) => {
+      const caller = await newCaller();
+      for (let index = 0; index < count; index += 1) {
+        await answer(
+          await admitted(caller, `Question ${String(index)}?`),
+          `Answer ${String(index)}.`,
+        );
+        now = new Date(now.getTime() + 61_000);
+      }
+      return caller;
+    };
+
+    const started = async (caller: ChatCaller) => {
+      const result = await compact(caller);
+      if (result.status !== "started") throw new Error(`Expected a start, got ${result.status}.`);
+      return result;
+    };
+
+    it("is a local no-op for a small working context: no challenge, quota or spend", async () => {
+      const empty = await newCaller();
+      const small = await withExchanges(2);
+      const calls = verifier.calls;
+      const before = await chat.usage(small, { clientAddress: null });
+
+      await expect(compact(empty)).resolves.toEqual({
+        status: "noop",
+        reason: "nothing_to_compact",
+      });
+      await expect(compact(small)).resolves.toEqual({
+        status: "noop",
+        reason: "nothing_to_compact",
+      });
+
+      expect(verifier.calls).toBe(calls);
+      const after = await chat.usage(small, { clientAddress: null });
+      expect(after.utcDay.used).toBe(before.utcDay.used);
+      expect(after.activeOperation).toBeNull();
+    });
+
+    it("starts a compaction of the working context without appending a visitor message", async () => {
+      const caller = await withExchanges(3);
+      const calls = verifier.calls;
+
+      const result = await started(caller);
+
+      expect(verifier.calls).toBe(calls + 1);
+      expect(ChatOperationSchema.parse(result.operation)).toEqual(result.operation);
+      expect(result.operation).toMatchObject({
+        kind: "compaction",
+        status: "accepted",
+        assistantMessageId: null,
+        compaction: null,
+      });
+      expect(result.dispatch).toMatchObject({
+        operationId: result.operation.operationId,
+        summary: null,
+        contextRevision: 3,
+        model: "fictional-model",
+        effort: "medium",
+        pricingVersion: "fictional-pricing-1",
+        allowanceUsd: 0.02,
+        deadlineAt: result.operation.deadlineAt,
+      });
+      expect(result.dispatch.grant).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(result.dispatch.exchanges.map((exchange) => exchange.question)).toEqual([
+        "Question 0?",
+        "Question 1?",
+        "Question 2?",
+      ]);
+      const conversation = await chat.conversation(caller, { limit: 20 });
+      expect(conversation.messages).toHaveLength(6);
+      expect(conversation.activeOperation).toEqual(result.operation);
+      expect(JSON.stringify(conversation)).not.toContain(result.dispatch.grant);
+    });
+
+    it("recovers a repeated request without a challenge and refuses a question's request id", async () => {
+      const caller = await withExchanges(3);
+      const requestId = randomUUID();
+      const first = await compact(caller, requestId);
+      if (first.status !== "started") throw new Error(first.status);
+      const calls = verifier.calls;
+
+      await expect(compact(caller, requestId)).resolves.toEqual({
+        status: "existing",
+        operation: first.operation,
+      });
+      await expect(
+        chat.submit(
+          caller,
+          { requestId, question: "What do you build?", challengeToken: "fictional-token" },
+          { clientAddress: nextAddress() },
+        ),
+      ).resolves.toEqual({ status: "conflict" });
+      expect(verifier.calls).toBe(calls);
+
+      const asking = await withExchanges(3);
+      const question = await admitted(asking, "One more?");
+      const questionRequest = (await chat.operation(asking, question.operationId))?.requestId;
+      await expect(compact(asking, questionRequest)).resolves.toEqual({ status: "conflict" });
+    });
+
+    it("is refused while another operation is active, in either direction, before any challenge", async () => {
+      const caller = await withExchanges(3);
+      const asking = await admitted(caller, "Still answering?");
+      const calls = verifier.calls;
+
+      const busy = await compact(caller);
+
+      expect(busy).toMatchObject({
+        status: "busy",
+        operation: { operationId: asking.operationId },
+      });
+      expect(verifier.calls).toBe(calls);
+      await answer(asking);
+      now = new Date(now.getTime() + 61_000);
+
+      const compaction = await started(caller);
+      await expect(submit(caller, "And now?")).resolves.toEqual({
+        status: "busy",
+        operation: compaction.operation,
+      });
+    });
+
+    it("refuses a failed challenge and starts nothing", async () => {
+      const caller = await withExchanges(3);
+      verifier.answer = false;
+
+      await expect(compact(caller)).resolves.toEqual({ status: "challenge_failed" });
+
+      verifier.answer = true;
+      expect((await chat.conversation(caller, { limit: 20 })).activeOperation).toBeNull();
+    });
+
+    it("binds the grant claim to a compaction, and an answer's result is refused for it", async () => {
+      const caller = await withExchanges(3);
+      const { dispatch } = await started(caller);
+
+      const claim = await chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+
+      expect(claim).toMatchObject({
+        status: "claimed",
+        claimed: { kind: "compaction", contextRevision: 3, allowanceUsd: 0.02 },
+      });
+      await expect(
+        chat.reconcile(dispatch.operationId, answerFor(dispatch.grant)),
+      ).resolves.toEqual({ status: "wrong_grant" });
+    });
+
+    it("installs a valid summary at its revision; the next question carries it and only the kept exchanges", async () => {
+      const caller = await withExchanges(3);
+      const { dispatch } = await started(caller);
+      await chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+
+      const result = await chat.reconcileCompaction(
+        dispatch.operationId,
+        compactedFor(dispatch.grant, 1),
+      );
+      const repeat = await chat.reconcileCompaction(
+        dispatch.operationId,
+        compactedFor(dispatch.grant, 2),
+      );
+
+      expect(result).toMatchObject({
+        status: "reconciled",
+        operation: { status: "completed", compaction: { outcome: "compacted", reason: null } },
+      });
+      expect(repeat.status).toBe("already");
+      await expect(chat.observe(caller, dispatch.operationId)).resolves.toBeNull();
+      await expect(chat.operation(caller, dispatch.operationId)).resolves.toMatchObject({
+        kind: "compaction",
+        status: "completed",
+      });
+      expect((await chat.conversation(caller, { limit: 20 })).messages).toHaveLength(6);
+
+      now = new Date(now.getTime() + 61_000);
+      const next = await admitted(caller, "And the price?");
+      expect(next.summary).toEqual(summary);
+      expect(next.history.map((exchange) => exchange.question)).toEqual(["Question 2?"]);
+      expect(next.contextRevision).toBe(4);
+      await answer(next, "A fictional price.");
+      now = new Date(now.getTime() + 61_000);
+
+      // A later compaction summarises the summary together with the exchanges after it.
+      const again = await compact(caller);
+      expect(again.status).toBe("noop");
+      const more = await admitted(caller, "And the timeline?");
+      await answer(more, "A fictional timeline.");
+      now = new Date(now.getTime() + 61_000);
+      const second = await started(caller);
+      expect(second.dispatch.summary).toEqual(summary);
+      expect(second.dispatch.exchanges.map((exchange) => exchange.question)).toEqual([
+        "Question 2?",
+        "And the price?",
+        "And the timeline?",
+      ]);
+    });
+
+    it("keeps the prior working context after a failed, invalid or stopped compaction", async () => {
+      const caller = await withExchanges(3);
+      const failed = await started(caller);
+      await chat.claim({ operationId: failed.dispatch.operationId, grant: failed.dispatch.grant });
+      await expect(
+        chat.reconcileCompaction(failed.dispatch.operationId, {
+          ...compactedFor(failed.dispatch.grant),
+          outcome: "failed",
+          reason: "provider",
+          summary: null,
+          kept: 0,
+          summaryTokens: 0,
+          nextInputTokens: null,
+        }),
+      ).resolves.toMatchObject({
+        status: "reconciled",
+        operation: { status: "failed", compaction: { outcome: "failed", reason: "provider" } },
+      });
+      now = new Date(now.getTime() + 61_000);
+
+      const invalid = await started(caller);
+      await chat.claim({
+        operationId: invalid.dispatch.operationId,
+        grant: invalid.dispatch.grant,
+      });
+      await expect(
+        chat.reconcileCompaction(invalid.dispatch.operationId, {
+          ...compactedFor(invalid.dispatch.grant),
+          summary: { language: "en", goals: ["x".repeat(5000)] },
+        }),
+      ).resolves.toMatchObject({
+        status: "reconciled",
+        operation: { compaction: { outcome: "failed", reason: "invalid_result" } },
+      });
+      now = new Date(now.getTime() + 61_000);
+
+      const stopped = await started(caller);
+      await chat.claim({
+        operationId: stopped.dispatch.operationId,
+        grant: stopped.dispatch.grant,
+      });
+      await expect(chat.stop(caller, stopped.dispatch.operationId)).resolves.toMatchObject({
+        status: "stopped",
+        running: true,
+        operation: { status: "cancelled" },
+      });
+      await expect(
+        chat.reconcileCompaction(
+          stopped.dispatch.operationId,
+          compactedFor(stopped.dispatch.grant),
+        ),
+      ).resolves.toMatchObject({ status: "already" });
+      now = new Date(now.getTime() + 61_000);
+
+      const next = await admitted(caller, "Where were we?");
+      expect(next.summary).toBeNull();
+      expect(next.history).toHaveLength(3);
+      expect(next.contextRevision).toBe(3);
+    });
+
+    it("refuses a result without a grant, for an unclaimed compaction, or for an answer", async () => {
+      const caller = await withExchanges(3);
+      const { dispatch } = await started(caller);
+
+      await expect(chat.reconcileCompaction(dispatch.operationId, { kept: 1 })).resolves.toEqual({
+        status: "invalid",
+      });
+      await expect(
+        chat.reconcileCompaction(dispatch.operationId, compactedFor(dispatch.grant)),
+      ).resolves.toEqual({ status: "not_claimed" });
+      await expect(
+        chat.reconcileCompaction("not-an-id", compactedFor(dispatch.grant)),
+      ).resolves.toEqual({ status: "wrong_grant" });
+
+      const asking = await admitted(await newCaller());
+      await chat.claim({ operationId: asking.operationId, grant: asking.grant });
+      await expect(
+        chat.reconcileCompaction(asking.operationId, compactedFor(asking.grant)),
+      ).resolves.toEqual({ status: "wrong_grant" });
+    });
+
+    it("is never retried as a question", async () => {
+      const caller = await withExchanges(3);
+      const { dispatch } = await started(caller);
+      await chat.dispatchRefused(dispatch.operationId);
+
+      await expect(
+        chat.retry(
+          caller,
+          dispatch.operationId,
+          { retryId: randomUUID(), challengeToken: "fictional-token" },
+          { clientAddress: nextAddress() },
+        ),
+      ).resolves.toEqual({ status: "not_retryable" });
+    });
+
+    it("counts against the visitor's quota and reports the post-compaction estimate", async () => {
+      const caller = await withExchanges(3);
+      const { dispatch } = await started(caller);
+      await chat.claim({ operationId: dispatch.operationId, grant: dispatch.grant });
+      now = new Date(now.getTime() + 2000);
+      await chat.reconcileCompaction(dispatch.operationId, compactedFor(dispatch.grant));
+
+      const usage = await chat.usage(caller, { clientAddress: null });
+
+      expect(usage.utcDay.used).toBe(4);
+      expect(usage.nextRequest).toEqual({
+        status: "estimated",
+        historyTokens: 900,
+        operationId: dispatch.operationId,
+        measuredAt: now.toISOString(),
+      });
+      expect(ChatUsageSchema.parse(usage)).toEqual(usage);
     });
   });
 });

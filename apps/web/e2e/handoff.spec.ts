@@ -353,7 +353,7 @@ test.describe("a visitor asking", () => {
     // A question the person check does not confirm is labelled and offered again; the retry
     // answers in place.
     await queueTokens(page, ["fail-1"]);
-    const composer = page.getByRole("textbox", { name: "Your question" });
+    const composer = page.getByRole("combobox", { name: "Your question" });
     await composer.fill(`What could ${chatName} automate for my company?`);
     await composer.press("Enter");
     await answered(page);

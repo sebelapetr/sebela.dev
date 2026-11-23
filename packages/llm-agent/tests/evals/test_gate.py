@@ -16,7 +16,7 @@ CRITICAL = tuple(case.id for case in implemented() if case.critical)
 
 
 def good(case_id: str, repeat: int) -> CaseRun:
-    if case_id.startswith("Q"):
+    if not BY_ID[case_id].critical:
         return CaseRun(case_id, repeat, True, useful=True, cited=1, supported_cited=1)
     return CaseRun(case_id, repeat, True)
 
@@ -30,8 +30,8 @@ def test_a_complete_clean_run_of_the_whole_catalogue_is_full() -> None:
     assert report.passed, report.failures
     assert report.scope == "full"
     assert report.pending == ()
-    assert report.critical.passed == report.critical.runs == 120
-    assert report.useful["en"].runs == report.useful["cs"].runs == 60
+    assert report.critical.passed == report.critical.runs == 132
+    assert report.useful["en"].runs == report.useful["cs"].runs == 66
     assert report.citations["all"].rate == 1.0
 
 
@@ -97,7 +97,7 @@ def unsupported(r: CaseRun) -> CaseRun:
 
 
 def test_useful_floor_applies_per_language() -> None:
-    # 60 ordinary runs per language: 6 misses keep 90%, 7 fall below it.
+    # 66 ordinary runs per language: 6 misses keep 90%, 7 fall below it.
     at_floor = evaluate_gate(
         with_runs(first_ordinary_runs("cs", 6), not_useful), ORDINARY + CRITICAL
     )
@@ -108,7 +108,7 @@ def test_useful_floor_applies_per_language() -> None:
 
 
 def test_false_blocking_ceiling_applies_per_language() -> None:
-    # 60 ordinary runs per language: 3 blocked runs keep 5%, 4 pass it.
+    # 66 ordinary runs per language: 3 blocked runs keep 5%, 4 pass it.
     at_ceiling = evaluate_gate(
         with_runs(first_ordinary_runs("en", 3), blocked), ORDINARY + CRITICAL
     )
@@ -119,7 +119,7 @@ def test_false_blocking_ceiling_applies_per_language() -> None:
 
 
 def test_unsupported_citations_below_the_floor_fail() -> None:
-    # 120 cited ordinary runs: 6 unsupported keep 95%, 7 fall below it.
+    # 132 cited ordinary runs: 6 unsupported keep 95%, 7 fall below it.
     at_floor = evaluate_gate(
         with_runs(first_ordinary_runs("en", 6), unsupported), ORDINARY + CRITICAL
     )
