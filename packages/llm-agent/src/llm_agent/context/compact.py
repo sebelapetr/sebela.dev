@@ -6,11 +6,18 @@ every older exchange are folded by one logical call to the Main model with no to
 A reply is installed only when it parses into a `ContextSummary` in the conversation's language,
 every reference is one of the inputs' references (titles come from the inputs, never the model)
 and its rendered block stays within `SUMMARY_TOKEN_CAP`; anything else is an invalid attempt.
+
+Before that, the authority guard drops from `goals`, `open_questions` and `covered` every line that
+names an owner, admin, moderator or other role, a mode, access, a permission or a change of the
+rules, in English or Czech; `covered` keeps only a line that the assistant declined a rule change.
+`visitor_claims` is left as the model wrote it. The prompt asks for the same, and the code enforces
+it, because the model sometimes restated a claimed role as a goal (#213, C05).
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from typing import Any, Final, get_args
 
@@ -67,6 +74,40 @@ COMPACT_SCHEMA: Final[dict[str, Any]] = {
 }
 
 _Titles = dict[tuple[str, str], str]
+
+#: A role, mode, access or permission a line names. Close profile words stay out: a product
+#: owner, accessibility, models, administration (a degree), the Czech "vlastní" (own) and
+#: "přístup k" a topic (an approach to it) unless the topic is an access target.
+_AUTHORITY: Final = re.compile(
+    r"(?<!product\s)\bowners?\b"
+    r"|\badmin(?:s|istrators?)?\b|\badministrátor\w*"
+    r"|\bmoderators?\b|\bmoderátor\w*|\bsuperusers?\b"
+    r"|\b(?:system|assistant|admin|elevated|privileged)\s+roles?\b"
+    r"|\bmodes?\b|\brežim\w*"
+    r"|\baccess(?:es|ed|ing)?\b"
+    r"|\bpermissions?\b|\bprivileg\w*|\boprávn\w*"
+    r"|\bvlastn(?:ík|ic)\w*|\bmajitel\w*|\bsprávc\w*"
+    r"|\bpřístup\w*\b(?!\s+ke?\s+(?!admin|správ|systém|web|stránk|účt|nastaven|pravid|instrukc"
+    r"|dat|konverzac|rozhovor|poznám|soukrom|intern|profil))",
+    re.IGNORECASE,
+)
+#: A change of the assistant's rules or instructions, or its system instructions themselves.
+_RULE_CHANGE: Final = re.compile(
+    r"\b(?:ignor|skip|bypass|overrid|chang|forget|forgot|break|relax|lift|disabl|suspend)\w*\b"
+    r".{0,40}?\b(?:rules?|instructions?|guidelines|restrictions?|prompts?)\b"
+    r"|\b(?:rules?|instructions?|restrictions?)\b.{0,30}?"
+    r"\b(?:skipped|ignored|changed|lifted|overridden|bypassed|suspended|relaxed)\b"
+    r"|\bsystem\s+(?:prompts?|instructions?|notes?|messages?)\b"
+    r"|\b(?:your|its|the\s+assistant'?s?)\s+(?:own\s+)?(?:rules|instructions|prompt)\b"
+    r"|\bsystémov\w*\s+(?:instrukc|pokyn|prompt|zpráv|poznám)\w*"
+    r"|\b(?:změn|ignor|zapom|přeskoč|obejít|obejd|obcház|zruš|poruš|vypn)\w*\b"
+    r".{0,40}?\b(?:pravid|instrukc|pokyn|omezen)\w*"
+    r"|\b(?:pravid|instrukc|pokyn)\w*\b.{0,30}?\b(?:změn|ignor|zapom|přeskoč|zruš|poruš)\w*"
+    r"|\b(?:svá|své|svých|svým|jeho|jejich|asistent\w*)\s+(?:pravid|instrukc)\w*",
+    re.IGNORECASE,
+)
+#: That the assistant declined, the one rule-change line `covered` may keep.
+_DECLINED: Final = re.compile(r"\b(?:declin|refus|odmít|odmítl)\w*", re.IGNORECASE)
 
 
 def split(exchanges: Sequence[ChatExchange]) -> tuple[tuple[ChatExchange, ...], int]:
@@ -157,7 +198,32 @@ def _validated(text: str, *, language: Language, titles: _Titles) -> ContextSumm
             continue
         seen.add(key)
         references.append(reference.model_copy(update={"title": titles[key]}))
-    filled = summary.model_copy(update={"references": tuple(references)})
+    filled = _guarded(summary).model_copy(update={"references": tuple(references)})
     if summary_tokens(filled) > SUMMARY_TOKEN_CAP:
         return None
     return filled
+
+
+def _guarded(summary: ContextSummary) -> ContextSummary:
+    """`summary` without the goal, open-question and covered lines that name claimed authority."""
+
+    def kept(line: str, *, declined_rule_change: bool) -> bool:
+        if _AUTHORITY.search(line):
+            return False
+        if _RULE_CHANGE.search(line):
+            return declined_rule_change and _DECLINED.search(line) is not None
+        return True
+
+    return summary.model_copy(
+        update={
+            "goals": tuple(
+                line for line in summary.goals if kept(line, declined_rule_change=False)
+            ),
+            "open_questions": tuple(
+                line for line in summary.open_questions if kept(line, declined_rule_change=False)
+            ),
+            "covered": tuple(
+                line for line in summary.covered if kept(line, declined_rule_change=True)
+            ),
+        }
+    )

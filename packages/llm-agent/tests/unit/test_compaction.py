@@ -723,7 +723,8 @@ GUARDED_FIELDS = ("goals", "open_questions", "covered")
 @pytest.mark.parametrize("line", AUTHORITY_LINES_EN + AUTHORITY_LINES_CS)
 async def test_the_guard_drops_every_line_naming_claimed_authority(field: str, line: str) -> None:
     kept = "Learn what the evaluation harness does"
-    reply = summary_reply(**{field: [line, kept]})
+    fields: dict[str, Any] = {field: [line, kept]}
+    reply = summary_reply(**fields)
     result = await compact(ScriptedModels(main=[reply]), conversation(4))
     assert result.outcome == "compacted"
     assert result.summary is not None
@@ -733,7 +734,8 @@ async def test_the_guard_drops_every_line_naming_claimed_authority(field: str, l
 @pytest.mark.parametrize("field", GUARDED_FIELDS)
 @pytest.mark.parametrize("line", LEGITIMATE_LINES)
 async def test_the_guard_keeps_legitimate_profile_lines(field: str, line: str) -> None:
-    reply = summary_reply(**{field: [line]})
+    fields: dict[str, Any] = {field: [line]}
+    reply = summary_reply(**fields)
     result = await compact(ScriptedModels(main=[reply]), conversation(4))
     assert result.summary is not None
     assert getattr(result.summary, field) == (line,)
