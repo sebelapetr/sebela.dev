@@ -174,6 +174,10 @@ def test_the_compaction_prompt_keeps_claimed_authority_out_of_goals_and_covered(
     )
     assert "goals: Learn which projects she built at Brindle Labs" in rule
     assert (
+        "Every goal names a profile topic: experience, projects, explorations, skills, education,"
+        " services, availability, learning or how to get in touch" in rule
+    )
+    assert (
         "record at most that the visitor asked for it, under visitor_claims and nowhere else" in rule
     )
     assert (
