@@ -312,6 +312,17 @@ describe("whether a change runs the Python agent model evals", () => {
     });
   }
 
+  it("names an imported client module that matches no documented operation", (t) => {
+    const result = affected(t, {
+      "packages/llm-agent/src/llm_agent/tools/other.py":
+        "from sebela_api_client.api.default import list_missing_things\n",
+      [OPENAPI]: documentWith((d) => {
+        d.paths["/v1/chat/conversations"].post.description = "Changed.";
+      }),
+    });
+    assert.match(result.output, /with no documented operation: list_missing_things/);
+  });
+
   it("refuses wrong usage and prints no decision when Git cannot answer", (t) => {
     const { root } = repository(t, {});
     const missing = decide(root, []);

@@ -46,8 +46,7 @@ The phase-PR run fills these from its redacted `summary.json` (artifact `llm-age
 
 ## Cost
 
-The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the C07 run of [#446][i448]: https://github.com/sebelapetr/sebela.dev/issues/448
-[p446]:
+The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the C07 run of [#446][p446]:
 
 `spend: expected 0.0092 USD, actual 0.0113 USD (uncertain 0.0000); 3.6716 USD of the 07-ai-service ceiling (4.00 USD) remain`
 
@@ -68,10 +67,10 @@ Eval selection: the `Python agent model evals` job does not run for a change und
 
 ## Follow-ups outside this change
 
-These need either real conversations or a paid run nobody has allowed, so they are not built in #215:
+Neither needs a real conversation (they use the fictional fixtures). They stay out of this change for the reasons given:
 
-- **Latency workload command** (S07 item 5): a command that runs the 20 `comparison-v1` cases x 3 repeats at concurrency 1 and 4, Haiku only, no judge. The current comparison mode runs 1 repeat with the judge. Needs a paid run from the phase-PR reserve.
-- **Langfuse annotation queue** (S07 item 6) with the 12 stored phase-PR answers: needs stored answers of the paid phase-PR run and the owner's credentials.
+- **Latency workload command** (S07 item 5): a command that runs the 20 `comparison-v1` cases x 3 repeats at concurrency 1 and 4, Haiku only, no judge. The current comparison mode runs 1 repeat with the judge. Not built: it is a new measurement mode (first status and first approved content timing at two concurrencies) rather than a small change, and its one paid run (about USD 0.25, allowed from the phase-PR reserve) belongs to S07. It stays a follow-up of the owner's S07 work.
+- **Langfuse annotation queue** (S07 item 6) with the 12 stored phase-PR answers: needs Langfuse credentials and the stored answers of the paid phase-PR run, neither of which exists before that run.
 - **Production grading batch:** [#448][i448].
 - **[#442][i442]** (C03-cs and C04-cs misses) stays open and is settled before the phase-PR run.
 

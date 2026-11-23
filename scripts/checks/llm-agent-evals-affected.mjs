@@ -190,7 +190,10 @@ function contractReasons(baseText, headText, sources) {
   const schemes = (side) =>
     JSON.stringify(resolved(side.document, side.document.components?.securitySchemes ?? null));
   if (schemes(base) !== schemes(head)) reasons.push("the security schemes changed");
-  const { called } = operationsCalledBy(sources, baseDocument, headDocument);
+  const { called, unmatched } = operationsCalledBy(sources, baseDocument, headDocument);
+  for (const module of unmatched) {
+    process.stderr.write(`imported client module with no documented operation: ${module}\n`);
+  }
   for (const operation of called) {
     const before = operationText(base.document, operation);
     const after = operationText(head.document, operation);
