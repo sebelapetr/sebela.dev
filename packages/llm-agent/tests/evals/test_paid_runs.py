@@ -255,7 +255,7 @@ async def test_a_full_run_starts_under_a_realistic_allowance_and_runs_chunk_by_c
 ) -> None:
     selected = [case.id for case in implemented()]
     assert len(selected) == 96
-    # The whole run would reserve about USD 10.82; each chunk is reserved just before it starts.
+    # The whole run would reserve about USD 11.18; each chunk is reserved just before it starts.
     assert run.reservation(selected) > 2.0
     assert await run.command_run(selected, 2.0, campaign=P6) in (0, 1)
     expected = run.chunks(selected, repeats=3)

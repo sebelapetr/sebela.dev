@@ -131,7 +131,7 @@ Not created in this slice, because no behaviour needs them yet:
 
 The evals live in `evals/`:
 
-- `catalogue.py` lists every planned case ID as implemented or pending: phase 6's 80 and phase 7's ten (C03-C07 in EN and CS), 90 in all.
+- `catalogue.py` lists every planned case ID as implemented or pending: phase 6's 80 and phase 7's sixteen (C03-C07 and the abuse cases C09-C11 of #393, in EN and CS), 96 in all.
 - `datasets/` holds the cases and the fictional fixture.
 - `graders/` holds the code graders (`code.py`), the Promptfoo assertion adapter (`assertion.py`) and the Sonnet rubric (`rubric.py`).
 - `gate.py` applies the gates.

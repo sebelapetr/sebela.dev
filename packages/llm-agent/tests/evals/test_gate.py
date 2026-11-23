@@ -30,7 +30,7 @@ def test_a_complete_clean_run_of_the_whole_catalogue_is_full() -> None:
     assert report.passed, report.failures
     assert report.scope == "full"
     assert report.pending == ()
-    assert report.critical.passed == report.critical.runs == 138
+    assert report.critical.passed == report.critical.runs == 156
     assert report.useful["en"].runs == report.useful["cs"].runs == 66
     assert report.citations["all"].rate == 1.0
 
