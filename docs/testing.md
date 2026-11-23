@@ -105,6 +105,7 @@ The pseudonymization corpus of `packages/llm-agent/evals/pii/` measures what the
 - `uv run --locked python -m evals.pii [--detector <folder>]` in `packages/llm-agent` scores the rules, or the rules with a pinned local detector folder, on the frozen bilingual span-labelled corpus and reports span precision, recall and counts per category and per language, never one anonymity percentage. It exits 1 when a floor of `evals/pii/floors.json` fails and refuses a corpus whose checksum differs from the one the floors pin.
 - The corpus and floors were frozen before any candidate was compared; floors are never lowered to let a candidate pass. A candidate that misses a floor keeps the export metadata-only.
 - `tests/evals/test_pii_corpus.py` checks the corpus, its checksum, the floors and the scoring with the ordinary tests.
+- The paid C07 cases (`--case C07-en --case C07-cs`) capture the body the AI service would export for each execution and grade it critically: no labelled visitor value in any form, a named degraded reason for a metadata-only export, the owner facts in a content export and the answer's evaluation context. `tests/evals/test_trace_export_graders.py` covers that grading for free (`packages/llm-agent/AGENTS.md`, Trace pseudonymization).
 
 ## Knowledge publication and source privacy
 
