@@ -281,6 +281,7 @@ def grade_code(
 
     failures.extend(_source_failures(result, outcome, expectation.required_sources))
     failures.extend(_record_failures(result, expectation.required_records))
+    failures.extend(_any_record_failures(result, expectation.any_records))
     failures.extend(_block_failures(result, outcome, expectation.required_blocks))
     if expectation.no_tools:
         for name, _status in calls:
@@ -509,10 +510,22 @@ def _source_failures(result: Mapping[str, Any], outcome: str, required: Iterable
 
 
 def _record_failures(result: Mapping[str, Any], required: Iterable[str]) -> list[str]:
-    cited = {
+    cited = _cited_records(result)
+    return [f"no source cites {record}" for record in sorted(set(required) - cited)]
+
+
+def _cited_records(result: Mapping[str, Any]) -> set[str]:
+    return {
         f"{source.get('kind')}:{source.get('record_id')}" for source in _list(result.get("sources"))
     }
-    return [f"no source cites {record}" for record in sorted(set(required) - cited)]
+
+
+def _any_record_failures(result: Mapping[str, Any], accepted: Iterable[str]) -> list[str]:
+    """The approved answer cites at least one of the `accepted` records, if any are given."""
+    wanted = sorted(set(accepted))
+    if not wanted or set(wanted) & _cited_records(result):
+        return []
+    return [f"no source cites any of {', '.join(wanted)}"]
 
 
 def _block_failures(result: Mapping[str, Any], outcome: str, required: Iterable[str]) -> list[str]:
