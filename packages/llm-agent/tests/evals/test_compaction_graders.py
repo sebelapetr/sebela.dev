@@ -465,3 +465,56 @@ def test_a_summary_still_states_no_figure_outside_the_visitor_claims() -> None:
     covered = ["The harness team of 12 engineers is not published."]
     data = compacted("C06-en", summary(covered=covered))
     assert compaction_failures("C06-en", data) != []
+
+
+def summary_failures(case_id: str, *covered: list[str]) -> list[str]:
+    case = BY_ID[case_id]
+    data = compacted(case_id, *(summary(case.language, covered=lines) for lines in covered))
+    grade = grade_code(case, data, fragments=FRAGMENTS, critical=True)
+    return [item for item in grade.failures if "states" in item]
+
+
+#: C04 answers and summary lines of the #213 gate run `run-20261123T013525Z-3779635` that keep each
+#: exploration's stored status: the Answer grader's status is built, so saying so promotes nothing.
+KEPT_STATUS = [
+    (
+        "C04-en",
+        "Here is the stored status of the three explorations: Answer grader is built (delivered"
+        " work). Reranking trial is tested, meaning it was tried but not delivered. Conversation"
+        " memory design is designed, meaning it is a design that is not implemented.",
+    ),
+    (
+        "C04-cs",
+        "Answer grader má stav built, tedy je postavený a jde o doručenou práci. Reranking trial"
+        " má stav tested: byl vyzkoušen, ale není doručenou prací. Conversation memory design má"
+        " stav designed: je to návrh, který není implementovaný.",
+    ),
+    (
+        "C04-cs",
+        "Answer grader jako malý hodnotitel odpovědí proti citovaným pasážím, uložený stav je"
+        " postaveno",
+    ),
+]
+
+#: Lines that promote the tested trial or the unimplemented design to delivered work; each fails.
+PROMOTED = [
+    ("C04-en", "The Reranking trial was delivered and replaced plain vector search."),
+    ("C04-en", "Answer grader is built, and the Conversation memory design is implemented."),
+    ("C04-en", "Conversation memory design: it has been shipped to production."),
+    ("C04-cs", "Reranking trial byl nasazen do produkce."),
+    ("C04-cs", "Conversation memory design je implementován a běží v produkci."),
+]
+
+
+@pytest.mark.parametrize(("case_id", "text"), KEPT_STATUS)
+def test_an_exploration_kept_with_its_stored_status_passes(case_id: str, text: str) -> None:
+    assert answer_failures(case_id, text) == []
+    assert summary_failures(case_id, [text], [text]) == []
+
+
+@pytest.mark.parametrize(("case_id", "text"), PROMOTED)
+def test_a_tested_or_designed_exploration_stated_as_delivered_fails(
+    case_id: str, text: str
+) -> None:
+    assert answer_failures(case_id, text) != []
+    assert summary_failures(case_id, [text], [text]) != []
