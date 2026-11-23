@@ -1,0 +1,97 @@
+# Evaluation report: phase 07, the AI service (draft, S07 pending)
+
+This is the draft evaluation report of phase 07 (`apps/ai-service` and the phase-7 additions to `packages/llm-agent`). It is prepared by the AFK work of the phase for the phase pull request. **It is not an acceptance record.** Owner acceptance is issue [#216][i216] (S07), which stays open until the owner has run the checks of [What S07 still needs](#what-s07-still-needs), the final paid gates have passed and the human grades are recorded. A draft phase pull request, a loop's `phase_done`, `ready-for-agent` or an approval click is not acceptance.
+
+Every figure below is copied from the issue or pull request it names. Nothing was computed or run again for this report; where the record has no figure, the report says **pending** or **not recorded**. All eval data is fictional.
+
+## Summary
+
+- The eight paired families C01–C08 of `.plan/07-ai-service/evals.md` are each implemented once ([Families](#families)). The deterministic ones (C01, C02, C08) run on fakes in ordinary CI. The ten paid cases (C03–C07, EN and CS) are in the Python agent runner beside phase 6's 80 cases (`packages/llm-agent/evals/catalogue.py`, 90 in all).
+- Issue gates so far: critical C05/C06 and C07 passed their issue runs; the ordinary C03-cs and C04-cs gates are each one miss in three below the 90% floor, left to [#442][i442] and the phase-PR run.
+- The full phase-6 plus phase-7 catalogue (3 repeats, pinned judge) has **not run** on the final phase state. It runs once on the phase pull request when the owner marks it ready, or by manual dispatch ([How the final run starts](#how-the-final-run-starts)).
+- Trace export is **metadata only**: no PII detector is accepted, so no visitor content leaves the process ([PII corpus](#pii-corpus-and-trace-export)).
+- Production grading of real visitor answers moved to [#448][i448], outside phase 7. Phase 7 is accepted on the fixture evals; no real conversation is sent to a cloud judge in this phase ([Grading real answers](#grading-real-answers)).
+
+## Families
+
+| Family | Kind           | Where it runs                                                                                                                                                                   | Status on the phase branch                                            |
+| ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| C01    | Deterministic  | Disconnect, reload, Stop and retry complete the operation once: `apps/ai-service/tests/integration/test_chat_stack.py` through the real API and AI service with a fake provider | Green in CI; critical assertions at 100%                              |
+| C02    | Deterministic  | Two tabs share one active operation and a stranger sees none: the same file and `apps/api/src/chat.test.ts`                                                                     | Green in CI; critical assertions at 100%                              |
+| C03    | Paid, ordinary | Python agent runner, EN and CS, 3 repeats, pinned judge                                                                                                                         | Issue run: useful EN 3/3, CS 2/3 ([#213][i213]); CS below floor, #442 |
+| C04    | Paid, ordinary | The same                                                                                                                                                                        | Issue run: useful EN 3/3, CS 2/3 ([#213][i213]); CS below floor, #442 |
+| C05    | Paid, critical | The same                                                                                                                                                                        | Issue run 12/12 together with C06 ([#213][i213]); final run pending   |
+| C06    | Paid, critical | The same                                                                                                                                                                        | See C05                                                               |
+| C07    | Paid, critical | The same, with a capturing trace sink (nothing is sent)                                                                                                                         | Issue run `run-20261123T170748Z-1205854`: 6/6 ([#446][p446])          |
+| C08    | Deterministic  | Classifier, provider, tool or compaction failure gives the safe state: `packages/llm-agent/tests/unit/test_compaction.py` with a scripted model                                 | Green in CI; critical assertions at 100%                              |
+
+A pending, skipped, missing-key or insufficient-budget case is reported as pending and never as a pass (`packages/llm-agent/AGENTS.md`, Evals).
+
+## Report fields of the final run
+
+The phase-PR run fills these from its redacted `summary.json` (artifact `llm-agent-evals`); until then each is **pending**.
+
+| Field                                 | Value                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Selection and scope                   | Pending: `--all`, 90 cases × 3 repeats, stage `phase-pr`, campaign `07-ai-service`                                 |
+| Versions                              | Pending: pipeline, models and efforts, prompts, tools, runtime, dataset, expectations, judge and rubric, pricing   |
+| Gate denominators by language         | Pending: useful ≥ 90%, supported citations ≥ 95% with coverage, false blocking ≤ 5%, each for EN and CS separately |
+| Critical failures                     | Pending: every critical case-run must pass                                                                         |
+| Cost (estimated, reported, uncertain) | Pending; the latest recorded campaign line is under [Cost](#cost)                                                  |
+| Latency                               | Pending: case-run p50/p95 from the summary; first-status and approved-content latency from the S07 measurement     |
+| PII corpus metrics                    | Recorded under [PII corpus](#pii-corpus-and-trace-export)                                                          |
+| ARM64 measurement                     | Pending, S07                                                                                                       |
+| Cloud deletion                        | Pending, S07 (the deletion path is tested on fakes, [#446][p446])                                                  |
+| Human review references               | Pending, S07                                                                                                       |
+
+## Cost
+
+The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the C07 run of [#446][p446]:
+
+`spend: expected 0.0092 USD, actual 0.0113 USD (uncertain 0.0000); 3.6716 USD of the 07-ai-service ceiling (4.00 USD) remain`
+
+Each worktree keeps its own ledger, so that remainder counts only what the ledgers it saw recorded; the owner sets `LLM_AGENT_EVAL_ALLOWANCE_USD` to the campaign's true remainder before marking the phase pull request ready.
+
+## PII corpus and trace export
+
+From `packages/llm-agent/AGENTS.md` (Trace pseudonymization, [#446][p446]): the frozen corpus `pii-corpus-v1` (108 fictional entries, EN and CS) scored by rules alone gives recall 0.000 for `person` and `address` in both languages (EN 41 and 21 gold spans, CS 43 and 21) and 1.000 for every fixed-format category; public owner facts kept EN 22/22, CS 17/17. No candidate detector runtime is installed, so none has been scored, and the export carries metadata only (`degraded` `no_detector`). S07 records this fallback for the owner's acceptance unless a candidate meets every floor and the server measurement first.
+
+## Grading real answers
+
+Owner decision on [#215][i215]: the issue is split. Phase 7 is accepted on the fixture evals, as before, and **production grading moved to [#448][i448], outside phase 7**. It covers an evidence snapshot per stored answer, an accepted PII detector scored against `pii-corpus-v1`, and the grading batch (explicitly selected answers under a declared scope and maximum batch cost) with Langfuse scores. Nothing of it is built in this phase, and no real conversation is sent to a cloud judge. #448 starts from two open facts:
+
+- **No evidence to judge against.** The API stores an answer's text and its sources (reference, kind, record ID, title, link), but not the evidence the agent read. The versioned rubric judges claims against that evidence, so it cannot grade a stored answer as it is. The choices are a stored evidence snapshot per answer, a re-read of the current public records (which may have changed since), or a separate production rubric.
+- **Nothing may leave unfiltered.** Before external grading, visitor content must pass S05's policy or the record is omitted. With no detector accepted, every real record would be omitted.
+
+Eval selection: the `Python agent model evals` job does not run for a change under `apps/ai-service`. That is deliberate, because the eval runner never loads the AI service; its own tests cover it (`scripts/checks/llm-agent-evals-affected.mjs`; `docs/testing.md`, CI).
+
+## Follow-ups outside this change
+
+Neither needs a real conversation (they use the fictional fixtures). They stay out of this change for the reasons given:
+
+- **Latency workload command** (S07 item 5): a command that runs the 20 `comparison-v1` cases x 3 repeats at concurrency 1 and 4, Haiku only, no judge. The current comparison mode runs 1 repeat with the judge. Not built: it is a new measurement mode (first status and first approved content timing at two concurrencies) rather than a small change, and its one paid run (about USD 0.25, allowed from the phase-PR reserve) belongs to S07. It stays a follow-up of the owner's S07 work.
+- **Langfuse annotation queue** (S07 item 6) with the 12 stored phase-PR answers: needs Langfuse credentials and the stored answers of the paid phase-PR run, neither of which exists before that run.
+- **Production grading batch:** [#448][i448].
+- **[#442][i442]** (C03-cs and C04-cs misses) stays open and is settled before the phase-PR run.
+
+## How the final run starts
+
+The `Python agent model evals` job runs the full catalogue once on the phase pull request when it is opened, reopened or marked ready and is not a draft, and only when the phase changes what the agent runs (`scripts/checks/llm-agent-evals-affected.mjs`; `docs/testing.md`, CI). Phase 7 changes the agent package, so the job is selected. The phase loop opens the pull request as a draft; marking it ready starts the run. A manual dispatch (`suite=llm-agent`, `campaign=07-ai-service`, `stage=phase-pr`, `allowance=<remainder>`) reruns it. S07 does not have to be closed first: the run is part of S07's evidence.
+
+## What S07 still needs
+
+The owner runs these; fakes or laptop results do not count for any of them.
+
+1. **Final paid gates.** Set `LLM_AGENT_EVAL_ALLOWANCE_USD` to the campaign remainder, mark the phase pull request ready and keep the artifact `llm-agent-evals`. Store the remainder the job log names afterwards.
+2. **Real Turnstile.** On the deployed fictional stack: a solved challenge creates a conversation; a missing, expired or reused token is refused without a paid call; read, stop and delete need no challenge.
+3. **Langfuse EU ingest and delete.** With the owner's credentials through the existing protected mechanism, export one disposable fictional trace, confirm it arrives metadata only, then delete its conversation and confirm the remote deletion completes (`chat-maintenance delete-telemetry`; `apps/api/AGENTS.md`).
+4. **Shared ARM64 server envelope.** Declare the available CPU and memory first, then run `cd apps/ai-service && uv run --locked python scripts/measure_trace_export.py --json` on the server (with `--detector <folder>` for a candidate, if one is installed) and record peak memory, CPU and latency (`apps/ai-service/AGENTS.md`, Trace export). Without an accepted candidate, record the metadata-only fallback.
+5. **Latency workload.** The 20 `comparison-v1` cases (10 EN, 10 CS) × 3 repeats, at concurrency 1 and at concurrency 4, Haiku only, no judge, never batched, about USD 0.25 from the USD 2.00 phase-PR reserve; record first status (target within 1 s) and time to the first approved content (p95 target at most 20 s, deadline 60 s), with model, effort, pricing, host resources and run count. It is a measurement, not a gate, and its answers are never pooled. No command runs this workload yet; it is a follow-up ([Follow-ups](#follow-ups-outside-this-change)).
+6. **Human grades.** 12 final-revision answers (6 EN, 6 CS) taken from the stored phase-PR run, plus every disputed result, scored 1–5 for grounding, relevance and language in the phase-6 record format, with case, run, commit, model, judge and rubric versions, reviewer and date. Include compact continuation, ordinary factual, unknown/contact and adversarial summary or history cases. Resolve each score below 4; critical failures cannot be waived. The annotation queue is a follow-up ([Follow-ups](#follow-ups-outside-this-change)); until it exists the record format of the [phase 06 report](06-llm-agent.md#graded-answers-and-the-judge) applies.
+
+[i213]: https://github.com/sebelapetr/sebela.dev/issues/213
+[i215]: https://github.com/sebelapetr/sebela.dev/issues/215
+[i216]: https://github.com/sebelapetr/sebela.dev/issues/216
+[i442]: https://github.com/sebelapetr/sebela.dev/issues/442
+[i448]: https://github.com/sebelapetr/sebela.dev/issues/448
+[p446]: https://github.com/sebelapetr/sebela.dev/pull/446

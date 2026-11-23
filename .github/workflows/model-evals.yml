@@ -88,28 +88,24 @@ jobs:
           SUITE: ${{ inputs.suite }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          affected() {
-            local name="$1" pattern="$2"
-            if [ "$EVENT" = "workflow_dispatch" ]; then
-              if [ "$SUITE" = "all" ] || [ "$SUITE" = "$name" ]; then echo "$name=true"; else echo "$name=false"; fi
-            elif git diff --name-only "$BASE"...HEAD | grep -qE "$pattern"; then
-              echo "$name=true"
-            else
-              echo "$name=false"
-            fi
+          # A manual run selects the suites by its input.
+          chosen() {
+            if [ "$SUITE" = "all" ] || [ "$SUITE" = "$1" ]; then echo "$1=true"; else echo "$1=false"; fi
           }
           # MCP Admin: its app, its job below, and the routes it calls in the API contract, the API
           # client and their locked dependencies, decided by scripts/checks/mcp-admin-evals-affected.mjs
           # (docs/testing.md, CI). A route added for another consumer does not run it.
+          # Python agent: its package (prompts, evals and fixtures included), the generated Python
+          # client's runtime, the Python workspace, its job below, and the API operations it calls in
+          # the contract, decided by scripts/checks/llm-agent-evals-affected.mjs (decision 0026,
+          # point 8). The API's code, the AI service and an operation for another consumer do not.
           if [ "$EVENT" = "workflow_dispatch" ]; then
-            affected mcp-admin '' >> "$GITHUB_OUTPUT"
+            chosen mcp-admin >> "$GITHUB_OUTPUT"
+            chosen llm-agent >> "$GITHUB_OUTPUT"
           else
             node scripts/checks/mcp-admin-evals-affected.mjs "$BASE" HEAD >> "$GITHUB_OUTPUT"
+            node scripts/checks/llm-agent-evals-affected.mjs "$BASE" HEAD >> "$GITHUB_OUTPUT"
           fi
-          # Python agent: its package, the API its evals read through (and what is behind it), the
-          # content client and the contract it is generated from, the Python toolchain and lockfiles
-          # and this workflow.
-          affected llm-agent '^(packages/(llm-agent|api-client-python)/|apps/api/|packages/(contracts|api-client|services|db)/|pyproject\.toml$|uv\.lock$|\.python-version$|pnpm-lock\.yaml$|\.github/workflows/model-evals\.yml$)' >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
   mcp-admin:

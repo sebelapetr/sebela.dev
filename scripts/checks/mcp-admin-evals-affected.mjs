@@ -59,9 +59,10 @@ const USAGE =
   "Usage: mcp-admin-evals-affected <base> [<head>]\n" +
   "  Prints mcp-admin=true|false: whether <base>...<head> can change MCP Admin's behaviour.\n";
 
-class GitError extends Error {}
+export class GitError extends Error {}
 
-function git(args) {
+/** Git's output for `args`; throws GitError when Git fails. */
+export function git(args) {
   const result = spawnSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   if (result.status !== 0) {
     throw new GitError(`git ${args.join(" ")} failed: ${(result.stderr ?? "").trim()}`);
@@ -70,7 +71,7 @@ function git(args) {
 }
 
 /** A file's content at a commit, or undefined when it does not exist there. */
-function show(commit, file) {
+export function show(commit, file) {
   const result = spawnSync("git", ["show", `${commit}:${file}`], {
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
@@ -145,7 +146,7 @@ function resolvePointer(document, pointer) {
 }
 
 /** A value with every `$ref` replaced by what it names (a cycle stays a reference), keys sorted. */
-function resolved(document, value, seen = []) {
+export function resolved(document, value, seen = []) {
   if (Array.isArray(value)) return value.map((item) => resolved(document, item, seen));
   if (value === null || typeof value !== "object") return value;
   if (typeof value.$ref === "string") {
@@ -165,7 +166,7 @@ function resolved(document, value, seen = []) {
 }
 
 /** The shared error catalogue's codes, removed from a copy of the document that is returned. */
-function withoutErrorCodes(document) {
+export function withoutErrorCodes(document) {
   const copy = structuredClone(document ?? {});
   const code = copy.components?.schemas?.ErrorResponse?.properties?.error?.properties?.code;
   const codes = Array.isArray(code?.enum) ? code.enum : [];
