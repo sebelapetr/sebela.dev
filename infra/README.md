@@ -2,19 +2,19 @@
 
 The production definition of sebela.dev (`docs/release-workflow.md`, `.plan/done/10-delivery/prd.md`). Development never uses these files; its stack is the root `compose.yaml` alone.
 
-| Path                              | What it is                                                                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `production/compose.yaml`         | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                                          |
-| `production/.env.example`         | Every production setting, as a documented placeholder; the real file lives only on the server                                        |
-| `nginx/sebela.dev.conf`           | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website               |
-| `scripts/deploy.sh`               | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                                      |
-| `scripts/backup.sh`               | The encrypted backup of the production database to the `sebela-backups` zone, with retention                                         |
-| `scripts/restore.sh`              | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                                       |
-| `scripts/clear-demo.sh`           | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                                |
-| `scripts/bunny-edge-addresses.sh` | Writes the Bunny CDN edge addresses nginx trusts for the visitor's address, then tests and reloads nginx (root, daily)               |
-| `scripts/backup-common.sh`        | The settings and storage helpers the three scripts above share (sourced, never run)                                                  |
-| `crons.txt`                       | The server's scheduled jobs, entered once in the hosting panel: the nightly backup and, once the chat is on, the daily chat deletion |
-| `pnpm/`                           | pnpm for the API, website and MCP Admin images: a manifest and npm lockfile installed with `npm ci` (below)                          |
+| Path                              | What it is                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `production/compose.yaml`         | Production overrides of the root `compose.yaml`: published images, ports, restarts and logs                                                                        |
+| `production/.env.example`         | Every production setting, as a documented placeholder; the real file lives only on the server                                                                      |
+| `nginx/sebela.dev.conf`           | Reference configuration of the nginx managed by the server's hosting panel site that proxies sebela.dev to the website                                             |
+| `scripts/deploy.sh`               | The deployment and rollback, run only as the `deploy` user's forced SSH command or by the owner                                                                    |
+| `scripts/backup.sh`               | The encrypted backup of the production database to the `sebela-backups` zone, with retention                                                                       |
+| `scripts/restore.sh`              | Lists and fetches backups and restores a decrypted dump into a chosen database, comparing rows                                                                     |
+| `scripts/clear-demo.sh`           | Backs up, then clears the fictional demo content, leaving an empty, migrated database                                                                              |
+| `scripts/bunny-edge-addresses.sh` | Writes the Bunny CDN edge addresses nginx trusts for the visitor's address, then tests and reloads nginx (root, daily)                                             |
+| `scripts/backup-common.sh`        | The settings and storage helpers the three scripts above share (sourced, never run)                                                                                |
+| `crons.txt`                       | The server's scheduled jobs, entered once in the hosting panel: the nightly backup and, once the chat is on, the daily chat deletion and the hourly trace deletion |
+| `pnpm/`                           | pnpm for the API, website and MCP Admin images: a manifest and npm lockfile installed with `npm ci` (below)                                                        |
 
 ## The production stack
 
