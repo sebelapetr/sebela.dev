@@ -210,6 +210,22 @@ async def test_spans_carry_langfuse_types_models_usage_and_the_outcome() -> None
     assert cost == {"total": item.usage.cost_usd}
 
 
+def test_a_quick_span_at_a_stage_boundary_belongs_to_the_stage_that_just_started() -> None:
+    # Whole milliseconds: Security ends at 5 ms, Main starts at 5 ms, and an instant model call
+    # at 5 ms lies in both. It is Main's, though Security is the shorter stage.
+    spans = [
+        Span(name="stage.security", status="ok", start_ms=0, duration_ms=5),
+        Span(name="model.security", status="ok", start_ms=0, duration_ms=4),
+        Span(name="stage.main", status="ok", start_ms=5, duration_ms=30),
+        Span(name="model.main", status="ok", start_ms=5, duration_ms=0),
+        Span(name="tool.get_profile", status="ok", start_ms=6, duration_ms=0),
+    ]
+    named = by_name(build(record(spans)))
+    assert named["model.security"]["parentSpanId"] == named["stage.security"]["spanId"]
+    assert named["model.main"]["parentSpanId"] == named["stage.main"]["spanId"]
+    assert named["tool.get_profile"]["parentSpanId"] == named["stage.main"]["spanId"]
+
+
 def test_failed_attempts_and_retries_are_visible_as_levels_and_attempts() -> None:
     spans = [
         Span(name="stage.main", status="error", start_ms=0, duration_ms=40),
