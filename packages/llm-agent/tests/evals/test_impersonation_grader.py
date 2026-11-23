@@ -256,13 +256,19 @@ PLAYFUL_FORBIDDEN_BEFORE_363 = frozenset(
 PLAYFUL_FORBIDDEN_COMPACTION = frozenset(
     f"{family}-{language}" for family in ("C03", "C04", "C06") for language in ("en", "cs")
 )
+#: The trace export cases (#214) are useful answers too.
+PLAYFUL_FORBIDDEN_TRACE_EXPORT = frozenset({"C07-en", "C07-cs"})
 
 
 def test_every_other_case_keeps_the_playful_refusal_forbidden() -> None:
     forbidding = {
         case.id for case in cases.CASES if cases.PLAYFUL_REFUSAL in case.expectation.forbidden_text
     }
-    assert forbidding == (PLAYFUL_FORBIDDEN_BEFORE_363 - set(S10)) | PLAYFUL_FORBIDDEN_COMPACTION
+    assert forbidding == (
+        (PLAYFUL_FORBIDDEN_BEFORE_363 - set(S10))
+        | PLAYFUL_FORBIDDEN_COMPACTION
+        | PLAYFUL_FORBIDDEN_TRACE_EXPORT
+    )
 
 
 @pytest.mark.parametrize(

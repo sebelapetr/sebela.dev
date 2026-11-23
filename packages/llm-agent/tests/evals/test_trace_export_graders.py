@@ -225,7 +225,9 @@ def test_a_visitor_value_in_a_span_name_or_the_resource_fails() -> None:
     data["resourceSpans"][0]["resource"]["attributes"].append(
         attribute("host.name", "callum.whitfield@harrowgate.example.com")
     )
-    data["resourceSpans"][0]["scopeSpans"][0]["spans"][1]["name"] = "tool.Callum Whitfield"
+    data["resourceSpans"][0]["scopeSpans"][0]["spans"].append(
+        {"traceId": TRACE, "spanId": "e" * 16, "name": "tool.Callum Whitfield", "attributes": []}
+    )
     assert failures("C07-en", exported("C07-en", data)) == [
         "export 1: the visitor value 'Callum Whitfield' reached the export",
         "export 1: the visitor value 'callum.whitfield@harrowgate.example.com' reached the export",
@@ -294,14 +296,15 @@ def test_export_failures_also_fail_the_deterministic_grade() -> None:
 
 async def test_the_provider_captures_the_export_the_ai_service_would_send() -> None:
     """The real agent with scripted models: the visitor's name planted in the Security reason and
-    in a tool argument still never reaches the captured body, which is metadata-only for want of
-    an accepted detector."""
+    his email planted as a record slug (a tool argument) still never reach the captured body,
+    which is metadata-only for want of an accepted detector."""
     case = BY_ID["C07-en"]
     assert case.trace_export is not None
     models = ScriptedModels(
         security=[verdict(reason="Callum Whitfield, 27 Larkspur Road")],
         main=[
-            tools("get_profile", args={"note": "callum.whitfield@harrowgate.example.com"}),
+            tools("get_profile"),
+            tools("get_project", args={"slug": "callum.whitfield@harrowgate.example.com"}),
             draft(),
         ],
     )
