@@ -98,6 +98,14 @@ The retrieval evals of `packages/memory/evals/` (`packages/memory/AGENTS.md`, Ev
 - Cases the system cannot answer yet (`plan.js`) are reported pending, never passed; without the key every case is pending (exit code 2). Publish paid baselines to `evals/results/` with their cost, and post the cumulative spend in the pull request.
 - Ordinary tests never call the provider: the deterministic fake embedder is a bag of words, so a test query uses the target record's own words and a no-evidence query uses words absent from the seed. `evals/evals.test.ts` checks dataset, graders, plan and options with `pnpm test`.
 
+### Trace pseudonymization evals
+
+The pseudonymization corpus of `packages/llm-agent/evals/pii/` measures what the trace export would remove, with no model provider and no cost (`packages/llm-agent/AGENTS.md`, Trace pseudonymization).
+
+- `uv run --locked python -m evals.pii [--detector <folder>]` in `packages/llm-agent` scores the rules, or the rules with a pinned local detector folder, on the frozen bilingual span-labelled corpus and reports span precision, recall and counts per category and per language, never one anonymity percentage. It exits 1 when a floor of `evals/pii/floors.json` fails and refuses a corpus whose checksum differs from the one the floors pin.
+- The corpus and floors were frozen before any candidate was compared; floors are never lowered to let a candidate pass. A candidate that misses a floor keeps the export metadata-only.
+- `tests/evals/test_pii_corpus.py` checks the corpus, its checksum, the floors and the scoring with the ordinary tests.
+
 ## Knowledge publication and source privacy
 
 - Phase 9 tests the terminal ingest boundary before implementation: supported formats/extraction limits, local sensitivity checks, approval tied to content/version, no external embedding call before approval and no public access to pending/rejected material.
