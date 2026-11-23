@@ -7,6 +7,7 @@
 export type ChatRelayRoute =
   | { readonly kind: "conversation" }
   | { readonly kind: "messages" }
+  | { readonly kind: "compact" }
   | { readonly kind: "operation"; readonly operationId: string }
   | { readonly kind: "events"; readonly operationId: string }
   | { readonly kind: "stop"; readonly operationId: string }
@@ -104,6 +105,7 @@ async function readBounded(
 const methods: Readonly<Record<ChatRelayRoute["kind"], string>> = {
   conversation: "GET",
   messages: "POST",
+  compact: "POST",
   operation: "GET",
   events: "GET",
   stop: "POST",
@@ -113,7 +115,12 @@ const methods: Readonly<Record<ChatRelayRoute["kind"], string>> = {
 };
 
 /** The routes whose body is relayed, bounded; every other route's body stays on the website. */
-const withBody: ReadonlySet<ChatRelayRoute["kind"]> = new Set(["messages", "retry", "clear"]);
+const withBody: ReadonlySet<ChatRelayRoute["kind"]> = new Set([
+  "messages",
+  "compact",
+  "retry",
+  "clear",
+]);
 
 function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
   switch (route.kind) {
@@ -131,6 +138,8 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
       return "/v1/chat/conversation";
     case "messages":
       return "/v1/chat/conversation/messages";
+    case "compact":
+      return "/v1/chat/conversation/compact";
     case "usage":
       return "/v1/chat/usage";
     case "operation":
@@ -148,7 +157,7 @@ function upstreamPath(request: Request, route: ChatRelayRoute): string | null {
  * Builds the relay. It forwards only the headers the visitor routes read (cookie, origin, content
  * type, accept, last event ID), adds its token and, with trusted proxy hops, the visitor's address
  * from X-Forwarded-For counted from the right, and never an API key or authorisation. Only a
- * question, a retry and a clear carry a body (a stop never does); one over `chatRelayMaxBodyBytes`
+ * question, a compaction, a retry and a clear carry a body (a stop never does); one over `chatRelayMaxBodyBytes`
  * is refused with 413, an operation ID that is not a UUID with 404, both without reaching the API. The answer keeps the API's status and body stream with its
  * content type, every cookie and Retry-After, is never cached, and an event stream is marked
  * unbuffered. Without its settings, or with an API it cannot reach, it answers 503 `unavailable`.
