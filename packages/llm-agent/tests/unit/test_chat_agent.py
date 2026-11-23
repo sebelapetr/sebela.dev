@@ -265,6 +265,41 @@ def test_the_unpublished_flag_covers_only_the_fact_the_visitor_asked_for() -> No
         assert excluded in flat
 
 
+def test_the_main_agent_claims_no_exclusivity_the_records_do_not_show() -> None:
+    """#442: C03-cs called one of two projects without an end date the only active project."""
+    rule = CHAT_PROMPT.split("\n3. ", 1)[1].split("\n4. ", 1)[0]
+    flat = " ".join(rule.split()).lower()
+    assert "never call a record the only one of its kind" in flat
+    assert "unless every record of that kind you read shows it" in flat
+    assert "two records without an end date" in flat
+
+
+def test_the_main_agent_cites_only_the_records_its_text_uses() -> None:
+    """#442: C03-cs r1 and the phase-6 Q15-en r1 cited records that no claim of the text used."""
+    field = CHAT_PROMPT.split("- source_refs:", 1)[1].split("\n- ", 1)[0]
+    flat = " ".join(field.split())
+    assert "and no other ref" in flat
+    assert "never a record you read but your text does not use" in flat
+
+
+def test_the_main_agent_answers_a_question_whose_other_part_is_not_published() -> None:
+    """#442: C03-cs r2 and r3 named the best-fitting project and that the team size is still not
+    published, and still chose insufficient_evidence."""
+    rule = CHAT_PROMPT.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
+    flat = " ".join(rule.split())
+    assert (
+        "When the records answer one part of a question and another part is not published" in flat
+    )
+    assert "the outcome is answered" in flat
+
+
+def test_the_main_agent_names_a_gap_only_after_reading_the_tools_that_could_fill_it() -> None:
+    """#442: C03-cs r1 said the records show no rerankers without reading list_explorations."""
+    rule = CHAT_PROMPT.split("\n5. ", 1)[1].split("\n6. ", 1)[0]
+    flat = " ".join(rule.split())
+    assert "only after reading the tools that could show it" in flat
+
+
 async def test_an_unknown_answer_whose_contact_read_fails_is_unavailable() -> None:
     models = ScriptedModels(
         security=[verdict()],

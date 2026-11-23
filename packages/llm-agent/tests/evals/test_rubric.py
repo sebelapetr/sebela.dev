@@ -80,7 +80,17 @@ def test_the_judge_sees_the_trusted_contact_card_the_visitor_is_shown() -> None:
     assert shown["answer"]["contact_card"] == fixture_contact()
     assert rubric.judge_input(CASE, record("Q01-en"))["answer"]["contact_card"] is None
     assert "contact_card" in rubric.JUDGE_INSTRUCTIONS
-    assert rubric.RUBRIC_VERSION == "rubric-v5"
+    assert rubric.RUBRIC_VERSION == "rubric-v6"
+
+
+def test_the_judge_reads_stored_statuses_as_the_chat_prompt_does() -> None:
+    """#442: rule 4 of the chat prompt reads "built" as delivered work; a judge that did not know
+    that marked "Answer grader is delivered work" unsupported (C04-cs r3 of #213)."""
+    flat = " ".join(rubric.JUDGE_INSTRUCTIONS.split())
+    assert '"built" work is delivered work' in flat
+    assert '"tested" work was only tried and is not built or delivered' in flat
+    assert '"designed" work is a design that is not implemented' in flat
+    assert rubric.RUBRIC_VERSION == "rubric-v6"
 
 
 def test_the_judge_sees_the_structured_blocks_the_visitor_is_shown() -> None:

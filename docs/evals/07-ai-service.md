@@ -7,23 +7,23 @@ Every figure below is copied from the issue or pull request it names. Nothing wa
 ## Summary
 
 - The eight paired families C01–C08 of `.plan/07-ai-service/evals.md` are each implemented once ([Families](#families)). The deterministic ones (C01, C02, C08) run on fakes in ordinary CI. The ten paid cases (C03–C07, EN and CS) are in the Python agent runner beside phase 6's 80 cases (`packages/llm-agent/evals/catalogue.py`, 90 in all).
-- Issue gates so far: critical C05/C06 and C07 passed their issue runs; the ordinary C03-cs and C04-cs gates are each one miss in three below the 90% floor, left to [#442][i442] and the phase-PR run.
+- Issue gates so far: critical C05/C06 and C07 passed their issue runs; after [#442][i442] (`rubric-v6`, chat prompt `147163f83ce3`) C04-cs passes 3/3 and C03-cs is still one miss in three (an `insufficient_evidence` outcome on an answered question) below the 90% floor; C03-en, C04-en and the phase-6 S cases on the new subject are left to the phase-PR run.
 - The full phase-6 plus phase-7 catalogue (3 repeats, pinned judge) has **not run** on the final phase state. It runs once on the phase pull request when the owner marks it ready, or by manual dispatch ([How the final run starts](#how-the-final-run-starts)).
 - Trace export is **metadata only**: no PII detector is accepted, so no visitor content leaves the process ([PII corpus](#pii-corpus-and-trace-export)).
 - Production grading of real visitor answers moved to [#448][i448], outside phase 7. Phase 7 is accepted on the fixture evals; no real conversation is sent to a cloud judge in this phase ([Grading real answers](#grading-real-answers)).
 
 ## Families
 
-| Family | Kind           | Where it runs                                                                                                                                                                   | Status on the phase branch                                            |
-| ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| C01    | Deterministic  | Disconnect, reload, Stop and retry complete the operation once: `apps/ai-service/tests/integration/test_chat_stack.py` through the real API and AI service with a fake provider | Green in CI; critical assertions at 100%                              |
-| C02    | Deterministic  | Two tabs share one active operation and a stranger sees none: the same file and `apps/api/src/chat.test.ts`                                                                     | Green in CI; critical assertions at 100%                              |
-| C03    | Paid, ordinary | Python agent runner, EN and CS, 3 repeats, pinned judge                                                                                                                         | Issue run: useful EN 3/3, CS 2/3 ([#213][i213]); CS below floor, #442 |
-| C04    | Paid, ordinary | The same                                                                                                                                                                        | Issue run: useful EN 3/3, CS 2/3 ([#213][i213]); CS below floor, #442 |
-| C05    | Paid, critical | The same                                                                                                                                                                        | Issue run 12/12 together with C06 ([#213][i213]); final run pending   |
-| C06    | Paid, critical | The same                                                                                                                                                                        | See C05                                                               |
-| C07    | Paid, critical | The same, with a capturing trace sink (nothing is sent)                                                                                                                         | Issue run `run-20261123T170748Z-1205854`: 6/6 ([#446][p446])          |
-| C08    | Deterministic  | Classifier, provider, tool or compaction failure gives the safe state: `packages/llm-agent/tests/unit/test_compaction.py` with a scripted model                                 | Green in CI; critical assertions at 100%                              |
+| Family | Kind           | Where it runs                                                                                                                                                                   | Status on the phase branch                                                |
+| ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| C01    | Deterministic  | Disconnect, reload, Stop and retry complete the operation once: `apps/ai-service/tests/integration/test_chat_stack.py` through the real API and AI service with a fake provider | Green in CI; critical assertions at 100%                                  |
+| C02    | Deterministic  | Two tabs share one active operation and a stranger sees none: the same file and `apps/api/src/chat.test.ts`                                                                     | Green in CI; critical assertions at 100%                                  |
+| C03    | Paid, ordinary | Python agent runner, EN and CS, 3 repeats, pinned judge                                                                                                                         | EN 3/3 ([#213][i213]); CS 2/3 after [#442][i442], below floor; EN pending |
+| C04    | Paid, ordinary | The same                                                                                                                                                                        | EN 3/3 ([#213][i213]); CS 3/3 after [#442][i442]; EN pending              |
+| C05    | Paid, critical | The same                                                                                                                                                                        | Issue run 12/12 together with C06 ([#213][i213]); final run pending       |
+| C06    | Paid, critical | The same                                                                                                                                                                        | See C05                                                                   |
+| C07    | Paid, critical | The same, with a capturing trace sink (nothing is sent)                                                                                                                         | Issue run `run-20261123T170748Z-1205854`: 6/6 ([#446][p446])              |
+| C08    | Deterministic  | Classifier, provider, tool or compaction failure gives the safe state: `packages/llm-agent/tests/unit/test_compaction.py` with a scripted model                                 | Green in CI; critical assertions at 100%                                  |
 
 A pending, skipped, missing-key or insufficient-budget case is reported as pending and never as a pass (`packages/llm-agent/AGENTS.md`, Evals).
 
@@ -46,9 +46,9 @@ The phase-PR run fills these from its redacted `summary.json` (artifact `llm-age
 
 ## Cost
 
-The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the C07 run of [#446][p446]:
+The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the second C03-cs/C04-cs run of [#442][i442]:
 
-`spend: expected 0.0092 USD, actual 0.0113 USD (uncertain 0.0000); 3.6716 USD of the 07-ai-service ceiling (4.00 USD) remain`
+`spend: expected 0.0582 USD, actual 0.0417 USD (uncertain 0.0000); 3.5825 USD of the 07-ai-service ceiling (4.00 USD) remain`
 
 Each worktree keeps its own ledger, so that remainder counts only what the ledgers it saw recorded; the owner sets `LLM_AGENT_EVAL_ALLOWANCE_USD` to the campaign's true remainder before marking the phase pull request ready.
 
@@ -72,7 +72,7 @@ Neither needs a real conversation (they use the fictional fixtures). They stay o
 - **Latency workload command** (S07 item 5): a command that runs the 20 `comparison-v1` cases x 3 repeats at concurrency 1 and 4, Haiku only, no judge. The current comparison mode runs 1 repeat with the judge. Not built: it is a new measurement mode (first status and first approved content timing at two concurrencies) rather than a small change, and its one paid run (about USD 0.25, allowed from the phase-PR reserve) belongs to S07. It stays a follow-up of the owner's S07 work.
 - **Langfuse annotation queue** (S07 item 6) with the 12 stored phase-PR answers: needs Langfuse credentials and the stored answers of the paid phase-PR run, neither of which exists before that run.
 - **Production grading batch:** [#448][i448].
-- **[#442][i442]** (C03-cs and C04-cs misses) stays open and is settled before the phase-PR run.
+- **[#442][i442]** fixed the judge's reading of `built`, the false only-current claim and unused citations; the C03-cs outcome choice remains one miss in three and needs an owner decision before the phase-PR run.
 
 ## How the final run starts
 

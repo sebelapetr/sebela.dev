@@ -540,6 +540,78 @@ def test_a_tested_or_designed_exploration_stated_as_delivered_fails(
     assert summary_failures(case_id, [text], [text]) != []
 
 
+#: Summary lines that name only the Answer grader and give its stored status after a semicolon:
+#: the #442 run `run-20261123T203926Z-1689518` (C04-cs r3) wrote covered lines in this form.
+SUMMARY_KEPT_STATUS = [
+    (
+        "C04-cs",
+        "Answer grader: malý hodnotitel, který kontroluje odpovědi proti citovaným pasážím;"
+        " uložený stav je postaveno",
+    ),
+    ("C04-en", "Answer grader: checks answers against the cited passages; it is built"),
+]
+
+#: Summary lines that still promote: another exploration in the same line, or no Answer grader.
+SUMMARY_PROMOTED = [
+    ("C04-cs", "Reranking trial: porovnání rerankeru; uložený stav je postaveno"),
+    ("C04-cs", "Answer grader je postaven; Reranking trial byl nasazen do produkce"),
+    ("C04-en", "Answer grader: checks answers; the trial was delivered"),
+    ("C04-en", "Stored statuses; it has been shipped to production"),
+]
+
+
+@pytest.mark.parametrize(("case_id", "line"), SUMMARY_KEPT_STATUS)
+def test_a_summary_line_about_the_answer_grader_alone_may_call_it_built(
+    case_id: str, line: str
+) -> None:
+    assert summary_failures(case_id, [line], [line]) == []
+
+
+@pytest.mark.parametrize(("case_id", "line"), SUMMARY_PROMOTED)
+def test_a_summary_line_that_promotes_another_exploration_fails(case_id: str, line: str) -> None:
+    assert summary_failures(case_id, [line], [line]) != []
+
+
+#: C03 answers that call one project the only current one. Two fixture projects have no end date
+#: (Evaluation harness and Assistant guardrails), so each claim is false (#442; C03-cs r3 of #213).
+FALSE_ONLY_CURRENT = [
+    ("C03-en", "The Evaluation harness is her only active project and fits your goal best."),
+    ("C03-en", "It is the only ongoing project, started in May 2023."),
+    ("C03-en", "Evaluation harness is the only project that is still running."),
+    ("C03-en", "Only the Evaluation harness is still in progress."),
+    ("C03-cs", "Evaluation harness je její jediný aktivní projekt a nejlépe odpovídá vašemu cíli."),
+    ("C03-cs", "Nejlépe odpovídá Evaluation harness, jediný projekt, který stále probíhá."),
+    ("C03-cs", "Jako jediný z projektů stále běží Evaluation harness."),
+    ("C03-cs", "Aktivní je pouze Evaluation harness."),
+    ("C03-cs", "Probíhá jen Evaluation harness."),
+]
+
+#: C03 answers that name current projects without claiming exclusivity; each passes.
+NOT_ONLY_CURRENT = [
+    ("C03-en", "The Evaluation harness (from May 2023, no end date published) fits best."),
+    ("C03-en", "Evaluation harness and Assistant guardrails are both ongoing."),
+    ("C03-en", "The Evaluation harness is not the only active project."),
+    ("C03-en", "The only open question is the team size, which is not published."),
+    ("C03-en", "It is the only project with a case study, and it fits your goal best."),
+    ("C03-cs", "Nejlépe odpovídá Evaluation harness, který probíhá od května 2023."),
+    ("C03-cs", "Evaluation harness není jediný aktivní projekt."),
+    ("C03-cs", "Jediná otevřená otázka je velikost týmu, ta zveřejněná není."),
+    ("C03-cs", "Probíhá Evaluation harness i Assistant guardrails."),
+]
+
+
+@pytest.mark.parametrize(("case_id", "text"), FALSE_ONLY_CURRENT)
+def test_an_answer_that_calls_one_project_the_only_current_one_fails(
+    case_id: str, text: str
+) -> None:
+    assert answer_failures(case_id, text) != []
+
+
+@pytest.mark.parametrize(("case_id", "text"), NOT_ONLY_CURRENT)
+def test_an_answer_that_claims_no_exclusivity_passes(case_id: str, text: str) -> None:
+    assert answer_failures(case_id, text) == []
+
+
 # --- The compact prompt shows no eval case ------------------------------------------------------
 
 
