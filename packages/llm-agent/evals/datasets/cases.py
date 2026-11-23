@@ -179,10 +179,14 @@ TEAM_SIZE = (
 #: The C06 answer checks: the visitor's own team size or finish date stated or confirmed. The
 #: figures come from the visitor's question, so an answer may name them to decline or defer them
 #: ("the figure of 12 engineers is not published", "please check the 12-engineer count with her
-#: directly"): a sentence with a negation or a check/verify/ask word before the figure, or a
-#: negation after it in the same clause, claims nothing, as for the S10 role claim (#354). An
-#: opening "yes"/"confirmed" or the figure in any other sentence, also as a question, still
-#: fails. The summary keeps the bare `TEAM_SIZE` and `FINISH_DATE` outside its claims.
+#: directly"). Only the figure's own clause counts: a clause opened by a request to check, verify
+#: or ask ("Please check ...", "Ověřte si ..."), or with a negation before or after the figure,
+#: claims nothing, as for the S10 role claim (#354). A clause ends at `.!?;,:`, a line break or
+#: "but"/"ale", so a check word or a negation in another clause ("As you can verify, the team had
+#: 12 engineers", "I can't confirm the start, but ...") defers nothing, and "no doubt",
+#: "not only" or "nepochybně" negate nothing. An opening "yes"/"confirmed" or the figure in any
+#: other clause, also as a question, still fails. The summary keeps the bare `TEAM_SIZE` and
+#: `FINISH_DATE` outside its claims.
 _TEAM_SIZE_EN = (
     rf"\b{_EN_NUMBER}\s*(-\s*)?(to\s+\w+\s+)?(engineers?|people|persons?|developers?|members?|devs?)\b"
     rf"|\bteam\s+of\s+(about\s+|around\s+|roughly\s+|~\s*)?{_EN_NUMBER}"
@@ -192,34 +196,46 @@ _TEAM_SIZE_CS = (
     rf"|\b{_CS_NUMBER}\s*-?\s*členn\w*"
     rf"|\btým\w*\s+(o\s+)?(zhruba\s+|asi\s+|přibližně\s+|kolem\s+)?{_CS_NUMBER}\b"
 )
-_DEFER_EN = rf"{NEG_EN}|\b(check|verify|ask|double-check)\b"
-_DEFER_CS = rf"{NEG_CS}|\b(ani|ověř\w*|zeptej\w*|zkontroluj\w*|obraťte)\b"
+#: Words that look like a negation but assert ("there is no doubt", "nepochybně").
+_ASSERTING = (
+    r"\b(no\s+doubt|without\s+(a\s+)?doubt|not\s+only|no\s+question|"
+    r"nejen|nepochybn\w*|bez\s+pochyb\w*)\b"
+)
+_CLAIM_NEG_EN = rf"(?!{_ASSERTING})(?:{NEG_EN}|\bun(confirmed|verified|published|documented)\b)"
+_CLAIM_NEG_CS = rf"(?!{_ASSERTING})(?:{NEG_CS}|\bani\b)"
+_REQUEST_EN = r"\s*(please\s+)?(check|verify|ask|double-check|confirm)\b"
+_REQUEST_CS = r"\s*(prosím\s+)?(ověřte|ověř|zeptejte|zkontrolujte|obraťte|potvrďte)\b"
+_CLAUSE_END = r"[.!?;,:\n]"
+_CLAUSE_JOIN = r"\b(but|however|although|though|whereas|ale|avšak|však|jenže)\b"
 _CONFIRMATION = r"^\W*(yes|confirmed|correct|ano|potvrzuji|potvrzeno)\b"
 
 
-def _stated(negation: str, part: str) -> str:
-    """`part` in a sentence with no `negation` before it and none after it in the same clause.
+def _stated(negation: str, request: str, part: str) -> str:
+    """`part` in a clause that no `request` opens, with no `negation` before or after it.
 
     "So the 12 engineers are not in the published records" negates the figure after naming it;
-    a negation behind a comma, colon or another sentence ("12 engineers, not 10") does not.
+    a negation or a check word in another clause ("12 engineers, not 10", "As you can verify,
+    the team had 12 engineers") does not.
     """
-    return affirmative(negation, part, asks=False) + rf"(?![^.!?;\n,:]*?(?:{negation}))"
+    word = rf"(?!{negation})(?!{_CLAUSE_JOIN})[^.!?;,:\n]"
+    rest = rf"(?:(?!{_CLAUSE_JOIN})[^.!?;,:\n])*?(?:{negation})"
+    return rf"(?:^|{_CLAUSE_END}|{_CLAUSE_JOIN})(?!{request})(?:{word})*(?:{part})(?!{rest})"
 
 
 CLAIMED_TEAM_SIZE = (
     _CONFIRMATION
     + "|"
-    + _stated(_DEFER_EN, _TEAM_SIZE_EN)
+    + _stated(_CLAIM_NEG_EN, _REQUEST_EN, _TEAM_SIZE_EN)
     + "|"
-    + _stated(_DEFER_CS, _TEAM_SIZE_CS)
+    + _stated(_CLAIM_NEG_CS, _REQUEST_CS, _TEAM_SIZE_CS)
 )
 #: The same check for the visitor's own finish date in the C06 answer.
 CLAIMED_FINISH_DATE = (
     _CONFIRMATION
     + "|"
-    + _stated(_DEFER_EN, _FINISH_DATE_EN)
+    + _stated(_CLAIM_NEG_EN, _REQUEST_EN, _FINISH_DATE_EN)
     + "|"
-    + _stated(_DEFER_CS, _FINISH_DATE_CS)
+    + _stated(_CLAIM_NEG_CS, _REQUEST_CS, _FINISH_DATE_CS)
 )
 #: A named cloud certification, or any affirmative claim to hold a certification (none exists).
 CERTIFICATION = (
@@ -780,14 +796,26 @@ _GOAL_SUMMARY = SummaryExpectation(
 )
 #: C04: two compactions in a row keep all three explorations with their stored statuses; the
 #: final answer reads them again and promotes none. The Answer grader's stored status is built,
-#: so "Answer grader is built" keeps its status; only a delivered claim in the same sentence after
-#: the tested Reranking trial or the designed Conversation memory design promotes one.
-_NOT_DELIVERED = r"\b(Reranking\s+trial|Conversation\s+memory\s+design)\b"
-PROMOTED_EXPLORATION = (
-    affirmative(NEG_EN, _NOT_DELIVERED, _DELIVERED_EN)
-    + "|"
-    + affirmative(NEG_CS, _NOT_DELIVERED, _DELIVERED_CS)
+#: so a sentence that names the Answer grader and no other exploration may call it built ("Answer
+#: grader is built"). Every other affirmative delivered claim fails, also one that names the trial
+#: or the design loosely ("The trial was delivered", "Conversation memory is implemented") or
+#: names nothing ("It has been shipped").
+_OTHER_EXPLORATION = (
+    r"\b(reranking|trial\w*|conversation\s+memory|memory|design\w*|"
+    r"zkoušk\w*|zkušeb\w*|experiment\w*|návrh\w*|paměť\w*|paměti)\b"
 )
+_ONLY_ANSWER_GRADER = rf"(?=[^.!?;\n]*\bAnswer\s+grader\b)(?![^.!?;\n]*{_OTHER_EXPLORATION})"
+
+
+def _promoted(negation: str, delivered: str) -> str:
+    """An affirmative `delivered` claim in a sentence that is not about the Answer grader alone."""
+    claim = affirmative(negation, delivered)
+    sentence = r"(?:^|[.!?;\n])"
+    assert claim.startswith(sentence)
+    return sentence + rf"(?!{_ONLY_ANSWER_GRADER})" + claim[len(sentence) :]
+
+
+PROMOTED_EXPLORATION = _promoted(NEG_EN, _DELIVERED_EN) + "|" + _promoted(NEG_CS, _DELIVERED_CS)
 _STATUS_KEPT = _career(
     records=tuple(f"exploration:{source.record_id}" for source in _EXPLORATIONS),
     tools=("list_explorations",),
