@@ -210,20 +210,31 @@ async def test_spans_carry_langfuse_types_models_usage_and_the_outcome() -> None
     assert cost == {"total": item.usage.cost_usd}
 
 
-def test_a_quick_span_at_a_stage_boundary_belongs_to_the_stage_that_just_started() -> None:
-    # Whole milliseconds: Security ends at 5 ms, Main starts at 5 ms, and an instant model call
-    # at 5 ms lies in both. It is Main's, though Security is the shorter stage.
+def test_a_span_belongs_to_the_stage_recorded_after_it_whatever_the_rounding() -> None:
+    # As the tracer records them: a span when it finishes, so a stage follows its own spans.
+    # Start and duration are rounded to whole milliseconds separately, so a span can seem to end
+    # up to 2 ms after its stage: here model.security after Security and the second model.main
+    # after Main, inside Output. Time alone would hang them on the root and on Output.
     spans = [
-        Span(name="stage.security", status="ok", start_ms=0, duration_ms=5),
-        Span(name="model.security", status="ok", start_ms=0, duration_ms=4),
-        Span(name="stage.main", status="ok", start_ms=5, duration_ms=30),
-        Span(name="model.main", status="ok", start_ms=5, duration_ms=0),
-        Span(name="tool.get_profile", status="ok", start_ms=6, duration_ms=0),
+        Span(name="model.security", status="ok", start_ms=7, duration_ms=1),
+        Span(name="stage.security", status="ok", start_ms=6, duration_ms=0),
+        Span(name="model.main", status="ok", start_ms=8, duration_ms=0),
+        Span(name="tool.get_profile", status="ok", start_ms=9, duration_ms=0),
+        Span(name="model.main", status="ok", start_ms=9, duration_ms=2),
+        Span(name="stage.main", status="ok", start_ms=8, duration_ms=1),
+        Span(name="stage.output", status="ok", start_ms=9, duration_ms=24),
     ]
-    named = by_name(build(record(spans)))
-    assert named["model.security"]["parentSpanId"] == named["stage.security"]["spanId"]
-    assert named["model.main"]["parentSpanId"] == named["stage.main"]["spanId"]
-    assert named["tool.get_profile"]["parentSpanId"] == named["stage.main"]["spanId"]
+    exported = exported_spans(build(record(spans)))
+    stages = {
+        span["name"]: span["spanId"] for span in exported if span["name"].startswith("stage.")
+    }
+    children = [span for span in exported if span["name"].split(".")[0] in {"model", "tool"}]
+    assert [span.get("parentSpanId") for span in children] == [
+        stages["stage.security"],
+        stages["stage.main"],
+        stages["stage.main"],
+        stages["stage.main"],
+    ]
 
 
 def test_failed_attempts_and_retries_are_visible_as_levels_and_attempts() -> None:
