@@ -14326,6 +14326,148 @@
         }
       }
     },
+    "/v1/internal/chat/operations/{operationId}/telemetry": {
+      "post": {
+        "operationId": "registerChatTelemetry",
+        "summary": "Register a chat trace before its export",
+        "description": "Internal: the AI service registers each trace of a claimed operation before it exports it, and exports it only on `allowed`, within 10 minutes of the registration. The API deletes the remote copy at `expiresAt`, 30 days later, or when the conversation is deleted. `refused` means the trace must not be exported, because its conversation or operation is gone or it is already owed a deletion; `expiresAt` is then when its remote copy, should one exist, is deleted. A repeat answers alike.",
+        "security": [
+          {
+            "controlToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTelemetryRegistration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the trace may be exported, and when its remote copy is deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTelemetryRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the control token is missing or wrong; no API key is accepted.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the grant is not the operation's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the operation's grant has not been claimed, or the trace is another operation's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -18686,6 +18828,25 @@
         "required": [
           "kind",
           "recordId"
+        ],
+        "additionalProperties": false
+      },
+      "ChatTelemetryRegistration": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "traceId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        },
+        "required": [
+          "grant",
+          "traceId"
         ],
         "additionalProperties": false
       },
@@ -24189,6 +24350,33 @@
           "effort",
           "pricingVersion",
           "contextRevision"
+        ],
+        "additionalProperties": false
+      },
+      "ChatTelemetryRegistered": {
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "export": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "refused"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "traceId",
+          "export",
+          "expiresAt"
         ],
         "additionalProperties": false
       },

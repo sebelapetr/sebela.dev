@@ -12,6 +12,8 @@ import {
   chatHistoryExchangeLimit,
   chatRetentionDaysDefault,
   chatReplayEvents,
+  chatTelemetryExportHorizonMs,
+  chatTelemetryRetentionDays,
   chatTerminalForGeneration,
   type ChatAssistantMessage,
   type ChatCompactionResult,
@@ -45,6 +47,7 @@ import {
   spendWindows,
   windowEnd,
 } from "./policy.js";
+import { runTelemetryDeletion } from "./telemetry.js";
 import type {
   ChatCaller,
   ChatCompactResult,
@@ -55,6 +58,7 @@ import type {
   ChatService,
   ChatServiceOptions,
   ChatSubmitResult,
+  ChatTelemetryOutcome,
 } from "./types.js";
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -848,12 +852,34 @@ export function createChatService(
       );
     },
 
-    registerTelemetry() {
-      return Promise.reject(new Error("Not implemented."));
+    async registerTelemetry(operationId, registration): Promise<ChatTelemetryOutcome> {
+      if (!uuidPattern.test(operationId)) return { status: "wrong_grant" };
+      const at = now();
+      const result = await persistence.registerTelemetry({
+        operationId,
+        verifier: digest(registration.grant),
+        traceId: registration.traceId,
+        at,
+        exportUntil: new Date(at.getTime() + chatTelemetryExportHorizonMs),
+        expiresAt: new Date(at.getTime() + chatTelemetryRetentionDays * dayMs),
+      });
+      if (result.status === "recorded" || result.status === "refused") {
+        const allowed = result.status === "recorded";
+        return {
+          status: "registered",
+          registered: {
+            traceId: registration.traceId,
+            export: allowed ? "allowed" : "refused",
+            // A refused trace's expiry is when its remote copy, should one exist, is deleted.
+            expiresAt: (allowed ? result.expiresAt : result.deleteAfter).toISOString(),
+          },
+        };
+      }
+      return { status: result.status };
     },
 
-    deleteTelemetry() {
-      return Promise.reject(new Error("Not implemented."));
+    deleteTelemetry(run) {
+      return runTelemetryDeletion(persistence, run, now());
     },
 
     async usage(caller, context) {

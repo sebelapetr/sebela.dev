@@ -72,6 +72,9 @@ from .chat_source_record import ChatSourceRecord
 from .chat_source_record_kind import ChatSourceRecordKind
 from .chat_summary_reference import ChatSummaryReference
 from .chat_summary_reference_kind import ChatSummaryReferenceKind
+from .chat_telemetry_registered import ChatTelemetryRegistered
+from .chat_telemetry_registered_export import ChatTelemetryRegisteredExport
+from .chat_telemetry_registration import ChatTelemetryRegistration
 from .chat_usage import ChatUsage
 from .chat_usage_context_type_0 import ChatUsageContextType0
 from .chat_usage_context_type_1 import ChatUsageContextType1
@@ -320,6 +323,9 @@ __all__ = (
     "ChatSourceRecordKind",
     "ChatSummaryReference",
     "ChatSummaryReferenceKind",
+    "ChatTelemetryRegistered",
+    "ChatTelemetryRegisteredExport",
+    "ChatTelemetryRegistration",
     "ChatUsage",
     "ChatUsageContextType0",
     "ChatUsageContextType1",

@@ -156,7 +156,11 @@ describe("chat telemetry persistence", () => {
     const row = result.rows[0];
     return row === undefined
       ? undefined
-      : { ...row, next_attempt_at: new Date(row.next_attempt_at) };
+      : {
+          ...row,
+          next_attempt_at: new Date(row.next_attempt_at),
+          settled_at: row.settled_at === null ? null : new Date(row.settled_at),
+        };
   };
 
   const due = async (when: Date, limit = 1000) =>

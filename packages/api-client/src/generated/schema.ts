@@ -1554,6 +1554,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/internal/chat/operations/{operationId}/telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a chat trace before its export
+         * @description Internal: the AI service registers each trace of a claimed operation before it exports it, and exports it only on `allowed`, within 10 minutes of the registration. The API deletes the remote copy at `expiresAt`, 30 days later, or when the conversation is deleted. `refused` means the trace must not be exported, because its conversation or operation is gone or it is already owed a deletion; `expiresAt` is then when its remote copy, should one exist, is deleted. A repeat answers alike.
+         */
+        post: operations["registerChatTelemetry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -2761,6 +2781,10 @@ export interface components {
             recordId: string;
             /** @default  */
             title?: string;
+        };
+        ChatTelemetryRegistration: {
+            grant: string;
+            traceId: string;
         };
         Health: {
             /** @constant */
@@ -4118,6 +4142,13 @@ export interface components {
             effort: string | null;
             pricingVersion: string;
             contextRevision: number;
+        };
+        ChatTelemetryRegistered: {
+            traceId: string;
+            /** @enum {string} */
+            export: "allowed" | "refused";
+            /** Format: date-time */
+            expiresAt: string;
         };
         ChatBlockOutput: {
             /** @constant */
@@ -14367,6 +14398,108 @@ export interface operations {
                 };
             };
             /** @description `conflict`: the operation's grant has not been claimed, or its conversation was cleared. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    registerChatTelemetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatTelemetryRegistration"];
+            };
+        };
+        responses: {
+            /** @description Whether the trace may be exported, and when its remote copy is deleted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatTelemetryRegistered"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the control token is missing or wrong; no API key is accepted. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the grant is not the operation's. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the operation's grant has not been claimed, or the trace is another operation's. */
             409: {
                 headers: {
                     [name: string]: unknown;

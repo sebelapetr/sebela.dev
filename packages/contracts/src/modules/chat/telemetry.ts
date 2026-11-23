@@ -28,11 +28,17 @@ export type ChatTelemetryExportDecision = (typeof chatTelemetryExportDecisions)[
 
 const Instant = z.iso.datetime({ offset: true });
 
+/** An OpenTelemetry trace id: 32 lowercase hexadecimal characters, never all zero. */
+const TraceId = z
+  .string()
+  .regex(/^[0-9a-f]{32}$/)
+  .refine((value) => !/^0+$/.test(value), "An all-zero trace id is invalid.");
+
 /** The AI service's registration of one trace of an operation, under the operation's grant. */
 export const ChatTelemetryRegistrationSchema = z
   .strictObject({
-    grant: z.string().max(chatGrantMaxLength),
-    traceId: z.string(),
+    grant: z.string().min(1).max(chatGrantMaxLength),
+    traceId: TraceId,
   })
   .meta({ id: "ChatTelemetryRegistration" });
 
@@ -41,7 +47,7 @@ export type ChatTelemetryRegistration = z.infer<typeof ChatTelemetryRegistration
 /** The API's answer to a registration: export it, or not; repeated registrations answer alike. */
 export const ChatTelemetryRegisteredSchema = z
   .strictObject({
-    traceId: z.string(),
+    traceId: TraceId,
     export: z.enum(chatTelemetryExportDecisions),
     expiresAt: Instant,
   })

@@ -1037,14 +1037,128 @@ async function handOverTelemetry(tx: Transaction, conversationIds: readonly stri
   const moved = await tx
     .delete(telemetryReferences)
     .where(inArray(telemetryReferences.conversationId, [...conversationIds]))
-    .returning({ traceId: telemetryReferences.traceId });
+    .returning({
+      traceId: telemetryReferences.traceId,
+      exportUntil: telemetryReferences.exportUntil,
+    });
   if (moved.length > 0) {
     await tx
       .insert(telemetryDeletions)
-      .values(moved.map((row) => ({ traceId: row.traceId, requestedAt: at })))
+      .values(
+        moved.map((row) => ({
+          traceId: row.traceId,
+          requestedAt: at,
+          nextAttemptAt: latest(at, row.exportUntil),
+        })),
+      )
       .onConflictDoNothing();
   }
   return moved.length;
+}
+
+/** The later of two instants. */
+const latest = (first: Date, second: Date) => (first > second ? first : second);
+
+/**
+ * Owes a remote deletion of a trace that must not be exported, due no earlier than `notBefore`;
+ * returns when the deletion owed for it, new or earlier, is due.
+ */
+async function oweDeletion(tx: Transaction, traceId: string, at: Date, notBefore: Date) {
+  await tx
+    .insert(telemetryDeletions)
+    .values({ traceId, requestedAt: at, nextAttemptAt: latest(at, notBefore) })
+    .onConflictDoNothing();
+  const [row] = await tx
+    .select({ nextAttemptAt: telemetryDeletions.nextAttemptAt })
+    .from(telemetryDeletions)
+    .where(eq(telemetryDeletions.traceId, traceId));
+  if (row === undefined) throw new Error("No telemetry deletion was stored.");
+  return row.nextAttemptAt;
+}
+
+/**
+ * Registers one trace inside a transaction. The operation and its grant are read without a lock;
+ * the conversation is then locked for share, so a concurrent clear either waits for the reference
+ * and hands it over, or has already deleted the conversation and the trace is refused.
+ */
+async function registerWithin(
+  tx: Transaction,
+  input: ChatTelemetryRegistrationInput,
+): Promise<ChatTelemetryRegistrationResult> {
+  const refused = async (): Promise<ChatTelemetryRegistrationResult> => ({
+    status: "refused",
+    deleteAfter: await oweDeletion(tx, input.traceId, input.at, input.exportUntil),
+  });
+
+  const [operation] = await tx
+    .select({
+      conversationId: operations.conversationId,
+      verifier: grants.verifier,
+      claimedAt: grants.claimedAt,
+    })
+    .from(operations)
+    .innerJoin(grants, eq(grants.operationId, operations.id))
+    .where(eq(operations.id, input.operationId));
+  if (operation === undefined) {
+    const [tombstone] = await tx
+      .select({ verifier: operationTombstones.verifier })
+      .from(operationTombstones)
+      .where(eq(operationTombstones.operationId, input.operationId));
+    if (tombstone !== undefined && tombstone.verifier !== input.verifier) {
+      return { status: "wrong_grant" };
+    }
+  } else {
+    if (operation.verifier !== input.verifier) return { status: "wrong_grant" };
+    if (operation.claimedAt === null) return { status: "not_claimed" };
+  }
+
+  const recordedBefore = async (): Promise<ChatTelemetryRegistrationResult | null> => {
+    const [reference] = await tx
+      .select({
+        operationId: telemetryReferences.operationId,
+        expiresAt: telemetryReferences.expiresAt,
+      })
+      .from(telemetryReferences)
+      .where(eq(telemetryReferences.traceId, input.traceId));
+    if (reference === undefined) return null;
+    return reference.operationId === input.operationId
+      ? { status: "recorded", expiresAt: reference.expiresAt }
+      : { status: "trace_conflict" };
+  };
+  const owedBefore = async () => {
+    const [deletion] = await tx
+      .select({ traceId: telemetryDeletions.traceId })
+      .from(telemetryDeletions)
+      .where(eq(telemetryDeletions.traceId, input.traceId));
+    return deletion !== undefined;
+  };
+
+  const before = await recordedBefore();
+  if (before !== null) return before;
+  if (operation === undefined || (await owedBefore())) return refused();
+
+  const [conversation] = await tx
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.id, operation.conversationId))
+    .for("share");
+  // Re-checked under the lock: a clear or sweep may have handed the trace over meanwhile.
+  if (conversation === undefined || (await owedBefore())) return refused();
+
+  const [stored] = await tx
+    .insert(telemetryReferences)
+    .values({
+      traceId: input.traceId,
+      conversationId: conversation.id,
+      operationId: input.operationId,
+      recordedAt: input.at,
+      exportUntil: input.exportUntil,
+      expiresAt: input.expiresAt,
+    })
+    .onConflictDoNothing()
+    .returning({ expiresAt: telemetryReferences.expiresAt });
+  if (stored !== undefined) return { status: "recorded", expiresAt: stored.expiresAt };
+  return (await recordedBefore()) ?? refused();
 }
 
 export function createChatPersistence(db: Database): ChatPersistence {
@@ -2003,24 +2117,102 @@ export function createChatPersistence(db: Database): ChatPersistence {
       });
     },
 
-    registerTelemetry() {
-      return Promise.reject(new Error("Not implemented."));
+    async registerTelemetry(input) {
+      return db.transaction((tx) => registerWithin(tx, input));
     },
 
-    sweepExpiredTelemetry() {
-      return Promise.reject(new Error("Not implemented."));
+    async sweepExpiredTelemetry(at, limit) {
+      const now = at.toISOString();
+      const result = await db.execute<{ moved: number } & Record<string, unknown>>(sql`
+        WITH expired AS (
+          SELECT ${telemetryReferences.traceId} AS trace_id
+          FROM ${telemetryReferences}
+          WHERE ${telemetryReferences.expiresAt} <= ${now}::timestamptz
+          ORDER BY ${telemetryReferences.expiresAt}, ${telemetryReferences.traceId}
+          LIMIT ${limit}
+          FOR UPDATE SKIP LOCKED
+        ), moved AS (
+          DELETE FROM ${telemetryReferences}
+          WHERE ${telemetryReferences.traceId} IN (SELECT trace_id FROM expired)
+          RETURNING ${telemetryReferences.traceId} AS trace_id,
+            ${telemetryReferences.exportUntil} AS export_until
+        ), owed AS (
+          INSERT INTO ${telemetryDeletions} (trace_id, requested_at, next_attempt_at)
+          SELECT trace_id, ${now}::timestamptz, greatest(${now}::timestamptz, export_until)
+          FROM moved
+          ON CONFLICT DO NOTHING
+        )
+        SELECT count(*)::int AS moved FROM moved
+      `);
+      return result.rows[0]?.moved ?? 0;
     },
 
-    claimDueTelemetryDeletions() {
-      return Promise.reject(new Error("Not implemented."));
+    async claimDueTelemetryDeletions(at, limit, leaseUntil) {
+      const result = await db.execute<
+        { trace_id: string; requested_at: string | Date; attempts: number } & Record<
+          string,
+          unknown
+        >
+      >(sql`
+        WITH due AS (
+          SELECT ${telemetryDeletions.traceId} AS trace_id,
+            ${telemetryDeletions.nextAttemptAt} AS due_at
+          FROM ${telemetryDeletions}
+          WHERE ${telemetryDeletions.state} = 'pending'
+            AND ${telemetryDeletions.nextAttemptAt} <= ${at.toISOString()}::timestamptz
+          ORDER BY ${telemetryDeletions.nextAttemptAt}, ${telemetryDeletions.traceId}
+          LIMIT ${limit}
+          FOR UPDATE SKIP LOCKED
+        ), leased AS (
+          UPDATE ${telemetryDeletions}
+          SET next_attempt_at = ${leaseUntil.toISOString()}::timestamptz
+          FROM due
+          WHERE ${telemetryDeletions.traceId} = due.trace_id
+          RETURNING due.trace_id, due.due_at, ${telemetryDeletions.requestedAt} AS requested_at,
+            ${telemetryDeletions.attempts} AS attempts
+        )
+        SELECT trace_id, requested_at, attempts FROM leased ORDER BY due_at, trace_id
+      `);
+      return result.rows.map((row) => ({
+        traceId: row.trace_id,
+        requestedAt: new Date(row.requested_at),
+        attempts: row.attempts,
+      }));
     },
 
-    settleTelemetryDeletions() {
-      return Promise.reject(new Error("Not implemented."));
+    async settleTelemetryDeletions(settlement) {
+      if (settlement.traceIds.length === 0) return;
+      const owed = and(
+        inArray(telemetryDeletions.traceId, [...settlement.traceIds]),
+        eq(telemetryDeletions.state, "pending"),
+      );
+      if (settlement.outcome === "completed") {
+        await db
+          .update(telemetryDeletions)
+          .set({ state: "completed", settledAt: settlement.at })
+          .where(owed);
+        return;
+      }
+      const now = settlement.at.toISOString();
+      const next =
+        settlement.retryAt === null
+          ? sql`${now}::timestamptz + least(
+              ${settlement.backoffMs}::bigint * power(2, least(${telemetryDeletions.attempts}, 20))::bigint,
+              ${settlement.maxBackoffMs}::bigint
+            ) * interval '1 millisecond'`
+          : sql`${settlement.retryAt.toISOString()}::timestamptz`;
+      await db
+        .update(telemetryDeletions)
+        .set({ attempts: sql`${telemetryDeletions.attempts} + 1`, nextAttemptAt: next })
+        .where(owed);
     },
 
-    telemetryDeletionBacklog() {
-      return Promise.reject(new Error("Not implemented."));
+    async telemetryDeletionBacklog() {
+      const [row] = await db
+        .select({ pending: sql<number>`count(*)::int` })
+        .from(telemetryDeletions)
+        .where(eq(telemetryDeletions.state, "pending"));
+      return row?.pending ?? 0;
     },
 
     async usage(input) {
