@@ -226,6 +226,11 @@ def security_verdict(result: Mapping[str, Any]) -> str | None:
     return None
 
 
+def handled_by(result: Mapping[str, Any]) -> str | None:
+    """Stub for the red test (#394)."""
+    raise NotImplementedError
+
+
 def grade_code(
     case: EvalCase,
     record: Mapping[str, Any],
