@@ -196,7 +196,7 @@ def test_trusted_links_and_email_pass() -> None:
         ("See ftp://evil.example.test/x for more.", "ftp://evil.example.test/x"),
         ("See www.evil.example.test for more.", "www.evil.example.test"),
         ("See EVIL.EXAMPLE.TEST for more.", "EVIL.EXAMPLE.TEST"),
-        ("See marrow.example.test.evil.example.test.", "marrow.example.test.evil.example.test."),
+        ("See marrow.example.test.evil.example.test.", "marrow.example.test.evil.example.test"),
         ("See code.example.test/attacker for more.", "code.example.test/attacker"),
     ],
 )
