@@ -197,7 +197,8 @@ def test_a_candidate_that_finds_nothing_misses_the_floors(
     )
     assert pii_command.main(["--detector", str(_candidate_folder(tmp_path))]) == 1
     out = capsys.readouterr().out
-    assert "FLOOR MISSED" in out and "floors: missed" in out
+    assert "FLOOR MISSED" in out
+    assert "floors: missed" in out
 
 
 def test_an_unavailable_candidate_is_reported_not_raised(

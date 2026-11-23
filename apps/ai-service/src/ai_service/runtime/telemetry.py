@@ -20,8 +20,12 @@ registration (`refused`), a registration older than the window allows (`expired`
 (`rate_limited`), any other failure of the store (`send_failed`), a record after shutdown
 (`closed`) and what shutdown leaves (`shutdown`). Nothing is spooled: what is dropped is gone.
 
-No detector has passed the frozen local corpus, so every trace says `degraded=no_detector` and
-carries metadata only (`packages/llm-agent/AGENTS.md`, Trace pseudonymization).
+Every trace carries metadata only and says why (`degraded`), decided once at start by
+`trace_masking` from `AI_SERVICE_TRACE_DETECTOR_DIR`: `no_detector` without a folder,
+`detector_unavailable` when the folder is not an accepted, verified detector (no candidate has
+passed the frozen local corpus yet, so this is every folder today), and `content_not_exported`
+for an accepted one, because the record carries no visitor or model text to mask
+(`packages/llm-agent/AGENTS.md`, Trace pseudonymization).
 """
 
 from __future__ import annotations
@@ -36,10 +40,11 @@ from collections.abc import Awaitable, Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 from typing import Any, Final, Protocol
 
 import httpx2
-from llm_agent import ExecutionRecord, otlp_trace
+from llm_agent import DetectorUnavailableError, ExecutionRecord, open_detector, otlp_trace
 
 from ai_service.config import Langfuse
 
@@ -47,7 +52,7 @@ from ai_service.config import Langfuse
 EXPORT_WINDOW_S: Final = 600.0
 #: The service name every trace carries as its only resource attribute.
 SERVICE: Final = "sebela-ai-service"
-#: Why every trace is metadata only: no detector is accepted yet.
+#: Why every trace is metadata only when no detector folder is configured.
 DEGRADED: Final = "no_detector"
 _INGESTION_PATH: Final = "/api/public/otel/v1/traces"
 #: How many operations may hold a bound grant at once (four run at most).
@@ -79,6 +84,22 @@ class _Job:
     ended_at_ns: int
 
 
+def trace_masking(folder: Path | None) -> str:
+    """Why the traces carry metadata only, given the configured detector folder (`degraded`).
+
+    Opens only an accepted detector (never a candidate under evaluation) and verifies its
+    manifest and checksums; CPU-bound, so call it off the event loop. Never raises.
+    """
+    if folder is None:
+        return DEGRADED
+    try:
+        open_detector(folder)
+    except DetectorUnavailableError as error:
+        _log.warning("trace detector unavailable, exporting metadata only: %s", error)
+        return "detector_unavailable"
+    return "content_not_exported"
+
+
 class TraceExporter:
     def __init__(
         self,
@@ -91,8 +112,10 @@ class TraceExporter:
         send_timeout_s: float = 10.0,
         build: Build = otlp_trace,
         clock: Callable[[], float] = time.monotonic,
+        degraded: str = DEGRADED,
     ) -> None:
         self._target = target
+        self._degraded = degraded
         self._register = register
         self._build = build
         self._build_timeout_s = build_timeout_s
@@ -197,7 +220,7 @@ class TraceExporter:
             ended_at_ns=job.ended_at_ns,
             service=SERVICE,
             environment=self._target.environment,
-            degraded=DEGRADED,
+            degraded=self._degraded,
         )
         try:
             async with asyncio.timeout(self._build_timeout_s):

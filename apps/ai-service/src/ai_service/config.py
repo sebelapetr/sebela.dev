@@ -4,7 +4,8 @@ Nothing about the environment is hard-coded: the host, the port and the API URL 
 the environment. The model defaults to the fictional `fake` one; the paid `anthropic` one needs an
 explicit opt-in, a daily ceiling and a provider key the secret wrapper provides. The trace export
 (`langfuse`) is on only when its base address and both keys are set; with any of them empty it is
-off, never an error.
+off, never an error. `AI_SERVICE_TRACE_DETECTOR_DIR` optionally names a pinned local detector
+folder for it; a folder that is not an accepted detector keeps the export metadata-only.
 """
 
 from __future__ import annotations
@@ -90,6 +91,8 @@ class Settings(BaseModel):
     shutdown_grace_s: float = Field(default=25.0, gt=0, le=65.0)
     #: The trace export; None (any `AI_SERVICE_LANGFUSE_*` key unset) exports nothing.
     langfuse: Langfuse | None = None
+    #: A pinned local detector folder for the trace export (absolute); None means no detector.
+    trace_detector_dir: Path | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
@@ -113,6 +116,8 @@ class Settings(BaseModel):
                 raise ValueError(f"{name} must be an absolute path")
             if self.model != "fake":
                 raise ValueError(f"{name} is for the fictional model only")
+        if self.trace_detector_dir is not None and not self.trace_detector_dir.is_absolute():
+            raise ValueError("AI_SERVICE_TRACE_DETECTOR_DIR must be an absolute path")
         if self.model == "anthropic":
             if not self.allow_paid:
                 raise ValueError("AI_SERVICE_MODEL=anthropic needs AI_SERVICE_ALLOW_PAID=true")
@@ -143,6 +148,7 @@ class Settings(BaseModel):
             "max_operations": "AI_SERVICE_MAX_OPERATIONS",
             "admission_wait_s": "AI_SERVICE_ADMISSION_WAIT_S",
             "shutdown_grace_s": "AI_SERVICE_SHUTDOWN_GRACE_S",
+            "trace_detector_dir": "AI_SERVICE_TRACE_DETECTOR_DIR",
         }
         required = ("host", "port", "api_url", "token", "control_token")
         for field, name in names.items():

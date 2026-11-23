@@ -21,11 +21,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from llm_agent import ExecutionRecord, Span, Usage, otlp_trace, versions
-from llm_agent.observability.pseudonymization import Finding, Manifest
-from llm_agent.observability.pseudonymization import detector as detector_module
+from llm_agent import ExecutionRecord, Finding, Span, Usage, otlp_trace, versions
 
 from ai_service.config import Langfuse
+from ai_service.runtime import telemetry
 from ai_service.runtime.telemetry import EXPORT_WINDOW_S, TraceExporter, trace_masking
 from tests.fakes import LANGFUSE_PUBLIC, LANGFUSE_SECRET, LANGFUSE_URL, FakeLangfuse
 
@@ -418,24 +417,20 @@ def test_a_folder_without_an_accepted_adapter_says_detector_unavailable(
     assert "no accepted adapter" in caplog.text
 
 
-def test_an_evaluation_candidate_never_reaches_the_export(
+def test_only_an_accepted_detector_is_opened_never_a_candidate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setitem(detector_module.CANDIDATES, "onnx-token-classification", _loader)
-    assert trace_masking(_detector_folder(tmp_path)) == "detector_unavailable"
+    calls: list[tuple[Path, dict[str, object]]] = []
 
+    def opened(folder: Path, **options: object) -> _Detector:
+        calls.append((folder, options))
+        return _Detector()
 
-def test_an_accepted_detector_still_exports_metadata_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    monkeypatch.setattr(telemetry, "open_detector", opened)
     # The record carries no visitor or model text, so even an accepted detector has nothing to
     # mask: the trace stays metadata only and says why.
-    monkeypatch.setitem(detector_module.ADAPTERS, "onnx-token-classification", _loader)
-    assert trace_masking(_detector_folder(tmp_path)) == "content_not_exported"
-
-
-def _loader(folder: Path, manifest: Manifest) -> _Detector:
-    return _Detector()
+    assert trace_masking(tmp_path) == "content_not_exported"
+    assert calls == [(tmp_path, {})]
 
 
 async def test_the_exporter_records_the_masking_state_it_was_given() -> None:

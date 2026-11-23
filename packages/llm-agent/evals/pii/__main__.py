@@ -4,11 +4,12 @@
         the rules alone, without a detector
     python -m evals.pii --detector <model-folder>
         the rules with the pinned local detector in that folder (`detector.json` names the model,
-        its revision, file checksums, licence and threshold; nothing is downloaded)
+        its revision, file checksums, licence and threshold; nothing is downloaded), opened as a
+        candidate under evaluation: an installed candidate adapter or an accepted one
 
 Prints the counts and recall/precision per language and category, the detector's version and the
 time it took, and exits 1 when any frozen floor is missed or the corpus is not the one the floors
-were frozen with; 2 for bad usage.
+were frozen with, or the detector is unavailable; 2 for bad usage.
 """
 
 from __future__ import annotations
@@ -19,7 +20,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from evals.pii import MaskedLike, load_corpus, load_floors, report, score
-from llm_agent.observability.pseudonymization import Detector, Pseudonymizer, open_detector
+from llm_agent.observability.pseudonymization import (
+    Detector,
+    DetectorUnavailableError,
+    Pseudonymizer,
+    open_detector,
+)
 
 USAGE = "usage: python -m evals.pii [--detector <model-folder>]\n"
 
@@ -31,7 +37,11 @@ def main(argv: Sequence[str]) -> int:
             sys.stderr.write(USAGE)
             return 2
         started = time.monotonic()
-        detector = open_detector(Path(argv[1]))
+        try:
+            detector = open_detector(Path(argv[1]), evaluation=True)
+        except DetectorUnavailableError as error:
+            sys.stderr.write(f"detector unavailable: {error}\n")
+            return 1
         print(f"detector: {detector.version} (loaded in {time.monotonic() - started:.1f} s)")
     else:
         print("detector: none (rules only)")

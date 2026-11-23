@@ -241,7 +241,8 @@ def test_an_evaluation_candidate_loads_only_for_evaluation(
         open_detector(folder)
     detector = open_detector(folder, evaluation=True)
     assert detector.version == "example/ner@0123456789abcdef"
-    assert seen[0].license == "apache-2.0" and seen[0].threshold == 0.5
+    assert seen[0].license == "apache-2.0"
+    assert seen[0].threshold == 0.5
 
 
 def test_an_evaluation_candidate_still_needs_a_verified_folder(

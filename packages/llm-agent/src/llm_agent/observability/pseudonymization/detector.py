@@ -3,11 +3,13 @@
 A detector finds the free-form categories rules cannot (`person`, `address`). It is opened only
 from a local folder whose `detector.json` pins the model, its revision, its licence, its runtime,
 its threshold and the SHA-256 of every file; nothing is downloaded and no remote model code runs.
-A runtime is usable only when an adapter for it is registered here, and an adapter is registered
-only after its candidate met every frozen floor of `evals/pii` (`AGENTS.md`, Trace
-pseudonymization). None has yet, so every manifest is refused and the export stays metadata-only.
-Swapping a model is a new folder (and, for a new runtime, a new reviewed adapter), never a change
-of the chat graph.
+Two registries decide which runtimes load. `ADAPTERS` holds the accepted ones, the only ones the
+export opens; an adapter moves there only after its candidate met every frozen floor of
+`evals/pii` (`AGENTS.md`, Trace pseudonymization). `CANDIDATES` holds runtimes under evaluation,
+which only the local scoring and measurement commands open (`evaluation=True`). Both are empty:
+no candidate runtime is installed yet, so every manifest is refused and the export stays
+metadata-only. Swapping a model is a new folder (and, for a new runtime, a new reviewed adapter),
+never a change of the chat graph.
 """
 
 from __future__ import annotations
@@ -47,8 +49,14 @@ class Manifest:
     files: Mapping[str, str]
 
 
-#: runtime name -> adapter that loads a verified folder. Empty until a candidate is accepted.
-ADAPTERS: dict[str, Callable[[Path, Manifest], Detector]] = {}
+Adapter = Callable[[Path, Manifest], Detector]
+"""Loads a detector from a folder whose manifest and checksums were already verified."""
+
+#: runtime name -> accepted adapter, the only ones the export opens. Empty until one is accepted.
+ADAPTERS: dict[str, Adapter] = {}
+#: runtime name -> adapter under evaluation, opened only by `open_detector(..., evaluation=True)`.
+#: Empty until a candidate runtime dependency is approved and installed.
+CANDIDATES: dict[str, Adapter] = {}
 
 _REQUIRED = ("model", "revision", "license", "runtime")
 
@@ -94,11 +102,22 @@ def _verify(folder: Path, manifest: Manifest) -> None:
             raise DetectorUnavailableError(f"{name} does not match its checksum")
 
 
-def open_detector(folder: Path) -> Detector:
-    """Loads the pinned detector in `folder`, or raises `DetectorUnavailableError`."""
+def open_detector(folder: Path, *, evaluation: bool = False) -> Detector:
+    """Loads the pinned detector in `folder`, or raises `DetectorUnavailableError`.
+
+    Only an accepted runtime loads, unless `evaluation` also admits a candidate under evaluation
+    (the scoring and measurement commands; never the export). The manifest and every checksum are
+    verified first either way.
+    """
     manifest = _manifest(folder)
     _verify(folder, manifest)
     adapter = ADAPTERS.get(manifest.runtime)
+    if adapter is None and evaluation:
+        adapter = CANDIDATES.get(manifest.runtime)
+        if adapter is None:
+            raise DetectorUnavailableError(
+                f"runtime {manifest.runtime!r} has no candidate adapter installed"
+            )
     if adapter is None:
         raise DetectorUnavailableError(f"runtime {manifest.runtime!r} has no accepted adapter")
     return adapter(folder, manifest)

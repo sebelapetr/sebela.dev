@@ -10,6 +10,7 @@ environment.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -29,7 +30,7 @@ from ai_service.runtime.admission import Admission
 from ai_service.runtime.capabilities import ReadCapabilities
 from ai_service.runtime.ceiling import DailyCeiling
 from ai_service.runtime.execution import Generations
-from ai_service.runtime.telemetry import TraceExporter
+from ai_service.runtime.telemetry import TraceExporter, trace_masking
 from ai_service.schemas import CompactionRequest, GenerationRequest
 
 TITLE = "Sebela AI service"
@@ -71,10 +72,12 @@ def create_app(
             )
             telemetry = None
             if settings.langfuse is not None:
+                degraded = await asyncio.to_thread(trace_masking, settings.trace_detector_dir)
                 telemetry = TraceExporter(
                     settings.langfuse,
                     register=control.register_telemetry,
                     transport=telemetry_transport,
+                    degraded=degraded,
                 )
                 telemetry.start()
             generations = Generations(

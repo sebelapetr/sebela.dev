@@ -1,11 +1,13 @@
 """Local pseudonymization of everything a trace export may carry (#214).
 
 One interface: `Pseudonymizer(detector).mask(text, facts, scope=)` and `filter_fields(...)`, with
-`open_detector(folder)` for the optional pinned local NER model. See `policy.py` for the rules and
+`open_detector(folder)` for the optional pinned local NER model (`evaluation=True` also admits
+a candidate under evaluation). See `policy.py` for the rules and
 exceptions and `detector.py` for the manifest and the accepted runtimes.
 """
 
 from llm_agent.observability.pseudonymization.detector import (
+    Adapter,
     Detector,
     DetectorUnavailableError,
     Manifest,
@@ -23,6 +25,7 @@ from llm_agent.observability.pseudonymization.policy import (
 
 __all__ = [
     "DENIED_KEYS",
+    "Adapter",
     "Detector",
     "DetectorUnavailableError",
     "Finding",

@@ -31,12 +31,16 @@ from pathlib import Path
 from typing import Any
 
 import httpx2
-from llm_agent import ExecutionRecord, Span, Usage, otlp_trace, versions
-from llm_agent.observability.pseudonymization import (
+from llm_agent import (
     Detector,
     DetectorUnavailableError,
+    ExecutionRecord,
     Pseudonymizer,
+    Span,
+    Usage,
     open_detector,
+    otlp_trace,
+    versions,
 )
 
 from ai_service.config import Langfuse
@@ -237,7 +241,7 @@ def measure(detector_folder: Path | None, corpus: Path, rounds: int) -> dict[str
     rss_before = _peak_rss_mb()
     detector: Detector | None = None
     if detector_folder is not None:
-        detector = open_detector(detector_folder)
+        detector = open_detector(detector_folder, evaluation=True)
     pseudonymizer = Pseudonymizer(detector)
     texts = _texts(corpus)
     masking = _masking(pseudonymizer, texts, rounds)
