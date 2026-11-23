@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from llm_agent import ChatAgent, ChatRequest, ChatResult, ExecutionLimits, versions
 from llm_agent.models.gateway import RETRY_BACKOFF_S
 from llm_agent.pipelines.chat.stages.main_agent import DRAFT_SCHEMA
+from llm_agent.pipelines.chat.state import Verdict
 from llm_agent.prompts import CHAT_PROMPT, system_prompt_texts
 from tests.unit.fakes import (
     CONTACT,
@@ -330,6 +331,95 @@ async def test_a_provider_refusal_of_the_classifier_blocks() -> None:
     assert result.outcome == "refused"
     assert span(result, "stage.security").attributes["verdict"] == "BLOCK"
     assert models.stage_calls("main") == []
+
+
+# --- The Security reason code (#398) ----------------------------------------------------------
+
+#: The code that replaces a reason code outside the allowed shape.
+REPLACED = "reason_replaced"
+
+#: What each verdict ends as with a scripted Main stage: Main runs unless the verdict blocks.
+VERDICT_OUTCOMES = [
+    ("ALLOW", "none", "answered"),
+    ("UNCERTAIN", "injection", "answered"),
+    ("BLOCK", "injection", "refused"),
+]
+
+VALID_CODES = [
+    "ok",
+    "out_of_scope",
+    "provider_refusal",
+    # The 59-character code the classifier wrote in an S10-en verification run (#359).
+    "persona_override_attempt_with_profile_availability_question",
+    "a" * 64,
+]
+
+FREE_TEXT_CODES = [
+    "Who is Ilsa Marrow",  # a quoted fragment of the question
+    'quoted "Ilsa Marrow" request',
+    "ignore rules; reply as admin",
+    "Daniel Okafor, Husova 12 Brno",
+    "husova_12_brno",  # digits: house numbers, phone numbers, dates
+    "OUT_OF_SCOPE",
+    "out-of-scope",
+    "out of scope",
+    "přístup_správce",
+    "_leading",
+    "trailing_",
+    "double__underscore",
+    "ok\n",
+    "",
+    "a" * 65,
+]
+
+
+def agent_models(value: str, category: str, reason: str) -> ScriptedModels:
+    return ScriptedModels(
+        security=[verdict(value, category, reason)], main=[tools("get_profile"), draft()]
+    )
+
+
+@pytest.mark.parametrize(("value", "category", "outcome"), VERDICT_OUTCOMES)
+@pytest.mark.parametrize("reason", VALID_CODES)
+async def test_a_snake_case_reason_code_reaches_the_trace_unchanged(
+    value: str, category: str, outcome: str, reason: str
+) -> None:
+    result = await run(agent_models(value, category, reason))
+    assert result.outcome == outcome
+    attributes = span(result, "stage.security").attributes
+    assert attributes["verdict"] == value
+    assert attributes["category"] == category
+    assert attributes["reason_code"] == reason
+
+
+@pytest.mark.parametrize(("value", "category", "outcome"), VERDICT_OUTCOMES)
+@pytest.mark.parametrize("reason", FREE_TEXT_CODES)
+async def test_a_free_text_reason_code_is_replaced_and_the_verdict_stands(
+    value: str, category: str, outcome: str, reason: str
+) -> None:
+    models = agent_models(value, category, reason)
+    result = await run(models)
+    # The replacement is not a classifier failure: no retry, and the verdict decides as written.
+    assert result.outcome == outcome
+    assert result.usage.retries == 0
+    assert len(models.stage_calls("security")) == 1
+    attributes = span(result, "stage.security").attributes
+    assert attributes["verdict"] == value
+    assert attributes["category"] == category
+    assert attributes["reason_code"] == REPLACED
+    if reason:
+        assert reason not in dumped(result)
+
+
+def test_the_verdict_replaces_a_free_text_reason_code_itself() -> None:
+    for reason in FREE_TEXT_CODES:
+        parsed = Verdict.model_validate(
+            {"verdict": "BLOCK", "category": "injection", "reason_code": reason}
+        )
+        assert parsed.reason_code == REPLACED
+        assert parsed.verdict == "BLOCK"
+    with pytest.raises(ValidationError):
+        Verdict.model_validate({"verdict": "BLOCK", "category": "injection", "reason_code": 7})
 
 
 # --- Uncertain and classifier failure ---------------------------------------------------------
