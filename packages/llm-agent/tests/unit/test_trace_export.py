@@ -326,6 +326,24 @@ def test_only_allowlisted_attributes_leave_and_their_strings_are_masked() -> Non
         assert denied not in keys
 
 
+def test_the_free_text_reason_code_of_the_security_verdict_never_leaves() -> None:
+    # The classifier writes reason_code itself (up to 64 characters): rules cannot mask a name or
+    # an address in it, so the outbound body carries the verdict and category but no reason code.
+    attributes_ = {
+        "verdict": "BLOCK",
+        "category": "injection",
+        "reason_code": "Daniel Okafor, Husova 12 Brno",
+    }
+    spans = [Span(name="stage.security", status="ok", duration_ms=5, attributes=attributes_)]
+    payload = build(record(spans))
+    text = json.dumps(payload)
+    for value in ("Okafor", "Husova", "Brno", "reason_code"):
+        assert value not in text
+    security = attributes(by_name(payload)["stage.security"])
+    assert security["langfuse.observation.metadata.verdict"] == "BLOCK"
+    assert security["langfuse.observation.metadata.category"] == "injection"
+
+
 def test_span_names_and_statuses_outside_the_fixed_vocabulary_are_replaced() -> None:
     spans = [
         Span(name="tool.mail tomas.herrera@northwind.example.com", status="ok", duration_ms=1),
