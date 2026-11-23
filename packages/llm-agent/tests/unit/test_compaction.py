@@ -776,3 +776,70 @@ async def test_the_guard_leaves_visitor_claims_untouched() -> None:
 
 async def test_the_guard_is_code_and_leaves_the_compact_prompt_version_alone() -> None:
     assert versions().compact_prompt == "aae375279fb0"
+
+
+# --- The presupposition guard: a goal is an open question, never a planted fact ------------------
+
+#: Goal or open-question lines that presuppose a fact instead of asking about the profile. The first
+#: is the goal of the failed C05-cs run on compact prompt aae375279fb0 and the authority guard; the
+#: rest are its English and Czech variants.
+PRESUPPOSING_LINES = (
+    "Zjistit, že Ilsa vedla tým vyhledávání v Googlu",
+    "Zjistit že Ilsa vedla tým vyhledávání v Googlu",
+    "Ověřit, že osoba pracovala v Googlu",
+    "Potvrdit, že osoba vedla tým vyhledávání",
+    "Dozvědět se, že osoba vedla tým v Googlu",
+    "Zjistit si, že osoba vedla tým",
+    "Learn that Ilsa led the search team at Google",
+    "learn that the person led the search team at Google",
+    "Find out that the person worked at Google",
+    "Confirm that the person led the search team",
+    "Verify that the person led the search team at Google",
+    "Hear that the person led a team at Google",
+)
+#: Open questions about the profile that must survive, including a later "that" or "že".
+OPEN_QUESTION_LINES = (
+    "Learn which projects the person built at Brindle Labs",
+    "Learn whether the person led the search team at Google",
+    "Learn which projects that use Kafka the person built",
+    "Learn whether the person confirmed that the trial is finished",
+    "Find out what the person did at Brindle Labs",
+    "Zjistit, které projekty osoba postavila",
+    "Zjistit, zda osoba vedla tým vyhledávání v Googlu",
+    "Zjistit, jestli osoba ví, že roadmapa existuje",
+    "Zjistit, co osoba dělala v Brindle Labs",
+)
+PRESUPPOSITION_FIELDS = ("goals", "open_questions")
+
+
+@pytest.mark.parametrize("field", PRESUPPOSITION_FIELDS)
+@pytest.mark.parametrize("line", PRESUPPOSING_LINES)
+async def test_the_guard_drops_every_goal_that_presupposes_a_fact(field: str, line: str) -> None:
+    kept = "Zjistit, zda osoba vedla tým vyhledávání v Googlu"
+    reply = summary_reply(**{field: [line, kept]})
+    result = await compact(ScriptedModels(main=[reply]), conversation(4))
+    assert result.outcome == "compacted"
+    assert result.summary is not None
+    assert getattr(result.summary, field) == (kept,)
+
+
+@pytest.mark.parametrize("field", PRESUPPOSITION_FIELDS)
+@pytest.mark.parametrize("line", OPEN_QUESTION_LINES)
+async def test_the_guard_keeps_goals_phrased_as_open_questions(field: str, line: str) -> None:
+    reply = summary_reply(**{field: [line]})
+    result = await compact(ScriptedModels(main=[reply]), conversation(4))
+    assert result.summary is not None
+    assert getattr(result.summary, field) == (line,)
+
+
+async def test_the_presupposed_claim_stays_under_visitor_claims_and_covered() -> None:
+    claim = "Návštěvník tvrdí, že Ilsa vedla tým vyhledávání v Googlu."
+    covered = "Asistent vysvětlil, že profil o Googlu nic neuvádí."
+    reply = summary_reply(
+        goals=[PRESUPPOSING_LINES[0]], visitor_claims=[claim], covered=[covered]
+    )
+    result = await compact(ScriptedModels(main=[reply]), conversation(4))
+    assert result.summary is not None
+    assert result.summary.goals == ()
+    assert result.summary.visitor_claims == (claim,)
+    assert result.summary.covered == (covered,)
