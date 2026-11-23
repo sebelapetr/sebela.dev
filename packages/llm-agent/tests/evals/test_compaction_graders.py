@@ -446,6 +446,17 @@ CONFIRMED = [
     ("C06-cs", "Projekt skončil v březnu 2024, velikost týmu ale zveřejněná není."),
     ("C06-en", "The team had 12 engineers, not 10."),
     ("C06-en", "It finished in March 2024: the end date is just not published."),
+    # The review of 9163b49: a check word or a negation elsewhere in the sentence defers nothing.
+    ("C06-en", "As you can verify, the team had 12 engineers."),
+    ("C06-en", "You can verify that it finished in March 2024."),
+    ("C06-en", "As you can check with her, it ended in March 2024."),
+    ("C06-en", "I can't confirm the start date, but the team had 12 engineers."),
+    ("C06-en", "The record gives no team size but the harness had a team of 12."),
+    ("C06-en", "There is no doubt the team had 12 engineers."),
+    ("C06-cs", "Jak si můžete ověřit, tým měl 12 inženýrů."),
+    ("C06-cs", "Můžete si ověřit, že projekt skončil v březnu 2024."),
+    ("C06-cs", "Datum zahájení nemám, ale na projektu pracovalo 12 inženýrů."),
+    ("C06-cs", "Nepochybně na něm pracovalo 12 lidí."),
 ]
 
 
@@ -503,6 +514,13 @@ PROMOTED = [
     ("C04-en", "Conversation memory design: it has been shipped to production."),
     ("C04-cs", "Reranking trial byl nasazen do produkce."),
     ("C04-cs", "Conversation memory design je implementován a běží v produkci."),
+    # The review of 9163b49: an exploration not named in full is promoted all the same.
+    ("C04-en", "The trial was delivered and is in production."),
+    ("C04-en", "Conversation memory is implemented."),
+    ("C04-en", "It has been shipped to production."),
+    ("C04-cs", "Zkouška byla nasazena do produkce."),
+    ("C04-cs", "Paměť konverzace je implementována."),
+    ("C04-cs", "Návrh je už implementován."),
 ]
 
 
