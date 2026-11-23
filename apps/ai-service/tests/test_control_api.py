@@ -12,7 +12,7 @@ import pytest
 from sebela_api_client.models import ChatGenerationResult, ChatGrantClaimed
 
 from ai_service.clients.control_api import ControlApi
-from ai_service.schemas import ResultReport
+from ai_service.schemas import CompactionReport, ResultReport
 from tests.fakes import API_URL, CONTROL_TOKEN, FakeApi, error
 
 
@@ -40,6 +40,45 @@ def report(grant: str) -> ResultReport:
     )
 
 
+def compaction_report(grant: str) -> CompactionReport:
+    return CompactionReport.model_validate(
+        {
+            "grant": grant,
+            "outcome": "failed",
+            "reason": "model_unavailable",
+            "summary": None,
+            "kept": 4,
+            "summaryTokens": 0,
+            "nextInputTokens": None,
+            "usage": {
+                "costUsd": 0.0,
+                "costUncertain": False,
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "modelAttempts": 2,
+            },
+            "versions": {"mainModel": "claude-haiku-5-5"},
+            "latencyMs": 10,
+        }
+    )
+
+
+async def test_a_compaction_report_reaches_its_own_route_and_is_retried() -> None:
+    api = FakeApi(report_failures=[503])
+    request = api.issue_compaction()
+    control = ControlApi(API_URL, CONTROL_TOKEN, transport=api.transport())
+    try:
+        stored = await control.report_compaction(
+            request["operationId"], compaction_report(request["grant"]), until=time.monotonic() + 5
+        )
+    finally:
+        await control.aclose()
+    assert stored is True
+    assert len(api.report_attempts) == 2
+    assert all(path.endswith("/compaction") for path in api.report_paths)
+    assert api.stored[request["operationId"]]["reason"] == "model_unavailable"
+
+
 async def test_a_claim_returns_the_grant_terms_once() -> None:
     api = FakeApi()
     request = api.issue()
@@ -54,6 +93,7 @@ async def test_a_claim_returns_the_grant_terms_once() -> None:
     assert (first.model, first.pricing_version) == ("claude-haiku-5-5", "anthropic-2026-11-19")
     assert first.effort == "medium"
     assert first.context_revision == 1
+    assert first.kind.value == "answer"
     assert first.deadline_at.tzinfo is not None
     assert second is None
 
@@ -121,6 +161,7 @@ CLAIMED: dict[str, Any] = {
     "effort": "medium",
     "pricingVersion": "anthropic-2026-11-19",
     "contextRevision": 1,
+    "kind": "answer",
 }
 
 
@@ -167,6 +208,8 @@ async def test_a_claim_sends_the_contract_body_with_the_control_bearer() -> None
         {**CLAIMED, "contextRevision": 1.5},
         {**CLAIMED, "contextRevision": True},
         {key: value for key, value in CLAIMED.items() if key != "contextRevision"},
+        {**CLAIMED, "kind": "summary"},
+        {key: value for key, value in CLAIMED.items() if key != "kind"},
         [CLAIMED],
         b"{not json",
     ],

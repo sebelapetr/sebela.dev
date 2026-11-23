@@ -23,12 +23,12 @@ from llm_agent import ApiContentReader, ChatAgent, ModelFactory, anthropic_model
 from ai_service.clients.control_api import ControlApi
 from ai_service.config import Settings
 from ai_service.models.fake import FakeModels
-from ai_service.routes import Services, capabilities, generation, health
+from ai_service.routes import Services, capabilities, compaction, generation, health
 from ai_service.runtime.admission import Admission
 from ai_service.runtime.capabilities import ReadCapabilities
 from ai_service.runtime.ceiling import DailyCeiling
 from ai_service.runtime.execution import Generations
-from ai_service.schemas import GenerationRequest
+from ai_service.schemas import CompactionRequest, GenerationRequest
 
 TITLE = "Sebela AI service"
 VERSION = "0.0.0"
@@ -101,6 +101,11 @@ def openapi_document() -> dict[str, Any]:
     )
     schemas.update(request.pop("$defs", {}))
     schemas["GenerationRequest"] = request
+    compaction_request = CompactionRequest.model_json_schema(
+        by_alias=True, ref_template="#/components/schemas/{model}"
+    )
+    schemas.update(compaction_request.pop("$defs", {}))
+    schemas["CompactionRequest"] = compaction_request
     document["components"]["securitySchemes"] = {"bearer": {"type": "http", "scheme": "bearer"}}
     return {
         **document,
@@ -120,7 +125,7 @@ def _app(lifespan: Any) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
-    for router in (generation.router, capabilities.router, health.router):
+    for router in (generation.router, compaction.router, capabilities.router, health.router):
         app.include_router(router)
     return app
 

@@ -122,6 +122,7 @@ async def test_a_compaction_folds_the_older_exchanges_with_one_model_call_and_no
     # No tool ran: the compaction reads no content.
     assert api.public_reads == []
     assert len(api.report_attempts) == 1
+    assert api.report_paths == [f"/v1/internal/chat/operations/{body['operationId']}/compaction"]
     assert set(stored) == {
         "grant",
         "outcome",
@@ -243,6 +244,7 @@ async def test_the_paid_mode_ceiling_stops_a_compaction_before_any_model_call() 
         AI_SERVICE_MODEL="anthropic",
         AI_SERVICE_ALLOW_PAID="true",
         AI_SERVICE_DAILY_CEILING_USD="0.03",
+        ANTHROPIC_API_KEY="fictional-key",
     )
     async with running(api, slow, service) as (_, client):
         first = api.issue()

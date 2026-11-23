@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
-from ai_service.schemas import ResultReport
+from ai_service.schemas import CompactionReport, ResultReport
 
 DOCUMENT = Path(__file__).resolve().parents[3] / "packages/api-client/src/generated/openapi.json"
 #: The bounds both sides must state alike wherever the API document states them.
@@ -27,8 +28,8 @@ def _api() -> dict[str, Any]:
     return schemas
 
 
-def _local() -> tuple[dict[str, Any], dict[str, Any]]:
-    schema = ResultReport.model_json_schema(by_alias=True, mode="serialization")
+def _local(model: type[BaseModel] = ResultReport) -> tuple[dict[str, Any], dict[str, Any]]:
+    schema = model.model_json_schema(by_alias=True, mode="serialization")
     return schema, schema.get("$defs", {})
 
 
@@ -104,6 +105,12 @@ def test_the_result_report_matches_the_api_documents_generation_result() -> None
     assert _tie("ChatGenerationResult", local, local_defs, api["ChatGenerationResult"], api) == []
 
 
+def test_the_compaction_report_matches_the_api_documents_compaction_result() -> None:
+    local, local_defs = _local(CompactionReport)
+    api = _api()
+    assert _tie("ChatCompactionResult", local, local_defs, api["ChatCompactionResult"], api) == []
+
+
 def test_the_tie_notices_a_drift() -> None:
     local, local_defs = _local()
     api = json.loads(json.dumps(_api()))
@@ -115,6 +122,8 @@ def test_the_tie_notices_a_drift() -> None:
     assert len(drift) == 3
 
 
-@pytest.mark.parametrize("name", ["ChatGrantClaimed", "ChatGenerationResult", "ChatGrantClaim"])
+@pytest.mark.parametrize(
+    "name", ["ChatGrantClaimed", "ChatGenerationResult", "ChatGrantClaim", "ChatCompactionResult"]
+)
 def test_the_control_schemas_are_in_the_api_document(name: str) -> None:
     assert name in _api()

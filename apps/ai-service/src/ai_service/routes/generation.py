@@ -7,12 +7,11 @@ runs on, independent of this request.
 
 `POST /internal/v1/generations/{operationId}/cancel` is the API's Stop of one operation, behind
 the same bearer: 202 whether it runs here, already ended or was never dispatched, so the answer
-says nothing about other operations.
+says nothing about other operations. It stops a compaction (`routes/compaction.py`) the same way.
 """
 
 from __future__ import annotations
 
-import hmac
 import uuid
 
 from fastapi import APIRouter, Request
@@ -20,12 +19,10 @@ from fastapi.responses import JSONResponse
 from llm_agent import versions
 from pydantic import ValidationError
 
-from ai_service.routes import problem, services
+from ai_service.routes import MAX_BODY_BYTES, authorized, problem, services
 from ai_service.schemas import Accepted, GenerationRequest, Problem
 
 PATH = "/internal/v1/generations"
-#: The largest body the route reads; the contract's bounds stay well below it.
-MAX_BODY_BYTES = 512 * 1024
 
 router = APIRouter()
 
@@ -52,7 +49,7 @@ router = APIRouter()
 async def generate(request: Request) -> Accepted | JSONResponse:
     """Admits one generation and answers before it runs."""
     service = services(request)
-    if not _authorized(request, service.settings.token.get_secret_value()):
+    if not authorized(request, service.settings.token.get_secret_value()):
         return problem(401, "unauthorized")
     body = await request.body()
     if len(body) > MAX_BODY_BYTES:
@@ -94,7 +91,7 @@ async def generate(request: Request) -> Accepted | JSONResponse:
 async def cancel(request: Request) -> Accepted | JSONResponse:
     """Stops one generation; repeating it, or stopping one that ended, changes nothing."""
     service = services(request)
-    if not _authorized(request, service.settings.token.get_secret_value()):
+    if not authorized(request, service.settings.token.get_secret_value()):
         return problem(401, "unauthorized")
     try:
         operation = uuid.UUID(request.path_params["operation_id"])
@@ -102,10 +99,3 @@ async def cancel(request: Request) -> Accepted | JSONResponse:
         return JSONResponse(status_code=422, content={"detail": "the operation is not a UUID"})
     service.generations.cancel(str(operation))
     return Accepted()
-
-
-def _authorized(request: Request, token: str) -> bool:
-    scheme, _, presented = request.headers.get("authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not presented:
-        return False
-    return hmac.compare_digest(presented.encode(), token.encode())

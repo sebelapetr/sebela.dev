@@ -8,6 +8,8 @@ configuration (`AI_SERVICE_FAKE_SCENARIO`), never a request field. `calls` count
 test can assert that no second model call happened; a test in another process reads the same from
 the calls file (`AI_SERVICE_FAKE_CALLS_FILE`), and opens the `slow` gate by creating the gate file
 (`AI_SERVICE_FAKE_GATE_FILE`). A question that asks about contact is answered with the contact card.
+A compaction call (the summary schema, no tools) is answered with a short fictional summary in the
+requested language that cites no record.
 """
 
 from __future__ import annotations
@@ -36,6 +38,21 @@ _QUESTION_TAG = "<visitor_question>"
 _EXCHANGE_TAG = "<visitor_exchange>"
 #: How often the `slow` scenario looks for its gate file.
 _GATE_POLL_S = 0.05
+
+#: How the compaction prompt names the language of the summary it asks for.
+_SUMMARY_LANGUAGE = "Return the summary in the language "
+
+
+def _summary(language: str) -> dict[str, object]:
+    return {
+        "language": language,
+        "goals": ["Learn what the fictional engineer builds."],
+        "open_questions": [],
+        "covered": ["The fictional engineer's evaluated assistants."],
+        "visitor_claims": [],
+        "references": [],
+    }
+
 
 _DRAFT = {
     "outcome": "answered",
@@ -76,9 +93,11 @@ class _FakeModel:
             for message in input
             if isinstance(message, HumanMessage) and isinstance(message.content, str)
         )
-        owner.record(self._call.stage, visitor.count(_EXCHANGE_TAG))
+        owner.record(self._call.stage, visitor.count(_EXCHANGE_TAG), visitor)
         if self._call.stage == "security":
             return await owner.security()
+        if "open_questions" in self._call.response_schema.get("properties", {}):
+            return await owner.compaction(visitor)
         if any(isinstance(message, ToolMessage) for message in input):
             question = visitor.rpartition(_QUESTION_TAG)[2]
             return _reply({**_DRAFT, "show_contact": "contact" in question.lower()}, "end_turn")
@@ -92,7 +111,7 @@ class FakeModels:
     `answer` answers from the profile; `slow` waits in the Security call for `gate` or until
     `gate_file` exists (forever without either) and then answers; `refuse` is blocked by the
     Security stage; `fail` raises a transient provider error on every call, so the agent ends
-    `unavailable`.
+    `unavailable` (a compaction `failed`). A compaction waits for the same gate in `slow`.
     """
 
     def __init__(
@@ -109,10 +128,13 @@ class FakeModels:
         self.gate_file = gate_file
         #: The stage of every model call, in order.
         self.calls: list[str] = []
+        #: The stage and the visitor-side prompt text of every model call, in order.
+        self.prompts: list[tuple[str, str]] = []
 
-    def record(self, stage: str, history: int) -> None:
+    def record(self, stage: str, history: int, prompt: str = "") -> None:
         """Counts one call; with a calls file, also appends its stage and history length."""
         self.calls.append(stage)
+        self.prompts.append((stage, prompt))
         if self.calls_file is not None:
             with self.calls_file.open("a", encoding="utf-8") as calls:
                 calls.write(json.dumps({"stage": stage, "history": history}) + "\n")
@@ -128,6 +150,14 @@ class FakeModels:
         if self.scenario == "slow":
             await self._gate_opens()
         return _reply(_ALLOW, "end_turn")
+
+    async def compaction(self, prompt: str) -> BaseMessage:
+        if self.scenario == "fail":
+            raise _provider_failure()
+        if self.scenario == "slow":
+            await self._gate_opens()
+        language = prompt.rpartition(_SUMMARY_LANGUAGE)[2][:2]
+        return _reply(_summary(language if language in ("en", "cs") else "en"), "end_turn")
 
     async def _gate_opens(self) -> None:
         if self.gate_file is None:

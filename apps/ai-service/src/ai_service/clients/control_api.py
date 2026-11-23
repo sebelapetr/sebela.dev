@@ -1,9 +1,10 @@
 """The API's internal control routes: the one-use grant claim and the one result report.
 
 The only module of this app that imports the generated client (`sebela_api_client`,
-packages/api-client-python, generated from the API's OpenAPI document); it calls exactly two of
-its operations, `claim_chat_grant` and `report_chat_result`, and uses their generated models
-(`ChatGrantClaim`, `ChatGrantClaimed`, `ChatGenerationResult`). The control bearer is the service's
+packages/api-client-python, generated from the API's OpenAPI document); it calls exactly three of
+its operations, `claim_chat_grant`, `report_chat_result` and `report_chat_compaction`, and uses
+their generated models (`ChatGrantClaim`, `ChatGrantClaimed`, `ChatGenerationResult`,
+`ChatCompactionResult`). The control bearer is the service's
 own credential (`AI_SERVICE_CONTROL_TOKEN`), never a content API key, and never reaches the model.
 Redirects are never followed. The status decides before any body is parsed: a response hook ends
 every answer but a 200 with `_Answered(status)`, so an unreadable error body (a proxy's page, an
@@ -18,6 +19,8 @@ error code this service does not know) can never hide a final 4xx.
   retrying server errors and transport failures with a short backoff until `until` (a
   `time.monotonic()` instant); any other status is final: a 2xx means stored (whatever its body),
   a redirect or a 4xx means never.
+- `report_compaction` delivers a compaction's result as the generated `ChatCompactionResult`
+  to its own result route under the same rules.
 """
 
 from __future__ import annotations
@@ -26,14 +29,24 @@ import asyncio
 import math
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Final
 
 import httpx2
 from sebela_api_client import AuthenticatedClient
-from sebela_api_client.api.default import claim_chat_grant, report_chat_result
-from sebela_api_client.models import ChatGenerationResult, ChatGrantClaim, ChatGrantClaimed
+from sebela_api_client.api.default import (
+    claim_chat_grant,
+    report_chat_compaction,
+    report_chat_result,
+)
+from sebela_api_client.models import (
+    ChatCompactionResult,
+    ChatGenerationResult,
+    ChatGrantClaim,
+    ChatGrantClaimed,
+)
 
-from ai_service.schemas import ResultReport
+from ai_service.schemas import CompactionReport, ResultReport
 
 _FIRST_BACKOFF_S: Final = 0.2
 _MAX_BACKOFF_S: Final = 1.0
@@ -95,33 +108,56 @@ class ControlApi:
         except _UNREADABLE:
             return False
         operation = uuid.UUID(operation_id)
-        backoff = _FIRST_BACKOFF_S
-        while True:
-            remaining = until - time.monotonic()
-            if remaining <= 0:
-                return False
-            try:
-                async with asyncio.timeout(min(remaining, _MAX_ATTEMPT_S)):
-                    await report_chat_result.asyncio_detailed(
-                        operation, client=self._client, body=body
-                    )
-                return True
-            except _UNREADABLE:
-                # The hook let only a 200 through: the API stored the result.
-                return True
-            except _Answered as answered:
-                if answered.status < 500:
-                    return 200 <= answered.status < 300
-            except (httpx2.HTTPError, TimeoutError):
-                pass
-            remaining = until - time.monotonic()
-            if remaining <= 0:
-                return False
-            await asyncio.sleep(min(backoff, remaining))
-            backoff = min(backoff * 2, _MAX_BACKOFF_S)
+
+        async def send() -> None:
+            await report_chat_result.asyncio_detailed(operation, client=self._client, body=body)
+
+        return await _delivered(send, until)
+
+    async def report_compaction(
+        self, operation_id: str, report: CompactionReport, *, until: float
+    ) -> bool:
+        """True once the API stored the compaction's result; False when it never did."""
+        try:
+            body = ChatCompactionResult.from_dict(report.model_dump(mode="json", by_alias=True))
+        except _UNREADABLE:
+            return False
+        operation = uuid.UUID(operation_id)
+
+        async def send() -> None:
+            await report_chat_compaction.asyncio_detailed(operation, client=self._client, body=body)
+
+        return await _delivered(send, until)
 
     async def aclose(self) -> None:
         await self._http.aclose()
+
+
+async def _delivered(send: Callable[[], Awaitable[None]], until: float) -> bool:
+    """Sends until the API stores the report: server errors and transport failures are retried
+    with a short backoff until `until`; any other status is final."""
+    backoff = _FIRST_BACKOFF_S
+    while True:
+        remaining = until - time.monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            async with asyncio.timeout(min(remaining, _MAX_ATTEMPT_S)):
+                await send()
+            return True
+        except _UNREADABLE:
+            # The hook let only a 200 through: the API stored the report.
+            return True
+        except _Answered as answered:
+            if answered.status < 500:
+                return 200 <= answered.status < 300
+        except (httpx2.HTTPError, TimeoutError):
+            pass
+        remaining = until - time.monotonic()
+        if remaining <= 0:
+            return False
+        await asyncio.sleep(min(backoff, remaining))
+        backoff = min(backoff * 2, _MAX_BACKOFF_S)
 
 
 def _within_contract(claimed: ChatGrantClaimed) -> bool:

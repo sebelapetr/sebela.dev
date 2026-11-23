@@ -140,9 +140,7 @@ class CompactionRequest(_Body):
     operation_id: uuid.UUID
     grant: Grant
     summary: WireSummary | None = None
-    exchanges: list[HistoryExchange] = Field(
-        default_factory=list, max_length=MAX_HISTORY_EXCHANGES
-    )
+    exchanges: list[HistoryExchange] = Field(default_factory=list, max_length=MAX_HISTORY_EXCHANGES)
     deadline_at: AwareDatetime
     context_revision: int = Field(ge=0)
     model: Annotated[str, StringConstraints(min_length=1, max_length=100)]

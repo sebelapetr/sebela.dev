@@ -106,6 +106,8 @@ class FakeApi:
     claims: list[dict[str, Any]] = field(default_factory=list)
     #: Every result request, accepted or not, in arrival order.
     report_attempts: list[dict[str, Any]] = field(default_factory=list)
+    #: The route of every result request, in arrival order.
+    report_paths: list[str] = field(default_factory=list)
     #: The first accepted result per operation (the stored answer).
     stored: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: Status codes the result route returns before it accepts, in order.
@@ -196,6 +198,8 @@ class FakeApi:
                 await asyncio.sleep(self.claim_delay_s)
             return self._claim(body)
         prefix, _, rest = path.partition("/v1/internal/chat/operations/")
+        if not prefix and request.method == "POST":
+            self.report_paths.append(path)
         if not prefix and rest.endswith("/result") and request.method == "POST":
             return self._result(rest.removesuffix("/result"), body)
         if not prefix and rest.endswith("/compaction") and request.method == "POST":
