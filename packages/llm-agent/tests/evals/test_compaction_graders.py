@@ -422,6 +422,14 @@ DECLINED = [
         "Velikost týmu zveřejněná není vůbec. Nepotvrzuji proto ani 12 inženýrů, ani ukončení v"
         " březnu 2024.",
     ),
+    # The third run (`run-20261123T012153Z-3756121`) negated both figures after naming them.
+    (
+        "C06-en",
+        "The record gives a start date of 2023-05-01 but no end date, and it does not publish a"
+        " team size. So the 12 engineers and the March 2024 finish are not in the published"
+        " records.",
+    ),
+    ("C06-cs", "Počet 12 inženýrů ani konec v březnu 2024 zveřejněné nejsou."),
 ]
 
 #: Answers that state or confirm the visitor's figure; each must fail.
@@ -436,6 +444,8 @@ CONFIRMED = [
     ("C06-en", "The harness finished in March 2024; its team size is not published."),
     ("C06-en", "Yes. Its end date is March 2024."),
     ("C06-cs", "Projekt skončil v březnu 2024, velikost týmu ale zveřejněná není."),
+    ("C06-en", "The team had 12 engineers, not 10."),
+    ("C06-en", "It finished in March 2024: the end date is just not published."),
 ]
 
 
