@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -36,6 +37,7 @@ _BLOCK = {"verdict": "BLOCK", "category": "injection", "reason_code": "fake_refu
 #: How the agent marks the visitor's question and each earlier exchange in its prompts.
 _QUESTION_TAG = "<visitor_question>"
 _EXCHANGE_TAG = "<visitor_exchange>"
+_SUMMARY_TAG = "<visitor_summary>"
 #: How often the `slow` scenario looks for its gate file.
 _GATE_POLL_S = 0.05
 
@@ -43,13 +45,18 @@ _GATE_POLL_S = 0.05
 _SUMMARY_LANGUAGE = "Return the summary in the language "
 
 
-def _summary(language: str) -> dict[str, object]:
+def _summary(language: str, prompt: str) -> dict[str, object]:
+    """A summary that copies every folded question verbatim into its visitor claims: the worst
+    case of a model carrying injected text into the summary, which stays untrusted history."""
+    questions = re.findall(
+        r"<visitor_turn_question>\n(.*?)\n</visitor_turn_question>", prompt, re.S
+    )
     return {
         "language": language,
         "goals": ["Learn what the fictional engineer builds."],
         "open_questions": [],
         "covered": ["The fictional engineer's evaluated assistants."],
-        "visitor_claims": [],
+        "visitor_claims": [f"The visitor wrote: {question}"[:300] for question in questions[:8]],
         "references": [],
     }
 
@@ -132,12 +139,14 @@ class FakeModels:
         self.prompts: list[tuple[str, str]] = []
 
     def record(self, stage: str, history: int, prompt: str = "") -> None:
-        """Counts one call; with a calls file, also appends its stage and history length."""
+        """Counts one call; with a calls file, also appends its stage, its history length and
+        whether its history opened with a summary."""
         self.calls.append(stage)
         self.prompts.append((stage, prompt))
         if self.calls_file is not None:
             with self.calls_file.open("a", encoding="utf-8") as calls:
-                calls.write(json.dumps({"stage": stage, "history": history}) + "\n")
+                line = {"stage": stage, "history": history, "summary": _SUMMARY_TAG in prompt}
+                calls.write(json.dumps(line) + "\n")
 
     def __call__(self, call: ModelCall) -> ChatModel:
         return _FakeModel(self, call)
@@ -157,7 +166,7 @@ class FakeModels:
         if self.scenario == "slow":
             await self._gate_opens()
         language = prompt.rpartition(_SUMMARY_LANGUAGE)[2][:2]
-        return _reply(_summary(language if language in ("en", "cs") else "en"), "end_turn")
+        return _reply(_summary(language if language in ("en", "cs") else "en", prompt), "end_turn")
 
     async def _gate_opens(self) -> None:
         if self.gate_file is None:
