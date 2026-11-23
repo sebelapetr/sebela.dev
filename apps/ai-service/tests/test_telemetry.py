@@ -337,6 +337,21 @@ async def test_a_registration_older_than_the_export_window_is_not_posted() -> No
     assert item.counts["expired"] == 1
 
 
+async def test_a_post_that_overruns_its_send_bound_is_dropped_as_a_whole() -> None:
+    # A store that accepts the connection and then stalls: the client's own timeouts bound each
+    # read and write, not the whole request, so the exporter bounds the request itself.
+    store, registrar = FakeLangfuse(delay_s=30.0), Registrar()
+    item = exporter(store, registrar, send_timeout_s=0.1)
+    item.start()
+    item.bind(OPERATION, GRANT)
+    item.export(record())
+    started = time.monotonic()
+    await settle(item, timeout_s=5.0)
+    assert time.monotonic() - started < 2.0
+    assert item.counts["send_failed"] == 1
+    assert "exported" not in item.counts
+
+
 async def test_shutdown_is_bounded_while_the_trace_store_hangs() -> None:
     store, registrar = FakeLangfuse(delay_s=30.0), Registrar()
     item = exporter(store, registrar)
