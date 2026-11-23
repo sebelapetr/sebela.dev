@@ -201,3 +201,17 @@ def test_an_invalid_langfuse_environment_is_refused(value: str) -> None:
 def test_the_langfuse_base_url_must_be_http() -> None:
     with pytest.raises(ConfigError, match="AI_SERVICE_LANGFUSE_BASE_URL"):
         Settings.from_env(env(**{**LANGFUSE, "AI_SERVICE_LANGFUSE_BASE_URL": "ftp://x.test"}))
+
+
+def test_the_trace_detector_folder_is_off_by_default() -> None:
+    assert Settings.from_env(env(**LANGFUSE)).trace_detector_dir is None
+
+
+def test_the_trace_detector_folder_is_read_as_an_absolute_path(tmp_path: Path) -> None:
+    settings = Settings.from_env(env(**LANGFUSE, AI_SERVICE_TRACE_DETECTOR_DIR=str(tmp_path)))
+    assert settings.trace_detector_dir == tmp_path
+
+
+def test_the_trace_detector_folder_must_be_absolute() -> None:
+    with pytest.raises(ConfigError, match="AI_SERVICE_TRACE_DETECTOR_DIR"):
+        Settings.from_env(env(**LANGFUSE, AI_SERVICE_TRACE_DETECTOR_DIR="models/ner"))

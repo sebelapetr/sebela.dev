@@ -6,7 +6,9 @@ leaves the service, and that a failing or refusing trace path never changes an a
 
 from __future__ import annotations
 
+import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 from ai_service.models.fake import FakeModels
@@ -146,3 +148,32 @@ async def test_a_refused_claim_registers_no_trace() -> None:
         assert response.status_code == 202
     assert api.registrations == []
     assert store.requests == []
+
+
+async def test_a_configured_but_unaccepted_detector_keeps_the_export_metadata_only(
+    tmp_path: Path,
+) -> None:
+    # A pinned folder whose runtime has no accepted adapter is refused at start, and the service
+    # still answers and exports metadata only, saying why.
+    weights = b"fictional weights"
+    (tmp_path / "model.onnx").write_bytes(weights)
+    manifest = {
+        "model": "example/ner",
+        "revision": "0123456789abcdef",
+        "license": "apache-2.0",
+        "runtime": "onnx-token-classification",
+        "threshold": 0.5,
+        "files": {"model.onnx": hashlib.sha256(weights).hexdigest()},
+    }
+    (tmp_path / "detector.json").write_text(json.dumps(manifest), encoding="utf-8")
+    api, store = FakeApi(), FakeLangfuse()
+    body = {**api.issue(), "question": QUESTION}
+    stored = await _answered(
+        api, store, body, **LANGFUSE_ENV, AI_SERVICE_TRACE_DETECTOR_DIR=str(tmp_path)
+    )
+    assert stored["outcome"] == "answered"
+    (request,) = store.requests
+    root = _root(json.loads(request.content))
+    assert root["langfuse.trace.metadata.export_mode"] == "metadata"
+    assert root["langfuse.trace.metadata.degraded"] == "detector_unavailable"
+    assert "Daniel Okafor" not in request.content.decode()

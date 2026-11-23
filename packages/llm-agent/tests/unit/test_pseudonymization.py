@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,11 +14,13 @@ import pytest
 from llm_agent.observability.pseudonymization import (
     DetectorUnavailableError,
     Finding,
+    Manifest,
     Pseudonymizer,
     Scope,
     filter_fields,
     open_detector,
 )
+from llm_agent.observability.pseudonymization import detector as detector_module
 
 FACTS = ("Ilsa Marrow", "Port Wren", "Brindle Labs")
 
@@ -218,3 +220,52 @@ def test_open_detector_refuses_a_runtime_without_an_accepted_adapter(tmp_path: P
     # No candidate has passed the frozen corpus yet, so no runtime adapter is registered.
     with pytest.raises(DetectorUnavailableError, match="no accepted adapter"):
         open_detector(_model_folder(tmp_path))
+
+
+def _candidate(seen: list[Manifest]) -> Callable[[Path, Manifest], _Detector]:
+    def load(folder: Path, manifest: Manifest) -> _Detector:
+        seen.append(manifest)
+        return _Detector(("Daniel Okafor",), version=f"{manifest.model}@{manifest.revision}")
+
+    return load
+
+
+def test_an_evaluation_candidate_loads_only_for_evaluation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[Manifest] = []
+    monkeypatch.setitem(detector_module.CANDIDATES, "onnx-token-classification", _candidate(seen))
+    folder = _model_folder(tmp_path)
+    # A candidate under evaluation is not accepted: the export never opens it.
+    with pytest.raises(DetectorUnavailableError, match="no accepted adapter"):
+        open_detector(folder)
+    detector = open_detector(folder, evaluation=True)
+    assert detector.version == "example/ner@0123456789abcdef"
+    assert seen[0].license == "apache-2.0" and seen[0].threshold == 0.5
+
+
+def test_an_evaluation_candidate_still_needs_a_verified_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[Manifest] = []
+    monkeypatch.setitem(detector_module.CANDIDATES, "onnx-token-classification", _candidate(seen))
+    folder = _model_folder(tmp_path, files={"model.onnx": "0" * 64})
+    with pytest.raises(DetectorUnavailableError, match="checksum"):
+        open_detector(folder, evaluation=True)
+    assert seen == []
+
+
+def test_an_accepted_adapter_is_also_available_for_evaluation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[Manifest] = []
+    monkeypatch.setitem(detector_module.ADAPTERS, "onnx-token-classification", _candidate(seen))
+    folder = _model_folder(tmp_path)
+    assert open_detector(folder).version == open_detector(folder, evaluation=True).version
+    assert len(seen) == 2
+
+
+def test_without_a_registered_candidate_evaluation_refuses_the_runtime(tmp_path: Path) -> None:
+    # No candidate runtime is installed yet (its dependency awaits the owner's approval).
+    with pytest.raises(DetectorUnavailableError, match="no candidate adapter"):
+        open_detector(_model_folder(tmp_path), evaluation=True)

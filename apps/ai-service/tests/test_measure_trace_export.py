@@ -6,6 +6,7 @@ runs without a network or a key and reports what S07 has to read on the ARM64 se
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -60,6 +61,25 @@ def test_a_missing_detector_folder_fails_without_downloading() -> None:
     result = _run("--detector", str(SCRIPT.parent / "no-such-model"), "--rounds", "1")
     assert result.returncode == 1
     assert "detector" in result.stderr
+
+
+def test_a_pinned_folder_is_opened_as_an_evaluation_candidate(tmp_path: Path) -> None:
+    # The measurement opens candidates under evaluation, not only accepted detectors; without a
+    # candidate runtime installed it names that, rather than the missing acceptance.
+    weights = b"fictional weights"
+    (tmp_path / "model.onnx").write_bytes(weights)
+    manifest = {
+        "model": "example/ner",
+        "revision": "0123456789abcdef",
+        "license": "apache-2.0",
+        "runtime": "onnx-token-classification",
+        "threshold": 0.5,
+        "files": {"model.onnx": hashlib.sha256(weights).hexdigest()},
+    }
+    (tmp_path / "detector.json").write_text(json.dumps(manifest), encoding="utf-8")
+    result = _run("--detector", str(tmp_path), "--rounds", "1")
+    assert result.returncode == 1
+    assert "no candidate adapter" in result.stderr
 
 
 def test_bad_usage_exits_two() -> None:

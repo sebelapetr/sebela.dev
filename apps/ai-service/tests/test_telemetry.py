@@ -9,18 +9,24 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import hashlib
 import importlib.util
 import json
 import sys
 import threading
 import time
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
 from llm_agent import ExecutionRecord, Span, Usage, otlp_trace, versions
+from llm_agent.observability.pseudonymization import Finding, Manifest
+from llm_agent.observability.pseudonymization import detector as detector_module
 
 from ai_service.config import Langfuse
-from ai_service.runtime.telemetry import EXPORT_WINDOW_S, TraceExporter
+from ai_service.runtime.telemetry import EXPORT_WINDOW_S, TraceExporter, trace_masking
 from tests.fakes import LANGFUSE_PUBLIC, LANGFUSE_SECRET, LANGFUSE_URL, FakeLangfuse
 
 OPERATION = "00000000-0000-4000-8000-0000000000a1"
@@ -376,3 +382,74 @@ async def test_the_bound_grants_cannot_grow_without_limit() -> None:
         item.bind(f"operation-{index}", f"grant-{index}")
     assert item.bound <= 64
     await settle(item)
+
+
+def _detector_folder(tmp_path: Path, runtime: str = "onnx-token-classification") -> Path:
+    weights = b"fictional weights"
+    (tmp_path / "model.onnx").write_bytes(weights)
+    manifest = {
+        "model": "example/ner",
+        "revision": "0123456789abcdef",
+        "license": "apache-2.0",
+        "runtime": runtime,
+        "threshold": 0.5,
+        "files": {"model.onnx": hashlib.sha256(weights).hexdigest()},
+    }
+    (tmp_path / "detector.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return tmp_path
+
+
+@dataclass(frozen=True)
+class _Detector:
+    version: str = "example/ner@0123456789abcdef"
+
+    def detect(self, text: str) -> Sequence[Finding]:
+        return ()
+
+
+def test_without_a_detector_folder_the_trace_says_no_detector() -> None:
+    assert trace_masking(None) == "no_detector"
+
+
+def test_a_folder_without_an_accepted_adapter_says_detector_unavailable(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert trace_masking(_detector_folder(tmp_path)) == "detector_unavailable"
+    assert "no accepted adapter" in caplog.text
+
+
+def test_an_evaluation_candidate_never_reaches_the_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(detector_module.CANDIDATES, "onnx-token-classification", _loader)
+    assert trace_masking(_detector_folder(tmp_path)) == "detector_unavailable"
+
+
+def test_an_accepted_detector_still_exports_metadata_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The record carries no visitor or model text, so even an accepted detector has nothing to
+    # mask: the trace stays metadata only and says why.
+    monkeypatch.setitem(detector_module.ADAPTERS, "onnx-token-classification", _loader)
+    assert trace_masking(_detector_folder(tmp_path)) == "content_not_exported"
+
+
+def _loader(folder: Path, manifest: Manifest) -> _Detector:
+    return _Detector()
+
+
+async def test_the_exporter_records_the_masking_state_it_was_given() -> None:
+    store, registrar = FakeLangfuse(), Registrar()
+    item = exporter(store, registrar, degraded="detector_unavailable")
+    item.start()
+    item.bind(OPERATION, GRANT)
+    item.export(record())
+    await settle(item)
+    (request,) = store.requests
+    body = json.loads(request.content)
+    attributes = {
+        attribute["key"]: attribute["value"]["stringValue"]
+        for attribute in body["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["attributes"]
+    }
+    assert attributes["langfuse.trace.metadata.degraded"] == "detector_unavailable"
+    assert attributes["langfuse.trace.metadata.export_mode"] == "metadata"
