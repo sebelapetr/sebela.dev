@@ -18,6 +18,8 @@ const operation = {
   status: "accepted",
   deadlineAt: "2026-11-20T10:01:00.000Z",
   assistantMessageId: MESSAGE,
+  kind: "answer",
+  compaction: null,
 };
 
 const ids = { requestId: REQUEST, messageId: MESSAGE };

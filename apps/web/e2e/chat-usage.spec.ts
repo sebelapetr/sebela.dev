@@ -132,6 +132,8 @@ function snapshot(fields: {
             status: "running",
             deadlineAt: new Date(now + 2 * minute).toISOString(),
             assistantMessageId: "00000000-0000-4000-8000-000000000003",
+            kind: "answer",
+            compaction: null,
           }
         : null,
     restriction: fields.restriction ?? null,

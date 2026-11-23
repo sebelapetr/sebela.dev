@@ -210,6 +210,8 @@ describe("describeChatUsage", () => {
           status: "running",
           deadlineAt: "2026-11-22T14:02:00.000Z",
           assistantMessageId: "33333333-0000-4000-8000-000000000001",
+          kind: "answer",
+          compaction: null,
         },
       }),
       LOCAL,

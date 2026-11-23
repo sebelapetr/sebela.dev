@@ -302,6 +302,8 @@ describe("opening the conversation", () => {
           status: "running",
           deadlineAt: "2026-11-20T10:01:00.000Z",
           assistantMessageId: storedId(3),
+          kind: "answer",
+          compaction: null,
         },
       }),
     );
@@ -597,6 +599,8 @@ describe("the hero's hand-off", () => {
           status: "running",
           deadlineAt: "2026-11-20T10:01:00.000Z",
           assistantMessageId: storedId(3),
+          kind: "answer",
+          compaction: null,
         },
       }),
     );
@@ -833,6 +837,8 @@ function activeOperation(n: number) {
     status: "running",
     deadlineAt: "2026-11-20T10:01:00.000Z",
     assistantMessageId: storedId(n * 2 + 1),
+    kind: "answer",
+    compaction: null,
   };
 }
 
