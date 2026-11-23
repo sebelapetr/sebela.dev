@@ -325,7 +325,8 @@ services:
       AI_SERVICE_MAX_OPERATIONS: ${AI_SERVICE_MAX_OPERATIONS:-}
       AI_SERVICE_ADMISSION_WAIT_S: ${AI_SERVICE_ADMISSION_WAIT_S:-}
       AI_SERVICE_SHUTDOWN_GRACE_S: ${AI_SERVICE_SHUTDOWN_GRACE_S:-}
-      # The metadata-only trace export; any key empty turns it off.
+      # The metadata-only trace export; any key empty turns it off. AI_SERVICE_TRACE_DETECTOR_DIR is
+      # not passed: no detector is accepted, and a detector folder would need a read-only mount.
       AI_SERVICE_LANGFUSE_BASE_URL: ${AI_SERVICE_LANGFUSE_BASE_URL:-}
       AI_SERVICE_LANGFUSE_PUBLIC_KEY: ${AI_SERVICE_LANGFUSE_PUBLIC_KEY:-}
       AI_SERVICE_LANGFUSE_SECRET_KEY: ${AI_SERVICE_LANGFUSE_SECRET_KEY:-}
