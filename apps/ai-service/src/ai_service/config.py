@@ -2,7 +2,9 @@
 
 Nothing about the environment is hard-coded: the host, the port and the API URL always come from
 the environment. The model defaults to the fictional `fake` one; the paid `anthropic` one needs an
-explicit opt-in, a daily ceiling and a provider key the secret wrapper provides.
+explicit opt-in, a daily ceiling and a provider key the secret wrapper provides. The trace export
+(`langfuse`) is on only when its base address and both keys are set; with any of them empty it is
+off, never an error.
 """
 
 from __future__ import annotations
