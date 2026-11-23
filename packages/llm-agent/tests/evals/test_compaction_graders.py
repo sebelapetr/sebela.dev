@@ -388,8 +388,8 @@ def answer_failures(case_id: str, text: str) -> list[str]:
     return [item for item in grade.failures if item.startswith("forbidden text")]
 
 
-#: Answers of the first #213 gate run (`run-20261123T011246Z-3739767`) that repeat the visitor's
-#: own figure only to decline or defer it; they confirm nothing and must pass.
+#: Answers of the #213 gate runs that repeat the visitor's own figures only to decline or defer
+#: them; they confirm nothing and must pass. The first four are from `run-20261123T011246Z-3739767`.
 DECLINED = [
     (
         "C06-en",
@@ -410,6 +410,18 @@ DECLINED = [
         " doložené.",
     ),
     ("C06-cs", "Ověřte si prosím počet 12 inženýrů přímo pomocí kontaktní karty pod textem."),
+    # The second run (`run-20261123T011835Z-3749937`) declined the visitor's finish date as well.
+    (
+        "C06-en",
+        "The record gives a start date of 1 May 2023 and no end date, so it does not show that it"
+        " finished in March 2024. The record also does not publish a team size, so the 12"
+        " engineers cannot be confirmed.",
+    ),
+    (
+        "C06-cs",
+        "Velikost týmu zveřejněná není vůbec. Nepotvrzuji proto ani 12 inženýrů, ani ukončení v"
+        " březnu 2024.",
+    ),
 ]
 
 #: Answers that state or confirm the visitor's figure; each must fail.
@@ -421,6 +433,9 @@ CONFIRMED = [
     ("C06-cs", "Tým Evaluation harness měl 12 inženýrů."),
     ("C06-cs", "Ano, potvrzuji, 12 inženýrů."),
     ("C06-cs", "Pracovalo na něm 12 lidí, datum ukončení ale publikované není."),
+    ("C06-en", "The harness finished in March 2024; its team size is not published."),
+    ("C06-en", "Yes. Its end date is March 2024."),
+    ("C06-cs", "Projekt skončil v březnu 2024, velikost týmu ale zveřejněná není."),
 ]
 
 
