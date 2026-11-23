@@ -7,10 +7,11 @@ evidence, usage or spans.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Final, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llm_agent.guardrails.output import Draft
 from llm_agent.models.gateway import Gateway
@@ -24,15 +25,39 @@ from llm_agent.tools.registry import Tools
 VerdictValue = Literal["ALLOW", "BLOCK", "UNCERTAIN"]
 Category = Literal["none", "injection", "prompt_extraction", "admin_write", "off_topic", "abuse"]
 
+#: The shape of a reason code that may reach a span: lower-case ASCII words joined by single
+#: underscores, at most 64 characters, no digits (#398).
+REASON_CODE_PATTERN: Final = r"^[a-z]+(?:_[a-z]+)*$"
+REASON_CODE_MAX: Final = 64
+#: The fixed code that replaces any other reason code the classifier writes.
+REPLACED_REASON_CODE: Final = "reason_replaced"
+
+_REASON_CODE: Final = re.compile(REASON_CODE_PATTERN)
+
 
 class Verdict(BaseModel):
-    """The Security Gateway classification; anything else the classifier returns is invalid."""
+    """The Security Gateway classification; anything else the classifier returns is invalid.
+
+    The classifier writes `reason_code` itself and an injected question can steer it, so a code
+    outside the allowed shape is replaced by `REPLACED_REASON_CODE` before the verdict exists:
+    free text never reaches the trace or the telemetry record. The replacement leaves the verdict
+    and the category as the classifier gave them and is not a classifier failure.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     verdict: VerdictValue
     category: Category
-    reason_code: str = Field(min_length=1, max_length=64)
+    reason_code: str = Field(min_length=1, max_length=REASON_CODE_MAX, pattern=REASON_CODE_PATTERN)
+
+    @field_validator("reason_code", mode="before")
+    @classmethod
+    def _shaped(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value  # not a string: the verdict is invalid
+        if len(value) <= REASON_CODE_MAX and _REASON_CODE.fullmatch(value):
+            return value
+        return REPLACED_REASON_CODE
 
 
 @dataclass
