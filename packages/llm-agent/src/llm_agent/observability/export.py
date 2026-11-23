@@ -46,7 +46,6 @@ ATTRIBUTES: Final = frozenset(
         "output_tokens",
         "verdict",
         "category",
-        "reason_code",
         "action",
         "outcome",
         "unpublished",
