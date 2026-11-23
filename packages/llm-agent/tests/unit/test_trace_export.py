@@ -329,7 +329,7 @@ def test_only_allowlisted_attributes_leave_and_their_strings_are_masked() -> Non
 def test_the_free_text_reason_code_of_the_security_verdict_never_leaves() -> None:
     # The classifier writes reason_code itself (up to 64 characters): rules cannot mask a name or
     # an address in it, so the outbound body carries the verdict and category but no reason code.
-    attributes_ = {
+    attributes_: dict[str, str | int | float | bool | None] = {
         "verdict": "BLOCK",
         "category": "injection",
         "reason_code": "Daniel Okafor, Husova 12 Brno",
