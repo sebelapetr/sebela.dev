@@ -18,6 +18,7 @@ const CONTROL_ROUTES = new Set([
   "POST /v1/internal/chat/grants/claim",
   "POST /v1/internal/chat/operations/:operationId/result",
   "POST /v1/internal/chat/operations/:operationId/compaction",
+  "POST /v1/internal/chat/operations/:operationId/telemetry",
 ]);
 /** The public writes: a visitor's question, compaction, retry, Stop and clear of their own conversation. */
 const VISITOR_WRITES = new Set([
@@ -113,6 +114,21 @@ describe("the OpenAPI document and the reference", () => {
         );
       }
     }
+  });
+
+  it("documents the telemetry registration under the control token", () => {
+    const registration = operation("POST", "/v1/internal/chat/operations/:operationId/telemetry");
+    expect(registration.operationId).toBe("registerChatTelemetry");
+    expect(registration.security).toEqual([{ controlToken: [] }]);
+    expect(registration.requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ChatTelemetryRegistration" } },
+    });
+    expect(registration.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ChatTelemetryRegistered" } },
+    });
+    expect(Object.keys(registration.responses)).toEqual(
+      expect.arrayContaining(["400", "401", "403", "409"]),
+    );
   });
 
   it("is generated from the contract schemas", () => {

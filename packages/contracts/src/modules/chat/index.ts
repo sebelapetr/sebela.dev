@@ -103,5 +103,17 @@ export type {
   ChatRetrySubmission,
   ChatUserMessage,
 } from "./conversation.js";
+export {
+  ChatTelemetryRegisteredSchema,
+  ChatTelemetryRegistrationSchema,
+  chatTelemetryExportDecisions,
+  chatTelemetryExportHorizonMs,
+  chatTelemetryRetentionDays,
+} from "./telemetry.js";
+export type {
+  ChatTelemetryExportDecision,
+  ChatTelemetryRegistered,
+  ChatTelemetryRegistration,
+} from "./telemetry.js";
 export { ChatUsageSchema, chatRestrictionReasons, chatUsageLevel } from "./usage.js";
 export type { ChatRestrictionReason, ChatUsage, ChatUsageLevel } from "./usage.js";

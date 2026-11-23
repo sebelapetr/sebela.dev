@@ -158,3 +158,60 @@ def test_a_fake_test_channel_is_refused_with_the_paid_model(name: str, tmp_path:
                 **{name: str(tmp_path / "channel")},
             )
         )
+
+
+LANGFUSE = {
+    "AI_SERVICE_LANGFUSE_BASE_URL": "https://langfuse.example.test/",
+    "AI_SERVICE_LANGFUSE_PUBLIC_KEY": "pk-lf-fictional-0000",
+    "AI_SERVICE_LANGFUSE_SECRET_KEY": "sk-lf-fictional-secret-0000",
+}
+
+
+def test_the_trace_export_is_off_by_default() -> None:
+    assert Settings.from_env(env()).langfuse is None
+
+
+@pytest.mark.parametrize("missing", sorted(LANGFUSE))
+def test_the_trace_export_is_off_unless_every_langfuse_setting_is_set(missing: str) -> None:
+    assert Settings.from_env(env(**{**LANGFUSE, missing: "-"})).langfuse is None
+
+
+def test_the_trace_export_reads_the_langfuse_settings_and_never_prints_the_key() -> None:
+    settings = Settings.from_env(env(**LANGFUSE))
+    assert settings.langfuse is not None
+    assert settings.langfuse.base_url == "https://langfuse.example.test"
+    assert settings.langfuse.public_key == "pk-lf-fictional-0000"
+    assert settings.langfuse.secret_key.get_secret_value() == "sk-lf-fictional-secret-0000"
+    assert settings.langfuse.environment == "development"
+    assert "sk-lf-fictional-secret-0000" not in repr(settings)
+
+
+def test_the_langfuse_environment_is_configurable() -> None:
+    settings = Settings.from_env(env(**LANGFUSE, AI_SERVICE_LANGFUSE_ENVIRONMENT="production"))
+    assert settings.langfuse is not None
+    assert settings.langfuse.environment == "production"
+
+
+@pytest.mark.parametrize("value", ["Production", "langfuse-x", "a b", "x" * 41])
+def test_an_invalid_langfuse_environment_is_refused(value: str) -> None:
+    with pytest.raises(ConfigError, match="AI_SERVICE_LANGFUSE_ENVIRONMENT"):
+        Settings.from_env(env(**LANGFUSE, AI_SERVICE_LANGFUSE_ENVIRONMENT=value))
+
+
+def test_the_langfuse_base_url_must_be_http() -> None:
+    with pytest.raises(ConfigError, match="AI_SERVICE_LANGFUSE_BASE_URL"):
+        Settings.from_env(env(**{**LANGFUSE, "AI_SERVICE_LANGFUSE_BASE_URL": "ftp://x.test"}))
+
+
+def test_the_trace_detector_folder_is_off_by_default() -> None:
+    assert Settings.from_env(env(**LANGFUSE)).trace_detector_dir is None
+
+
+def test_the_trace_detector_folder_is_read_as_an_absolute_path(tmp_path: Path) -> None:
+    settings = Settings.from_env(env(**LANGFUSE, AI_SERVICE_TRACE_DETECTOR_DIR=str(tmp_path)))
+    assert settings.trace_detector_dir == tmp_path
+
+
+def test_the_trace_detector_folder_must_be_absolute() -> None:
+    with pytest.raises(ConfigError, match="AI_SERVICE_TRACE_DETECTOR_DIR"):
+        Settings.from_env(env(**LANGFUSE, AI_SERVICE_TRACE_DETECTOR_DIR="models/ner"))

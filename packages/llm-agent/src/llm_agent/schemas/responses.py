@@ -170,6 +170,8 @@ class Usage(_Frozen):
 class Span(_Frozen):
     name: str
     status: str
+    #: Milliseconds from the execution's start (its tracer's creation) to this span's start.
+    start_ms: int = 0
     duration_ms: int
     attributes: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
 

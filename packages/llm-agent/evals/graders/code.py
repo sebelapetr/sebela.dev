@@ -8,13 +8,16 @@ that prose is true; usefulness and citation support are the rubric's (`rubric.py
 A record is the JSON the provider stores for one case-run (`evals/provider.py`): the approved
 `ChatResult` of the agent under `result`, plus its case and fingerprint. A compaction case also
 stores the `CompactionResult` of each compaction under `compactions`; their checks
-(`compaction_failures`) are critical in every case-run, ordinary cases included.
+(`compaction_failures`) are critical in every case-run, ordinary cases included. A trace export
+case (C07) also stores the captured OTLP/JSON bodies under `exports`; their checks
+(`trace_export_failures`) are critical too.
 """
 
 from __future__ import annotations
 
 import datetime
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -80,7 +83,7 @@ class CodeGrade:
     blocked: bool
     #: The source refs the approved answer cites.
     cited_refs: tuple[str, ...] = field(default=())
-    #: Failed compaction checks: they fail the gate even for an ordinary case.
+    #: Failed compaction and trace export checks: they fail the gate even for an ordinary case.
     critical_failures: tuple[str, ...] = field(default=())
 
 
@@ -261,8 +264,8 @@ def grade_code(
         if not re.search(pattern, text, re.IGNORECASE):
             failures.append(f"required text {pattern!r} is missing")
 
-    compaction = tuple(compaction_failures(case, record))
-    failures.extend(compaction)
+    critical_failures = (*compaction_failures(case, record), *trace_export_failures(case, record))
+    failures.extend(critical_failures)
 
     blocked = not critical and (outcome == "refused" or security_verdict(result) == "BLOCK")
     cited = tuple(str(source.get("ref")) for source in _list(result.get("sources")))
@@ -271,7 +274,7 @@ def grade_code(
         failures=tuple(failures),
         blocked=blocked,
         cited_refs=cited,
-        critical_failures=compaction,
+        critical_failures=critical_failures,
     )
 
 
@@ -339,6 +342,110 @@ def compaction_failures(case: EvalCase, record: Mapping[str, Any]) -> list[str]:
             ):
                 failures.append(f"the final summary has no {name} matching {pattern!r}")
     return failures
+
+
+#: OTLP/JSON fields whose digits are identifiers and clocks, never visitor text.
+OTLP_ID_FIELDS = frozenset(
+    {"traceId", "spanId", "parentSpanId", "startTimeUnixNano", "endTimeUnixNano"}
+)
+#: A labelled value with this many digits is a number: other formats of it match too.
+PHONE_MIN_DIGITS = 7
+#: The trailing digits of a number that identify it regardless of a country or trunk prefix.
+PHONE_TAIL_DIGITS = 9
+
+
+def trace_export_failures(case: EvalCase, record: Mapping[str, Any]) -> list[str]:
+    """No labelled visitor value reaches any captured export in any form; a metadata-only export
+    names why the content was withheld, a content export keeps the public owner facts, and the
+    answer export keeps its evaluation context (outcome, language, stage and tool spans)."""
+    expected = case.trace_export
+    if expected is None:
+        return []
+    exports = _list(record.get("exports"))
+    if not exports:
+        return ["no answer export was captured"]
+    failures: list[str] = []
+    answer: tuple[str, Mapping[str, Any]] | None = None
+    for index, export in enumerate(exports, start=1):
+        label = f"export {index}"
+        texts = [_fold(text) for text in _export_strings(export)]
+        for value in expected.visitor_values:
+            if any(_reveals(text, value) for text in texts):
+                failures.append(f"{label}: the visitor value {value!r} reached the export")
+        root = _root_attributes(export)
+        if root.get("langfuse.trace.metadata.export_mode") == "metadata":
+            if not root.get("langfuse.trace.metadata.degraded"):
+                failures.append(f"{label}: a metadata-only export names no degraded reason")
+        else:
+            for fact in expected.owner_facts:
+                if not any(_fold(fact) in text for text in texts):
+                    failures.append(f"{label}: the owner fact {fact!r} was not kept")
+        if answer is None and root.get("langfuse.trace.name") == "chat.answer":
+            answer = (label, export)
+    if answer is None:
+        return [*failures, "no answer export was captured"]
+    label, answer_export = answer
+    result = _mapping(record.get("result"))
+    root = _root_attributes(answer_export)
+    for name, actual in (("outcome", result.get("outcome")), ("language", result.get("language"))):
+        exported = root.get(f"langfuse.trace.metadata.{name}")
+        if exported != actual:
+            failures.append(f"{label}: {name} {exported}, the answer was {actual}")
+    names = {str(span.get("name")) for span in _export_spans(answer_export)}
+    for name in sorted(expected.required_spans - names):
+        failures.append(f"{label}: the span {name} is missing")
+    return failures
+
+
+def _fold(text: str) -> str:
+    """Case-folded, compatibility-decomposed text without combining marks (ř → r)."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def _reveals(folded_text: str, value: str) -> bool:
+    if _fold(value) in folded_text:
+        return True
+    digits = re.sub(r"\D", "", value)
+    if len(digits) < PHONE_MIN_DIGITS:
+        return False
+    tail = digits[-PHONE_TAIL_DIGITS:]
+    return re.search(r"\W{0,3}".join(tail), folded_text) is not None
+
+
+def _export_strings(value: object) -> Iterable[str]:
+    """Every string of an OTLP/JSON body: span and scope names, attribute keys and values."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for key, item in value.items():
+            if key not in OTLP_ID_FIELDS:
+                yield from _export_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _export_strings(item)
+
+
+def _export_spans(export: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        span
+        for resource in _list(export.get("resourceSpans"))
+        for scope in _list(resource.get("scopeSpans"))
+        for span in _list(scope.get("spans"))
+    ]
+
+
+def _root_attributes(export: Mapping[str, Any]) -> dict[str, str]:
+    """The string attributes of the span that names the trace (the root span), or none."""
+    for span in _export_spans(export):
+        attributes = {
+            str(item.get("key")): str(_mapping(item.get("value")).get("stringValue"))
+            for item in _list(span.get("attributes"))
+            if "stringValue" in _mapping(item.get("value"))
+        }
+        if "langfuse.trace.name" in attributes:
+            return attributes
+    return {}
 
 
 def _source_failures(result: Mapping[str, Any], outcome: str, required: Iterable[str]) -> list[str]:

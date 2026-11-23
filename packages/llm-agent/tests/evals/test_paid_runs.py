@@ -254,8 +254,8 @@ async def test_a_full_run_starts_under_a_realistic_allowance_and_runs_chunk_by_c
     paid: dict[str, Any],
 ) -> None:
     selected = [case.id for case in implemented()]
-    assert len(selected) == 88
-    # The whole run would reserve about USD 9.18; each chunk is reserved just before it starts.
+    assert len(selected) == 90
+    # The whole run would reserve about USD 10.82; each chunk is reserved just before it starts.
     assert run.reservation(selected) > 2.0
     assert await run.command_run(selected, 2.0, campaign=P6) in (0, 1)
     expected = run.chunks(selected, repeats=3)
@@ -265,7 +265,7 @@ async def test_a_full_run_starts_under_a_realistic_allowance_and_runs_chunk_by_c
     summary = summary_of()
     assert summary["pending"] == []
     assert summary["stopped"] is None
-    assert len(summary["case_runs"]) == 264
+    assert len(summary["case_runs"]) == 270
     (entry,) = ledger()
     assert [chunk["cases"] for chunk in entry["chunks"]] == [list(chunk) for chunk in expected]
     for chunk, piece in zip(entry["chunks"], expected, strict=True):

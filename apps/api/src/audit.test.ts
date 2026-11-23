@@ -53,6 +53,7 @@ const CHAT_WRITES = new Set([
   "POST /v1/internal/chat/grants/claim",
   "POST /v1/internal/chat/operations/:operationId/result",
   "POST /v1/internal/chat/operations/:operationId/compaction",
+  "POST /v1/internal/chat/operations/:operationId/telemetry",
 ]);
 
 /**

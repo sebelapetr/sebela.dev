@@ -1,10 +1,11 @@
 """The API's internal control routes: the one-use grant claim and the one result report.
 
 The only module of this app that imports the generated client (`sebela_api_client`,
-packages/api-client-python, generated from the API's OpenAPI document); it calls exactly three of
-its operations, `claim_chat_grant`, `report_chat_result` and `report_chat_compaction`, and uses
-their generated models (`ChatGrantClaim`, `ChatGrantClaimed`, `ChatGenerationResult`,
-`ChatCompactionResult`). The control bearer is the service's
+packages/api-client-python, generated from the API's OpenAPI document); it calls exactly four of
+its operations, `claim_chat_grant`, `report_chat_result`, `report_chat_compaction` and
+`register_chat_telemetry`, and uses their generated models (`ChatGrantClaim`, `ChatGrantClaimed`,
+`ChatGenerationResult`, `ChatCompactionResult`, `ChatTelemetryRegistration`,
+`ChatTelemetryRegistered`). The control bearer is the service's
 own credential (`AI_SERVICE_CONTROL_TOKEN`), never a content API key, and never reaches the model.
 Redirects are never followed. The status decides before any body is parsed: a response hook ends
 every answer but a 200 with `_Answered(status)`, so an unreadable error body (a proxy's page, an
@@ -21,6 +22,10 @@ error code this service does not know) can never hide a final 4xx.
   a redirect or a 4xx means never.
 - `report_compaction` delivers a compaction's result as the generated `ChatCompactionResult`
   to its own result route under the same rules.
+- `register_telemetry` registers one trace of a claimed operation before its export, once and
+  without a retry: True only when the API answers `allowed` for exactly this trace; a refusal,
+  any other status, a transport failure or a body outside the contract is False, and the trace
+  is then never exported.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ import httpx2
 from sebela_api_client import AuthenticatedClient
 from sebela_api_client.api.default import (
     claim_chat_grant,
+    register_chat_telemetry,
     report_chat_compaction,
     report_chat_result,
 )
@@ -44,6 +50,9 @@ from sebela_api_client.models import (
     ChatGenerationResult,
     ChatGrantClaim,
     ChatGrantClaimed,
+    ChatTelemetryRegistered,
+    ChatTelemetryRegisteredExport,
+    ChatTelemetryRegistration,
 )
 
 from ai_service.schemas import CompactionReport, ResultReport
@@ -128,6 +137,26 @@ class ControlApi:
             await report_chat_compaction.asyncio_detailed(operation, client=self._client, body=body)
 
         return await _delivered(send, until)
+
+    async def register_telemetry(
+        self, operation_id: str, grant: str, trace_id: str, *, timeout_s: float = _CLAIM_TIMEOUT_S
+    ) -> bool:
+        """True only when the API allows exporting `trace_id` for this operation now."""
+        body = ChatTelemetryRegistration(grant=grant, trace_id=trace_id)
+        try:
+            operation = uuid.UUID(operation_id)
+            async with asyncio.timeout(max(timeout_s, 0.01)):
+                response = await register_chat_telemetry.asyncio_detailed(
+                    operation, client=self._client, body=body
+                )
+        except (_Answered, httpx2.HTTPError, TimeoutError, *_UNREADABLE):
+            return False
+        registered = response.parsed
+        return (
+            isinstance(registered, ChatTelemetryRegistered)
+            and registered.trace_id == trace_id
+            and registered.export is ChatTelemetryRegisteredExport.ALLOWED
+        )
 
     async def aclose(self) -> None:
         await self._http.aclose()

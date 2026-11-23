@@ -277,3 +277,71 @@ async def test_a_redirected_or_refused_report_is_final(status: int) -> None:
         await control.aclose()
     assert stored is False
     assert len(seen) == 1
+
+
+TRACE = "4bf92f3577b34da6a3ce929d0e0e4736"
+
+
+async def _registered(api: FakeApi, operation: str, grant: str, trace: str = TRACE) -> bool:
+    control = ControlApi(API_URL, CONTROL_TOKEN, transport=api.transport())
+    try:
+        return await control.register_telemetry(operation, grant, trace)
+    finally:
+        await control.aclose()
+
+
+async def test_a_trace_registered_as_allowed_may_be_exported() -> None:
+    api = FakeApi()
+    request = api.issue()
+    api.claimed.add(request["operationId"])
+    assert await _registered(api, request["operationId"], request["grant"]) is True
+    assert api.registrations == [
+        (request["operationId"], {"grant": request["grant"], "traceId": TRACE})
+    ]
+
+
+@pytest.mark.parametrize("answer", ["refused", 403, 409, 500, 302])
+async def test_a_trace_that_is_not_allowed_is_never_exported(answer: str | int) -> None:
+    api = FakeApi(telemetry_export=answer)
+    request = api.issue()
+    api.claimed.add(request["operationId"])
+    assert await _registered(api, request["operationId"], request["grant"]) is False
+
+
+async def test_a_trace_of_an_unclaimed_or_foreign_grant_is_never_exported() -> None:
+    api = FakeApi()
+    request = api.issue()
+    assert await _registered(api, request["operationId"], request["grant"]) is False
+    api.claimed.add(request["operationId"])
+    assert await _registered(api, request["operationId"], "grant-of-another") is False
+
+
+async def test_an_allowed_answer_for_another_trace_is_not_an_allowance() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200,
+            json={
+                "traceId": "0" * 31 + "1",
+                "export": "allowed",
+                "expiresAt": "2026-12-23T00:00:00Z",
+            },
+        )
+
+    control = ControlApi(API_URL, CONTROL_TOKEN, transport=httpx2.MockTransport(handler))
+    try:
+        operation = "00000000-0000-4000-8000-0000000000aa"
+        assert await control.register_telemetry(operation, "grant-x", TRACE) is False
+    finally:
+        await control.aclose()
+
+
+async def test_a_registration_that_times_out_is_not_an_allowance() -> None:
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ReadTimeout("fictional timeout", request=request)
+
+    control = ControlApi(API_URL, CONTROL_TOKEN, transport=httpx2.MockTransport(handler))
+    try:
+        operation = "00000000-0000-4000-8000-0000000000aa"
+        assert await control.register_telemetry(operation, "grant-x", TRACE) is False
+    finally:
+        await control.aclose()

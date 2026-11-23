@@ -1,14 +1,16 @@
 """The service application: the composition of settings, the agent, the API clients and routes.
 
 `create_app(settings)` builds the FastAPI app; its lifespan opens the public content reader and
-the control client, starts admitting generations and, on exit, shuts down bounded
-(`Generations.shutdown`). The model is the fictional one unless the settings choose the paid
-`anthropic` one, which also brings the daily ceiling. `openapi_document()` is the service's
-published interface and needs no environment.
+the control client, starts the trace exporter when Langfuse is configured, starts admitting
+generations and, on exit, shuts down bounded (`Generations.shutdown`, then the exporter). The
+model is the fictional one unless the settings choose the paid `anthropic` one, which also brings
+the daily ceiling. `openapi_document()` is the service's published interface and needs no
+environment.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -28,9 +30,12 @@ from ai_service.runtime.admission import Admission
 from ai_service.runtime.capabilities import ReadCapabilities
 from ai_service.runtime.ceiling import DailyCeiling
 from ai_service.runtime.execution import Generations
+from ai_service.runtime.telemetry import TraceExporter, trace_masking
 from ai_service.schemas import CompactionRequest, GenerationRequest
 
 TITLE = "Sebela AI service"
+#: How long a shutdown lets queued traces go after the operations ended.
+_TELEMETRY_SHUTDOWN_S = 5.0
 VERSION = "0.0.0"
 
 
@@ -52,8 +57,10 @@ def create_app(
     models: ModelFactory | None = None,
     transport: httpx2.AsyncBaseTransport | None = None,
     capability_limits: CapabilityLimits | None = None,
+    telemetry_transport: httpx2.AsyncBaseTransport | None = None,
 ) -> FastAPI:
-    """The service for `settings`; `models` and `transport` replace the model and the API."""
+    """The service for `settings`; `models`, `transport` and `telemetry_transport` replace the
+    model, the API and the trace store."""
     factory = models or _models(settings)
     limits = capability_limits or CapabilityLimits()
 
@@ -63,11 +70,22 @@ def create_app(
             control = ControlApi(
                 settings.api_url, settings.control_token.get_secret_value(), transport=transport
             )
+            telemetry = None
+            if settings.langfuse is not None:
+                degraded = await asyncio.to_thread(trace_masking, settings.trace_detector_dir)
+                telemetry = TraceExporter(
+                    settings.langfuse,
+                    register=control.register_telemetry,
+                    transport=telemetry_transport,
+                    degraded=degraded,
+                )
+                telemetry.start()
             generations = Generations(
-                agent=ChatAgent(content=content, models=factory),
+                agent=ChatAgent(content=content, models=factory, telemetry=telemetry),
                 control=control,
                 admission=Admission(settings.max_operations, settings.admission_wait_s),
                 ceiling=_ceiling(settings),
+                telemetry=telemetry,
             )
             app.state.services = Services(
                 settings=settings,
@@ -85,6 +103,8 @@ def create_app(
                 yield
             finally:
                 await generations.shutdown(settings.shutdown_grace_s)
+                if telemetry is not None:
+                    await telemetry.shutdown(_TELEMETRY_SHUTDOWN_S)
                 await control.aclose()
 
     app = _app(lifespan)

@@ -1,0 +1,10 @@
+{
+  "description": "Acceptance floors of the trace pseudonymizer, frozen with corpus pii-corpus-v1 before the first implementation and before any detector candidate was compared (#214). Each floor applies independently to each language. Never lowered to let a candidate pass: a candidate that misses one keeps the metadata-only export.",
+  "corpus_sha256": "9d8d2ead36d94957ac9e9c6f05495ceccfb90e45496ca44b338244e93199f0ff",
+  "detected": {
+    "person": { "recall": 0.9, "precision": 0.9 },
+    "address": { "recall": 0.9, "precision": 0.9 }
+  },
+  "removal": 1.0,
+  "public_fact_retention": 1.0
+}

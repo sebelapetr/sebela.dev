@@ -218,6 +218,13 @@
       "when": 1795389210969,
       "tag": "0030_chat_compaction",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795443931765,
+      "tag": "0031_telemetry_deletion_schedule",
+      "breakpoints": true
     }
   ]
 }

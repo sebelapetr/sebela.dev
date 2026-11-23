@@ -200,8 +200,16 @@ describe("the generated API client", () => {
     expect(claimed.response.status).toBe(401);
     expect(claimed.error?.error.code).toBe("unauthorized");
 
+    const registered = await client.POST("/v1/internal/chat/operations/{operationId}/telemetry", {
+      params: { path: { operationId } },
+      body: { grant: "fictional-grant", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+    });
+    expect(registered.response.status).toBe(401);
+    expect(registered.data?.export).toBeUndefined();
+    expect(registered.error?.error.code).toBe("unauthorized");
+
     // The control routes take the AI service's control token; the owner's key never goes there.
-    expect(authorizations).toEqual([null, null, null, null, null, null]);
+    expect(authorizations).toEqual([null, null, null, null, null, null, null]);
   });
 
   it("checks a key: authenticated with it, refused without it or once revoked", async () => {

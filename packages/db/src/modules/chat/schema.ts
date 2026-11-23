@@ -218,8 +218,10 @@ export const operationTombstones = chatSchema.table(
 );
 
 /**
- * A telemetry trace exported for a conversation, so deleting the conversation can delete the
- * remote copy too. Identifiers only; it moves to `telemetry_deletions` when the conversation goes.
+ * A telemetry trace registered for export, so deleting the conversation, or its 30-day expiry,
+ * can delete the remote copy too. Identifiers and times only: the exporter may still export it
+ * until `export_until`; it moves to `telemetry_deletions` when the conversation goes or at
+ * `expires_at`.
  */
 export const telemetryReferences = chatSchema.table(
   "telemetry_references",
@@ -228,13 +230,19 @@ export const telemetryReferences = chatSchema.table(
     conversationId: uuid("conversation_id").notNull(),
     operationId: uuid("operation_id"),
     recordedAt: at("recorded_at").notNull(),
+    exportUntil: at("export_until").notNull(),
+    expiresAt: at("expires_at").notNull(),
   },
-  (table) => [index("telemetry_references_conversation").on(table.conversationId)],
+  (table) => [
+    index("telemetry_references_conversation").on(table.conversationId),
+    index("telemetry_references_expiry").on(table.expiresAt, table.traceId),
+  ],
 );
 
 /**
- * A remote telemetry deletion the API owes: `pending` until the exporter confirms it, with the
- * failed attempts counted; `completed` after. No content and no reference to the conversation.
+ * A remote telemetry deletion the API owes: `pending` until the trace store confirms it, with the
+ * failed attempts counted and the next attempt never before the trace's last possible export;
+ * `completed` after. No content and no reference to the conversation.
  */
 export const telemetryDeletions = chatSchema.table(
   "telemetry_deletions",
@@ -243,11 +251,12 @@ export const telemetryDeletions = chatSchema.table(
     requestedAt: at("requested_at").notNull(),
     state: text("state").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: at("next_attempt_at").notNull().defaultNow(),
     settledAt: at("settled_at"),
   },
   (table) => [
-    index("telemetry_deletions_pending")
-      .on(table.requestedAt)
+    index("telemetry_deletions_due")
+      .on(table.nextAttemptAt, table.traceId)
       .where(sql`${table.state} = 'pending'`),
     check("telemetry_deletions_state_known", sql`${table.state} IN ('pending', 'completed')`),
   ],

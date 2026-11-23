@@ -211,6 +211,10 @@ describe("the production example settings", () => {
     for (const name of NOT_PRODUCTION_SETTINGS) assert.ok(!(name in example), name);
   });
 
+  it("hold no setting the composition does not pass", () => {
+    assert.ok(!("AI_SERVICE_TRACE_DETECTOR_DIR" in example));
+  });
+
   it("hold placeholders, never a credential", () => {
     for (const [name, value] of Object.entries(example)) {
       if (/(?:PASSWORD|SECRET|API_KEY|TOKEN|IMAGE_TAG)$/.test(name)) {

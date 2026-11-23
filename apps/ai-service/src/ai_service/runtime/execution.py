@@ -18,7 +18,9 @@ Each operation:
 4. stops without a model call when the deadline already passed, or (paid mode) when the daily
    ceiling refuses the allowance;
 5. runs the agent (`run` or `compact`), maps its result to the contract and reports it once to
-   its own result route, with bounded retries until a few seconds after the deadline.
+   its own result route, with bounded retries until a few seconds after the deadline. With a
+   trace export, the claimed grant is bound to the exporter for the agent's one record and
+   released when the operation ends (`runtime/telemetry.py`).
 
 `cancel` is the API's Stop of one operation: a running one stops its graph, model and tool work
 and reports `cancelled (stopped)` (zero, certain usage when it stopped before a model call; the
@@ -54,6 +56,7 @@ from ai_service.runtime.mapping import (
     stopped_report,
     summary_for,
 )
+from ai_service.runtime.telemetry import TraceExporter
 from ai_service.schemas import (
     MAX_ALLOWANCE_USD,
     CompactionReport,
@@ -94,8 +97,10 @@ class Generations:
         control: ControlApi,
         admission: Admission,
         ceiling: DailyCeiling | None,
+        telemetry: TraceExporter | None = None,
     ) -> None:
         self._agent = agent
+        self._telemetry = telemetry
         self._control = control
         self._admission = admission
         self._ceiling = ceiling
@@ -170,6 +175,8 @@ class Generations:
             if claim is None:
                 _log.info("operation %s: the grant was not claimed", operation)
                 return
+            if self._telemetry is not None:
+                self._telemetry.bind(operation, request.grant)
             deadline_at = min(request.deadline_at, claim.deadline_at)
             until = time.monotonic() + max(_seconds_until(deadline_at), 0.0) + RECONCILE_GRACE_S
             report: ResultReport | CompactionReport
@@ -188,6 +195,8 @@ class Generations:
         except Exception:
             _log.exception("operation %s failed", operation)
         finally:
+            if self._telemetry is not None:
+                self._telemetry.release(operation)
             slot.release()
 
     async def _generate(

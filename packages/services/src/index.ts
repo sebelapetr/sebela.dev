@@ -70,8 +70,10 @@ export type {
 export { readRetrievalOptions } from "./modules/retrieval/index.js";
 export {
   chatPolicy,
+  createLangfuseTraceDeleter,
   createSiteverifyVerifier,
   readChatOptions,
+  readTelemetryDeletionOptions,
   siteverifyUrl,
 } from "./modules/chat/index.js";
 export type {
@@ -91,6 +93,13 @@ export type {
   ChatService,
   ChatServiceOptions,
   ChatSubmitResult,
+  ChatTelemetryDeletionReport,
+  ChatTelemetryDeletionRun,
+  ChatTelemetryOutcome,
+  ChatTraceDeleter,
+  ChatTraceDeletionResult,
+  LangfuseDeletionOptions,
+  LangfuseTraceDeleterOptions,
   SiteverifyOptions,
 } from "./modules/chat/index.js";
 export type {

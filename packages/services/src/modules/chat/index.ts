@@ -9,6 +9,8 @@ export type { ChatPolicy } from "./policy.js";
 export { createChatService, unconfiguredChat } from "./service.js";
 export { createSiteverifyVerifier, readChatOptions, siteverifyUrl } from "./siteverify.js";
 export type { SiteverifyOptions } from "./siteverify.js";
+export { createLangfuseTraceDeleter, readTelemetryDeletionOptions } from "./telemetry.js";
+export type { LangfuseDeletionOptions, LangfuseTraceDeleterOptions } from "./telemetry.js";
 export type {
   ChallengeVerifier,
   ChatCaller,
@@ -28,4 +30,9 @@ export type {
   ChatServiceOptions,
   ChatStopOutcome,
   ChatSubmitResult,
+  ChatTelemetryDeletionReport,
+  ChatTelemetryDeletionRun,
+  ChatTelemetryOutcome,
+  ChatTraceDeleter,
+  ChatTraceDeletionResult,
 } from "./types.js";

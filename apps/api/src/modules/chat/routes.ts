@@ -20,12 +20,15 @@ import {
   ChatMessageSubmissionSchema,
   ChatOperationSchema,
   ChatRetrySubmissionSchema,
+  ChatTelemetryRegisteredSchema,
+  ChatTelemetryRegistrationSchema,
   ChatUsageSchema,
   type ChatCompactionSubmission,
   type ChatConversationClear,
   type ChatGrantClaim,
   type ChatMessageSubmission,
   type ChatRetrySubmission,
+  type ChatTelemetryRegistration,
 } from "@sebela/contracts";
 import type {
   ChatCaller,
@@ -385,6 +388,33 @@ const controlRoutes = {
       409: "`conflict`: the operation's grant has not been claimed, or its conversation was cleared.",
     },
   },
+  telemetry: {
+    operationId: "registerChatTelemetry",
+    method: "POST",
+    path: "/v1/internal/chat/operations/:operationId/telemetry",
+    access: "private",
+    authorization: "control",
+    summary: "Register a chat trace before its export",
+    description:
+      "Internal: the AI service registers each trace of a claimed operation before it exports " +
+      "it, and exports it only on `allowed`, within 10 minutes of the registration. The API " +
+      "deletes the remote copy at `expiresAt`, 30 days later, or when the conversation is " +
+      "deleted. `refused` means the trace must not be exported, because its conversation or " +
+      "operation is gone or it is already owed a deletion; `expiresAt` is then when its remote " +
+      "copy, should one exist, is deleted. A repeat answers alike.",
+    params: OperationParamsSchema,
+    body: ChatTelemetryRegistrationSchema,
+    response: {
+      status: 200,
+      description: "Whether the trace may be exported, and when its remote copy is deleted.",
+      schema: ChatTelemetryRegisteredSchema,
+    },
+    errors: [],
+    refusals: {
+      403: "`forbidden`: the grant is not the operation's.",
+      409: "`conflict`: the operation's grant has not been claimed, or the trace is another operation's.",
+    },
+  },
 } satisfies Record<string, RouteDocumentation>;
 
 /** The documentation of every chat route, in registration order. */
@@ -695,5 +725,26 @@ export function registerChatRoutes(app: Hono<ApiEnv>, options: ChatRouteOptions)
     controlRoutes.compaction.path,
     control(controlRoutes.compaction, z.unknown()),
     async (c) => reconciled(c, await chat.reconcileCompaction(operationIdOf(c), c.get("body"))),
+  );
+
+  app.post(
+    controlRoutes.telemetry.path,
+    control(controlRoutes.telemetry, ChatTelemetryRegistrationSchema),
+    async (c) => {
+      const outcome = await chat.registerTelemetry(
+        operationIdOf(c),
+        c.get("body") as ChatTelemetryRegistration,
+      );
+      switch (outcome.status) {
+        case "registered":
+          return c.json(outcome.registered, 200);
+        case "wrong_grant":
+          throw new ApiError(403, "forbidden", "The grant is not the operation's.");
+        case "not_claimed":
+          throw new ApiError(409, "conflict", "The operation's grant has not been claimed.");
+        case "trace_conflict":
+          throw new ApiError(409, "conflict", "The trace is registered for another operation.");
+      }
+    },
   );
 }

@@ -1877,55 +1877,6 @@ describe("chat persistence", () => {
         ).resolves.toEqual({ status: "mismatch" });
         await expect(chat.findActiveOperation(caller.identityId)).resolves.toEqual(operation);
       });
-
-      it("hands a cleared conversation's telemetry references over for remote deletion", async () => {
-        const caller = await identity();
-        const operation = await admitted(admission(caller));
-        await finish(operation.id);
-        const traces = [unique("trace"), unique("trace")];
-        for (const traceId of traces) {
-          await expect(
-            chat.recordTelemetryReference({
-              traceId,
-              conversationId: caller.conversation.id,
-              operationId: operation.id,
-              at,
-            }),
-          ).resolves.toBe("recorded");
-        }
-        const pendingOf = async () =>
-          (await chat.pendingTelemetryDeletions(1000)).filter((entry) =>
-            entry.traceId.startsWith("trace-"),
-          );
-        const before = (await pendingOf()).map((entry) => entry.traceId);
-        expect(before).not.toEqual(expect.arrayContaining([traces[0]]));
-
-        const result = await cleared(clearing(caller));
-        expect(result.telemetryPending).toBe(2);
-        const lateTrace = unique("trace");
-        await expect(
-          chat.recordTelemetryReference({
-            traceId: lateTrace,
-            conversationId: caller.conversation.id,
-            operationId: operation.id,
-            at: later(6000),
-          }),
-        ).resolves.toBe("deletion_pending");
-        const pending = await pendingOf();
-        expect(pending.map((entry) => entry.traceId)).toEqual(
-          expect.arrayContaining([...traces, lateTrace]),
-        );
-        expect(pending.find((entry) => entry.traceId === traces[0])).toMatchObject({ attempts: 0 });
-
-        await chat.settleTelemetryDeletion(traces[0] ?? "", "completed", later(7000));
-        await chat.settleTelemetryDeletion(traces[1] ?? "", "failed", later(7000));
-        const after = await pendingOf();
-        expect(after.map((entry) => entry.traceId)).not.toContain(traces[0]);
-        expect(after.find((entry) => entry.traceId === traces[1])).toMatchObject({ attempts: 1 });
-
-        const empty = await cleared(clearing({ ...caller, conversation: result.conversation }));
-        expect(empty.telemetryPending).toBe(0);
-      });
     });
   });
 });

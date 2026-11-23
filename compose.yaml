@@ -131,6 +131,10 @@ services:
       API_AI_SERVICE_URL: ${API_AI_SERVICE_TOKEN:+http://ai-service:8080}
       API_AI_SERVICE_TOKEN: ${API_AI_SERVICE_TOKEN:-}
       API_AI_CONTROL_TOKEN: ${API_AI_CONTROL_TOKEN:-}
+      # Remote deletion of exported chat traces; all empty leaves the deletions pending.
+      API_LANGFUSE_BASE_URL: ${API_LANGFUSE_BASE_URL:-}
+      API_LANGFUSE_PUBLIC_KEY: ${API_LANGFUSE_PUBLIC_KEY:-}
+      API_LANGFUSE_SECRET_KEY: ${API_LANGFUSE_SECRET_KEY:-}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       # Local files live on the media volume below, not in the checkout, so they survive a restart
       # or a rebuilt container. The key namespaces (environment, worktree) apply below this folder.
@@ -321,6 +325,12 @@ services:
       AI_SERVICE_MAX_OPERATIONS: ${AI_SERVICE_MAX_OPERATIONS:-}
       AI_SERVICE_ADMISSION_WAIT_S: ${AI_SERVICE_ADMISSION_WAIT_S:-}
       AI_SERVICE_SHUTDOWN_GRACE_S: ${AI_SERVICE_SHUTDOWN_GRACE_S:-}
+      # The metadata-only trace export; any key empty turns it off. AI_SERVICE_TRACE_DETECTOR_DIR is
+      # not passed: no detector is accepted, and a detector folder would need a read-only mount.
+      AI_SERVICE_LANGFUSE_BASE_URL: ${AI_SERVICE_LANGFUSE_BASE_URL:-}
+      AI_SERVICE_LANGFUSE_PUBLIC_KEY: ${AI_SERVICE_LANGFUSE_PUBLIC_KEY:-}
+      AI_SERVICE_LANGFUSE_SECRET_KEY: ${AI_SERVICE_LANGFUSE_SECRET_KEY:-}
+      AI_SERVICE_LANGFUSE_ENVIRONMENT: ${AI_SERVICE_LANGFUSE_ENVIRONMENT:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     networks: [chat]
     depends_on:
