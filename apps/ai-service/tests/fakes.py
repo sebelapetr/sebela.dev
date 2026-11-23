@@ -134,6 +134,10 @@ class FakeApi:
     public_reads: list[str] = field(default_factory=list)
     reported: asyncio.Event = field(default_factory=asyncio.Event)
     deadlines: dict[str, str] = field(default_factory=dict)
+    #: Every telemetry registration, as (operation ID, body), in arrival order.
+    registrations: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    #: What a registration answers: `allowed`, `refused` or an error status.
+    telemetry_export: str | int = "allowed"
 
     def issue(self, deadline_s: float = 30.0) -> dict[str, Any]:
         """A fresh generation request body with its own operation and grant."""
@@ -198,6 +202,8 @@ class FakeApi:
                 await asyncio.sleep(self.claim_delay_s)
             return self._claim(body)
         prefix, _, rest = path.partition("/v1/internal/chat/operations/")
+        if not prefix and rest.endswith("/telemetry") and request.method == "POST":
+            return self._telemetry(rest.removesuffix("/telemetry"), body)
         if not prefix and request.method == "POST":
             self.report_paths.append(path)
         if not prefix and rest.endswith("/result") and request.method == "POST":
@@ -248,6 +254,23 @@ class FakeApi:
             },
         )
 
+    def _telemetry(self, operation: str, body: dict[str, Any]) -> httpx2.Response:
+        self.registrations.append((operation, body))
+        if self.grants.get(operation) != body.get("grant"):
+            return httpx2.Response(403, json=error("forbidden"))
+        if operation not in self.claimed:
+            return httpx2.Response(409, json=error("conflict"))
+        if isinstance(self.telemetry_export, int):
+            return httpx2.Response(self.telemetry_export, json=error("internal_error"))
+        return httpx2.Response(
+            200,
+            json={
+                "traceId": body["traceId"],
+                "export": self.telemetry_export,
+                "expiresAt": "2026-12-23T00:00:00.000Z",
+            },
+        )
+
     async def wait_reported(self, count: int = 1, timeout_s: float = 10.0) -> None:
         async with asyncio.timeout(timeout_s):
             while len(self.stored) < count:
@@ -255,6 +278,55 @@ class FakeApi:
                 if len(self.stored) >= count:
                     return
                 await self.reported.wait()
+
+
+LANGFUSE_URL = "https://langfuse.example.test"
+LANGFUSE_PUBLIC = "pk-lf-fictional-0000"
+LANGFUSE_SECRET = "sk-lf-fictional-secret-0000"
+
+#: The service settings that turn the trace export on, with fictional keys and host.
+LANGFUSE_ENV: dict[str, str] = {
+    "AI_SERVICE_LANGFUSE_BASE_URL": LANGFUSE_URL,
+    "AI_SERVICE_LANGFUSE_PUBLIC_KEY": LANGFUSE_PUBLIC,
+    "AI_SERVICE_LANGFUSE_SECRET_KEY": LANGFUSE_SECRET,
+}
+
+
+@dataclass
+class FakeLangfuse:
+    """The fictional trace store: it records every outbound request whole, headers and body."""
+
+    requests: list[httpx2.Request] = field(default_factory=list)
+    #: Status codes the ingestion answers before it accepts, in order (0 is a transport failure).
+    failures: list[int] = field(default_factory=list)
+    #: How long each ingestion takes.
+    delay_s: float = 0.0
+    received: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def transport(self) -> httpx2.MockTransport:
+        return httpx2.MockTransport(self._handle)
+
+    @property
+    def bodies(self) -> list[dict[str, Any]]:
+        return [json.loads(request.content) for request in self.requests]
+
+    async def _handle(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
+        self.received.set()
+        if self.delay_s:
+            await asyncio.sleep(self.delay_s)
+        if self.failures:
+            status = self.failures.pop(0)
+            if status == 0:
+                raise httpx2.ConnectError("fictional outage", request=request)
+            return httpx2.Response(status, json={"message": "fictional failure"})
+        return httpx2.Response(200, json={})
+
+    async def wait(self, count: int = 1, timeout_s: float = 10.0) -> None:
+        async with asyncio.timeout(timeout_s):
+            while len(self.requests) < count:
+                self.received.clear()
+                await self.received.wait()
 
 
 def exchange_bodies(count: int) -> list[dict[str, Any]]:
