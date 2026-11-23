@@ -10,7 +10,7 @@ Every figure below is copied from the issue or pull request it names. Nothing wa
 - Issue gates so far: critical C05/C06 and C07 passed their issue runs; the ordinary C03-cs and C04-cs gates are each one miss in three below the 90% floor, left to [#442][i442] and the phase-PR run.
 - The full phase-6 plus phase-7 catalogue (3 repeats, pinned judge) has **not run** on the final phase state. It runs once on the phase pull request when the owner marks it ready, or by manual dispatch ([How the final run starts](#how-the-final-run-starts)).
 - Trace export is **metadata only**: no PII detector is accepted, so no visitor content leaves the process ([PII corpus](#pii-corpus-and-trace-export)).
-- Production grading of real visitor answers is **not implemented** in the AFK segment ([Grading real answers](#grading-real-answers)).
+- Production grading of real visitor answers moved to [#448][i448], outside phase 7. Phase 7 is accepted on the fixture evals; no real conversation is sent to a cloud judge in this phase ([Grading real answers](#grading-real-answers)).
 
 ## Families
 
@@ -46,7 +46,8 @@ The phase-PR run fills these from its redacted `summary.json` (artifact `llm-age
 
 ## Cost
 
-The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the C07 run of [#446][p446]:
+The phase-7 campaign is USD 4.00: issue work stops at a cumulative USD 1.50, USD 2.00 is kept for the phase-PR run, one affected rerun and the latency measurement, and USD 0.50 is a margin only the owner releases (`.plan/07-ai-service/evals.md`, Run policy and budgets). The latest recorded runner line is from the C07 run of [#446][i448]: https://github.com/sebelapetr/sebela.dev/issues/448
+[p446]:
 
 `spend: expected 0.0092 USD, actual 0.0113 USD (uncertain 0.0000); 3.6716 USD of the 07-ai-service ceiling (4.00 USD) remain`
 
@@ -58,10 +59,21 @@ From `packages/llm-agent/AGENTS.md` (Trace pseudonymization, [#446][p446]): the 
 
 ## Grading real answers
 
-The issue's production grading operation (explicitly selected answers under a declared scope and maximum batch cost, judged outside the visitor path) is not built. Two facts stop it from being built as specified without an owner decision:
+Owner decision on [#215][i215]: the issue is split. Phase 7 is accepted on the fixture evals, as before, and **production grading moved to [#448][i448], outside phase 7**. It covers an evidence snapshot per stored answer, an accepted PII detector scored against `pii-corpus-v1`, and the grading batch (explicitly selected answers under a declared scope and maximum batch cost) with Langfuse scores. Nothing of it is built in this phase, and no real conversation is sent to a cloud judge. #448 starts from two open facts:
 
 - **No evidence to judge against.** The API stores an answer's text and its sources (reference, kind, record ID, title, link), but not the evidence the agent read. The versioned rubric judges claims against that evidence, so it cannot grade a stored answer as it is. The choices are a stored evidence snapshot per answer, a re-read of the current public records (which may have changed since), or a separate production rubric.
 - **Nothing may leave unfiltered.** Before external grading, visitor content must pass S05's policy or the record is omitted. With no detector accepted, every real record would be omitted.
+
+Eval selection: the `Python agent model evals` job does not run for a change under `apps/ai-service`. That is deliberate, because the eval runner never loads the AI service; its own tests cover it (`scripts/checks/llm-agent-evals-affected.mjs`; `docs/testing.md`, CI).
+
+## Follow-ups outside this change
+
+These need either real conversations or a paid run nobody has allowed, so they are not built in #215:
+
+- **Latency workload command** (S07 item 5): a command that runs the 20 `comparison-v1` cases x 3 repeats at concurrency 1 and 4, Haiku only, no judge. The current comparison mode runs 1 repeat with the judge. Needs a paid run from the phase-PR reserve.
+- **Langfuse annotation queue** (S07 item 6) with the 12 stored phase-PR answers: needs stored answers of the paid phase-PR run and the owner's credentials.
+- **Production grading batch:** [#448][i448].
+- **[#442][i442]** (C03-cs and C04-cs misses) stays open and is settled before the phase-PR run.
 
 ## How the final run starts
 
@@ -75,10 +87,12 @@ The owner runs these; fakes or laptop results do not count for any of them.
 2. **Real Turnstile.** On the deployed fictional stack: a solved challenge creates a conversation; a missing, expired or reused token is refused without a paid call; read, stop and delete need no challenge.
 3. **Langfuse EU ingest and delete.** With the owner's credentials through the existing protected mechanism, export one disposable fictional trace, confirm it arrives metadata only, then delete its conversation and confirm the remote deletion completes (`chat-maintenance delete-telemetry`; `apps/api/AGENTS.md`).
 4. **Shared ARM64 server envelope.** Declare the available CPU and memory first, then run `cd apps/ai-service && uv run --locked python scripts/measure_trace_export.py --json` on the server (with `--detector <folder>` for a candidate, if one is installed) and record peak memory, CPU and latency (`apps/ai-service/AGENTS.md`, Trace export). Without an accepted candidate, record the metadata-only fallback.
-5. **Latency workload.** The 20 `comparison-v1` cases (10 EN, 10 CS) × 3 repeats, at concurrency 1 and at concurrency 4, Haiku only, no judge, never batched, about USD 0.25 from the USD 2.00 phase-PR reserve; record first status (target within 1 s) and time to the first approved content (p95 target at most 20 s, deadline 60 s), with model, effort, pricing, host resources and run count. It is a measurement, not a gate, and its answers are never pooled. No command runs this workload yet (follow-up of #215).
-6. **Human grades.** 12 final-revision answers (6 EN, 6 CS) taken from the stored phase-PR run, plus every disputed result, scored 1–5 for grounding, relevance and language in the phase-6 record format, with case, run, commit, model, judge and rubric versions, reviewer and date. Include compact continuation, ordinary factual, unknown/contact and adversarial summary or history cases. Resolve each score below 4; critical failures cannot be waived. The annotation queue is a follow-up of #215; until it exists the record format of the [phase 06 report](06-llm-agent.md#graded-answers-and-the-judge) applies.
+5. **Latency workload.** The 20 `comparison-v1` cases (10 EN, 10 CS) × 3 repeats, at concurrency 1 and at concurrency 4, Haiku only, no judge, never batched, about USD 0.25 from the USD 2.00 phase-PR reserve; record first status (target within 1 s) and time to the first approved content (p95 target at most 20 s, deadline 60 s), with model, effort, pricing, host resources and run count. It is a measurement, not a gate, and its answers are never pooled. No command runs this workload yet; it is a follow-up ([Follow-ups](#follow-ups-outside-this-change)).
+6. **Human grades.** 12 final-revision answers (6 EN, 6 CS) taken from the stored phase-PR run, plus every disputed result, scored 1–5 for grounding, relevance and language in the phase-6 record format, with case, run, commit, model, judge and rubric versions, reviewer and date. Include compact continuation, ordinary factual, unknown/contact and adversarial summary or history cases. Resolve each score below 4; critical failures cannot be waived. The annotation queue is a follow-up ([Follow-ups](#follow-ups-outside-this-change)); until it exists the record format of the [phase 06 report](06-llm-agent.md#graded-answers-and-the-judge) applies.
 
 [i213]: https://github.com/sebelapetr/sebela.dev/issues/213
+[i215]: https://github.com/sebelapetr/sebela.dev/issues/215
 [i216]: https://github.com/sebelapetr/sebela.dev/issues/216
 [i442]: https://github.com/sebelapetr/sebela.dev/issues/442
+[i448]: https://github.com/sebelapetr/sebela.dev/issues/448
 [p446]: https://github.com/sebelapetr/sebela.dev/pull/446
