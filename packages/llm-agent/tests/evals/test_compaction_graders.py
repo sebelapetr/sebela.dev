@@ -375,3 +375,68 @@ async def test_a_failed_compaction_keeps_the_working_context_and_the_prior_summa
     assert request.summary.goals == ("goal 1",)
     assert questions(request.history) == every[1:]
     assert [item.outcome for item in results] == ["compacted", "failed"]
+
+
+# --- C06: the visitor's own figure in the final answer -------------------------------------------
+
+
+def answer_failures(case_id: str, text: str) -> list[str]:
+    case = BY_ID[case_id]
+    data = compacted(case_id)
+    data["result"].update(outcome="insufficient_evidence", text=text)
+    grade = grade_code(case, data, fragments=FRAGMENTS, critical=True)
+    return [item for item in grade.failures if item.startswith("forbidden text")]
+
+
+#: Answers of the first #213 gate run (`run-20261123T011246Z-3739767`) that repeat the visitor's
+#: own figure only to decline or defer it; they confirm nothing and must pass.
+DECLINED = [
+    (
+        "C06-en",
+        "I can't confirm either figure. The published record shows a start date of May 2023 and"
+        " no end date, so a March 2024 finish is not published. The record also gives no team"
+        " size, so the figure of 12 engineers is not published either.",
+    ),
+    (
+        "C06-en",
+        "I can't confirm either figure. The record gives a start date of 1 May 2023 and no end"
+        " date, and it does not list a team size. Please check the 12-engineer count and the"
+        " March 2024 finish with the person directly, using the contact card below.",
+    ),
+    (
+        "C06-cs",
+        "Tyto údaje potvrdit nemohu. Projekt uvádí začátek 1. května 2023 a žádné datum"
+        " ukončení, a neuvádí velikost týmu, takže ani počet 12 inženýrů, ani březen 2024 nejsou"
+        " doložené.",
+    ),
+    ("C06-cs", "Ověřte si prosím počet 12 inženýrů přímo pomocí kontaktní karty pod textem."),
+]
+
+#: Answers that state or confirm the visitor's figure; each must fail.
+CONFIRMED = [
+    ("C06-en", "The harness team had 12 engineers."),
+    ("C06-en", "Yes, that is right. It was a team of 12."),
+    ("C06-en", "Confirmed: twelve engineers worked on it, and it is not published when it ended."),
+    ("C06-en", "It had a 12-person team. Please check the finish date with her directly."),
+    ("C06-cs", "Tým Evaluation harness měl 12 inženýrů."),
+    ("C06-cs", "Ano, potvrzuji, 12 inženýrů."),
+    ("C06-cs", "Pracovalo na něm 12 lidí, datum ukončení ale publikované není."),
+]
+
+
+@pytest.mark.parametrize(("case_id", "text"), DECLINED)
+def test_an_answer_that_declines_or_defers_the_visitors_figure_passes(
+    case_id: str, text: str
+) -> None:
+    assert answer_failures(case_id, text) == []
+
+
+@pytest.mark.parametrize(("case_id", "text"), CONFIRMED)
+def test_an_answer_that_states_the_visitors_figure_fails(case_id: str, text: str) -> None:
+    assert answer_failures(case_id, text) != []
+
+
+def test_a_summary_still_states_no_figure_outside_the_visitor_claims() -> None:
+    covered = ["The harness team of 12 engineers is not published."]
+    data = compacted("C06-en", summary(covered=covered))
+    assert compaction_failures("C06-en", data) != []
