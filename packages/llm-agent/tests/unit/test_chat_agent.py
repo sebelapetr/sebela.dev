@@ -547,6 +547,10 @@ async def test_a_draft_that_is_only_an_unknown_ref_is_replaced() -> None:
         "Write to someone@evil.example.test for details.",
         "She is great <img src=x onerror=alert(1)>.",
         "Ilsa is ![a photo](https://marrow.example.test/x.png) an engineer.",
+        "See evil.example.test/offer for details.",
+        "See //evil.example.test/offer for details.",
+        "Read [her paper](evil.example.test/paper).",
+        "See evil[.]example[.]test for details.",
     ],
 )
 async def test_the_guard_replaces_untrusted_links_emails_and_markup(text: str) -> None:
@@ -597,7 +601,10 @@ async def test_the_guard_replaces_a_leaked_system_prompt_line() -> None:
 
 
 async def test_trusted_contact_links_in_the_text_pass() -> None:
-    text = "You can write to ilsa@marrow.example.test or see https://marrow.example.test/."
+    text = (
+        "You can write to ilsa@marrow.example.test or see https://marrow.example.test/,"
+        " marrow.example.test/experience or code.example.test/ilsa-marrow."
+    )
     models = ScriptedModels(
         security=[verdict()], main=[tools("get_contact"), draft(text, show_contact=True)]
     )

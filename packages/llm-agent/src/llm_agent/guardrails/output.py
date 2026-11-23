@@ -9,9 +9,10 @@ dashes, valid refs are kept in their canonical form (`src-1`), and only the site
 is tidied. A forged ref the visitor asked for (S20) is so never shown, even in a sentence that
 declines it; a draft in which one would remain is replaced (`unknown_ref`). An answered draft that
 cites no valid current-turn source is always replaced: the prompt asks for sources, but only this
-check enforces it. Nothing else of the text is edited: a draft with an untrusted link or e-mail
-address, markup, a code block or a system-prompt line is replaced as a whole, and so is one that
-is empty after the repair.
+check enforces it. Nothing else of the text is edited: a draft with a link or e-mail address
+outside the trusted contact data, in any form (`links`: bare host names, `//host`, any scheme,
+disguised dots), markup, a code block or a system-prompt line is replaced as a whole, and so is
+one that is empty after the repair.
 """
 
 from __future__ import annotations
@@ -24,14 +25,14 @@ from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from llm_agent.guardrails.links import invisible as _ignored
+from llm_agent.guardrails.links import link_finding
 from llm_agent.schemas import ContactCard, Evidence, Language
 
-GUARD_VERSION: Final = "output-guard-5"
+GUARD_VERSION: Final = "output-guard-6"
 MAX_TEXT_CHARS: Final = 4000
 LEAK_MIN_LENGTH: Final = 40
 
-_URL = re.compile(r"(?:https?://|www\.)[^\s)\]>\"']+", re.IGNORECASE)
-_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _MARKUP = re.compile(r"<\s*/?\s*[a-z!][^>]*>|!\[[^\]]*\]\(|```", re.IGNORECASE)
 
 #: How often the removal of unknown refs runs again on its own result before the draft is replaced.
@@ -116,8 +117,6 @@ def without_unknown_refs(text: str, known: Container[str]) -> str | None:
     return None
 
 
-#: Invisible characters outside the categories Cf, Mn and Me (Hangul fillers, braille blank).
-_INVISIBLE: Final = frozenset("\u115f\u1160\u3164\uffa0\u2800")
 #: The most separator characters between `src` and the number of a token.
 _MAX_SEPARATORS: Final = 3
 
@@ -134,12 +133,6 @@ class _Token:
 
 def _fold(char: str) -> str:
     return unicodedata.normalize("NFKC", char).casefold()
-
-
-def _ignored(char: str) -> bool:
-    """An invisible character: a format character (zero-width space, joiner, soft hyphen), a
-    combining or enclosing mark (variation selector, combining grapheme joiner) or a filler."""
-    return unicodedata.category(char) in {"Cf", "Mn", "Me"} or char in _INVISIBLE
 
 
 def _wordlike(folded: str) -> bool:
@@ -325,14 +318,9 @@ def text_finding(
         return "too_long"
     if _MARKUP.search(text):
         return "markup"
-    trusted_urls = {link.url.rstrip("/").casefold() for link in contact.links} if contact else set()
-    for url in _URL.findall(text):
-        if url.rstrip("/.,;:!?").rstrip("/").casefold() not in trusted_urls:
-            return "untrusted_url"
-    trusted_email = (contact.email or "").casefold() if contact else ""
-    for email in _EMAIL.findall(text):
-        if not trusted_email or email.rstrip(".").casefold() != trusted_email:
-            return "untrusted_email"
+    link = link_finding(text, contact)
+    if link is not None:
+        return link
     lowered = text.casefold()
     for prompt in prompt_texts:
         for line in prompt.splitlines():
