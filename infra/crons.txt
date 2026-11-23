@@ -12,3 +12,11 @@
 # chat-maintenance), in the API container. Entered only when the visitor chat is enabled
 # (infra/README.md, "The AI service and the visitor chat"); until then it stays commented out.
 # 30 3 * * * cd <checkout> && COMPOSE_FILE=compose.yaml:infra/production/compose.yaml docker compose --env-file <production environment file> exec -T api node dist/cli/chat-maintenance.js delete-expired 2>&1 | logger --tag sebela-chat-maintenance
+
+# The hourly deletion of exported telemetry traces 30 days after their registration, and of the
+# traces a visitor's deletion scheduled at once (apps/api/AGENTS.md, chat-maintenance), in the API
+# container. Entered with the line above, and only once the trace export is configured
+# (API_LANGFUSE_BASE_URL, API_LANGFUSE_PUBLIC_KEY, API_LANGFUSE_SECRET_KEY for the deletion;
+# AI_SERVICE_LANGFUSE_* for the export); until then it stays commented out. A run that stops at its
+# request limit or a rate limit leaves the rest to the next hour.
+# 15 * * * * cd <checkout> && COMPOSE_FILE=compose.yaml:infra/production/compose.yaml docker compose --env-file <production environment file> exec -T api node dist/cli/chat-maintenance.js delete-telemetry 2>&1 | logger --tag sebela-chat-maintenance
