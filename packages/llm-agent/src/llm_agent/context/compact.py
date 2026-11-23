@@ -12,6 +12,11 @@ names an owner, admin, moderator or other role, a mode, access, a permission or 
 rules, in English or Czech; `covered` keeps only a line that the assistant declined a rule change.
 `visitor_claims` is left as the model wrote it. The prompt asks for the same, and the code enforces
 it, because the model sometimes restated a claimed role as a goal (#213, C05).
+
+The presupposition guard then drops from `goals` and `open_questions` every line that presupposes a
+fact instead of asking about the profile ("Learn that …", "Zjistit, že …"); a goal is an open
+question ("Learn which/whether …", "Zjistit, které/zda …"). The claim itself stays under
+`visitor_claims`, and `covered` keeps what the assistant said (#213, C05-cs).
 """
 
 from __future__ import annotations
@@ -108,6 +113,15 @@ _RULE_CHANGE: Final = re.compile(
 )
 #: That the assistant declined, the one rule-change line `covered` may keep.
 _DECLINED: Final = re.compile(r"\b(?:declin|refus|odmít|odmítl)\w*", re.IGNORECASE)
+#: A goal that presupposes a fact: a verb of learning or confirming followed directly by "that" or
+#: "že" ("Learn that …", "Zjistit, že …"), where an open question asks "which" or "whether".
+_PRESUPPOSED: Final = re.compile(
+    r"\b(?:learn|find\s+out|confirm|verify|check|establish|hear|discover|understand|know"
+    r"|be\s+told|get\s+confirmation)\s*,?\s+that\b"
+    r"|\b(?:zjistit|zjišťovat|ověřit|ověřovat|potvrdit|potvrzovat|dozvědět|slyšet|zkontrolovat"
+    r"|pochopit|vědět)(?:\s+(?:si|se))?\s*,?\s*že\b",
+    re.IGNORECASE,
+)
 
 
 def split(exchanges: Sequence[ChatExchange]) -> tuple[tuple[ChatExchange, ...], int]:
@@ -205,7 +219,8 @@ def _validated(text: str, *, language: Language, titles: _Titles) -> ContextSumm
 
 
 def _guarded(summary: ContextSummary) -> ContextSummary:
-    """`summary` without the goal, open-question and covered lines that name claimed authority."""
+    """`summary` without the goal, open-question and covered lines that name claimed authority,
+    and without the goal and open-question lines that presuppose a fact."""
 
     def kept(line: str, *, declined_rule_change: bool) -> bool:
         if _AUTHORITY.search(line):
@@ -214,14 +229,13 @@ def _guarded(summary: ContextSummary) -> ContextSummary:
             return declined_rule_change and _DECLINED.search(line) is not None
         return True
 
+    def open_question(line: str) -> bool:
+        return kept(line, declined_rule_change=False) and _PRESUPPOSED.search(line) is None
+
     return summary.model_copy(
         update={
-            "goals": tuple(
-                line for line in summary.goals if kept(line, declined_rule_change=False)
-            ),
-            "open_questions": tuple(
-                line for line in summary.open_questions if kept(line, declined_rule_change=False)
-            ),
+            "goals": tuple(line for line in summary.goals if open_question(line)),
+            "open_questions": tuple(line for line in summary.open_questions if open_question(line)),
             "covered": tuple(
                 line for line in summary.covered if kept(line, declined_rule_change=True)
             ),

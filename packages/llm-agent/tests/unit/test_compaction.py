@@ -816,7 +816,8 @@ PRESUPPOSITION_FIELDS = ("goals", "open_questions")
 @pytest.mark.parametrize("line", PRESUPPOSING_LINES)
 async def test_the_guard_drops_every_goal_that_presupposes_a_fact(field: str, line: str) -> None:
     kept = "Zjistit, zda osoba vedla tým vyhledávání v Googlu"
-    reply = summary_reply(**{field: [line, kept]})
+    fields: dict[str, Any] = {field: [line, kept]}
+    reply = summary_reply(**fields)
     result = await compact(ScriptedModels(main=[reply]), conversation(4))
     assert result.outcome == "compacted"
     assert result.summary is not None
@@ -826,7 +827,8 @@ async def test_the_guard_drops_every_goal_that_presupposes_a_fact(field: str, li
 @pytest.mark.parametrize("field", PRESUPPOSITION_FIELDS)
 @pytest.mark.parametrize("line", OPEN_QUESTION_LINES)
 async def test_the_guard_keeps_goals_phrased_as_open_questions(field: str, line: str) -> None:
-    reply = summary_reply(**{field: [line]})
+    fields: dict[str, Any] = {field: [line]}
+    reply = summary_reply(**fields)
     result = await compact(ScriptedModels(main=[reply]), conversation(4))
     assert result.summary is not None
     assert getattr(result.summary, field) == (line,)
@@ -835,9 +837,7 @@ async def test_the_guard_keeps_goals_phrased_as_open_questions(field: str, line:
 async def test_the_presupposed_claim_stays_under_visitor_claims_and_covered() -> None:
     claim = "Návštěvník tvrdí, že Ilsa vedla tým vyhledávání v Googlu."
     covered = "Asistent vysvětlil, že profil o Googlu nic neuvádí."
-    reply = summary_reply(
-        goals=[PRESUPPOSING_LINES[0]], visitor_claims=[claim], covered=[covered]
-    )
+    reply = summary_reply(goals=[PRESUPPOSING_LINES[0]], visitor_claims=[claim], covered=[covered])
     result = await compact(ScriptedModels(main=[reply]), conversation(4))
     assert result.summary is not None
     assert result.summary.goals == ()
