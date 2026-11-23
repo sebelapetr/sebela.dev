@@ -745,7 +745,10 @@ async def test_the_main_output_ceiling_is_the_remaining_aggregate_output() -> No
 
 async def test_the_whole_execution_deadline_stops_with_a_limit() -> None:
     models = ScriptedModels(security=[verdict()], main=[Hang()])
-    result = await run(models, limits=ExecutionLimits(deadline_s=0.05))
+    # The deadline must leave the security stage time to finish on a slow runner, so the hung Main
+    # attempt is what it stops; at 0.05 s a slow CI runner expired it before Main started.
+    result = await run(models, limits=ExecutionLimits(deadline_s=0.25))
+    assert len(models.stage_calls("main")) == 1
     assert result.outcome == "limit_reached"
     assert result.reason == "deadline"
     assert result.usage.cost_uncertain is True
