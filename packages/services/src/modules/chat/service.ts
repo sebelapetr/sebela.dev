@@ -848,6 +848,14 @@ export function createChatService(
       );
     },
 
+    registerTelemetry() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+
+    deleteTelemetry() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+
     async usage(caller, context) {
       const at = now();
       const rules = namedQuotaRules(at);
@@ -956,5 +964,7 @@ export const unconfiguredChat: ChatService = {
   dispatchRefused: chatOff,
   interruptOverdue: chatOff,
   deleteExpired: chatOff,
+  registerTelemetry: chatOff,
+  deleteTelemetry: chatOff,
   usage: chatOff,
 };

@@ -386,20 +386,56 @@ export type ChatClearResult =
     }
   | { status: "mismatch" };
 
-/** A telemetry trace recorded for a conversation, so deleting it can delete the export too. */
-export interface ChatTelemetryReferenceInput {
+/**
+ * The AI service's registration of one trace it means to export, under the operation's grant.
+ * The caller computes the times: `exportUntil` is the end of the export horizon, after which the
+ * trace is never exported, and `expiresAt` is when its remote copy is to be deleted.
+ */
+export interface ChatTelemetryRegistrationInput {
+  operationId: string;
+  verifier: string;
   traceId: string;
-  conversationId: string;
-  operationId: string | null;
   at: Date;
+  exportUntil: Date;
+  expiresAt: Date;
 }
 
-/** A remote telemetry deletion still to be done. */
+export type ChatTelemetryRegistrationResult =
+  /** Stored, or stored before for the same operation; `expiresAt` is the stored expiry. */
+  | { status: "recorded"; expiresAt: Date }
+  /**
+   * Not to be exported: its conversation or operation is gone, or the trace is already owed a
+   * deletion. Its remote deletion is pending and not attempted before `deleteAfter`.
+   */
+  | { status: "refused"; deleteAfter: Date }
+  | { status: "not_claimed" }
+  | { status: "wrong_grant" }
+  /** The trace is registered for another operation. */
+  | { status: "trace_conflict" };
+
+/** A remote telemetry deletion taken for one attempt. */
 export interface ChatTelemetryDeletion {
   traceId: string;
   requestedAt: Date;
+  /** The failed attempts before this one. */
   attempts: number;
 }
+
+/**
+ * The outcome of one remote deletion attempt: `completed` ends it; `retry` counts a failure and
+ * schedules the next attempt at `retryAt`, or after `backoffMs` doubled per earlier failure and
+ * capped at `maxBackoffMs`.
+ */
+export type ChatTelemetrySettlement =
+  | { outcome: "completed"; traceIds: readonly string[]; at: Date }
+  | {
+      outcome: "retry";
+      traceIds: readonly string[];
+      at: Date;
+      retryAt: Date | null;
+      backoffMs: number;
+      maxBackoffMs: number;
+    };
 
 /** A visitor's message error, as stored. */
 export interface ChatStoredError {
@@ -539,20 +575,31 @@ export interface ChatPersistence {
    */
   clear(input: ChatClearInput): Promise<ChatClearResult>;
   /**
-   * Records a telemetry trace of a conversation; one of a deleted conversation or operation goes
-   * straight to pending deletion.
+   * Registers a trace of a claimed operation before its export. A trace of a deleted conversation
+   * or operation, or one already owed a deletion, is refused and goes to pending deletion; it is
+   * never recorded again. Idempotent for the same trace and operation.
    */
-  recordTelemetryReference(
-    input: ChatTelemetryReferenceInput,
-  ): Promise<"recorded" | "deletion_pending">;
-  /** The oldest pending remote telemetry deletions, at most `limit`. */
-  pendingTelemetryDeletions(limit: number): Promise<ChatTelemetryDeletion[]>;
-  /** Records a remote deletion's outcome: `completed` ends it, `failed` keeps it pending. */
-  settleTelemetryDeletion(
-    traceId: string,
-    outcome: "completed" | "failed",
+  registerTelemetry(
+    input: ChatTelemetryRegistrationInput,
+  ): Promise<ChatTelemetryRegistrationResult>;
+  /**
+   * Moves at most `limit` references expired at `at` to pending deletion, skipping rows another
+   * transaction holds; returns how many it moved.
+   */
+  sweepExpiredTelemetry(at: Date, limit: number): Promise<number>;
+  /**
+   * Takes at most `limit` pending deletions due at `at`, the longest due first, skipping rows
+   * another run holds, and leases them until `leaseUntil` so no other run takes them meanwhile.
+   */
+  claimDueTelemetryDeletions(
     at: Date,
-  ): Promise<void>;
+    limit: number,
+    leaseUntil: Date,
+  ): Promise<ChatTelemetryDeletion[]>;
+  /** Records the outcome of one remote deletion attempt of pending deletions. */
+  settleTelemetryDeletions(settlement: ChatTelemetrySettlement): Promise<void>;
+  /** How many remote telemetry deletions are pending. */
+  telemetryDeletionBacklog(): Promise<number>;
   /**
    * Reads an identity's quotas, the room of the spend windows, its active operation and its
    * conversation's last context measurement in one read-only snapshot; changes nothing.
@@ -1956,70 +2003,24 @@ export function createChatPersistence(db: Database): ChatPersistence {
       });
     },
 
-    async recordTelemetryReference(input) {
-      return db.transaction(async (tx) => {
-        // A share lock keeps the conversation from being cleared until the reference is stored.
-        const [conversation] = await tx
-          .select({ id: conversations.id })
-          .from(conversations)
-          .where(eq(conversations.id, input.conversationId))
-          .for("share");
-        const tombstoned =
-          input.operationId === null
-            ? []
-            : await tx
-                .select({ operationId: operationTombstones.operationId })
-                .from(operationTombstones)
-                .where(eq(operationTombstones.operationId, input.operationId));
-        if (conversation === undefined || tombstoned.length > 0) {
-          await tx
-            .insert(telemetryDeletions)
-            .values({ traceId: input.traceId, requestedAt: input.at })
-            .onConflictDoNothing();
-          return "deletion_pending";
-        }
-        await tx
-          .insert(telemetryReferences)
-          .values({
-            traceId: input.traceId,
-            conversationId: input.conversationId,
-            operationId: input.operationId,
-            recordedAt: input.at,
-          })
-          .onConflictDoNothing();
-        return "recorded";
-      });
+    registerTelemetry() {
+      return Promise.reject(new Error("Not implemented."));
     },
 
-    async pendingTelemetryDeletions(limit) {
-      return db
-        .select({
-          traceId: telemetryDeletions.traceId,
-          requestedAt: telemetryDeletions.requestedAt,
-          attempts: telemetryDeletions.attempts,
-        })
-        .from(telemetryDeletions)
-        .where(eq(telemetryDeletions.state, "pending"))
-        .orderBy(asc(telemetryDeletions.requestedAt), asc(telemetryDeletions.traceId))
-        .limit(limit);
+    sweepExpiredTelemetry() {
+      return Promise.reject(new Error("Not implemented."));
     },
 
-    async settleTelemetryDeletion(traceId, outcome, at) {
-      const pending = and(
-        eq(telemetryDeletions.traceId, traceId),
-        eq(telemetryDeletions.state, "pending"),
-      );
-      if (outcome === "completed") {
-        await db
-          .update(telemetryDeletions)
-          .set({ state: "completed", settledAt: at })
-          .where(pending);
-      } else {
-        await db
-          .update(telemetryDeletions)
-          .set({ attempts: sql`${telemetryDeletions.attempts} + 1` })
-          .where(pending);
-      }
+    claimDueTelemetryDeletions() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+
+    settleTelemetryDeletions() {
+      return Promise.reject(new Error("Not implemented."));
+    },
+
+    telemetryDeletionBacklog() {
+      return Promise.reject(new Error("Not implemented."));
     },
 
     async usage(input) {

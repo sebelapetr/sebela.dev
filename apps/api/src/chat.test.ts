@@ -67,6 +67,7 @@ const stopPath = (id: string) => `/v1/chat/operations/${id}/stop`;
 const retryPath = (id: string) => `/v1/chat/operations/${id}/retry`;
 const COMPACT = "/v1/chat/conversation/compact";
 const compactionPath = (id: string) => `/v1/internal/chat/operations/${id}/compaction`;
+const telemetryPath = (id: string) => `/v1/internal/chat/operations/${id}/telemetry`;
 
 const answerFor = (grant: string, text = "A fictional answer."): ChatGenerationResult => ({
   grant,
@@ -904,6 +905,63 @@ describe("the visitor chat over HTTP", () => {
       expect(conversation).not.toContain("unapproved draft");
     });
 
+    it("register a claimed operation's trace before its export, alike when repeated", async () => {
+      const { cookie, conversationId } = await visitor();
+      await ask(cookie);
+      const dispatch = lastDispatch();
+      const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+      const path = telemetryPath(dispatch.operationId);
+
+      const unclaimed = await control(path, { grant: dispatch.grant, traceId });
+      expect(unclaimed.status).toBe(409);
+      expect(await unclaimed.json()).toEqual({ error: { code: "conflict", message: anyText } });
+      await control(CLAIM, { operationId: dispatch.operationId, grant: dispatch.grant });
+      const wrong = await control(path, { grant: "wrong-grant", traceId });
+      expect(wrong.status).toBe(403);
+      expect(await wrong.json()).toEqual({ error: { code: "forbidden", message: anyText } });
+      for (const body of [
+        { grant: dispatch.grant, traceId: traceId.toUpperCase() },
+        { grant: dispatch.grant, traceId: "0".repeat(32) },
+        { grant: dispatch.grant },
+        { grant: dispatch.grant, traceId, conversationId },
+      ]) {
+        const invalid = await control(path, body);
+        expect(invalid.status).toBe(400);
+        expect(await invalid.json()).toMatchObject({ error: { code: "validation_failed" } });
+      }
+      const anonymous = await request(path, {
+        method: "POST",
+        ...json({ grant: dispatch.grant, traceId }),
+      });
+      expect(anonymous.status).toBe(401);
+
+      const expected = {
+        traceId,
+        export: "allowed",
+        expiresAt: new Date(clock.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+      const registered = await control(path, { grant: dispatch.grant, traceId });
+      expect(registered.status).toBe(200);
+      expect(await registered.json()).toEqual(expected);
+      const repeated = await control(path, { grant: dispatch.grant, traceId });
+      expect(await repeated.json()).toEqual(expected);
+
+      // A cleared conversation's late trace is refused and owed a deletion after the horizon.
+      const cleared = await request(CONVERSATION, {
+        method: "DELETE",
+        ...json({ conversationId }, { cookie, origin: ORIGIN }),
+      });
+      expect(await cleared.json()).toMatchObject({ cleared: true, telemetryDeletion: "pending" });
+      const lateTrace = "00f067aa0ba902b7a3ce929d0e0e4736";
+      const late = await control(path, { grant: dispatch.grant, traceId: lateTrace });
+      expect(late.status).toBe(200);
+      expect(await late.json()).toEqual({
+        traceId: lateTrace,
+        export: "refused",
+        expiresAt: new Date(clock.getTime() + 10 * 60 * 1000).toISOString(),
+      });
+    });
+
     it("accept only the control token, which no other route accepts", async () => {
       const { cookie } = await visitor();
       await ask(cookie);
@@ -1418,6 +1476,7 @@ describe("the visitor chat over HTTP", () => {
         CLAIM,
         "/v1/internal/chat/operations/:operationId/result",
         "/v1/internal/chat/operations/:operationId/compaction",
+        "/v1/internal/chat/operations/:operationId/telemetry",
       ]);
       const credentials = [CONTROL_TOKEN, AI_TOKEN, RELAY_TOKEN];
       const privateRoutes = api.routes.filter(

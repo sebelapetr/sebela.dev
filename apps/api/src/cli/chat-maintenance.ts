@@ -7,6 +7,7 @@ import {
   readChatOptions,
   readDatabaseConfig,
   type ChatService,
+  type ChatTraceDeleter,
 } from "@sebela/services";
 
 import type { CommandOutput } from "./api-keys.js";
@@ -38,10 +39,15 @@ const count = (text: string | undefined, max: number): number | null => {
  */
 export async function runChatMaintenanceCommand(
   args: readonly string[],
-  chat: Pick<ChatService, "deleteExpired">,
+  chat: Pick<ChatService, "deleteExpired" | "deleteTelemetry">,
   output: CommandOutput,
+  deleter: ChatTraceDeleter | null = null,
 ): Promise<number> {
   const [command, ...flags] = args;
+  if (command === "delete-telemetry") {
+    output.err(`Not implemented${deleter === null ? "" : "."}\n`);
+    return 1;
+  }
   let batchSize: number | null = DEFAULT_BATCH_SIZE;
   let maxBatches: number | null = DEFAULT_MAX_BATCHES;
   let usable = command === "delete-expired" && flags.length % 2 === 0;

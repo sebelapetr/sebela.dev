@@ -14,6 +14,8 @@ import type {
   ChatRetrySubmission,
   ChatSourceKind,
   ChatStreamEvent,
+  ChatTelemetryRegistered,
+  ChatTelemetryRegistration,
   ChatUsage,
 } from "@sebela/contracts";
 
@@ -165,6 +167,48 @@ export type ChatReconcileOutcome =
   | { status: "wrong_grant" }
   | { status: "invalid" };
 
+export type ChatTelemetryOutcome =
+  | { status: "registered"; registered: ChatTelemetryRegistered }
+  | { status: "not_claimed" }
+  | { status: "wrong_grant" }
+  /** The trace id is already registered for another operation. */
+  | { status: "trace_conflict" };
+
+/** How the trace store answered one deletion request. */
+export type ChatTraceDeletionResult =
+  | { status: "accepted" }
+  /** `retryAfterMs` is `null` when the answer named no usable `Retry-After`. */
+  | { status: "rate_limited"; retryAfterMs: number | null }
+  | { status: "failed" };
+
+/** Deletes traces from the remote trace store; at most 1000 ids per call. */
+export interface ChatTraceDeleter {
+  deleteTraces(traceIds: readonly string[]): Promise<ChatTraceDeletionResult>;
+}
+
+export interface ChatTelemetryDeletionRun {
+  /** `null` when remote deletion is not configured: expiry is still swept, nothing is sent. */
+  deleter: ChatTraceDeleter | null;
+  /** Traces per deletion request, at most 1000. */
+  batchSize: number;
+  /** Deletion requests in this run at most. */
+  maxRequests: number;
+}
+
+export interface ChatTelemetryDeletionReport {
+  configured: boolean;
+  /** Expired references handed over for deletion. */
+  swept: number;
+  requests: number;
+  sent: number;
+  completed: number;
+  failed: number;
+  /** Deletions still owed after the run, due or not. */
+  pending: number;
+  /** The trace store refused with 429; the run stopped. */
+  rateLimited: boolean;
+}
+
 export interface ChatService {
   readonly retentionDays: number;
   open(cookie: string | null): Promise<ChatOpened>;
@@ -216,6 +260,20 @@ export interface ChatService {
   dispatchRefused(operationId: string): Promise<boolean>;
   interruptOverdue(graceMs: number): Promise<string[]>;
   deleteExpired(limit: number): Promise<number>;
+  /**
+   * Registers one trace of a claimed operation before the AI service exports it, under the
+   * operation's grant. An unknown, deleted or cleared operation's trace is `refused` and owed a
+   * remote deletion once the export horizon has passed. Repeated registrations answer alike.
+   */
+  registerTelemetry(
+    operationId: string,
+    registration: ChatTelemetryRegistration,
+  ): Promise<ChatTelemetryOutcome>;
+  /**
+   * Hands expired trace references over for deletion, then sends the due deletions oldest first
+   * in bounded requests: failures back off, a rate limit stops the run.
+   */
+  deleteTelemetry(run: ChatTelemetryDeletionRun): Promise<ChatTelemetryDeletionReport>;
   /** The caller's own usage and policy snapshot; never another visitor's or the global spend. */
   usage(caller: ChatCaller, context: { clientAddress: string | null }): Promise<ChatUsage>;
 }
