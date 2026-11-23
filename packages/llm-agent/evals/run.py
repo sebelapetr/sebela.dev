@@ -80,7 +80,13 @@ from evals.datasets.cases import (
 )
 from evals.gate import CaseRun, evaluate_gate, latency_percentiles
 from evals.graders import rubric
-from evals.graders.code import fixture_contact, grade_code
+from evals.graders.code import (
+    fixture_contact,
+    grade_code,
+    handled_by,
+    security_category,
+    security_verdict,
+)
 from evals.provider import RECORD_SCHEMA
 
 PROMPTFOO = "promptfoo@0.126.0"
@@ -833,6 +839,11 @@ async def grade_record(
             for span in result.get("trace", [])
             if str(span.get("name", "")).startswith("tool.")
         ],
+        "security": {
+            "verdict": security_verdict(result),
+            "category": security_category(result),
+        },
+        "handled_by": handled_by(result),
         "latency_ms": record.get("latency_ms"),
         "usage": usage,
         "judge_cost_usd": round(judge_cost, 6),

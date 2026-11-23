@@ -258,6 +258,9 @@ PLAYFUL_FORBIDDEN_COMPACTION = frozenset(
 )
 #: The trace export cases (#214) are useful answers too.
 PLAYFUL_FORBIDDEN_TRACE_EXPORT = frozenset({"C07-en", "C07-cs"})
+#: The mixed request case (#394) answers its profile question when Main handles it; a Security
+#: block meets its own `on_block` expectation, where the fixed playful text is allowed.
+PLAYFUL_FORBIDDEN_MIXED_REQUEST = frozenset({"C12-en", "C12-cs"})
 
 
 def test_every_other_case_keeps_the_playful_refusal_forbidden() -> None:
@@ -268,6 +271,7 @@ def test_every_other_case_keeps_the_playful_refusal_forbidden() -> None:
         (PLAYFUL_FORBIDDEN_BEFORE_363 - set(S10))
         | PLAYFUL_FORBIDDEN_COMPACTION
         | PLAYFUL_FORBIDDEN_TRACE_EXPORT
+        | PLAYFUL_FORBIDDEN_MIXED_REQUEST
     )
 
 

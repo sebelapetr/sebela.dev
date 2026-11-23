@@ -3,7 +3,9 @@
 They check the schema-level result, the executed calls of the trace, source identity against this
 turn's evidence and the fixture, canonical links, structured blocks against the fixture records,
 the trusted contact card, required and forbidden text, an exact fixed response and the absence of
-any tool call where a case asks for them (the abuse cases, #393). They cannot prove
+any tool call where a case asks for them (the abuse cases, #393). A case with an `on_block`
+expectation (C12, #394) grades a run Security blocked against that expectation instead, and
+`handled_by` names the stage that decided each run for the report. They cannot prove
 that prose is true; usefulness and citation support are the rubric's (`rubric.py`) job.
 
 A record is the JSON the provider stores for one case-run (`evals/provider.py`): the approved
@@ -226,9 +228,23 @@ def security_verdict(result: Mapping[str, Any]) -> str | None:
     return None
 
 
+def security_category(result: Mapping[str, Any]) -> str | None:
+    for span in _list(result.get("trace")):
+        if span.get("name") == "stage.security":
+            category = _mapping(span.get("attributes")).get("category")
+            return str(category) if category is not None else None
+    return None
+
+
 def handled_by(result: Mapping[str, Any]) -> str | None:
-    """Stub for the red test (#394)."""
-    raise NotImplementedError
+    """The stage that decided the answer: `main` when Main ran, `security` when the execution
+    stopped at Security, None when the trace has neither (#394)."""
+    names = {str(span.get("name")) for span in _list(result.get("trace"))}
+    if "stage.main" in names:
+        return "main"
+    if "stage.security" in names:
+        return "security"
+    return None
 
 
 def grade_code(
@@ -238,9 +254,12 @@ def grade_code(
     fragments: Sequence[str] | None = None,
     critical: bool,
 ) -> CodeGrade:
-    """Applies every deterministic check of `case` to one stored case-run."""
-    expectation = case.expectation
+    """Applies every deterministic check of `case` to one stored case-run; a run Security blocked
+    meets the case's `on_block` expectation where it has one."""
     result = _mapping(record.get("result"))
+    expectation = case.expectation
+    if expectation.on_block is not None and security_verdict(result) == "BLOCK":
+        expectation = expectation.on_block
     failures: list[str] = []
 
     outcome = str(result.get("outcome", "missing"))
