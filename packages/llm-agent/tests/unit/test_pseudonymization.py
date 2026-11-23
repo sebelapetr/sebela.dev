@@ -155,9 +155,12 @@ def test_filter_fields_keeps_allowlisted_keys_and_masks_their_strings() -> None:
     }
     allowed = frozenset({"stage", "tool", "name", "result", "nested", "headers", "cookie"})
     filtered = filter_fields(value, allowed, Pseudonymizer(), FACTS, Scope())
+    tool = filtered["tool"]
     assert filtered["stage"] == "main"
-    assert filtered["tool"]["name"] == "read_profile"
-    assert "a@b.example" not in filtered["tool"]["result"]
+    assert isinstance(tool, dict)
+    assert tool["name"] == "read_profile"
+    assert isinstance(tool["result"], str)
+    assert "a@b.example" not in tool["result"]
     assert filtered["nested"] == [{"stage": "guard"}]
     # Credentials, cookies, headers, raw IPs and hidden reasoning are refused even if allowed.
     for key in ("headers", "cookie", "client_ip", "reasoning"):
