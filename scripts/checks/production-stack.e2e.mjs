@@ -253,8 +253,26 @@ function describe(error) {
   return `${error.message} (${cause.name}: ${cause.message}${code})`;
 }
 
+/**
+ * `fetch`, tried again when a pooled keep-alive connection was closed by a container that was
+ * recreated since the last request (`other side closed`): the first request after a recreation
+ * goes out on a socket of the old container.
+ */
+async function fetchAgain(url, options = {}, attempts = 5) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fetch(url, { signal: AbortSignal.timeout(10_000), ...options });
+    } catch (error) {
+      const code = error instanceof Error && error.cause ? String(error.cause.code) : "";
+      const closed = ["UND_ERR_SOCKET", "ECONNRESET", "ECONNREFUSED"].includes(code);
+      if (!closed || attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
 async function health() {
-  const response = await fetch(`${web}/health`, { signal: AbortSignal.timeout(10_000) });
+  const response = await fetchAgain(`${web}/health`);
   return { status: response.status, body: await response.json() };
 }
 
@@ -750,7 +768,7 @@ try {
   Object.assign(env, chatOff);
   compose(["up", "--detach", "--wait", "--wait-timeout", "240", "--no-deps", "api", "web"]);
   for (const route of ["/api/chat/conversation", "/api/chat/usage"]) {
-    const answer = await fetch(`${web}${route}`, { headers: { origin: web } });
+    const answer = await fetchAgain(`${web}${route}`, { headers: { origin: web } });
     await answer.arrayBuffer();
     assert.equal(answer.status, 503, `${route} answers 503 with the chat off`);
   }
