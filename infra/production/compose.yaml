@@ -8,9 +8,13 @@
 #
 # - Every service starts without a profile: Postgres, the one-off migration, the API, the website
 #   and MCP Admin. The migration and the API run the API image, so a release migrates with the very
-#   image it then runs. The AI service keeps its profile `ai-service` until the release pipeline
-#   deploys its image; without it the chat stays off.
-# - Images come from GHCR by a tag per service (API_IMAGE_TAG, WEB_IMAGE_TAG, MCP_ADMIN_IMAGE_TAG),
+#   image it then runs. The AI service keeps its profile `ai-service`, which is the chat's switch:
+#   the owner adds it to COMPOSE_PROFILES in the production environment file together with the chat
+#   settings (infra/README.md, "The AI service and the visitor chat"), and a deployment then pulls,
+#   starts, health-checks and rolls back the AI service with the others. Without it the chat stays
+#   off and nothing of the AI service runs.
+# - Images come from GHCR by a tag per service (API_IMAGE_TAG, WEB_IMAGE_TAG, MCP_ADMIN_IMAGE_TAG,
+#   AI_SERVICE_IMAGE_TAG),
 #   so a release changes only the services it rebuilt. Nothing is built on the server.
 # - Only the website is published, on WEB_HOST and WEB_PORT (the host's loopback interface, where
 #   the server's nginx proxies to it). Postgres, the API and MCP Admin have no host port: the
@@ -74,11 +78,12 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  # The AI service behind the chat. It stays behind its profile `ai-service` (no `!reset`) until the
-  # release pipeline publishes and deploys its image: a deploy that knows only the API, website and
-  # MCP Admin images neither pulls nor starts it, and the chat stays off. Start it with
-  # `--profile ai-service`, its AI_SERVICE_IMAGE_TAG and the chat settings. No host port: only the
-  # API reaches it, inside the chat network.
+  # The AI service behind the chat. It stays behind its profile `ai-service` (no `!reset`), the
+  # chat's switch: while COMPOSE_PROFILES of the production environment file does not name it, a
+  # deployment neither pulls nor starts it and the chat stays off. Once it does, the deployment
+  # script names it with the other services, waits for its health check and rolls it back with
+  # them. It refuses the fictional model here (STORAGE_ENVIRONMENT=production), so it needs the
+  # paid model's settings. No host port: only the API reaches it, inside the chat network.
   ai-service:
     build: !reset null
     image: ghcr.io/sebelapetr/sebela-ai-service:${AI_SERVICE_IMAGE_TAG:-}

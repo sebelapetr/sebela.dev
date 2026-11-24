@@ -10,6 +10,8 @@
 //   unhealthy   tags whose services never become healthy (`compose up --wait` fails)
 //   failMigrate API tags whose one-off migration fails
 //   images      local image references, as `docker image ls` lists them
+//   aiService   true when the environment file switches the AI service on (its profile is active):
+//               `compose config --services` then lists it, and `compose up` that names it starts it
 //   chmodOnUp   path -> octal mode, applied when `compose up` succeeds: a state folder or record
 //               that stops being writable after the script checked it
 //
@@ -23,6 +25,7 @@ const tags = {
   api: process.env.API_IMAGE_TAG ?? null,
   web: process.env.WEB_IMAGE_TAG ?? null,
   "mcp-admin": process.env.MCP_ADMIN_IMAGE_TAG ?? null,
+  "ai-service": process.env.AI_SERVICE_IMAGE_TAG || null,
 };
 const composeFiles = (process.env.COMPOSE_FILE ?? "")
   .split(":")
@@ -41,15 +44,26 @@ function fail(message) {
 const tagOf = (reference) => reference.slice(reference.lastIndexOf(":") + 1);
 
 if (args[0] === "compose") {
-  const command = args.find((arg) => ["pull", "run", "up"].includes(arg));
+  const command = args.find((arg) => ["pull", "run", "up", "config", "stop"].includes(arg));
   if (command === "pull") process.exit(0);
+  if (command === "stop") process.exit(0);
+  if (command === "config") {
+    const services = ["postgres", "migrate", "api", "web", "mcp-admin"];
+    if (scenario.aiService) services.push("ai-service");
+    process.stdout.write(services.map((name) => `${name}\n`).join(""));
+    process.exit(0);
+  }
   if (command === "run") {
     if (!args.includes("migrate")) fail(`unexpected compose run: ${args.join(" ")}`);
     if ((scenario.failMigrate ?? []).includes(tags.api)) fail("the migration failed");
     process.exit(0);
   }
   if (command === "up") {
-    const sick = Object.values(tags).filter((tag) => (scenario.unhealthy ?? []).includes(tag));
+    // Only the services the call names are started; the AI service is named only when it is on.
+    const sick = Object.entries(tags)
+      .filter(([service]) => service !== "ai-service" || args.includes("ai-service"))
+      .map(([, tag]) => tag)
+      .filter((tag) => (scenario.unhealthy ?? []).includes(tag));
     if (sick.length > 0) fail(`a container is unhealthy (${sick.join(", ")})`);
     for (const [file, mode] of Object.entries(scenario.chmodOnUp ?? {})) {
       fs.chmodSync(file, Number.parseInt(mode, 8));

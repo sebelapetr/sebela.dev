@@ -165,8 +165,8 @@ function seconds(duration) {
 }
 
 describe("the production AI service (issue #210)", () => {
-  // Behind its profile until the release pipeline publishes and deploys its image, so a deploy that
-  // knows only the API, website and MCP Admin images neither pulls nor starts it.
+  // Behind its profile, the chat's switch: a deployment neither pulls nor starts it while the
+  // environment file does not activate it.
   const withAi = render({ AI_SERVICE_IMAGE_TAG: "tag-ai" }, ["ai-service"]);
   /** @type {Record<string, any>} */
   const ai = withAi.services["ai-service"] ?? {};
@@ -198,6 +198,15 @@ describe("the production AI service (issue #210)", () => {
   it("runs the fictional model with the example settings", () => {
     assert.equal(ai.environment?.AI_SERVICE_MODEL ?? "", "");
     assert.equal(ai.environment?.AI_SERVICE_ALLOW_PAID ?? "", "");
+  });
+
+  it("is told the production environment, in which it refuses the fictional model", () => {
+    assert.equal(ai.environment?.AI_SERVICE_ENVIRONMENT, "production");
+    assert.equal(ai.environment?.AI_SERVICE_ENVIRONMENT, example.STORAGE_ENVIRONMENT);
+  });
+
+  it("is switched on only by its profile in the environment file, which the example leaves empty", () => {
+    assert.equal(example.COMPOSE_PROFILES, "");
   });
 });
 

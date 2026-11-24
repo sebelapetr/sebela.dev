@@ -1,0 +1,22 @@
+{
+  "description": "The AI service's own files select only its image",
+  "changedFiles": ["apps/ai-service/src/ai_service/config.py"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "@sebela/ai-service",
+            "path": "apps/ai-service",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": ["ai-service"]
+}

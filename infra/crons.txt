@@ -9,9 +9,10 @@
 30 2 * * * BACKUP_ENV_FILE=<production environment file> <checkout>/infra/scripts/backup.sh 2>&1 | logger --tag sebela-backup
 
 # The daily deletion of visitor chat conversations past their retention (apps/api/AGENTS.md,
-# chat-maintenance), in the API container. Entered only when the visitor chat is enabled
-# (infra/README.md, "The AI service and the visitor chat"); until then it stays commented out.
-# 30 3 * * * cd <checkout> && COMPOSE_FILE=compose.yaml:infra/production/compose.yaml docker compose --env-file <production environment file> exec -T api node dist/cli/chat-maintenance.js delete-expired 2>&1 | logger --tag sebela-chat-maintenance
+# chat-maintenance), in the API container (infra/README.md, "The AI service and the visitor chat").
+# Scheduled from the start: with the chat off it says that the chat is not configured and deletes
+# nothing.
+30 3 * * * cd <checkout> && COMPOSE_FILE=compose.yaml:infra/production/compose.yaml docker compose --env-file <production environment file> exec -T api node dist/cli/chat-maintenance.js delete-expired 2>&1 | logger --tag sebela-chat-maintenance
 
 # The hourly deletion of exported telemetry traces 30 days after their registration, and of the
 # traces a visitor's deletion scheduled at once (apps/api/AGENTS.md, chat-maintenance), in the API

@@ -3,7 +3,7 @@
 # "Deployment"; infra/README.md, "Deployment"). Run only as the forced command of the `deploy`
 # user's SSH key, or by the owner on the server. The only input is one of:
 #
-#   deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit>
+#   deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> ai-service=<commit>
 #             the release commit and the verified tag set of the release job
 #   rollback  back to the previous verified release
 #
@@ -18,6 +18,12 @@
 # way), checks the commit out detached and runs the checked-out deploy.sh again, once, with
 # DEPLOY_RELEASE_CHECKED_OUT set to the commit; that run checks the checkout is at the commit and
 # goes on. A rollback leaves the checkout as it is.
+#
+# The AI service is part of the tag set but runs only when the production environment file switches
+# the visitor chat on: its Compose profile `ai-service` is then active (COMPOSE_PROFILES,
+# infra/README.md, "The AI service and the visitor chat"). Then it is pulled, started with the
+# others, waited for like the others and rolled back with them; otherwise it is neither pulled nor
+# started, and the chat stays off.
 #
 # A deployment pulls the images, backs up first when the release adds a migration (DEPLOY_BACKUP,
 # which reads the same DEPLOY_ENV_FILE; without an executable backup script such a release is
@@ -47,11 +53,11 @@
 set -euo pipefail
 set -f
 
-SERVICES=(api web mcp-admin)
+SERVICES=(api web mcp-admin ai-service)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MIGRATIONS_DIR=/app/packages/db/migrations
-USAGE="usage: deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> | rollback"
+USAGE="usage: deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> ai-service=<commit> | rollback"
 
 say() { printf 'deploy: %s\n' "$*" >&2; }
 fail() {
@@ -69,15 +75,18 @@ fi
 
 # Only lower-case letters, digits, '=', '-' and single spaces: no shell syntax, paths or options
 # can get through, whatever reads the words later.
-if ((${#input} > 200)) || [[ ! "$input" =~ ^[a-z0-9=-]+( [a-z0-9=-]+)*$ ]]; then
+if ((${#input} > 320)) || [[ ! "$input" =~ ^[a-z0-9=-]+( [a-z0-9=-]+)*$ ]]; then
   fail "$USAGE"
 fi
 read -r -a words <<<"$input"
 
-# parse_set <array name> <word>...: a complete tag set, every service once with a commit SHA.
+# parse_set <array name> <input|record> <word>...: a complete tag set, every service once with a
+# commit SHA. A line of the record written before the AI service was deployed names three
+# services; the AI service has no tag in it, and starting that release leaves the AI service out.
 parse_set() {
   local -n into="$1"
-  shift
+  local source="$2"
+  shift 2
   into=()
   local word service known
   for word in "$@"; do
@@ -90,7 +99,8 @@ parse_set() {
     into[$service]="${BASH_REMATCH[2]}"
   done
   for service in "${SERVICES[@]}"; do
-    [[ -n "${into[$service]:-}" ]] || fail "missing service: $service"
+    [[ -n "${into[$service]:-}" || ("$source" == record && "$service" == ai-service) ]] ||
+      fail "missing service: $service"
   done
 }
 
@@ -98,7 +108,9 @@ parse_set() {
 describe_set() {
   local -n tags="$1"
   local service line=""
-  for service in "${SERVICES[@]}"; do line+="${line:+ }$service=${tags[$service]}"; done
+  for service in "${SERVICES[@]}"; do
+    [[ -z "${tags[$service]:-}" ]] || line+="${line:+ }$service=${tags[$service]}"
+  done
   printf '%s' "$line"
 }
 
@@ -118,7 +130,7 @@ case "$command" in
       fi
     done
     [[ -n "$release" ]] || fail "missing release commit: $USAGE"
-    parse_set target "${service_words[@]}"
+    parse_set target input "${service_words[@]}"
     ;;
   rollback)
     ((${#words[@]} == 1)) || fail "$USAGE"
@@ -200,14 +212,37 @@ compose() { docker compose --env-file "$DEPLOY_ENV_FILE" "$@"; }
 use_set() {
   local -n tags="$1"
   export API_IMAGE_TAG="${tags[api]}" WEB_IMAGE_TAG="${tags[web]}"
-  export MCP_ADMIN_IMAGE_TAG="${tags[mcp-admin]}"
+  export MCP_ADMIN_IMAGE_TAG="${tags[mcp-admin]}" AI_SERVICE_IMAGE_TAG="${tags[ai-service]:-}"
+}
+
+# Whether the production environment file switches the AI service on: the services Compose lists
+# include it only when its profile `ai-service` is active there. Status 0 when it is, 1 when it
+# is not and 2 when Compose cannot say.
+ai_service_enabled() {
+  local listed
+  listed="$(compose config --services)" || return 2
+  grep -qx ai-service <<<"$listed"
 }
 
 # Starts the long-running services of the exported tag set and waits until they are healthy. They
 # are named, with --no-deps, so `up` never starts the one-off migration: a deployment runs it
-# exactly once, before this, and a rollback never runs it.
+# exactly once, before this, and a rollback never runs it. The AI service is named only when the
+# environment file switches it on, and then it has to become healthy too. A release of the record
+# that predates it has no AI service image: the AI service is stopped instead of started.
 start() {
-  compose up --detach --wait --wait-timeout "$WAIT_TIMEOUT" --no-deps postgres "${SERVICES[@]}"
+  local -a names=(postgres api web mcp-admin)
+  local enabled=0
+  ai_service_enabled || enabled=$?
+  ((enabled <= 1)) || return 1
+  if ((enabled == 0)); then
+    if [[ -n "${AI_SERVICE_IMAGE_TAG:-}" ]]; then
+      names+=(ai-service)
+    else
+      say "this release has no AI service image: stopping the AI service"
+      compose stop ai-service || say "could not stop the AI service"
+    fi
+  fi
+  compose up --detach --wait --wait-timeout "$WAIT_TIMEOUT" --no-deps "${names[@]}"
 }
 
 # recorded <n>: the n-th last verified release (1 is the current one); empty when there is none.
@@ -223,7 +258,7 @@ recorded() {
 load_set() {
   local -a recorded_words
   read -r -a recorded_words <<<"$2"
-  parse_set "$1" "${recorded_words[@]}"
+  parse_set "$1" record "${recorded_words[@]}"
 }
 
 # The migration files in an API image, one per line; fails when the image cannot be read.
@@ -247,7 +282,7 @@ adds_migration() {
   return 1
 }
 
-# Removes local images of the three services whose tag is in neither of the last two releases.
+# Removes local images of the services whose tag is in neither of the last two releases.
 prune() {
   local keep service repository reference tag
   keep=" $(tail -n 2 "$RELEASES" | tr '\n' ' ') "

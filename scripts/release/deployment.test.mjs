@@ -27,12 +27,15 @@ describe("deploy input", () => {
 
   it("names the release commit, then every service with its tag, in a fixed order", () => {
     assert.equal(
-      deployInput({ "mcp-admin": sha("c"), web: sha("b"), api: sha("a") }, release),
-      `deploy release=${release} api=${sha("a")} web=${sha("b")} mcp-admin=${sha("c")}`,
+      deployInput(
+        { "ai-service": sha("d"), "mcp-admin": sha("c"), web: sha("b"), api: sha("a") },
+        release,
+      ),
+      `deploy release=${release} api=${sha("a")} web=${sha("b")} mcp-admin=${sha("c")} ai-service=${sha("d")}`,
     );
   });
 
-  const tags = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c") };
+  const tags = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c"), "ai-service": sha("d") };
   const invalidReleases = {
     "a missing release commit": undefined,
     "a short release commit": "abc1234",
@@ -48,10 +51,25 @@ describe("deploy input", () => {
   const invalid = {
     "a missing service": { api: sha("a"), web: sha("b") },
     "an unknown service": { api: sha("a"), web: sha("b"), "mcp-admin": sha("c"), x: sha("d") },
-    "a moving tag": { api: "current", web: sha("b"), "mcp-admin": sha("c") },
-    "a short tag": { api: "abc1234", web: sha("b"), "mcp-admin": sha("c") },
-    "an injection": { api: `${sha("a")};id`, web: sha("b"), "mcp-admin": sha("c") },
-    "a tag that is not a string": { api: 1, web: sha("b"), "mcp-admin": sha("c") },
+    "a moving tag": {
+      api: "current",
+      web: sha("b"),
+      "mcp-admin": sha("c"),
+      "ai-service": sha("d"),
+    },
+    "a short tag": { api: "abc1234", web: sha("b"), "mcp-admin": sha("c"), "ai-service": sha("d") },
+    "an injection": {
+      api: `${sha("a")};id`,
+      web: sha("b"),
+      "mcp-admin": sha("c"),
+      "ai-service": sha("d"),
+    },
+    "a tag that is not a string": {
+      api: 1,
+      web: sha("b"),
+      "mcp-admin": sha("c"),
+      "ai-service": sha("d"),
+    },
   };
   for (const [name, tags] of Object.entries(invalid)) {
     it(`refuses ${name}`, () => {
@@ -122,7 +140,7 @@ describe("released version", () => {
 
 const REPOSITORY = "owner/site";
 const GITHUB = `https://github.com/${REPOSITORY}`;
-const images = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c") };
+const images = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c"), "ai-service": sha("d") };
 
 describe("release notes", () => {
   const render = (commits, options = {}) =>
@@ -272,7 +290,7 @@ describe("release notes", () => {
   it("lists the deployed image of every service at the end", () => {
     const notes = render(commits);
     const imagesSection = notes.slice(notes.indexOf("### Images"));
-    for (const service of ["api", "web", "mcp-admin"]) {
+    for (const service of ["api", "web", "mcp-admin", "ai-service"]) {
       assert.match(imagesSection, new RegExp(`sebela-${service}:${images[service]}`));
     }
   });
@@ -341,7 +359,9 @@ describe("release notes", () => {
 
   it("keeps the plain list of images when it is not known which were built", () => {
     const notes = render(commits);
-    assert.ok(notes.endsWith(`- \`ghcr.io/sebelapetr/sebela-mcp-admin:${images["mcp-admin"]}\`\n`));
+    assert.ok(
+      notes.endsWith(`- \`ghcr.io/sebelapetr/sebela-ai-service:${images["ai-service"]}\`\n`),
+    );
     assert.doesNotMatch(notes, /attached|reused/);
   });
 

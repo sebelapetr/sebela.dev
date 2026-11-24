@@ -1,0 +1,22 @@
+{
+  "description": "The Python lockfile belongs to the root in Turborepo's view but enters the AI service image only",
+  "changedFiles": ["uv.lock"],
+  "turbo": {
+    "version": "2.11.11",
+    "data": {
+      "affectedPackages": {
+        "items": [
+          {
+            "name": "//",
+            "path": "",
+            "reason": {
+              "__typename": "FileChanged"
+            }
+          }
+        ],
+        "length": 1
+      }
+    }
+  },
+  "services": ["ai-service"]
+}
